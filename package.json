@@ -1,0 +1,16 @@
+{
+  "name": "budget-terminal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Budget Terminal - Electron rebuild",
+  "workspaces": [
+    "apps/desktop"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace budget-terminal-desktop",
+    "build": "npm run build --workspace budget-terminal-desktop",
+    "typecheck": "npm run typecheck --workspace budget-terminal-desktop",
+    "probe": "npm run probe --workspace budget-terminal-desktop",
+    "probe:portfolio": "npm run probe:portfolio --workspace budget-terminal-desktop"
+  }
+}

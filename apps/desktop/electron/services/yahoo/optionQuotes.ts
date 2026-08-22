@@ -1,0 +1,105 @@
+import type { OptionQuotesPayload, OptionQuotesRequest } from '../../shared/contract.js'
+import { isSellerStrategy } from '../../shared/analytics.js'
+import { cache, TTL } from '../cache.js'
+import { paced, yahoo } from './client.js'
+
+/**
+ * Live marks for tracked option positions, plus the expiry list each ticker offers.
+ *
+ * The expiry list is what fills the Expiry dropdown; the chain gives the current price,
+ * volume, open interest and implied volatility for the exact contract held.
+ */
+
+async function fetchExpiries(ticker: string): Promise<string[]> {
+  const result = await paced(() => yahoo.options(ticker))
+  return (result.expirationDates ?? []).map((date) => date.toISOString().slice(0, 10))
+}
+
+interface ContractQuote {
+  currentPrice: number
+  volume: number
+  openInterest: number
+  impliedVolatility: number
+}
+
+async function fetchContract(
+  ticker: string,
+  expiry: string,
+  strike: number,
+  strategy: string,
+): Promise<ContractQuote> {
+  const result = await paced(() => yahoo.options(ticker, { date: expiry }))
+  const chain = result.options?.[0]
+  if (!chain) throw new Error(`No chain for ${ticker} ${expiry}.`)
+
+  // A covered call is a short call and a cash-secured put a short put, so the side to
+  // price is decided by the strategy, not by whether the user is long or short.
+  const puts = strategy === 'Puts' || strategy === 'Cash Secured Put'
+  const side = (puts ? chain.puts : chain.calls) ?? []
+
+  // Strikes come back as floats; match on the nearest rather than on equality.
+  let best: (typeof side)[number] | null = null
+  let bestDistance = Infinity
+  for (const contract of side) {
+    const distance = Math.abs(Number(contract.strike) - strike)
+    if (distance < bestDistance) {
+      bestDistance = distance
+      best = contract
+    }
+  }
+  if (!best || bestDistance > 0.01) throw new Error(`No ${strike} strike for ${ticker} ${expiry}.`)
+
+  return {
+    currentPrice: Number(best.lastPrice) || 0,
+    volume: Number(best.volume) || 0,
+    openInterest: Number(best.openInterest) || 0,
+    impliedVolatility: Number(best.impliedVolatility) || 0,
+  }
+}
+
+export async function getOptionQuotes({
+  positions,
+  force = false,
+}: OptionQuotesRequest): Promise<OptionQuotesPayload> {
+  const tickers = [...new Set(positions.map((p) => p.ticker.trim().toUpperCase()).filter(Boolean))]
+
+  const expiryResults = await Promise.allSettled(
+    tickers.map((ticker) =>
+      cache
+        .resolve(`optexp:${ticker}`, TTL.options, () => fetchExpiries(ticker), { force })
+        .then((result) => result.value),
+    ),
+  )
+  const expiries: OptionQuotesPayload['expiries'] = {}
+  expiryResults.forEach((outcome, index) => {
+    if (outcome.status === 'fulfilled') expiries[tickers[index]] = outcome.value
+  })
+
+  const priced = positions.filter((p) => p.ticker && p.expiry && p.strike > 0)
+  const quoteResults = await Promise.allSettled(
+    priced.map((position) =>
+      cache
+        .resolve(
+          `optquote:${position.ticker}:${position.expiry}:${position.strike}:${isSellerStrategy(position.strategy) ? 'x' : 'l'}:${position.strategy}`,
+          TTL.options,
+          () =>
+            fetchContract(
+              position.ticker.trim().toUpperCase(),
+              position.expiry,
+              position.strike,
+              position.strategy,
+            ),
+          { force },
+        )
+        .then((result) => result.value),
+    ),
+  )
+
+  const quotes: OptionQuotesPayload['quotes'] = {}
+  quoteResults.forEach((outcome, index) => {
+    // A contract that cannot be priced simply keeps its stored premium-only row.
+    if (outcome.status === 'fulfilled') quotes[priced[index].rowId] = outcome.value
+  })
+
+  return { quotes, expiries }
+}

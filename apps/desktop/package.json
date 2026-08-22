@@ -1,0 +1,41 @@
+{
+  "name": "budget-terminal-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./out/main/main.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "probe": "tsx scripts/probe.ts",
+    "probe:portfolio": "tsx scripts/probe-portfolio.ts",
+    "probe:rate": "tsx scripts/probe-rate.ts",
+    "probe:store": "tsx scripts/probe-store.ts",
+    "probe:analytics": "tsx scripts/probe-analytics.ts",
+    "probe:finance": "tsx scripts/probe-finance.ts"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^43.4.1",
+    "electron-vite": "^5.0.0",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "vite": "^7.3.6"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.101.4",
+    "lightweight-charts": "^5.2.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "yahoo-finance2": "^4.0.2",
+    "zod": "^4.4.3",
+    "zustand": "^5.0.15"
+  }
+}

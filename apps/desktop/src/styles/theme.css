@@ -1,0 +1,96 @@
+@import 'tailwindcss';
+
+/*
+ * Terminal palette. Dark only, deliberately: this is a trading workstation that runs
+ * for hours and the reference app has no light mode.
+ */
+@theme {
+  --color-bg: #080b12;
+  --color-surface: #0d1420;
+  --color-surface-raised: #121b2b;
+  --color-surface-hover: #172233;
+  --color-border: #1e2b3f;
+  --color-border-strong: #2c3e59;
+
+  --color-text: #d5dee9;
+  --color-text-muted: #7d8ea6;
+  --color-text-dim: #56677f;
+
+  --color-accent: #2f6fd0;
+  --color-accent-hover: #3b82e8;
+  --color-accent-dim: #1b3f7a;
+
+  --color-up: #26c281;
+  --color-down: #f0554e;
+  --color-up-bg: #0f2a20;
+  --color-down-bg: #2d1517;
+
+  --font-mono: 'Cascadia Mono', 'Consolas', 'SF Mono', ui-monospace, monospace;
+
+  /*
+   * The whole type scale, +4px against Tailwind's defaults. Every size the app uses is
+   * declared here so the step stays uniform — bumping the root font size instead would
+   * scale each one by a different number of pixels.
+   */
+  --text-2xs: 0.9375rem; /* 15px */
+  --text-2xs--line-height: 1.25rem;
+  --text-xs: 1rem; /* 16px */
+  --text-xs--line-height: 1.25rem;
+  --text-sm: 1.125rem; /* 18px */
+  --text-sm--line-height: 1.5rem;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 16px;
+  overflow: hidden;
+  /* Terminal chrome should not feel like a web page. */
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Thin scrollbars everywhere; the panels are dense and 16px bars eat a whole column. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 4px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent-dim);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+@utility drag-region {
+  -webkit-app-region: drag;
+}
+
+@utility no-drag {
+  -webkit-app-region: no-drag;
+}
+
+@utility num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
