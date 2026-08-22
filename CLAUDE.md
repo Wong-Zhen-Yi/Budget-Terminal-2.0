@@ -11,6 +11,7 @@ npm run probe -- AAPL "1 Week"   # exercise every Yahoo service headless
 npm run probe:portfolio          # holdings panel as the UI renders it
 npm run probe:rate               # 20-symbol burst; fails on any 429
 npm run probe:finance            # every Personal Finance figure, then every write
+npm run probe:settings           # settings writes, then export/import/clear/reset-cache
 ```
 
 There is no test suite. The `scripts/probe*.ts` files are the verification story: they
@@ -28,9 +29,11 @@ the behaviour being ported comes from.
 
 Built so far: the **Dashboard**, the whole **Portfolio** page (summary bar, portfolio
 CRUD, and all five sub-tabs: Positions with the options tracker and the Dip Finder and
-Weight charts, Pie Chart, Portfolio Heatmap, Momentum Tracker, Portfolio Metrics), and
-the **Personal Finance** page (Cash, Debt, Recurring Bills, Totals donut, net-worth Goal
-ring and the Silos bar chart). The remaining tabs are labels in `TABS`
+Weight charts, Pie Chart, Portfolio Heatmap, Momentum Tracker, Portfolio Metrics), the
+**Personal Finance** page (Cash, Debt, Recurring Bills, Totals donut, net-worth Goal
+ring and the Silos bar chart), and the **Settings** page (one scrolling page grouped
+Data / General / Workspace) together with the app-wide keyboard shortcuts. The remaining
+tabs are labels in `TABS`
 (`electron/shared/contract.ts`) and render a placeholder; `implemented: true` is what
 routes a tab to a real page in `App.tsx`.
 
@@ -138,6 +141,28 @@ adding handlers.
   the cell does, so a long description still clips. `wrap` swaps in a textarea sized to
   its content, and that sizing needs the `ResizeObserver` as well as the layout effect —
   the line count changes when the column narrows even though the text has not.
+- **Settings live in their own file, not the holdings store.**
+  `electron/services/settingsStore.ts` writes
+  `%APPDATA%\BudgetTerminalElectron\settings.json`. Folding them into `portfolio.json`
+  would put a navigation change behind a burst of cell edits on the one write queue, and
+  would make Clear All User Data reset the tab order — which the reference's Clear
+  deliberately does not.
+- **Settings is the one tab that can never be hidden or obscured.** `setTabHidden` and
+  `setTabObscured` refuse it, and `normalize` strips it back out of either list, the way
+  `SETTINGS_PAGE_INDEX` is skipped throughout the reference. Hiding the page that owns
+  the visibility controls leaves no way back to them.
+- **A tab the settings file has never seen lands in its contract position.** `normalize`
+  inserts it by its index in `TABS` rather than appending, so an existing install finds a
+  newly migrated page where the default order puts it instead of at the end of the strip.
+- **The bare-key shortcuts are guarded by `isTextEntry`.** The backtick picker and the
+  arrow keys must not fire while a cell is being edited; Ctrl+Tab and F5 are not guarded,
+  matching `_should_handle_main_tab_navigation_keys`. `TabPicker` also calls
+  `stopPropagation` on its own backtick and Escape — without it the window-level handler
+  sees the same key and reopens the picker in the same tick.
+- **Data Health is session-only and fed by the status bar.** `stores/dataHealth.ts`
+  records whatever every page already reports through `onStatusChange`, which is what
+  lets the Settings page describe feeds whose pages are not mounted. It is never
+  persisted, exactly as the reference's view is not.
 - **Animations must survive a StrictMode remount.** `useAnimatedProgress` keys its rAF
   loop on a `startedAt` state value so the effect re-arms after the dev double-mount.
   Starting the loop outside an effect leaves the donut and the goal ring pinned at zero.
@@ -157,3 +182,5 @@ decimal. Useful starting points:
 | Personal Finance, all of it | `mixins/networth.py` (donut `widgets/pie_chart.py`, bars `widgets/bar_chart.py`) |
 | Personal Finance validation | `_normalize_networth_payload` in `persistence.py` |
 | Tab labels and order | `mixins/window_setup.py`, `persistence.py` |
+| Settings, all of it | `mixins/settings.py` |
+| Shortcut wiring, tab picker, Obscure | `mixins/window_setup.py`, `mixins/window_lifecycle.py` |

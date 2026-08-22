@@ -1,27 +1,53 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { TABS } from '@shared/contract'
+import { CLOCK_COUNTRIES, DEFAULT_CLOCK_COUNTRY } from '@shared/contract'
 import { api } from '@/api/client'
 import { clockTime } from '@/lib/format'
 
+interface TabBarTab {
+  id: string
+  label: string
+  implemented: boolean
+}
+
 interface TabBarProps {
+  /** The visible tabs, already in the order Settings persists. */
+  tabs: TabBarTab[]
   activeTab: string
   onSelectTab: (id: string) => void
   onReload: () => void
   reloading: boolean
+  /** Clock market code from Settings; falls back to the default when it is unknown. */
+  clockCountry: string
+  time12h: boolean
+  obscured: boolean
+  onToggleObscure: () => void
 }
 
 /**
- * The page strip across the top. Every page of the PySide6 app is listed in its
- * navigation order, but only Dashboard is built — the rest are inert markers of what
- * the migration still has to cover.
+ * The page strip across the top. Every page of the PySide6 app is listed, in the order
+ * and with the visibility Settings persists; the ones that are not migrated yet are
+ * inert markers of what the port still has to cover.
  */
-export function TabBar({ activeTab, onSelectTab, onReload, reloading }: TabBarProps) {
+export function TabBar({
+  tabs,
+  activeTab,
+  onSelectTab,
+  onReload,
+  reloading,
+  clockCountry,
+  time12h,
+  obscured,
+  onToggleObscure,
+}: TabBarProps) {
   const scroller = useRef<HTMLDivElement>(null)
-  const [clock, setClock] = useState(() => clockTime(new Date()))
+  const zone =
+    CLOCK_COUNTRIES.find((entry) => entry.code === clockCountry)?.zone ??
+    CLOCK_COUNTRIES.find((entry) => entry.code === DEFAULT_CLOCK_COUNTRY)!.zone
+  const [now, setNow] = useState(() => new Date())
 
   useEffect(() => {
-    const timer = setInterval(() => setClock(clockTime(new Date())), 1000)
+    const timer = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
 
@@ -43,7 +69,7 @@ export function TabBar({ activeTab, onSelectTab, onReload, reloading }: TabBarPr
         ref={scroller}
         className="no-drag flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        {TABS.map((tab) => {
+        {tabs.map((tab) => {
           const isActive = tab.id === activeTab
           return (
             <button
@@ -70,7 +96,23 @@ export function TabBar({ activeTab, onSelectTab, onReload, reloading }: TabBarPr
         {'>'}
       </ArrowButton>
 
-      <span className="num no-drag px-2 text-2xs text-text-muted">{clock}</span>
+      <span className="num no-drag px-2 text-2xs text-text-muted">
+        {clockTime(now, zone, time12h)}
+      </span>
+
+      <button
+        type="button"
+        onClick={onToggleObscure}
+        title="Obscure the pages selected in Settings (Ctrl+Shift+H)"
+        aria-pressed={obscured}
+        className={`no-drag h-9 shrink-0 border px-3 text-2xs ${
+          obscured
+            ? 'border-accent bg-accent-dim text-text'
+            : 'border-border-strong bg-surface-raised text-text hover:bg-surface-hover'
+        }`}
+      >
+        {obscured ? 'Reveal' : 'Obscure'}
+      </button>
 
       <button
         type="button"

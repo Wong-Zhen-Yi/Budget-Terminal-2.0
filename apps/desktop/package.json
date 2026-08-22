@@ -14,7 +14,8 @@
     "probe:rate": "tsx scripts/probe-rate.ts",
     "probe:store": "tsx scripts/probe-store.ts",
     "probe:analytics": "tsx scripts/probe-analytics.ts",
-    "probe:finance": "tsx scripts/probe-finance.ts"
+    "probe:finance": "tsx scripts/probe-finance.ts",
+    "probe:settings": "tsx scripts/probe-settings.ts"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

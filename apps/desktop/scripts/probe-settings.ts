@@ -1,0 +1,143 @@
+/**
+ * Exercise everything the Settings page writes: the settings store's mutations, then
+ * the four User Data maintenance actions.
+ *
+ *   npm run probe:settings
+ *
+ * APPDATA is redirected to a scratch directory first, so this never touches your real
+ * settings.json or portfolio.json. The reference to compare against is the PySide6
+ * Settings page: the same refusals (Settings cannot be hidden or obscured), the same
+ * reset behaviour, and a Clear that leaves navigation and privacy alone.
+ */
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+const scratch = mkdtempSync(join(tmpdir(), 'bt-settings-'))
+process.env.APPDATA = scratch
+
+const { mutateSettings, readSettings, settingsPath } = await import(
+  '../electron/services/settingsStore.js'
+)
+const { mutatePortfolios, readPortfolios } = await import('../electron/services/portfolioStore.js')
+const { yahooProvider } = await import('../electron/services/provider.js')
+
+type Settings = Awaited<ReturnType<typeof readSettings>>
+
+function show(label: string, settings: Settings): void {
+  console.log(`\n-- ${label}`)
+  console.log(`   clock=${settings.clockCountry} 12h=${settings.time12h}`)
+  console.log(`   first six tabs : ${settings.tabOrder.slice(0, 6).join(', ')}`)
+  console.log(`   hidden         : ${settings.hiddenTabs.join(', ') || '(none)'}`)
+  console.log(`   obscured       : ${settings.obscuredTabs.join(', ') || '(none)'}`)
+}
+
+async function expectRejected(label: string, run: () => Promise<unknown>): Promise<void> {
+  try {
+    await run()
+    console.log(`   FAIL  ${label} was allowed but should have been rejected`)
+    process.exitCode = 1
+  } catch (error) {
+    console.log(`   ok    ${label} rejected: ${error instanceof Error ? error.message : error}`)
+  }
+}
+
+function check(label: string, condition: boolean): void {
+  console.log(`   ${condition ? 'ok   ' : 'FAIL '} ${label}`)
+  if (!condition) process.exitCode = 1
+}
+
+async function main(): Promise<void> {
+  console.log(`settings path : ${settingsPath()}`)
+
+  show('defaults', await readSettings())
+
+  show('clock market SG', await mutateSettings({ type: 'setClockCountry', code: 'sg' }))
+  show('24-hour clock', await mutateSettings({ type: 'setTime12h', value: false }))
+  show('hide Global', await mutateSettings({ type: 'setTabHidden', id: 'global', hidden: true }))
+  show('move Portfolio up', await mutateSettings({ type: 'moveTab', id: 'portfolio', direction: -1 }))
+  show(
+    'obscure Portfolio too',
+    await mutateSettings({ type: 'setTabObscured', id: 'portfolio', obscured: true }),
+  )
+
+  console.log('\n-- refused edits')
+  await expectRejected('hiding Settings', () =>
+    mutateSettings({ type: 'setTabHidden', id: 'settings', hidden: true }),
+  )
+  await expectRejected('obscuring Settings', () =>
+    mutateSettings({ type: 'setTabObscured', id: 'settings', obscured: true }),
+  )
+  await expectRejected('an unknown page', () =>
+    mutateSettings({ type: 'setTabHidden', id: 'nope', hidden: true }),
+  )
+  await expectRejected('an unknown clock market', () =>
+    mutateSettings({ type: 'setClockCountry', code: 'ZZ' }),
+  )
+
+  console.log('\n-- moving past the ends is a no-op, not an error')
+  const top = (await readSettings()).tabOrder[0]
+  const beforeTop = (await readSettings()).tabOrder.join(',')
+  await mutateSettings({ type: 'moveTab', id: top, direction: -1 })
+  check('order unchanged after moving the top tab up', (await readSettings()).tabOrder.join(',') === beforeTop)
+
+  show('reset navigation', await mutateSettings({ type: 'resetNavigation' }))
+  const afterReset = await readSettings()
+  check('reset restores the contract order', afterReset.tabOrder[1] === 'global')
+  check('reset clears hidden pages', afterReset.hiddenTabs.length === 0)
+  check('reset keeps privacy selections', afterReset.obscuredTabs.includes('portfolio'))
+  check('reset keeps the clock market', afterReset.clockCountry === 'SG')
+
+  /* --------------------------------------------------------------- maintenance */
+
+  const portfolio = (await readPortfolios()).portfolios[0]
+  await mutatePortfolios({ type: 'addPosition', portfolioId: portfolio.id, ticker: 'NVDA' })
+  await mutatePortfolios({
+    type: 'setPosition',
+    portfolioId: portfolio.id,
+    ticker: 'NVDA',
+    shares: 7,
+    avgPrice: 123.45,
+  })
+
+  const backup = join(scratch, 'backup.json')
+  console.log('\n-- export')
+  const exported = await yahooProvider.exportUserData(backup)
+  console.log(`   ${exported.data.message}`)
+  check('export reports success', exported.data.performed)
+
+  console.log('\n-- clear')
+  const cleared = await yahooProvider.clearUserData()
+  console.log(`   ${cleared.data.message}`)
+  check('clear empties the holdings', (await readPortfolios()).portfolios[0].tickers.length === 0)
+  check('clear leaves settings alone', (await readSettings()).clockCountry === 'SG')
+
+  console.log('\n-- import')
+  const imported = await yahooProvider.importUserData(backup)
+  console.log(`   ${imported.data.message}`)
+  const restored = (await readPortfolios()).portfolios[0]
+  check('import restores the position', restored.tickers.includes('NVDA'))
+  check('import restores the share count', restored.holdings.NVDA?.shares === 7)
+  check('import restores settings', (await readSettings()).clockCountry === 'SG')
+
+  console.log('\n-- import refuses a file that is not a backup')
+  const rejected = await yahooProvider.importUserData(settingsPath())
+  console.log(`   ${rejected.data.message}`)
+  check('a foreign file is refused', !rejected.data.performed)
+  check('the refusal is a partial envelope', rejected.meta.freshness === 'partial')
+
+  console.log('\n-- reset cache')
+  const reset = await yahooProvider.resetCache()
+  console.log(`   ${reset.data.message}`)
+  check('reset cache reports success', reset.data.performed)
+
+  show('final', await readSettings())
+  console.log(`\nscratch cleaned: ${scratch}\n`)
+}
+
+main()
+  .catch((error) => {
+    console.error(error)
+    process.exitCode = 1
+  })
+  .finally(() => rmSync(scratch, { recursive: true, force: true }))

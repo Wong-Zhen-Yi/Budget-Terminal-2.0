@@ -30,9 +30,15 @@ const toneFor: Record<Freshness, string> = {
 export function StatusBar({
   panels,
   sourcePath,
+  notice = '',
 }: {
   panels: PanelStatus[]
   sourcePath: string
+  /**
+   * A shell-level message that outranks the health line — what the reference writes
+   * straight into `status_bar`, such as the result of toggling Obscure.
+   */
+  notice?: string
 }) {
   const loading = panels.filter((panel) => panel.loading)
   const settled = panels.filter((panel) => panel.envelope)
@@ -48,7 +54,10 @@ export function StatusBar({
 
   let health = 'Data health: OK'
   let tone = 'text-up'
-  if (loading.length) {
+  if (notice) {
+    health = notice
+    tone = 'text-text-muted'
+  } else if (loading.length) {
     health = `Loading ${loading.map((panel) => panel.label).join(', ')}...`
     tone = 'text-text-muted'
   } else if (worst) {
