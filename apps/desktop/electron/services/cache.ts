@@ -22,6 +22,13 @@ export const TTL = {
   profile: 12 * 60 * 60_000,
   // The Personal Finance page refreshes FX on the reference's 300s cadence.
   fx: 5 * 60_000,
+  // CNN recomputes the Fear & Greed score a few times an hour; the Pre-Market page's own
+  // refresh is every 15 minutes, so this only collapses a Reload landing on top of one.
+  fearGreed: 5 * 60_000,
+  // Trading Volumes costs a 12-page screen plus 100 daily charts, so it is the most
+  // expensive load in the app. The reference has no refresh timer at all; this only
+  // stops a page revisit from paying for the whole thing again.
+  tradingVolumes: 15 * 60_000,
 } as const
 
 export interface CachedResult<T> {

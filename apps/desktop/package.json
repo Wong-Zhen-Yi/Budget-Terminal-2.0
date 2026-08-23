@@ -15,7 +15,10 @@
     "probe:store": "tsx scripts/probe-store.ts",
     "probe:analytics": "tsx scripts/probe-analytics.ts",
     "probe:finance": "tsx scripts/probe-finance.ts",
-    "probe:settings": "tsx scripts/probe-settings.ts"
+    "probe:settings": "tsx scripts/probe-settings.ts",
+    "probe:global": "tsx scripts/probe-global.ts",
+    "probe:pre-market": "tsx scripts/probe-pre-market.ts",
+    "probe:trading-volumes": "tsx scripts/probe-trading-volumes.ts"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

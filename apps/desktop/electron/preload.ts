@@ -19,6 +19,9 @@ const api: DesktopApi = {
   mutatePersonalFinance: (mutation) =>
     ipcRenderer.invoke(CHANNELS.personalFinanceMutate, mutation),
   fx: (request) => ipcRenderer.invoke(CHANNELS.fx, request),
+  globalMarkets: (request) => ipcRenderer.invoke(CHANNELS.globalMarkets, request),
+  preMarket: (request) => ipcRenderer.invoke(CHANNELS.preMarket, request),
+  tradingVolumes: (request) => ipcRenderer.invoke(CHANNELS.tradingVolumes, request),
   fundamentals: (request) => ipcRenderer.invoke(CHANNELS.fundamentals, request),
   returns: (request) => ipcRenderer.invoke(CHANNELS.returns, request),
   momentum: (request) => ipcRenderer.invoke(CHANNELS.momentum, request),

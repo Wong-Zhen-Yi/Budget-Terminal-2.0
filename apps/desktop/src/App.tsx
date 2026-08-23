@@ -8,8 +8,11 @@ import { TabBar } from '@/components/chrome/TabBar'
 import { TabPicker } from '@/components/chrome/TabPicker'
 import { isTextEntry } from '@/lib/shortcuts'
 import { DashboardPage } from '@/pages/DashboardPage'
+import { GlobalPage } from '@/pages/GlobalPage'
 import { PersonalFinancePage } from '@/pages/PersonalFinancePage'
 import { PortfolioPage } from '@/pages/PortfolioPage'
+import { PreMarketPage } from '@/pages/PreMarketPage'
+import { TradingVolumesPage } from '@/pages/TradingVolumesPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { useDataHealth } from '@/stores/dataHealth'
 
@@ -179,10 +182,16 @@ export function App() {
         >
           {activeTab === 'dashboard' ? (
             <DashboardPage onStatusChange={handleStatusChange} />
+          ) : activeTab === 'global' ? (
+            <GlobalPage onStatusChange={handleStatusChange} />
           ) : activeTab === 'portfolio' ? (
             <PortfolioPage onStatusChange={handleStatusChange} />
           ) : activeTab === 'personal-finance' ? (
             <PersonalFinancePage onStatusChange={handleStatusChange} />
+          ) : activeTab === 'pre-market' ? (
+            <PreMarketPage onStatusChange={handleStatusChange} />
+          ) : activeTab === 'trading-volumes' ? (
+            <TradingVolumesPage onStatusChange={handleStatusChange} />
           ) : activeTab === SETTINGS_TAB_ID ? (
             <SettingsPage onStatusChange={handleStatusChange} />
           ) : (

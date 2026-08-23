@@ -13,6 +13,12 @@ import type {
   MaintenanceResult,
   FxPayload,
   FxRequest,
+  GlobalMarketsPayload,
+  GlobalMarketsRequest,
+  PreMarketPayload,
+  PreMarketRequest,
+  TradingVolumesPayload,
+  TradingVolumesRequest,
   MomentumPayload,
   MomentumRequest,
   OptionQuotesPayload,
@@ -64,6 +70,9 @@ import {
 } from './settingsStore.js'
 import { getChart } from './yahoo/chart.js'
 import { getFundamentals } from './yahoo/fundamentals.js'
+import { getGlobalMarkets } from './yahoo/globalMarkets.js'
+import { getPreMarket, PRE_MARKET_SOURCE } from './yahoo/preMarket.js'
+import { getTradingVolumes, TRADING_VOLUMES_SOURCE } from './yahoo/tradingVolumes.js'
 import { getCloses, getClosesBatch, periodReturn } from './yahoo/history.js'
 import { getOptionQuotes } from './yahoo/optionQuotes.js'
 import { getNews } from './yahoo/news.js'
@@ -96,6 +105,9 @@ export interface MarketDataProvider {
     mutation: PersonalFinanceMutation,
   ): Promise<Envelope<PersonalFinancePayload>>
   fx(request: FxRequest): Promise<Envelope<FxPayload>>
+  globalMarkets(request: GlobalMarketsRequest): Promise<Envelope<GlobalMarketsPayload>>
+  preMarket(request: PreMarketRequest): Promise<Envelope<PreMarketPayload>>
+  tradingVolumes(request: TradingVolumesRequest): Promise<Envelope<TradingVolumesPayload>>
   settings(): Promise<Envelope<AppSettings>>
   mutateSettings(mutation: AppSettingsMutation): Promise<Envelope<AppSettings>>
   /**
@@ -449,6 +461,79 @@ export const yahooProvider: MarketDataProvider = {
         describeError(error),
         FX_SOURCE,
       )
+    }
+  },
+
+  async globalMarkets({ force }) {
+    const empty: GlobalMarketsPayload = {
+      generatedAt: '',
+      source: 'yahoo chart',
+      rows: [],
+      missing: [],
+    }
+    try {
+      const payload = await getGlobalMarkets(force)
+      if (!payload.missing.length) return ok(payload, 'yahoo chart')
+      // A market whose symbol failed still has a row; the page prints `--` for it and
+      // says so in the status line rather than losing the other sixteen.
+      return partial(
+        payload,
+        payload.missing.map((symbol) =>
+          err('yahoo chart', `No history for ${symbol}.`, 'globalMarkets', symbol),
+        ),
+        'yahoo chart',
+        `${payload.missing.length} symbol(s) were unavailable.`,
+      )
+    } catch (error) {
+      return failed(empty, describeError(error), 'yahoo chart')
+    }
+  },
+
+  async preMarket({ force }) {
+    const empty: PreMarketPayload = {
+      futures: [],
+      dxy: null,
+      tnx: null,
+      vix: null,
+      fearGreed: null,
+      momentum: null,
+      missing: [],
+    }
+    try {
+      const payload = await getPreMarket(force)
+      if (!payload.missing.length) return ok(payload, PRE_MARKET_SOURCE)
+      // Six independent feeds, one of which is not even Yahoo. A dead block leaves its
+      // own panel showing a warning dot; the other five still render.
+      return partial(
+        payload,
+        payload.missing.map((block) =>
+          err(PRE_MARKET_SOURCE, `No data for ${block}.`, 'preMarket', block),
+        ),
+        PRE_MARKET_SOURCE,
+        `${payload.missing.length} pre-market feed(s) were unavailable.`,
+      )
+    } catch (error) {
+      return failed(empty, describeError(error), PRE_MARKET_SOURCE)
+    }
+  },
+
+  async tradingVolumes({ force }) {
+    const empty: TradingVolumesPayload = { rows: [], asOf: '', source: TRADING_VOLUMES_SOURCE, missing: [] }
+    try {
+      const payload = await getTradingVolumes(force)
+      if (!payload.missing.length) return ok(payload, TRADING_VOLUMES_SOURCE)
+      // A symbol whose daily history failed still has its screener row and its 1D
+      // figures; only the columns that need history are blank. The page stays up.
+      return partial(
+        payload,
+        payload.missing.map((symbol) =>
+          err(TRADING_VOLUMES_SOURCE, 'No daily history.', 'tradingVolumes', symbol),
+        ),
+        TRADING_VOLUMES_SOURCE,
+        `${payload.missing.length} symbol(s) had no daily history.`,
+      )
+    } catch (error) {
+      return failed(empty, describeError(error), TRADING_VOLUMES_SOURCE)
     }
   },
 

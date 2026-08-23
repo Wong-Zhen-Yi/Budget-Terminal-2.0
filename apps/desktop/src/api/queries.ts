@@ -22,11 +22,14 @@ const QUOTE_REFRESH_MS = 60_000
  * Invalidating a query re-runs its fetcher, but the main process answers that from its
  * own TTL cache — so a Reload would return the same numbers. This window marks the
  * refetches that a Reload triggered so they carry `force` through to Yahoo.
+ *
+ * Exported because the pages that keep their queries in their own module — the Global
+ * page — still have to answer a Reload the same way.
  */
 const FORCE_WINDOW_MS = 5_000
 let forceUntil = 0
 
-function forcing(): boolean {
+export function forcing(): boolean {
   return Date.now() < forceUntil
 }
 

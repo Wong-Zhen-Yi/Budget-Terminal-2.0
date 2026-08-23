@@ -71,6 +71,25 @@ export function percent(value: number | null | undefined, decimals = 2): string 
   return `${value >= 0 ? '+' : ''}${value.toFixed(decimals)}%`
 }
 
+/**
+ * A performance percent as the Global page prints it: signed only when the move is
+ * positive, so a flat market reads `0.00%` rather than `+0.00%`. That is `_p26_pct`,
+ * and it differs from `percent` above at exactly zero.
+ */
+export function performancePercent(value: number | null | undefined, decimals = 2): string {
+  if (!finite(value)) return EM_DASH
+  return `${value > 0 ? '+' : ''}${value.toFixed(decimals)}%`
+}
+
+/** A bare number with thousands separators and no currency mark: `7,674.37`. */
+export function thousands(value: number | null | undefined, places = 2): string {
+  if (!finite(value)) return EM_DASH
+  return value.toLocaleString('en-US', {
+    minimumFractionDigits: places,
+    maximumFractionDigits: places,
+  })
+}
+
 /** Weight column: no sign, one decimal. */
 export function plainPercent(value: number | null | undefined, decimals = 1): string {
   if (!finite(value)) return EM_DASH
@@ -98,6 +117,21 @@ export function compactNumber(value: number | null | undefined): string {
   if (abs >= 1e6) return `${(value / 1e6).toFixed(2)}M`
   if (abs >= 1e3) return `${(value / 1e3).toFixed(2)}K`
   return value.toFixed(0)
+}
+
+/**
+ * `_p20_format_compact_currency`: one decimal place and a dollar sign, unlike
+ * `compactNumber` above, which is two places and unprefixed. The Trading Volumes table
+ * and both of its log axes print this, so it cannot live in either of them.
+ */
+export function compactCurrency(value: number | null | undefined): string {
+  if (!finite(value)) return EM_DASH
+  const sign = value < 0 ? '-' : ''
+  const abs = Math.abs(value)
+  if (abs >= 1e12) return `${sign}$${(abs / 1e12).toFixed(1)}T`
+  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(1)}B`
+  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(1)}M`
+  return `${sign}$${Math.round(abs).toLocaleString('en-US')}`
 }
 
 export function integer(value: number | null | undefined): string {

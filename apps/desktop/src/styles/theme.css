@@ -22,6 +22,8 @@
 
   --color-up: #26c281;
   --color-down: #f0554e;
+  /* The Global map tints a flat market amber, between the up and down greens/reds. */
+  --color-warn: #d6b25e;
   --color-up-bg: #0f2a20;
   --color-down-bg: #2d1517;
 

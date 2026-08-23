@@ -567,13 +567,13 @@ export const OPTION_BUCKETS: ReadonlyArray<{ key: OptionBucketKey; label: string
  */
 export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boolean }> = [
   { id: 'dashboard', label: 'Dashboard', implemented: true },
-  { id: 'global', label: 'Global', implemented: false },
+  { id: 'global', label: 'Global', implemented: true },
   { id: 'portfolio', label: 'Portfolio', implemented: true },
   { id: 'cards', label: 'Cards', implemented: false },
   { id: 'personal-finance', label: 'Personal Finance', implemented: true },
-  { id: 'pre-market', label: 'Pre-Market', implemented: false },
+  { id: 'pre-market', label: 'Pre-Market', implemented: true },
   { id: 'up-down', label: 'Up/Down', implemented: false },
-  { id: 'trading-volumes', label: 'Trading Volumes', implemented: false },
+  { id: 'trading-volumes', label: 'Trading Volumes', implemented: true },
   { id: 'signals', label: 'Signals', implemented: false },
   { id: 'price', label: 'Price', implemented: false },
   { id: 'heatmap', label: 'Heatmap', implemented: false },
@@ -599,6 +599,266 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'settings', label: 'Settings', implemented: true },
 ]
 
+/* --------------------------------------------------------- global markets */
+
+/** The Global page's interval buttons, from `GLOBAL_INTERVALS`. */
+export const GLOBAL_INTERVALS = ['1D', '5D', '30D', 'YTD', '1Y', '5Y'] as const
+export type GlobalInterval = (typeof GLOBAL_INTERVALS)[number]
+
+/**
+ * One index pinned to the Global map.
+ *
+ * `labelDx`/`labelDy` are the hand-tuned first-choice offsets for the callout box; the
+ * map's placement search falls back from there. A zero offset counts as unset and
+ * becomes the 12/-18 default, which is what `_label_candidates` does.
+ */
+export interface GlobalIndexConfig {
+  region: string
+  country: string
+  name: string
+  shortName: string
+  symbol: string
+  lat: number
+  lon: number
+  labelDx: number
+  labelDy: number
+}
+
+/** `GLOBAL_MARKET_INDEXES` in the PySide6 `services/global_markets.py`, verbatim. */
+export const GLOBAL_MARKET_INDEXES: ReadonlyArray<GlobalIndexConfig> = [
+  { region: 'North America', country: 'USA', name: 'S&P 500', shortName: 'S&P 500', symbol: '^GSPC', lat: 39.5, lon: -98.4, labelDx: -94, labelDy: -42 },
+  { region: 'North America', country: 'Canada', name: 'S&P/TSX Composite Index', shortName: 'TSX', symbol: '^GSPTSE', lat: 56.1, lon: -106.3, labelDx: -102, labelDy: -18 },
+  { region: 'Europe', country: 'UK', name: 'FTSE 100', shortName: 'FTSE', symbol: '^FTSE', lat: 55.4, lon: -3.4, labelDx: -86, labelDy: -44 },
+  { region: 'Europe', country: 'Germany', name: 'DAX 40', shortName: 'DAX', symbol: '^GDAXI', lat: 51.2, lon: 10.5, labelDx: 32, labelDy: -44 },
+  { region: 'Europe', country: 'France', name: 'CAC 40', shortName: 'CAC', symbol: '^FCHI', lat: 46.2, lon: 2.2, labelDx: -92, labelDy: 8 },
+  { region: 'Europe', country: 'Italy', name: 'FTSE MIB', shortName: 'MIB', symbol: 'FTSEMIB.MI', lat: 42.8, lon: 12.5, labelDx: 32, labelDy: 8 },
+  { region: 'Europe', country: 'Spain', name: 'IBEX 35', shortName: 'IBEX', symbol: '^IBEX', lat: 40.5, lon: -3.7, labelDx: -92, labelDy: 34 },
+  { region: 'Asia-Pacific', country: 'Japan', name: 'Nikkei 225', shortName: 'Nikkei', symbol: '^N225', lat: 36.2, lon: 138.3, labelDx: 38, labelDy: -42 },
+  { region: 'Asia-Pacific', country: 'Hong Kong', name: 'Hang Seng Index (HSI)', shortName: 'HSI', symbol: '^HSI', lat: 22.3, lon: 114.2, labelDx: 30, labelDy: 28 },
+  { region: 'Asia-Pacific', country: 'China', name: 'CSI 300', shortName: 'CSI 300', symbol: '000300.SS', lat: 39.9, lon: 116.4, labelDx: 36, labelDy: -8 },
+  { region: 'Asia-Pacific', country: 'Taiwan', name: 'Taiwan Capitalization Weighted Stock Index', shortName: 'TAIEX', symbol: '^TWII', lat: 23.7, lon: 121.0, labelDx: -112, labelDy: 38 },
+  { region: 'Asia-Pacific', country: 'India', name: 'Nifty 50', shortName: 'Nifty', symbol: '^NSEI', lat: 28.6, lon: 77.2, labelDx: -110, labelDy: -18 },
+  { region: 'Asia-Pacific', country: 'South Korea', name: 'KOSPI', shortName: 'KOSPI', symbol: '^KS11', lat: 36.5, lon: 127.9, labelDx: 36, labelDy: 20 },
+  { region: 'Asia-Pacific', country: 'Singapore', name: 'Straits Times Index (STI)', shortName: 'STI', symbol: '^STI', lat: 1.35, lon: 103.8, labelDx: 36, labelDy: 52 },
+  { region: 'Asia-Pacific', country: 'Australia', name: 'S&P/ASX 200', shortName: 'ASX 200', symbol: '^AXJO', lat: -25.3, lon: 133.8, labelDx: 36, labelDy: 18 },
+  { region: 'Latin America', country: 'Brazil', name: 'Bovespa (IBOV)', shortName: 'IBOV', symbol: '^BVSP', lat: -14.2, lon: -51.9, labelDx: 30, labelDy: 22 },
+  { region: 'Latin America', country: 'Mexico', name: 'S&P/BMV IPC', shortName: 'IPC', symbol: '^MXX', lat: 23.6, lon: -102.6, labelDx: -100, labelDy: 18 },
+]
+
+/** One interval's return, or the reason there isn't one. */
+export interface IntervalPerformance {
+  available: boolean
+  interval: GlobalInterval
+  startDate: string
+  endDate: string
+  startClose: number | null
+  endClose: number | null
+  changePct: number | null
+  reason: string
+}
+
+/**
+ * Trading-session metadata as Yahoo reports it. Epoch **seconds**, like everything else
+ * in this contract. The renderer turns these into a session line in the Settings clock
+ * timezone, so nothing here is pre-formatted.
+ */
+export interface MarketTiming {
+  symbol: string
+  exchangeName: string
+  exchangeTimezone: string
+  regularStart: number | null
+  regularEnd: number | null
+  regularMarketTime: number | null
+  lastTickTime: number | null
+  source: string
+}
+
+export interface GlobalIndexRow extends GlobalIndexConfig {
+  lastClose: number | null
+  lastDate: string
+  intervals: Record<GlobalInterval, IntervalPerformance>
+  marketTiming: MarketTiming
+}
+
+export interface GlobalMarketsPayload {
+  generatedAt: string
+  source: string
+  rows: GlobalIndexRow[]
+  /** Symbols Yahoo gave nothing usable for; their rows render as `--`. */
+  missing: string[]
+}
+
+export interface GlobalMarketsRequest {
+  force?: boolean
+}
+
+/* -------------------------------------------------------------- pre-market */
+
+/** `PreMarketWorker._FUTURES_CONTRACTS`, in order. */
+export const PRE_MARKET_FUTURES: ReadonlyArray<{ symbol: string; name: string }> = [
+  { symbol: 'ES=F', name: 'S&P 500' },
+  { symbol: 'NQ=F', name: 'Nasdaq 100' },
+  { symbol: 'YM=F', name: 'Dow Jones' },
+  { symbol: 'CL=F', name: 'WTI Crude' },
+  { symbol: 'ZB=F', name: 'T-Bond' },
+]
+
+/**
+ * The range buttons on the DXY / 10Y / VIX charts.
+ *
+ * Not in the reference, which prints those three panels as text only. The service always
+ * sends two years of daily closes and the renderer slices, so a range click never
+ * refetches.
+ */
+export const MACRO_RANGES = ['1M', '6M', '1Y', '2Y'] as const
+export type MacroRange = (typeof MACRO_RANGES)[number]
+
+export type FuturesDirection = 'Up' | 'Down' | 'Flat'
+
+export interface FuturesRow {
+  symbol: string
+  name: string
+  price: number
+  changePct: number
+  direction: FuturesDirection
+}
+
+/** Daily closes for one macro symbol. `dates` is `YYYY-MM-DD`, ascending. */
+export interface MacroSeries {
+  dates: string[]
+  values: number[]
+}
+
+export type DxyTrend = 'Strengthening' | 'Weakening' | 'Flat' | '--'
+
+export interface DxySnapshot {
+  level: number
+  changePct: number
+  trend: DxyTrend
+  series: MacroSeries
+}
+
+export interface TnxSnapshot {
+  yield: number
+  changeBps: number
+  avg20d: number
+  vsAvg: number
+  series: MacroSeries
+}
+
+export type VixRegime = 'Low Vol' | 'Normal' | 'Elevated' | 'High Vol'
+
+export interface VixSnapshot {
+  level: number
+  change: number
+  regime: VixRegime
+  series: MacroSeries
+}
+
+export interface FearGreedRow {
+  period: string
+  score: number | null
+  rating: string
+}
+
+export interface FearGreedPayload {
+  score: number | null
+  /** CNN's own rating for the current score, title-cased; the rows compute their own. */
+  rating: string
+  /** Already formatted in `America/New_York`; empty when CNN sent nothing usable. */
+  timestamp: string
+  history: FearGreedRow[]
+}
+
+/** SPY against its 125-day mean. `ma125` is null for the first 124 bars. */
+export interface SpyMomentumPayload {
+  dates: string[]
+  closes: number[]
+  ma125: Array<number | null>
+  lastClose: number | null
+  lastMa: number | null
+}
+
+/**
+ * Six independent blocks. Any one of them can be null — the reference fetches each in
+ * its own try/except and leaves a dead panel showing its last value rather than taking
+ * the page down, and the panels here show their own warning dot instead.
+ */
+export interface PreMarketPayload {
+  futures: FuturesRow[]
+  dxy: DxySnapshot | null
+  tnx: TnxSnapshot | null
+  vix: VixSnapshot | null
+  fearGreed: FearGreedPayload | null
+  momentum: SpyMomentumPayload | null
+  /** Blocks that came back empty, by the label the panel carries. */
+  missing: string[]
+}
+
+export interface PreMarketRequest {
+  force?: boolean
+}
+
+/* --------------------------------------------------------- trading volumes */
+
+/**
+ * The six intervals the Trading Volumes page ranks by, from `_P20_DOT_METRICS`.
+ * Selecting one re-ranks the table and the dot plot together.
+ */
+export const TRADING_VOLUME_INTERVALS = ['1d', '5d', '30d', 'ytd', '1y', '3y'] as const
+export type TradingVolumeInterval = (typeof TRADING_VOLUME_INTERVALS)[number]
+
+/** One point of the price-based market-cap estimate, from `_market_cap_estimate_history`. */
+export interface MarketCapPoint {
+  /** `YYYY-MM-DD`. */
+  date: string
+  value: number
+}
+
+/**
+ * A screened row. Every figure is nullable because the reference leaves a metric out
+ * rather than guessing when the history behind it is too short.
+ */
+export interface TradingVolumeRow {
+  ticker: string
+  name: string
+  sector: string
+  marketCap: number | null
+
+  oneDayDollarVolume: number | null
+  fiveDayAvgDollarVolume: number | null
+  thirtyDayAvgDollarVolume: number | null
+  ytdAvgDollarVolume: number | null
+  oneYearAvgDollarVolume: number | null
+  threeYearAvgDollarVolume: number | null
+
+  oneDayPriceReturnPct: number | null
+  fiveDayPriceReturnPct: number | null
+  thirtyDayPriceReturnPct: number | null
+  ytdPriceReturnPct: number | null
+  oneYearPriceReturnPct: number | null
+  threeYearPriceReturnPct: number | null
+
+  /**
+   * Daily price-based market-cap estimate over the full three years. Carried so the
+   * deferred Replay animation drops in without a contract change; nothing reads it yet.
+   */
+  marketCapHistory: MarketCapPoint[]
+}
+
+export interface TradingVolumesPayload {
+  rows: TradingVolumeRow[]
+  /** `YYYY-MM-DD HH:mm`, the reference's `as_of`. */
+  asOf: string
+  source: string
+  /** Symbols whose daily history failed, so their ADV columns beyond 1D are blank. */
+  missing: string[]
+}
+
+export interface TradingVolumesRequest {
+  force?: boolean
+}
+
 /* ---------------------------------------------------------------- channels */
 
 export const CHANNELS = {
@@ -612,6 +872,9 @@ export const CHANNELS = {
   personalFinance: 'finance:read',
   personalFinanceMutate: 'finance:mutate',
   fx: 'finance:fx',
+  globalMarkets: 'global:markets',
+  preMarket: 'pre-market:read',
+  tradingVolumes: 'trading-volumes:read',
   fundamentals: 'dashboard:fundamentals',
   returns: 'portfolio:returns',
   momentum: 'portfolio:momentum',
@@ -700,6 +963,9 @@ export interface DesktopApi {
     mutation: PersonalFinanceMutation,
   ): Promise<Envelope<PersonalFinancePayload>>
   fx(request: FxRequest): Promise<Envelope<FxPayload>>
+  globalMarkets(request: GlobalMarketsRequest): Promise<Envelope<GlobalMarketsPayload>>
+  preMarket(request: PreMarketRequest): Promise<Envelope<PreMarketPayload>>
+  tradingVolumes(request: TradingVolumesRequest): Promise<Envelope<TradingVolumesPayload>>
   fundamentals(request: FundamentalsRequest): Promise<Envelope<FundamentalsPayload>>
   returns(request: ReturnsRequest): Promise<Envelope<ReturnsPayload>>
   momentum(request: MomentumRequest): Promise<Envelope<MomentumPayload>>

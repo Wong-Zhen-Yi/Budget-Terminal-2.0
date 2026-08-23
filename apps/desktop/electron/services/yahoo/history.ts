@@ -73,7 +73,12 @@ export function windowStart(window: ReturnTimeframe | HeatmapInterval | MetricsL
   }
 }
 
-async function fetchCloses(symbol: string, start: Date): Promise<CloseSeries> {
+/**
+ * The raw close pull, exported so callers whose window has no member in the timeframe
+ * unions above (the Pre-Market page wants a flat two years) get the same adjusted-close
+ * preference and repeated-trailing-date collapse instead of writing their own.
+ */
+export async function fetchCloses(symbol: string, start: Date): Promise<CloseSeries> {
   const result = await paced(() =>
     yahoo.chart(symbol, { period1: start, interval: '1d' }),
   )
@@ -141,4 +146,90 @@ export function periodReturn(series: CloseSeries): number | null {
   const last = series.values[series.values.length - 1]
   if (!first) return null
   return ((last - first) / first) * 100
+}
+
+/* ----------------------------------------------------- closes with volume */
+
+/**
+ * Daily bars carrying volume, for the Trading Volumes page's ADV columns.
+ *
+ * Deliberately not folded into `fetchCloses`, which prefers `adjclose` and drops volume.
+ * ADV is `close * volume` on the **unadjusted** close, matching the reference's
+ * `yf.download(..., auto_adjust=False)` — feeding it adjusted closes would restate every
+ * historical dollar volume by the split and dividend factors.
+ */
+export interface CloseVolumeSeries {
+  /** `YYYY-MM-DD`, ascending. */
+  dates: string[]
+  closes: number[]
+  volumes: number[]
+}
+
+export async function fetchCloseVolume(symbol: string, start: Date): Promise<CloseVolumeSeries> {
+  const result = await paced(() => yahoo.chart(symbol, { period1: start, interval: '1d' }))
+  const dates: string[] = []
+  const closes: number[] = []
+  const volumes: number[] = []
+  let previousDate = ''
+
+  for (const row of result.quotes) {
+    const close = row.close
+    const volume = row.volume
+    if (typeof close !== 'number' || !Number.isFinite(close) || close <= 0) continue
+    if (typeof volume !== 'number' || !Number.isFinite(volume)) continue
+    const date = row.date.toISOString().slice(0, 10)
+    if (date === previousDate) {
+      // Yahoo repeats the last session as a live row; keep the newer value.
+      closes[closes.length - 1] = close
+      volumes[volumes.length - 1] = volume
+      continue
+    }
+    previousDate = date
+    dates.push(date)
+    closes.push(close)
+    volumes.push(volume)
+  }
+
+  if (!dates.length) throw new Error(`No history returned for ${symbol}.`)
+  return { dates, closes, volumes }
+}
+
+export interface CloseVolumeBatch {
+  series: Record<string, CloseVolumeSeries>
+  missing: string[]
+}
+
+/**
+ * One hundred symbols of three-year daily history, which is the Trading Volumes page's
+ * whole cost. The reference gets it in a single bulk `yf.download`; there is no bulk
+ * equivalent here, so these are 100 individual charts paced by the rate gate. A symbol
+ * that fails only blanks its own ADV columns.
+ */
+export async function getCloseVolumeBatch(
+  symbols: string[],
+  start: Date,
+  force = false,
+): Promise<CloseVolumeBatch> {
+  const unique = [...new Set(symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean))]
+  const stamp = start.toISOString().slice(0, 10)
+  const settled = await Promise.allSettled(
+    unique.map((symbol) =>
+      cache
+        .resolve(
+          `close-volume:${symbol}:${stamp}`,
+          TTL.chartDaily,
+          () => fetchCloseVolume(symbol, start),
+          { force },
+        )
+        .then((result) => result.value),
+    ),
+  )
+
+  const series: Record<string, CloseVolumeSeries> = {}
+  const missing: string[] = []
+  settled.forEach((outcome, index) => {
+    if (outcome.status === 'fulfilled') series[unique[index]] = outcome.value
+    else missing.push(unique[index])
+  })
+  return { series, missing }
 }

@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
 
 export interface LineSeries {
-  values: number[]
+  /** `null` breaks the line rather than plotting a point, keeping the x alignment. */
+  values: Array<number | null>
   color: string
   dashed?: boolean
   label: string
@@ -13,36 +14,75 @@ interface LineChartProps {
   series: LineSeries[]
   format: (value: number) => string
   empty?: string
+  /**
+   * `zero` pins the baseline at zero and draws it, which is what a returns chart wants.
+   * `auto` fits the data — a $550-$770 price series against a forced zero is a flat line
+   * at the top of the frame.
+   */
+  baseline?: 'zero' | 'auto'
+  /**
+   * The viewBox, which is stretched to the container with `preserveAspectRatio="none"`.
+   * A panel much shorter or narrower than the default ratio should pass its own, or the
+   * axis text is visibly squashed.
+   */
+  viewBox?: { width: number; height: number }
+  /** Drop the value labels and x ticks for a chart too small to carry them. */
+  axisLabels?: boolean
+  /** Roughly how many x labels to print. */
+  ticks?: number
 }
 
 const WIDTH = 1000
 const HEIGHT = 380
 const PAD = { top: 16, right: 56, bottom: 26, left: 8 }
+const BARE_PAD = { top: 8, right: 8, bottom: 8, left: 8 }
 
 /**
- * An SVG line chart with a zero baseline, for the Momentum Tracker.
+ * An SVG line chart, for the Momentum Tracker and the Pre-Market page's macro panels.
  *
  * It uses a fixed viewBox and scales to fit, so it needs no resize observer and no
  * charting library — the series is a few hundred daily points at most.
  */
-export function LineChart({ labels, series, format, empty = 'No data' }: LineChartProps) {
+export function LineChart({
+  labels,
+  series,
+  format,
+  empty = 'No data',
+  baseline = 'zero',
+  viewBox,
+  axisLabels = true,
+  ticks = 8,
+}: LineChartProps) {
+  const width = viewBox?.width ?? WIDTH
+  const height = viewBox?.height ?? HEIGHT
+  const pad = axisLabels ? PAD : BARE_PAD
+
   const plot = useMemo(() => {
-    const all = series.flatMap((entry) => entry.values)
+    const all = series
+      .flatMap((entry) => entry.values)
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
     if (!all.length) return null
 
-    // Always include zero so the baseline is meaningful, as the reference chart does.
-    const minimum = Math.min(...all, 0)
-    const maximum = Math.max(...all, 0)
+    // A returns chart is meaningless without its zero line; a price chart is unreadable
+    // with one.
+    const minimum = baseline === 'zero' ? Math.min(...all, 0) : Math.min(...all)
+    const maximum = baseline === 'zero' ? Math.max(...all, 0) : Math.max(...all)
     const span = maximum - minimum || 1
-    const innerWidth = WIDTH - PAD.left - PAD.right
-    const innerHeight = HEIGHT - PAD.top - PAD.bottom
+    const innerWidth = width - pad.left - pad.right
+    const innerHeight = height - pad.top - pad.bottom
     const count = Math.max(...series.map((entry) => entry.values.length))
 
     const x = (index: number) =>
-      PAD.left + (count > 1 ? (index / (count - 1)) * innerWidth : innerWidth / 2)
-    const y = (value: number) => PAD.top + ((maximum - value) / span) * innerHeight
+      pad.left + (count > 1 ? (index / (count - 1)) * innerWidth : innerWidth / 2)
+    const y = (value: number) => pad.top + ((maximum - value) / span) * innerHeight
 
-    const gridValues = [maximum, maximum - span / 4, maximum - span / 2, maximum - (span * 3) / 4, minimum]
+    const gridValues = [
+      maximum,
+      maximum - span / 4,
+      maximum - span / 2,
+      maximum - (span * 3) / 4,
+      minimum,
+    ]
 
     return {
       minimum,
@@ -53,11 +93,19 @@ export function LineChart({ labels, series, format, empty = 'No data' }: LineCha
       zeroY: y(0),
       paths: series.map((entry) => ({
         ...entry,
-        d: entry.values.map((value, index) => `${index ? 'L' : 'M'} ${x(index)} ${y(value)}`).join(' '),
-        last: entry.values[entry.values.length - 1],
+        // A gap restarts the path with `M`, so the 125-day mean can begin 124 bars in
+        // without dragging a line back to the origin.
+        d: entry.values
+          .map((value, index) =>
+            typeof value === 'number' && Number.isFinite(value)
+              ? `${index && typeof entry.values[index - 1] === 'number' ? 'L' : 'M'} ${x(index)} ${y(value)}`
+              : '',
+          )
+          .filter(Boolean)
+          .join(' '),
       })),
     }
-  }, [series])
+  }, [series, baseline, width, height, pad.left, pad.right, pad.top, pad.bottom])
 
   if (!plot) {
     return (
@@ -65,40 +113,48 @@ export function LineChart({ labels, series, format, empty = 'No data' }: LineCha
     )
   }
 
-  // Roughly eight ticks, whatever the series length.
-  const tickStep = Math.max(1, Math.ceil(labels.length / 8))
+  // Roughly `ticks` labels, whatever the series length.
+  const tickStep = Math.max(1, Math.ceil(labels.length / ticks))
 
   return (
-    <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} preserveAspectRatio="none" className="min-h-0 w-full flex-1">
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="none"
+      className="min-h-0 w-full flex-1"
+    >
       {plot.gridValues.map((value) => (
         <g key={value}>
           <line
-            x1={PAD.left}
-            x2={WIDTH - PAD.right}
+            x1={pad.left}
+            x2={width - pad.right}
             y1={plot.y(value)}
             y2={plot.y(value)}
             stroke="var(--color-border)"
             strokeWidth={1}
           />
-          <text
-            x={WIDTH - PAD.right + 6}
-            y={plot.y(value) + 4}
-            fill="var(--color-text-muted)"
-            fontSize={11}
-          >
-            {format(value)}
-          </text>
+          {axisLabels ? (
+            <text
+              x={width - pad.right + 6}
+              y={plot.y(value) + 4}
+              fill="var(--color-text-muted)"
+              fontSize={11}
+            >
+              {format(value)}
+            </text>
+          ) : null}
         </g>
       ))}
 
-      <line
-        x1={PAD.left}
-        x2={WIDTH - PAD.right}
-        y1={plot.zeroY}
-        y2={plot.zeroY}
-        stroke="var(--color-border-strong)"
-        strokeDasharray="4 4"
-      />
+      {baseline === 'zero' ? (
+        <line
+          x1={pad.left}
+          x2={width - pad.right}
+          y1={plot.zeroY}
+          y2={plot.zeroY}
+          stroke="var(--color-border-strong)"
+          strokeDasharray="4 4"
+        />
+      ) : null}
 
       {plot.paths.map((entry) => (
         <path
@@ -112,20 +168,25 @@ export function LineChart({ labels, series, format, empty = 'No data' }: LineCha
         />
       ))}
 
-      {labels.map((label, index) =>
-        index % tickStep === 0 ? (
-          <text
-            key={`${label}-${index}`}
-            x={plot.x(index)}
-            y={HEIGHT - 8}
-            fill="var(--color-text-muted)"
-            fontSize={11}
-            textAnchor="middle"
-          >
-            {label}
-          </text>
-        ) : null,
-      )}
+      {/* The first and last labels anchor inwards; centred, they hang off the frame. */}
+      {axisLabels
+        ? labels.map((label, index) =>
+            index % tickStep === 0 ? (
+              <text
+                key={`${label}-${index}`}
+                x={plot.x(index)}
+                y={height - 8}
+                fill="var(--color-text-muted)"
+                fontSize={11}
+                textAnchor={
+                  index === 0 ? 'start' : index + tickStep >= labels.length ? 'end' : 'middle'
+                }
+              >
+                {label}
+              </text>
+            ) : null,
+          )
+        : null}
     </svg>
   )
 }

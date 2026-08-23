@@ -10,6 +10,9 @@ import type {
   MaintenanceResult,
   FundamentalsRequest,
   FxRequest,
+  GlobalMarketsRequest,
+  PreMarketRequest,
+  TradingVolumesRequest,
   MomentumRequest,
   OptionQuotesRequest,
   PersonalFinanceMutation,
@@ -66,6 +69,16 @@ export function registerIpcHandlers(): () => void {
     provider.mutatePersonalFinance(mutation),
   )
   ipcMain.handle(CHANNELS.fx, (_event, request: FxRequest) => provider.fx(request))
+  ipcMain.handle(CHANNELS.globalMarkets, (_event, request: GlobalMarketsRequest) =>
+    provider.globalMarkets(request),
+  )
+
+  ipcMain.handle(CHANNELS.preMarket, (_event, request: PreMarketRequest) =>
+    provider.preMarket(request),
+  )
+  ipcMain.handle(CHANNELS.tradingVolumes, (_event, request: TradingVolumesRequest) =>
+    provider.tradingVolumes(request),
+  )
   ipcMain.handle(CHANNELS.settings, () => provider.settings())
   ipcMain.handle(CHANNELS.settingsMutate, (_event, mutation: AppSettingsMutation) =>
     provider.mutateSettings(mutation),
