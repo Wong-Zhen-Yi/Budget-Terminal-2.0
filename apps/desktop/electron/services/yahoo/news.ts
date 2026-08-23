@@ -1,14 +1,15 @@
 import type { NewsItem } from '../../shared/contract.js'
+import { normalizeNewsSymbol } from '../../shared/news.js'
 import { cache, TTL } from '../cache.js'
-import { paced, yahoo } from './client.js'
+import { searchNews } from './newsPage.js'
 
+/**
+ * The Dashboard panel deliberately keeps its own numbers. The News page asks for eight
+ * and keeps every match; this asks for ten and keeps two per ticker so one busy holding
+ * cannot fill a side panel. Only `searchNews` is shared.
+ */
 const PER_TICKER_LIMIT = 2
 const SEARCH_NEWS_COUNT = 10
-
-/** Yahoo writes the same ticker as `BRK-B` and `BRK.B` depending on the endpoint. */
-function normalizeSymbol(value: string): string {
-  return value.trim().toUpperCase().replace(/\./g, '-')
-}
 
 /**
  * Only keep articles Yahoo itself associates with the ticker via `relatedTickers`.
@@ -16,18 +17,11 @@ function normalizeSymbol(value: string): string {
  * is why the PySide6 app filters the same way in `_search_portfolio_news_items`.
  */
 async function fetchTickerNews(ticker: string): Promise<NewsItem[]> {
-  const result = await paced(() =>
-    yahoo.search(ticker, {
-      newsCount: SEARCH_NEWS_COUNT,
-      quotesCount: 0,
-      enableCb: false,
-      enableNavLinks: false,
-    }),
-  )
-  const wanted = normalizeSymbol(ticker)
+  const news = await searchNews(ticker, SEARCH_NEWS_COUNT)
+  const wanted = normalizeNewsSymbol(ticker)
   const items: NewsItem[] = []
-  for (const article of result.news ?? []) {
-    const related = (article.relatedTickers ?? []).map(normalizeSymbol)
+  for (const article of news) {
+    const related = (article.relatedTickers ?? []).map(normalizeNewsSymbol)
     if (!related.includes(wanted)) continue
     items.push({
       id: article.uuid,

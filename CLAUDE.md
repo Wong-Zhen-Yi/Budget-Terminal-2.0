@@ -14,6 +14,7 @@ npm run probe:finance            # every Personal Finance figure, then every wri
 npm run probe:settings           # settings writes, then export/import/clear/reset-cache
 npm run probe:pre-market         # futures, the three macro panels, CNN F&G, SPY momentum
 npm run probe:trading-volumes    # the screen, all six ADV columns and the fitted trend line
+npm run probe:news               # all three news lanes; --offline, --feeds-only, --preview N, --images
 ```
 
 There is no test suite. The `scripts/probe*.ts` files are the verification story: they
@@ -37,8 +38,9 @@ ring and the Silos bar chart), the **Settings** page (one scrolling page grouped
 Data / General / Workspace) together with the app-wide keyboard shortcuts, and the
 **Pre-Market** page (futures table, DXY / 10Y / VIX panels each with a chart, the CNN
 Fear & Greed dial and the SPY momentum plot), and the **Trading Volumes** page
-(the screened top-100 table beside the log-log market-cap dot plot; the Replay
-animation is the one piece not yet ported). The remaining
+(the screened top-100 table beside the log-log market-cap dot plot, including the
+Replay animation), and the **News** page (a three-lane card grid with a reader rail,
+thumbnails, the signal heuristic and an outside-portfolio ticker search). The remaining
 tabs are labels in `TABS`
 (`electron/shared/contract.ts`) and render a placeholder; `implemented: true` is what
 routes a tab to a real page in `App.tsx`.
@@ -227,6 +229,62 @@ adding handlers.
 - **The `#` column is a real column, not `DataTable`'s `showIndex`.** It prints the rank a
   row held *before* the filter sliced the list, which is what makes Exclude Top 5 start
   the table at 6. `showIndex` would print the display position and lose that.
+- **Replay pins the y range and the label set before the first frame.** The range comes
+  from the min and max of *every* aligned value, so dots move against a still axis
+  instead of one rescaling under them (`setYRange` at the top of
+  `_p20_replay_market_cap_animation`). The label set is likewise chosen once from the
+  resting layout and only repositioned — the reference creates its `TextItem`s in the
+  static render and moves them, and recomputing collisions per frame would make labels
+  blink as dots drift past each other. The trend line *is* refitted every frame.
+- **Playback interpolates in log space, and the last frame is forced to the live cap.**
+  `alignMarketCapHistory` resamples each ticker onto the shared timeline log-linearly and
+  overwrites the final value, so a five-second replay lands exactly where the static plot
+  already is. `npm run probe:trading-volumes` prints that check per ticker.
+- **The Replay timeline is a union, so it is longer than the interval's bar count.** 30D
+  slices 31 bars per ticker but the shared timeline came out at 44 dates, because tickers
+  that halted or listed late contribute their own sessions. That is the reference's
+  behaviour and why alignment has to interpolate rather than index.
+- **The News page has three lanes, and only two of them are Yahoo.** The portfolio lane is
+  `yahoo.search` behind the `relatedTickers` gate and the macro lane reads Yahoo's per-symbol
+  headline RSS, both inside `paced()`. The six publisher feeds in `services/news/feeds.ts`,
+  the article preview and the thumbnail proxy are deliberately **outside** it, on the
+  `fearGreed.ts` precedent — six unrelated hosts behind the Yahoo gate would let one slow
+  publisher edge throttle the whole app.
+- **`yahoo-finance2@4` has no news module**, so the macro lane is a hand-rolled fetch of
+  `feeds.finance.yahoo.com/rss/2.0/headline`. Do not "simplify" it back to `search`: searching
+  the literal string `DX-Y.NYB` returns generic retirement listicles, because a macro symbol
+  has no company name for the query to match. The probe prints per-symbol counts.
+- **The News fetches use `services/news/http.ts`, not `fetch`.** Node's `fetch` is undici,
+  whose `maxHeaderSize` is fixed at 16KB; Yahoo answers an article URL with more `Set-Cookie`
+  than that and the request dies as an opaque `fetch failed` (cause: `Headers Overflow Error`).
+  `node:https` takes `maxHeaderSize` per request, and streaming also lets the body be capped
+  mid-download instead of after it.
+- **News timestamps are milliseconds, and a bare ISO stamp gets an explicit `Z`.** The
+  reference stores seconds in `_ts`, and Python reads a zone-less stamp as UTC where
+  JavaScript reads it as local. Without the `Z` in `parseNewsTimestamp`, every affected
+  article shifts by the machine's offset and shows up only as slightly wrong ages. The probe
+  asserts nothing is dated in the future, which is what catches it.
+- **`NewsArticle.score` is `null` on the Yahoo lanes, not `0`.** `_p34_filtered_groups` sorts
+  on whether an article carries a score before sorting on its value, so collapsing null to
+  zero puts unscored Yahoo articles above genuinely low-scoring RSS ones under Signal sort.
+- **Card images are `data:` URIs from the main process.** The renderer CSP is
+  `img-src 'self' data:`, so a raw `https://` `<img>` is blocked silently and looks like a
+  broken proxy. `services/news/images.ts` fetches and base64-inlines each one, bounded by a
+  24MB byte budget rather than an entry count — thumbnail sizes vary by a factor of thirty.
+  Relaxing the CSP would turn every feed-supplied URL into a tracking beacon.
+- **A feed's stale fallback is capped at 24h in `feeds.ts`, not in `cache.ts`.**
+  `resolveWithStaleFallback` has no upper bound on staleness, so without the explicit age
+  check a feed that broke last week keeps serving last week's headlines with nothing on
+  screen to say so.
+- **News has no refresh timer, deliberately** — like Trading Volumes, and like the reference,
+  whose `init_page34` creates none. A background refetch would also reshuffle the card grid
+  under whoever is mid-article in the reader.
+- **Two documented departures from `mixins/news.py`:** the reader is a right rail rather than
+  a 190-270px strip above the cards (six thousand characters do not fit in a strip), and the
+  highest-scoring story from the last 24 hours is promoted to a hero above the grid. The age
+  bound matters — several publisher feeds carry months-old items, and the reference applies no
+  age cutoff anywhere.
+
 - **Neither `100%` nor `table-fixed` alone gives Trading Volumes a usable Name column.**
   Under `table-fixed` a `100%` column collapses to nothing; under `auto` it swallows the
   pane and pushes the six ADV columns — the point of the page — out of sight. It is a
@@ -249,4 +307,5 @@ decimal. Useful starting points:
 | Tab labels and order | `mixins/window_setup.py`, `persistence.py` |
 | Settings, all of it | `mixins/settings.py` |
 | Trading Volumes, all of it | `mixins/overview.py` (worker `workers/overview.py`) |
+| News, all of it | `mixins/news.py` (feeds `workers/news_sources.py`, reader `workers/news_preview.py`, dedupe `services/news_analysis.py`) |
 | Shortcut wiring, tab picker, Obscure | `mixins/window_setup.py`, `mixins/window_lifecycle.py` |

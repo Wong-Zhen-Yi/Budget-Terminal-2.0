@@ -13,6 +13,7 @@ import { useRefreshTradingVolumes, useTradingVolumes } from '@/api/tradingVolume
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { DotPlot } from '@/components/tradingvolumes/DotPlot'
 import { buildTradingVolumesLlmExport } from '@/components/tradingvolumes/llmExport'
+import { useMarketCapReplay } from '@/components/tradingvolumes/useMarketCapReplay'
 import { VolumeTable } from '@/components/tradingvolumes/VolumeTable'
 import { Button } from '@/components/ui/Button'
 import { NumberInput } from '@/components/ui/NumberInput'
@@ -24,10 +25,8 @@ import { useTradingVolumesPage } from '@/stores/tradingVolumes'
  * beside a log-log plot of market cap against that dollar volume. Ported from
  * `OverviewMixin` (`mixins/overview.py`).
  *
- * Two departures from the reference, both deliberate. It stacks a page title over a panel
- * title that both read "Trading Volumes"; there is one header here, with the controls on
- * it. And Replay — the five-second market-cap animation — is not built yet, so its button
- * is present but disabled; the payload already carries the history it will need.
+ * One departure from the reference: it stacks a page title over a panel title that both
+ * read "Trading Volumes", where there is one header here with the controls on it.
  */
 
 type Tone = 'muted' | 'positive' | 'warning' | 'negative'
@@ -83,6 +82,10 @@ export function TradingVolumesPage({
   // slice, which is what lets the `#` column keep reading 6..100 under an exclude.
   const ranked = useMemo(() => rankRows(payload?.rows ?? [], interval), [payload, interval])
   const rows = useMemo(() => visibleRows(ranked, filter), [ranked, filter])
+
+  // Replay animates the visible rows over the active interval, so it re-plans whenever
+  // either changes — and stops itself when it does.
+  const replay = useMarketCapReplay(rows, interval)
 
   useEffect(() => {
     onStatusChange(
@@ -212,21 +215,37 @@ export function TradingVolumesPage({
             <span className="shrink-0 text-2xs font-semibold whitespace-nowrap text-text">
               Trading Volumes Dot Plot
             </span>
-            {/* The header is a fixed h-9, so this has to give way on a narrow pane
-                rather than wrap a second line into it. */}
-            <span
-              className="min-w-0 truncate pl-1 text-2xs whitespace-nowrap text-text-dim"
-              title="Price-based estimate that assumes shares outstanding remain unchanged."
-            >
-              Estimated market cap • price-based
-            </span>
+{/* The header is a fixed h-9 on a pane that can get narrow, so the prose and
+                the playback date take turns rather than competing for it. While Replay
+                runs the date is the information — `_p20_apply_market_cap_animation_frame`
+                writes it here — and the standing caption would only truncate to noise. */}
+            {replay.frame ? (
+              <span
+                className="num shrink-0 pl-1 text-2xs whitespace-nowrap text-text-muted"
+                title="Estimated market cap on this date, assuming shares outstanding are unchanged."
+              >
+                • {replay.frame.date}
+              </span>
+            ) : (
+              <span
+                className="min-w-0 truncate pl-1 text-2xs whitespace-nowrap text-text-dim"
+                title="Price-based estimate that assumes shares outstanding remain unchanged."
+              >
+                Estimated market cap{replay.canReplay ? ' • price-based' : ''}
+              </span>
+            )}
             <Button
               className="ml-auto"
               variant="accent"
-              disabled
-              title="Market-cap replay is not built yet; the history it needs is already loaded."
+              disabled={!replay.canReplay}
+              onClick={replay.playing ? replay.stop : replay.start}
+              title={
+                replay.canReplay
+                  ? 'Replay the selected interval using price-based estimated market caps.'
+                  : 'Refresh Trading Volumes to load daily market-cap history.'
+              }
             >
-              Replay
+              {replay.playing ? 'Stop' : 'Replay'}
             </Button>
             {TRADING_VOLUME_INTERVALS.map((key) => (
               <Button
@@ -240,7 +259,13 @@ export function TradingVolumesPage({
             ))}
           </div>
 
-          <DotPlot rows={rows} interval={interval} loaded={Boolean(ranked.length)} />
+          <DotPlot
+            rows={rows}
+            interval={interval}
+            loaded={Boolean(ranked.length)}
+            frame={replay.frame}
+            plan={replay.plan}
+          />
         </div>
       </div>
     </div>

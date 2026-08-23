@@ -25,6 +25,10 @@ export const queryKeys = {
   options: (symbol: string) => ['options', symbol] as const,
   targets: (tickers: string[]) => ['targets', [...tickers].sort().join(',')] as const,
   news: (tickers: string[]) => ['news', [...tickers].sort().join(',')] as const,
+  newsPage: (tickers: string[]) => ['newsPage', [...tickers].sort().join(',')] as const,
+  newsTickerSearch: (tickers: string[]) => ['newsTickerSearch', tickers.join(',')] as const,
+  newsPreview: (url: string) => ['newsPreview', url] as const,
+  newsThumbnail: (url: string) => ['newsThumbnail', url] as const,
   fundamentals: (tickers: string[]) => ['fundamentals', [...tickers].sort().join(',')] as const,
   returns: (tickers: string[], window: string) =>
     ['returns', window, [...tickers].sort().join(',')] as const,

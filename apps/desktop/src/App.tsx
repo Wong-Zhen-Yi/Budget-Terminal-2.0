@@ -11,6 +11,7 @@ import { DashboardPage } from '@/pages/DashboardPage'
 import { GlobalPage } from '@/pages/GlobalPage'
 import { PersonalFinancePage } from '@/pages/PersonalFinancePage'
 import { PortfolioPage } from '@/pages/PortfolioPage'
+import { NewsPage } from '@/pages/NewsPage'
 import { PreMarketPage } from '@/pages/PreMarketPage'
 import { TradingVolumesPage } from '@/pages/TradingVolumesPage'
 import { SettingsPage } from '@/pages/SettingsPage'
@@ -192,6 +193,8 @@ export function App() {
             <PreMarketPage onStatusChange={handleStatusChange} />
           ) : activeTab === 'trading-volumes' ? (
             <TradingVolumesPage onStatusChange={handleStatusChange} />
+          ) : activeTab === 'news' ? (
+            <NewsPage onStatusChange={handleStatusChange} />
           ) : activeTab === SETTINGS_TAB_ID ? (
             <SettingsPage onStatusChange={handleStatusChange} />
           ) : (

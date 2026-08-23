@@ -21,6 +21,10 @@ export interface EnvelopeError {
   source: string
   reason: string
   operation: string
+  /**
+   * The symbol the failure belongs to — or, on the pages whose panels share one envelope,
+   * the block label that panel looks itself up by (`warningOf` on Pre-Market and News).
+   */
   symbol?: string
 }
 
@@ -412,6 +416,111 @@ export interface NewsPayload {
   items: NewsItem[]
 }
 
+/* --------------------------------------------------------------- news page */
+
+/**
+ * The News page's own types. `NewsItem` above stays as it is: the Dashboard panel binds
+ * to it, and the two fetch paths agree on almost nothing — `newsCount` 10 vs 8, a two-per
+ * -ticker cap vs none, one lane vs three. Widening one shape to cover both would give
+ * `NewsPanel` fields it has no column for.
+ */
+export type NewsCategory = 'portfolio' | 'macro' | 'other' | 'search'
+
+export interface NewsArticle {
+  /** `_p34_article_key`: the url when there is one, else title|source|time. Stable across
+   *  refetches, so it is both the React key and the selection identity. */
+  id: string
+  /** `'AAPL'`, `'AAPL, MSFT'` (first three) or `'OTHER'`, as `_parse_rss_item` builds it. */
+  ticker: string
+  title: string
+  source: string
+  /** `HH:MM` local, the reference's `time` field. The export prints it. */
+  time: string
+  url: string
+  category: NewsCategory
+  /** Epoch **milliseconds**. The reference stores seconds in `_ts`; this contract is
+   *  milliseconds everywhere outside `Candle`. 0 when nothing parsed. */
+  publishedAt: number
+  /** `_trader_score`, or **null** on the Yahoo lanes, which the reference leaves unscored.
+   *  Null is not zero: `_p34_filtered_groups` sorts scored articles above unscored ones
+   *  under Signal, which only a nullable field can reproduce. */
+  score: number | null
+  /** `_signal_tags`, already sorted and de-duplicated. */
+  signals: string[]
+  /** Publisher thumbnail as the feed gave it. The renderer never fetches this — the CSP is
+   *  `img-src 'self' data:`, so `news:thumbnail` proxies it into a `data:` URI. */
+  imageUrl: string
+  /** RSS `description`; the reader pane's fallback body. Empty on the Yahoo lanes. */
+  summary: string
+}
+
+export type NewsLaneKey = 'portfolio' | 'macro' | 'other'
+
+/** Per-lane coverage, from `_news_fetch_status` and `_news_refresh_meta`. */
+export interface NewsLaneStatus {
+  lane: NewsLaneKey
+  /** Section label the page's `warningOf` looks up, e.g. 'Portfolio Spotlight'. */
+  label: string
+  fresh: string[]
+  stale: string[]
+  failed: string[]
+}
+
+export interface NewsPagePayload {
+  /** portfolio, then macro, then the diverse `other` selection — the merge order is the
+   *  dedupe priority, exactly as `_collect_news_page_payload` builds it. */
+  articles: NewsArticle[]
+  lanes: NewsLaneStatus[]
+  counts: { portfolio: number; macro: number; other: number }
+  /** Epoch ms; the page prints it beside the source. */
+  generatedAt: number
+}
+
+export interface NewsPageRequest {
+  tickers: string[]
+  force?: boolean
+}
+
+export interface NewsTickerSearchPayload {
+  queried: string[]
+  /** Every article stamped `category: 'search'`, newest first. */
+  articles: NewsArticle[]
+  empty: string[]
+  failed: string[]
+}
+
+export interface NewsTickerSearchRequest {
+  tickers: string[]
+  force?: boolean
+}
+
+export interface NewsPreviewPayload {
+  url: string
+  text: string
+  /** 'article' when extraction worked, 'fallback' when it did not. */
+  origin: 'article' | 'fallback'
+  truncated: boolean
+}
+
+export interface NewsPreviewRequest {
+  url: string
+  title: string
+  /** The RSS description, used as the fallback body without a second round trip. */
+  summary: string
+  force?: boolean
+}
+
+export interface NewsThumbnailPayload {
+  url: string
+  /** `data:image/webp;base64,...`, or '' when nothing usable came back. */
+  dataUri: string
+  bytes: number
+}
+
+export interface NewsThumbnailRequest {
+  url: string
+}
+
 /* --------------------------------------------------------------- analytics */
 
 /** Timeframes shared by Dip Finder and Momentum Tracker. */
@@ -577,7 +686,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'signals', label: 'Signals', implemented: false },
   { id: 'price', label: 'Price', implemented: false },
   { id: 'heatmap', label: 'Heatmap', implemented: false },
-  { id: 'news', label: 'News', implemented: false },
+  { id: 'news', label: 'News', implemented: true },
   { id: 'calendar', label: 'Calendar', implemented: false },
   { id: 'stocks', label: 'Stocks', implemented: false },
   { id: 'fundamentals', label: 'Fundamentals', implemented: false },
@@ -867,6 +976,10 @@ export const CHANNELS = {
   options: 'dashboard:options',
   targets: 'dashboard:targets',
   news: 'dashboard:news',
+  newsPage: 'news:read',
+  newsTickerSearch: 'news:ticker-search',
+  newsArticle: 'news:article',
+  newsThumbnail: 'news:thumbnail',
   portfolio: 'dashboard:portfolio',
   portfolioMutate: 'portfolio:mutate',
   personalFinance: 'finance:read',
@@ -956,6 +1069,12 @@ export interface DesktopApi {
   options(request: OptionsRequest): Promise<Envelope<OptionsPayload>>
   targets(request: TargetsRequest): Promise<Envelope<TargetsPayload>>
   news(request: NewsRequest): Promise<Envelope<NewsPayload>>
+  newsPage(request: NewsPageRequest): Promise<Envelope<NewsPagePayload>>
+  newsTickerSearch(
+    request: NewsTickerSearchRequest,
+  ): Promise<Envelope<NewsTickerSearchPayload>>
+  newsArticle(request: NewsPreviewRequest): Promise<Envelope<NewsPreviewPayload>>
+  newsThumbnail(request: NewsThumbnailRequest): Promise<Envelope<NewsThumbnailPayload>>
   portfolio(): Promise<Envelope<PortfolioPayload>>
   mutatePortfolio(mutation: PortfolioMutation): Promise<Envelope<PortfolioPayload>>
   personalFinance(): Promise<Envelope<PersonalFinancePayload>>

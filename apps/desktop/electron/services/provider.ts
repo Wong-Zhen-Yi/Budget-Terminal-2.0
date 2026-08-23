@@ -29,6 +29,14 @@ import type {
   FundamentalsRequest,
   NewsPayload,
   NewsRequest,
+  NewsPageRequest,
+  NewsPagePayload,
+  NewsTickerSearchRequest,
+  NewsTickerSearchPayload,
+  NewsPreviewRequest,
+  NewsPreviewPayload,
+  NewsThumbnailRequest,
+  NewsThumbnailPayload,
   OptionsPayload,
   OptionsRequest,
   PersonalFinanceMutation,
@@ -76,6 +84,13 @@ import { getTradingVolumes, TRADING_VOLUMES_SOURCE } from './yahoo/tradingVolume
 import { getCloses, getClosesBatch, periodReturn } from './yahoo/history.js'
 import { getOptionQuotes } from './yahoo/optionQuotes.js'
 import { getNews } from './yahoo/news.js'
+import {
+  NEWS_SOURCE,
+  getNewsPage,
+  getNewsTickerSearch,
+} from './news/index.js'
+import { getNewsPreview } from './news/preview.js'
+import { getNewsThumbnail } from './news/images.js'
 import { getOptions } from './yahoo/options.js'
 import { getQuotes } from './yahoo/quotes.js'
 import { getTargets } from './yahoo/targets.js'
@@ -93,6 +108,10 @@ export interface MarketDataProvider {
   options(request: OptionsRequest): Promise<Envelope<OptionsPayload>>
   targets(request: TargetsRequest): Promise<Envelope<TargetsPayload>>
   news(request: NewsRequest): Promise<Envelope<NewsPayload>>
+  newsPage(request: NewsPageRequest): Promise<Envelope<NewsPagePayload>>
+  newsTickerSearch(request: NewsTickerSearchRequest): Promise<Envelope<NewsTickerSearchPayload>>
+  newsArticle(request: NewsPreviewRequest): Promise<Envelope<NewsPreviewPayload>>
+  newsThumbnail(request: NewsThumbnailRequest): Promise<Envelope<NewsThumbnailPayload>>
   fundamentals(request: FundamentalsRequest): Promise<Envelope<FundamentalsPayload>>
   returns(request: ReturnsRequest): Promise<Envelope<ReturnsPayload>>
   momentum(request: MomentumRequest): Promise<Envelope<MomentumPayload>>
@@ -263,6 +282,45 @@ export const yahooProvider: MarketDataProvider = {
     } catch (error) {
       return failed({ items: [] }, describeError(error), 'yahoo search')
     }
+  },
+
+  /**
+   * Three lanes, each allowed to fail on its own. A dead feed or an unreachable holding
+   * comes back as `partial` carrying the reason, not as a failed page — the section that
+   * lost its source shows a dot and the rest of the grid still reads.
+   */
+  async newsPage({ tickers, force }) {
+    try {
+      const { payload, errors, unitFailures } = await getNewsPage(tickers, force)
+      return errors.length
+        ? partial(payload, errors, NEWS_SOURCE, `${unitFailures} news source(s) were unavailable.`)
+        : ok(payload, NEWS_SOURCE)
+    } catch (error) {
+      const empty = { articles: [], lanes: [], counts: { portfolio: 0, macro: 0, other: 0 }, generatedAt: Date.now() }
+      return failed(empty, describeError(error), NEWS_SOURCE)
+    }
+  },
+
+  async newsTickerSearch({ tickers, force }) {
+    try {
+      const { payload, errors } = await getNewsTickerSearch(tickers, force)
+      return errors.length ? partial(payload, errors, NEWS_SOURCE) : ok(payload, NEWS_SOURCE)
+    } catch (error) {
+      const empty = { queried: tickers, articles: [], empty: [], failed: tickers }
+      return failed(empty, describeError(error), NEWS_SOURCE)
+    }
+  },
+
+  // Both of these answer with a usable payload whatever happens upstream, so neither
+  // needs a catch: the fallback text and the blank image are the failure states.
+  async newsArticle(request) {
+    const { payload, errors } = await getNewsPreview(request)
+    return errors.length ? partial(payload, errors, 'news preview') : ok(payload, 'news preview')
+  },
+
+  async newsThumbnail({ url }) {
+    const { payload, errors } = await getNewsThumbnail(url)
+    return errors.length ? partial(payload, errors, 'news image') : ok(payload, 'news image')
   },
 
   async fundamentals({ tickers, force }) {

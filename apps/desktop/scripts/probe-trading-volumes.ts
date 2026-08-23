@@ -15,10 +15,13 @@ import type { TradingVolumeInterval, TradingVolumeRow } from '../electron/shared
 import { TRADING_VOLUME_INTERVALS } from '../electron/shared/contract.js'
 import {
   TRADING_VOLUME_METRICS,
+  buildReplayPlan,
+  intervalMarketCapHistory,
   isLoggable,
   leastSquares,
   metricValue,
   rankRows,
+  replayFrame,
 } from '../electron/shared/tradingVolumes.js'
 import { yahooProvider } from '../electron/services/provider.js'
 
@@ -127,6 +130,52 @@ function plotInputs(rows: TradingVolumeRow[], interval: TradingVolumeInterval): 
   console.log(`  trend line : alpha ${fit.alpha.toFixed(4)}, beta ${fit.beta.toFixed(4)}`)
 }
 
+/**
+ * What the Replay button animates. The shared timeline and the pinned y range are the two
+ * things `_p20_replay_market_cap_animation` computes before it starts its timer, so they
+ * are what to compare against the reference.
+ */
+function replayInputs(rows: TradingVolumeRow[], interval: TradingVolumeInterval): void {
+  const plan = buildReplayPlan(rows, interval)
+  if (!plan) {
+    console.log('  replay     : disabled (no row has two points of interval history)')
+    return
+  }
+
+  const tickers = Object.keys(plan.series)
+  console.log(
+    `  timeline   : ${plan.dates.length} date(s), ${plan.dates[0]} .. ${plan.dates.at(-1)}`,
+  )
+  console.log(`  animated   : ${tickers.length} ticker(s); ${plan.insufficient.length} held still`)
+  console.log(
+    `  y range    : ${compact(10 ** plan.yMin)} .. ${compact(10 ** plan.yMax)} (log10, padded)`,
+  )
+
+  // The last frame must land on the live market cap; `alignMarketCapHistory` forces it,
+  // so a mismatch here means the interpolation or the timeline is wrong.
+  const first = replayFrame(plan, 0)
+  const last = replayFrame(plan, 1)
+  console.log(`  frame 0.0  : ${first.date}`)
+  console.log(`  frame 1.0  : ${last.date}`)
+  console.log('    ticker  pts       start         end   lands on live cap')
+
+  for (const row of rows.filter((entry) => tickers.includes(entry.ticker)).slice(0, 5)) {
+    const points = intervalMarketCapHistory(row.marketCapHistory ?? [], interval).length
+    const end = compact(last.caps[row.ticker])
+    const live = compact(row.marketCap)
+    console.log(
+      [
+        '   ',
+        pad(row.ticker, 7),
+        pad(String(points), 4, 'right'),
+        pad(compact(first.caps[row.ticker]), 11, 'right'),
+        pad(end, 11, 'right'),
+        end === live ? '   ok' : `   MISMATCH (live ${live})`,
+      ].join(' '),
+    )
+  }
+}
+
 async function main(): Promise<void> {
   const requested = process.argv[2] as TradingVolumeInterval | undefined
   const interval: TradingVolumeInterval =
@@ -149,6 +198,9 @@ async function main(): Promise<void> {
 
   console.log(`\n== Dot plot (${TRADING_VOLUME_METRICS[interval].axisLabel} vs Market Cap) ==`)
   plotInputs(payload.rows, interval)
+
+  console.log(`\n== Replay (${TRADING_VOLUME_METRICS[interval].label}) ==`)
+  replayInputs(payload.rows, interval)
 
   console.log(`\n${payload.missing.length} symbol(s) had no daily history.`)
   for (const symbol of payload.missing) console.log(`  missing: ${symbol}`)

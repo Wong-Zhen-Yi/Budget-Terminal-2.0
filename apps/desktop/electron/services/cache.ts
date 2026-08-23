@@ -29,6 +29,15 @@ export const TTL = {
   // expensive load in the app. The reference has no refresh timer at all; this only
   // stops a page revisit from paying for the whole thing again.
   tradingVolumes: 15 * 60_000,
+  // The News page is a second, wider news query than the Dashboard panel above, on the
+  // reference's own 15-minute `_DETAILS_CACHE_TTL_SECONDS`. Two entries, because the two
+  // paths ask Yahoo for different things and must not share a cache key.
+  newsPage: 15 * 60_000,
+  newsFeed: 15 * 60_000,
+  newsPreview: 30 * 60_000,
+  // A publisher thumbnail is immutable once fetched; the long TTL is what keeps a card
+  // grid from re-downloading a hundred images every time the page is revisited.
+  newsImage: 6 * 60 * 60_000,
 } as const
 
 export interface CachedResult<T> {

@@ -18,6 +18,10 @@ import type {
   PersonalFinanceMutation,
   ReturnsRequest,
   NewsRequest,
+  NewsPageRequest,
+  NewsTickerSearchRequest,
+  NewsPreviewRequest,
+  NewsThumbnailRequest,
   PortfolioMutation,
   OptionsRequest,
   QuotesRequest,
@@ -28,16 +32,7 @@ import { CHANNELS } from '../shared/contract.js'
 import { ok } from '../shared/envelope.js'
 import { yahooProvider } from '../services/provider.js'
 import { watchPortfolios } from '../services/portfolioStore.js'
-
-/** Only http(s) links from the news panel may leave the app. */
-function isSafeExternalUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url)
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:'
-  } catch {
-    return false
-  }
-}
+import { isSafeExternalUrl } from '../services/urls.js'
 
 export function registerIpcHandlers(): () => void {
   const provider = yahooProvider
@@ -47,6 +42,18 @@ export function registerIpcHandlers(): () => void {
   ipcMain.handle(CHANNELS.options, (_event, request: OptionsRequest) => provider.options(request))
   ipcMain.handle(CHANNELS.targets, (_event, request: TargetsRequest) => provider.targets(request))
   ipcMain.handle(CHANNELS.news, (_event, request: NewsRequest) => provider.news(request))
+  ipcMain.handle(CHANNELS.newsPage, (_event, request: NewsPageRequest) =>
+    provider.newsPage(request),
+  )
+  ipcMain.handle(CHANNELS.newsTickerSearch, (_event, request: NewsTickerSearchRequest) =>
+    provider.newsTickerSearch(request),
+  )
+  ipcMain.handle(CHANNELS.newsArticle, (_event, request: NewsPreviewRequest) =>
+    provider.newsArticle(request),
+  )
+  ipcMain.handle(CHANNELS.newsThumbnail, (_event, request: NewsThumbnailRequest) =>
+    provider.newsThumbnail(request),
+  )
   ipcMain.handle(CHANNELS.fundamentals, (_event, request: FundamentalsRequest) =>
     provider.fundamentals(request),
   )

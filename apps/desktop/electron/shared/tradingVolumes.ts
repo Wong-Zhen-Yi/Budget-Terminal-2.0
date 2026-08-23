@@ -371,3 +371,214 @@ export function leastSquares(points: Array<{ x: number; y: number }>): Fit | nul
   const beta = covariance / variance
   return { alpha: meanY - beta * meanX, beta }
 }
+
+/* -------------------------------------------------- market-cap replay (Replay) */
+
+/**
+ * The Replay animation: the selected interval's estimated market caps played back over
+ * five seconds. Ported from `_p20_replay_market_cap_animation` and the two helpers it
+ * leans on, `_p20_interval_market_cap_history` and `_p20_align_market_cap_history`.
+ *
+ * Only the market cap moves. Dollar volume is a single number per row, not a series, so
+ * every dot keeps its x for the whole playback and slides vertically.
+ */
+
+/** `_P20_MARKET_CAP_ANIMATION_DURATION_MS`. */
+export const REPLAY_DURATION_MS = 5000
+
+/**
+ * `_P20_MARKET_CAP_TRAILING_POINTS`. These three intervals take a bar count; YTD, 1Y and
+ * 3Y slice by calendar date instead — the same split `advMetrics` makes, for the same
+ * reason.
+ */
+const REPLAY_TRAILING_POINTS: Partial<Record<TradingVolumeInterval, number>> = {
+  '1d': 2,
+  '5d': 6,
+  '30d': 31,
+}
+
+const DAY_MS = 86_400_000
+
+function stampToMs(stamp: string): number {
+  return Date.parse(`${stamp}T00:00:00Z`)
+}
+
+function msToStamp(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10)
+}
+
+/** Whole days between two `YYYY-MM-DD` stamps, as `(right - left).days` does. */
+function daysBetween(left: string, right: string): number {
+  return Math.round((stampToMs(right) - stampToMs(left)) / DAY_MS)
+}
+
+/** `_p20_interval_market_cap_history`: the slice of history the active interval covers. */
+export function intervalMarketCapHistory(
+  history: MarketCapPoint[],
+  interval: TradingVolumeInterval,
+): MarketCapPoint[] {
+  if (!history.length) return []
+
+  const trailing = REPLAY_TRAILING_POINTS[interval]
+  if (trailing !== undefined) return history.slice(-trailing)
+
+  const end = history[history.length - 1].date
+  if (interval === 'ytd') {
+    const year = end.slice(0, 4)
+    return history.filter((point) => point.date.slice(0, 4) === year)
+  }
+  if (interval === '1y') {
+    const start = msToStamp(stampToMs(end) - 365 * DAY_MS)
+    return history.filter((point) => point.date >= start)
+  }
+  // 3Y, as a calendar offset rather than 1095 days.
+  const endDate = new Date(stampToMs(end))
+  const start = msToStamp(
+    Date.UTC(endDate.getUTCFullYear() - 3, endDate.getUTCMonth(), endDate.getUTCDate()),
+  )
+  return history.filter((point) => point.date >= start)
+}
+
+/**
+ * `_p20_align_market_cap_history`: resample one ticker onto the shared playback dates.
+ *
+ * The interpolation is **log-linear** — a market cap that doubles reads as a straight
+ * climb on the log axis the plot draws, which is the whole point of animating in that
+ * space. Outside the ticker's own range the value clamps rather than extrapolating, and
+ * the final frame is forced to the live market cap so playback lands where the static
+ * plot already is.
+ */
+export function alignMarketCapHistory(
+  history: MarketCapPoint[],
+  timeline: string[],
+  currentMarketCap: number,
+): number[] {
+  if (history.length < 2) return timeline.map(() => currentMarketCap)
+
+  const first = history[0]
+  const last = history[history.length - 1]
+  const aligned: number[] = []
+  let rightIndex = 1
+
+  for (const target of timeline) {
+    if (target <= first.date) {
+      aligned.push(first.value)
+      continue
+    }
+    if (target >= last.date) {
+      aligned.push(last.value)
+      continue
+    }
+    while (rightIndex < history.length && history[rightIndex].date < target) rightIndex += 1
+    const left = history[rightIndex - 1]
+    const right = history[rightIndex]
+    const span = Math.max(daysBetween(left.date, right.date), 1)
+    const fraction = Math.min(Math.max(daysBetween(left.date, target) / span, 0), 1)
+    const logValue =
+      Math.log10(left.value) + (Math.log10(right.value) - Math.log10(left.value)) * fraction
+    aligned.push(10 ** logValue)
+  }
+
+  if (aligned.length) aligned[aligned.length - 1] = currentMarketCap
+  return aligned
+}
+
+export interface ReplayPlan {
+  /** The shared timeline: every date any plottable row has an observation on. */
+  dates: string[]
+  /** Market cap per ticker, one value per timeline date. */
+  series: Record<string, number[]>
+  /** Each ticker's cap at the interval's start, what the tooltip measures change from. */
+  baselines: Record<string, number>
+  /** Tickers whose slice had fewer than two points; their tooltip says so. */
+  insufficient: string[]
+  /** log10 and already padded. The y range is pinned for the whole playback. */
+  yMin: number
+  yMax: number
+}
+
+/**
+ * Everything the animation needs, computed once when Replay is pressed.
+ *
+ * Returns `null` when there is nothing to play — no plottable rows, or a timeline of
+ * fewer than two dates. That same `null` is what disables the button, so the check and
+ * the enablement rule cannot drift apart the way the reference's separate
+ * `_p20_update_market_cap_replay_state` can.
+ */
+export function buildReplayPlan(
+  rows: TradingVolumeRow[],
+  interval: TradingVolumeInterval,
+): ReplayPlan | null {
+  const metric = TRADING_VOLUME_METRICS[interval]
+  const candidates: Array<{ ticker: string; marketCap: number; history: MarketCapPoint[] }> = []
+  const timeline = new Set<string>()
+
+  for (const row of rows) {
+    const volume = metricValue(row, metric.volumeField)
+    // Only rows the dot plot actually draws can be animated.
+    if (!isLoggable(volume) || !isLoggable(row.marketCap)) continue
+
+    const history = intervalMarketCapHistory(row.marketCapHistory ?? [], interval)
+    if (history.length >= 2) for (const point of history) timeline.add(point.date)
+    candidates.push({ ticker: row.ticker, marketCap: row.marketCap, history })
+  }
+
+  const dates = [...timeline].sort()
+  if (!candidates.length || dates.length < 2) return null
+
+  const series: Record<string, number[]> = {}
+  const baselines: Record<string, number> = {}
+  const insufficient: string[] = []
+  let low = Infinity
+  let high = -Infinity
+
+  for (const candidate of candidates) {
+    const aligned = alignMarketCapHistory(candidate.history, dates, candidate.marketCap)
+    series[candidate.ticker] = aligned
+    // A row with too little history sits still at its current cap rather than dropping
+    // out, so the plot keeps the same dots throughout.
+    if (candidate.history.length >= 2) {
+      baselines[candidate.ticker] = candidate.history[0].value
+    } else {
+      baselines[candidate.ticker] = candidate.marketCap
+      insufficient.push(candidate.ticker)
+    }
+    for (const value of aligned) {
+      if (!isLoggable(value)) continue
+      if (value < low) low = value
+      if (value > high) high = value
+    }
+  }
+
+  if (!Number.isFinite(low) || !Number.isFinite(high)) return null
+
+  const minY = Math.log10(low)
+  const maxY = Math.log10(high)
+  const padding = Math.max((maxY - minY) * 0.12, 0.08)
+  return { dates, series, baselines, insufficient, yMin: minY - padding, yMax: maxY + padding }
+}
+
+export interface ReplayFrame {
+  /** The date the caption shows, picked by rounding rather than flooring. */
+  date: string
+  caps: Record<string, number>
+}
+
+/** `_p20_apply_market_cap_animation_frame`: one frame's market cap for every ticker. */
+export function replayFrame(plan: ReplayPlan, progress: number): ReplayFrame {
+  const lastIndex = plan.dates.length - 1
+  const position = Math.min(Math.max(progress, 0), 1) * lastIndex
+  const leftIndex = Math.min(Math.floor(position), lastIndex)
+  const rightIndex = Math.min(leftIndex + 1, lastIndex)
+  const fraction = position - leftIndex
+
+  const caps: Record<string, number> = {}
+  for (const [ticker, values] of Object.entries(plan.series)) {
+    const left = values[leftIndex]
+    const right = values[rightIndex]
+    // Interpolated in log space, the same as the alignment above.
+    caps[ticker] = 10 ** (Math.log10(left) + (Math.log10(right) - Math.log10(left)) * fraction)
+  }
+
+  return { date: plan.dates[Math.min(Math.round(position), lastIndex)], caps }
+}

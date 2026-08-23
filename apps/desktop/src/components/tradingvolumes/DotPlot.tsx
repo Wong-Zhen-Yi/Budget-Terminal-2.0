@@ -7,8 +7,10 @@ import {
   leastSquares,
   metricValue,
   type RankedTradingVolumeRow,
+  type ReplayFrame,
+  type ReplayPlan,
 } from '@shared/tradingVolumes'
-import { compactCurrency } from '@/lib/format'
+import { compactCurrency, percent } from '@/lib/format'
 
 /**
  * Market cap against average daily dollar volume, both on log10 axes, with a
@@ -22,12 +24,19 @@ import { compactCurrency } from '@/lib/format'
  *
  * Like the reference, the values are log10-transformed and plotted linearly; the axis
  * ticks raise 10 to the power to print a dollar figure back (`_P20CompactCurrencyAxisItem`).
+ *
+ * Pass `frame` to draw one step of the Replay animation instead of live market caps.
+ * Only y moves: dollar volume is one number per row, not a series.
  */
 
 interface DotPlotProps {
   rows: RankedTradingVolumeRow[]
   interval: TradingVolumeInterval
   loaded: boolean
+  /** One Replay frame, or `null` to draw live market caps. */
+  frame?: ReplayFrame | null
+  /** Supplies the pinned y range and the tooltip's interval-start baselines. */
+  plan?: ReplayPlan | null
 }
 
 const PAD = { top: 14, right: 18, bottom: 42, left: 62 }
@@ -40,9 +49,9 @@ const DOT_RADIUS = 3.5
 
 interface Point {
   ticker: string
-  /** log10 of the active ADV. */
+  /** log10 of the active ADV. Fixed, including through a Replay. */
   x: number
-  /** log10 of the market cap. */
+  /** log10 of the live market cap. */
   y: number
   marketCap: number
   volume: number
@@ -100,11 +109,11 @@ function dotColor(returnPct: number | null): string {
   return returnPct > 0 ? 'var(--color-up)' : 'var(--color-down)'
 }
 
-export function DotPlot({ rows, interval, loaded }: DotPlotProps) {
+export function DotPlot({ rows, interval, loaded, frame = null, plan = null }: DotPlotProps) {
   const metric = TRADING_VOLUME_METRICS[interval]
   const containerRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
-  const [hovered, setHovered] = useState<Point | null>(null)
+  const [hoveredTicker, setHoveredTicker] = useState<string | null>(null)
 
   // The SVG is drawn at true pixel size, so it has to know what that size is.
   useEffect(() => {
@@ -137,7 +146,16 @@ export function DotPlot({ rows, interval, loaded }: DotPlotProps) {
     return result
   }, [rows, metric])
 
-  const scene = useMemo(() => {
+  /**
+   * The parts that do not change frame to frame: the x range, the resting y range, and
+   * which tickers get a label.
+   *
+   * The label set is deliberately fixed here rather than recomputed per frame. The
+   * reference creates its `TextItem`s once in the static render and only moves them
+   * during playback; recomputing collisions every frame would make labels blink in and
+   * out as dots drift past each other.
+   */
+  const base = useMemo(() => {
     if (!points.length || size.width <= 0 || size.height <= 0) return null
 
     const xs = points.map((point) => point.x)
@@ -149,42 +167,72 @@ export function DotPlot({ rows, interval, loaded }: DotPlotProps) {
     // `x_padding = max(span * 0.08, 0.08)`, `y_padding = max(span * 0.12, 0.08)`.
     const xPad = Math.max((xMaxRaw - xMinRaw) * 0.08, 0.08)
     const yPad = Math.max((yMaxRaw - yMinRaw) * 0.12, 0.08)
-    const xMin = xMinRaw - xPad
-    const xMax = xMaxRaw + xPad
-    const yMin = yMinRaw - yPad
-    const yMax = yMaxRaw + yPad
 
     const plotWidth = Math.max(1, size.width - PAD.left - PAD.right)
     const plotHeight = Math.max(1, size.height - PAD.top - PAD.bottom)
-    const toX = (value: number) => PAD.left + ((value - xMin) / (xMax - xMin)) * plotWidth
-    const toY = (value: number) =>
-      PAD.top + plotHeight - ((value - yMin) / (yMax - yMin)) * plotHeight
-
-    const placed = points.map((point) => ({ point, cx: toX(point.x), cy: toY(point.y) }))
+    const xMin = xMinRaw - xPad
+    const xMax = xMaxRaw + xPad
+    const staticYMin = yMinRaw - yPad
+    const staticYMax = yMaxRaw + yPad
 
     // Label collision suppression — the one place this deliberately departs from the
     // reference, which draws all hundred labels and lets the dense cluster in the middle
     // become an unreadable pile. Biggest companies get first claim on the space, since
     // those are the names a reader scans for; anything that would land on top of an
     // already-placed label keeps its dot and loses its text. Hover still names every dot.
-    const labels: Array<{ ticker: string; x: number; y: number }> = []
+    const toStaticX = (value: number) => PAD.left + ((value - xMin) / (xMax - xMin)) * plotWidth
+    const toStaticY = (value: number) =>
+      PAD.top + plotHeight - ((value - staticYMin) / (staticYMax - staticYMin)) * plotHeight
+
+    const labelled = new Set<string>()
     const boxes: Box[] = []
-    for (const entry of [...placed].sort((a, b) => b.point.marketCap - a.point.marketCap)) {
-      const halfWidth = (entry.point.ticker.length * CHAR_WIDTH) / 2
-      const baseline = entry.cy - LABEL_OFFSET
+    for (const point of [...points].sort((a, b) => b.marketCap - a.marketCap)) {
+      const cx = toStaticX(point.x)
+      const baseline = toStaticY(point.y) - LABEL_OFFSET
+      const halfWidth = (point.ticker.length * CHAR_WIDTH) / 2
       const box: Box = {
-        left: entry.cx - halfWidth,
-        right: entry.cx + halfWidth,
+        left: cx - halfWidth,
+        right: cx + halfWidth,
         top: baseline - LABEL_HEIGHT,
         bottom: baseline,
       }
       if (box.left < PAD.left || box.right > size.width - PAD.right || box.top < PAD.top) continue
       if (boxes.some((other) => overlaps(box, other))) continue
       boxes.push(box)
-      labels.push({ ticker: entry.point.ticker, x: entry.cx, y: baseline })
+      labelled.add(point.ticker)
     }
 
-    const fit = leastSquares(points)
+    return { xMin, xMax, staticYMin, staticYMax, plotWidth, plotHeight, labelled }
+  }, [points, size])
+
+  const scene = useMemo(() => {
+    if (!base) return null
+
+    // Replay pins the y range across the whole playback, from the min and max of every
+    // aligned value, so dots move against a still axis instead of one rescaling under
+    // them. `setYRange` at the top of `_p20_replay_market_cap_animation` does the same.
+    const animating = Boolean(frame && plan)
+    const yMin = animating ? plan!.yMin : base.staticYMin
+    const yMax = animating ? plan!.yMax : base.staticYMax
+
+    const toX = (value: number) =>
+      PAD.left + ((value - base.xMin) / (base.xMax - base.xMin)) * base.plotWidth
+    const toY = (value: number) =>
+      PAD.top + base.plotHeight - ((value - yMin) / (yMax - yMin)) * base.plotHeight
+
+    const placed = points.map((point) => {
+      const marketCap = frame?.caps[point.ticker] ?? point.marketCap
+      const y = isLoggable(marketCap) ? Math.log10(marketCap) : point.y
+      return { point, marketCap, cx: toX(point.x), cy: toY(y), yLog: y }
+    })
+
+    // Refitted every frame, exactly as the reference recomputes the regression line in
+    // `_p20_apply_market_cap_animation_frame` — the trend is a property of where the
+    // dots are now, not of where they ended up.
+    const fit = leastSquares(placed.map((entry) => ({ x: entry.point.x, y: entry.yLog })))
+    const xs = points.map((point) => point.x)
+    const xMinRaw = Math.min(...xs)
+    const xMaxRaw = Math.max(...xs)
     const trend = fit
       ? {
           x1: toX(xMinRaw),
@@ -194,20 +242,33 @@ export function DotPlot({ rows, interval, loaded }: DotPlotProps) {
         }
       : null
 
+    const labels = placed
+      .filter((entry) => base.labelled.has(entry.point.ticker))
+      .map((entry) => ({ ticker: entry.point.ticker, x: entry.cx, y: entry.cy - LABEL_OFFSET }))
+      // A pinned range can push a dot above the frame mid-playback; drop the text rather
+      // than paint it over the axis.
+      .filter((label) => label.y >= PAD.top)
+
     return {
       placed,
       labels,
       trend,
-      xTicks: logTicks(xMin, xMax, Math.max(2, Math.floor(plotWidth / 70))).map((value) => ({
-        value,
-        position: toX(value),
-      })),
-      yTicks: logTicks(yMin, yMax, Math.max(2, Math.floor(plotHeight / 44))).map((value) => ({
+      xTicks: logTicks(
+        base.xMin,
+        base.xMax,
+        Math.max(2, Math.floor(base.plotWidth / 70)),
+      ).map((value) => ({ value, position: toX(value) })),
+      yTicks: logTicks(yMin, yMax, Math.max(2, Math.floor(base.plotHeight / 44))).map((value) => ({
         value,
         position: toY(value),
       })),
     }
-  }, [points, size])
+  }, [base, points, frame, plan])
+
+  const hovered = useMemo(
+    () => scene?.placed.find((entry) => entry.point.ticker === hoveredTicker) ?? null,
+    [scene, hoveredTicker],
+  )
 
   const message = !loaded
     ? 'Load Trading Volumes to plot tickers.'
@@ -228,7 +289,7 @@ export function DotPlot({ rows, interval, loaded }: DotPlotProps) {
           width={size.width}
           height={size.height}
           className="block"
-          onMouseLeave={() => setHovered(null)}
+          onMouseLeave={() => setHoveredTicker(null)}
         >
           {scene.yTicks.map((tick) => (
             <g key={`y-${tick.value.toFixed(4)}`}>
@@ -290,11 +351,11 @@ export function DotPlot({ rows, interval, loaded }: DotPlotProps) {
               key={entry.point.ticker}
               cx={entry.cx}
               cy={entry.cy}
-              r={hovered?.ticker === entry.point.ticker ? DOT_RADIUS + 2 : DOT_RADIUS}
+              r={hoveredTicker === entry.point.ticker ? DOT_RADIUS + 2 : DOT_RADIUS}
               fill={dotColor(entry.point.returnPct)}
               stroke="var(--color-border-strong)"
               strokeWidth={0.6}
-              onMouseEnter={() => setHovered(entry.point)}
+              onMouseEnter={() => setHoveredTicker(entry.point.ticker)}
             />
           ))}
 
@@ -330,20 +391,53 @@ export function DotPlot({ rows, interval, loaded }: DotPlotProps) {
         </svg>
       ) : null}
 
-      {/* `_p20_market_cap_tooltip`, minus the interval-change line the deferred Replay
-          animation would fill in. Also how a dot whose label was suppressed is named. */}
+      {/* `_p20_market_cap_tooltip`. Also how a dot whose label was suppressed is named. */}
       {hovered ? (
         <div className="pointer-events-none absolute top-2 right-2 border border-border-strong bg-surface-raised px-2 py-1 text-2xs">
-          <div className="font-semibold text-text">{hovered.ticker}</div>
+          <div className="font-semibold text-text">{hovered.point.ticker}</div>
+          {frame ? <div className="text-text-muted">Date: {frame.date}</div> : null}
           <div className="text-text-muted">
             Est. Market Cap: {compactCurrency(hovered.marketCap)}
           </div>
           <div className="text-text-muted">
-            {metric.label} ADV: {compactCurrency(hovered.volume)}
+            {metric.label} ADV: {compactCurrency(hovered.point.volume)}
           </div>
+          <MarketCapChange
+            ticker={hovered.point.ticker}
+            marketCap={hovered.marketCap}
+            plan={frame ? plan : null}
+          />
           <div className="text-text-dim">Price-based estimate; shares assumed unchanged.</div>
         </div>
       ) : null}
+    </div>
+  )
+}
+
+/** The tooltip's `Change from interval start` line, only meaningful during a Replay. */
+function MarketCapChange({
+  ticker,
+  marketCap,
+  plan,
+}: {
+  ticker: string
+  marketCap: number
+  plan: ReplayPlan | null
+}) {
+  if (!plan) return null
+
+  const baseline = plan.baselines[ticker]
+  if (plan.insufficient.includes(ticker) || !isLoggable(baseline)) {
+    return <div className="text-text-dim">Market Cap Change: Insufficient history</div>
+  }
+
+  const change = marketCap - baseline
+  const changePct = (change / baseline) * 100
+  const tone = change >= 0 ? 'text-up' : 'text-down'
+  return (
+    <div className={tone}>
+      Change from interval start: {change >= 0 ? '+' : '-'}
+      {compactCurrency(Math.abs(change))} ({percent(changePct)})
     </div>
   )
 }
