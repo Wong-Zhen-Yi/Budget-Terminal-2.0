@@ -25,8 +25,8 @@ export function App() {
   const [sourcePath, setSourcePath] = useState('')
   const [reloading, setReloading] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
-  /** Obscure is a session state, like the reference's `_privacy_obscured`. */
-  const [obscured, setObscured] = useState(false)
+  /** Obscure is a session state, like the reference's `_privacy_obscured`, but it starts on. */
+  const [obscured, setObscured] = useState(true)
   const [notice, setNotice] = useState('')
   const reloadAll = useReloadAll()
 
