@@ -92,9 +92,11 @@ adding handlers.
 - **`LineChart`'s newer props all default to the old behaviour.** `baseline` defaults to
   `'zero'` because the Portfolio Momentum Tracker needs the forced zero line; the
   Pre-Market charts pass `'auto'` or a price series renders as a flat line at the top of
-  the frame. `viewBox` and `axisLabels` exist because the chart stretches with
-  `preserveAspectRatio="none"`, which distorts tick text in a panel far off the default
-  1000x380 ratio. A `null` in a series breaks the path rather than plotting — that is what
+  the frame. The chart measures its container and draws at real pixel size, like
+  `DotPlot`; it no longer stretches a fixed viewBox with `preserveAspectRatio="none"`,
+  which scaled the axis text by the panel's aspect ratio. `viewBox` is now only the
+  pre-measurement fallback size, and `axisLabels` still drops the ticks on a chart too
+  small to carry them. A `null` in a series breaks the path rather than plotting — that is what
   lets the 125-day mean start 124 bars in while staying aligned to the closes.
 - **This app owns its store; the PySide6 file is read once.**
   `electron/services/portfolioStore.ts` writes
@@ -221,9 +223,11 @@ adding handlers.
   `refetchInterval: false`, unlike every other page module — the reference has no timer
   either, and a background refetch would spend a hundred Yahoo requests on a page nobody
   is looking at. Refresh and F5 are the only ways it refetches.
-- **The dot plot must not borrow `LineChart`'s `preserveAspectRatio="none"`.** That trick
-  is fine for a path but turns every scatter dot into an ellipse, so `DotPlot` measures
-  its box with a `ResizeObserver` and draws at real pixel size. Both axes are `log10` of
+- **The dot plot draws at real pixel size, and so does `LineChart` now.** Stretching a
+  fixed viewBox with `preserveAspectRatio="none"` is fine for a path but turns every
+  scatter dot into an ellipse, so `DotPlot` has always measured its box with a
+  `ResizeObserver`; `LineChart` does the same, because the same stretch distorted its
+  axis text. Both axes are `log10` of
   the value plotted linearly, with the ticks raising 10 to the power to print dollars
   back — the same thing `_P20CompactCurrencyAxisItem` does.
 - **The `#` column is a real column, not `DataTable`'s `showIndex`.** It prints the rank a

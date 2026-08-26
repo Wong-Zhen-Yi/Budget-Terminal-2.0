@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 export interface LineSeries {
   /** `null` breaks the line rather than plotting a point, keeping the x alignment. */
@@ -21,9 +21,8 @@ interface LineChartProps {
    */
   baseline?: 'zero' | 'auto'
   /**
-   * The viewBox, which is stretched to the container with `preserveAspectRatio="none"`.
-   * A panel much shorter or narrower than the default ratio should pass its own, or the
-   * axis text is visibly squashed.
+   * Fallback drawing size for the first paint, before the container has been measured.
+   * The chart draws at true pixel size after that, so this no longer sets the look.
    */
   viewBox?: { width: number; height: number }
   /** Drop the value labels and x ticks for a chart too small to carry them. */
@@ -40,8 +39,10 @@ const BARE_PAD = { top: 8, right: 8, bottom: 8, left: 8 }
 /**
  * An SVG line chart, for the Momentum Tracker and the Pre-Market page's macro panels.
  *
- * It uses a fixed viewBox and scales to fit, so it needs no resize observer and no
- * charting library — the series is a few hundred daily points at most.
+ * It measures its box and draws at real pixel size, the way `DotPlot` does. The fixed
+ * viewBox it used before was stretched with `preserveAspectRatio="none"`, which is fine
+ * for a path but scaled the axis text by the container's aspect ratio — squashed or
+ * smeared differently in every panel.
  */
 export function LineChart({
   labels,
@@ -53,8 +54,23 @@ export function LineChart({
   axisLabels = true,
   ticks = 8,
 }: LineChartProps) {
-  const width = viewBox?.width ?? WIDTH
-  const height = viewBox?.height ?? HEIGHT
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [size, setSize] = useState({ width: 0, height: 0 })
+
+  // Drawing at true pixel size means knowing what that size is.
+  useEffect(() => {
+    const element = containerRef.current
+    if (!element) return
+    const observer = new ResizeObserver(([entry]) => {
+      const box = entry.contentRect
+      setSize({ width: box.width, height: box.height })
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+
+  const width = size.width || viewBox?.width || WIDTH
+  const height = size.height || viewBox?.height || HEIGHT
   const pad = axisLabels ? PAD : BARE_PAD
 
   const plot = useMemo(() => {
@@ -109,7 +125,12 @@ export function LineChart({
 
   if (!plot) {
     return (
-      <div className="flex flex-1 items-center justify-center text-2xs text-text-dim">{empty}</div>
+      <div
+        ref={containerRef}
+        className="flex min-h-0 flex-1 items-center justify-center text-2xs text-text-dim"
+      >
+        {empty}
+      </div>
     )
   }
 
@@ -117,76 +138,74 @@ export function LineChart({
   const tickStep = Math.max(1, Math.ceil(labels.length / ticks))
 
   return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      preserveAspectRatio="none"
-      className="min-h-0 w-full flex-1"
-    >
-      {plot.gridValues.map((value) => (
-        <g key={value}>
+    <div ref={containerRef} className="min-h-0 w-full flex-1 overflow-hidden">
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="block">
+        {plot.gridValues.map((value) => (
+          <g key={value}>
+            <line
+              x1={pad.left}
+              x2={width - pad.right}
+              y1={plot.y(value)}
+              y2={plot.y(value)}
+              stroke="var(--color-border)"
+              strokeWidth={1}
+            />
+            {axisLabels ? (
+              <text
+                x={width - pad.right + 6}
+                y={plot.y(value) + 4}
+                fill="var(--color-text-muted)"
+                fontSize={11}
+              >
+                {format(value)}
+              </text>
+            ) : null}
+          </g>
+        ))}
+
+        {baseline === 'zero' ? (
           <line
             x1={pad.left}
             x2={width - pad.right}
-            y1={plot.y(value)}
-            y2={plot.y(value)}
-            stroke="var(--color-border)"
-            strokeWidth={1}
+            y1={plot.zeroY}
+            y2={plot.zeroY}
+            stroke="var(--color-border-strong)"
+            strokeDasharray="4 4"
           />
-          {axisLabels ? (
-            <text
-              x={width - pad.right + 6}
-              y={plot.y(value) + 4}
-              fill="var(--color-text-muted)"
-              fontSize={11}
-            >
-              {format(value)}
-            </text>
-          ) : null}
-        </g>
-      ))}
+        ) : null}
 
-      {baseline === 'zero' ? (
-        <line
-          x1={pad.left}
-          x2={width - pad.right}
-          y1={plot.zeroY}
-          y2={plot.zeroY}
-          stroke="var(--color-border-strong)"
-          strokeDasharray="4 4"
-        />
-      ) : null}
+        {plot.paths.map((entry) => (
+          <path
+            key={entry.label}
+            d={entry.d}
+            fill="none"
+            stroke={entry.color}
+            strokeWidth={2}
+            strokeDasharray={entry.dashed ? '6 4' : undefined}
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
 
-      {plot.paths.map((entry) => (
-        <path
-          key={entry.label}
-          d={entry.d}
-          fill="none"
-          stroke={entry.color}
-          strokeWidth={2}
-          strokeDasharray={entry.dashed ? '6 4' : undefined}
-          vectorEffect="non-scaling-stroke"
-        />
-      ))}
-
-      {/* The first and last labels anchor inwards; centred, they hang off the frame. */}
-      {axisLabels
-        ? labels.map((label, index) =>
-            index % tickStep === 0 ? (
-              <text
-                key={`${label}-${index}`}
-                x={plot.x(index)}
-                y={height - 8}
-                fill="var(--color-text-muted)"
-                fontSize={11}
-                textAnchor={
-                  index === 0 ? 'start' : index + tickStep >= labels.length ? 'end' : 'middle'
-                }
-              >
-                {label}
-              </text>
-            ) : null,
-          )
-        : null}
-    </svg>
+        {/* The first and last labels anchor inwards; centred, they hang off the frame. */}
+        {axisLabels
+          ? labels.map((label, index) =>
+              index % tickStep === 0 ? (
+                <text
+                  key={`${label}-${index}`}
+                  x={plot.x(index)}
+                  y={height - 8}
+                  fill="var(--color-text-muted)"
+                  fontSize={11}
+                  textAnchor={
+                    index === 0 ? 'start' : index + tickStep >= labels.length ? 'end' : 'middle'
+                  }
+                >
+                  {label}
+                </text>
+              ) : null,
+            )
+          : null}
+      </svg>
+    </div>
   )
 }
