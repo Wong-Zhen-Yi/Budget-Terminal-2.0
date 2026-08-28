@@ -19,7 +19,16 @@
     "probe:global": "tsx scripts/probe-global.ts",
     "probe:pre-market": "tsx scripts/probe-pre-market.ts",
     "probe:trading-volumes": "tsx scripts/probe-trading-volumes.ts",
-    "probe:news": "tsx scripts/probe-news.ts"
+    "probe:price": "tsx scripts/probe-price.ts",
+    "probe:news": "tsx scripts/probe-news.ts",
+    "probe:stocks": "tsx scripts/probe-stocks.ts",
+    "probe:fundamentals": "tsx scripts/probe-fundamentals.ts",
+    "probe:calendar": "tsx scripts/probe-calendar.ts",
+    "probe:charts": "tsx scripts/probe-charts.ts",
+    "probe:crypto": "tsx scripts/probe-crypto.ts",
+    "probe:cards": "tsx scripts/probe-cards.ts",
+    "probe:options": "tsx scripts/probe-options.ts",
+    "probe:heatmap": "tsx scripts/probe-heatmap.ts"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

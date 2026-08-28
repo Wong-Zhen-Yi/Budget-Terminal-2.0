@@ -15,6 +15,13 @@ npm run probe:settings           # settings writes, then export/import/clear/res
 npm run probe:pre-market         # futures, the three macro panels, CNN F&G, SPY momentum
 npm run probe:trading-volumes    # the screen, all six ADV columns and the fitted trend line
 npm run probe:news               # all three news lanes; --offline, --feeds-only, --preview N, --images
+npm run probe:stocks -- AAPL     # complete Stocks workspace; use --offline for deterministic checks
+npm run probe:fundamentals -- AAPL # SEC/Yahoo statements, charts and filings; --offline for fixtures
+npm run probe:charts -- AAPL # five-tab Charts workspace; use --offline for deterministic checks
+npm run probe:crypto           # all four Crypto stages; --offline for the pure checks
+npm run probe:cards            # Cards math, persistence and models; --live adds Yahoo
+npm run probe:options -- AAPL  # chain Greeks, strategy ranking, both grids; --offline for the pure checks
+npm run probe:heatmap -- SPY   # index holdings, all seven intervals, sector split; --offline for the pure checks
 ```
 
 There is no test suite. The `scripts/probe*.ts` files are the verification story: they
@@ -33,15 +40,25 @@ the behaviour being ported comes from.
 Built so far: the **Dashboard**, the whole **Portfolio** page (summary bar, portfolio
 CRUD, and all five sub-tabs: Positions with the options tracker and the Dip Finder and
 Weight charts, Pie Chart, Portfolio Heatmap, Momentum Tracker, Portfolio Metrics), the
+**Cards** page (built-in, custom-weight, equal-weight and live portfolio baskets), the
 **Personal Finance** page (Cash, Debt, Recurring Bills, Totals donut, net-worth Goal
 ring and the Silos bar chart), the **Settings** page (one scrolling page grouped
 Data / General / Workspace) together with the app-wide keyboard shortcuts, and the
 **Pre-Market** page (futures table, DXY / 10Y / VIX panels each with a chart, the CNN
 Fear & Greed dial and the SPY momentum plot), and the **Trading Volumes** page
 (the screened top-100 table beside the log-log market-cap dot plot, including the
-Replay animation), and the **News** page (a three-lane card grid with a reader rail,
-thumbnails, the signal heuristic and an outside-portfolio ticker search). The remaining
-tabs are labels in `TABS`
+Replay animation), the **News** page (a three-lane card grid with a reader rail,
+thumbnails, the signal heuristic and an outside-portfolio ticker search), and the
+**Stocks** page (company facts and targets, news, ownership activity, a three-year daily
+candlestick chart, and optional MFI), the **Fundamentals** page (SEC/Yahoo merged
+statements, comparison and indexed charts, headline metrics, and SEC filings), the
+full **Charts** workspace (Main, Multi Charts, Compare, Relationship, and Cheat Sheet),
+the **Crypto** page (KPI strip, Top 30 heatmap, watchlist, crypto news and ETF proxies),
+the **Options** page (the Chain tab with Greeks and the two strategy rankings, plus
+the Options by Top Volume and Options by Strike grids over every live expiration), and
+the **Heatmap** page (the S&P 500 / Nasdaq 100 / Dow 30 holdings treemap over seven
+intervals, with the coverage strip and the selected-holding detail bar).
+The remaining tabs are labels in `TABS`
 (`electron/shared/contract.ts`) and render a placeholder; `implemented: true` is what
 routes a tab to a real page in `App.tsx`.
 
@@ -108,6 +125,11 @@ adding handlers.
   one, normalises, and persists atomically (temp file plus rename). Returning the whole
   re-read document is deliberate: the renderer writes that straight into the query cache
   instead of guessing at post-write state, so a rejected edit simply renders unchanged.
+- **Cards own a separate store.** `electron/services/cardsStore.ts` writes
+  `%APPDATA%\BudgetTerminalElectron\strategies.json` and seeds it once from the PySide6
+  Cards file. Definitions, order, hidden portfolio cards and intervals persist there;
+  performance remains in the shared runtime cache and every Yahoo history call stays
+  behind `paced()`.
 - **A refused edit is a normal outcome, not an exception.** `provider.mutatePortfolio`
   catches and returns a `partial` envelope carrying the reason. Keep that — duplicate
   tickers, the five-portfolio cap and deleting the last portfolio all land there.
@@ -288,11 +310,156 @@ adding handlers.
   highest-scoring story from the last 24 hours is promoted to a hero above the grid. The age
   bound matters — several publisher feeds carry months-old items, and the reference applies no
   age cutoff anywhere.
+- **Stocks treats the chart as the commit boundary.** Quote summary, fundamentals fallback,
+  news, institutional holders, and insider transactions are optional blocks. A partial
+  response updates the usable workspace; a missing chart leaves the prior successful
+  payload intact. Its persisted snapshot renders before the startup background refresh.
+- **Stocks MFI matches the reference's rolling sums.** It uses typical price times volume,
+  14-period positive and negative flow sums, and fixed 80/20 guides. It is not RSI and is
+  not Wilder-smoothed. The institutional change column is a fractional percentage change
+  and is deliberately uncapped.
+- **Stocks has no refresh timer.** It requests on startup, Load, and F5 only. Range presets
+  slice the three-year client-side history; Auto defaults to 120 bars with the newest bar
+  at the 85% anchor, while manual pan and zoom persist only when Auto is off.
 
+- **Fundamentals bar labels are placed, not offset.** `placeLabels` in
+  `FundamentalsBarChart.tsx` ports `_p2_layout_compact_annotations`: labels sit at their own
+  bar's end, lanes come from *horizontal* overlap alone (so they do not move when the y domain
+  does), only genuine collisions are displaced outwards, and a displaced label gets a leader
+  line back to its bar. Staggering a whole series by its index instead leaves labels floating
+  over unrelated bars. Zero-value bars are skipped — their growth reads as a bogus -100%. Past
+  `ANNOTATION_LIMIT` (32 bars, the reference's `P2_COMPACT_ANNOTATION_LIMIT`) a compact chart
+  drops every label and hover carries the detail; fullscreen always keeps them.
+- **The chart's y domain is grown to fit the labels, not padded by a fixed fraction.** The
+  headroom needed is only known once the labels are placed, and placing them needs the scale,
+  so the layout iterates up to four passes like the reference. That is why the top margin is
+  10px rather than the 58px of reserved space it used to be.
+
+- **Crypto talks to three hosts, and only one of them is Yahoo.** CoinGecko (`coins/markets`
+  twice and `/global`) and alternative.me's Fear & Greed are fetched directly in
+  `services/crypto.ts`, and the four crypto RSS feeds go through the News page's own
+  `loadFeed`. All of them stay **outside** `paced()`, on the `fearGreed.ts` precedent —
+  putting CoinGecko behind the Yahoo gate would let its free-tier throttling halve the
+  dashboard's budget. The six equity proxies (COIN, MSTR, BMNR, IBIT, ETHA, BITQ) *are*
+  Yahoo and do go through the gate.
+- **Crypto's four stages run concurrently, not in sequence.** `CryptoMarketWorker` emits a
+  `partial` signal after each stage so the Qt page fills in progressively; an IPC
+  request/response cannot, so all four run at once and the payload carries the same
+  `progress` map. Keep the map — the page's status line and every panel's warning dot are
+  derived from it, not from the envelope alone.
+- **A failed Crypto heatmap falls back to five tiles built from the quotes.**
+  `buildHeatmapFromQuotes` mirrors `_build_heatmap_from_quotes` and ranks them 1-5 by
+  `CRYPTO_TICKERS` order, not by market cap. Drop it and a CoinGecko top-30 outage empties
+  the panel that is most of the page.
+- **The Crypto heatmap grid is fixed at 30 cells, not built from the payload.** A short
+  response leaves `#n --` placeholders where the missing coins belong, so the panel's shape
+  never changes with coverage — the same thing `_p19_build_heatmap` does by creating every
+  `QLabel` up front.
+- **`_p19_format_money`'s `compact` flag only adds the thousands step.** The T/B/M steps
+  apply either way, which is why a market cap and a volume in the same row read alike.
+  `cryptoMoney` in `shared/crypto.ts` keeps that; treating `compact` as "abbreviate at all"
+  changes every figure in the KPI strip.
+- **The Crypto Fear & Greed tile is amber whatever it reads.** The classification text
+  already names the direction, so tinting "Extreme Greed" green would report it as good
+  news. That is the reference's `'warning'` status, and it is not the CNN index the
+  Pre-Market page shows — different source, different scale, and the two routinely disagree.
+- **Crypto has no refresh timer**, like Trading Volumes and News, and like `init_page19`.
+  Refresh and F5 are the only ways it refetches; CoinGecko's free tier rate-limits by the
+  minute.
+- **One documented departure from `workers/crypto.py`:** the proxy table's market cap reads
+  `totalAssets` as a last fallback, so the column headed "AUM / Mkt Cap" has a number for
+  the three spot ETFs instead of the dash `fast_info.market_cap` leaves there.
+
+- **An option expiry dies at 16:00 New York, not at the local date rollover.**
+  `isOptionsExpiryClosed` in `shared/optionsPage.ts` ports `is_options_expiry_closed`:
+  it compares against the ET date *and* the 16:00 regular close. Comparing against the
+  machine's own date leaves today's expiry in the dropdown for a whole evening in Asia,
+  and Yahoo answers a dead date with a bare "expiration cannot be found".
+- **The Options Greeks are Black-Scholes with dividends, and their scales differ.** Theta
+  is per day (the annual figure over 365) and vega and rho are per percentage point (the
+  raw sensitivity over 100), which is why a delta of 0.412 sits beside a vega of 0.087.
+  `normalCdf` is Hart's rational approximation rather than a short series because the
+  implied-vol solve is a Newton iteration on it; `npm run probe:options -- --offline`
+  asserts every Greek against numbers taken from the reference's own
+  `services/options_analysis.py`.
+- **The chain backfills a zero implied volatility from the row's own mid.** Yahoo returns
+  `impliedVolatility: 0` for most of a chain outside regular hours, which is when the page
+  is most often open; without `enrichChain`'s solve every Greek column is blank. The
+  solve's own failure returns 0, which leaves that one cell empty rather than poisoning
+  the row.
+- **The two summary tabs share one payload, and the reference does not.**
+  `_p5_load_top_volume`, `_p5_load_strike_values` and `_p5_load_options_by_strike` each
+  sweep every live expiration's chain; here `optionsExpirations` sweeps once and the
+  renderer derives the type filter, the strike list and the strike selection from it. That
+  makes changing the Both/Calls/Puts filter or the strike instant instead of a reload —
+  the reference reloads on both and only its chain cache keeps that cheap.
+- **Options has no refresh timer, and nothing loads on mount.** `init_page5` fires no
+  request at all: every load is a button. A sweep is one Yahoo request per listed expiry
+  (21 for AAPL), so an automatic refetch would be the second most expensive thing in the
+  app after Trading Volumes.
+- **The summary grid's highlights are ranked before the display sort.** `summaryHighlights`
+  ranks the records as loaded, so re-sorting a panel moves rows without repainting which
+  one is the highest-volume contract. The low ranks explicitly exclude the rows the top
+  ranks claimed, or a two-row table paints the same row as both.
 - **Neither `100%` nor `table-fixed` alone gives Trading Volumes a usable Name column.**
   Under `table-fixed` a `100%` column collapses to nothing; under `auto` it swallows the
   pane and pushes the six ADV columns — the point of the page — out of sight. It is a
   fixed 184px with the pane scrolling horizontally, as the reference's does.
+
+- **The Heatmap page's constituent closes come from Yahoo's `spark` endpoint, not `chart`.**
+  A five-hundred-name index behind `paced()` one `chart()` call at a time would cost five
+  times what Trading Volumes does. `yahoo/spark.ts` posts to `v8/finance/spark`, which
+  Yahoo caps at **20 symbols per request** — 26 requests for SPY, and the whole page loads
+  in about seven seconds. Still inside `paced()`, still through the client's own `_fetch`;
+  spark needs no crumb. One year, not the reference's two, because `1y` is the longest
+  window the page offers. The closes are unadjusted, matching `auto_adjust=False`.
+- **A failed spark chunk costs twenty tiles, not five hundred**, which is why the
+  reference's per-ticker recovery pass (`_fetch_quote_fallback`, `_fallback_budget`) has no
+  port. That pass exists because `yf.download` answers for the whole batch or dies; spark's
+  chunking already contains a failure, and the symbols in it come back in `missing` and
+  render as dashed no-data tiles.
+- **Issuer holdings files and Wikipedia stay outside `paced()`**, on the `fearGreed.ts`
+  precedent. `services/etf/holdings.ts` reads SSGA's daily xlsx for SPY and DIA and
+  Invesco's QQQ JSON API; both are unrelated hosts, and letting one throttle the Yahoo
+  budget would be strictly worse than letting this page fail alone. The Yahoo top-holdings
+  fallback underneath *is* Yahoo and does go through the gate.
+- **`services/etf/xlsx.ts` reads the workbook with `node:zlib` and regexes, deliberately.**
+  An xlsx is a zip of XML and the reference reads it with the Python standard library
+  alone; one file does not justify a dependency. It ports `_parse_xlsx_rows` — one sheet,
+  shared strings, inline strings — and pads gaps from each cell's `r="B7"` reference so a
+  row's indexes still line up with its header row.
+- **Only two of the reference's seven issuer providers are ported.** The Heatmap page has
+  exactly three buttons; ARK, iShares, Vanguard, First Trust and ProShares would be
+  unreachable code until the ETF page is migrated.
+- **Two documented departures from the reference's page17.** The GICS sector map scraped
+  from Wikipedia is applied to *all three* ETFs, not SPY alone: SSGA publishes a literal
+  `-` in DIA's Sector column and Invesco's QQQ feed has no `sectorName`, so the reference
+  leaves both indexes as a single "Unclassified" rectangle — a treemap with nothing to
+  say. The map is fetched once a day either way. And `_p17_on_show` warms all three
+  indexes every time the tab is shown; only the selected one is fetched here, because the
+  per-index cache already makes a second visit free.
+- **A no-quote tile is outlined, not tinted.** `_is_unquoted` matters because the neutral
+  fill is also what a genuine 0.00% move gets, so missing data would otherwise read as
+  flat. The same distinction drives the coverage cell, which is amber below the holdings
+  count and red once more than half the book is unquoted.
+- **The Heatmap's zoom magnifies the layout, not the text.** `_visible_rect` scales each
+  rectangle and subtracts the pan while the fonts stay fixed, so zooming in *reveals*
+  labels on tiles that were too small to carry them. A CSS transform on the container
+  would scale the type with it and reveal nothing — which is also why `IndexHeatmap`
+  measures its own box and lays out in pixels: every one of the reference's rules
+  (header at 58x90, symbol at 34x22, change at 46x40, name at 90x58 past 1.35x) is a pixel
+  threshold, and a percentage layout cannot ask.
+- **The tile ramp saturates at 4%, the Portfolio Heatmap's at 5%.** `heatmapTileColor`
+  ports `_heat_color` exactly — mix the neutral toward up or down by `0.35 + 0.65 *
+  min(|change| / 4, 1)` — so the same session reads the same shade in both apps. The
+  layout, by contrast, deliberately reuses the app's squarified `Treemap` rather than the
+  reference's `_binary_layout`, so a holding of a given weight is the same shape on both
+  of this app's treemaps.
+- **The interval buttons never go back to the network.** The payload carries all seven
+  windows per holding, so Live to 1Y is a re-render, exactly as
+  `_p17_render_interval_result` is. The page has no refresh timer either — `init_page17`
+  creates none — and its per-index cache holds the reference's own 120 seconds.
+
 
 ## Porting behaviour from the PySide6 app
 
@@ -312,4 +479,9 @@ decimal. Useful starting points:
 | Settings, all of it | `mixins/settings.py` |
 | Trading Volumes, all of it | `mixins/overview.py` (worker `workers/overview.py`) |
 | News, all of it | `mixins/news.py` (feeds `workers/news_sources.py`, reader `workers/news_preview.py`, dedupe `services/news_analysis.py`) |
+| Stocks, all of it | `mixins/stocks_page.py` (plus its linked workers, services, persistence and smoke tests) |
+| Crypto, all of it | `mixins/crypto.py` (worker `workers/crypto.py`, feeds `workers/news_sources.py`) |
+| Options, all of it | `mixins/options_chain.py` (presenters `mixins/options_chain_presenters.py`, Greeks `services/options_analysis.py`, fetching `services/options_data.py`) |
+| Heatmap, all of it | `mixins/spy_heatmap.py` (presenters `mixins/spy_heatmap_presenters.py`, worker `workers/etf_heatmap.py`, issuer files `etf_holdings.py`, widget `widgets/etf_heatmap.py`) |
+| Fundamentals, all of it | `mixins/fundamentals_setup.py`, `mixins/fundamentals_render.py`, `workers/fundamentals.py`, `services/fundamentals_compare.py`, `services/sec_edgar.py` |
 | Shortcut wiring, tab picker, Obscure | `mixins/window_setup.py`, `mixins/window_lifecycle.py` |

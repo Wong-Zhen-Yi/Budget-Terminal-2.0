@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { SETTINGS_TAB_ID, TABS } from '@shared/contract'
+import { useWarmPages } from '@/api/prefetch'
 import { useReloadAll } from '@/api/queries'
 import { useSettings } from '@/api/settingsQueries'
 import { StatusBar, type PanelStatus } from '@/components/chrome/StatusBar'
@@ -8,14 +9,26 @@ import { TabBar } from '@/components/chrome/TabBar'
 import { TabPicker } from '@/components/chrome/TabPicker'
 import { isTextEntry } from '@/lib/shortcuts'
 import { DashboardPage } from '@/pages/DashboardPage'
+import { CardsPage } from '@/pages/CardsPage'
+import { CalendarPage } from '@/pages/CalendarPage'
+import { ChartsPage } from '@/pages/ChartsPage'
+import { CryptoPage } from '@/pages/CryptoPage'
+import { FundamentalsPage } from '@/pages/FundamentalsPage'
+import { HeatmapPage } from '@/pages/HeatmapPage'
 import { GlobalPage } from '@/pages/GlobalPage'
 import { PersonalFinancePage } from '@/pages/PersonalFinancePage'
 import { PortfolioPage } from '@/pages/PortfolioPage'
 import { NewsPage } from '@/pages/NewsPage'
+import { OptionsPage } from '@/pages/OptionsPage'
 import { PreMarketPage } from '@/pages/PreMarketPage'
+import { PricePage } from '@/pages/PricePage'
 import { TradingVolumesPage } from '@/pages/TradingVolumesPage'
 import { SettingsPage } from '@/pages/SettingsPage'
+import { StocksPage } from '@/pages/StocksPage'
 import { useDataHealth } from '@/stores/dataHealth'
+import { useChartsStore } from '@/stores/charts'
+import { useFundamentalsStore } from '@/stores/fundamentals'
+import { useOptionsPage } from '@/stores/options'
 
 const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
 
@@ -33,6 +46,11 @@ export function App() {
   const settingsQuery = useSettings()
   const settings = settingsQuery.data?.data
   const record = useDataHealth((state) => state.record)
+  // Every page's data is warmed at startup, one call at a time, so switching tabs lands
+  // on a loaded page rather than a spinner.
+  const warm = useWarmPages(settings)
+  const setFundamentalsSymbol = useFundamentalsStore((state) => state.setSymbol)
+  const setOptionsSymbol = useOptionsPage((state) => state.setSymbol)
 
   /** The tab strip: Settings' order, minus what Settings hides. */
   const visibleTabs = useMemo(() => {
@@ -68,6 +86,21 @@ export function App() {
     },
     [record],
   )
+
+  const setChartsSymbol = useChartsStore((state) => state.setSymbol)
+
+  /**
+   * A page handing a symbol to another page. Stocks uses it for Fundamentals and Options;
+   * the Heatmap's double-click uses the Charts branch, as `_p17_open_symbol_in_charts`
+   * does — set the target page's symbol first, then switch, so it mounts already loading
+   * the right ticker.
+   */
+  const handleStocksNavigate = useCallback((tabId: string, symbol?: string) => {
+    if (tabId === 'fundamentals' && symbol) setFundamentalsSymbol(symbol)
+    if (tabId === 'options' && symbol) setOptionsSymbol(symbol)
+    if (tabId === 'charts' && symbol) setChartsSymbol(symbol)
+    setActiveTab(tabId)
+  }, [setFundamentalsSymbol, setOptionsSymbol, setChartsSymbol])
 
   const reload = useCallback(async () => {
     setReloading(true)
@@ -187,14 +220,32 @@ export function App() {
             <GlobalPage onStatusChange={handleStatusChange} />
           ) : activeTab === 'portfolio' ? (
             <PortfolioPage onStatusChange={handleStatusChange} />
+          ) : activeTab === 'cards' ? (
+            <CardsPage onStatusChange={handleStatusChange} onNavigate={setActiveTab} />
           ) : activeTab === 'personal-finance' ? (
             <PersonalFinancePage onStatusChange={handleStatusChange} />
           ) : activeTab === 'pre-market' ? (
             <PreMarketPage onStatusChange={handleStatusChange} />
           ) : activeTab === 'trading-volumes' ? (
             <TradingVolumesPage onStatusChange={handleStatusChange} />
+          ) : activeTab === 'price' ? (
+            <PricePage onStatusChange={handleStatusChange} />
           ) : activeTab === 'news' ? (
             <NewsPage onStatusChange={handleStatusChange} />
+          ) : activeTab === 'calendar' ? (
+            <CalendarPage onStatusChange={handleStatusChange} />
+          ) : activeTab === 'heatmap' ? (
+            <HeatmapPage onStatusChange={handleStatusChange} onNavigate={handleStocksNavigate} />
+          ) : activeTab === 'crypto' ? (
+            <CryptoPage onStatusChange={handleStatusChange} />
+          ) : activeTab === 'charts' ? (
+            <ChartsPage onStatusChange={handleStatusChange} />
+          ) : activeTab === 'stocks' ? (
+            <StocksPage onStatusChange={handleStatusChange} onNavigate={handleStocksNavigate} />
+          ) : activeTab === 'fundamentals' ? (
+            <FundamentalsPage onStatusChange={handleStatusChange} />
+          ) : activeTab === 'options' ? (
+            <OptionsPage onStatusChange={handleStatusChange} />
           ) : activeTab === SETTINGS_TAB_ID ? (
             <SettingsPage onStatusChange={handleStatusChange} />
           ) : (
@@ -211,7 +262,16 @@ export function App() {
         ) : null}
       </div>
 
-      <StatusBar panels={panels} sourcePath={sourcePath} notice={notice} />
+      <StatusBar
+        panels={panels}
+        sourcePath={sourcePath}
+        notice={notice}
+        warming={
+          warm.active
+            ? `Loading pages in the background (${warm.done + 1}/${warm.total}): ${warm.label}...`
+            : ''
+        }
+      />
 
       {pickerOpen ? (
         <TabPicker
@@ -236,4 +296,3 @@ function PlaceholderPage({ tabId }: { tabId: string }) {
     </div>
   )
 }
-

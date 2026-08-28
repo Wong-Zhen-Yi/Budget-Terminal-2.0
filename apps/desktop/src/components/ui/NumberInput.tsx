@@ -7,6 +7,8 @@ interface NumberInputProps {
   decimals?: number
   prefix?: string
   min?: number
+  max?: number
+  disabled?: boolean
   className?: string
   'aria-label'?: string
 }
@@ -24,6 +26,8 @@ export function NumberInput({
   decimals,
   prefix = '',
   min = 0,
+  max = Number.POSITIVE_INFINITY,
+  disabled = false,
   className = '',
   'aria-label': ariaLabel,
 }: NumberInputProps) {
@@ -38,7 +42,7 @@ export function NumberInput({
   const commit = () => {
     setEditing(false)
     const parsed = Number(draft.replace(/[$,\s]/g, ''))
-    if (!Number.isFinite(parsed) || parsed < min) {
+    if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
       setDraft(display)
       return
     }
@@ -53,6 +57,7 @@ export function NumberInput({
       ) : null}
       <input
         aria-label={ariaLabel}
+        disabled={disabled}
         value={editing ? draft : display}
         inputMode="decimal"
         spellCheck={false}
@@ -74,7 +79,7 @@ export function NumberInput({
         // The prefix is drawn over the field, so the text has to start clear of it —
         // `US$` needs more room than `$`.
         style={prefix ? { paddingLeft: `${0.3 + prefix.length * 0.45}rem` } : undefined}
-        className={`num h-7 w-full border border-transparent bg-transparent py-0 text-right text-2xs text-text outline-none hover:border-border-strong focus:border-accent focus:bg-surface-raised ${
+        className={`num h-7 w-full border border-transparent bg-transparent py-0 text-right text-2xs text-text outline-none hover:border-border-strong focus:border-accent focus:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-40 ${
           prefix ? 'pr-1' : 'px-1'
         }`}
       />

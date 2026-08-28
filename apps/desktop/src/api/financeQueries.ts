@@ -8,9 +8,7 @@ import type {
   PersonalFinancePayload,
 } from '@shared/contract'
 import { api, queryKeys } from './client'
-
-/** The reference refreshes USD/SGD every 300 seconds; match it. */
-const FX_REFRESH_MS = 300_000
+import { FX_REFRESH_MS } from './refreshRates'
 
 export function usePersonalFinance(): UseQueryResult<Envelope<PersonalFinancePayload>> {
   const queryClient = useQueryClient()

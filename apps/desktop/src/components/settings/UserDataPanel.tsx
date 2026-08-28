@@ -12,13 +12,13 @@ const CONFIRMATIONS: Partial<Record<MaintenanceAction, { title: string; body: st
     importUserData: {
       title: 'Import User Data',
       body:
-        'Importing replaces the saved holdings, options tracker and personal finance book with the contents of the backup file. A rollback copy of the current store is written beside it first.',
+        'Importing replaces the saved holdings, options tracker, personal finance book and Cards data with the contents of the backup file. A rollback copy of the current holdings store is written beside it first.',
       verb: 'Choose Backup File',
     },
     clearUserData: {
       title: 'Clear All User Data',
       body:
-        'This removes every saved portfolio, holding, options position and personal finance row. Settings — navigation order, privacy and the clock — are kept, and a rollback copy is written first.',
+        'This removes every saved portfolio, holding, options position, personal finance row and custom Card. Settings — navigation order, privacy and the clock — are kept, and a rollback copy of the holdings store is written first.',
       verb: 'Clear Everything',
     },
     resetCache: {
@@ -53,7 +53,7 @@ export function UserDataPanel({
       <div className="flex flex-col gap-2 p-2">
         <SectionHeader
           title="Backups and Maintenance"
-          hint="Export or restore one JSON file holding the portfolios, the personal finance book and these settings."
+          hint="Export or restore one JSON file holding portfolios, personal finance, Cards and these settings."
         />
         <div className="grid grid-cols-2 gap-2">
           <Button
@@ -62,7 +62,7 @@ export function UserDataPanel({
             disabled={busy !== null}
             onClick={() => start('exportUserData')}
           >
-            {busy === 'exportUserData' ? 'Exporting...' : 'Export User Data'}
+            {busy === 'exportUserData' ? 'Exporting...' : 'Export User Data and Cards'}
           </Button>
           <Button
             variant="accent"
@@ -70,10 +70,10 @@ export function UserDataPanel({
             disabled={busy !== null}
             onClick={() => start('importUserData')}
           >
-            {busy === 'importUserData' ? 'Importing...' : 'Import User Data'}
+            {busy === 'importUserData' ? 'Importing...' : 'Import User Data and Cards'}
           </Button>
           <Button variant="danger" disabled={busy !== null} onClick={() => start('clearUserData')}>
-            {busy === 'clearUserData' ? 'Clearing...' : 'Clear All User Data'}
+            {busy === 'clearUserData' ? 'Clearing...' : 'Clear All User Data and Cards'}
           </Button>
           <Button variant="danger" disabled={busy !== null} onClick={() => start('resetCache')}>
             {busy === 'resetCache' ? 'Resetting...' : 'Reset Cache'}

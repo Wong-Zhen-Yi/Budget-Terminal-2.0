@@ -31,6 +31,7 @@ export function StatusBar({
   panels,
   sourcePath,
   notice = '',
+  warming = '',
 }: {
   panels: PanelStatus[]
   sourcePath: string
@@ -39,6 +40,11 @@ export function StatusBar({
    * straight into `status_bar`, such as the result of toggling Obscure.
    */
   notice?: string
+  /**
+   * The startup warm-up's progress. It sits below the current page's own loading line:
+   * what is on screen matters more than what is being loaded for later.
+   */
+  warming?: string
 }) {
   const loading = panels.filter((panel) => panel.loading)
   const settled = panels.filter((panel) => panel.envelope)
@@ -59,6 +65,9 @@ export function StatusBar({
     tone = 'text-text-muted'
   } else if (loading.length) {
     health = `Loading ${loading.map((panel) => panel.label).join(', ')}...`
+    tone = 'text-text-muted'
+  } else if (warming) {
+    health = warming
     tone = 'text-text-muted'
   } else if (worst) {
     const meta = worst.envelope!.meta

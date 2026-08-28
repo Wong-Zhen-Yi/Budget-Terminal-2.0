@@ -5,7 +5,7 @@
  *   npm run probe:settings
  *
  * APPDATA is redirected to a scratch directory first, so this never touches your real
- * settings.json or portfolio.json. The reference to compare against is the PySide6
+ * settings.json, portfolio.json or strategies.json. The reference to compare against is the PySide6
  * Settings page: the same refusals (Settings cannot be hidden or obscured), the same
  * reset behaviour, and a Clear that leaves navigation and privacy alone.
  */
@@ -15,11 +15,13 @@ import { join } from 'node:path'
 
 const scratch = mkdtempSync(join(tmpdir(), 'bt-settings-'))
 process.env.APPDATA = scratch
+process.env.LOCALAPPDATA = scratch
 
 const { mutateSettings, readSettings, settingsPath } = await import(
   '../electron/services/settingsStore.js'
 )
 const { mutatePortfolios, readPortfolios } = await import('../electron/services/portfolioStore.js')
+const { mutateCards, readCards } = await import('../electron/services/cardsStore.js')
 const { yahooProvider } = await import('../electron/services/provider.js')
 
 type Settings = Awaited<ReturnType<typeof readSettings>>
@@ -99,6 +101,13 @@ async function main(): Promise<void> {
     shares: 7,
     avgPrice: 123.45,
   })
+  await mutateCards({
+    type: 'add',
+    name: 'Settings Probe Card',
+    symbols: ['NVDA', 'AVGO'],
+    weighting: 'equal',
+    weights: {},
+  })
 
   const backup = join(scratch, 'backup.json')
   console.log('\n-- export')
@@ -110,6 +119,7 @@ async function main(): Promise<void> {
   const cleared = await yahooProvider.clearUserData()
   console.log(`   ${cleared.data.message}`)
   check('clear empties the holdings', (await readPortfolios()).portfolios[0].tickers.length === 0)
+  check('clear empties custom cards', (await readCards()).customCards.length === 0)
   check('clear leaves settings alone', (await readSettings()).clockCountry === 'SG')
 
   console.log('\n-- import')
@@ -118,6 +128,10 @@ async function main(): Promise<void> {
   const restored = (await readPortfolios()).portfolios[0]
   check('import restores the position', restored.tickers.includes('NVDA'))
   check('import restores the share count', restored.holdings.NVDA?.shares === 7)
+  check(
+    'import restores cards',
+    (await readCards()).customCards.some((card) => card.name === 'Settings Probe Card'),
+  )
   check('import restores settings', (await readSettings()).clockCountry === 'SG')
 
   console.log('\n-- import refuses a file that is not a backup')

@@ -10,6 +10,9 @@ import { CHANNELS } from './shared/contract.js'
 const api: DesktopApi = {
   quotes: (request) => ipcRenderer.invoke(CHANNELS.quotes, request),
   chart: (request) => ipcRenderer.invoke(CHANNELS.chart, request),
+  chartsHistory: (request) => ipcRenderer.invoke(CHANNELS.chartsHistory, request),
+  chartsCompare: (request) => ipcRenderer.invoke(CHANNELS.chartsCompare, request),
+  chartsRelationship: (request) => ipcRenderer.invoke(CHANNELS.chartsRelationship, request),
   options: (request) => ipcRenderer.invoke(CHANNELS.options, request),
   targets: (request) => ipcRenderer.invoke(CHANNELS.targets, request),
   news: (request) => ipcRenderer.invoke(CHANNELS.news, request),
@@ -19,6 +22,9 @@ const api: DesktopApi = {
   newsThumbnail: (request) => ipcRenderer.invoke(CHANNELS.newsThumbnail, request),
   portfolio: () => ipcRenderer.invoke(CHANNELS.portfolio),
   mutatePortfolio: (mutation) => ipcRenderer.invoke(CHANNELS.portfolioMutate, mutation),
+  cards: () => ipcRenderer.invoke(CHANNELS.cards),
+  mutateCards: (mutation) => ipcRenderer.invoke(CHANNELS.cardsMutate, mutation),
+  cardsPerformance: (request) => ipcRenderer.invoke(CHANNELS.cardsPerformance, request),
   personalFinance: () => ipcRenderer.invoke(CHANNELS.personalFinance),
   mutatePersonalFinance: (mutation) =>
     ipcRenderer.invoke(CHANNELS.personalFinanceMutate, mutation),
@@ -26,7 +32,16 @@ const api: DesktopApi = {
   globalMarkets: (request) => ipcRenderer.invoke(CHANNELS.globalMarkets, request),
   preMarket: (request) => ipcRenderer.invoke(CHANNELS.preMarket, request),
   tradingVolumes: (request) => ipcRenderer.invoke(CHANNELS.tradingVolumes, request),
+  priceScreen: (request) => ipcRenderer.invoke(CHANNELS.priceScreen, request),
+  calendarMonth: (request) => ipcRenderer.invoke(CHANNELS.calendarMonth, request),
+  earningsCalendar: (request) => ipcRenderer.invoke(CHANNELS.earningsCalendar, request),
+  crypto: (request) => ipcRenderer.invoke(CHANNELS.crypto, request),
+  heatmap: (request) => ipcRenderer.invoke(CHANNELS.heatmap, request),
+  stocks: (request) => ipcRenderer.invoke(CHANNELS.stocks, request),
+  optionsChain: (request) => ipcRenderer.invoke(CHANNELS.optionsChain, request),
+  optionsExpirations: (request) => ipcRenderer.invoke(CHANNELS.optionsExpirations, request),
   fundamentals: (request) => ipcRenderer.invoke(CHANNELS.fundamentals, request),
+  fundamentalsPage: (request) => ipcRenderer.invoke(CHANNELS.fundamentalsPage, request),
   returns: (request) => ipcRenderer.invoke(CHANNELS.returns, request),
   momentum: (request) => ipcRenderer.invoke(CHANNELS.momentum, request),
   analytics: (request) => ipcRenderer.invoke(CHANNELS.analytics, request),
@@ -37,6 +52,7 @@ const api: DesktopApi = {
   openExternal: (url) => ipcRenderer.invoke(CHANNELS.openExternal, url),
   saveText: (suggestedName, contents) =>
     ipcRenderer.invoke(CHANNELS.saveText, suggestedName, contents),
+  writeClipboard: (contents) => ipcRenderer.invoke(CHANNELS.writeClipboard, contents),
   windowControl: (action) => ipcRenderer.invoke(CHANNELS.windowControl, action),
   onPortfolioChanged: (listener) => {
     const handler = () => listener()

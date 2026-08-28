@@ -38,6 +38,9 @@ export const TTL = {
   // A publisher thumbnail is immutable once fetched; the long TTL is what keeps a card
   // grid from re-downloading a hundred images every time the page is revisited.
   newsImage: 6 * 60 * 60_000,
+  // The Crypto page has no refresh timer, like the reference's `init_page19`. This only
+  // stops a tab revisit from spending CoinGecko's free-tier rate budget again.
+  crypto: 5 * 60_000,
 } as const
 
 export interface CachedResult<T> {

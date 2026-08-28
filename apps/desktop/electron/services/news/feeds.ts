@@ -89,7 +89,7 @@ async function fetchFeedBody(url: string): Promise<FeedBody> {
  * headlines with nothing on screen to say so. The reference caps the same fallback at
  * `NEWS_FEED_STALE_FALLBACK_SECONDS`.
  */
-async function loadFeed(
+export async function loadFeed(
   feed: NewsFeedConfig,
   universe: Set<string>,
   force: boolean,

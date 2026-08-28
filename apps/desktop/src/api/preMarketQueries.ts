@@ -4,9 +4,7 @@ import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-q
 import type { Envelope, PreMarketPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
 import { forcing } from './queries'
-
-/** `_P14_AUTO_REFRESH_INTERVAL_MS`. */
-const REFRESH_MS = 15 * 60_000
+import { PRE_MARKET_REFRESH_MS as REFRESH_MS } from './refreshRates'
 
 /**
  * All six Pre-Market blocks in one call.

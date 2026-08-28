@@ -1,18 +1,30 @@
-import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
 import { writeFile } from 'node:fs/promises'
 
 import type {
   AnalyticsRequest,
   AppSettingsMutation,
+  CardsMutation,
+  CardsPerformanceRequest,
   ChartRequest,
+  ChartsCompareRequest,
+  ChartsHistoryRequest,
+  ChartsRelationshipRequest,
+  CalendarMonthRequest,
+  CryptoRequest,
+  EarningsCalendarRequest,
+  HeatmapRequest,
   Envelope,
   MaintenanceAction,
   MaintenanceResult,
   FundamentalsRequest,
+  FundamentalsPageRequest,
   FxRequest,
   GlobalMarketsRequest,
   PreMarketRequest,
+  PriceScreenRequest,
   TradingVolumesRequest,
+  StocksRequest,
   MomentumRequest,
   OptionQuotesRequest,
   PersonalFinanceMutation,
@@ -24,6 +36,8 @@ import type {
   NewsThumbnailRequest,
   PortfolioMutation,
   OptionsRequest,
+  OptionsChainRequest,
+  OptionsExpirationsRequest,
   QuotesRequest,
   TargetsRequest,
   WindowAction,
@@ -39,6 +53,15 @@ export function registerIpcHandlers(): () => void {
 
   ipcMain.handle(CHANNELS.quotes, (_event, request: QuotesRequest) => provider.quotes(request))
   ipcMain.handle(CHANNELS.chart, (_event, request: ChartRequest) => provider.chart(request))
+  ipcMain.handle(CHANNELS.chartsHistory, (_event, request: ChartsHistoryRequest) =>
+    provider.chartsHistory(request),
+  )
+  ipcMain.handle(CHANNELS.chartsCompare, (_event, request: ChartsCompareRequest) =>
+    provider.chartsCompare(request),
+  )
+  ipcMain.handle(CHANNELS.chartsRelationship, (_event, request: ChartsRelationshipRequest) =>
+    provider.chartsRelationship(request),
+  )
   ipcMain.handle(CHANNELS.options, (_event, request: OptionsRequest) => provider.options(request))
   ipcMain.handle(CHANNELS.targets, (_event, request: TargetsRequest) => provider.targets(request))
   ipcMain.handle(CHANNELS.news, (_event, request: NewsRequest) => provider.news(request))
@@ -57,6 +80,9 @@ export function registerIpcHandlers(): () => void {
   ipcMain.handle(CHANNELS.fundamentals, (_event, request: FundamentalsRequest) =>
     provider.fundamentals(request),
   )
+  ipcMain.handle(CHANNELS.fundamentalsPage, (_event, request: FundamentalsPageRequest) =>
+    provider.fundamentalsPage(request),
+  )
   ipcMain.handle(CHANNELS.returns, (_event, request: ReturnsRequest) => provider.returns(request))
   ipcMain.handle(CHANNELS.momentum, (_event, request: MomentumRequest) =>
     provider.momentum(request),
@@ -70,6 +96,13 @@ export function registerIpcHandlers(): () => void {
   ipcMain.handle(CHANNELS.portfolio, () => provider.portfolio())
   ipcMain.handle(CHANNELS.portfolioMutate, (_event, mutation: PortfolioMutation) =>
     provider.mutatePortfolio(mutation),
+  )
+  ipcMain.handle(CHANNELS.cards, () => provider.cards())
+  ipcMain.handle(CHANNELS.cardsMutate, (_event, mutation: CardsMutation) =>
+    provider.mutateCards(mutation),
+  )
+  ipcMain.handle(CHANNELS.cardsPerformance, (_event, request: CardsPerformanceRequest) =>
+    provider.cardsPerformance(request),
   )
   ipcMain.handle(CHANNELS.personalFinance, () => provider.personalFinance())
   ipcMain.handle(CHANNELS.personalFinanceMutate, (_event, mutation: PersonalFinanceMutation) =>
@@ -85,6 +118,24 @@ export function registerIpcHandlers(): () => void {
   )
   ipcMain.handle(CHANNELS.tradingVolumes, (_event, request: TradingVolumesRequest) =>
     provider.tradingVolumes(request),
+  )
+  ipcMain.handle(CHANNELS.priceScreen, (_event, request: PriceScreenRequest) =>
+    provider.priceScreen(request),
+  )
+  ipcMain.handle(CHANNELS.calendarMonth, (_event, request: CalendarMonthRequest) =>
+    provider.calendarMonth(request),
+  )
+  ipcMain.handle(CHANNELS.earningsCalendar, (_event, request: EarningsCalendarRequest) =>
+    provider.earningsCalendar(request),
+  )
+  ipcMain.handle(CHANNELS.crypto, (_event, request: CryptoRequest) => provider.crypto(request))
+  ipcMain.handle(CHANNELS.heatmap, (_event, request: HeatmapRequest) => provider.heatmap(request))
+  ipcMain.handle(CHANNELS.stocks, (_event, request: StocksRequest) => provider.stocks(request))
+  ipcMain.handle(CHANNELS.optionsChain, (_event, request: OptionsChainRequest) =>
+    provider.optionsChain(request),
+  )
+  ipcMain.handle(CHANNELS.optionsExpirations, (_event, request: OptionsExpirationsRequest) =>
+    provider.optionsExpirations(request),
   )
   ipcMain.handle(CHANNELS.settings, () => provider.settings())
   ipcMain.handle(CHANNELS.settingsMutate, (_event, mutation: AppSettingsMutation) =>
@@ -152,6 +203,10 @@ export function registerIpcHandlers(): () => void {
       return result.filePath
     },
   )
+
+  ipcMain.handle(CHANNELS.writeClipboard, (_event, contents: string) => {
+    clipboard.writeText(contents)
+  })
 
   ipcMain.handle(CHANNELS.windowControl, (event, action: WindowAction) => {
     const window = BrowserWindow.fromWebContents(event.sender)

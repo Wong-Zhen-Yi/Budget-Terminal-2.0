@@ -30,10 +30,20 @@ export interface ScreenerQuote {
   averageDailyVolume10Day?: number
   averageDailyVolume3Month?: number
   sharesOutstanding?: number
+  exchange?: string
+  intradayprice?: number
+  eodprice?: number
+  intradaymarketcap?: number
+  'lastclosemarketcap.lasttwelvemonths'?: number
 }
 
 interface ScreenerResponse {
   finance?: { result?: Array<{ total?: number; quotes?: ScreenerQuote[] }> }
+}
+
+export interface EquityScreenPage {
+  total: number
+  quotes: ScreenerQuote[]
 }
 
 const SCREENER_URL = 'https://query2.finance.yahoo.com/v1/finance/screener'
@@ -65,14 +75,36 @@ function warmCrumb(): Promise<void> {
   return warmed
 }
 
+async function postScreen(body: Record<string, unknown>): Promise<EquityScreenPage> {
+  await warmCrumb()
+  const response = (await paced(() =>
+    yahoo._fetch(
+      SCREENER_URL,
+      { lang: 'en-US', region: 'US', formatted: 'false', corsDomain: 'finance.yahoo.com' },
+      {
+        fetchOptions: {
+          method: 'POST',
+          body: JSON.stringify(body),
+          headers: { 'content-type': 'application/json' },
+        },
+      },
+      'json',
+      true,
+    ),
+  )) as ScreenerResponse
+  const result = response.finance?.result?.[0]
+  return {
+    total: Number.isFinite(Number(result?.total)) ? Number(result?.total) : 0,
+    quotes: result?.quotes ?? [],
+  }
+}
+
 /** One page of the screen, ordered by `sortField` descending. */
 export async function equityScreen(
   sortField: string,
   offset: number,
   size = SCREEN_PAGE_SIZE,
 ): Promise<ScreenerQuote[]> {
-  await warmCrumb()
-
   const body = {
     size,
     offset,
@@ -91,23 +123,41 @@ export async function equityScreen(
     userIdType: 'guid',
   }
 
-  const response = (await paced(() =>
-    yahoo._fetch(
-      SCREENER_URL,
-      { lang: 'en-US', region: 'US', formatted: 'false', corsDomain: 'finance.yahoo.com' },
-      {
-        fetchOptions: {
-          method: 'POST',
-          body: JSON.stringify(body),
-          headers: { 'content-type': 'application/json' },
-        },
-      },
-      'json',
-      true,
-    ),
-  )) as ScreenerResponse
+  return (await postScreen(body)).quotes
+}
 
-  return response.finance?.result?.[0]?.quotes ?? []
+/** One market-cap-ranked page for the Price screen's inclusive range query. */
+export function equityPriceScreen(
+  minimumPrice: number,
+  maximumPrice: number,
+  exchanges: readonly string[],
+  offset: number,
+  size = SCREEN_PAGE_SIZE,
+): Promise<EquityScreenPage> {
+  return postScreen({
+    size,
+    offset,
+    sortField: 'intradaymarketcap',
+    sortType: 'DESC',
+    quoteType: 'EQUITY',
+    query: {
+      operator: 'and',
+      operands: [
+        { operator: 'eq', operands: ['region', 'us'] },
+        { operator: 'gte', operands: ['intradayprice', minimumPrice] },
+        { operator: 'lte', operands: ['intradayprice', maximumPrice] },
+        {
+          operator: 'or',
+          operands: exchanges.map((exchange) => ({
+            operator: 'eq',
+            operands: ['exchange', exchange],
+          })),
+        },
+      ],
+    },
+    userId: '',
+    userIdType: 'guid',
+  })
 }
 
 /**

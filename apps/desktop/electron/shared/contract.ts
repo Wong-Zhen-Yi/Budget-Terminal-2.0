@@ -117,6 +117,86 @@ export type PortfolioMutation =
   | { type: 'setIncludeCash'; portfolioId: string; includeCashInWeight: boolean }
   | OptionMutation
 
+/* -------------------------------------------------------------------- cards */
+
+export const CARD_INTERVALS = ['1d', '30d', '1y'] as const
+export type CardInterval = (typeof CARD_INTERVALS)[number]
+export type CardWeighting = 'equal' | 'custom'
+export type CardResolvedWeighting = CardWeighting | 'portfolio' | 'equal_fallback'
+
+export interface CustomCard {
+  id: string
+  name: string
+  symbols: string[]
+  weighting: CardWeighting
+  weights: Record<string, number>
+}
+
+/** The Cards page's separate, app-owned strategies document. */
+export interface CardsPayload {
+  version: number
+  starterCardsVersion: number
+  customCards: CustomCard[]
+  cardOrder: string[]
+  hiddenPortfolioIds: string[]
+  intervals: Record<string, CardInterval>
+  sourcePath: string
+}
+
+export type CardsMutation =
+  | {
+      type: 'add'
+      name: string
+      symbols: string[]
+      weighting: CardWeighting
+      weights: Record<string, number>
+    }
+  | {
+      type: 'update'
+      id: string
+      name: string
+      symbols: string[]
+      weighting: CardWeighting
+      weights: Record<string, number>
+    }
+  | { type: 'remove'; id: string }
+  | { type: 'reorder'; order: string[] }
+  | { type: 'setPortfolioVisible'; portfolioId: string; visible: boolean }
+  | { type: 'setInterval'; id: string; interval: CardInterval }
+
+export interface CardPerformanceInput {
+  id: string
+  symbols: string[]
+  weighting: CardResolvedWeighting
+  weights: Record<string, number>
+  shares: Record<string, number>
+  cashBalance: number
+}
+
+export interface CardPerformance {
+  values: number[]
+  returnPct: number
+  points: number
+  includedSymbols: string[]
+  missingSymbols: string[]
+  weights: Record<string, number>
+  weighting: CardResolvedWeighting
+  weightingLabel: string
+  source: string
+  interval: CardInterval
+}
+
+export interface CardsPerformanceRequest {
+  interval: CardInterval
+  cards: CardPerformanceInput[]
+  force?: boolean
+}
+
+export interface CardsPerformancePayload {
+  interval: CardInterval
+  results: Record<string, CardPerformance>
+}
+
 /* --------------------------------------------------------- option tracker */
 
 export interface OptionPosition {
@@ -313,6 +393,96 @@ export interface FundamentalsPayload {
   fundamentals: Record<string, Fundamentals>
 }
 
+/** The fixed statement series behind the migrated Fundamentals workspace. */
+export const FUNDAMENTAL_SERIES_KEYS = [
+  'revenue',
+  'netIncome',
+  'operatingCashFlow',
+  'freeCashFlow',
+  'sharesOutstanding',
+  'cashAndBonds',
+  'totalDebt',
+  'sellingGeneralAdmin',
+  'researchDevelopment',
+] as const
+export type FundamentalSeriesKey = (typeof FUNDAMENTAL_SERIES_KEYS)[number]
+
+export type FundamentalPointSource = 'sec' | 'yahoo' | 'derived'
+
+export interface FundamentalSeriesPoint {
+  /** ISO fiscal period end. */
+  endDate: string
+  /** Calendar label used for chart alignment: YYYY or YYYY-Qn. */
+  label: string
+  value: number
+  source: FundamentalPointSource
+}
+
+export type FundamentalSeriesMap = Record<FundamentalSeriesKey, FundamentalSeriesPoint[]>
+
+export interface FundamentalsPageCompany {
+  name: string
+  exchange: string
+  sector: string
+  industry: string
+  currency: string
+  website: string
+  irWebsite: string
+}
+
+/** Raw inputs for the ten reference headline calculations. */
+export interface FundamentalsPageFacts {
+  trailingPe: number | null
+  forwardPe: number | null
+  priceToSales: number | null
+  pegRatio: number | null
+  earningsGrowth: number | null
+  enterpriseValue: number | null
+  ebitda: number | null
+  marketCap: number | null
+  totalRevenue: number | null
+  freeCashFlow: number | null
+  totalCash: number | null
+  totalDebt: number | null
+  sharesOutstanding: number | null
+  beta: number | null
+  currentPrice: number | null
+}
+
+export interface SecFiling {
+  form: string
+  filedDate: string
+  reportPeriod: string
+  description: string
+  items: string
+  accessionNumber: string
+  documentUrl: string
+}
+
+export type SecFreshness = 'fresh' | 'cached' | 'stale' | 'failed' | 'unavailable'
+
+export interface FundamentalsSecMetadata {
+  available: boolean
+  statementsAvailable: boolean
+  cik: string
+  freshness: SecFreshness
+  statementFreshness: SecFreshness
+  cacheAgeSeconds: number
+  filings: SecFiling[]
+  warnings: string[]
+}
+
+export interface FundamentalsPagePayload {
+  symbol: string
+  company: FundamentalsPageCompany
+  facts: FundamentalsPageFacts
+  annual: FundamentalSeriesMap
+  quarterly: FundamentalSeriesMap
+  sec: FundamentalsSecMetadata
+  warnings: string[]
+  generatedAt: number
+}
+
 /* ------------------------------------------------------------------- chart */
 
 export interface Candle {
@@ -355,6 +525,107 @@ export interface ChartPayload {
     rsi: IndicatorPoint[]
     rsiMa: IndicatorPoint[]
   }
+}
+
+/* ------------------------------------------------------------ charts page */
+
+export const CHARTS_INTERVALS = [
+  '1 Minute',
+  '5 Minutes',
+  '15 Minutes',
+  '1 Hour',
+  '4 Hours',
+  '1 Day',
+  '1 Week',
+  '1 Month',
+] as const
+export type ChartsInterval = (typeof CHARTS_INTERVALS)[number]
+
+export const CHARTS_RANGES = ['1D', '5D', '1M', '3M', '6M', 'YTD', '1Y', '5Y', 'Max'] as const
+export type ChartsRange = (typeof CHARTS_RANGES)[number]
+export type ChartsCompareInterval = '1 Day' | '1 Week'
+export type ChartsCompareRange = '5Y' | '3Y' | '1Y' | 'YTD' | '3M' | '1M'
+export type ChartsRelationshipRange = '1M' | '3M' | '6M' | '1Y' | '5Y' | 'Max'
+export type ChartsRollingWindow = 30 | 60 | 120 | 252
+
+export interface ChartsHistoryRequest {
+  symbol: string
+  interval: ChartsInterval
+  range: ChartsRange
+  force?: boolean
+}
+
+export interface ChartsHistoryPayload {
+  symbol: string
+  intervalLabel: ChartsInterval
+  rangeLabel: ChartsRange
+  interval: string
+  candles: Candle[]
+  stats: ChartStats | null
+  indicators: ChartPayload['indicators']
+}
+
+export interface ChartsCompareRequest {
+  symbols: string[]
+  interval: ChartsCompareInterval
+  range: ChartsCompareRange
+  force?: boolean
+}
+
+export interface ChartsSeriesPoint {
+  time: number
+  close: number
+}
+
+export interface ChartsComparePayload {
+  symbols: string[]
+  interval: ChartsCompareInterval
+  range: ChartsCompareRange
+  series: Record<string, ChartsSeriesPoint[]>
+  missing: string[]
+}
+
+export interface ChartsRelationshipRequest {
+  symbols: [string, string]
+  range: ChartsRelationshipRange
+  rollingWindow: ChartsRollingWindow
+  force?: boolean
+}
+
+export interface ChartsRelationshipPoint {
+  time: number
+  date: string
+  leftClose: number
+  rightClose: number
+  leftIndexed: number
+  rightIndexed: number
+  ratio: number
+  leftReturnPct: number | null
+  rightReturnPct: number | null
+  rollingCorrelation: number | null
+  rollingSample: number
+}
+
+export interface ChartsRelationshipStats {
+  latestRatio: number | null
+  latestCorrelation: number | null
+  latestCorrelationSample: number
+  beta: number | null
+  alphaDailyPct: number | null
+  r: number | null
+  rSquared: number | null
+  stdErrorPct: number | null
+  observations: number
+}
+
+export interface ChartsRelationshipPayload {
+  symbols: [string, string]
+  range: ChartsRelationshipRange
+  rollingWindow: ChartsRollingWindow
+  points: ChartsRelationshipPoint[]
+  regressionLine: Array<{ x: number; y: number }>
+  stats: ChartsRelationshipStats
+  missing: string[]
 }
 
 /* ----------------------------------------------------------------- options */
@@ -410,6 +681,91 @@ export interface NewsItem {
   source: string
   publishedAt: number
   url: string
+}
+
+/* ------------------------------------------------------------------- stocks */
+
+export const STOCKS_RANGE_PRESETS = ['1M', '3M', '6M', '1Y', '3Y'] as const
+export type StocksRangePreset = '' | (typeof STOCKS_RANGE_PRESETS)[number]
+
+export interface StocksMetrics {
+  marketCap: string
+  revenue: string
+  netIncome: string
+  eps: string
+  grossMargin: string
+  operatingMargin: string
+  netMargin: string
+  sharesOutstanding: string
+  pe: string
+  forwardPe: string
+  dividend: string
+  exDividendDate: string
+  volume: string
+  beta: string
+  earningsDate: string
+}
+
+export interface StocksTargets {
+  low: string
+  mean: string
+  high: string
+  upsideToMean: string
+  upsidePct: number | null
+  analysts: string
+}
+
+export interface StocksCompany {
+  name: string
+  exchange: string
+  sector: string
+  industry: string
+  description: string
+}
+
+export interface StocksNewsRow extends NewsItem {}
+
+export interface StocksInstitutionalRow {
+  holder: string
+  pctHeld: string
+  shares: string
+  value: string
+  pctChange: string
+  reported: string
+}
+
+export interface StocksInsiderRow {
+  date: string
+  insider: string
+  title: string
+  transaction: string
+  shares: string
+  value: string
+}
+
+export interface StocksChartPayload {
+  candles: Candle[]
+  stats: ChartStats
+  mfi: IndicatorPoint[]
+}
+
+export interface StocksPayload {
+  symbol: string
+  company: StocksCompany
+  metrics: StocksMetrics
+  targets: StocksTargets
+  chart: StocksChartPayload
+  news: StocksNewsRow[]
+  institutional: StocksInstitutionalRow[]
+  insiders: StocksInsiderRow[]
+  /** Optional blocks whose live request failed. Empty data is not itself a failure. */
+  missing: string[]
+  generatedAt: number
+}
+
+export interface StocksRequest {
+  symbol: string
+  force?: boolean
 }
 
 export interface NewsPayload {
@@ -678,24 +1034,24 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'dashboard', label: 'Dashboard', implemented: true },
   { id: 'global', label: 'Global', implemented: true },
   { id: 'portfolio', label: 'Portfolio', implemented: true },
-  { id: 'cards', label: 'Cards', implemented: false },
+  { id: 'cards', label: 'Cards', implemented: true },
   { id: 'personal-finance', label: 'Personal Finance', implemented: true },
   { id: 'pre-market', label: 'Pre-Market', implemented: true },
   { id: 'up-down', label: 'Up/Down', implemented: false },
   { id: 'trading-volumes', label: 'Trading Volumes', implemented: true },
   { id: 'signals', label: 'Signals', implemented: false },
-  { id: 'price', label: 'Price', implemented: false },
-  { id: 'heatmap', label: 'Heatmap', implemented: false },
+  { id: 'price', label: 'Price', implemented: true },
+  { id: 'heatmap', label: 'Heatmap', implemented: true },
   { id: 'news', label: 'News', implemented: true },
-  { id: 'calendar', label: 'Calendar', implemented: false },
-  { id: 'stocks', label: 'Stocks', implemented: false },
-  { id: 'fundamentals', label: 'Fundamentals', implemented: false },
+  { id: 'calendar', label: 'Calendar', implemented: true },
+  { id: 'stocks', label: 'Stocks', implemented: true },
+  { id: 'fundamentals', label: 'Fundamentals', implemented: true },
   { id: 'valuation', label: 'Valuation', implemented: false },
-  { id: 'charts', label: 'Charts', implemented: false },
+  { id: 'charts', label: 'Charts', implemented: true },
   { id: 'projections', label: 'Projections', implemented: false },
-  { id: 'options', label: 'Options', implemented: false },
+  { id: 'options', label: 'Options', implemented: true },
   { id: 'etf', label: 'ETF', implemented: false },
-  { id: 'crypto', label: 'Crypto', implemented: false },
+  { id: 'crypto', label: 'Crypto', implemented: true },
   { id: 'backtest', label: 'Backtest', implemented: false },
   { id: 'roll', label: 'Roll', implemented: false },
   { id: 'ipo', label: 'IPO', implemented: false },
@@ -968,6 +1324,342 @@ export interface TradingVolumesRequest {
   force?: boolean
 }
 
+/* -------------------------------------------------------------------- price */
+
+/** One major-exchange U.S. equity returned by the Price market screen. */
+export interface PriceScreenRow {
+  ticker: string
+  name: string
+  exchange: string
+  price: number
+  marketCap: number
+}
+
+export interface PriceScreenPayload {
+  rows: PriceScreenRow[]
+  source: string
+  /** `YYYY-MM-DD HH:mm`, in local time like the PySide6 page. */
+  asOf: string
+  candidateCount: number
+  minimumPrice: number
+  maximumPrice: number
+}
+
+export interface PriceScreenRequest {
+  minimumPrice: number
+  maximumPrice: number
+}
+
+/* ---------------------------------------------------------------- calendar */
+
+export interface CalendarCompanyEvent {
+  date: string
+  ticker: string
+  event: 'Earnings' | 'Ex-Dividend'
+}
+
+export interface EconomicCalendarEvent {
+  date: string
+  name: string
+  importance: string
+}
+
+export interface MarketHolidayEvent {
+  date: string
+  market: string
+  event: string
+  detail: string
+  cellLabel: string
+  color: string
+}
+
+export interface CalendarMonthPayload {
+  companyEvents: CalendarCompanyEvent[]
+  economicEvents: EconomicCalendarEvent[]
+  marketHolidays: MarketHolidayEvent[]
+  generatedAt: number
+}
+
+export interface CalendarMonthRequest {
+  tickers: string[]
+  year: number
+  month: number
+  force?: boolean
+}
+
+export interface EarningsCalendarRow {
+  date: string
+  dateDisplay: string
+  datetimeUtc: string
+  timeDisplay: string
+  symbol: string
+  company: string
+  eventName: string
+  timing: string
+  epsEstimate: string
+  epsEstimateValue: number | null
+  reportedEps: string
+  reportedEpsValue: number | null
+  surprisePct: string
+  surprisePctValue: number | null
+  marketCap: string
+  marketCapValue: number | null
+  status: string
+  previousDate: string
+  previousDatetimeUtc: string
+  changedDate: boolean
+  eventKey: string
+}
+
+export interface EarningsCalendarPayload {
+  rows: EarningsCalendarRow[]
+  source: string
+  sourceUrl: string
+  fetchedAt: string
+  startDate: string
+  endDate: string
+  rangeKey: string
+  symbolUniverseCount: number
+}
+
+export interface EarningsCalendarRequest {
+  startDate: string
+  endDate: string
+  rangeKey: string
+  force?: boolean
+}
+
+export interface CalendarExportInput {
+  year: number
+  month: number
+  today: string
+  includeEconomic: boolean
+  includeCompany: boolean
+  includeOptions: boolean
+  includeMarketHolidays: boolean
+  economicEvents: EconomicCalendarEvent[]
+  companyEvents: CalendarCompanyEvent[]
+  marketHolidays: MarketHolidayEvent[]
+  options: OptionPosition[]
+}
+
+export interface EarningsExportInput {
+  payload: EarningsCalendarPayload
+  rows: EarningsCalendarRow[]
+  weekStart: string
+  rangeLabel: string
+  search: string
+  timing: 'all' | 'BMO' | 'AMC' | 'TAS' | 'TBD'
+  changedOnly: boolean
+  exportedAt: string
+}
+
+/* ------------------------------------------------------------------ crypto */
+
+/**
+ * One row of the Crypto page's quote map, keyed by the short label (`BTC`, `COIN`).
+ *
+ * `source` is per row rather than per payload because the coins prefer CoinGecko and
+ * fall back to Yahoo field by field (`_fetch_quotes`), so two rows in the same table can
+ * genuinely have come from different places.
+ */
+export interface CryptoQuote {
+  label: string
+  symbol: string
+  name: string
+  price: number | null
+  changePct: number | null
+  volume: number | null
+  marketCap: number | null
+  source: string
+}
+
+/** One cell of the Top 30 grid. */
+export interface CryptoHeatmapTile {
+  rank: number
+  symbol: string
+  name: string
+  price: number | null
+  changePct: number | null
+  marketCap: number | null
+  volume: number | null
+  source: string
+}
+
+export interface CryptoHeatmapPayload {
+  tiles: CryptoHeatmapTile[]
+  coverage: { loaded: number; total: number }
+  /** Local ISO stamp to the second; the panel prints its `HH:MM:SS` tail. */
+  updatedAt: string
+}
+
+/** `_fetch_global_market`: CoinGecko's `/global` block. */
+export interface CryptoGlobalMarket {
+  marketCap: number | null
+  volume24h: number | null
+  changePct: number | null
+  btcDominance: number | null
+}
+
+/** `_fetch_crypto_fear_greed`: alternative.me's index, which is not CNN's. */
+export interface CryptoFearGreed {
+  value: number | null
+  classification: string
+  /** Already formatted `Mon DD`, as the reference stores it. */
+  timestamp: string
+  source: string
+}
+
+/** The four independent fetches `CryptoMarketWorker.run` stages. */
+export type CryptoStage = 'heatmap' | 'quotes' | 'market' | 'news'
+export type CryptoStageStatus = 'loaded' | 'unavailable'
+
+export interface CryptoPayload {
+  /** Local ISO stamp to the second, `datetime.now().isoformat(timespec='seconds')`. */
+  fetchedAt: string
+  heatmap: CryptoHeatmapPayload
+  quotes: Record<string, CryptoQuote>
+  global: CryptoGlobalMarket | null
+  fearGreed: CryptoFearGreed | null
+  /** Ranked crypto-native RSS, capped at `CRYPTO_NEWS_LIMIT`. */
+  news: NewsArticle[]
+  progress: Record<CryptoStage, CryptoStageStatus>
+}
+
+export interface CryptoRequest {
+  force?: boolean
+}
+
+/* ------------------------------------------------------------ heatmap page */
+
+/**
+ * The Heatmap page (`mixins/spy_heatmap.py`, page17) — one index ETF's full holdings
+ * list, quote-enriched, grouped into sector tiles.
+ *
+ * The presenters, the interval-return arithmetic and the tile colour ramp live in
+ * `shared/heatmap.ts` beside each other, so the page, the main process and the probe
+ * cannot disagree about what a tile is worth. The intervals are `HeatmapInterval` —
+ * `_P17_INTERVALS` and the Portfolio Heatmap's `_P4_HEATMAP_INTERVALS` are the same
+ * seven windows, and the reference shares them too.
+ */
+export type HeatmapEtfKey = 'SPY' | 'NDX' | 'DJI'
+
+/** `EtfHeatmapHolding`. `weight` is a fraction: 0.0873 prints as 8.73%. */
+export interface HeatmapHolding {
+  symbol: string
+  name: string
+  sector: string
+  weight: number
+  price: number | null
+  /**
+   * Percent change per interval. A key is *absent* when that window had no usable base,
+   * which is what makes the per-interval quote coverage a real number rather than a
+   * count of rows.
+   */
+  changes: Partial<Record<HeatmapInterval, number>>
+}
+
+/** Only what the summary strip prints; the reference carries the whole holding. */
+export interface HeatmapHoldingSummary {
+  symbol: string
+  changePct: number
+}
+
+/** `EtfHeatmapIntervalSummary`. */
+export interface HeatmapIntervalSummary {
+  quoteCoverage: number
+  weightedMove: number | null
+  strongest: HeatmapHoldingSummary | null
+  weakest: HeatmapHoldingSummary | null
+}
+
+/** `EtfHeatmapResult`. The top-level figures repeat the `live` summary, as it does. */
+export interface HeatmapPayload {
+  etf: HeatmapEtfKey
+  /** The ETF actually fetched — SPY, QQQ or DIA — as opposed to the index label. */
+  ticker: string
+  fundName: string
+  issuer: string
+  asOfDate: string
+  sourceUrl: string
+  holdings: HeatmapHolding[]
+  holdingsLoaded: number
+  quoteCoverage: number
+  weightedDayMove: number | null
+  strongest: HeatmapHoldingSummary | null
+  weakest: HeatmapHoldingSummary | null
+  intervalSummaries: Record<HeatmapInterval, HeatmapIntervalSummary>
+  /** Epoch milliseconds; the summary strip prints its clock tail. */
+  fetchedAt: number
+}
+
+export interface HeatmapRequest {
+  etf: HeatmapEtfKey
+  force?: boolean
+}
+
+/* ------------------------------------------------------------ options page */
+
+/**
+ * The Options page (`mixins/options_chain.py`, page5) — three subtabs over two loads.
+ *
+ * The row shapes themselves live in `shared/optionsPage.ts` beside the maths that
+ * produces them, so the Greeks, the strategy ranking and the summary tables cannot
+ * drift between the main process, the renderer and the probe.
+ */
+export type {
+  OptionsChainRow,
+  OptionsExpirationBucket,
+  OptionsRawRow,
+  OptionsStrategy,
+  OptionsTypeFilter,
+} from './optionsPage.js'
+
+/** One block of the Options page that could not refresh; the panel shows its own dot. */
+export interface OptionsPageFailure {
+  /** `Chain`, `Expirations`, or the ISO expiry whose own panel failed. */
+  block: string
+  reason: string
+}
+
+export interface OptionsChainRequest {
+  symbol: string
+  /** Empty, or an expiry no longer listed, falls back to the nearest live one. */
+  expiry?: string
+  force?: boolean
+}
+
+export interface OptionsChainPayload {
+  symbol: string
+  /** Every live expiration, with the `YYYY-MM-DD (Nd)` label the dropdown prints. */
+  expiries: Array<{ expiry: string; label: string }>
+  /** The expiration `rows` belongs to. */
+  expiry: string
+  spotPrice: number
+  /** `_p5_resolve_greek_inputs`: the ^IRX proxy, or the 0.04 config default. */
+  riskFreeRate: number
+  rateSource: 'market' | 'config'
+  dividendYield: number
+  dividendSource: 'ticker' | 'default'
+  rows: import('./optionsPage.js').OptionsChainRow[]
+  generatedAt: number
+}
+
+export interface OptionsExpirationsRequest {
+  symbol: string
+  force?: boolean
+}
+
+export interface OptionsExpirationsPayload {
+  symbol: string
+  spotPrice: number
+  /** The raw chain for every live expiration, ascending. */
+  buckets: import('./optionsPage.js').OptionsExpirationBucket[]
+  /** The sorted union of every strike quoted across those chains. */
+  strikes: number[]
+  generatedAt: number
+}
+
 /* ---------------------------------------------------------------- channels */
 
 export const CHANNELS = {
@@ -982,13 +1674,28 @@ export const CHANNELS = {
   newsThumbnail: 'news:thumbnail',
   portfolio: 'dashboard:portfolio',
   portfolioMutate: 'portfolio:mutate',
+  cards: 'cards:read',
+  cardsMutate: 'cards:mutate',
+  cardsPerformance: 'cards:performance',
   personalFinance: 'finance:read',
   personalFinanceMutate: 'finance:mutate',
   fx: 'finance:fx',
   globalMarkets: 'global:markets',
   preMarket: 'pre-market:read',
   tradingVolumes: 'trading-volumes:read',
+  priceScreen: 'price:screen',
+  calendarMonth: 'calendar:month',
+  earningsCalendar: 'calendar:earnings',
+  crypto: 'crypto:read',
+  heatmap: 'heatmap:read',
+  stocks: 'stocks:read',
+  optionsChain: 'options:chain',
+  optionsExpirations: 'options:expirations',
   fundamentals: 'dashboard:fundamentals',
+  fundamentalsPage: 'fundamentals:read',
+  chartsHistory: 'charts:history',
+  chartsCompare: 'charts:compare',
+  chartsRelationship: 'charts:relationship',
   returns: 'portfolio:returns',
   momentum: 'portfolio:momentum',
   analytics: 'portfolio:analytics',
@@ -999,6 +1706,7 @@ export const CHANNELS = {
   maintenance: 'settings:maintenance',
   openExternal: 'shell:openExternal',
   saveText: 'shell:saveText',
+  writeClipboard: 'shell:writeClipboard',
   windowControl: 'window:control',
 } as const
 
@@ -1024,6 +1732,10 @@ export interface NewsRequest {
 }
 export interface FundamentalsRequest {
   tickers: string[]
+  force?: boolean
+}
+export interface FundamentalsPageRequest {
+  symbol: string
   force?: boolean
 }
 export interface ReturnsRequest {
@@ -1066,6 +1778,9 @@ export type WindowAction = 'minimize' | 'maximize' | 'close'
 export interface DesktopApi {
   quotes(request: QuotesRequest): Promise<Envelope<QuotesPayload>>
   chart(request: ChartRequest): Promise<Envelope<ChartPayload>>
+  chartsHistory(request: ChartsHistoryRequest): Promise<Envelope<ChartsHistoryPayload>>
+  chartsCompare(request: ChartsCompareRequest): Promise<Envelope<ChartsComparePayload>>
+  chartsRelationship(request: ChartsRelationshipRequest): Promise<Envelope<ChartsRelationshipPayload>>
   options(request: OptionsRequest): Promise<Envelope<OptionsPayload>>
   targets(request: TargetsRequest): Promise<Envelope<TargetsPayload>>
   news(request: NewsRequest): Promise<Envelope<NewsPayload>>
@@ -1077,6 +1792,11 @@ export interface DesktopApi {
   newsThumbnail(request: NewsThumbnailRequest): Promise<Envelope<NewsThumbnailPayload>>
   portfolio(): Promise<Envelope<PortfolioPayload>>
   mutatePortfolio(mutation: PortfolioMutation): Promise<Envelope<PortfolioPayload>>
+  cards(): Promise<Envelope<CardsPayload>>
+  mutateCards(mutation: CardsMutation): Promise<Envelope<CardsPayload>>
+  cardsPerformance(
+    request: CardsPerformanceRequest,
+  ): Promise<Envelope<CardsPerformancePayload>>
   personalFinance(): Promise<Envelope<PersonalFinancePayload>>
   mutatePersonalFinance(
     mutation: PersonalFinanceMutation,
@@ -1085,7 +1805,20 @@ export interface DesktopApi {
   globalMarkets(request: GlobalMarketsRequest): Promise<Envelope<GlobalMarketsPayload>>
   preMarket(request: PreMarketRequest): Promise<Envelope<PreMarketPayload>>
   tradingVolumes(request: TradingVolumesRequest): Promise<Envelope<TradingVolumesPayload>>
+  priceScreen(request: PriceScreenRequest): Promise<Envelope<PriceScreenPayload>>
+  calendarMonth(request: CalendarMonthRequest): Promise<Envelope<CalendarMonthPayload>>
+  earningsCalendar(
+    request: EarningsCalendarRequest,
+  ): Promise<Envelope<EarningsCalendarPayload>>
+  crypto(request: CryptoRequest): Promise<Envelope<CryptoPayload>>
+  heatmap(request: HeatmapRequest): Promise<Envelope<HeatmapPayload>>
+  stocks(request: StocksRequest): Promise<Envelope<StocksPayload>>
+  optionsChain(request: OptionsChainRequest): Promise<Envelope<OptionsChainPayload>>
+  optionsExpirations(
+    request: OptionsExpirationsRequest,
+  ): Promise<Envelope<OptionsExpirationsPayload>>
   fundamentals(request: FundamentalsRequest): Promise<Envelope<FundamentalsPayload>>
+  fundamentalsPage(request: FundamentalsPageRequest): Promise<Envelope<FundamentalsPagePayload>>
   returns(request: ReturnsRequest): Promise<Envelope<ReturnsPayload>>
   momentum(request: MomentumRequest): Promise<Envelope<MomentumPayload>>
   analytics(request: AnalyticsRequest): Promise<Envelope<AnalyticsPayload>>
@@ -1095,6 +1828,7 @@ export interface DesktopApi {
   maintenance(action: MaintenanceAction): Promise<Envelope<MaintenanceResult>>
   openExternal(url: string): Promise<void>
   saveText(suggestedName: string, contents: string): Promise<string | null>
+  writeClipboard(contents: string): Promise<void>
   windowControl(action: WindowAction): Promise<void>
   onPortfolioChanged(listener: () => void): () => void
 }

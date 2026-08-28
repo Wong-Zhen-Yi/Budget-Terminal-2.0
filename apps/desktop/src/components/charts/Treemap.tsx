@@ -11,7 +11,7 @@ export interface TreemapTile {
   subtitle: string
 }
 
-interface Rect {
+export interface Rect {
   x: number
   y: number
   width: number
@@ -23,7 +23,7 @@ interface Rect {
  * the next tile would make the row's aspect ratios worse. Keeps tiles close to square
  * instead of the slivers a naive slice-and-dice produces.
  */
-function squarify(values: number[], bounds: Rect): Rect[] {
+export function squarify(values: number[], bounds: Rect): Rect[] {
   const total = values.reduce((sum, value) => sum + value, 0)
   if (total <= 0) return values.map(() => ({ x: bounds.x, y: bounds.y, width: 0, height: 0 }))
 

@@ -14,9 +14,7 @@ import type {
   TimeframeLabel,
 } from '@shared/contract'
 import { api, queryKeys } from './client'
-
-/** Quotes and the macro bar tick on their own; everything else refetches on demand. */
-const QUOTE_REFRESH_MS = 60_000
+import { QUOTE_REFRESH_MS } from './refreshRates'
 
 /**
  * Invalidating a query re-runs its fetcher, but the main process answers that from its

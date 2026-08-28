@@ -11,6 +11,14 @@
     "build": "npm run build --workspace budget-terminal-desktop",
     "typecheck": "npm run typecheck --workspace budget-terminal-desktop",
     "probe": "npm run probe --workspace budget-terminal-desktop",
-    "probe:portfolio": "npm run probe:portfolio --workspace budget-terminal-desktop"
+    "probe:portfolio": "npm run probe:portfolio --workspace budget-terminal-desktop",
+    "probe:stocks": "npm run --workspace budget-terminal-desktop probe:stocks --",
+    "probe:fundamentals": "npm run --workspace budget-terminal-desktop probe:fundamentals --",
+    "probe:calendar": "npm run --workspace budget-terminal-desktop probe:calendar --",
+    "probe:charts": "npm run --workspace budget-terminal-desktop probe:charts --",
+    "probe:crypto": "npm run --workspace budget-terminal-desktop probe:crypto --",
+    "probe:cards": "npm run --workspace budget-terminal-desktop probe:cards --",
+    "probe:price": "npm run --workspace budget-terminal-desktop probe:price --",
+    "probe:heatmap": "npm run --workspace budget-terminal-desktop probe:heatmap --"
   }
 }
