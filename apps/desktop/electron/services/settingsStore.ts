@@ -10,6 +10,10 @@ import {
   SETTINGS_TAB_ID,
   TABS,
 } from '../shared/contract.js'
+import {
+  DEFAULT_BACKTEST_PAGE_SETTINGS,
+  normalizeBacktestPageSettings,
+} from '../shared/backtest.js'
 
 /**
  * The Settings page's own store.
@@ -27,6 +31,7 @@ const settingsSchema = z.object({
   tabOrder: z.array(z.string()).catch([]),
   hiddenTabs: z.array(z.string()).catch([]),
   obscuredTabs: z.array(z.string()).optional(),
+  backtestPage: z.unknown().optional(),
 })
 
 type StoredSettings = z.infer<typeof settingsSchema>
@@ -52,6 +57,7 @@ function emptySettings(): StoredSettings {
     hiddenTabs: [],
     // A fresh install obscures Personal Finance, like `DEFAULT_PRIVACY_SETTINGS`.
     obscuredTabs: [...DEFAULT_OBSCURED_TABS],
+    backtestPage: DEFAULT_BACKTEST_PAGE_SETTINGS,
   }
 }
 
@@ -84,6 +90,7 @@ function normalize(settings: StoredSettings): StoredSettings {
   ]
   settings.hiddenTabs = keep(settings.hiddenTabs)
   settings.obscuredTabs = keep(settings.obscuredTabs ?? [...DEFAULT_OBSCURED_TABS])
+  settings.backtestPage = normalizeBacktestPageSettings(settings.backtestPage)
   return settings
 }
 
@@ -125,6 +132,7 @@ function toPayload(settings: StoredSettings): AppSettings {
     tabOrder: [...settings.tabOrder],
     hiddenTabs: [...settings.hiddenTabs],
     obscuredTabs: [...(settings.obscuredTabs ?? [])],
+    backtestPage: normalizeBacktestPageSettings(settings.backtestPage),
     sourcePath: settingsPath(),
   }
 }
@@ -180,6 +188,10 @@ function apply(settings: StoredSettings, mutation: AppSettingsMutation): void {
         mutation.id,
         mutation.obscured,
       )
+      return
+    }
+    case 'setBacktestPage': {
+      settings.backtestPage = normalizeBacktestPageSettings(mutation.value)
       return
     }
   }

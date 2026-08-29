@@ -2,6 +2,8 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { z } from 'zod'
 
 import type {
+  BacktestPayload,
+  BacktestRequest,
   AnalyticsPayload,
   AnalyticsRequest,
   AppSettings,
@@ -49,6 +51,8 @@ import type {
   OptionsChainRequest,
   OptionsExpirationsPayload,
   OptionsExpirationsRequest,
+  ProjectionsPayload,
+  ProjectionsRequest,
   ReturnsPayload,
   ReturnsRequest,
   FundamentalsPayload,
@@ -75,6 +79,12 @@ import type {
   QuotesRequest,
   TargetsPayload,
   TargetsRequest,
+  UpDownPayload,
+  UpDownRequest,
+  UpDownTargetsPayload,
+  UpDownTargetsRequest,
+  ValuationPayload,
+  ValuationRequest,
 } from '../shared/contract.js'
 import { DEFAULT_CLOCK_COUNTRY, DEFAULT_OBSCURED_TABS, MACRO_SYMBOLS, TABS } from '../shared/contract.js'
 import {
@@ -89,6 +99,7 @@ import { CRYPTO_HEATMAP_LIMIT, CRYPTO_STAGES, localIsoSeconds } from '../shared/
 import { normalizeEtfKey } from '../shared/heatmap.js'
 import { DEFAULT_RISK_FREE_RATE } from '../shared/optionsPage.js'
 import { describeError, err, failed, meta, ok, partial } from '../shared/envelope.js'
+import { DEFAULT_BACKTEST_PAGE_SETTINGS, emptyBacktestPayload } from '../shared/backtest.js'
 import { cache } from './cache.js'
 import {
   cardsPath,
@@ -100,6 +111,13 @@ import {
 } from './cardsStore.js'
 import { CRYPTO_SOURCE, getCrypto } from './crypto.js'
 import { HEATMAP_SOURCE, emptyHeatmapPayload, getHeatmap } from './heatmap.js'
+import {
+  UP_DOWN_SOURCE,
+  clearUpDownCaches,
+  getUpDown,
+  getUpDownTargets,
+  type UpDownFetchResult,
+} from './upDown.js'
 import { clearSecCaches } from './secEdgar.js'
 import {
   CALENDAR_SOURCE,
@@ -160,8 +178,21 @@ import {
   getOptionsExpirations,
   OPTIONS_PAGE_SOURCE,
 } from './yahoo/optionsPage.js'
+import {
+  emptyProjections,
+  getProjections,
+  PROJECTIONS_SOURCE,
+} from './yahoo/projections.js'
+import { clearRiskFreeCache } from './riskFree.js'
+import {
+  emptyValuation,
+  getValuation,
+  VALUATION_SOURCE,
+  type ValuationFetchResult,
+} from './yahoo/valuation.js'
 import { getQuotes } from './yahoo/quotes.js'
 import { getTargets } from './yahoo/targets.js'
+import { BACKTEST_SOURCE, getBacktest } from './yahoo/backtest.js'
 
 /**
  * The seam the renderer talks to.
@@ -171,6 +202,7 @@ import { getTargets } from './yahoo/targets.js'
  * and the renderer will not notice.
  */
 export interface MarketDataProvider {
+  backtest(request: BacktestRequest): Promise<Envelope<BacktestPayload>>
   quotes(request: QuotesRequest): Promise<Envelope<QuotesPayload>>
   chart(request: ChartRequest): Promise<Envelope<ChartPayload>>
   chartsHistory(request: ChartsHistoryRequest): Promise<Envelope<ChartsHistoryPayload>>
@@ -207,11 +239,15 @@ export interface MarketDataProvider {
   earningsCalendar(request: EarningsCalendarRequest): Promise<Envelope<EarningsCalendarPayload>>
   crypto(request: CryptoRequest): Promise<Envelope<CryptoPayload>>
   heatmap(request: HeatmapRequest): Promise<Envelope<HeatmapPayload>>
+  upDown(request: UpDownRequest): Promise<Envelope<UpDownPayload>>
+  upDownTargets(request: UpDownTargetsRequest): Promise<Envelope<UpDownTargetsPayload>>
+  valuation(request: ValuationRequest): Promise<Envelope<ValuationPayload>>
   stocks(request: StocksRequest): Promise<Envelope<StocksPayload>>
   optionsChain(request: OptionsChainRequest): Promise<Envelope<OptionsChainPayload>>
   optionsExpirations(
     request: OptionsExpirationsRequest,
   ): Promise<Envelope<OptionsExpirationsPayload>>
+  projections(request: ProjectionsRequest): Promise<Envelope<ProjectionsPayload>>
   settings(): Promise<Envelope<AppSettings>>
   mutateSettings(mutation: AppSettingsMutation): Promise<Envelope<AppSettings>>
   /**
@@ -284,6 +320,7 @@ const emptySettings: AppSettings = {
   tabOrder: TABS.map((tab) => tab.id),
   hiddenTabs: [],
   obscuredTabs: [...DEFAULT_OBSCURED_TABS],
+  backtestPage: DEFAULT_BACKTEST_PAGE_SETTINGS,
   sourcePath: settingsPath(),
 }
 
@@ -353,6 +390,58 @@ function calendarEnvelope<T>(result: CalendarFetchResult<T>, source: string): En
       cacheAgeSeconds: result.cacheAgeSeconds,
       ...(failureReason ? { failureReason } : {}),
     },
+    errors: result.errors,
+  }
+}
+
+/**
+ * A Valuation load is `partial`, never `failed`, once it has a quote.
+ *
+ * A missing risk-free rate or a missing statement block still leaves a usable model — the
+ * required return falls back to the heuristic and the derivation says so in its caveats —
+ * so the page shows its own warnings rather than blanking. Only a symbol with no quote at
+ * all throws, and that lands in the catch below.
+ */
+function valuationEnvelope(result: ValuationFetchResult): Envelope<ValuationPayload> {
+  const failureReason = result.errors.map((entry) => entry.reason).join(' | ')
+  return {
+    data: result.payload,
+    meta: meta(
+      VALUATION_SOURCE,
+      result.stale
+        ? 'stale'
+        : result.errors.length
+          ? 'partial'
+          : result.fromCache
+            ? 'cached'
+            : 'fresh',
+      {
+        cacheAgeSeconds: result.cacheAgeSeconds,
+        ...(failureReason ? { failureReason } : {}),
+      },
+    ),
+    errors: result.errors,
+  }
+}
+
+function upDownEnvelope(result: UpDownFetchResult): Envelope<UpDownPayload> {
+  const failureReason = result.errors.map((entry) => entry.reason).join(' | ')
+  return {
+    data: result.payload,
+    meta: meta(
+      UP_DOWN_SOURCE,
+      result.stale
+        ? 'stale'
+        : result.errors.length
+          ? 'partial'
+          : result.fromCache
+            ? 'cached'
+            : 'fresh',
+      {
+        cacheAgeSeconds: result.cacheAgeSeconds,
+        ...(failureReason ? { failureReason } : {}),
+      },
+    ),
     errors: result.errors,
   }
 }
@@ -1003,6 +1092,42 @@ export const yahooProvider: MarketDataProvider = {
     }
   },
 
+  async upDown(request) {
+    const empty: UpDownPayload = {
+      source: request.source,
+      interval: request.interval,
+      rows: [],
+      missing: [],
+      asOf: '',
+      dataSource: 'Yahoo Finance',
+      holdingsSource: '',
+      forceTargets: false,
+    }
+    try {
+      return upDownEnvelope(await getUpDown(request))
+    } catch (error) {
+      return failed(empty, describeError(error), UP_DOWN_SOURCE)
+    }
+  },
+
+  async upDownTargets({ tickers, force }) {
+    const empty: UpDownTargetsPayload = { targets: {}, resolved: 0, available: 0 }
+    try {
+      return ok(await getUpDownTargets(tickers, Boolean(force)), UP_DOWN_SOURCE)
+    } catch (error) {
+      return failed(empty, describeError(error), UP_DOWN_SOURCE)
+    }
+  },
+
+  async valuation({ symbol, customPeers, force }) {
+    const normalized = symbol.trim().toUpperCase()
+    try {
+      return valuationEnvelope(await getValuation(normalized, customPeers ?? [], Boolean(force)))
+    } catch (error) {
+      return failed(emptyValuation(normalized), describeError(error), VALUATION_SOURCE)
+    }
+  },
+
   async stocks({ symbol, force }) {
     const normalized = symbol.trim().toUpperCase() || 'SPY'
     try {
@@ -1090,6 +1215,68 @@ export const yahooProvider: MarketDataProvider = {
     }
   },
 
+  /**
+   * The Projections page: one chart plus every live expiration's chain.
+   *
+   * A failed chart is `partial`, not `failed` — the option tables and their per-panel
+   * projections still render, exactly as `_p28_update_view` keeps them when only the
+   * chart came back empty. Only an empty sweep *and* an empty chart make the page a
+   * failure, and that arrives here as an empty payload with both blocks reported.
+   */
+  async projections({ symbol, timeframe, force }) {
+    const normalized = symbol.trim().toUpperCase()
+    if (!normalized) {
+      return failed(
+        emptyProjections(normalized, timeframe),
+        'Enter a ticker before loading options top volume.',
+        PROJECTIONS_SOURCE,
+      )
+    }
+    try {
+      const { payload, failures } = await getProjections(normalized, timeframe, Boolean(force))
+      if (!failures.length) return ok(payload, PROJECTIONS_SOURCE)
+      if (!payload.candles.length && !payload.buckets.some((bucket) => bucket.rows.length)) {
+        return failed(payload, failures[0].reason, PROJECTIONS_SOURCE)
+      }
+      return partial(
+        payload,
+        failures.map((failure) =>
+          err(PROJECTIONS_SOURCE, failure.reason, 'projections', failure.block),
+        ),
+        PROJECTIONS_SOURCE,
+        failures[0].reason,
+      )
+    } catch (error) {
+      return failed(emptyProjections(normalized, timeframe), describeError(error), PROJECTIONS_SOURCE)
+    }
+  },
+
+  async backtest(request) {
+    const compareSymbol = request.compareSymbol.trim().toUpperCase()
+    try {
+      const result = await getBacktest(request)
+      if (result.stale) {
+        return {
+          data: result.payload,
+          meta: meta(BACKTEST_SOURCE, 'stale', { cacheAgeSeconds: result.cacheAgeSeconds }),
+          errors: [
+            err(BACKTEST_SOURCE, 'Live backtest refresh failed; showing cached data.', 'backtest'),
+          ],
+        }
+      }
+      if (result.fromCache) {
+        return {
+          data: result.payload,
+          meta: meta(BACKTEST_SOURCE, 'cached', { cacheAgeSeconds: result.cacheAgeSeconds }),
+          errors: [],
+        }
+      }
+      return ok(result.payload, BACKTEST_SOURCE)
+    } catch (error) {
+      return failed(emptyBacktestPayload(compareSymbol), describeError(error), BACKTEST_SOURCE)
+    }
+  },
+
   async settings() {
     try {
       return ok(await readSettings(), SETTINGS_SOURCE)
@@ -1170,6 +1357,8 @@ export const yahooProvider: MarketDataProvider = {
       cache.clear()
       await clearCalendarCaches()
       await clearSecCaches()
+      await clearUpDownCaches()
+      await clearRiskFreeCache()
       return ok(
         {
           action: 'clearUserData' as const,
@@ -1191,6 +1380,8 @@ export const yahooProvider: MarketDataProvider = {
       cache.clear()
       await clearCalendarCaches()
       await clearSecCaches()
+      await clearUpDownCaches()
+      await clearRiskFreeCache()
       return ok(
         {
           action: 'resetCache' as const,

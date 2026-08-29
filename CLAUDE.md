@@ -22,6 +22,9 @@ npm run probe:crypto           # all four Crypto stages; --offline for the pure 
 npm run probe:cards            # Cards math, persistence and models; --live adds Yahoo
 npm run probe:options -- AAPL  # chain Greeks, strategy ranking, both grids; --offline for the pure checks
 npm run probe:heatmap -- SPY   # index holdings, all seven intervals, sector split; --offline for the pure checks
+npm run probe:projections -- AAPL # chart, every expiration, the three paths; --offline for the pure checks
+npm run probe:up-down -- AAPL  # Up/Down counts and targets; --offline for deterministic math checks
+npm run probe:valuation -- NVDA # DCF, CAPM required return, derivation and peers; --offline for the pure checks
 ```
 
 There is no test suite. The `scripts/probe*.ts` files are the verification story: they
@@ -57,7 +60,10 @@ the **Crypto** page (KPI strip, Top 30 heatmap, watchlist, crypto news and ETF p
 the **Options** page (the Chain tab with Greeks and the two strategy rankings, plus
 the Options by Top Volume and Options by Strike grids over every live expiration), and
 the **Heatmap** page (the S&P 500 / Nasdaq 100 / Dow 30 holdings treemap over seven
-intervals, with the coverage strip and the selected-holding detail bar).
+intervals, with the coverage strip and the selected-holding detail bar), and the
+**Up/Down** page (Portfolio, SPY, QQQ and Custom sources with progressive analyst targets),
+and the **Valuation** page (a DCF over SEC-backed statements with every assumption derived
+from history, the 10Y Treasury, analyst estimates and peers; seven tabs over one load).
 The remaining tabs are labels in `TABS`
 (`electron/shared/contract.ts`) and render a placeholder; `implemented: true` is what
 routes a tab to a real page in `App.tsx`.
@@ -461,6 +467,116 @@ adding handlers.
   creates none — and its per-index cache holds the reference's own 120 seconds.
 
 
+- **Projections is page28, and its file is called `charts_options_top_volume.py`.** The
+  reference's name predates the page: everything on it is labelled Projections, and the
+  options top-volume grid is only the right-hand rail. Grep for `_p28_`, not for the
+  page's title.
+- **The Projections load is two existing services, not a new fetch path.**
+  `services/yahoo/projections.ts` calls `getChartsHistory` and `getOptionsExpirations`
+  concurrently — the Options page's sweep is exactly the `bucket_config` loop `_p28_load`
+  writes by hand, so the chains are shared and cached between the two pages. Nothing new
+  reaches Yahoo, and everything still goes through `paced()` inside those two.
+- **A failed chart is `partial` on Projections, not `failed`.** `_p28_update_view` only
+  fails the page when the chart *and* every expiration came back empty; a chart failure
+  alone keeps the option tables and drops the projections, which have no close to anchor
+  on. Turning that into a `failed` envelope empties a page that still has most of its
+  data.
+- **The projections themselves are computed in the renderer, from the payload.** The
+  chains are the expensive part and `buildProjectionSummaries` is a pure function of them
+  plus the latest chart close, so switching the tables between Calls and Puts repaints
+  what is loaded — `_p28_apply_loaded_type_filter` does the same. The *timeframe* still
+  reloads, because a different chart means a different close to anchor on.
+- **The anchor is a weighted median, and the weight is three things multiplied.**
+  `projectionSideSummary` ports `_p28_projection_side_summary`: sqrt(volume) grown by open
+  interest, scaled by spread quality and by moneyness, and the anchor is the weighted
+  *percentile at 0.50* rather than the mean — one enormous print must not be able to
+  define an expiration. A candidate outside 1.5 expected moves is clamped into the band
+  *and* quartered in weight rather than dropped.
+- **The combined path's confidence is the weaker side's, not the blend.** The price is
+  confidence-and-count weighted between the two sides, but a center built on one strong
+  side and one weak one is only as trustworthy as the weak one — and the coverage tile
+  counts calls and puts only, because every combined anchor is derived from them.
+- **The last trade is deliberately not a price fallback.** `effectiveOptionPrice` needs a
+  two-sided quote; a row without one contributes nothing. A stale print is exactly what
+  the quality filters exist to keep out, and this is the opposite of the Options page's
+  chain, which backfills a zero IV from the row's own mid.
+- **One documented departure from `_p28_weekly_x_by_date`.** The reference plots against
+  bar *indexes*, so it parks each weekly point on a synthetic slot five indexes past the
+  last bar and relabels the axis by hand; `ProjectionsChart` plots the paths at their real
+  dates on the candles' own time scale, so an expiration two weeks out sits two weeks out.
+  The origin is the exception — it is the latest close, and on an intraday timeframe its
+  calendar date is *behind* the last bar's timestamp, so it takes that bar's exact time.
+- **Projections' timeframe ranges are one step wider than the reference's periods.**
+  `requestStart` in `yahoo/chartsPage.ts` already clamps each interval to the longest
+  window Yahoo answers (6d for 1m, 59d for 5m and 15m, 729d for 1h), so `3M` on a 5-minute
+  chart resolves to the reference's `60d` rather than to a shorter one. Narrowing them to
+  match the period text would cost bars.
+- **Projections has no refresh timer, and its tables paint only the top ranks.**
+  `init_page28` creates no timer; Load, the timeframe buttons and F5 are the only refetches.
+  `_p28_render_option_tables` passes empty tuples for both *low* highlight backgrounds,
+  which is why `OptionSummaryTable` takes `lowHighlights` — a ten-row panel carries two
+  highlight colours here and four on the Options page.
+
+
+- **Valuation solves in the renderer; only the inputs are fetched.** The load answers with
+  metrics, statements, peers and a full derivation, and `calculateValuationScenarios` then
+  runs on whatever the assumption form holds — so editing a growth rate repaints instantly
+  and never goes back to the network, exactly as `_valuation_recalculate_from_controls` is
+  wired to every spin box and touches no worker. The maths is in `shared/valuation.ts` so
+  the probe, the main process and the page cannot disagree.
+- **A load always re-derives.** `_valuation_apply_derived_assumptions` never consults the
+  saved per-ticker assumptions; they are the first-paint defaults only. Feeding them back
+  in would make each load drift from the last, and the Re-derive button would do nothing.
+  `terminalMethod` and `projectionYears` are the exception — neither has a derivation rule,
+  so they are the user's model choices and survive.
+- **`finiteOrNull` guards null before `Number()`.** `Number(null)` is 0 and `Number('')` is
+  0, so without the guard every absent Yahoo field arrives as a real zero: a missing free
+  cash flow reads as *negative* FCF and adds 1.5pp to the required return, and a missing
+  basis fails the model instead of falling back. Python's `float(None)` raises, which is
+  why `_safe_float` has no equivalent hazard to document.
+- **The derivation order is load-bearing.** The required return sets the terminal-growth
+  cap, terminal growth sets the fade target for years 6-N, and the whole derived set is
+  priced once to size the margin of safety. Reordering `deriveValuationSuggestions` changes
+  every number after the first.
+- **Terminal growth is held 2.5pp under the required return, not 1.0.** `inputWarnings`
+  blocks below 1.0pp, but the bull case is built with `discountRate - 1.0` and
+  `terminalGrowth + 0.5` — narrowing the spread by 1.5. A base spread under 2.5 therefore
+  yields an unsolvable *bull* case, which flips `scenariosOrdered` off and drops the whole
+  verdict even though the base case looks fine.
+- **A currency mismatch withholds the comparison, not the model.** `basisValue` is
+  per-share off the statements and `price` is off the quote; for a foreign listing those
+  are different currencies. The fair values still come back — the DCF is sound in its own
+  unit — but the verdict, upside, the buy/trim band and the band chart are all withheld and
+  `priceComparisonValid` goes false. No FX conversion is applied on purpose: that needs a
+  rate source and a per-period date convention, and picking one silently would swap a
+  visible error for an invisible one.
+- **The peer exit multiple is an equity multiple, and EV/EBITDA is deliberately unused.**
+  The DCF multiplies a per-share equity flow, so `100 / fcfYield` (a P/FCF) or the peer P/E
+  is the only unit that fits. Fewer than three peers inside the 3-50x bounds falls back to
+  the 15x default and says so — which is the *common* case on megacap tech, where peer FCF
+  yields put P/FCF outside the band.
+- **Valuation reuses two existing services rather than fetching statements itself.**
+  `getFundamentalsPage` already merges SEC EDGAR XBRL over Yahoo's frames and caches it, so
+  the two pages share one statement layer; `riskFree.ts` owns the Treasury curve. The
+  reference calls `fetch_company_bundle`/`merge_sec_frames` by hand for exactly the former.
+- **The Treasury curve stays outside `paced()`**, on the `fearGreed.ts` precedent —
+  home.treasury.gov is not Yahoo, and it answers in 10-20s even when healthy, so putting it
+  behind the Yahoo gate would stall the whole app on one slow CSV. Four tiers cover it: a
+  15-minute process memo, a 12-hour disk entry, the two CSVs, then a 30-day stale entry.
+  Losing every tier costs precision, not correctness: `estimateRequiredReturn` falls back to
+  the pre-CAPM heuristic and the derivation names the missing input.
+- **A peer candidate costs one Yahoo request, so the candidate list is the request budget.**
+  `PEER_CANDIDATE_LIMIT` is 16, matching the reference, and the page has no refresh timer —
+  `init_page23` creates none. Load, a peer-list change and F5 are the only refetches.
+- **Three documented departures from `mixins/valuation.py`.** The bear-to-bull band is drawn
+  as its two dashed edges rather than a shaded region, because `LineChart` draws paths and
+  not regions. Per-period share counts come from the merged map's `sharesOutstanding` rather
+  than a diluted average, which the repo's SEC layer does not carry — the approximate flag
+  is still raised the same way. And the Sources citations name the source, basis and period
+  rather than the XBRL tag and accession, because this repo's SEC normalization keeps the
+  point's source but not its filing.
+
+
 ## Porting behaviour from the PySide6 app
 
 When adding a panel, find the reference first — the numbers are expected to match to the
@@ -482,6 +598,8 @@ decimal. Useful starting points:
 | Stocks, all of it | `mixins/stocks_page.py` (plus its linked workers, services, persistence and smoke tests) |
 | Crypto, all of it | `mixins/crypto.py` (worker `workers/crypto.py`, feeds `workers/news_sources.py`) |
 | Options, all of it | `mixins/options_chain.py` (presenters `mixins/options_chain_presenters.py`, Greeks `services/options_analysis.py`, fetching `services/options_data.py`) |
+| Projections, all of it | `mixins/charts_options_top_volume.py` (page28; presenters `mixins/options_chain_presenters.py`) |
+| Valuation, all of it | `mixins/valuation.py` (page23; maths `services/valuation.py`, fetch and peers `workers/valuation.py`, Treasury `services/risk_free.py`) |
 | Heatmap, all of it | `mixins/spy_heatmap.py` (presenters `mixins/spy_heatmap_presenters.py`, worker `workers/etf_heatmap.py`, issuer files `etf_holdings.py`, widget `widgets/etf_heatmap.py`) |
 | Fundamentals, all of it | `mixins/fundamentals_setup.py`, `mixins/fundamentals_render.py`, `workers/fundamentals.py`, `services/fundamentals_compare.py`, `services/sec_edgar.py` |
 | Shortcut wiring, tab picker, Obscure | `mixins/window_setup.py`, `mixins/window_lifecycle.py` |

@@ -348,6 +348,8 @@ export interface AppSettings {
   hiddenTabs: string[]
   /** Tab ids the Obscure button blurs and locks. */
   obscuredTabs: string[]
+  /** Persisted controls for the standalone Backtest page. */
+  backtestPage: BacktestPageSettings
   /** Absolute path of the settings file, surfaced on the page. */
   sourcePath: string
 }
@@ -360,6 +362,7 @@ export type AppSettingsMutation =
   | { type: 'moveTab'; id: string; direction: -1 | 1 }
   | { type: 'resetNavigation' }
   | { type: 'setTabObscured'; id: string; obscured: boolean }
+  | { type: 'setBacktestPage'; value: BacktestPageSettings }
 
 /** The four User Data buttons. Each one prompts in the renderer before it is sent. */
 export type MaintenanceAction =
@@ -1037,7 +1040,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'cards', label: 'Cards', implemented: true },
   { id: 'personal-finance', label: 'Personal Finance', implemented: true },
   { id: 'pre-market', label: 'Pre-Market', implemented: true },
-  { id: 'up-down', label: 'Up/Down', implemented: false },
+  { id: 'up-down', label: 'Up/Down', implemented: true },
   { id: 'trading-volumes', label: 'Trading Volumes', implemented: true },
   { id: 'signals', label: 'Signals', implemented: false },
   { id: 'price', label: 'Price', implemented: true },
@@ -1046,13 +1049,13 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'calendar', label: 'Calendar', implemented: true },
   { id: 'stocks', label: 'Stocks', implemented: true },
   { id: 'fundamentals', label: 'Fundamentals', implemented: true },
-  { id: 'valuation', label: 'Valuation', implemented: false },
+  { id: 'valuation', label: 'Valuation', implemented: true },
   { id: 'charts', label: 'Charts', implemented: true },
-  { id: 'projections', label: 'Projections', implemented: false },
+  { id: 'projections', label: 'Projections', implemented: true },
   { id: 'options', label: 'Options', implemented: true },
   { id: 'etf', label: 'ETF', implemented: false },
   { id: 'crypto', label: 'Crypto', implemented: true },
-  { id: 'backtest', label: 'Backtest', implemented: false },
+  { id: 'backtest', label: 'Backtest', implemented: true },
   { id: 'roll', label: 'Roll', implemented: false },
   { id: 'ipo', label: 'IPO', implemented: false },
   { id: 'institutions', label: 'Institutions', implemented: false },
@@ -1598,6 +1601,54 @@ export interface HeatmapRequest {
   force?: boolean
 }
 
+/* ------------------------------------------------------------ up/down page */
+
+export type UpDownSource = 'portfolio' | 'spy' | 'qqq' | 'custom'
+export type UpDownInterval = '1d' | '5d' | '30d' | 'ytd' | '1y'
+
+export interface UpDownRow {
+  ticker: string
+  name: string
+  lastClose: number | null
+  intervalReturn: number | null
+  tradingDays: number
+  daysUp: number
+  daysDown: number
+  flatDays: number
+}
+
+export interface UpDownPayload {
+  source: UpDownSource
+  interval: UpDownInterval
+  rows: UpDownRow[]
+  missing: string[]
+  /** Local `YYYY-MM-DD HH:mm`, matching the reference page. */
+  asOf: string
+  dataSource: string
+  holdingsSource: string
+  /** A forced base refresh also bypasses the analyst-target cache. */
+  forceTargets: boolean
+}
+
+export interface UpDownRequest {
+  source: UpDownSource
+  interval: UpDownInterval
+  /** Used by Portfolio and Custom. ETF sources resolve their official holdings in main. */
+  symbols?: string[]
+  force?: boolean
+}
+
+export interface UpDownTargetsRequest {
+  tickers: string[]
+  force?: boolean
+}
+
+export interface UpDownTargetsPayload {
+  targets: Record<string, number | null>
+  resolved: number
+  available: number
+}
+
 /* ------------------------------------------------------------ options page */
 
 /**
@@ -1660,7 +1711,190 @@ export interface OptionsExpirationsPayload {
   generatedAt: number
 }
 
+/* -------------------------------------------------------- projections page */
+
+/**
+ * The Projections page (`mixins/charts_options_top_volume.py`, page28) — one load that
+ * answers with a chart and every live expiration's raw chain.
+ *
+ * The maths that turns those chains into the three projected paths lives in
+ * `shared/projections.ts`, and the renderer runs it: the chains are the expensive part
+ * and the summaries are a pure function of them plus the latest chart close, so
+ * switching the table between calls and puts repaints what is already loaded.
+ */
+export type {
+  ProjectionAggregate,
+  ProjectionModel,
+  ProjectionPaths,
+  ProjectionPoint,
+  ProjectionSide,
+  ProjectionSummary,
+  ProjectionsTypeFilter,
+} from './projections.js'
+
+/** One block of the Projections page that could not load; the panel shows its own dot. */
+export interface ProjectionsFailure {
+  /** `Chart`, `Expirations`, or the ISO expiry whose own panel failed. */
+  block: string
+  reason: string
+}
+
+export interface ProjectionsRequest {
+  symbol: string
+  timeframe: ChartsInterval
+  force?: boolean
+}
+
+export interface ProjectionsPayload {
+  symbol: string
+  timeframe: ChartsInterval
+  /** The interval actually fetched, `4h` included. */
+  interval: string
+  candles: Candle[]
+  stats: ChartStats | null
+  /**
+   * Why the chart is empty, when it is. A missing chart is not fatal here: the
+   * reference keeps the option tables and only drops the projections, which need a
+   * close to anchor on.
+   */
+  chartError: string
+  spotPrice: number
+  /** Every live expiration's raw chain, ascending, as the Options sweep returns it. */
+  buckets: import('./optionsPage.js').OptionsExpirationBucket[]
+  generatedAt: number
+}
+
+/* ---------------------------------------------------------- valuation page */
+
+/**
+ * The Valuation page (`mixins/valuation.py`, page23) — a DCF over reported statements.
+ *
+ * The maths itself lives in `shared/valuation.ts`, beside the derivation that produces the
+ * assumptions, because the renderer re-solves the model on every assumption edit and must
+ * not be able to disagree with the load. Peer selection lives in `shared/valuationPeers.ts`.
+ */
+export type {
+  ValuationAnalystEstimates,
+  ValuationAssumptions,
+  ValuationBasisType,
+  ValuationComponents,
+  ValuationFairValueDetails,
+  ValuationMarketContext,
+  ValuationMetrics,
+  ValuationPeerRow,
+  ValuationScenarioRow,
+  ValuationScenarios,
+  ValuationSuggestionBundle,
+  ValuationTerminalMethod,
+  ValuationTrends,
+} from './valuation.js'
+
+/** Where one valuation input actually came from, for the Sources tab's citations. */
+export interface ValuationProvenanceEntry {
+  metric: string
+  source: string
+  basis: string
+  period: string
+  facts: string[]
+}
+
+export interface ValuationPricePoint {
+  date: string
+  close: number
+}
+
+export interface ValuationPayload {
+  ticker: string
+  metrics: import('./valuation.js').ValuationMetrics
+  trends: import('./valuation.js').ValuationTrends
+  /** Five years of monthly closes, behind the fair-value band and the P/E curve. */
+  priceHistory: ValuationPricePoint[]
+  /** Null when every Treasury tier failed; the required return then uses the heuristic. */
+  market: import('./valuation.js').ValuationMarketContext | null
+  analyst: import('./valuation.js').ValuationAnalystEstimates
+  suggestions: import('./valuation.js').ValuationSuggestionBundle
+  peerRows: import('./valuation.js').ValuationPeerRow[]
+  peerWarnings: string[]
+  customPeers: string[]
+  statementSource: string
+  secBacked: boolean
+  provenance: ValuationProvenanceEntry[]
+  sources: {
+    quote: string
+    statements: string
+    computed: string
+    suggestions: string
+  }
+  generatedAt: number
+}
+
+export interface ValuationRequest {
+  symbol: string
+  /** Saved per-ticker in the renderer; a change to it re-ranks the peer table. */
+  customPeers?: string[]
+  force?: boolean
+}
+
 /* ---------------------------------------------------------------- channels */
+
+/* ------------------------------------------------------------ backtest page */
+
+export const BACKTEST_INTERVALS = ['1D', '1W'] as const
+export type BacktestInterval = (typeof BACKTEST_INTERVALS)[number]
+export const BACKTEST_RANGES = ['Max', '5Y', '3Y', '1Y', 'YTD'] as const
+export type BacktestRange = (typeof BACKTEST_RANGES)[number]
+
+export interface BacktestRow {
+  symbol: string
+  weight: number
+}
+
+export interface BacktestPageSettings {
+  rows: BacktestRow[]
+  compareSymbol: string
+  interval: BacktestInterval
+  range: BacktestRange
+  splitterSizes: number[]
+}
+
+export interface BacktestPriceSeries {
+  dates: string[]
+  values: number[]
+}
+
+export interface BacktestPoint {
+  date: string
+  portfolioReturnPct: number
+  drawdownPct: number
+  compareReturnPct: number | null
+}
+
+export interface BacktestStats {
+  start: string
+  end: string
+  totalReturnPct: number
+  cagrPct: number
+  maxDrawdownPct: number
+  finalValue: number
+}
+
+export interface BacktestPayload {
+  rows: BacktestRow[]
+  weights: Record<string, number>
+  rawWeightTotal: number
+  compareSymbol: string
+  compareError: string
+  points: BacktestPoint[]
+  stats: BacktestStats | null
+}
+
+export interface BacktestRequest {
+  rows: BacktestRow[]
+  compareSymbol: string
+  interval: BacktestInterval
+  range: BacktestRange
+  force?: boolean
+}
 
 export const CHANNELS = {
   quotes: 'dashboard:quotes',
@@ -1688,9 +1922,14 @@ export const CHANNELS = {
   earningsCalendar: 'calendar:earnings',
   crypto: 'crypto:read',
   heatmap: 'heatmap:read',
+  upDown: 'up-down:read',
+  upDownTargets: 'up-down:targets',
   stocks: 'stocks:read',
   optionsChain: 'options:chain',
   optionsExpirations: 'options:expirations',
+  projections: 'projections:read',
+  valuation: 'valuation:read',
+  backtest: 'backtest:run',
   fundamentals: 'dashboard:fundamentals',
   fundamentalsPage: 'fundamentals:read',
   chartsHistory: 'charts:history',
@@ -1812,11 +2051,16 @@ export interface DesktopApi {
   ): Promise<Envelope<EarningsCalendarPayload>>
   crypto(request: CryptoRequest): Promise<Envelope<CryptoPayload>>
   heatmap(request: HeatmapRequest): Promise<Envelope<HeatmapPayload>>
+  upDown(request: UpDownRequest): Promise<Envelope<UpDownPayload>>
+  upDownTargets(request: UpDownTargetsRequest): Promise<Envelope<UpDownTargetsPayload>>
   stocks(request: StocksRequest): Promise<Envelope<StocksPayload>>
   optionsChain(request: OptionsChainRequest): Promise<Envelope<OptionsChainPayload>>
   optionsExpirations(
     request: OptionsExpirationsRequest,
   ): Promise<Envelope<OptionsExpirationsPayload>>
+  projections(request: ProjectionsRequest): Promise<Envelope<ProjectionsPayload>>
+  valuation(request: ValuationRequest): Promise<Envelope<ValuationPayload>>
+  backtest(request: BacktestRequest): Promise<Envelope<BacktestPayload>>
   fundamentals(request: FundamentalsRequest): Promise<Envelope<FundamentalsPayload>>
   fundamentalsPage(request: FundamentalsPageRequest): Promise<Envelope<FundamentalsPagePayload>>
   returns(request: ReturnsRequest): Promise<Envelope<ReturnsPayload>>

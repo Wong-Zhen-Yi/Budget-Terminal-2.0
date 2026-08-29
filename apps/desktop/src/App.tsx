@@ -9,6 +9,7 @@ import { TabBar } from '@/components/chrome/TabBar'
 import { TabPicker } from '@/components/chrome/TabPicker'
 import { isTextEntry } from '@/lib/shortcuts'
 import { DashboardPage } from '@/pages/DashboardPage'
+import { BacktestPage } from '@/pages/BacktestPage'
 import { CardsPage } from '@/pages/CardsPage'
 import { CalendarPage } from '@/pages/CalendarPage'
 import { ChartsPage } from '@/pages/ChartsPage'
@@ -20,9 +21,12 @@ import { PersonalFinancePage } from '@/pages/PersonalFinancePage'
 import { PortfolioPage } from '@/pages/PortfolioPage'
 import { NewsPage } from '@/pages/NewsPage'
 import { OptionsPage } from '@/pages/OptionsPage'
+import { ProjectionsPage } from '@/pages/ProjectionsPage'
 import { PreMarketPage } from '@/pages/PreMarketPage'
 import { PricePage } from '@/pages/PricePage'
 import { TradingVolumesPage } from '@/pages/TradingVolumesPage'
+import { UpDownPage } from '@/pages/UpDownPage'
+import { ValuationPage } from '@/pages/ValuationPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { StocksPage } from '@/pages/StocksPage'
 import { useDataHealth } from '@/stores/dataHealth'
@@ -226,6 +230,8 @@ export function App() {
             <PersonalFinancePage onStatusChange={handleStatusChange} />
           ) : activeTab === 'pre-market' ? (
             <PreMarketPage onStatusChange={handleStatusChange} />
+          ) : activeTab === 'up-down' ? (
+            <UpDownPage onStatusChange={handleStatusChange} />
           ) : activeTab === 'trading-volumes' ? (
             <TradingVolumesPage onStatusChange={handleStatusChange} />
           ) : activeTab === 'price' ? (
@@ -244,8 +250,14 @@ export function App() {
             <StocksPage onStatusChange={handleStatusChange} onNavigate={handleStocksNavigate} />
           ) : activeTab === 'fundamentals' ? (
             <FundamentalsPage onStatusChange={handleStatusChange} />
+          ) : activeTab === 'valuation' ? (
+            <ValuationPage onStatusChange={handleStatusChange} />
           ) : activeTab === 'options' ? (
             <OptionsPage onStatusChange={handleStatusChange} />
+          ) : activeTab === 'projections' ? (
+            <ProjectionsPage onStatusChange={handleStatusChange} />
+          ) : activeTab === 'backtest' ? (
+            <BacktestPage onStatusChange={handleStatusChange} />
           ) : activeTab === SETTINGS_TAB_ID ? (
             <SettingsPage onStatusChange={handleStatusChange} />
           ) : (

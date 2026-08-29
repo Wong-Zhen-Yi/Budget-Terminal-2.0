@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import type { AppSettings, AppSettingsMutation, MaintenanceAction } from '@shared/contract'
 import { DEFAULT_CLOCK_COUNTRY, SETTINGS_TAB_ID, TABS } from '@shared/contract'
+import { DEFAULT_BACKTEST_PAGE_SETTINGS } from '@shared/backtest'
 import { usePortfolio } from '@/api/queries'
 import { useMaintenance, useSettings, useSettingsMutation } from '@/api/settingsQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
@@ -21,6 +22,7 @@ const fallbackSettings: AppSettings = {
   tabOrder: TABS.map((tab) => tab.id),
   hiddenTabs: [],
   obscuredTabs: [],
+  backtestPage: DEFAULT_BACKTEST_PAGE_SETTINGS,
   sourcePath: '',
 }
 

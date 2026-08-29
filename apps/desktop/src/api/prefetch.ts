@@ -53,6 +53,7 @@ const TAB_ORDER = [
   'personal-finance',
   'global',
   'pre-market',
+  'up-down',
   'calendar',
   'stocks',
   'fundamentals',
@@ -68,6 +69,7 @@ function holdingsOf(payload: PortfolioPayload | undefined): {
   every: string[]
   editable: string[]
   main: string[]
+  upDown: string[]
 } {
   const portfolios = payload?.portfolios ?? []
   const active = portfolios.find((entry) => entry.id === payload?.activeId) ?? portfolios[0] ?? null
@@ -83,7 +85,11 @@ function holdingsOf(payload: PortfolioPayload | undefined): {
   const editable = [
     ...new Set(portfolios.filter((entry) => !entry.readOnly).flatMap((entry) => entry.tickers)),
   ]
-  return { active: active?.tickers ?? [], every, editable, main: main?.tickers ?? [] }
+  const upDown = active?.tickers.filter((ticker) => {
+    const holding = active.holdings[ticker]
+    return holding && holding.shares > 0 && holding.includeInWeight
+  }) ?? []
+  return { active: active?.tickers ?? [], every, editable, main: main?.tickers ?? [], upDown }
 }
 
 function buildTasks(
@@ -91,7 +97,7 @@ function buildTasks(
   symbols: { stocks: string; fundamentals: string },
   calendar: { year: number; month: number; earningsYear: number },
 ): WarmTask[] {
-  const { active, every, editable, main } = holdingsOf(payload)
+  const { active, every, editable, main, upDown } = holdingsOf(payload)
   const tasks: WarmTask[] = []
 
   // Dashboard and Portfolio share the quote call for the active book. The Dashboard's
@@ -193,6 +199,19 @@ function buildTasks(
         staleTime: PRE_MARKET_REFRESH_MS / 2,
       }),
   })
+
+  if (upDown.length) {
+    tasks.push({
+      tab: 'up-down',
+      label: 'Up/Down',
+      run: (client) =>
+        client.prefetchQuery({
+          queryKey: queryKeys.upDown('portfolio', '1d', upDown),
+          queryFn: () => api.upDown({ source: 'portfolio', interval: '1d', symbols: upDown }),
+          staleTime: Infinity,
+        }),
+    })
+  }
 
   tasks.push({
     tab: 'calendar',

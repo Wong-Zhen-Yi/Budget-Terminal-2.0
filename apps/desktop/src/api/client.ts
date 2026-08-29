@@ -27,6 +27,8 @@ export const queryKeys = {
   earningsCalendar: (rangeKey: string) => ['earningsCalendar', rangeKey] as const,
   crypto: ['crypto'] as const,
   heatmap: (etf: string) => ['heatmap', etf] as const,
+  upDown: (source: string, interval: string, symbols: string[]) =>
+    ['upDown', source, interval, [...symbols].sort().join(',')] as const,
   stocks: (symbol: string) => ['stocks', symbol] as const,
   quotes: (holdings: string[]) => ['quotes', [...holdings].sort().join(',')] as const,
   chart: (symbol: string, timeframe: string) => ['chart', symbol, timeframe] as const,
@@ -39,6 +41,11 @@ export const queryKeys = {
   options: (symbol: string) => ['options', symbol] as const,
   optionsChain: (symbol: string, expiry: string) => ['optionsChain', symbol, expiry] as const,
   optionsExpirations: (symbol: string) => ['optionsExpirations', symbol] as const,
+  projections: (symbol: string, timeframe: string) => ['projections', symbol, timeframe] as const,
+  // The peer list is part of the key: adding a peer changes the exit multiple, and with it
+  // every assumption the derivation hangs off that multiple.
+  valuation: (symbol: string, customPeers: string[]) =>
+    ['valuation', symbol, customPeers.join(',')] as const,
   targets: (tickers: string[]) => ['targets', [...tickers].sort().join(',')] as const,
   news: (tickers: string[]) => ['news', [...tickers].sort().join(',')] as const,
   newsPage: (tickers: string[]) => ['newsPage', [...tickers].sort().join(',')] as const,

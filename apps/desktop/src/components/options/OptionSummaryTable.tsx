@@ -39,13 +39,27 @@ export function OptionSummaryTable({
   sort,
   onSortChange,
   empty = 'No rows',
+  lowHighlights = true,
 }: {
   rows: OptionsRawRow[]
   sort: SortState | null
   onSortChange: (sort: SortState | null) => void
   empty?: string
+  /**
+   * The Projections page paints only the top-price and top-volume ranks: its
+   * `_p28_render_option_tables` passes empty tuples for both low backgrounds, so a
+   * ten-row panel does not carry four different colours.
+   */
+  lowHighlights?: boolean
 }) {
-  const highlights = useMemo(() => summaryHighlights(rows), [rows])
+  const highlights = useMemo(() => {
+    const ranked = summaryHighlights(rows)
+    if (lowHighlights) return ranked
+    return ranked.map((entry) => ({
+      price: entry.price?.kind === 'top' ? entry.price : undefined,
+      volume: entry.volume?.kind === 'top' ? entry.volume : undefined,
+    }))
+  }, [rows, lowHighlights])
 
   const ordered = useMemo(() => {
     const indexed = rows.map((row, index) => ({ row, index }))

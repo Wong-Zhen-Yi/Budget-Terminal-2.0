@@ -28,7 +28,11 @@
     "probe:crypto": "tsx scripts/probe-crypto.ts",
     "probe:cards": "tsx scripts/probe-cards.ts",
     "probe:options": "tsx scripts/probe-options.ts",
-    "probe:heatmap": "tsx scripts/probe-heatmap.ts"
+    "probe:heatmap": "tsx scripts/probe-heatmap.ts",
+    "probe:projections": "tsx scripts/probe-projections.ts",
+    "probe:up-down": "tsx scripts/probe-up-down.ts",
+    "probe:valuation": "tsx scripts/probe-valuation.ts",
+    "probe:backtest": "tsx scripts/probe-backtest.ts"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

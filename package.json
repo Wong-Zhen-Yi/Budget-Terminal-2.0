@@ -19,6 +19,9 @@
     "probe:crypto": "npm run --workspace budget-terminal-desktop probe:crypto --",
     "probe:cards": "npm run --workspace budget-terminal-desktop probe:cards --",
     "probe:price": "npm run --workspace budget-terminal-desktop probe:price --",
-    "probe:heatmap": "npm run --workspace budget-terminal-desktop probe:heatmap --"
+    "probe:heatmap": "npm run --workspace budget-terminal-desktop probe:heatmap --",
+    "probe:up-down": "npm run --workspace budget-terminal-desktop probe:up-down --",
+    "probe:valuation": "npm run --workspace budget-terminal-desktop probe:valuation --",
+    "probe:backtest": "npm run --workspace budget-terminal-desktop probe:backtest --"
   }
 }

@@ -2,6 +2,7 @@ import { BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
 import { writeFile } from 'node:fs/promises'
 
 import type {
+  BacktestRequest,
   AnalyticsRequest,
   AppSettingsMutation,
   CardsMutation,
@@ -38,8 +39,12 @@ import type {
   OptionsRequest,
   OptionsChainRequest,
   OptionsExpirationsRequest,
+  ProjectionsRequest,
   QuotesRequest,
   TargetsRequest,
+  UpDownRequest,
+  UpDownTargetsRequest,
+  ValuationRequest,
   WindowAction,
 } from '../shared/contract.js'
 import { CHANNELS } from '../shared/contract.js'
@@ -130,12 +135,25 @@ export function registerIpcHandlers(): () => void {
   )
   ipcMain.handle(CHANNELS.crypto, (_event, request: CryptoRequest) => provider.crypto(request))
   ipcMain.handle(CHANNELS.heatmap, (_event, request: HeatmapRequest) => provider.heatmap(request))
+  ipcMain.handle(CHANNELS.upDown, (_event, request: UpDownRequest) => provider.upDown(request))
+  ipcMain.handle(CHANNELS.upDownTargets, (_event, request: UpDownTargetsRequest) =>
+    provider.upDownTargets(request),
+  )
+  ipcMain.handle(CHANNELS.valuation, (_event, request: ValuationRequest) =>
+    provider.valuation(request),
+  )
   ipcMain.handle(CHANNELS.stocks, (_event, request: StocksRequest) => provider.stocks(request))
   ipcMain.handle(CHANNELS.optionsChain, (_event, request: OptionsChainRequest) =>
     provider.optionsChain(request),
   )
   ipcMain.handle(CHANNELS.optionsExpirations, (_event, request: OptionsExpirationsRequest) =>
     provider.optionsExpirations(request),
+  )
+  ipcMain.handle(CHANNELS.projections, (_event, request: ProjectionsRequest) =>
+    provider.projections(request),
+  )
+  ipcMain.handle(CHANNELS.backtest, (_event, request: BacktestRequest) =>
+    provider.backtest(request),
   )
   ipcMain.handle(CHANNELS.settings, () => provider.settings())
   ipcMain.handle(CHANNELS.settingsMutate, (_event, mutation: AppSettingsMutation) =>
