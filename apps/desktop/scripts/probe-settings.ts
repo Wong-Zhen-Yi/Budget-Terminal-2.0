@@ -20,6 +20,7 @@ process.env.LOCALAPPDATA = scratch
 const { mutateSettings, readSettings, settingsPath } = await import(
   '../electron/services/settingsStore.js'
 )
+const { TABS } = await import('../electron/shared/contract.js')
 const { mutatePortfolios, readPortfolios } = await import('../electron/services/portfolioStore.js')
 const { mutateCards, readCards } = await import('../electron/services/cardsStore.js')
 const { yahooProvider } = await import('../electron/services/provider.js')
@@ -85,7 +86,10 @@ async function main(): Promise<void> {
 
   show('reset navigation', await mutateSettings({ type: 'resetNavigation' }))
   const afterReset = await readSettings()
-  check('reset restores the contract order', afterReset.tabOrder[1] === 'global')
+  check(
+    'reset restores the contract order',
+    afterReset.tabOrder.join(',') === TABS.map((tab) => tab.id).join(','),
+  )
   check('reset clears hidden pages', afterReset.hiddenTabs.length === 0)
   check('reset keeps privacy selections', afterReset.obscuredTabs.includes('portfolio'))
   check('reset keeps the clock market', afterReset.clockCountry === 'SG')
@@ -97,6 +101,22 @@ async function main(): Promise<void> {
   })
   check('Signals filter persists', signalsSettings.signalsPage.filter === 'blocked')
   check('Signals search persists', signalsSettings.signalsPage.search === 'NVDA')
+
+  console.log('\n-- Quant page controls')
+  const quantSettings = await mutateSettings({
+    type: 'setQuantPage',
+    value: {
+      activeTab: 'pairs',
+      screenFilter: 'top_quartile',
+      pairFilter: 'stretched',
+      search: 'aapl',
+      pairLeft: 'msft',
+      pairRight: 'googl',
+    },
+  })
+  check('Quant tab persists', quantSettings.quantPage.activeTab === 'pairs')
+  check('Quant filters persist', quantSettings.quantPage.screenFilter === 'top_quartile' && quantSettings.quantPage.pairFilter === 'stretched')
+  check('Quant symbols normalize', quantSettings.quantPage.search === 'AAPL' && quantSettings.quantPage.pairLeft === 'MSFT' && quantSettings.quantPage.pairRight === 'GOOGL')
 
   console.log('\n-- YouTube page controls')
   const youtubeSettings = await mutateSettings({

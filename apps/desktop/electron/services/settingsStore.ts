@@ -15,6 +15,10 @@ import {
   normalizeBacktestPageSettings,
 } from '../shared/backtest.js'
 import {
+  DEFAULT_QUANT_PAGE_SETTINGS,
+  normalizeQuantPageSettings,
+} from '../shared/quant.js'
+import {
   DEFAULT_YOUTUBE_PAGE_SETTINGS,
   normalizeYouTubePageSettings,
 } from '../shared/youtube.js'
@@ -37,6 +41,7 @@ const settingsSchema = z.object({
   obscuredTabs: z.array(z.string()).optional(),
   backtestPage: z.unknown().optional(),
   signalsPage: z.unknown().optional(),
+  quantPage: z.unknown().optional(),
   youtubePage: z.unknown().optional(),
 })
 
@@ -79,6 +84,7 @@ function emptySettings(): StoredSettings {
     obscuredTabs: [...DEFAULT_OBSCURED_TABS],
     backtestPage: DEFAULT_BACKTEST_PAGE_SETTINGS,
     signalsPage: DEFAULT_SIGNALS_PAGE_SETTINGS,
+    quantPage: DEFAULT_QUANT_PAGE_SETTINGS,
     youtubePage: DEFAULT_YOUTUBE_PAGE_SETTINGS,
   }
 }
@@ -114,6 +120,7 @@ function normalize(settings: StoredSettings): StoredSettings {
   settings.obscuredTabs = keep(settings.obscuredTabs ?? [...DEFAULT_OBSCURED_TABS])
   settings.backtestPage = normalizeBacktestPageSettings(settings.backtestPage)
   settings.signalsPage = normalizeSignalsPageSettings(settings.signalsPage)
+  settings.quantPage = normalizeQuantPageSettings(settings.quantPage)
   settings.youtubePage = normalizeYouTubePageSettings(settings.youtubePage)
   return settings
 }
@@ -158,6 +165,7 @@ function toPayload(settings: StoredSettings): AppSettings {
     obscuredTabs: [...(settings.obscuredTabs ?? [])],
     backtestPage: normalizeBacktestPageSettings(settings.backtestPage),
     signalsPage: normalizeSignalsPageSettings(settings.signalsPage),
+    quantPage: normalizeQuantPageSettings(settings.quantPage),
     youtubePage: normalizeYouTubePageSettings(settings.youtubePage),
     sourcePath: settingsPath(),
   }
@@ -222,6 +230,10 @@ function apply(settings: StoredSettings, mutation: AppSettingsMutation): void {
     }
     case 'setSignalsPage': {
       settings.signalsPage = normalizeSignalsPageSettings(mutation.value)
+      return
+    }
+    case 'setQuantPage': {
+      settings.quantPage = normalizeQuantPageSettings(mutation.value)
       return
     }
     case 'setYouTubePage': {

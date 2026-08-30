@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AppSettings, AppSettingsMutation, MaintenanceAction } from '@shared/contract'
 import { DEFAULT_CLOCK_COUNTRY, SETTINGS_TAB_ID, TABS } from '@shared/contract'
 import { DEFAULT_BACKTEST_PAGE_SETTINGS } from '@shared/backtest'
+import { DEFAULT_QUANT_PAGE_SETTINGS } from '@shared/quant'
 import { DEFAULT_YOUTUBE_PAGE_SETTINGS } from '@shared/youtube'
 import { usePortfolio } from '@/api/queries'
 import { useMaintenance, useSettings, useSettingsMutation } from '@/api/settingsQueries'
@@ -25,6 +26,7 @@ const fallbackSettings: AppSettings = {
   obscuredTabs: [],
   backtestPage: DEFAULT_BACKTEST_PAGE_SETTINGS,
   signalsPage: { filter: 'all', search: '' },
+  quantPage: DEFAULT_QUANT_PAGE_SETTINGS,
   youtubePage: DEFAULT_YOUTUBE_PAGE_SETTINGS,
   sourcePath: '',
 }

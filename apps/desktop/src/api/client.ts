@@ -23,6 +23,7 @@ export const queryKeys = {
   preMarket: ['preMarket'] as const,
   tradingVolumes: ['tradingVolumes'] as const,
   signals: ['signals'] as const,
+  quant: ['quant'] as const,
   calendarMonth: (tickers: string[], year: number, month: number) =>
     ['calendarMonth', year, month, [...tickers].sort().join(',')] as const,
   earningsCalendar: (rangeKey: string) => ['earningsCalendar', rangeKey] as const,
@@ -59,6 +60,7 @@ export const queryKeys = {
   // and the completed year is part of its key so an older year is its own entry.
   ipoUpcoming: ['ipoUpcoming'] as const,
   ipoCompleted: (year: number) => ['ipoCompleted', year] as const,
+  politicsPage: (page: number) => ['politicsPage', page] as const,
   institutionActivity: (quarter: string) => ['institutions', 'activity', quarter || 'latest'] as const,
   institutionTickerActivity: (symbol: string) => ['institutions', 'ticker', symbol] as const,
   targets: (tickers: string[]) => ['targets', [...tickers].sort().join(',')] as const,

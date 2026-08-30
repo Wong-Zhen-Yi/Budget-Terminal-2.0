@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { CLOCK_COUNTRIES, DEFAULT_CLOCK_COUNTRY } from '@shared/contract'
 import { api } from '@/api/client'
@@ -41,6 +41,7 @@ export function TabBar({
   onToggleObscure,
 }: TabBarProps) {
   const scroller = useRef<HTMLDivElement>(null)
+  const tabButtons = useRef(new Map<string, HTMLButtonElement>())
   const zone =
     CLOCK_COUNTRIES.find((entry) => entry.code === clockCountry)?.zone ??
     CLOCK_COUNTRIES.find((entry) => entry.code === DEFAULT_CLOCK_COUNTRY)!.zone
@@ -50,6 +51,15 @@ export function TabBar({
     const timer = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
+
+  // Keyboard navigation can select a tab beyond the strip's current viewport. Keep the
+  // active button visible for Ctrl+Tab, Ctrl+Shift+Tab and selections from the tab picker.
+  useLayoutEffect(() => {
+    tabButtons.current.get(activeTab)?.scrollIntoView({
+      block: 'nearest',
+      inline: 'nearest',
+    })
+  }, [activeTab, tabs])
 
   const scrollBy = (delta: number) => {
     scroller.current?.scrollBy({ left: delta, behavior: 'smooth' })
@@ -74,6 +84,10 @@ export function TabBar({
           return (
             <button
               key={tab.id}
+              ref={(button) => {
+                if (button) tabButtons.current.set(tab.id, button)
+                else tabButtons.current.delete(tab.id)
+              }}
               type="button"
               disabled={!tab.implemented}
               title={tab.implemented ? tab.label : `${tab.label} - not migrated yet`}

@@ -54,6 +54,27 @@ function normalizeModes(values: unknown): RollPatternMode[] {
   return [...seen].sort()
 }
 
+/**
+ * A targeted load — a Scored Candidates row or a Roll History row — skips the screen, so
+ * `getRoll` answers with a pool of exactly one synthetic candidate. Replacing an eight-row
+ * pool with that single row makes the panel a one-shot: opening one candidate destroys the
+ * list the other seven were on. Where the pool already holds the symbol being opened, it is
+ * carried across so the ranking stays browsable and the highlight lands on the real row.
+ *
+ * The rail's own figures still come from the payload as the main process built it: an
+ * exact-symbol load genuinely was not scored against a screen, and "Why This Rolled" says
+ * so.
+ */
+function withCarriedPool(previous: RollPayload | null, incoming: RollPayload): RollPayload {
+  const targeted = incoming.candidatePool.length === 1 && incoming.candidatePool[0]?.rank === 0
+  if (!targeted || !previous) return incoming
+  const pool = previous.candidatePool
+  if (pool.length < 2 || !pool.some((candidate) => candidate.symbol === incoming.symbol)) {
+    return incoming
+  }
+  return { ...incoming, candidatePool: pool }
+}
+
 export const useRollPage = create<RollState>()(
   persist(
     (set) => ({
@@ -71,8 +92,9 @@ export const useRollPage = create<RollState>()(
           ),
         })),
       setIndicators: (indicators) => set({ indicators }),
-      applyRoll: (payload) =>
+      applyRoll: (incoming) =>
         set((state) => {
+          const payload = withCarriedPool(state.payload, incoming)
           // `_p18_remember_full_payload` re-inserts an existing symbol at the end, so the
           // five it keeps are the five most recently *seen*, not the five first rolled.
           const payloads = { ...state.payloads }

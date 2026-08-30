@@ -1,6 +1,7 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import YahooFinance from 'yahoo-finance2'
 
-import { rateGate } from './rateGate.js'
+import { rateGate, type Priority } from './rateGate.js'
 
 /**
  * The single Yahoo client for the process.
@@ -16,8 +17,21 @@ export const yahoo = new YahooFinance({
   queue: { concurrency: 4 },
 })
 
+/**
+ * The lane the current request belongs in. An `AsyncLocalStorage` rather than a `paced()`
+ * argument because the flag arrives on the IPC request and the fan-out that reads it is
+ * dozens of call sites deep — the store propagates through every `await` and
+ * `Promise.allSettled` between the handler and the request, so no service changes.
+ */
+const priorityStore = new AsyncLocalStorage<Priority>()
+
+/** Run `fn` — and everything it awaits — in the given rate-gate lane. */
+export function runWithPriority<T>(priority: Priority, fn: () => Promise<T>): Promise<T> {
+  return priorityStore.run(priority, fn)
+}
+
 export function paced<T>(task: () => Promise<T>): Promise<T> {
-  return rateGate.run(task)
+  return rateGate.run(task, priorityStore.getStore() ?? 'foreground')
 }
 
 /** Days -> the `period1` timestamp Yahoo's chart endpoint expects. */

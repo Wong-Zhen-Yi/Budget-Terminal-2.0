@@ -186,7 +186,20 @@ export interface CardPerformance {
   interval: CardInterval
 }
 
-export interface CardsPerformanceRequest {
+/**
+ * Every request the startup warm-up in `src/api/prefetch.ts` can issue carries this.
+ *
+ * A request marked `background` runs in the rate gate's background lane
+ * (`electron/services/yahoo/rateGate.ts`), so a page the user opens while the warm-up is
+ * still fanning out is served first instead of queueing behind a hundred of its requests.
+ * It describes *scheduling*, never the answer, so it must stay out of every main-process
+ * cache key — a warmed payload and a user-requested one are the same entry.
+ */
+export interface BackgroundRequest {
+  background?: boolean
+}
+
+export interface CardsPerformanceRequest extends BackgroundRequest {
   interval: CardInterval
   cards: CardPerformanceInput[]
   force?: boolean
@@ -317,7 +330,7 @@ export interface YouTubePayload {
   tickersTotal: number
 }
 
-export interface YouTubeRequest {
+export interface YouTubeRequest extends BackgroundRequest {
   tickers: string[]
   force?: boolean
 }
@@ -395,7 +408,7 @@ export interface InstitutionTickerActivityPayload {
   fetchedAt: string
 }
 
-export interface InstitutionActivityRequest {
+export interface InstitutionActivityRequest extends BackgroundRequest {
   limit?: number
   quarter?: string
   force?: boolean
@@ -468,6 +481,8 @@ export interface AppSettings {
   backtestPage: BacktestPageSettings
   /** Persisted filter/search controls for the automatic Signals scanner. */
   signalsPage: SignalsPageSettings
+  /** Persisted tab/filter/input controls for the Quant workspace. */
+  quantPage: QuantPageSettings
   /** Persisted table sort for the portfolio YouTube feed. */
   youtubePage: YouTubePageSettings
   /** Absolute path of the settings file, surfaced on the page. */
@@ -484,6 +499,7 @@ export type AppSettingsMutation =
   | { type: 'setTabObscured'; id: string; obscured: boolean }
   | { type: 'setBacktestPage'; value: BacktestPageSettings }
   | { type: 'setSignalsPage'; value: SignalsPageSettings }
+  | { type: 'setQuantPage'; value: QuantPageSettings }
   | { type: 'setYouTubePage'; value: YouTubePageSettings }
 
 /** The four User Data buttons. Each one prompts in the renderer before it is sent. */
@@ -888,7 +904,7 @@ export interface StocksPayload {
   generatedAt: number
 }
 
-export interface StocksRequest {
+export interface StocksRequest extends BackgroundRequest {
   symbol: string
   force?: boolean
 }
@@ -957,7 +973,7 @@ export interface NewsPagePayload {
   generatedAt: number
 }
 
-export interface NewsPageRequest {
+export interface NewsPageRequest extends BackgroundRequest {
   tickers: string[]
   force?: boolean
 }
@@ -1157,35 +1173,35 @@ export const OPTION_BUCKETS: ReadonlyArray<{ key: OptionBucketKey; label: string
  */
 export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boolean }> = [
   { id: 'dashboard', label: 'Dashboard', implemented: true },
-  { id: 'global', label: 'Global', implemented: true },
   { id: 'portfolio', label: 'Portfolio', implemented: true },
-  { id: 'cards', label: 'Cards', implemented: true },
   { id: 'personal-finance', label: 'Personal Finance', implemented: true },
-  { id: 'pre-market', label: 'Pre-Market', implemented: true },
-  { id: 'up-down', label: 'Up/Down', implemented: true },
-  { id: 'trading-volumes', label: 'Trading Volumes', implemented: true },
-  { id: 'signals', label: 'Signals', implemented: true },
-  { id: 'price', label: 'Price', implemented: true },
-  { id: 'heatmap', label: 'Heatmap', implemented: true },
+  { id: 'global', label: 'Global', implemented: true },
   { id: 'news', label: 'News', implemented: true },
   { id: 'calendar', label: 'Calendar', implemented: true },
+  { id: 'pre-market', label: 'Pre-Market', implemented: true },
+  { id: 'trading-volumes', label: 'Trading Volumes', implemented: true },
+  { id: 'heatmap', label: 'Heatmap', implemented: true },
+  { id: 'cards', label: 'Cards', implemented: true },
+  { id: 'up-down', label: 'Up/Down', implemented: true },
   { id: 'stocks', label: 'Stocks', implemented: true },
   { id: 'fundamentals', label: 'Fundamentals', implemented: true },
-  { id: 'valuation', label: 'Valuation', implemented: true },
   { id: 'charts', label: 'Charts', implemented: true },
-  { id: 'projections', label: 'Projections', implemented: true },
+  { id: 'valuation', label: 'Valuation', implemented: true },
   { id: 'options', label: 'Options', implemented: true },
+  { id: 'signals', label: 'Signals', implemented: true },
+  { id: 'quant', label: 'Quant', implemented: true },
+  { id: 'projections', label: 'Projections', implemented: true },
   { id: 'etf', label: 'ETF', implemented: true },
   { id: 'crypto', label: 'Crypto', implemented: true },
   { id: 'backtest', label: 'Backtest', implemented: true },
   { id: 'roll', label: 'Roll', implemented: true },
   { id: 'ipo', label: 'IPO', implemented: true },
   { id: 'institutions', label: 'Institutions', implemented: true },
-  { id: 'politics', label: 'Politics', implemented: false },
+  { id: 'politics', label: 'Politics', implemented: true },
   { id: 'youtube', label: 'YouTube', implemented: true },
   { id: 'dictionary', label: 'Dictionary', implemented: true },
-  { id: 'quant', label: 'Quant', implemented: false },
   { id: 'economic', label: 'Economic', implemented: true },
+  { id: 'price', label: 'Price', implemented: true },
   { id: 'settings', label: 'Settings', implemented: true },
 ]
 
@@ -1283,7 +1299,7 @@ export interface EconomicPayload {
   yieldCurve: EconomicYieldCurve
 }
 
-export interface EconomicRequest {
+export interface EconomicRequest extends BackgroundRequest {
   /** Ignore the cached payload and re-download every provider. */
   force?: boolean
 }
@@ -1377,7 +1393,7 @@ export interface GlobalMarketsPayload {
   missing: string[]
 }
 
-export interface GlobalMarketsRequest {
+export interface GlobalMarketsRequest extends BackgroundRequest {
   force?: boolean
 }
 
@@ -1484,7 +1500,7 @@ export interface PreMarketPayload {
   missing: string[]
 }
 
-export interface PreMarketRequest {
+export interface PreMarketRequest extends BackgroundRequest {
   force?: boolean
 }
 
@@ -1544,7 +1560,7 @@ export interface TradingVolumesPayload {
   missing: string[]
 }
 
-export interface TradingVolumesRequest {
+export interface TradingVolumesRequest extends BackgroundRequest {
   force?: boolean
 }
 
@@ -1642,7 +1658,7 @@ export interface SignalsPayload {
   universeFromCache: boolean
 }
 
-export interface SignalsRequest {
+export interface SignalsRequest extends BackgroundRequest {
   latestOnly?: boolean
   forceMarketRefresh?: boolean
   forceUniverseRefresh?: boolean
@@ -1704,7 +1720,7 @@ export interface CalendarMonthPayload {
   generatedAt: number
 }
 
-export interface CalendarMonthRequest {
+export interface CalendarMonthRequest extends BackgroundRequest {
   tickers: string[]
   year: number
   month: number
@@ -1746,7 +1762,7 @@ export interface EarningsCalendarPayload {
   symbolUniverseCount: number
 }
 
-export interface EarningsCalendarRequest {
+export interface EarningsCalendarRequest extends BackgroundRequest {
   startDate: string
   endDate: string
   rangeKey: string
@@ -1850,7 +1866,7 @@ export interface CryptoPayload {
   progress: Record<CryptoStage, CryptoStageStatus>
 }
 
-export interface CryptoRequest {
+export interface CryptoRequest extends BackgroundRequest {
   force?: boolean
 }
 
@@ -1917,7 +1933,7 @@ export interface HeatmapPayload {
   fetchedAt: number
 }
 
-export interface HeatmapRequest {
+export interface HeatmapRequest extends BackgroundRequest {
   etf: HeatmapEtfKey
   force?: boolean
 }
@@ -2024,7 +2040,7 @@ export interface EtfArbitrageRequest {
   force?: boolean
 }
 
-export interface EtfAumRequest {
+export interface EtfAumRequest extends BackgroundRequest {
   force?: boolean
 }
 
@@ -2057,7 +2073,7 @@ export interface UpDownPayload {
   forceTargets: boolean
 }
 
-export interface UpDownRequest {
+export interface UpDownRequest extends BackgroundRequest {
   source: UpDownSource
   interval: UpDownInterval
   /** Used by Portfolio and Custom. ETF sources resolve their official holdings in main. */
@@ -2323,6 +2339,110 @@ export interface BacktestRequest {
   force?: boolean
 }
 
+/* --------------------------------------------------------------- quant page */
+
+export type QuantActiveTab = 'screener' | 'pairs'
+export type QuantScreenFilter =
+  | 'all'
+  | 'top_quartile'
+  | 'momentum'
+  | 'oversold'
+  | 'overbought'
+  | 'low_volatility'
+export type QuantPairFilter = 'all' | 'stationary' | 'stretched' | 'fast'
+
+export interface QuantPageSettings {
+  activeTab: QuantActiveTab
+  screenFilter: QuantScreenFilter
+  pairFilter: QuantPairFilter
+  search: string
+  pairLeft: string
+  pairRight: string
+}
+
+export interface QuantScreenRow {
+  ticker: string
+  name: string
+  exchange: string
+  lastPrice: number | null
+  marketCap: number | null
+  medianDollarVolume: number | null
+  momentum1m: number | null
+  momentum3m: number | null
+  momentum6m: number | null
+  momentum12m: number | null
+  volatilityPct: number | null
+  sharpe: number | null
+  maxDrawdownPct: number | null
+  zScore: number | null
+  rsi: number | null
+  composite: number | null
+  rank: number
+  observations: number
+}
+
+export interface QuantPairRow {
+  left: string
+  right: string
+  correlation: number | null
+  hedgeRatio: number | null
+  spreadZ: number | null
+  halfLife: number | null
+  hurst: number | null
+  dickeyFuller: number | null
+  stationaryAt: string
+  score: number | null
+  rank: number
+  observations: number
+}
+
+export interface QuantScanPayload {
+  rows: QuantScreenRow[]
+  pairs: QuantPairRow[]
+  source: string
+  sourcedAt: string
+  startedAt: string
+  completedAt: string
+  universeSize: number
+  errors: Record<string, string>
+  universeFromCache: boolean
+}
+
+export interface QuantPairPoint {
+  date: string
+  spreadZ: number | null
+  leftIndexed: number
+  rightIndexed: number
+  rollingCorrelation: number | null
+}
+
+export interface QuantPairDetail {
+  left: string
+  right: string
+  hedgeRatio: number | null
+  intercept: number | null
+  latestZ: number | null
+  correlation: number | null
+  halfLife: number | null
+  dickeyFuller: number | null
+  stationaryAt: string
+  hurst: number | null
+  score: number | null
+  observations: number
+  points: QuantPairPoint[]
+}
+
+export interface QuantScanRequest {
+  forceUniverseRefresh?: boolean
+  latestOnly?: boolean
+}
+
+export interface QuantPairRequest {
+  left: string
+  right: string
+  force?: boolean
+}
+
 /* ---------------------------------------------------------------- roll page */
 
 /**
@@ -2552,14 +2672,60 @@ export interface IpoCompletedPayload extends IpoPayloadBase {
   year: number
 }
 
-export interface IpoUpcomingRequest {
+export interface IpoUpcomingRequest extends BackgroundRequest {
   force?: boolean
 }
 
-export interface IpoCompletedRequest {
+export interface IpoCompletedRequest extends BackgroundRequest {
   /** Defaults to the current year, which is the only one the reference ever asks for. */
   year?: number
   force?: boolean
+}
+
+/* ---------------------------------------------------------------- politics */
+
+export type PoliticsParty = 'Democrat' | 'Republican' | 'Independent' | 'Unknown'
+
+export interface PoliticsTrade {
+  politician: string
+  chamber: string
+  party: PoliticsParty
+  ticker: string
+  assetDescription: string
+  theme: string
+  tradeType: string
+  amount: string
+  amountValue: number
+  transactionDate: string
+  disclosureDate: string
+}
+
+export interface PoliticsPagePayload {
+  page: number
+  trades: PoliticsTrade[]
+  /** Count before rows without a ticker are discarded; controls whether Next is enabled. */
+  rawCount: number
+  fetchedAt: number
+  fromCache: boolean
+  cacheAgeSeconds: number | null
+  stale: boolean
+  warning: string
+}
+
+export interface PoliticsExportPayload {
+  trades: PoliticsTrade[]
+  pagesFetched: number
+  fetchedAt: number
+}
+
+export interface PoliticsPageRequest extends BackgroundRequest {
+  page?: number
+  force?: boolean
+}
+
+export interface PoliticsExportRequest {
+  /** The reference export reads pages 1 through 5. */
+  pages?: number
 }
 
 export const CHANNELS = {
@@ -2605,7 +2771,11 @@ export const CHANNELS = {
   roll: 'roll:read',
   ipoUpcoming: 'ipo:upcoming',
   ipoCompleted: 'ipo:completed',
+  politicsPage: 'politics:page',
+  politicsExport: 'politics:export',
   backtest: 'backtest:run',
+  quantScan: 'quant:scan',
+  quantPair: 'quant:pair',
   youtube: 'youtube:read',
   youtubeThumbnail: 'youtube:thumbnail',
   fundamentals: 'dashboard:fundamentals',
@@ -2627,7 +2797,7 @@ export const CHANNELS = {
   windowControl: 'window:control',
 } as const
 
-export interface QuotesRequest {
+export interface QuotesRequest extends BackgroundRequest {
   holdings: string[]
 }
 export interface ChartRequest {
@@ -2639,19 +2809,19 @@ export interface OptionsRequest {
   symbol: string
   force?: boolean
 }
-export interface TargetsRequest {
+export interface TargetsRequest extends BackgroundRequest {
   tickers: string[]
   force?: boolean
 }
-export interface NewsRequest {
+export interface NewsRequest extends BackgroundRequest {
   tickers: string[]
   force?: boolean
 }
-export interface FundamentalsRequest {
+export interface FundamentalsRequest extends BackgroundRequest {
   tickers: string[]
   force?: boolean
 }
-export interface FundamentalsPageRequest {
+export interface FundamentalsPageRequest extends BackgroundRequest {
   symbol: string
   force?: boolean
 }
@@ -2686,7 +2856,7 @@ export interface OptionQuotesPayload {
   expiries: Record<string, string[]>
 }
 
-export interface FxRequest {
+export interface FxRequest extends BackgroundRequest {
   force?: boolean
 }
 
@@ -2752,7 +2922,11 @@ export interface DesktopApi {
   roll(request: RollRequest): Promise<Envelope<RollPayload | null>>
   ipoUpcoming(request: IpoUpcomingRequest): Promise<Envelope<IpoUpcomingPayload>>
   ipoCompleted(request: IpoCompletedRequest): Promise<Envelope<IpoCompletedPayload>>
+  politicsPage(request: PoliticsPageRequest): Promise<Envelope<PoliticsPagePayload>>
+  politicsExport(request: PoliticsExportRequest): Promise<Envelope<PoliticsExportPayload>>
   backtest(request: BacktestRequest): Promise<Envelope<BacktestPayload>>
+  quantScan(request: QuantScanRequest): Promise<Envelope<QuantScanPayload | null>>
+  quantPair(request: QuantPairRequest): Promise<Envelope<QuantPairDetail | null>>
   youtube(request: YouTubeRequest): Promise<Envelope<YouTubePayload>>
   youtubeThumbnail(
     request: YouTubeThumbnailRequest,

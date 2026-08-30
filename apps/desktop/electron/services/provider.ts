@@ -45,6 +45,10 @@ import type {
   PreMarketRequest,
   PriceScreenPayload,
   PriceScreenRequest,
+  QuantPairDetail,
+  QuantPairRequest,
+  QuantScanPayload,
+  QuantScanRequest,
   SignalsPayload,
   SignalsRequest,
   TradingVolumesPayload,
@@ -103,6 +107,10 @@ import type {
   IpoCompletedRequest,
   IpoUpcomingPayload,
   IpoUpcomingRequest,
+  PoliticsExportPayload,
+  PoliticsExportRequest,
+  PoliticsPagePayload,
+  PoliticsPageRequest,
   RollPayload,
   RollRequest,
   YouTubePayload,
@@ -124,6 +132,7 @@ import { normalizeEtfKey } from '../shared/heatmap.js'
 import { DEFAULT_RISK_FREE_RATE } from '../shared/optionsPage.js'
 import { describeError, err, failed, meta, ok, partial } from '../shared/envelope.js'
 import { DEFAULT_BACKTEST_PAGE_SETTINGS, emptyBacktestPayload } from '../shared/backtest.js'
+import { DEFAULT_QUANT_PAGE_SETTINGS } from '../shared/quant.js'
 import { DEFAULT_YOUTUBE_PAGE_SETTINGS } from '../shared/youtube.js'
 import { cache } from './cache.js'
 import {
@@ -144,6 +153,13 @@ import {
   IPO_COMPLETED_SOURCE,
   IPO_UPCOMING_SOURCE,
 } from './ipo.js'
+import {
+  clearPoliticsCache,
+  emptyPoliticsPage,
+  getPoliticsExport,
+  getPoliticsPage,
+  POLITICS_SOURCE,
+} from './politics.js'
 import { HEATMAP_SOURCE, emptyHeatmapPayload, getHeatmap } from './heatmap.js'
 import {
   ETF_ARBITRAGE_SOURCE,
@@ -258,6 +274,13 @@ import {
 import { getQuotes } from './yahoo/quotes.js'
 import { getTargets } from './yahoo/targets.js'
 import { BACKTEST_SOURCE, getBacktest } from './yahoo/backtest.js'
+import {
+  analyzeQuantPair,
+  clearLatestQuant,
+  getLatestQuant,
+  QUANT_SOURCE,
+  runQuantScan,
+} from './yahoo/quant.js'
 import { clearYouTubeCache, getYouTube, YOUTUBE_SOURCE } from './youtube.js'
 import { getYouTubeThumbnail } from './youtubeImages.js'
 
@@ -270,6 +293,8 @@ import { getYouTubeThumbnail } from './youtubeImages.js'
  */
 export interface MarketDataProvider {
   backtest(request: BacktestRequest): Promise<Envelope<BacktestPayload>>
+  quantScan(request: QuantScanRequest): Promise<Envelope<QuantScanPayload | null>>
+  quantPair(request: QuantPairRequest): Promise<Envelope<QuantPairDetail | null>>
   youtube(request: YouTubeRequest): Promise<Envelope<YouTubePayload>>
   youtubeThumbnail(
     request: YouTubeThumbnailRequest,
@@ -327,6 +352,8 @@ export interface MarketDataProvider {
   roll(request: RollRequest): Promise<Envelope<RollPayload | null>>
   ipoUpcoming(request: IpoUpcomingRequest): Promise<Envelope<IpoUpcomingPayload>>
   ipoCompleted(request: IpoCompletedRequest): Promise<Envelope<IpoCompletedPayload>>
+  politicsPage(request: PoliticsPageRequest): Promise<Envelope<PoliticsPagePayload>>
+  politicsExport(request: PoliticsExportRequest): Promise<Envelope<PoliticsExportPayload>>
   stocks(request: StocksRequest): Promise<Envelope<StocksPayload>>
   optionsChain(request: OptionsChainRequest): Promise<Envelope<OptionsChainPayload>>
   optionsExpirations(
@@ -406,6 +433,7 @@ const emptySettings: AppSettings = {
   hiddenTabs: [],
   obscuredTabs: [...DEFAULT_OBSCURED_TABS],
   backtestPage: DEFAULT_BACKTEST_PAGE_SETTINGS,
+  quantPage: DEFAULT_QUANT_PAGE_SETTINGS,
   signalsPage: { filter: 'all', search: '' },
   youtubePage: DEFAULT_YOUTUBE_PAGE_SETTINGS,
   sourcePath: settingsPath(),
@@ -1445,6 +1473,31 @@ export const yahooProvider: MarketDataProvider = {
     }
   },
 
+  async politicsPage({ page, force }) {
+    const target = Math.max(1, Math.trunc(Number(page)) || 1)
+    try {
+      const { payload, errors } = await getPoliticsPage(target, Boolean(force))
+      if (!errors.length) return ok(payload, POLITICS_SOURCE)
+      return partial(payload, errors, POLITICS_SOURCE, payload.warning)
+    } catch (error) {
+      return failed(emptyPoliticsPage(target), describeError(error), POLITICS_SOURCE)
+    }
+  },
+
+  async politicsExport({ pages }) {
+    try {
+      const { payload, errors } = await getPoliticsExport(Number(pages) || 5)
+      if (!errors.length) return ok(payload, POLITICS_SOURCE)
+      return partial(payload, errors, POLITICS_SOURCE, errors[0]?.reason)
+    } catch (error) {
+      return failed(
+        { trades: [], pagesFetched: 0, fetchedAt: 0 },
+        describeError(error),
+        POLITICS_SOURCE,
+      )
+    }
+  },
+
   async valuation({ symbol, customPeers, force }) {
     const normalized = symbol.trim().toUpperCase()
     try {
@@ -1603,6 +1656,31 @@ export const yahooProvider: MarketDataProvider = {
     }
   },
 
+  async quantScan(request) {
+    if (request.latestOnly) return ok(await getLatestQuant(), QUANT_SOURCE)
+    try {
+      const payload = await runQuantScan(Boolean(request.forceUniverseRefresh))
+      const failures = Object.entries(payload.errors)
+      if (!failures.length) return ok(payload, QUANT_SOURCE)
+      return partial(
+        payload,
+        failures.map(([symbol, message]) => err(QUANT_SOURCE, message, 'quantScan', symbol)),
+        QUANT_SOURCE,
+        `${failures.length} ticker(s) returned incomplete daily history.`,
+      )
+    } catch (error) {
+      return failed(await getLatestQuant(), describeError(error), QUANT_SOURCE)
+    }
+  },
+
+  async quantPair({ left, right, force }) {
+    try {
+      return ok(await analyzeQuantPair(left, right, Boolean(force)), QUANT_SOURCE)
+    } catch (error) {
+      return failed(null, describeError(error), QUANT_SOURCE)
+    }
+  },
+
   async youtube(request) {
     const empty: YouTubePayload = {
       items: [],
@@ -1724,6 +1802,7 @@ export const yahooProvider: MarketDataProvider = {
       await clearInstitutionCaches()
       await clearYouTubeCache()
       await clearIpoCache()
+      await clearPoliticsCache()
       return ok(
         {
           action: 'clearUserData' as const,
@@ -1744,6 +1823,7 @@ export const yahooProvider: MarketDataProvider = {
     try {
       cache.clear()
       await clearLatestSignals()
+      await clearLatestQuant()
       await clearCalendarCaches()
       await clearSecCaches()
       await clearUpDownCaches()
@@ -1752,6 +1832,7 @@ export const yahooProvider: MarketDataProvider = {
       await clearInstitutionCaches()
       await clearYouTubeCache()
       await clearIpoCache()
+      await clearPoliticsCache()
       return ok(
         {
           action: 'resetCache' as const,

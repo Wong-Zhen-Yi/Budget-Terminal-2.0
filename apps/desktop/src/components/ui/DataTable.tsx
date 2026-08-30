@@ -41,6 +41,12 @@ interface DataTableProps<T> {
    * stretching the table. Needed by any table with a free-text column.
    */
   layout?: 'auto' | 'fixed'
+  /**
+   * Floor for the table's own width, so a `fixed` layout with more declared columns than
+   * the pane can carry scrolls horizontally instead of scaling every column down until
+   * its text ellipsis away. The scroller is the wrapper this component already renders.
+   */
+  minWidth?: string
   /** Initial sort; the header stays clickable from there. */
   defaultSort?: SortState
 }
@@ -66,6 +72,7 @@ export function DataTable<T>({
   rowClassName,
   empty = 'No data',
   layout = 'auto',
+  minWidth,
   defaultSort,
 }: DataTableProps<T>) {
   // One wrapping column makes every row variable-height, so the short cells have to
@@ -138,6 +145,7 @@ export function DataTable<T>({
       }}
     >
       <table
+        style={minWidth ? { minWidth } : undefined}
         className={`w-full border-collapse ${layout === 'fixed' ? 'table-fixed' : ''}`}
       >
         <thead className="sticky top-0 z-10">

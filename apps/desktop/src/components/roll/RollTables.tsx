@@ -43,10 +43,12 @@ export function RollCandidatesTable({
   candidates,
   currentSymbol,
   patternActive,
+  onOpen,
 }: {
   candidates: RollCandidate[]
   currentSymbol: string
   patternActive: boolean
+  onOpen: (symbol: string) => void
 }) {
   const columns: Array<Column<RollCandidate>> = [
     {
@@ -54,7 +56,7 @@ export function RollCandidatesTable({
       header: 'Rank',
       align: 'right',
       numeric: true,
-      width: '52px',
+      width: '84px',
       cell: (row, index) => (row.rank === 0 ? 'Selected' : integer(row.rank || index + 1)),
       sortValue: (row) => row.rank,
     },
@@ -62,7 +64,7 @@ export function RollCandidatesTable({
       key: 'symbol',
       header: 'Ticker',
       align: 'center',
-      width: '68px',
+      width: '78px',
       cell: (row) => (
         <span className={row.symbol === currentSymbol ? 'text-accent' : undefined}>{row.symbol}</span>
       ),
@@ -73,14 +75,14 @@ export function RollCandidatesTable({
       header: 'Score',
       align: 'right',
       numeric: true,
-      width: '54px',
+      width: '68px',
       cell: (row) => score(row.score),
       sortValue: (row) => row.score,
     },
     {
       key: 'pattern',
       header: 'Pattern',
-      width: '150px',
+      width: '146px',
       cell: (row) => {
         let setup = row.patternType === 'None' || !row.patternType ? 'Balanced' : row.patternType
         if (patternActive && (row.matchTier === 'fallback' || row.matchTier === 'unavailable')) {
@@ -98,10 +100,10 @@ export function RollCandidatesTable({
     },
     {
       key: 'patternScore',
-      header: 'Pattern score',
+      header: 'Pat. score',
       align: 'right',
       numeric: true,
-      width: '84px',
+      width: '92px',
       // A pattern score is only meaningful where an evaluator actually ran and produced
       // something; an `unavailable` row would otherwise print a confident 0.0.
       cell: (row) =>
@@ -113,8 +115,8 @@ export function RollCandidatesTable({
     {
       key: 'sector',
       header: 'Sector',
-      width: '132px',
-      cell: (row) => row.sector || 'N/A',
+      width: '128px',
+      cell: (row) => <span title={row.sector || undefined}>{row.sector || 'N/A'}</span>,
       sortValue: (row) => row.sector,
     },
     {
@@ -122,7 +124,7 @@ export function RollCandidatesTable({
       header: 'Day %',
       align: 'right',
       numeric: true,
-      width: '66px',
+      width: '88px',
       cell: (row) => signedPercent(row.dayChangePct),
       sortValue: (row) => row.dayChangePct,
     },
@@ -131,7 +133,7 @@ export function RollCandidatesTable({
       header: '1Y %',
       align: 'right',
       numeric: true,
-      width: '70px',
+      width: '96px',
       cell: (row) => signedPercent(row.fiftyTwoWeekChangePct),
       sortValue: (row) => row.fiftyTwoWeekChangePct,
     },
@@ -140,15 +142,20 @@ export function RollCandidatesTable({
       header: 'Avg Vol',
       align: 'right',
       numeric: true,
-      width: '86px',
+      width: '124px',
       cell: (row) => integer(row.averageVolume),
       sortValue: (row) => row.averageVolume,
     },
     {
       key: 'reason',
       header: 'Reason',
-      wrap: true,
-      cell: (row) => rollCandidateReasonText(row, patternActive),
+      // `candidates_header.setSectionResizeMode(9, Stretch)` over a 22px fixed row
+      // height: the reference elides this column onto one line. Wrapping it instead made
+      // a row ten lines tall and left three candidates on screen out of twelve.
+      cell: (row) => {
+        const text = rollCandidateReasonText(row, patternActive)
+        return <span title={text}>{text}</span>
+      },
     },
   ]
 
@@ -158,6 +165,8 @@ export function RollCandidatesTable({
       rows={candidates}
       rowKey={(row) => row.symbol}
       layout="fixed"
+      minWidth="1240px"
+      onRowClick={(row) => onOpen(row.symbol)}
       rowClassName={(row) => (row.symbol === currentSymbol ? 'bg-surface-raised' : '')}
       empty="Roll to see ranked ticker candidates."
     />
@@ -167,12 +176,12 @@ export function RollCandidatesTable({
 /** Top Options By Expiration: one row per near-term expiry. */
 export function RollTopOptionsTable({ rows }: { rows: RollTopOption[] }) {
   const columns: Array<Column<RollTopOption>> = [
-    { key: 'expiration', header: 'Exp', align: 'center', width: '100px', cell: (row) => row.expiration || 'N/A' },
+    { key: 'expiration', header: 'Exp', align: 'center', width: '116px', cell: (row) => row.expiration || 'N/A' },
     {
       key: 'type',
       header: 'Type',
       align: 'center',
-      width: '56px',
+      width: '68px',
       cell: (row) => (
         <span className={row.type === 'Call' ? 'text-up' : row.type === 'Put' ? 'text-down' : undefined}>
           {row.type || 'N/A'}
@@ -181,14 +190,14 @@ export function RollTopOptionsTable({ rows }: { rows: RollTopOption[] }) {
     },
     { key: 'strike', header: 'Strike', align: 'right', numeric: true, cell: (row) => optionNumber(row.strike) },
     { key: 'last', header: 'Last', align: 'right', numeric: true, cell: (row) => optionNumber(row.lastPrice) },
-    { key: 'volume', header: 'Vol', align: 'right', numeric: true, width: '68px', cell: (row) => integer(row.volume) },
-    { key: 'oi', header: 'OI', align: 'right', numeric: true, width: '72px', cell: (row) => integer(row.openInterest) },
+    { key: 'volume', header: 'Vol', align: 'right', numeric: true, width: '86px', cell: (row) => integer(row.volume) },
+    { key: 'oi', header: 'OI', align: 'right', numeric: true, width: '86px', cell: (row) => integer(row.openInterest) },
     {
       key: 'iv',
       header: 'IV',
       align: 'right',
       numeric: true,
-      width: '62px',
+      width: '76px',
       cell: (row) => impliedVolatility(row.impliedVolatility),
     },
   ]
@@ -209,12 +218,17 @@ export function RollNewsTable({ rows, onOpen }: { rows: RollNewsRow[]; onOpen: (
       key: 'time',
       header: 'Time',
       align: 'center',
-      width: '58px',
+      width: '72px',
       numeric: true,
       cell: (row) => (row.publishedAt ? newsTime(row.publishedAt) : EM_DASH),
     },
-    { key: 'source', header: 'Source', width: '104px', cell: (row) => row.source },
-    { key: 'title', header: 'Headline', wrap: true, cell: (row) => row.title },
+    {
+      key: 'source',
+      header: 'Source',
+      width: '132px',
+      cell: (row) => <span title={row.source || undefined}>{row.source}</span>,
+    },
+    { key: 'title', header: 'Headline', wrap: true, cell: (row) => <span title={row.title}>{row.title}</span> },
   ]
   return (
     <DataTable
@@ -243,14 +257,19 @@ export function RollHistoryTable({
   onOpen: (symbol: string) => void
 }) {
   const columns: Array<Column<RollHistoryRow>> = [
-    { key: 'symbol', header: 'Ticker', align: 'center', width: '68px', cell: (row) => row.symbol },
+    { key: 'symbol', header: 'Ticker', align: 'center', width: '78px', cell: (row) => row.symbol },
     { key: 'company', header: 'Company', wrap: true, cell: (row) => row.company || 'N/A' },
-    { key: 'sector', header: 'Sector', width: '128px', cell: (row) => row.sector || 'N/A' },
+    {
+      key: 'sector',
+      header: 'Sector',
+      width: '124px',
+      cell: (row) => <span title={row.sector || undefined}>{row.sector || 'N/A'}</span>,
+    },
     {
       key: 'rolled',
       header: 'Rolled',
       align: 'center',
-      width: '58px',
+      width: '74px',
       numeric: true,
       cell: (row) => (row.rolledAt ? newsTime(row.rolledAt) : EM_DASH),
     },

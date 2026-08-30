@@ -27,7 +27,9 @@ import { OptionsPage } from '@/pages/OptionsPage'
 import { ProjectionsPage } from '@/pages/ProjectionsPage'
 import { PreMarketPage } from '@/pages/PreMarketPage'
 import { PricePage } from '@/pages/PricePage'
+import { QuantPage } from '@/pages/QuantPage'
 import { IpoPage } from '@/pages/IpoPage'
+import { PoliticsPage } from '@/pages/PoliticsPage'
 import { RollPage } from '@/pages/RollPage'
 import { SignalsPage } from '@/pages/SignalsPage'
 import { TradingVolumesPage } from '@/pages/TradingVolumesPage'
@@ -44,6 +46,26 @@ import { useOptionsPage } from '@/stores/options'
 import { useStocksPage } from '@/stores/stocks'
 
 const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
+
+/**
+ * Pages that stay mounted after you switch away from them, hidden rather than destroyed.
+ *
+ * Their data already survives a tab switch (the query cache holds an hour, see
+ * `main.tsx`), so what this buys is the *render*: a five-hundred-tile treemap, a
+ * hundred-row table and a log-log dot plot are all laid out in pixels from a measured
+ * container, and rebuilding that from scratch is what makes re-entry feel slow.
+ *
+ * The list is an allowlist, not a default, because keeping a page mounted is only safe
+ * when it neither polls nor gates a query on being visible. These pages set
+ * `refetchInterval: false` and hold no visibility flag. Pre-Market (15-minute timer) and
+ * the Dashboard (60-second quotes) would poll forever once visited; Portfolio gates its
+ * heavy analytics on the on-screen sub-tab via `enabled`; Charts takes an opt-in
+ * `pollSeconds`. None of those may be added without dealing with that first.
+ */
+const PAGE_KEEP_ALIVE = new Set(['trading-volumes', 'heatmap', 'economic', 'etf', 'quant'])
+
+/** How many hidden pages to hold besides the one on screen. */
+const KEEP_ALIVE_LIMIT = 3
 
 export function App() {
   const [activeTab, setActiveTab] = useState('dashboard')
@@ -91,11 +113,28 @@ export function App() {
   const activeTabRef = useRef(activeTab)
   activeTabRef.current = activeTab
 
-  const handleStatusChange = useCallback(
-    (next: PanelStatus[], path: string) => {
-      setPanels(next)
-      setSourcePath(path)
-      record(activeTabRef.current, next)
+  /**
+   * One status callback per tab, cached so each page sees a stable identity — several
+   * pages hold it in an effect's dependency list.
+   *
+   * The tab id is bound rather than read off `activeTabRef`, because a kept-alive page
+   * goes on reporting while it is hidden. Its report is dropped: the status bar and Data
+   * Health describe the page you are looking at, and a background repaint from a hidden
+   * treemap must not overwrite that.
+   */
+  const statusHandlers = useRef(new Map<string, (next: PanelStatus[], path: string) => void>())
+  const statusFor = useCallback(
+    (tabId: string) => {
+      const cached = statusHandlers.current.get(tabId)
+      if (cached) return cached
+      const handler = (next: PanelStatus[], path: string) => {
+        if (activeTabRef.current !== tabId) return
+        setPanels(next)
+        setSourcePath(path)
+        record(tabId, next)
+      }
+      statusHandlers.current.set(tabId, handler)
+      return handler
     },
     [record],
   )
@@ -207,6 +246,32 @@ export function App() {
 
   const hideCurrent = obscured && (settings?.obscuredTabs ?? []).includes(activeTab)
 
+  /**
+   * The allowlisted pages currently mounted, most recently visited first.
+   *
+   * The active page is folded in during render rather than waiting for the effect below,
+   * so arriving on one of these tabs paints on the same frame instead of flashing empty.
+   * A page hidden in Settings is dropped: it is unreachable, and holding its treemap
+   * mounted would be paying for a page the user has taken out of the strip.
+   */
+  const [visited, setVisited] = useState<string[]>([])
+  const residents = useMemo(() => {
+    const ordered = PAGE_KEEP_ALIVE.has(activeTab)
+      ? [activeTab, ...visited.filter((id) => id !== activeTab)]
+      : visited
+    const shown = new Set(visibleTabs.map((tab) => tab.id))
+    return ordered.filter((id) => shown.has(id)).slice(0, KEEP_ALIVE_LIMIT)
+  }, [activeTab, visited, visibleTabs])
+
+  useEffect(() => {
+    if (!PAGE_KEEP_ALIVE.has(activeTab)) return
+    setVisited((was) =>
+      was[0] === activeTab
+        ? was
+        : [activeTab, ...was.filter((id) => id !== activeTab)].slice(0, KEEP_ALIVE_LIMIT),
+    )
+  }, [activeTab])
+
   return (
     <div className="flex h-full flex-col bg-bg">
       <TabBar
@@ -229,67 +294,32 @@ export function App() {
             hideCurrent ? 'pointer-events-none blur-md select-none' : ''
           }`}
         >
-          {activeTab === 'dashboard' ? (
-            <DashboardPage onStatusChange={handleStatusChange} />
-          ) : activeTab === 'global' ? (
-            <GlobalPage onStatusChange={handleStatusChange} />
-          ) : activeTab === 'portfolio' ? (
-            <PortfolioPage onStatusChange={handleStatusChange} />
-          ) : activeTab === 'cards' ? (
-            <CardsPage onStatusChange={handleStatusChange} onNavigate={setActiveTab} />
-          ) : activeTab === 'personal-finance' ? (
-            <PersonalFinancePage onStatusChange={handleStatusChange} />
-          ) : activeTab === 'pre-market' ? (
-            <PreMarketPage onStatusChange={handleStatusChange} />
-          ) : activeTab === 'up-down' ? (
-            <UpDownPage onStatusChange={handleStatusChange} />
-          ) : activeTab === 'trading-volumes' ? (
-            <TradingVolumesPage onStatusChange={handleStatusChange} />
-          ) : activeTab === 'price' ? (
-            <PricePage onStatusChange={handleStatusChange} />
-          ) : activeTab === 'signals' ? (
-            <SignalsPage onStatusChange={handleStatusChange} />
-          ) : activeTab === 'news' ? (
-            <NewsPage onStatusChange={handleStatusChange} />
-          ) : activeTab === 'calendar' ? (
-            <CalendarPage onStatusChange={handleStatusChange} />
-          ) : activeTab === 'heatmap' ? (
-            <HeatmapPage onStatusChange={handleStatusChange} onNavigate={handleStocksNavigate} />
-          ) : activeTab === 'etf' ? (
-            <EtfPage onStatusChange={handleStatusChange} onNavigate={handleStocksNavigate} />
-          ) : activeTab === 'crypto' ? (
-            <CryptoPage onStatusChange={handleStatusChange} />
-          ) : activeTab === 'dictionary' ? (
-            <DictionaryPage onStatusChange={handleStatusChange} />
-          ) : activeTab === 'charts' ? (
-            <ChartsPage onStatusChange={handleStatusChange} />
-          ) : activeTab === 'stocks' ? (
-            <StocksPage onStatusChange={handleStatusChange} onNavigate={handleStocksNavigate} />
-          ) : activeTab === 'fundamentals' ? (
-            <FundamentalsPage onStatusChange={handleStatusChange} />
-          ) : activeTab === 'valuation' ? (
-            <ValuationPage onStatusChange={handleStatusChange} />
-          ) : activeTab === 'economic' ? (
-            <EconomicPage onStatusChange={handleStatusChange} />
-          ) : activeTab === 'options' ? (
-            <OptionsPage onStatusChange={handleStatusChange} />
-          ) : activeTab === 'projections' ? (
-            <ProjectionsPage onStatusChange={handleStatusChange} />
-          ) : activeTab === 'roll' ? (
-            <RollPage onStatusChange={handleStatusChange} onNavigate={handleStocksNavigate} />
-          ) : activeTab === 'ipo' ? (
-            <IpoPage onStatusChange={handleStatusChange} />
-          ) : activeTab === 'backtest' ? (
-            <BacktestPage onStatusChange={handleStatusChange} />
-          ) : activeTab === 'youtube' ? (
-            <YouTubePage onStatusChange={handleStatusChange} />
-          ) : activeTab === 'institutions' ? (
-            <InstitutionsPage onStatusChange={handleStatusChange} />
-          ) : activeTab === SETTINGS_TAB_ID ? (
-            <SettingsPage onStatusChange={handleStatusChange} />
-          ) : (
-            <PlaceholderPage tabId={activeTab} />
-          )}
+          {residents.map((id) => (
+            // A hidden resident keeps its component tree, so re-entry is a repaint rather
+            // than a rebuild. `display: none` reports 0x0 to the ResizeObserver every
+            // pixel-measured chart on these pages uses; each falls back to its own default
+            // until the page is shown again and the observer fires with the real box.
+            <div
+              key={id}
+              className={id === activeTab ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}
+            >
+              {renderPage({
+                tabId: id,
+                onStatusChange: statusFor(id),
+                onNavigate: handleStocksNavigate,
+                onSelectTab: setActiveTab,
+              })}
+            </div>
+          ))}
+
+          {PAGE_KEEP_ALIVE.has(activeTab)
+            ? null
+            : renderPage({
+                tabId: activeTab,
+                onStatusChange: statusFor(activeTab),
+                onNavigate: handleStocksNavigate,
+                onSelectTab: setActiveTab,
+              })}
         </div>
 
         {hideCurrent ? (
@@ -333,5 +363,89 @@ function PlaceholderPage({ tabId }: { tabId: string }) {
     <div className="flex min-h-0 flex-1 items-center justify-center">
       <p className="text-2xs text-text-dim">{label} has not been migrated yet.</p>
     </div>
+  )
+}
+
+/**
+ * One page, by tab id. Lifted out of `App` so the keep-alive host can render the same
+ * chain for a hidden page as for the one on screen.
+ */
+function renderPage({
+  tabId,
+  onStatusChange,
+  onNavigate,
+  onSelectTab,
+}: {
+  tabId: string
+  onStatusChange: (panels: PanelStatus[], sourcePath: string) => void
+  onNavigate: (tabId: string, symbol?: string) => void
+  onSelectTab: (tabId: string) => void
+}) {
+  return (
+    tabId === 'dashboard' ? (
+      <DashboardPage onStatusChange={onStatusChange} />
+    ) : tabId === 'global' ? (
+      <GlobalPage onStatusChange={onStatusChange} />
+    ) : tabId === 'portfolio' ? (
+      <PortfolioPage onStatusChange={onStatusChange} />
+    ) : tabId === 'cards' ? (
+      <CardsPage onStatusChange={onStatusChange} onNavigate={onSelectTab} />
+    ) : tabId === 'personal-finance' ? (
+      <PersonalFinancePage onStatusChange={onStatusChange} />
+    ) : tabId === 'pre-market' ? (
+      <PreMarketPage onStatusChange={onStatusChange} />
+    ) : tabId === 'up-down' ? (
+      <UpDownPage onStatusChange={onStatusChange} />
+    ) : tabId === 'trading-volumes' ? (
+      <TradingVolumesPage onStatusChange={onStatusChange} />
+    ) : tabId === 'price' ? (
+      <PricePage onStatusChange={onStatusChange} />
+    ) : tabId === 'signals' ? (
+      <SignalsPage onStatusChange={onStatusChange} />
+    ) : tabId === 'news' ? (
+      <NewsPage onStatusChange={onStatusChange} />
+    ) : tabId === 'calendar' ? (
+      <CalendarPage onStatusChange={onStatusChange} />
+    ) : tabId === 'heatmap' ? (
+      <HeatmapPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
+    ) : tabId === 'etf' ? (
+      <EtfPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
+    ) : tabId === 'crypto' ? (
+      <CryptoPage onStatusChange={onStatusChange} />
+    ) : tabId === 'dictionary' ? (
+      <DictionaryPage onStatusChange={onStatusChange} />
+    ) : tabId === 'charts' ? (
+      <ChartsPage onStatusChange={onStatusChange} />
+    ) : tabId === 'stocks' ? (
+      <StocksPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
+    ) : tabId === 'fundamentals' ? (
+      <FundamentalsPage onStatusChange={onStatusChange} />
+    ) : tabId === 'valuation' ? (
+      <ValuationPage onStatusChange={onStatusChange} />
+    ) : tabId === 'economic' ? (
+      <EconomicPage onStatusChange={onStatusChange} />
+    ) : tabId === 'options' ? (
+      <OptionsPage onStatusChange={onStatusChange} />
+    ) : tabId === 'projections' ? (
+      <ProjectionsPage onStatusChange={onStatusChange} />
+    ) : tabId === 'roll' ? (
+      <RollPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
+    ) : tabId === 'ipo' ? (
+      <IpoPage onStatusChange={onStatusChange} />
+    ) : tabId === 'politics' ? (
+      <PoliticsPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
+    ) : tabId === 'backtest' ? (
+      <BacktestPage onStatusChange={onStatusChange} />
+    ) : tabId === 'quant' ? (
+      <QuantPage onStatusChange={onStatusChange} />
+    ) : tabId === 'youtube' ? (
+      <YouTubePage onStatusChange={onStatusChange} />
+    ) : tabId === 'institutions' ? (
+      <InstitutionsPage onStatusChange={onStatusChange} />
+    ) : tabId === SETTINGS_TAB_ID ? (
+      <SettingsPage onStatusChange={onStatusChange} />
+    ) : (
+      <PlaceholderPage tabId={tabId} />
+    )
   )
 }

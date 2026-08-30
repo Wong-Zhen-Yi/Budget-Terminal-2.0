@@ -54,6 +54,10 @@ import type {
   EconomicRequest,
   IpoCompletedRequest,
   IpoUpcomingRequest,
+  PoliticsExportRequest,
+  PoliticsPageRequest,
+  QuantPairRequest,
+  QuantScanRequest,
   RollRequest,
   YouTubeRequest,
   YouTubeThumbnailRequest,
@@ -62,147 +66,178 @@ import type {
 import { CHANNELS } from '../shared/contract.js'
 import { ok } from '../shared/envelope.js'
 import { yahooProvider } from '../services/provider.js'
+import { runWithPriority } from '../services/yahoo/client.js'
 import { watchPortfolios } from '../services/portfolioStore.js'
 import { isSafeExternalUrl } from '../services/urls.js'
 
 export function registerIpcHandlers(): () => void {
   const provider = yahooProvider
 
-  ipcMain.handle(CHANNELS.quotes, (_event, request: QuotesRequest) => provider.quotes(request))
-  ipcMain.handle(CHANNELS.chart, (_event, request: ChartRequest) => provider.chart(request))
-  ipcMain.handle(CHANNELS.chartsHistory, (_event, request: ChartsHistoryRequest) =>
+  /**
+   * Register a provider channel in the rate gate lane its request asks for.
+   *
+   * The warm-up sets `background: true` (see `BackgroundRequest` in the contract), and
+   * `runWithPriority` puts the whole fan-out that handler starts — however many awaits
+   * deep — into the background lane. Everything else is foreground, which is what makes a
+   * page the user just opened jump the warm-up's queue. The maintenance, window and
+   * clipboard channels below touch no Yahoo and are registered directly.
+   */
+  const handle = <Request>(channel: string, run: (request: Request) => unknown): void => {
+    ipcMain.handle(channel, (_event, request: Request) =>
+      runWithPriority(
+        (request as { background?: boolean } | undefined)?.background
+          ? 'background'
+          : 'foreground',
+        async () => run(request),
+      ),
+    )
+  }
+
+  handle(CHANNELS.quotes, (request: QuotesRequest) => provider.quotes(request))
+  handle(CHANNELS.chart, (request: ChartRequest) => provider.chart(request))
+  handle(CHANNELS.chartsHistory, (request: ChartsHistoryRequest) =>
     provider.chartsHistory(request),
   )
-  ipcMain.handle(CHANNELS.chartsCompare, (_event, request: ChartsCompareRequest) =>
+  handle(CHANNELS.chartsCompare, (request: ChartsCompareRequest) =>
     provider.chartsCompare(request),
   )
-  ipcMain.handle(CHANNELS.chartsRelationship, (_event, request: ChartsRelationshipRequest) =>
+  handle(CHANNELS.chartsRelationship, (request: ChartsRelationshipRequest) =>
     provider.chartsRelationship(request),
   )
-  ipcMain.handle(CHANNELS.options, (_event, request: OptionsRequest) => provider.options(request))
-  ipcMain.handle(CHANNELS.targets, (_event, request: TargetsRequest) => provider.targets(request))
-  ipcMain.handle(CHANNELS.news, (_event, request: NewsRequest) => provider.news(request))
-  ipcMain.handle(CHANNELS.newsPage, (_event, request: NewsPageRequest) =>
+  handle(CHANNELS.options, (request: OptionsRequest) => provider.options(request))
+  handle(CHANNELS.targets, (request: TargetsRequest) => provider.targets(request))
+  handle(CHANNELS.news, (request: NewsRequest) => provider.news(request))
+  handle(CHANNELS.newsPage, (request: NewsPageRequest) =>
     provider.newsPage(request),
   )
-  ipcMain.handle(CHANNELS.newsTickerSearch, (_event, request: NewsTickerSearchRequest) =>
+  handle(CHANNELS.newsTickerSearch, (request: NewsTickerSearchRequest) =>
     provider.newsTickerSearch(request),
   )
-  ipcMain.handle(CHANNELS.newsArticle, (_event, request: NewsPreviewRequest) =>
+  handle(CHANNELS.newsArticle, (request: NewsPreviewRequest) =>
     provider.newsArticle(request),
   )
-  ipcMain.handle(CHANNELS.newsThumbnail, (_event, request: NewsThumbnailRequest) =>
+  handle(CHANNELS.newsThumbnail, (request: NewsThumbnailRequest) =>
     provider.newsThumbnail(request),
   )
-  ipcMain.handle(CHANNELS.fundamentals, (_event, request: FundamentalsRequest) =>
+  handle(CHANNELS.fundamentals, (request: FundamentalsRequest) =>
     provider.fundamentals(request),
   )
-  ipcMain.handle(CHANNELS.fundamentalsPage, (_event, request: FundamentalsPageRequest) =>
+  handle(CHANNELS.fundamentalsPage, (request: FundamentalsPageRequest) =>
     provider.fundamentalsPage(request),
   )
-  ipcMain.handle(CHANNELS.returns, (_event, request: ReturnsRequest) => provider.returns(request))
-  ipcMain.handle(CHANNELS.momentum, (_event, request: MomentumRequest) =>
+  handle(CHANNELS.returns, (request: ReturnsRequest) => provider.returns(request))
+  handle(CHANNELS.momentum, (request: MomentumRequest) =>
     provider.momentum(request),
   )
-  ipcMain.handle(CHANNELS.analytics, (_event, request: AnalyticsRequest) =>
+  handle(CHANNELS.analytics, (request: AnalyticsRequest) =>
     provider.analytics(request),
   )
-  ipcMain.handle(CHANNELS.optionQuotes, (_event, request: OptionQuotesRequest) =>
+  handle(CHANNELS.optionQuotes, (request: OptionQuotesRequest) =>
     provider.optionQuotes(request),
   )
-  ipcMain.handle(CHANNELS.portfolio, () => provider.portfolio())
-  ipcMain.handle(CHANNELS.portfolioMutate, (_event, mutation: PortfolioMutation) =>
+  handle(CHANNELS.portfolio, () => provider.portfolio())
+  handle(CHANNELS.portfolioMutate, (mutation: PortfolioMutation) =>
     provider.mutatePortfolio(mutation),
   )
-  ipcMain.handle(CHANNELS.cards, () => provider.cards())
-  ipcMain.handle(CHANNELS.cardsMutate, (_event, mutation: CardsMutation) =>
+  handle(CHANNELS.cards, () => provider.cards())
+  handle(CHANNELS.cardsMutate, (mutation: CardsMutation) =>
     provider.mutateCards(mutation),
   )
-  ipcMain.handle(CHANNELS.cardsPerformance, (_event, request: CardsPerformanceRequest) =>
+  handle(CHANNELS.cardsPerformance, (request: CardsPerformanceRequest) =>
     provider.cardsPerformance(request),
   )
-  ipcMain.handle(CHANNELS.personalFinance, () => provider.personalFinance())
-  ipcMain.handle(CHANNELS.personalFinanceMutate, (_event, mutation: PersonalFinanceMutation) =>
+  handle(CHANNELS.personalFinance, () => provider.personalFinance())
+  handle(CHANNELS.personalFinanceMutate, (mutation: PersonalFinanceMutation) =>
     provider.mutatePersonalFinance(mutation),
   )
-  ipcMain.handle(CHANNELS.fx, (_event, request: FxRequest) => provider.fx(request))
-  ipcMain.handle(CHANNELS.globalMarkets, (_event, request: GlobalMarketsRequest) =>
+  handle(CHANNELS.fx, (request: FxRequest) => provider.fx(request))
+  handle(CHANNELS.globalMarkets, (request: GlobalMarketsRequest) =>
     provider.globalMarkets(request),
   )
 
-  ipcMain.handle(CHANNELS.preMarket, (_event, request: PreMarketRequest) =>
+  handle(CHANNELS.preMarket, (request: PreMarketRequest) =>
     provider.preMarket(request),
   )
-  ipcMain.handle(CHANNELS.tradingVolumes, (_event, request: TradingVolumesRequest) =>
+  handle(CHANNELS.tradingVolumes, (request: TradingVolumesRequest) =>
     provider.tradingVolumes(request),
   )
-  ipcMain.handle(CHANNELS.signals, (_event, request: SignalsRequest) =>
+  handle(CHANNELS.signals, (request: SignalsRequest) =>
     provider.signals(request),
   )
-  ipcMain.handle(CHANNELS.priceScreen, (_event, request: PriceScreenRequest) =>
+  handle(CHANNELS.priceScreen, (request: PriceScreenRequest) =>
     provider.priceScreen(request),
   )
-  ipcMain.handle(CHANNELS.calendarMonth, (_event, request: CalendarMonthRequest) =>
+  handle(CHANNELS.calendarMonth, (request: CalendarMonthRequest) =>
     provider.calendarMonth(request),
   )
-  ipcMain.handle(CHANNELS.earningsCalendar, (_event, request: EarningsCalendarRequest) =>
+  handle(CHANNELS.earningsCalendar, (request: EarningsCalendarRequest) =>
     provider.earningsCalendar(request),
   )
-  ipcMain.handle(CHANNELS.crypto, (_event, request: CryptoRequest) => provider.crypto(request))
-  ipcMain.handle(CHANNELS.heatmap, (_event, request: HeatmapRequest) => provider.heatmap(request))
-  ipcMain.handle(CHANNELS.etfHoldings, (_event, request: EtfHoldingsRequest) =>
+  handle(CHANNELS.crypto, (request: CryptoRequest) => provider.crypto(request))
+  handle(CHANNELS.heatmap, (request: HeatmapRequest) => provider.heatmap(request))
+  handle(CHANNELS.etfHoldings, (request: EtfHoldingsRequest) =>
     provider.etfHoldings(request),
   )
-  ipcMain.handle(CHANNELS.etfArbitrage, (_event, request: EtfArbitrageRequest) =>
+  handle(CHANNELS.etfArbitrage, (request: EtfArbitrageRequest) =>
     provider.etfArbitrage(request),
   )
-  ipcMain.handle(CHANNELS.etfAum, (_event, request: EtfAumRequest) => provider.etfAum(request))
-  ipcMain.handle(CHANNELS.upDown, (_event, request: UpDownRequest) => provider.upDown(request))
-  ipcMain.handle(CHANNELS.upDownTargets, (_event, request: UpDownTargetsRequest) =>
+  handle(CHANNELS.etfAum, (request: EtfAumRequest) => provider.etfAum(request))
+  handle(CHANNELS.upDown, (request: UpDownRequest) => provider.upDown(request))
+  handle(CHANNELS.upDownTargets, (request: UpDownTargetsRequest) =>
     provider.upDownTargets(request),
   )
-  ipcMain.handle(CHANNELS.valuation, (_event, request: ValuationRequest) =>
+  handle(CHANNELS.valuation, (request: ValuationRequest) =>
     provider.valuation(request),
   )
-  ipcMain.handle(CHANNELS.economic, (_event, request: EconomicRequest) =>
+  handle(CHANNELS.economic, (request: EconomicRequest) =>
     provider.economic(request),
   )
-  ipcMain.handle(CHANNELS.institutionActivity, (_event, request: InstitutionActivityRequest) =>
+  handle(CHANNELS.institutionActivity, (request: InstitutionActivityRequest) =>
     provider.institutionActivity(request),
   )
-  ipcMain.handle(
-    CHANNELS.institutionTickerActivity,
-    (_event, request: InstitutionTickerActivityRequest) =>
-      provider.institutionTickerActivity(request),
+  handle(CHANNELS.institutionTickerActivity, (request: InstitutionTickerActivityRequest) =>
+    provider.institutionTickerActivity(request),
   )
-  ipcMain.handle(CHANNELS.roll, (_event, request: RollRequest) => provider.roll(request))
-  ipcMain.handle(CHANNELS.ipoUpcoming, (_event, request: IpoUpcomingRequest) =>
+  handle(CHANNELS.roll, (request: RollRequest) => provider.roll(request))
+  handle(CHANNELS.ipoUpcoming, (request: IpoUpcomingRequest) =>
     provider.ipoUpcoming(request),
   )
-  ipcMain.handle(CHANNELS.ipoCompleted, (_event, request: IpoCompletedRequest) =>
+  handle(CHANNELS.ipoCompleted, (request: IpoCompletedRequest) =>
     provider.ipoCompleted(request),
   )
-  ipcMain.handle(CHANNELS.stocks, (_event, request: StocksRequest) => provider.stocks(request))
-  ipcMain.handle(CHANNELS.optionsChain, (_event, request: OptionsChainRequest) =>
+  handle(CHANNELS.politicsPage, (request: PoliticsPageRequest) =>
+    provider.politicsPage(request),
+  )
+  handle(CHANNELS.politicsExport, (request: PoliticsExportRequest) =>
+    provider.politicsExport(request),
+  )
+  handle(CHANNELS.stocks, (request: StocksRequest) => provider.stocks(request))
+  handle(CHANNELS.optionsChain, (request: OptionsChainRequest) =>
     provider.optionsChain(request),
   )
-  ipcMain.handle(CHANNELS.optionsExpirations, (_event, request: OptionsExpirationsRequest) =>
+  handle(CHANNELS.optionsExpirations, (request: OptionsExpirationsRequest) =>
     provider.optionsExpirations(request),
   )
-  ipcMain.handle(CHANNELS.projections, (_event, request: ProjectionsRequest) =>
+  handle(CHANNELS.projections, (request: ProjectionsRequest) =>
     provider.projections(request),
   )
-  ipcMain.handle(CHANNELS.backtest, (_event, request: BacktestRequest) =>
+  handle(CHANNELS.backtest, (request: BacktestRequest) =>
     provider.backtest(request),
   )
-  ipcMain.handle(CHANNELS.youtube, (_event, request: YouTubeRequest) =>
+  handle(CHANNELS.quantScan, (request: QuantScanRequest) =>
+    provider.quantScan(request),
+  )
+  handle(CHANNELS.quantPair, (request: QuantPairRequest) =>
+    provider.quantPair(request),
+  )
+  handle(CHANNELS.youtube, (request: YouTubeRequest) =>
     provider.youtube(request),
   )
-  ipcMain.handle(CHANNELS.youtubeThumbnail, (_event, request: YouTubeThumbnailRequest) =>
+  handle(CHANNELS.youtubeThumbnail, (request: YouTubeThumbnailRequest) =>
     provider.youtubeThumbnail(request),
   )
-  ipcMain.handle(CHANNELS.settings, () => provider.settings())
-  ipcMain.handle(CHANNELS.settingsMutate, (_event, mutation: AppSettingsMutation) =>
+  handle(CHANNELS.settings, () => provider.settings())
+  handle(CHANNELS.settingsMutate, (mutation: AppSettingsMutation) =>
     provider.mutateSettings(mutation),
   )
 

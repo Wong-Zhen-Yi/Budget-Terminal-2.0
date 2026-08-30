@@ -4,6 +4,7 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import type { AppSettings, PortfolioPayload } from '@shared/contract'
 import { calendarToday, earningsDateRange } from '@shared/calendar'
 import { useCalendarPage } from '@/stores/calendar'
+import { useIpoPage } from '@/stores/ipo'
 import { useFundamentalsStore } from '@/stores/fundamentals'
 import { useStocksPage } from '@/stores/stocks'
 import { api, queryKeys } from './client'
@@ -11,6 +12,12 @@ import { FX_REFRESH_MS, PRE_MARKET_REFRESH_MS, QUOTE_REFRESH_MS } from './refres
 
 /** `_P17_REFRESH_TTL_SECONDS`, and what `useHeatmap` uses as its own `staleTime`. */
 const HEATMAP_STALE_MS = 120_000
+/** `IPO_STALE_MS` in `ipoQueries.ts`. */
+const IPO_STALE_MS = 24 * 60 * 60 * 1000
+/** `ACTIVITY_STALE_MS` in `institutionQueries.ts`. */
+const INSTITUTIONS_STALE_MS = 4 * 60 * 60 * 1000
+/** `AUM_STALE_MS` in `etfQueries.ts`. */
+const ETF_AUM_STALE_MS = 6 * 60 * 60 * 1000
 import { usePortfolio } from './queries'
 
 /**
@@ -50,15 +57,26 @@ export interface WarmProgress {
 const TAB_ORDER = [
   'dashboard',
   'portfolio',
+  'cards',
   'personal-finance',
   'global',
   'pre-market',
   'up-down',
   'calendar',
+  'politics',
+  // Disk-cached in the main process, so a warm hit is usually a file read.
+  'signals',
+  'economic',
+  'ipo',
+  'institutions',
   'stocks',
   'fundamentals',
   'news',
   'crypto',
+  // A twelve-page screener sweep and a thumbnail fetch per video; both cost real
+  // requests, so they sit behind everything that does not.
+  'etf',
+  'youtube',
   'heatmap',
   'trading-volumes',
 ]
@@ -95,7 +113,7 @@ function holdingsOf(payload: PortfolioPayload | undefined): {
 function buildTasks(
   payload: PortfolioPayload | undefined,
   symbols: { stocks: string; fundamentals: string },
-  calendar: { year: number; month: number; earningsYear: number },
+  calendar: { year: number; month: number; earningsYear: number; ipoYear: number },
 ): WarmTask[] {
   const { active, every, editable, main, upDown } = holdingsOf(payload)
   const tasks: WarmTask[] = []
@@ -109,7 +127,7 @@ function buildTasks(
       run: (client) =>
         client.prefetchQuery({
           queryKey: queryKeys.quotes(active),
-          queryFn: () => api.quotes({ holdings: active }),
+          queryFn: () => api.quotes({ holdings: active, background: true }),
           staleTime: QUOTE_REFRESH_MS / 2,
         }),
     })
@@ -119,7 +137,7 @@ function buildTasks(
       run: (client) =>
         client.prefetchQuery({
           queryKey: queryKeys.targets(active),
-          queryFn: () => api.targets({ tickers: active }),
+          queryFn: () => api.targets({ tickers: active, background: true }),
           staleTime: Infinity,
         }),
     })
@@ -129,7 +147,7 @@ function buildTasks(
       run: (client) =>
         client.prefetchQuery({
           queryKey: queryKeys.news(active),
-          queryFn: () => api.news({ tickers: active }),
+          queryFn: () => api.news({ tickers: active, background: true }),
           staleTime: Infinity,
         }),
     })
@@ -139,11 +157,25 @@ function buildTasks(
       run: (client) =>
         client.prefetchQuery({
           queryKey: queryKeys.fundamentals(active),
-          queryFn: () => api.fundamentals({ tickers: active }),
+          queryFn: () => api.fundamentals({ tickers: active, background: true }),
           staleTime: Infinity,
         }),
     })
   }
+
+  // The card definitions are a local store read, so this only removes the mount spinner.
+  // The performance sweep is left to the page: its key is a signature over the models it
+  // builds from the definitions and the holdings, which cannot be reproduced here.
+  tasks.push({
+    tab: 'cards',
+    label: 'Cards',
+    run: (client) =>
+      client.prefetchQuery({
+        queryKey: queryKeys.cards,
+        queryFn: () => api.cards(),
+        staleTime: Infinity,
+      }),
+  })
 
   tasks.push({
     tab: 'personal-finance',
@@ -161,7 +193,7 @@ function buildTasks(
     run: (client) =>
       client.prefetchQuery({
         queryKey: queryKeys.fx,
-        queryFn: () => api.fx({}),
+        queryFn: () => api.fx({ background: true }),
         staleTime: FX_REFRESH_MS / 2,
       }),
   })
@@ -172,7 +204,7 @@ function buildTasks(
       run: (client) =>
         client.prefetchQuery({
           queryKey: queryKeys.quotes(editable),
-          queryFn: () => api.quotes({ holdings: editable }),
+          queryFn: () => api.quotes({ holdings: editable, background: true }),
           staleTime: QUOTE_REFRESH_MS / 2,
         }),
     })
@@ -184,7 +216,7 @@ function buildTasks(
     run: (client) =>
       client.prefetchQuery({
         queryKey: queryKeys.globalMarkets,
-        queryFn: () => api.globalMarkets({}),
+        queryFn: () => api.globalMarkets({ background: true }),
         staleTime: Infinity,
       }),
   })
@@ -195,7 +227,7 @@ function buildTasks(
     run: (client) =>
       client.prefetchQuery({
         queryKey: queryKeys.preMarket,
-        queryFn: () => api.preMarket({}),
+        queryFn: () => api.preMarket({ background: true }),
         staleTime: PRE_MARKET_REFRESH_MS / 2,
       }),
   })
@@ -207,7 +239,7 @@ function buildTasks(
       run: (client) =>
         client.prefetchQuery({
           queryKey: queryKeys.upDown('portfolio', '1d', upDown),
-          queryFn: () => api.upDown({ source: 'portfolio', interval: '1d', symbols: upDown }),
+          queryFn: () => api.upDown({ source: 'portfolio', interval: '1d', symbols: upDown, background: true }),
           staleTime: Infinity,
         }),
     })
@@ -220,8 +252,24 @@ function buildTasks(
       client.prefetchQuery({
         queryKey: queryKeys.calendarMonth(main, calendar.year, calendar.month),
         queryFn: () =>
-          api.calendarMonth({ tickers: main, year: calendar.year, month: calendar.month }),
+          api.calendarMonth({
+            tickers: main,
+            year: calendar.year,
+            month: calendar.month,
+            background: true,
+          }),
         staleTime: Infinity,
+      }),
+  })
+
+  tasks.push({
+    tab: 'politics',
+    label: 'Politics',
+    run: (client) =>
+      client.prefetchQuery({
+        queryKey: queryKeys.politicsPage(1),
+        queryFn: () => api.politicsPage({ page: 1, background: true }),
+        staleTime: 4 * 60 * 60 * 1000,
       }),
   })
   // The Earnings sub-tab opens on the whole current year, `earningsDateRange('year', ...)`.
@@ -237,8 +285,70 @@ function buildTasks(
             startDate: earnings.startDate,
             endDate: earnings.endDate,
             rangeKey: earnings.rangeKey,
+            background: true,
           }),
         staleTime: Infinity,
+      }),
+  })
+
+  // `latestOnly`: the page restores the last session's scan on mount and never starts a
+  // costly one itself, so this warms exactly what opening the tab would ask for.
+  tasks.push({
+    tab: 'signals',
+    label: 'Signals',
+    run: (client) =>
+      client.prefetchQuery({
+        queryKey: queryKeys.signals,
+        queryFn: () => api.signals({ latestOnly: true, background: true }),
+        staleTime: Infinity,
+      }),
+  })
+
+  // The slowest load in the app cold — five government hosts, about 45s — and the one
+  // with the most to gain: its six-hour disk cache means most warm-ups are nearly free.
+  tasks.push({
+    tab: 'economic',
+    label: 'Economic',
+    run: (client) =>
+      client.prefetchQuery({
+        queryKey: queryKeys.economic,
+        queryFn: () => api.economic({ background: true }),
+        staleTime: Infinity,
+      }),
+  })
+
+  // Two feeds, two keys, exactly as the page asks for them: a failed upcoming scrape must
+  // not evict the completed rows.
+  tasks.push({
+    tab: 'ipo',
+    label: 'Upcoming IPOs',
+    run: (client) =>
+      client.prefetchQuery({
+        queryKey: queryKeys.ipoUpcoming,
+        queryFn: () => api.ipoUpcoming({ background: true }),
+        staleTime: IPO_STALE_MS,
+      }),
+  })
+  tasks.push({
+    tab: 'ipo',
+    label: 'Completed IPOs',
+    run: (client) =>
+      client.prefetchQuery({
+        queryKey: queryKeys.ipoCompleted(calendar.ipoYear),
+        queryFn: () => api.ipoCompleted({ year: calendar.ipoYear, background: true }),
+        staleTime: IPO_STALE_MS,
+      }),
+  })
+
+  // The empty quarter is the latest one, which is what the page opens on.
+  tasks.push({
+    tab: 'institutions',
+    label: 'Institutions',
+    run: (client) =>
+      client.prefetchQuery({
+        queryKey: queryKeys.institutionActivity(''),
+        queryFn: () => api.institutionActivity({ quarter: '', limit: 50, background: true }),
+        staleTime: INSTITUTIONS_STALE_MS,
       }),
   })
 
@@ -249,7 +359,7 @@ function buildTasks(
       run: (client) =>
         client.prefetchQuery({
           queryKey: queryKeys.stocks(symbols.stocks),
-          queryFn: () => api.stocks({ symbol: symbols.stocks }),
+          queryFn: () => api.stocks({ symbol: symbols.stocks, background: true }),
           staleTime: Infinity,
         }),
     })
@@ -261,7 +371,7 @@ function buildTasks(
       run: (client) =>
         client.prefetchQuery({
           queryKey: queryKeys.fundamentalsPage(symbols.fundamentals),
-          queryFn: () => api.fundamentalsPage({ symbol: symbols.fundamentals }),
+          queryFn: () => api.fundamentalsPage({ symbol: symbols.fundamentals, background: true }),
           staleTime: Infinity,
         }),
     })
@@ -274,7 +384,7 @@ function buildTasks(
       run: (client) =>
         client.prefetchQuery({
           queryKey: queryKeys.newsPage(every),
-          queryFn: () => api.newsPage({ tickers: every }),
+          queryFn: () => api.newsPage({ tickers: every, background: true }),
           staleTime: Infinity,
         }),
     })
@@ -288,10 +398,37 @@ function buildTasks(
     run: (client) =>
       client.prefetchQuery({
         queryKey: queryKeys.crypto,
-        queryFn: () => api.crypto({}),
+        queryFn: () => api.crypto({ background: true }),
         staleTime: Infinity,
       }),
   })
+
+  // The AUM rail is the one request `init_page13` fires on mount; the holdings load
+  // itself is a button, so it is deliberately not warmed.
+  tasks.push({
+    tab: 'etf',
+    label: 'ETF AUM rail',
+    run: (client) =>
+      client.prefetchQuery({
+        queryKey: queryKeys.etfAum,
+        queryFn: () => api.etfAum({ background: true }),
+        staleTime: ETF_AUM_STALE_MS,
+      }),
+  })
+
+  if (every.length) {
+    // The same holdings set the News lane uses — the page unions every portfolio's tickers.
+    tasks.push({
+      tab: 'youtube',
+      label: 'YouTube',
+      run: (client) =>
+        client.prefetchQuery({
+          queryKey: queryKeys.youtube(every),
+          queryFn: () => api.youtube({ tickers: every, background: true }),
+          staleTime: Infinity,
+        }),
+    })
+  }
 
   // The default index only. Warming the other two would triple the cost for maps nobody
   // has asked to see, and the per-index cache makes switching to one free on the second
@@ -302,7 +439,7 @@ function buildTasks(
     run: (client) =>
       client.prefetchQuery({
         queryKey: queryKeys.heatmap('SPY'),
-        queryFn: () => api.heatmap({ etf: 'SPY' }),
+        queryFn: () => api.heatmap({ etf: 'SPY', background: true }),
         staleTime: HEATMAP_STALE_MS,
       }),
   })
@@ -315,7 +452,7 @@ function buildTasks(
     run: (client) =>
       client.prefetchQuery({
         queryKey: queryKeys.tradingVolumes,
-        queryFn: () => api.tradingVolumes({}),
+        queryFn: () => api.tradingVolumes({ background: true }),
         staleTime: Infinity,
       }),
   })
@@ -336,6 +473,7 @@ export function useWarmPages(settings: AppSettings | undefined): WarmProgress {
   const calendarYear = useCalendarPage((state) => state.year)
   const calendarMonth = useCalendarPage((state) => state.month)
   const earningsYear = useCalendarPage((state) => state.earningsYear)
+  const ipoYear = useIpoPage((state) => state.completedYear)
 
   const [progress, setProgress] = useState<WarmProgress>({
     active: false,
@@ -358,7 +496,7 @@ export function useWarmPages(settings: AppSettings | undefined): WarmProgress {
     const tasks = buildTasks(
       payload,
       { stocks: stocksSymbol, fundamentals: fundamentalsSymbol },
-      { year: calendarYear, month: calendarMonth, earningsYear },
+      { year: calendarYear, month: calendarMonth, earningsYear, ipoYear },
     ).filter((task) => !hidden.has(task.tab))
 
     if (!tasks.length) return
@@ -394,6 +532,7 @@ export function useWarmPages(settings: AppSettings | undefined): WarmProgress {
     calendarYear,
     calendarMonth,
     earningsYear,
+    ipoYear,
   ])
 
   return progress

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   ROLL_PATTERN_LABELS,
@@ -71,6 +71,11 @@ export function RollPage({
   }, [portfolioQuery.data])
   const historySymbols = useMemo(() => history.map((row) => row.symbol), [history])
 
+  // Read inside `openSymbol` without making the callback depend on the payload, which
+  // changes on every roll.
+  const currentSymbolRef = useRef('')
+  currentSymbolRef.current = payload?.symbol ?? ''
+
   const { roll, rolling, envelope } = useRoll({
     patternModes,
     excludeSymbols,
@@ -98,14 +103,22 @@ export function RollPage({
     if (url) void api.openExternal(url)
   }, [])
 
-  /** `_p18_open_history_item`: repaint from the cache, or re-roll that exact symbol. */
+  /**
+   * `_p18_open_history_item`: repaint from the cache, or re-roll that exact symbol.
+   *
+   * Both the Roll History rows and the Scored Candidates rows land here. The reference's
+   * candidate table is selection-only, but a scored candidate is exactly the same thing a
+   * history row is — a symbol the page already knows how to load — and leaving eleven of
+   * the twelve ranked names inert is the one thing the panel invites you to do and cannot.
+   */
   const openSymbol = useCallback(
     (symbol: string) => {
       setNotice('')
+      if (!symbol || symbol === currentSymbolRef.current) return
       const cached = payloads[symbol]
       if (cached) {
         revisit(cached)
-        setNotice(`Revisited ${symbol} from roll history.`)
+        setNotice(`Reopened ${symbol} from the roll cache.`)
         return
       }
       void roll({ targetSymbol: symbol })
@@ -201,6 +214,7 @@ export function RollPage({
               candidates={payload?.candidatePool ?? []}
               currentSymbol={payload?.symbol ?? ''}
               patternActive={Boolean(payload?.patternModes.length)}
+              onOpen={openSymbol}
             />
           </Panel>
         </div>

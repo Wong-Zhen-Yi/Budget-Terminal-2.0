@@ -106,6 +106,21 @@ adding handlers.
 
 ## Rules that are easy to break
 
+- **The rate gate has two lanes, and the flag never reaches a cache key.** A request
+  carrying `background: true` (the `BackgroundRequest` base in `contract.ts`, set only by
+  the startup warm-up) runs in `rateGate`'s background lane: it yields to every queued
+  foreground waiter and may not take the last of the four concurrency slots. Without it a
+  page opened while Trading Volumes or the Heatmap is warming queues behind a hundred
+  requests at 4/s — about half a minute. `paced()` reads the lane off an
+  `AsyncLocalStorage` entered by the `handle` wrapper in `ipc/handlers.ts`, so it
+  propagates through every `await` and `Promise.allSettled` in a fan-out and no service
+  call site knows about it. The flag describes scheduling, never the answer, so a warmed
+  payload and a user-requested one must stay the same `TtlCache` entry.
+- **`RateGate`'s wake timer is deliberately not `unref`'d.** It replaced an
+  `await sleep(...)` that held the event loop open while a request waited for a token. The
+  probe scripts have nothing else keeping the process alive, so unref'ing it lets them
+  exit silently in the middle of a queued burst — `npm run probe:rate` prints its first
+  block and then nothing.
 - **Reach Yahoo only through `paced()`** in `electron/services/yahoo/client.ts`. A direct
   `yahoo.*` call skips the rate gate, and Yahoo 429s on an unpaced dashboard load. This
   is the same rule as the PySide6 app's "import `yf` from `dependencies`, never
@@ -188,6 +203,23 @@ adding handlers.
 - **Vite is pinned to 7** because electron-vite 5 caps there, which in turn pins
   `@vitejs/plugin-react` to 5. Installing `@vitejs/plugin-react@6` pulls Vite 8 and
   breaks the build with duplicate-Vite type errors.
+- **The query cache's `gcTime` is what makes a tab switch cheap.** `App.tsx` renders one
+  page at a time, so switching tabs unmounts the old one and its queries lose their
+  observer immediately. React Query's five-minute `gcTime` default then evicts them, which
+  silently undoes both the `staleTime: Infinity` nearly every hook sets *and* the startup
+  warm-up. `main.tsx` sets an hour globally. Two consequences to keep: `useReloadAll` must
+  filter `{ type: 'active' }`, because `refetchQueries()` defaults to `type: 'all'` and
+  would otherwise refetch every page visited this session; and a warm task in
+  `prefetch.ts` must prime with the *exact* `staleTime` its page's hook asks for, or the
+  entry is stale on mount and refetches anyway.
+- **`PAGE_KEEP_ALIVE` in `App.tsx` is an allowlist, not a default.** Those four pages stay
+  mounted and hidden after you leave them, so re-entry repaints instead of rebuilding a
+  five-hundred-tile treemap or a log-log dot plot. A page may only join it if it neither
+  polls nor gates a query on being visible: Pre-Market's 15-minute timer and the
+  Dashboard's 60-second quotes would run forever once visited, and Portfolio gates its
+  analytics on the on-screen sub-tab through `enabled`. A hidden resident also goes on
+  reporting status, which is why `statusFor` binds the tab id and drops a report from
+  anything that is not on screen.
 - **Formatting lives in `src/lib/format.ts`.** Five panels print the same values; do not
   inline `toFixed` in a component.
 - **The type scale lives in `src/styles/theme.css`**, as `--text-2xs`/`--text-xs`/`--text-sm`
@@ -802,7 +834,24 @@ adding handlers.
   `_p18_full_payloads` (five deep, for instant revisits) is session-only. `P18_CANDIDATE_FIELDS`
   omits `technical_snapshot`, so thirty snapshots of twenty-odd keys do not go to storage —
   only the selected name's copy, which sits at the top level, is ever read.
-- **Four documented departures from `mixins/random_recommender.py`.** There are no progress
+- **A Scored Candidates row opens that candidate, and the pool survives it.** The
+  reference's table is `SingleSelection`/`SelectRows` and nothing more, which left eleven
+  of the twelve ranked names inert. A row click now goes through the same `openSymbol`
+  that Roll History rows do. A targeted load skips the screen, so `getRoll` answers with a
+  pool of one synthetic candidate; `withCarriedPool` in `stores/roll.ts` carries the old
+  pool across when it already holds that symbol, or opening one candidate would destroy
+  the list the other seven were on. The rail's figures are still the payload's own — an
+  exact-symbol load genuinely was not scored against a screen, and "Why This Rolled" says
+  so.
+- **The Reason column does not wrap, and every Roll column is sized for the 15px scale.**
+  `candidates_header.setSectionResizeMode(9, Stretch)` over a 22px row height means the
+  reference elides that column onto one line; wrapping it made a row ten lines tall and
+  left three candidates on screen out of twelve. The widths themselves were sized for an
+  older, smaller `--text-2xs` and ellipsis'd Time, Source, Day %, 1Y %, Avg Vol and Rolled
+  once the scale moved to 15px — this is the hazard the type-scale note warns about. Ten
+  columns no longer fit the pane at that size, so the candidates table carries a
+  `minWidth` and the pane scrolls horizontally, as Trading Volumes' does.
+- **Five documented departures from `mixins/random_recommender.py`.** There are no progress
   or partial frames — `RandomStockWorker` emits both so the Qt page fills in stage by stage,
   and an IPC request/response carries neither, the same wall the Crypto and Economic ports
   hit; the status line reports the load instead. A superseded roll is discarded by request
@@ -811,7 +860,7 @@ adding handlers.
   the whole pool to `yf.download` for a single chart. And the left rail lays its metrics out
   one label/value pair per row rather than the reference's two: that panel is a resizable
   splitter pane there and a fixed grid fraction here, and four columns inside it leave
-  neither the labels nor the values legible.
+  neither the labels nor the values legible. And the candidate table is clickable, above.
 
 
 - **IPO is page21, and its file is called `ipo_page.py`.** Grep for `_p21_`. It is two

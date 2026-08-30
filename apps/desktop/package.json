@@ -38,7 +38,9 @@
     "probe:economic": "tsx scripts/probe-economic.ts",
     "probe:roll": "tsx scripts/probe-roll.ts",
     "probe:ipo": "tsx scripts/probe-ipo.ts",
+    "probe:politics": "tsx scripts/probe-politics.ts",
     "probe:backtest": "tsx scripts/probe-backtest.ts",
+    "probe:quant": "tsx scripts/probe-quant.ts",
     "probe:youtube": "tsx scripts/probe-youtube.ts",
     "probe:institutions": "tsx scripts/probe-institutions.ts"
   },

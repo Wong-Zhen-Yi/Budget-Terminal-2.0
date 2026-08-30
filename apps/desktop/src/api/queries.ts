@@ -136,7 +136,10 @@ export function useReloadAll(): () => Promise<void> {
   return async () => {
     forceUntil = Date.now() + FORCE_WINDOW_MS
     try {
-      await queryClient.refetchQueries()
+      // `type: 'active'` is not optional. `refetchQueries()` defaults to `type: 'all'`,
+      // and inactive queries now survive an hour rather than five minutes — without the
+      // filter a Reload would fan out over every page visited this session.
+      await queryClient.refetchQueries({ type: 'active' })
     } finally {
       forceUntil = 0
     }
