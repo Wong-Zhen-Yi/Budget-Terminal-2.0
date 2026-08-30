@@ -90,6 +90,14 @@ async function main(): Promise<void> {
   check('reset keeps privacy selections', afterReset.obscuredTabs.includes('portfolio'))
   check('reset keeps the clock market', afterReset.clockCountry === 'SG')
 
+  console.log('\n-- Signals page controls')
+  const signalsSettings = await mutateSettings({
+    type: 'setSignalsPage',
+    value: { filter: 'blocked', search: 'NVDA' },
+  })
+  check('Signals filter persists', signalsSettings.signalsPage.filter === 'blocked')
+  check('Signals search persists', signalsSettings.signalsPage.search === 'NVDA')
+
   /* --------------------------------------------------------------- maintenance */
 
   const portfolio = (await readPortfolios()).portfolios[0]

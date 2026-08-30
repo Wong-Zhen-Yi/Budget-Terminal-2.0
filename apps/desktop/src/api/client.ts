@@ -22,6 +22,7 @@ export const queryKeys = {
   globalMarkets: ['globalMarkets'] as const,
   preMarket: ['preMarket'] as const,
   tradingVolumes: ['tradingVolumes'] as const,
+  signals: ['signals'] as const,
   calendarMonth: (tickers: string[], year: number, month: number) =>
     ['calendarMonth', year, month, [...tickers].sort().join(',')] as const,
   earningsCalendar: (rangeKey: string) => ['earningsCalendar', rangeKey] as const,
@@ -46,6 +47,8 @@ export const queryKeys = {
   // every assumption the derivation hangs off that multiple.
   valuation: (symbol: string, customPeers: string[]) =>
     ['valuation', symbol, customPeers.join(',')] as const,
+  // The whole catalog resolves from one load, so the page has a single key.
+  economic: ['economic'] as const,
   targets: (tickers: string[]) => ['targets', [...tickers].sort().join(',')] as const,
   news: (tickers: string[]) => ['news', [...tickers].sort().join(',')] as const,
   newsPage: (tickers: string[]) => ['newsPage', [...tickers].sort().join(',')] as const,

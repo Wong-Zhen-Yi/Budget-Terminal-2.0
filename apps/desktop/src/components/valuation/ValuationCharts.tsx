@@ -11,11 +11,15 @@ import { LineChart, type LineSeries } from '@/components/charts/LineChart'
  * are drawn against the same five-year monthly close series.
  */
 
-const COLOR = {
+/** Shared with the page, which prints a legend for these four series above the chart. */
+export const BAND_COLOR = {
   price: '#42a5f5',
   bear: '#ef5350',
   base: '#ffa726',
   bull: '#26c281',
+  // Buy-below is a threshold rather than a scenario, so it gets its own colour instead of
+  // borrowing the bull green it sits well below.
+  buyBelow: '#7e57c2',
 } as const
 
 function axisLabel(date: string): string {
@@ -38,17 +42,20 @@ export function FairValueBandChart({
 }) {
   const closes = priceHistory.map((point) => point.close)
   const labels = priceHistory.map((point) => axisLabel(point.date))
-  const series: LineSeries[] = [{ values: closes, color: COLOR.price, label: 'Current price' }]
+  const series: LineSeries[] = [{ values: closes, color: BAND_COLOR.price, label: 'Current price' }]
   // The band is in the reporting currency and the price line is in the quote currency;
   // sharing one axis between them is the whole defect the blocking guard exists to avoid.
   if (scenarios && scenarios.priceComparisonValid && closes.length) {
     const byName = new Map(scenarios.scenarios.map((row) => [row.name, row.fairValue]))
+    // `upperScenario` *is* the bull case, so the reference's fifth line always lands
+    // exactly on its third one. Drawing both paints one over the other and leaves the
+    // legend describing a colour nothing on the chart actually shows, so only the four
+    // distinct levels are drawn — the upper scenario is still printed in the verdict band.
     const levels = [
-      level(byName.get('Bear Case') ?? null, closes.length, COLOR.bear, 'Bear'),
-      level(byName.get('Base Case') ?? null, closes.length, COLOR.base, 'Base'),
-      level(byName.get('Bull Case') ?? null, closes.length, COLOR.bull, 'Bull'),
-      level(scenarios.buyBelow, closes.length, COLOR.bull, 'Buy below'),
-      level(scenarios.upperScenario, closes.length, COLOR.bear, 'Upper scenario'),
+      level(byName.get('Bear Case') ?? null, closes.length, BAND_COLOR.bear, 'Bear'),
+      level(byName.get('Base Case') ?? null, closes.length, BAND_COLOR.base, 'Base'),
+      level(byName.get('Bull Case') ?? null, closes.length, BAND_COLOR.bull, 'Bull'),
+      level(scenarios.buyBelow, closes.length, BAND_COLOR.buyBelow, 'Buy below'),
     ]
     for (const entry of levels) if (entry) series.push(entry)
   }
@@ -79,12 +86,12 @@ export function HistoricalPeChart({
   const usable = !currencyMismatch && eps !== null && eps > 0 && priceHistory.length > 0
   const values = usable ? priceHistory.map((point) => point.close / (eps as number)) : []
   const series: LineSeries[] = usable
-    ? [{ values, color: COLOR.price, label: 'P/E' }]
+    ? [{ values, color: BAND_COLOR.price, label: 'P/E' }]
     : []
   if (usable && currentPe !== null) {
     series.push({
       values: new Array(values.length).fill(currentPe),
-      color: COLOR.base,
+      color: BAND_COLOR.base,
       dashed: true,
       label: 'Current P/E',
     })
@@ -113,9 +120,9 @@ export function TrendChart({ trends }: { trends: ValuationTrends }) {
       return value === null || value === undefined ? null : value / 1_000_000_000
     })
   const series: LineSeries[] = [
-    { values: billions(trends.revenue), color: COLOR.bull, label: 'Revenue B' },
-    { values: billions(trends.fcf), color: COLOR.base, label: 'FCF B' },
-    { values: trends.labels.map((_, index) => trends.eps[index] ?? null), color: COLOR.price, label: 'EPS' },
+    { values: billions(trends.revenue), color: BAND_COLOR.bull, label: 'Revenue B' },
+    { values: billions(trends.fcf), color: BAND_COLOR.base, label: 'FCF B' },
+    { values: trends.labels.map((_, index) => trends.eps[index] ?? null), color: BAND_COLOR.price, label: 'EPS' },
   ].filter((entry) => entry.values.some((value) => value !== null))
   return (
     <LineChart

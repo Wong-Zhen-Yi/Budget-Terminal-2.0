@@ -31,7 +31,9 @@ interface AssumptionsPanelProps {
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex items-center gap-2">
-      <span className="w-36 shrink-0 truncate text-2xs text-text-muted">{label}</span>
+      <span className="w-32 shrink-0 truncate text-2xs text-text-muted" title={label}>
+        {label}
+      </span>
       <span className="min-w-0 flex-1">{children}</span>
     </label>
   )
@@ -39,9 +41,11 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-1 border border-border bg-surface-raised p-2">
-      <h3 className="text-2xs font-semibold tracking-wide text-text uppercase">{title}</h3>
-      <div className="flex flex-col gap-1">{children}</div>
+    <div className="flex flex-col gap-1.5 border border-border bg-surface-raised px-2 py-1.5">
+      <h3 className="border-b border-border pb-1 text-2xs tracking-wide text-text-muted uppercase">
+        {title}
+      </h3>
+      <div className="flex flex-col gap-1.5">{children}</div>
     </div>
   )
 }
@@ -61,8 +65,8 @@ export function AssumptionsPanel({
   const patch = (values: Partial<ValuationAssumptions>) => onChange({ ...assumptions, ...values })
 
   return (
-    <div className="flex flex-col gap-2 border border-border bg-surface p-2">
-      <div className="flex items-center gap-2">
+    <div className="flex flex-col border border-border bg-surface">
+      <header className="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-surface-raised px-2">
         <h2 className="text-2xs font-semibold tracking-wide text-text uppercase">
           Fair Value Assumptions
         </h2>
@@ -72,14 +76,18 @@ export function AssumptionsPanel({
           title="Recompute every assumption from the loaded data, discarding manual edits"
           onClick={onRederive}
         >
-          Re-derive assumptions
+          Re-derive
         </Button>
-      </div>
-      <p className="text-2xs text-text-muted" title={stateTooltip}>
+      </header>
+      {/* The full derivation is several hundred characters, so the line is clamped and the
+          unabridged version lives in the tooltip — the same split the reference uses. */}
+      <p
+        className="line-clamp-2 cursor-help border-b border-border px-2 py-1 text-2xs text-text-dim"
+        title={stateTooltip || stateLabel}
+      >
         {stateLabel}
       </p>
-
-      <div className="grid gap-2 lg:grid-cols-2">
+      <div className="grid items-start gap-2 p-2 lg:grid-cols-2">
         <div className="flex flex-col gap-2">
           <Group title="Starting Metric">
             <Row label="Basis type">
@@ -110,6 +118,7 @@ export function AssumptionsPanel({
             <Row label="Growth years 1-5">
               <NumberInput
                 aria-label="Growth years 1-5"
+                suffix="%"
                 value={assumptions.growth1to5}
                 decimals={1}
                 min={-30}
@@ -120,6 +129,7 @@ export function AssumptionsPanel({
             <Row label="Growth years 6-N">
               <NumberInput
                 aria-label="Growth years 6 to N"
+                suffix="%"
                 value={assumptions.growth6to10}
                 decimals={1}
                 min={-15}
@@ -130,6 +140,7 @@ export function AssumptionsPanel({
             <Row label="Projection years">
               <NumberInput
                 aria-label="Projection years"
+                suffix="yr"
                 value={assumptions.projectionYears}
                 decimals={0}
                 min={5}
@@ -144,6 +155,7 @@ export function AssumptionsPanel({
           <Row label="Required return">
             <NumberInput
               aria-label="Required return"
+              suffix="%"
               value={assumptions.discountRate}
               decimals={1}
               min={4}
@@ -168,6 +180,7 @@ export function AssumptionsPanel({
             <Row label="Terminal growth">
               <NumberInput
                 aria-label="Terminal growth"
+                suffix="%"
                 value={assumptions.terminalGrowth}
                 decimals={1}
                 min={-2}
@@ -179,6 +192,7 @@ export function AssumptionsPanel({
             <Row label={isEps ? 'Exit P/E' : 'Exit multiple'}>
               <NumberInput
                 aria-label="Exit multiple"
+                suffix="x"
                 value={assumptions.exitMultiple}
                 decimals={1}
                 min={3}
@@ -190,6 +204,7 @@ export function AssumptionsPanel({
           <Row label="Margin of safety">
             <NumberInput
               aria-label="Margin of safety"
+              suffix="%"
               value={assumptions.marginOfSafety}
               decimals={1}
               min={0}
@@ -201,7 +216,13 @@ export function AssumptionsPanel({
       </div>
 
       {warnings.length ? (
-        <p className={`text-2xs ${warningTone === 'negative' ? 'text-down' : 'text-warn'}`}>
+        <p
+          className={`mx-2 mb-2 border px-2 py-1 text-2xs ${
+            warningTone === 'negative'
+              ? 'border-down bg-down-bg text-down'
+              : 'border-warn text-warn'
+          }`}
+        >
           {warnings.join(' ')}
         </p>
       ) : null}

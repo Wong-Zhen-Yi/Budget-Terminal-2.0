@@ -32,11 +32,26 @@ const settingsSchema = z.object({
   hiddenTabs: z.array(z.string()).catch([]),
   obscuredTabs: z.array(z.string()).optional(),
   backtestPage: z.unknown().optional(),
+  signalsPage: z.unknown().optional(),
 })
 
 type StoredSettings = z.infer<typeof settingsSchema>
 
 const STORE_VERSION = 1
+
+const DEFAULT_SIGNALS_PAGE_SETTINGS = { filter: 'all' as const, search: '' }
+
+function normalizeSignalsPageSettings(value: unknown): AppSettings['signalsPage'] {
+  const input = value && typeof value === 'object'
+    ? value as { filter?: unknown; search?: unknown }
+    : {}
+  const filters = new Set(['all', 'strong', 'long', 'watch', 'blocked', 'too_new', 'error'])
+  const filter = String(input.filter ?? 'all')
+  return {
+    filter: (filters.has(filter) ? filter : 'all') as AppSettings['signalsPage']['filter'],
+    search: String(input.search ?? '').slice(0, 32),
+  }
+}
 
 const KNOWN_TABS = TABS.map((tab) => tab.id)
 const CLOCK_CODES = new Set(CLOCK_COUNTRIES.map((entry) => entry.code))
@@ -58,6 +73,7 @@ function emptySettings(): StoredSettings {
     // A fresh install obscures Personal Finance, like `DEFAULT_PRIVACY_SETTINGS`.
     obscuredTabs: [...DEFAULT_OBSCURED_TABS],
     backtestPage: DEFAULT_BACKTEST_PAGE_SETTINGS,
+    signalsPage: DEFAULT_SIGNALS_PAGE_SETTINGS,
   }
 }
 
@@ -91,6 +107,7 @@ function normalize(settings: StoredSettings): StoredSettings {
   settings.hiddenTabs = keep(settings.hiddenTabs)
   settings.obscuredTabs = keep(settings.obscuredTabs ?? [...DEFAULT_OBSCURED_TABS])
   settings.backtestPage = normalizeBacktestPageSettings(settings.backtestPage)
+  settings.signalsPage = normalizeSignalsPageSettings(settings.signalsPage)
   return settings
 }
 
@@ -133,6 +150,7 @@ function toPayload(settings: StoredSettings): AppSettings {
     hiddenTabs: [...settings.hiddenTabs],
     obscuredTabs: [...(settings.obscuredTabs ?? [])],
     backtestPage: normalizeBacktestPageSettings(settings.backtestPage),
+    signalsPage: normalizeSignalsPageSettings(settings.signalsPage),
     sourcePath: settingsPath(),
   }
 }
@@ -192,6 +210,10 @@ function apply(settings: StoredSettings, mutation: AppSettingsMutation): void {
     }
     case 'setBacktestPage': {
       settings.backtestPage = normalizeBacktestPageSettings(mutation.value)
+      return
+    }
+    case 'setSignalsPage': {
+      settings.signalsPage = normalizeSignalsPageSettings(mutation.value)
       return
     }
   }

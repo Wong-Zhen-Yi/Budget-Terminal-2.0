@@ -350,6 +350,8 @@ export interface AppSettings {
   obscuredTabs: string[]
   /** Persisted controls for the standalone Backtest page. */
   backtestPage: BacktestPageSettings
+  /** Persisted filter/search controls for the automatic Signals scanner. */
+  signalsPage: SignalsPageSettings
   /** Absolute path of the settings file, surfaced on the page. */
   sourcePath: string
 }
@@ -363,6 +365,7 @@ export type AppSettingsMutation =
   | { type: 'resetNavigation' }
   | { type: 'setTabObscured'; id: string; obscured: boolean }
   | { type: 'setBacktestPage'; value: BacktestPageSettings }
+  | { type: 'setSignalsPage'; value: SignalsPageSettings }
 
 /** The four User Data buttons. Each one prompts in the renderer before it is sent. */
 export type MaintenanceAction =
@@ -1042,7 +1045,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'pre-market', label: 'Pre-Market', implemented: true },
   { id: 'up-down', label: 'Up/Down', implemented: true },
   { id: 'trading-volumes', label: 'Trading Volumes', implemented: true },
-  { id: 'signals', label: 'Signals', implemented: false },
+  { id: 'signals', label: 'Signals', implemented: true },
   { id: 'price', label: 'Price', implemented: true },
   { id: 'heatmap', label: 'Heatmap', implemented: true },
   { id: 'news', label: 'News', implemented: true },
@@ -1056,16 +1059,115 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'etf', label: 'ETF', implemented: false },
   { id: 'crypto', label: 'Crypto', implemented: true },
   { id: 'backtest', label: 'Backtest', implemented: true },
-  { id: 'roll', label: 'Roll', implemented: false },
+  { id: 'roll', label: 'Roll', implemented: true },
   { id: 'ipo', label: 'IPO', implemented: false },
   { id: 'institutions', label: 'Institutions', implemented: false },
   { id: 'politics', label: 'Politics', implemented: false },
   { id: 'youtube', label: 'YouTube', implemented: false },
-  { id: 'dictionary', label: 'Dictionary', implemented: false },
+  { id: 'dictionary', label: 'Dictionary', implemented: true },
   { id: 'quant', label: 'Quant', implemented: false },
-  { id: 'economic', label: 'Economic', implemented: false },
+  { id: 'economic', label: 'Economic', implemented: true },
   { id: 'settings', label: 'Settings', implemented: true },
 ]
+
+/* ---------------------------------------------------------------- economic */
+
+export const ECONOMIC_GROUPS = ['Inflation', 'Labor', 'Growth', 'Rates'] as const
+export type EconomicGroup = (typeof ECONOMIC_GROUPS)[number]
+
+export const ECONOMIC_TRANSFORMS = [
+  'level',
+  'yoy_pct',
+  'mom_pct',
+  'mom_diff',
+  'qoq_saar',
+] as const
+export type EconomicTransform = (typeof ECONOMIC_TRANSFORMS)[number]
+
+export const ECONOMIC_PROVIDERS = [
+  'fred',
+  'bls',
+  'treasury',
+  'treasury_spread',
+  'treasury_breakeven',
+  'nyfed',
+  'umich',
+] as const
+export type EconomicProvider = (typeof ECONOMIC_PROVIDERS)[number]
+
+/** How often a series is published, which is what the year-ago lookup tolerances scale to. */
+export type EconomicFrequency = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'annual'
+
+/** One `(iso_date, value)` observation. Seconds are never involved: macro data is dated. */
+export type EconomicPoint = [string, number]
+
+/** One indicator, resolved. Mirrors `build_row` in `services/economic.py`. */
+export interface EconomicRow {
+  /** The FRED id, which is this catalog's primary key even where another provider serves it. */
+  seriesId: string
+  label: string
+  group: EconomicGroup
+  units: string
+  decimals: number
+  frequency: EconomicFrequency
+  transform: EconomicTransform
+  /**
+   * Tri-state on purpose: `null` means a move in either direction carries no good/bad
+   * meaning, so the change cell stays neutral rather than painting a judgement.
+   */
+  higherIsBetter: boolean | null
+  /** Years to maturity, set only on the tenors that draw the treasury curve. */
+  tenorYears: number | null
+  note: string
+  provider: EconomicProvider
+  /** Provider label plus identifier, for the Source column and the row tooltip. */
+  source: string
+  available: boolean
+  latest: number | null
+  latestDate: string | null
+  prior: number | null
+  /** Latest minus prior, in the transformed series' own units. */
+  change: number | null
+  /** Year-over-year percent change of the *raw* observations, before the transform. */
+  yoy: number | null
+  rawLatest: number | null
+  /** The transformed series, trimmed to `HISTORY_YEARS`. */
+  history: EconomicPoint[]
+}
+
+export interface EconomicCurveTenor {
+  seriesId: string
+  label: string
+  years: number
+  yieldPct: number
+  date: string | null
+}
+
+export interface EconomicYieldCurve {
+  tenors: EconomicCurveTenor[]
+  spread10y2y: number | null
+  spread10y3m: number | null
+  inverted2s10s: boolean
+  inverted3m10y: boolean
+}
+
+export interface EconomicPayload {
+  /** Local ISO stamp of the build, which the freshness line ages against. */
+  generatedAt: string
+  source: string
+  groups: EconomicGroup[]
+  rows: EconomicRow[]
+  /** Series ids whose provider returned nothing. */
+  missing: string[]
+  /** Providers that looked unreachable rather than merely short a series. */
+  unreachable: EconomicProvider[]
+  yieldCurve: EconomicYieldCurve
+}
+
+export interface EconomicRequest {
+  /** Ignore the cached payload and re-download every provider. */
+  force?: boolean
+}
 
 /* --------------------------------------------------------- global markets */
 
@@ -1325,6 +1427,106 @@ export interface TradingVolumesPayload {
 
 export interface TradingVolumesRequest {
   force?: boolean
+}
+
+/* ------------------------------------------------------------------ signals */
+
+export type SignalClass = 'NONE' | 'WATCH' | 'LONG' | 'STRONG_LONG'
+
+export type SignalTradeStatus =
+  | 'NONE'
+  | 'WATCH'
+  | 'VALID_LONG'
+  | 'TOO_EXTENDED'
+  | 'INSUFFICIENT_HISTORY'
+  | 'DATA_ERROR'
+
+export type SignalsFilter =
+  | 'all'
+  | 'strong'
+  | 'long'
+  | 'watch'
+  | 'blocked'
+  | 'too_new'
+  | 'error'
+
+export interface SignalsPageSettings {
+  filter: SignalsFilter
+  search: string
+}
+
+export interface SignalReason {
+  name: string
+  group: 'trend' | 'momentum' | 'volume' | 'entry' | 'relative'
+  passed: boolean
+  points: number
+  description: string
+  value: number | null
+  reference: number | null
+  weight: number
+}
+
+export interface SignalTimeframeBar {
+  asOf: string | null
+  partial: boolean
+  dropped: boolean
+}
+
+export interface SignalResult {
+  ticker: string
+  timestamp: string
+  price: number | null
+  rawScore: number
+  maxScore: number
+  trendScore: number
+  trendMaxScore: number
+  momentumScore: number
+  momentumMaxScore: number
+  volumeScore: number
+  volumeMaxScore: number
+  entryScore: number
+  entryMaxScore: number
+  relativeScore: number
+  relativeMaxScore: number
+  signal: SignalClass
+  tradeStatus: SignalTradeStatus
+  reasons: SignalReason[]
+  warnings: string[]
+  indicators: Record<string, number | string | null>
+  timeframeStatus: Record<string, string>
+  timeframeBars: Record<string, SignalTimeframeBar>
+  error: string
+}
+
+export interface SignalCandidate {
+  ticker: string
+  name: string
+  exchange: string
+  price: number
+  marketCap: number
+  medianDollarVolume: number
+  qualityRank: number
+  reasons: string[]
+}
+
+export interface SignalsPayload {
+  candidates: SignalCandidate[]
+  results: SignalResult[]
+  source: string
+  sourcedAt: string
+  startedAt: string
+  completedAt: string
+  sourceCandidateCount: number
+  rejectedCandidateCount: number
+  passedFilterCount: number
+  errors: Record<string, string>
+  universeFromCache: boolean
+}
+
+export interface SignalsRequest {
+  latestOnly?: boolean
+  forceMarketRefresh?: boolean
+  forceUniverseRefresh?: boolean
 }
 
 /* -------------------------------------------------------------------- price */
@@ -1896,6 +2098,172 @@ export interface BacktestRequest {
   force?: boolean
 }
 
+/* ---------------------------------------------------------------- roll page */
+
+/**
+ * The Roll page, ported from `mixins/random_recommender.py` and
+ * `workers/random_recommender.py` (page18). The scoring, the six pattern evaluators and
+ * the candidate draw all live in `shared/roll.ts`; these are only the shapes that cross
+ * IPC.
+ */
+
+/** The screener/quote fields the scorer reads. Yahoo returns far more; none of it is used. */
+export interface RollQuote {
+  symbol?: string
+  quoteType?: string
+  longName?: string
+  shortName?: string
+  displayName?: string
+  sector?: string
+  sectorDisp?: string
+  exchange?: string
+  fullExchangeName?: string
+  currency?: string
+  regularMarketPrice?: number
+  regularMarketPreviousClose?: number
+  regularMarketChange?: number
+  regularMarketChangePercent?: number
+  fiftyTwoWeekChangePercent?: number
+  fiftyTwoWeekLow?: number
+  fiftyTwoWeekHigh?: number
+  marketCap?: number
+  trailingPE?: number
+  forwardPE?: number
+  epsForward?: number
+  beta?: number
+  dividendYield?: number
+  targetMeanPrice?: number
+  averageAnalystRating?: string
+  averageDailyVolume3Month?: number
+  averageDailyVolume10Day?: number
+}
+
+/** `match_tier`: how the candidate earned its place in the pool. */
+export type RollMatchTier = 'strict' | 'near' | 'fallback' | 'unavailable'
+
+/** `_compact_candidate`: one row of the Scored Candidates table. */
+export interface RollCandidate {
+  rank: number
+  symbol: string
+  name: string
+  sector: string
+  score: number
+  reasons: string[]
+  dayChangePct: number | null
+  fiftyTwoWeekChangePct: number | null
+  averageVolume: number | null
+  marketCap: number | null
+  matchTier: RollMatchTier
+  matchedModes: string[]
+  primaryPatternMode: string
+  patternMatch: boolean
+  patternType: string
+  patternScore: number
+  patternReasons: string[]
+  patternFallbackReason: string
+  /** Per-mode `technical_snapshot`, keyed by pattern mode. Drives the Why panel. */
+  technicalSnapshot: Record<string, Record<string, number | string | boolean | null>>
+}
+
+/** The company facts the left rail prints, merged from `quoteSummary` over the screener quote. */
+export interface RollCompanyInfo {
+  name: string
+  exchange: string
+  sector: string
+  industry: string
+  currency: string
+  price: number | null
+  previousClose: number | null
+  change: number | null
+  changePercent: number | null
+  marketCap: number | null
+  revenue: number | null
+  profitMargin: number | null
+  trailingPe: number | null
+  forwardPe: number | null
+  priceToSales: number | null
+  beta: number | null
+  dividendYield: number | null
+  fiftyTwoWeekLow: number | null
+  fiftyTwoWeekHigh: number | null
+  averageVolume: number | null
+  meanTarget: number | null
+  website: string
+  irUrl: string
+}
+
+/** `_chart_payload_from_frame`, as the 1Y snapshot draws it. */
+export interface RollChartBar {
+  date: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
+/** One row of Top Options By Expiration: the highest-volume contract on that expiry. */
+export interface RollTopOption {
+  ticker: string
+  type: string
+  expiration: string
+  strike: number | null
+  lastPrice: number | null
+  volume: number | null
+  openInterest: number | null
+  impliedVolatility: number | null
+}
+
+export interface RollNewsRow {
+  ticker: string
+  title: string
+  source: string
+  url: string
+  publishedAt: number
+}
+
+/** One completed roll. */
+export interface RollPayload {
+  symbol: string
+  info: RollCompanyInfo
+  candidatePool: RollCandidate[]
+  candidateRank: number
+  candidateScore: number
+  candidateReasons: string[]
+  universeTotal: number
+  screeningSummary: string
+  patternModes: string[]
+  matchTier: RollMatchTier
+  matchedModes: string[]
+  primaryPatternMode: string
+  patternMatch: boolean
+  patternType: string
+  patternScore: number
+  patternReasons: string[]
+  patternFallbackReason: string
+  technicalSnapshot: Record<string, Record<string, number | string | boolean | null>>
+  chart: RollChartBar[]
+  chartStatus: string
+  topOptions: RollTopOption[]
+  topOptionsStatus: string
+  news: RollNewsRow[]
+  newsStatus: string
+  warnings: string[]
+  rolledAt: number
+}
+
+export interface RollRequest {
+  /** Selected pattern checkboxes. Empty means the balanced roll. */
+  patternModes?: string[]
+  /** Symbols already held, pushed down the ranking so a roll surfaces something new. */
+  excludeSymbols?: string[]
+  /** Symbols already rolled this session, pushed down less hard. */
+  historySymbols?: string[]
+  /** Set when re-opening a row of Roll History: skips the screen and loads this name. */
+  targetSymbol?: string
+  force?: boolean
+}
+
 export const CHANNELS = {
   quotes: 'dashboard:quotes',
   chart: 'dashboard:chart',
@@ -1917,6 +2285,7 @@ export const CHANNELS = {
   globalMarkets: 'global:markets',
   preMarket: 'pre-market:read',
   tradingVolumes: 'trading-volumes:read',
+  signals: 'signals:scan',
   priceScreen: 'price:screen',
   calendarMonth: 'calendar:month',
   earningsCalendar: 'calendar:earnings',
@@ -1929,6 +2298,8 @@ export const CHANNELS = {
   optionsExpirations: 'options:expirations',
   projections: 'projections:read',
   valuation: 'valuation:read',
+  economic: 'economic:read',
+  roll: 'roll:read',
   backtest: 'backtest:run',
   fundamentals: 'dashboard:fundamentals',
   fundamentalsPage: 'fundamentals:read',
@@ -2044,6 +2415,7 @@ export interface DesktopApi {
   globalMarkets(request: GlobalMarketsRequest): Promise<Envelope<GlobalMarketsPayload>>
   preMarket(request: PreMarketRequest): Promise<Envelope<PreMarketPayload>>
   tradingVolumes(request: TradingVolumesRequest): Promise<Envelope<TradingVolumesPayload>>
+  signals(request: SignalsRequest): Promise<Envelope<SignalsPayload | null>>
   priceScreen(request: PriceScreenRequest): Promise<Envelope<PriceScreenPayload>>
   calendarMonth(request: CalendarMonthRequest): Promise<Envelope<CalendarMonthPayload>>
   earningsCalendar(
@@ -2060,6 +2432,8 @@ export interface DesktopApi {
   ): Promise<Envelope<OptionsExpirationsPayload>>
   projections(request: ProjectionsRequest): Promise<Envelope<ProjectionsPayload>>
   valuation(request: ValuationRequest): Promise<Envelope<ValuationPayload>>
+  economic(request: EconomicRequest): Promise<Envelope<EconomicPayload>>
+  roll(request: RollRequest): Promise<Envelope<RollPayload | null>>
   backtest(request: BacktestRequest): Promise<Envelope<BacktestPayload>>
   fundamentals(request: FundamentalsRequest): Promise<Envelope<FundamentalsPayload>>
   fundamentalsPage(request: FundamentalsPageRequest): Promise<Envelope<FundamentalsPagePayload>>

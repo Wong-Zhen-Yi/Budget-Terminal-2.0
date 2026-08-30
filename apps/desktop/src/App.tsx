@@ -14,6 +14,7 @@ import { CardsPage } from '@/pages/CardsPage'
 import { CalendarPage } from '@/pages/CalendarPage'
 import { ChartsPage } from '@/pages/ChartsPage'
 import { CryptoPage } from '@/pages/CryptoPage'
+import { DictionaryPage } from '@/pages/DictionaryPage'
 import { FundamentalsPage } from '@/pages/FundamentalsPage'
 import { HeatmapPage } from '@/pages/HeatmapPage'
 import { GlobalPage } from '@/pages/GlobalPage'
@@ -24,15 +25,19 @@ import { OptionsPage } from '@/pages/OptionsPage'
 import { ProjectionsPage } from '@/pages/ProjectionsPage'
 import { PreMarketPage } from '@/pages/PreMarketPage'
 import { PricePage } from '@/pages/PricePage'
+import { RollPage } from '@/pages/RollPage'
+import { SignalsPage } from '@/pages/SignalsPage'
 import { TradingVolumesPage } from '@/pages/TradingVolumesPage'
 import { UpDownPage } from '@/pages/UpDownPage'
 import { ValuationPage } from '@/pages/ValuationPage'
+import { EconomicPage } from '@/pages/EconomicPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { StocksPage } from '@/pages/StocksPage'
 import { useDataHealth } from '@/stores/dataHealth'
 import { useChartsStore } from '@/stores/charts'
 import { useFundamentalsStore } from '@/stores/fundamentals'
 import { useOptionsPage } from '@/stores/options'
+import { useStocksPage } from '@/stores/stocks'
 
 const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
 
@@ -92,6 +97,7 @@ export function App() {
   )
 
   const setChartsSymbol = useChartsStore((state) => state.setSymbol)
+  const setStocksSymbol = useStocksPage((state) => state.setSymbol)
 
   /**
    * A page handing a symbol to another page. Stocks uses it for Fundamentals and Options;
@@ -100,11 +106,12 @@ export function App() {
    * the right ticker.
    */
   const handleStocksNavigate = useCallback((tabId: string, symbol?: string) => {
+    if (tabId === 'stocks' && symbol) setStocksSymbol(symbol)
     if (tabId === 'fundamentals' && symbol) setFundamentalsSymbol(symbol)
     if (tabId === 'options' && symbol) setOptionsSymbol(symbol)
     if (tabId === 'charts' && symbol) setChartsSymbol(symbol)
     setActiveTab(tabId)
-  }, [setFundamentalsSymbol, setOptionsSymbol, setChartsSymbol])
+  }, [setStocksSymbol, setFundamentalsSymbol, setOptionsSymbol, setChartsSymbol])
 
   const reload = useCallback(async () => {
     setReloading(true)
@@ -236,6 +243,8 @@ export function App() {
             <TradingVolumesPage onStatusChange={handleStatusChange} />
           ) : activeTab === 'price' ? (
             <PricePage onStatusChange={handleStatusChange} />
+          ) : activeTab === 'signals' ? (
+            <SignalsPage onStatusChange={handleStatusChange} />
           ) : activeTab === 'news' ? (
             <NewsPage onStatusChange={handleStatusChange} />
           ) : activeTab === 'calendar' ? (
@@ -244,6 +253,8 @@ export function App() {
             <HeatmapPage onStatusChange={handleStatusChange} onNavigate={handleStocksNavigate} />
           ) : activeTab === 'crypto' ? (
             <CryptoPage onStatusChange={handleStatusChange} />
+          ) : activeTab === 'dictionary' ? (
+            <DictionaryPage onStatusChange={handleStatusChange} />
           ) : activeTab === 'charts' ? (
             <ChartsPage onStatusChange={handleStatusChange} />
           ) : activeTab === 'stocks' ? (
@@ -252,10 +263,14 @@ export function App() {
             <FundamentalsPage onStatusChange={handleStatusChange} />
           ) : activeTab === 'valuation' ? (
             <ValuationPage onStatusChange={handleStatusChange} />
+          ) : activeTab === 'economic' ? (
+            <EconomicPage onStatusChange={handleStatusChange} />
           ) : activeTab === 'options' ? (
             <OptionsPage onStatusChange={handleStatusChange} />
           ) : activeTab === 'projections' ? (
             <ProjectionsPage onStatusChange={handleStatusChange} />
+          ) : activeTab === 'roll' ? (
+            <RollPage onStatusChange={handleStatusChange} onNavigate={handleStocksNavigate} />
           ) : activeTab === 'backtest' ? (
             <BacktestPage onStatusChange={handleStatusChange} />
           ) : activeTab === SETTINGS_TAB_ID ? (

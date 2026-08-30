@@ -39,6 +39,8 @@ import type {
   PreMarketRequest,
   PriceScreenPayload,
   PriceScreenRequest,
+  SignalsPayload,
+  SignalsRequest,
   TradingVolumesPayload,
   TradingVolumesRequest,
   StocksPayload,
@@ -85,6 +87,10 @@ import type {
   UpDownTargetsRequest,
   ValuationPayload,
   ValuationRequest,
+  EconomicPayload,
+  EconomicRequest,
+  RollPayload,
+  RollRequest,
 } from '../shared/contract.js'
 import { DEFAULT_CLOCK_COUNTRY, DEFAULT_OBSCURED_TABS, MACRO_SYMBOLS, TABS } from '../shared/contract.js'
 import {
@@ -160,6 +166,12 @@ import {
 import { getGlobalMarkets } from './yahoo/globalMarkets.js'
 import { getPreMarket, PRE_MARKET_SOURCE } from './yahoo/preMarket.js'
 import { getPriceScreen, PRICE_SCREEN_SOURCE } from './yahoo/priceScreen.js'
+import {
+  clearLatestSignals,
+  getLatestSignals,
+  getSignals,
+  SIGNALS_SOURCE,
+} from './yahoo/signals.js'
 import { getTradingVolumes, TRADING_VOLUMES_SOURCE } from './yahoo/tradingVolumes.js'
 import { getStocks, STOCKS_SOURCE } from './yahoo/stocks.js'
 import { getCloses, getClosesBatch, periodReturn } from './yahoo/history.js'
@@ -183,6 +195,14 @@ import {
   getProjections,
   PROJECTIONS_SOURCE,
 } from './yahoo/projections.js'
+import {
+  clearEconomicCache,
+  ECONOMIC_SOURCE,
+  economicErrors,
+  getEconomic,
+  type EconomicFetchResult,
+} from './economic.js'
+import { getRoll, ROLL_SOURCE } from './yahoo/roll.js'
 import { clearRiskFreeCache } from './riskFree.js'
 import {
   emptyValuation,
@@ -235,6 +255,7 @@ export interface MarketDataProvider {
   preMarket(request: PreMarketRequest): Promise<Envelope<PreMarketPayload>>
   tradingVolumes(request: TradingVolumesRequest): Promise<Envelope<TradingVolumesPayload>>
   priceScreen(request: PriceScreenRequest): Promise<Envelope<PriceScreenPayload>>
+  signals(request: SignalsRequest): Promise<Envelope<SignalsPayload | null>>
   calendarMonth(request: CalendarMonthRequest): Promise<Envelope<CalendarMonthPayload>>
   earningsCalendar(request: EarningsCalendarRequest): Promise<Envelope<EarningsCalendarPayload>>
   crypto(request: CryptoRequest): Promise<Envelope<CryptoPayload>>
@@ -242,6 +263,8 @@ export interface MarketDataProvider {
   upDown(request: UpDownRequest): Promise<Envelope<UpDownPayload>>
   upDownTargets(request: UpDownTargetsRequest): Promise<Envelope<UpDownTargetsPayload>>
   valuation(request: ValuationRequest): Promise<Envelope<ValuationPayload>>
+  economic(request: EconomicRequest): Promise<Envelope<EconomicPayload>>
+  roll(request: RollRequest): Promise<Envelope<RollPayload | null>>
   stocks(request: StocksRequest): Promise<Envelope<StocksPayload>>
   optionsChain(request: OptionsChainRequest): Promise<Envelope<OptionsChainPayload>>
   optionsExpirations(
@@ -321,6 +344,7 @@ const emptySettings: AppSettings = {
   hiddenTabs: [],
   obscuredTabs: [...DEFAULT_OBSCURED_TABS],
   backtestPage: DEFAULT_BACKTEST_PAGE_SETTINGS,
+  signalsPage: { filter: 'all', search: '' },
   sourcePath: settingsPath(),
 }
 
@@ -402,6 +426,29 @@ function calendarEnvelope<T>(result: CalendarFetchResult<T>, source: string): En
  * so the page shows its own warnings rather than blanking. Only a symbol with no quote at
  * all throws, and that lands in the catch below.
  */
+function economicEnvelope(result: EconomicFetchResult): Envelope<EconomicPayload> {
+  const errors = economicErrors(result.payload)
+  const failureReason = errors.map((entry) => entry.reason).join(' | ')
+  return {
+    data: result.payload,
+    meta: meta(
+      ECONOMIC_SOURCE,
+      result.stale
+        ? 'stale'
+        : errors.length
+          ? 'partial'
+          : result.fromCache
+            ? 'cached'
+            : 'fresh',
+      {
+        cacheAgeSeconds: result.cacheAgeSeconds,
+        ...(failureReason ? { failureReason } : {}),
+      },
+    ),
+    errors,
+  }
+}
+
 function valuationEnvelope(result: ValuationFetchResult): Envelope<ValuationPayload> {
   const failureReason = result.errors.map((entry) => entry.reason).join(' | ')
   return {
@@ -1004,6 +1051,24 @@ export const yahooProvider: MarketDataProvider = {
     }
   },
 
+  async signals(request) {
+    if (request.latestOnly) return ok(await getLatestSignals(), SIGNALS_SOURCE)
+    try {
+      const payload = await getSignals(request)
+      if (!Object.keys(payload.errors).length) return ok(payload, SIGNALS_SOURCE)
+      return partial(
+        payload,
+        Object.entries(payload.errors).map(([symbol, message]) =>
+          err(SIGNALS_SOURCE, message, 'signals', symbol),
+        ),
+        SIGNALS_SOURCE,
+        `${Object.keys(payload.errors).length} ticker(s) returned incomplete market data.`,
+      )
+    } catch (error) {
+      return failed(await getLatestSignals(), describeError(error), SIGNALS_SOURCE)
+    }
+  },
+
   async priceScreen({ minimumPrice, maximumPrice }) {
     const empty: PriceScreenPayload = {
       rows: [],
@@ -1116,6 +1181,58 @@ export const yahooProvider: MarketDataProvider = {
       return ok(await getUpDownTargets(tickers, Boolean(force)), UP_DOWN_SOURCE)
     } catch (error) {
       return failed(empty, describeError(error), UP_DOWN_SOURCE)
+    }
+  },
+
+  /**
+   * An Economic load is `partial`, never `failed`, while any provider answered.
+   *
+   * Five independent hosts feed the catalog, and the page is built to render whichever
+   * ones came back — a blocked FRED costs 20 rows, not the page. Only a total blackout with
+   * nothing cached reaches the catch below.
+   */
+  async economic(request) {
+    const empty: EconomicPayload = {
+      generatedAt: '',
+      source: ECONOMIC_SOURCE,
+      groups: [],
+      rows: [],
+      missing: [],
+      unreachable: [],
+      yieldCurve: {
+        tenors: [],
+        spread10y2y: null,
+        spread10y3m: null,
+        inverted2s10s: false,
+        inverted3m10y: false,
+      },
+    }
+    try {
+      return economicEnvelope(await getEconomic(request))
+    } catch (error) {
+      return failed(empty, describeError(error), ECONOMIC_SOURCE)
+    }
+  },
+
+  /**
+   * One dice throw over the liquid US screen.
+   *
+   * A failed roll answers with `null` rather than an empty payload: there is no partial
+   * Roll to render — either a candidate was drawn and enriched or the page keeps whatever
+   * was on screen, which is what `_p18_handle_error` leaves alone.
+   */
+  async roll(request) {
+    try {
+      const payload = await getRoll(request)
+      if (!payload.warnings.length) return ok(payload, ROLL_SOURCE)
+      return partial(
+        payload,
+        payload.warnings.map((reason) => err(ROLL_SOURCE, reason, 'roll', payload.symbol)),
+        ROLL_SOURCE,
+        payload.warnings[0],
+      )
+    } catch (error) {
+      return failed(null, describeError(error), ROLL_SOURCE)
     }
   },
 
@@ -1359,6 +1476,7 @@ export const yahooProvider: MarketDataProvider = {
       await clearSecCaches()
       await clearUpDownCaches()
       await clearRiskFreeCache()
+      await clearEconomicCache()
       return ok(
         {
           action: 'clearUserData' as const,
@@ -1378,10 +1496,12 @@ export const yahooProvider: MarketDataProvider = {
   async resetCache() {
     try {
       cache.clear()
+      await clearLatestSignals()
       await clearCalendarCaches()
       await clearSecCaches()
       await clearUpDownCaches()
       await clearRiskFreeCache()
+      await clearEconomicCache()
       return ok(
         {
           action: 'resetCache' as const,

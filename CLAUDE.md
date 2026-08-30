@@ -25,6 +25,9 @@ npm run probe:heatmap -- SPY   # index holdings, all seven intervals, sector spl
 npm run probe:projections -- AAPL # chart, every expiration, the three paths; --offline for the pure checks
 npm run probe:up-down -- AAPL  # Up/Down counts and targets; --offline for deterministic math checks
 npm run probe:valuation -- NVDA # DCF, CAPM required return, derivation and peers; --offline for the pure checks
+npm run probe:economic         # all 49 series across five providers; --offline for the pure checks
+npm run probe:roll             # a live roll, then a cached second one; --offline for the six evaluators
+                               # pass pattern modes as arguments: `npm run probe:roll -- breakout bullish_flag`
 ```
 
 There is no test suite. The `scripts/probe*.ts` files are the verification story: they
@@ -63,7 +66,14 @@ the **Heatmap** page (the S&P 500 / Nasdaq 100 / Dow 30 holdings treemap over se
 intervals, with the coverage strip and the selected-holding detail bar), and the
 **Up/Down** page (Portfolio, SPY, QQQ and Custom sources with progressive analyst targets),
 and the **Valuation** page (a DCF over SEC-backed statements with every assumption derived
-from history, the 10Y Treasury, analyst estimates and peers; seven tabs over one load).
+from history, the 10Y Treasury, analyst estimates and peers; seven tabs over one load), and
+the **Economic** page (49 US macro series across five keyless providers, an Overview grid
+and four group tabs with a history plot each, plus the treasury curve), and the
+**Dictionary** page (390 offline terms across 14 categories with ranked search, formula
+and economic-event detail, related navigation, and chart-pattern diagrams), and the
+**Roll** page (a weighted dice throw over the liquid US screen, with six technical pattern
+filters run over a year of daily bars, a scored-candidate table, a 1Y chart, top options
+by expiration, headlines and a roll history).
 The remaining tabs are labels in `TABS`
 (`electron/shared/contract.ts`) and render a placeholder; `implemented: true` is what
 routes a tab to a real page in `App.tsx`.
@@ -569,12 +579,173 @@ adding handlers.
   `PEER_CANDIDATE_LIMIT` is 16, matching the reference, and the page has no refresh timer —
   `init_page23` creates none. Load, a peer-list change and F5 are the only refetches.
 - **Three documented departures from `mixins/valuation.py`.** The bear-to-bull band is drawn
-  as its two dashed edges rather than a shaded region, because `LineChart` draws paths and
-  not regions. Per-period share counts come from the merged map's `sharesOutstanding` rather
-  than a diluted average, which the repo's SEC layer does not carry — the approximate flag
-  is still raised the same way. And the Sources citations name the source, basis and period
-  rather than the XBRL tag and accession, because this repo's SEC normalization keeps the
-  point's source but not its filing.
+  as dashed levels rather than a shaded region, because `LineChart` draws paths and not
+  regions; the reference's fifth line is also dropped, because `upperScenario` *is* the bull
+  case and drawing both painted one over the other and left the legend naming a colour
+  nothing on the chart showed. Per-period share counts come from the merged map's
+  `sharesOutstanding` rather than a diluted average, which the repo's SEC layer does not
+  carry — the approximate flag is still raised the same way. And the Sources citations name
+  the source, basis and period rather than the XBRL tag and accession, because this repo's
+  SEC normalization keeps the point's source but not its filing.
+- **A `LineChart` wrapper must be `flex min-h-0 flex-1 flex-col`.** The chart measures its
+  own container, so a plain `min-h-0 flex-1` block sizes to the SVG's 380px fallback instead
+  of the space available and the panel clips the bottom of the plot along with its whole x
+  axis. Every existing caller wraps it that way; the Valuation charts did not, and the
+  Trends tab lost both its date axes until they did.
+- **Assumption fields carry their unit in the field, not the label.** `NumberInput` takes a
+  `suffix` for exactly this: a form of bare decimals cannot distinguish a 2.5% terminal
+  growth from a 15.0x exit multiple, which is why the reference's spin boxes set ` %` and
+  ` x`.
+
+
+- **The Economic page reaches five hosts and none of them is Yahoo, so none of it goes
+  through `paced()`** — Treasury, BLS, NY Fed, UMich and FRED, all keyless, on the
+  `fearGreed.ts` precedent. This is the slowest load in the app (about 45s cold), and
+  putting five unrelated government hosts behind the Yahoo gate would let one of them stall
+  every other page.
+- **FRED must not get a browser User-Agent.** It sits behind Akamai, which reads a request
+  claiming to be Chrome without Chrome's TLS fingerprint as a bot and tarpits it until the
+  client times out — losing all 20 FRED-native series. A plain product token answers in
+  under a second. Treasury, BLS, NY Fed and UMich were each checked against both and return
+  identical responses, so none of them needs one.
+- **home.treasury.gov gets its own 45s timeout.** It renders each yearly CSV on demand and
+  takes 18-20s even when healthy, so the shared 15s timeout expired on every request and
+  lost all 16 treasury-backed series. The ten-year fan-out is still bounded because
+  `MAX_WORKERS` years run at once, and the nominal and TIPS curves overlap rather than
+  running back to back.
+- **The whole treasury block is two downloads, not sixteen.** `resolveTreasury` resolves
+  every tenor, every spread and every breakeven out of one nominal curve plus one TIPS
+  curve, which is why the three treasury providers share a single resolver group. A TIPS
+  failure is swallowed and a nominal failure is not: losing TIPS costs only the breakevens.
+- **The FRED fallback probes before it fans out, and gives up when the host looks blocked.**
+  Every catalog entry is keyed by its FRED id even where a direct provider serves it, so
+  anything a batch left empty is retried there. One short 6s probe is the whole cost of a
+  blocked FRED; without it, and without the four-consecutive-failure blackout, a network
+  that cannot reach FRED adds minutes of timeouts to every refresh.
+- **A provider recovered from FRED is not reported as down.** `unreachable` is filtered to
+  the providers that still have an empty series at the end, so the status line names only
+  the real gaps rather than every host that hiccuped.
+- **`finite()` guards null before `Number()`**, the same hazard as Valuation's
+  `finiteOrNull`: `Number(null)` and `Number('')` are both 0, so a missing CPI print would
+  render as `0.0%` and colour green instead of showing the em dash that says the provider
+  returned nothing. The same guard is why `cell()` rejects `''` and FRED's `.` sentinel
+  before coercing — an unauctioned tenor must be skipped, not zeroed.
+- **BLS periods are codes, not dates.** `M01`-`M12` are months and `Q01`-`Q04` are quarters,
+  but `M13` and `S03` are the annual and semiannual averages, which would otherwise land on
+  top of a real observation and corrupt every MoM figure in the labour block.
+- **The YoY lookup runs on dates with a tolerance, not on `index - 12`.** Index arithmetic
+  breaks the moment a series has a reporting gap or a different frequency; the tolerance is
+  half the nominal spacing so a daily series survives a holiday weekend while a monthly one
+  cannot pair with the month before its year-ago partner.
+- **`higherIsBetter` is tri-state.** `null` means a move in either direction carries no
+  good/bad meaning — a participation rate reading, a breakeven — so those change cells stay
+  neutral rather than being painted with a misleading judgement.
+- **The payload is cached on disk, not in `TtlCache`.** The page paints from it on the first
+  frame after a cold start, and an in-memory entry would be gone by the next launch. Six
+  hours fresh, seven days stale, with a schema version that drops an entry written by an
+  older shape. A total blackout never overwrites a good cached payload with an empty one.
+- **Economic has no refresh timer**, like `init_page42`, which creates none. Refresh, Force
+  refresh and F5 are the only refetches.
+- **One documented departure from `mixins/economic_page.py`:** there is no progress bar.
+  `_p42_launch_fetch` drives a `QProgressBar` from the worker's per-provider `progress`
+  signal, and an IPC request/response carries no intermediate frames — the same wall the
+  Crypto page hit. The busy status line reports the load instead, and the disk cache means
+  most visits never see it.
+
+
+- **Dictionary is renderer-local by design.** The 390-entry catalog and ranked search
+  live in `electron/shared/dictionary.ts`; there is no IPC handler, store, worker, or
+  network request. The page must remain available when every data provider is down.
+- **Dictionary search ranking is user-visible behavior.** Exact terms beat term prefixes,
+  which beat exact and prefix aliases, keywords, substring matches, then token matches.
+  Category filtering happens before ranking, and an empty query retains alphabetical order.
+- **Related terms always clear the active filters.** A related entry may not be reachable
+  inside the current query or category, so following one resets both controls before
+  selecting it. Chart-pattern entries reuse `shared/chartPatterns.ts` for their diagrams.
+- **Dictionary has no persistence or refresh timer.** Search, category and selection are
+  session state. F5 has no data to fetch; the catalog probe is the verification boundary.
+
+- **Roll is page18, and its file is called `random_recommender.py`.** Grep for `_p18_`, not
+  for the page's title. The worker of the same name holds the screening, the six pattern
+  evaluators and the draw; the mixin holds the layout and every display string.
+- **Roll fires nothing on mount and has no refresh timer.** `init_page18` creates neither.
+  Every load is the Roll button or a Roll History row, which is also why `useRoll` is a
+  plain mutation with no query key — a background refetch would spend a screen plus 120
+  daily histories *and* silently change the answer under whoever is reading it. The whole
+  point of the page is that a roll is a draw.
+- **The Roll screen is the only one in `screener.ts` that takes a direction.** Three of its
+  six orderings are ascending: the reference deliberately mixes the day's and the year's
+  *losers* into the pool, and without them a downtrend or double-bottom search has nothing
+  to find but recent winners. Still `postScreen`, still behind `paced()`.
+- **The pattern roll is one paced chart request per candidate — 120 of them.** yfinance
+  batches this into a single `yf.download`; `yahoo-finance2` has no multi-symbol endpoint
+  carrying OHLCV, and `spark` (which the Heatmap page uses) returns closes only, which the
+  evaluators cannot read. A cold pattern roll is about 35s, the balanced one about 4s, and
+  the ten-minute history cache is what makes the second roll of a session nearly free.
+- **`latest()` in `shared/roll.ts` drops nulls before indexing from the end.**
+  `_latest_series_value` calls `.dropna()` first, so `latest(rsi, 30)` counts thirty real
+  observations back, not thirty rows. Indexing the raw array instead shifts every momentum
+  delta on any series with a warm-up window — which is all of them.
+- **RSI's warm-up window is the literal number 50, not null.** `_calculate_rsi` ends in
+  `.fillna(50.0)`, so the first fourteen entries are real 50s that the long-window deltas
+  will read. Leaving them null changes `rsi_change_30` on every short history.
+- **The evaluators must be able to disagree.** The six modes are OR-matched, and a filter
+  that matched everything would be no filter at all: the probe asserts that a coiling
+  series matches consolidation and *not* downtrend, and that a controlled decline matches
+  downtrend and not consolidation.
+- **A monotonic decline is not a downtrend.** It drives RSI to 0, and `controlled_decline`
+  needs RSI at or above 24 while `rsi_bearish` wants 26-52. The page shows orderly declines,
+  not collapses — which is why the probe's fixture carries a 2% wobble.
+- **Three tiers, and the fallback reasons are different.** Strict matches win; failing that,
+  near misses (score over 50/55 and `near_eligible` not false); failing that, the whole
+  scored pool. A pool that had history but matched nothing says "No strong technical setup
+  found"; a pool whose history never loaded says "Technical pattern history was
+  unavailable". Collapsing the two hides a Yahoo outage behind a shrug.
+- **`near_eligible: false` means the structure was never there.** It is how an evaluator
+  refuses promotion to the near tier regardless of score, and it is why a high-scoring
+  `Late Breakout` is not offered as a near match.
+- **A structural shape within six points of the top score wins the primary slot.**
+  `_primary_pattern_mode` keeps a clean flag from being reported as a "Breakout Setup"
+  because breakout scored a point higher; ties then break on an explicit order.
+- **The draw is weighted and reaches only the top twelve.** `_ROLL_TOP_COUNT` is 12, so a
+  ninetieth-ranked name never surfaces. With patterns on, the pattern score dominates and
+  the quote score is worth a quarter of itself — that is what stops a liquid megacap with
+  no setup from outdrawing the shape that was asked for.
+- **Held and already-rolled names are pushed down, not filtered out.** `-14` for a portfolio
+  holding and `-7` for a name in the roll history, against `+8` for a fresh idea. The page
+  keeps surfacing something new without ever making a name unreachable.
+- **The change percentage is derived, never read from `quoteSummary`.** The screener quote's
+  `regularMarketChangePercent` is already a percentage (-2.44) while the summary's price
+  module returns the same move as a fraction (-0.0244), so reading the summary through
+  renders a 2.4% down day as "-0.02%". It is computed from the change and the previous
+  close wherever both exist.
+- **Today's bar is dropped before the close.** `_normalize_history_frame` removes a
+  still-forming session so a half-day range cannot decide a consolidation or a breakout.
+  The reference asks `pandas_market_calendars` and falls back to a weekday 16:00 ET; only
+  the fallback is ported, so on an early-close session the last bar is dropped between
+  13:00 and 16:00 ET — losing a completed session rather than admitting a partial one.
+- **History is re-adjusted, like everywhere else in this app.** The bars come back
+  unadjusted with `adjclose` alongside, and the ratio is applied to open/high/low. Drop it
+  and a 2:1 split reads as a 50% single-session collapse that matches every downtrend
+  filter.
+- **A symbol whose history fails stays in the pool as `unavailable`.** Every evaluator
+  answers empty for it and it sorts below the fallback rows. Dropping the row instead would
+  let the pool silently shrink on a Yahoo hiccup with nothing on screen to say so.
+- **Only the last payload is persisted, and its candidates lose their snapshots.**
+  `_p18_session_snapshot` keeps the payload, the checkboxes and the history;
+  `_p18_full_payloads` (five deep, for instant revisits) is session-only. `P18_CANDIDATE_FIELDS`
+  omits `technical_snapshot`, so thirty snapshots of twenty-odd keys do not go to storage —
+  only the selected name's copy, which sits at the top level, is ever read.
+- **Four documented departures from `mixins/random_recommender.py`.** There are no progress
+  or partial frames — `RandomStockWorker` emits both so the Qt page fills in stage by stage,
+  and an IPC request/response carries neither, the same wall the Crypto and Economic ports
+  hit; the status line reports the load instead. A superseded roll is discarded by request
+  id rather than cancelled, because an in-flight `invoke` cannot be interrupted — its Yahoo
+  work still lands in the caches. The balanced roll fetches one history rather than handing
+  the whole pool to `yf.download` for a single chart. And the left rail lays its metrics out
+  one label/value pair per row rather than the reference's two: that panel is a resizable
+  splitter pane there and a fixed grid fraction here, and four columns inside it leave
+  neither the labels nor the values legible.
 
 
 ## Porting behaviour from the PySide6 app
@@ -600,6 +771,9 @@ decimal. Useful starting points:
 | Options, all of it | `mixins/options_chain.py` (presenters `mixins/options_chain_presenters.py`, Greeks `services/options_analysis.py`, fetching `services/options_data.py`) |
 | Projections, all of it | `mixins/charts_options_top_volume.py` (page28; presenters `mixins/options_chain_presenters.py`) |
 | Valuation, all of it | `mixins/valuation.py` (page23; maths `services/valuation.py`, fetch and peers `workers/valuation.py`, Treasury `services/risk_free.py`) |
+| Economic, all of it | `mixins/economic_page.py` (page42; presenters `mixins/economic_presenters.py`, providers and maths `services/economic.py`, worker `workers/economic.py`) |
+| Dictionary, all of it | `mixins/dictionary_page.py` (catalog `services/dictionary_catalog.py`, diagrams `services/chart_pattern_catalog.py`, smoke `scripts/test_dictionary_page.py`) |
+| Roll, all of it | `mixins/random_recommender.py` (page18; worker `workers/random_recommender.py`) |
 | Heatmap, all of it | `mixins/spy_heatmap.py` (presenters `mixins/spy_heatmap_presenters.py`, worker `workers/etf_heatmap.py`, issuer files `etf_holdings.py`, widget `widgets/etf_heatmap.py`) |
 | Fundamentals, all of it | `mixins/fundamentals_setup.py`, `mixins/fundamentals_render.py`, `workers/fundamentals.py`, `services/fundamentals_compare.py`, `services/sec_edgar.py` |
 | Shortcut wiring, tab picker, Obscure | `mixins/window_setup.py`, `mixins/window_lifecycle.py` |

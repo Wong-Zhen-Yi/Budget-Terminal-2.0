@@ -20,11 +20,13 @@
     "probe:pre-market": "tsx scripts/probe-pre-market.ts",
     "probe:trading-volumes": "tsx scripts/probe-trading-volumes.ts",
     "probe:price": "tsx scripts/probe-price.ts",
+    "probe:signals": "tsx scripts/probe-signals.ts",
     "probe:news": "tsx scripts/probe-news.ts",
     "probe:stocks": "tsx scripts/probe-stocks.ts",
     "probe:fundamentals": "tsx scripts/probe-fundamentals.ts",
     "probe:calendar": "tsx scripts/probe-calendar.ts",
     "probe:charts": "tsx scripts/probe-charts.ts",
+    "probe:dictionary": "tsx scripts/probe-dictionary.ts",
     "probe:crypto": "tsx scripts/probe-crypto.ts",
     "probe:cards": "tsx scripts/probe-cards.ts",
     "probe:options": "tsx scripts/probe-options.ts",
@@ -32,6 +34,8 @@
     "probe:projections": "tsx scripts/probe-projections.ts",
     "probe:up-down": "tsx scripts/probe-up-down.ts",
     "probe:valuation": "tsx scripts/probe-valuation.ts",
+    "probe:economic": "tsx scripts/probe-economic.ts",
+    "probe:roll": "tsx scripts/probe-roll.ts",
     "probe:backtest": "tsx scripts/probe-backtest.ts"
   },
   "devDependencies": {

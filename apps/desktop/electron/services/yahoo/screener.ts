@@ -161,6 +161,73 @@ export function equityPriceScreen(
 }
 
 /**
+ * One page of the Roll page's own universe: US equities over $1B market cap and over 1M
+ * three-month average volume, which is `RandomStockWorker._query` verbatim.
+ *
+ * Unlike every other screen in this file, this one takes a direction: the Roll pool is
+ * built from six orderings, and three of them are ascending — the reference deliberately
+ * mixes the day's and the year's *losers* into the pool so a downtrend or double-bottom
+ * search has anything to find.
+ */
+export function equityRollScreen(
+  sortField: string,
+  sortAsc: boolean,
+  offset: number,
+  size: number,
+): Promise<EquityScreenPage> {
+  return postScreen({
+    size,
+    offset,
+    sortField,
+    sortType: sortAsc ? 'ASC' : 'DESC',
+    quoteType: 'EQUITY',
+    query: {
+      operator: 'and',
+      operands: [
+        { operator: 'eq', operands: ['region', 'us'] },
+        { operator: 'gt', operands: ['intradaymarketcap', 1_000_000_000] },
+        { operator: 'gt', operands: ['avgdailyvol3m', 1_000_000] },
+      ],
+    },
+    userId: '',
+    userIdType: 'guid',
+  })
+}
+
+/** One market-cap-ranked page for the automatic Signals universe. */
+export function equitySignalsScreen(
+  minimumPrice: number,
+  minimumMarketCap: number,
+  exchanges: readonly string[],
+  size: number,
+): Promise<EquityScreenPage> {
+  return postScreen({
+    size,
+    offset: 0,
+    sortField: 'intradaymarketcap',
+    sortType: 'DESC',
+    quoteType: 'EQUITY',
+    query: {
+      operator: 'and',
+      operands: [
+        { operator: 'eq', operands: ['region', 'us'] },
+        { operator: 'gte', operands: ['intradayprice', minimumPrice] },
+        { operator: 'gte', operands: ['intradaymarketcap', minimumMarketCap] },
+        {
+          operator: 'or',
+          operands: exchanges.map((exchange) => ({
+            operator: 'eq',
+            operands: ['exchange', exchange],
+          })),
+        },
+      ],
+    },
+    userId: '',
+    userIdType: 'guid',
+  })
+}
+
+/**
  * The full candidate pool: three sort orders by four offsets, deduplicated by symbol.
  *
  * A page that fails is skipped rather than failing the load — the reference logs and

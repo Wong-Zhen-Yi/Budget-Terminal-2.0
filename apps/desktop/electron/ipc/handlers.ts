@@ -24,6 +24,7 @@ import type {
   GlobalMarketsRequest,
   PreMarketRequest,
   PriceScreenRequest,
+  SignalsRequest,
   TradingVolumesRequest,
   StocksRequest,
   MomentumRequest,
@@ -45,6 +46,8 @@ import type {
   UpDownRequest,
   UpDownTargetsRequest,
   ValuationRequest,
+  EconomicRequest,
+  RollRequest,
   WindowAction,
 } from '../shared/contract.js'
 import { CHANNELS } from '../shared/contract.js'
@@ -124,6 +127,9 @@ export function registerIpcHandlers(): () => void {
   ipcMain.handle(CHANNELS.tradingVolumes, (_event, request: TradingVolumesRequest) =>
     provider.tradingVolumes(request),
   )
+  ipcMain.handle(CHANNELS.signals, (_event, request: SignalsRequest) =>
+    provider.signals(request),
+  )
   ipcMain.handle(CHANNELS.priceScreen, (_event, request: PriceScreenRequest) =>
     provider.priceScreen(request),
   )
@@ -142,6 +148,10 @@ export function registerIpcHandlers(): () => void {
   ipcMain.handle(CHANNELS.valuation, (_event, request: ValuationRequest) =>
     provider.valuation(request),
   )
+  ipcMain.handle(CHANNELS.economic, (_event, request: EconomicRequest) =>
+    provider.economic(request),
+  )
+  ipcMain.handle(CHANNELS.roll, (_event, request: RollRequest) => provider.roll(request))
   ipcMain.handle(CHANNELS.stocks, (_event, request: StocksRequest) => provider.stocks(request))
   ipcMain.handle(CHANNELS.optionsChain, (_event, request: OptionsChainRequest) =>
     provider.optionsChain(request),

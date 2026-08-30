@@ -16,12 +16,15 @@
     "probe:fundamentals": "npm run --workspace budget-terminal-desktop probe:fundamentals --",
     "probe:calendar": "npm run --workspace budget-terminal-desktop probe:calendar --",
     "probe:charts": "npm run --workspace budget-terminal-desktop probe:charts --",
+    "probe:dictionary": "npm run --workspace budget-terminal-desktop probe:dictionary --",
     "probe:crypto": "npm run --workspace budget-terminal-desktop probe:crypto --",
     "probe:cards": "npm run --workspace budget-terminal-desktop probe:cards --",
     "probe:price": "npm run --workspace budget-terminal-desktop probe:price --",
+    "probe:signals": "npm run --workspace budget-terminal-desktop probe:signals --",
     "probe:heatmap": "npm run --workspace budget-terminal-desktop probe:heatmap --",
     "probe:up-down": "npm run --workspace budget-terminal-desktop probe:up-down --",
     "probe:valuation": "npm run --workspace budget-terminal-desktop probe:valuation --",
-    "probe:backtest": "npm run --workspace budget-terminal-desktop probe:backtest --"
+    "probe:backtest": "npm run --workspace budget-terminal-desktop probe:backtest --",
+    "probe:roll": "npm run --workspace budget-terminal-desktop probe:roll --"
   }
 }
