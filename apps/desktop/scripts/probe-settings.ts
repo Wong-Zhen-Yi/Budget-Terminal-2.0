@@ -10,6 +10,7 @@
  * reset behaviour, and a Clear that leaves navigation and privacy alone.
  */
 import { mkdtempSync, rmSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -147,9 +148,40 @@ async function main(): Promise<void> {
 
   const backup = join(scratch, 'backup.json')
   console.log('\n-- export')
+  // An edit that has not finished writing when Export is clicked. The export joins the
+  // same write queue, so it has to come back with the new share count rather than the
+  // one the store held when the button was pressed.
+  const inFlight = mutatePortfolios({
+    type: 'setPosition',
+    portfolioId: portfolio.id,
+    ticker: 'NVDA',
+    shares: 9,
+    avgPrice: 123.45,
+  })
+  const pendingCard = mutateCards({
+    type: 'add',
+    name: 'In Flight Card',
+    symbols: ['MSFT'],
+    weighting: 'equal',
+    weights: {},
+  })
   const exported = await yahooProvider.exportUserData(backup)
+  await Promise.all([inFlight, pendingCard])
   console.log(`   ${exported.data.message}`)
   check('export reports success', exported.data.performed)
+
+  const bundle = JSON.parse(await readFile(backup, 'utf8')) as {
+    userData: { portfolios: Record<string, { holdings: Record<string, { shares: number }> }> }
+    cards: { customCards: { name: string }[] }
+  }
+  check(
+    'export carries an edit that was still in flight',
+    bundle.userData.portfolios[portfolio.id]?.holdings.NVDA?.shares === 9,
+  )
+  check(
+    'export carries a card that was still in flight',
+    bundle.cards.customCards.some((card) => card.name === 'In Flight Card'),
+  )
 
   console.log('\n-- clear')
   const cleared = await yahooProvider.clearUserData()
@@ -163,7 +195,8 @@ async function main(): Promise<void> {
   console.log(`   ${imported.data.message}`)
   const restored = (await readPortfolios()).portfolios[0]
   check('import restores the position', restored.tickers.includes('NVDA'))
-  check('import restores the share count', restored.holdings.NVDA?.shares === 7)
+  // 9, not 7: the backup was taken while that edit was still queued and carries it.
+  check('import restores the share count', restored.holdings.NVDA?.shares === 9)
   check(
     'import restores cards',
     (await readCards()).customCards.some((card) => card.name === 'Settings Probe Card'),

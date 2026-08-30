@@ -256,6 +256,17 @@ adding handlers.
   the cell does, so a long description still clips. `wrap` swaps in a textarea sized to
   its content, and that sizing needs the `ResizeObserver` as well as the layout effect —
   the line count changes when the column narrows even though the text has not.
+- **The user-data export reads at the back of the write queue.** All three stores'
+  export functions (`exportUserData`, `exportSettings`, `exportCards`) join the same
+  `writeChain` their mutations use, so an edit still queued or mid-persist when Export
+  was clicked is in the backup. Reading outside the queue returned the document as it
+  stood before that edit, which is how a backup came out one edit behind.
+- **Only an absent or unparseable store may be replaced by a seed.** `loadDocument`,
+  `loadSettings` and `readCards` used to treat *any* read failure as a first run and then
+  persist the defaults over the path — a transient EBUSY, EPERM or EACCES (antivirus, a
+  sync client holding the file on Windows) would wipe the live book and the next export
+  would carry the empty one. ENOENT and a `SyntaxError` fall back; every other error
+  throws, so the write fails visibly as a `partial` envelope instead.
 - **Settings live in their own file, not the holdings store.**
   `electron/services/settingsStore.ts` writes
   `%APPDATA%\BudgetTerminalElectron\settings.json`. Folding them into `portfolio.json`

@@ -130,14 +130,27 @@ function normalize(settings: StoredSettings): StoredSettings {
 let cached: StoredSettings | null = null
 let writeChain: Promise<void> = Promise.resolve()
 
+/**
+ * Whether a read failure means the file is not there rather than momentarily unreadable.
+ *
+ * The same rule as the holdings store: defaulting on a transient EBUSY or EPERM would
+ * hand the next write — and the next export — an empty settings document in place of the
+ * user's tab order.
+ */
+function isAbsentOrDamaged(error: unknown): boolean {
+  if (error instanceof SyntaxError) return true
+  return Boolean(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT')
+}
+
 async function loadSettings(): Promise<StoredSettings> {
   if (cached) return cached
   try {
     const raw = await readFile(settingsPath(), 'utf8')
     const parsed = settingsSchema.safeParse(JSON.parse(raw))
     cached = normalize(parsed.success ? parsed.data : emptySettings())
-  } catch {
-    // No file yet, or an unreadable one: start from the defaults rather than fail.
+  } catch (error) {
+    // No file yet, or a damaged one: start from the defaults rather than fail.
+    if (!isAbsentOrDamaged(error)) throw error
     cached = emptySettings()
   }
   return cached
@@ -284,7 +297,24 @@ export async function replaceSettings(source: unknown): Promise<AppSettings> {
   return readSettings()
 }
 
-/** The raw document, as the user-data export writes it. */
+/**
+ * The raw document, as the user-data export writes it.
+ *
+ * Taken at the back of the write queue so a mutation still in flight when Export was
+ * clicked is part of the backup rather than the edit the backup is missing.
+ */
 export async function exportSettings(): Promise<StoredSettings> {
-  return { ...(await loadSettings()) }
+  let snapshot: StoredSettings | undefined
+  let failure: unknown = null
+  const run = writeChain.then(async () => {
+    try {
+      snapshot = { ...(await loadSettings()) }
+    } catch (error) {
+      failure = error
+    }
+  })
+  writeChain = run
+  await run
+  if (failure) throw failure
+  return snapshot as StoredSettings
 }

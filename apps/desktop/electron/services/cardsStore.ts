@@ -49,7 +49,14 @@ export async function readCards(
   try {
     return normalizeCardsPayload(JSON.parse(await readFile(targetPath, 'utf8')), targetPath)
   } catch (error) {
-    if (!isMissing(error)) return defaultCardsPayload(targetPath)
+    // A damaged document has nothing to recover and falls back to the starter cards; a
+    // file that is merely unreadable this time (EBUSY, EPERM — an antivirus scan or a
+    // sync client holding it) must not, or the next write persists the defaults over the
+    // user's cards and the next export carries them.
+    if (!isMissing(error)) {
+      if (!(error instanceof SyntaxError)) throw error
+      return defaultCardsPayload(targetPath)
+    }
   }
 
   let seeded = defaultCardsPayload(targetPath)
@@ -152,8 +159,26 @@ export async function mutateCards(
   return result ?? readCards(targetPath, legacyPath)
 }
 
+/**
+ * The stored cards document, for the user-data export.
+ *
+ * Read at the back of the write queue, so a card added or reordered moments before
+ * Export was clicked is in the backup rather than missing from it.
+ */
 export async function exportCards(targetPath = cardsPath()): Promise<unknown> {
-  return storedDocument(await readCards(targetPath))
+  let snapshot: unknown = null
+  let failure: unknown = null
+  const run = writeChain.then(async () => {
+    try {
+      snapshot = storedDocument(await readCards(targetPath))
+    } catch (error) {
+      failure = error
+    }
+  })
+  writeChain = run
+  await run
+  if (failure) throw failure
+  return snapshot
 }
 
 export async function replaceCards(value: unknown, targetPath = cardsPath()): Promise<CardsPayload> {

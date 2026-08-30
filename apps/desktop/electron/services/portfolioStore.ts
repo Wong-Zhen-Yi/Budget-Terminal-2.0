@@ -353,6 +353,45 @@ let cached: StoredDocument | null = null
 /** Serialises writes so two rapid edits cannot interleave read-modify-write. */
 let writeChain: Promise<void> = Promise.resolve()
 
+/**
+ * Run `task` at the back of the write queue.
+ *
+ * A read that has to be current — the backup export — joins the same queue the writes
+ * use, so an edit that is still queued or mid-persist is in the answer. Reading outside
+ * it returns the document as it stood before that edit, which is how a backup taken
+ * straight after a cell edit came out one edit behind.
+ */
+async function queued<T>(task: () => Promise<T>): Promise<T> {
+  let result: T | undefined
+  let failure: unknown = null
+  const run = writeChain.then(async () => {
+    try {
+      result = await task()
+    } catch (error) {
+      failure = error
+    }
+  })
+  writeChain = run
+  await run
+  if (failure) throw failure
+  return result as T
+}
+
+/**
+ * Whether a read failure means "there is no store yet" rather than "the store could not
+ * be read this time".
+ *
+ * Only the first justifies seeding and persisting over the path: a transient EBUSY,
+ * EPERM or EACCES — an antivirus scan or a sync client holding the file on Windows —
+ * would otherwise replace a live book with a fresh seed, and the next export would carry
+ * that empty document. A damaged document counts as absent, since nothing can be
+ * recovered from it either way.
+ */
+function isAbsentOrDamaged(error: unknown): boolean {
+  if (error instanceof SyntaxError) return true
+  return Boolean(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT')
+}
+
 async function loadDocument(): Promise<StoredDocument> {
   if (cached) return cached
   try {
@@ -369,7 +408,8 @@ async function loadDocument(): Promise<StoredDocument> {
     if (backfill) parsed.data.personalFinance = await seedFinanceFromLegacy()
     cached = normalize(parsed.data)
     if (backfill) await persist(cached)
-  } catch {
+  } catch (error) {
+    if (!isAbsentOrDamaged(error)) throw error
     const seeded = await seedFromLegacy()
     await persist(seeded)
     cached = seeded
@@ -851,7 +891,7 @@ export async function mutatePersonalFinance(
  * app's own store, so an export taken here restores here.
  */
 export async function exportUserData(): Promise<unknown> {
-  return structuredClone(await loadDocument())
+  return queued(async () => structuredClone(await loadDocument()))
 }
 
 /**
