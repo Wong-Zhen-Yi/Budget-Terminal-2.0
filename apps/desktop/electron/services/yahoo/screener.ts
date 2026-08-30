@@ -203,10 +203,11 @@ export function equitySignalsScreen(
   minimumMarketCap: number,
   exchanges: readonly string[],
   size: number,
+  offset = 0,
 ): Promise<EquityScreenPage> {
   return postScreen({
     size,
-    offset: 0,
+    offset,
     sortField: 'intradaymarketcap',
     sortType: 'DESC',
     quoteType: 'EQUITY',

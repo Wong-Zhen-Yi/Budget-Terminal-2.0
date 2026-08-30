@@ -10,8 +10,11 @@ import {
   describeSignalsFreshness,
   formatSignalAge,
   formatSignalMoney,
+  formatSignalPercent,
   formatSignalPrice,
+  formatSignalRatio,
   formatSignalScore,
+  marketOpen,
   SIGNAL_FILTERS,
   SIGNAL_INDICATOR_FIELDS,
   SIGNAL_ROLE_LABELS,
@@ -45,22 +48,12 @@ function resultTone(result: SignalResult): Tone {
   return 'muted'
 }
 
-function label(value: string): string {
-  return value.replaceAll('_', ' ')
+function regimeTone(label: string): Tone {
+  return label === 'RISK_ON' ? 'positive' : label === 'RISK_OFF' ? 'negative' : 'warning'
 }
 
-function marketOpen(now: Date): boolean {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    weekday: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(now)
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((entry) => entry.type === type)?.value ?? ''
-  if (['Sat', 'Sun'].includes(part('weekday'))) return false
-  const minutes = Number(part('hour')) * 60 + Number(part('minute'))
-  return minutes >= 9 * 60 + 30 && minutes < 16 * 60
+function label(value: string): string {
+  return value.replaceAll('_', ' ')
 }
 
 function describeUniverse(payload: SignalsPayload | null): string {
@@ -68,8 +61,8 @@ function describeUniverse(payload: SignalsPayload | null): string {
   const cacheLabel = payload.universeFromCache ? 'cached universe' : 'live universe refresh'
   return (
     `Universe sourced ${new Date(payload.sourcedAt).toLocaleString()} (${formatSignalAge(payload.sourcedAt)}) · ` +
-    `${payload.sourceCandidateCount} screened · ${payload.passedFilterCount || payload.candidates.length} passed filters · ` +
-    `${payload.candidates.length} shortlisted · ${payload.rejectedCandidateCount} rejected · ${cacheLabel}`
+    `${payload.sourceCandidateCount} screened · ${payload.prefilteredCount} passed the free liquidity prefilter · ` +
+    `${payload.confirmedCount} confirmed on daily history · ${payload.candidates.length} shortlisted for intraday data · ${cacheLabel}`
   )
 }
 
@@ -90,6 +83,46 @@ function detailWarnings(result: SignalResult): string[] {
     : ['No warnings.']
 }
 
+function riskLines(result: SignalResult): string[] {
+  const risk = result.risk
+  if (!risk) {
+    return ['No trade plan: the daily ATR or a workable stop below the current price was unavailable.']
+  }
+  return [
+    `Entry (last price): ${formatSignalPrice(risk.entry)}`,
+    `Stop: ${formatSignalPrice(risk.stop)}  (${formatSignalRatio(risk.stopDistanceAtr)} ATR, ${formatSignalPrice(risk.riskPerShare)} per share)`,
+    `Target: ${formatSignalPrice(risk.target)}  (${formatSignalPrice(risk.rewardPerShare)} per share)`,
+    `Reward to risk: ${formatSignalRatio(risk.rewardToRisk)}  (a 3 ATR objective against this stop; a pullback entry reads high, a stretched one bottoms out near 2)`,
+    `Daily ATR: ${formatSignalPercent(risk.atrPct)} of price  (a long is capped at WATCH above 8%)`,
+    `Position size risking 1% of capital: ${formatSignalPercent(risk.positionSizePct)} of capital`,
+  ]
+}
+
+function validationLines(payload: SignalsPayload | null): string[] {
+  if (!payload?.validation.length) {
+    return ['No walk-forward measurement yet. Run a scan to score the daily model over its own history.']
+  }
+  const lines: string[] = []
+  for (const entry of payload.validation) {
+    lines.push(`${entry.horizonSessions}-session forward return · ${entry.tickers} ticker(s) · ${entry.samples} observation(s)`)
+    lines.push('  band        n      hit rate   mean     median')
+    for (const band of entry.bands) {
+      lines.push(
+        `  ${band.band.padEnd(10)} ${String(band.samples).padStart(5)}  ` +
+        `${(band.hitRate * 100).toFixed(1).padStart(8)}%  ` +
+        `${band.meanForwardReturn.toFixed(2).padStart(6)}%  ${band.medianForwardReturn.toFixed(2).padStart(6)}%`,
+      )
+    }
+    lines.push('')
+  }
+  lines.push(
+    'Measured on the daily blocks only — trend, momentum, daily volume and relative strength —',
+    'over the same history this scan downloaded. History is back-adjusted for splits and',
+    'dividends, so these are indicative of the score’s ordering, not a tradeable backtest.',
+  )
+  return lines
+}
+
 export function SignalsPage({
   onStatusChange,
 }: {
@@ -103,7 +136,7 @@ export function SignalsPage({
   const [filter, setFilter] = useState<SignalsFilter>('all')
   const [search, setSearch] = useState('')
   const [selectedTicker, setSelectedTicker] = useState('')
-  const [tableWidth, setTableWidth] = useState(820)
+  const [tableWidth, setTableWidth] = useState(880)
   const [now, setNow] = useState(() => new Date())
 
   const envelope = scan.data ?? latest.data
@@ -155,6 +188,7 @@ export function SignalsPage({
   const selectedCandidate = candidates.get(selectedTicker) ?? null
   const counts = summarizeSignals(payload?.results ?? [])
   const freshness = describeSignalsFreshness(payload)
+  const regime = payload?.regime ?? null
 
   const status = useMemo<{ text: string; tone: Tone }>(() => {
     if (scan.isPending) return { text: 'Sourcing and ranking liquid US equities…', tone: 'warning' }
@@ -207,7 +241,7 @@ export function SignalsPage({
       sortValue: (result) => candidates.get(result.ticker)?.marketCap ?? null,
       align: 'right',
       numeric: true,
-      width: '104px',
+      width: '96px',
     },
     {
       key: 'dollarVolume',
@@ -216,7 +250,7 @@ export function SignalsPage({
       sortValue: (result) => candidates.get(result.ticker)?.medianDollarVolume ?? null,
       align: 'right',
       numeric: true,
-      width: '116px',
+      width: '106px',
     },
     {
       key: 'score',
@@ -225,14 +259,23 @@ export function SignalsPage({
       sortValue: signalScoreFraction,
       align: 'right',
       numeric: true,
-      width: '70px',
+      width: '76px',
+    },
+    {
+      key: 'rewardToRisk',
+      header: 'R:R',
+      cell: (result) => formatSignalRatio(result.risk?.rewardToRisk),
+      sortValue: (result) => result.risk?.rewardToRisk ?? null,
+      align: 'right',
+      numeric: true,
+      width: '56px',
     },
     {
       key: 'signal',
       header: 'Signal',
       cell: (result) => <span className={toneClass[resultTone(result)]}>{label(result.signal)}</span>,
       sortValue: (result) => ({ NONE: 0, WATCH: 1, LONG: 2, STRONG_LONG: 3 })[result.signal],
-      width: '112px',
+      width: '104px',
     },
     {
       key: 'tradeStatus',
@@ -242,14 +285,20 @@ export function SignalsPage({
     },
   ], [candidates])
 
-  const metricValues = [
-    ['Shortlisted', payload ? payload.candidates.length : '—'],
-    ['Valid longs', payload ? counts.validLong : '—'],
-    ['Blocked', payload ? counts.blocked : '—'],
-    ['Watch', payload ? counts.watch : '—'],
-    ['Too new', payload ? counts.tooNew : '—'],
-    ['Data errors', payload ? counts.errors : '—'],
-    ['Last scan', payload ? formatSignalAge(payload.completedAt) : '—'],
+  const metricValues: Array<[string, string | number, Tone]> = [
+    ['Shortlisted', payload ? payload.candidates.length : '—', 'muted'],
+    ['Valid longs', payload ? counts.validLong : '—', 'muted'],
+    ['Blocked', payload ? counts.blocked : '—', 'muted'],
+    ['Watch', payload ? counts.watch : '—', 'muted'],
+    ['Stale intraday', payload ? counts.stale : '—', 'muted'],
+    ['Data errors', payload ? counts.errors : '—', 'muted'],
+    ['Regime', regime ? label(regime.label) : '—', regime ? regimeTone(regime.label) : 'muted'],
+    [
+      'Long / strong cut',
+      regime ? `${Math.round(regime.longThreshold * 100)} / ${Math.round(regime.strongThreshold * 100)}` : '—',
+      'muted',
+    ],
+    ['Last scan', payload ? formatSignalAge(payload.completedAt) : '—', 'muted'],
   ]
 
   const empty = !payload
@@ -265,7 +314,7 @@ export function SignalsPage({
       <div className="flex shrink-0 items-baseline gap-3">
         <h1 className="text-sm font-semibold text-text">Signals</h1>
         <p className="text-2xs text-text-muted">
-          Sources liquid US leaders on demand, then scores Daily → Hourly → 5-minute → 1-minute analysis out of 100. Decision support only.
+          Screens the liquid US market, then scores Daily → Hourly → 5-minute → 1-minute analysis out of 100 against the day's regime. Decision support only.
         </p>
       </div>
 
@@ -285,17 +334,17 @@ export function SignalsPage({
       </section>
 
       <section className="flex shrink-0 gap-6 border border-border bg-surface px-3 py-2">
-        {metricValues.map(([caption, value]) => (
+        {metricValues.map(([caption, value, tone]) => (
           <div key={caption} className="min-w-16">
             <div className="text-[10px] text-text-dim">{caption}</div>
-            <div className="num text-xs font-semibold text-text">{value}</div>
+            <div className={`num text-xs font-semibold ${tone === 'muted' ? 'text-text' : toneClass[tone]}`}>{value}</div>
           </div>
         ))}
       </section>
 
       <div className="shrink-0 space-y-1 text-[10px] leading-4 text-text-dim">
         <p>
-          Universe: US common stocks · price ≥ $5 · market cap ≥ $2B · 20-session median dollar volume ≥ $20M · top 25 by liquidity. Context timeframes score the last closed bar; entry uses the live bar. Every check awards partial credit, with distances measured in ATR of the timeframe being scored. Relative strength is daily excess return against SPY; a scan without a usable benchmark is scored out of 84 instead of 100.
+          Universe: US common stocks · price ≥ $5 · market cap ≥ $2B · screener dollar volume ≥ $20M, confirmed against a 20-session median · shortlisted by the daily sub-model. Context timeframes score the last closed bar; an intraday frame older than 15 minutes is reported stale rather than scored. Every check awards partial credit, with distances measured in ATR of the timeframe being scored, and the score is always out of 100 — a block that cannot be scored earns nothing and caps the result at WATCH. Relative strength is beta-adjusted alpha against SPY. In a risk-off regime the long and strong thresholds rise, so the same setup has to score higher.
         </p>
         <p>{describeUniverse(payload)}</p>
       </div>
@@ -309,14 +358,14 @@ export function SignalsPage({
             rows={visibleResults}
             rowKey={(result) => result.ticker}
             layout="fixed"
-            defaultSort={{ key: 'rank', direction: 'asc' }}
+            defaultSort={{ key: 'score', direction: 'desc' }}
             onRowClick={(result) => setSelectedTicker(result.ticker)}
             rowClassName={(result) => result.ticker === selectedTicker ? 'bg-accent-dim/60' : ''}
             empty={empty}
           />
         </div>
         <Splitter onDrag={(clientX) => setTableWidth(Math.min(Math.max(clientX, 420), maximumTableWidth))} />
-        <SignalDetail candidate={selectedCandidate} result={selectedResult} />
+        <SignalDetail candidate={selectedCandidate} result={selectedResult} payload={payload} />
       </div>
     </div>
   )
@@ -325,9 +374,11 @@ export function SignalsPage({
 function SignalDetail({
   candidate,
   result,
+  payload,
 }: {
   candidate: SignalCandidate | null
   result: SignalResult | null
+  payload: SignalsPayload | null
 }) {
   if (!result) {
     return (
@@ -371,8 +422,10 @@ function SignalDetail({
         </tbody>
       </table>
 
+      <DetailBlock title="Risk and trade plan" lines={riskLines(result)} />
       <DetailBlock title="Indicator values" lines={indicatorLines} />
       <DetailBlock title="Why this ticker was selected" lines={[...qualityReasons, ...(qualityReasons.length && scoredReasons.length ? [''] : []), ...scoredReasons]} />
+      <DetailBlock title="Measured forward returns by score band" lines={validationLines(payload)} />
       <DetailBlock title="Bar freshness, warnings and data health" lines={detailWarnings(result)} />
     </aside>
   )

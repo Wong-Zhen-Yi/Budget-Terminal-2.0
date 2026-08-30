@@ -1573,6 +1573,7 @@ export type SignalTradeStatus =
   | 'WATCH'
   | 'VALID_LONG'
   | 'TOO_EXTENDED'
+  | 'STALE_DATA'
   | 'INSUFFICIENT_HISTORY'
   | 'DATA_ERROR'
 
@@ -1582,8 +1583,12 @@ export type SignalsFilter =
   | 'long'
   | 'watch'
   | 'blocked'
+  | 'stale'
   | 'too_new'
   | 'error'
+
+/** Where the broad market sits, and the class thresholds that follow from it. */
+export type SignalRegimeLabel = 'RISK_ON' | 'NEUTRAL' | 'RISK_OFF'
 
 export interface SignalsPageSettings {
   filter: SignalsFilter
@@ -1592,13 +1597,55 @@ export interface SignalsPageSettings {
 
 export interface SignalReason {
   name: string
-  group: 'trend' | 'momentum' | 'volume' | 'entry' | 'relative'
+  group: 'trend' | 'momentum' | 'volume' | 'entry' | 'relative' | 'regime'
   passed: boolean
   points: number
   description: string
   value: number | null
   reference: number | null
   weight: number
+}
+
+/** The trade plan a signal implies, all in the ticker's own currency. */
+export interface SignalRisk {
+  entry: number | null
+  stop: number | null
+  target: number | null
+  riskPerShare: number | null
+  rewardPerShare: number | null
+  rewardToRisk: number | null
+  stopDistanceAtr: number | null
+  atrPct: number | null
+  /** Position value as a share of capital that risks one budget unit on this stop. */
+  positionSizePct: number | null
+}
+
+export interface SignalRegime {
+  label: SignalRegimeLabel
+  score: number
+  maxScore: number
+  fraction: number
+  longThreshold: number
+  strongThreshold: number
+  reasons: SignalReason[]
+  indicators: Record<string, number | string | null>
+  warnings: string[]
+}
+
+export interface SignalBacktestBand {
+  band: string
+  samples: number
+  hitRate: number
+  meanForwardReturn: number
+  medianForwardReturn: number
+}
+
+/** Measured forward returns of the daily sub-model, by score band. */
+export interface SignalValidation {
+  horizonSessions: number
+  tickers: number
+  samples: number
+  bands: SignalBacktestBand[]
 }
 
 export interface SignalTimeframeBar {
@@ -1623,6 +1670,9 @@ export interface SignalResult {
   entryMaxScore: number
   relativeScore: number
   relativeMaxScore: number
+  regimeScore: number
+  regimeMaxScore: number
+  risk: SignalRisk | null
   signal: SignalClass
   tradeStatus: SignalTradeStatus
   reasons: SignalReason[]
@@ -1639,7 +1689,11 @@ export interface SignalCandidate {
   exchange: string
   price: number
   marketCap: number
+  /** Price times average daily volume, straight off the screener row. Costs no request. */
+  estimatedDollarVolume: number
   medianDollarVolume: number
+  /** Fraction of the daily sub-model this name scored during stage one. */
+  dailyPreScore: number
   qualityRank: number
   reasons: string[]
 }
@@ -1652,8 +1706,12 @@ export interface SignalsPayload {
   startedAt: string
   completedAt: string
   sourceCandidateCount: number
+  prefilteredCount: number
+  confirmedCount: number
   rejectedCandidateCount: number
   passedFilterCount: number
+  regime: SignalRegime
+  validation: SignalValidation[]
   errors: Record<string, string>
   universeFromCache: boolean
 }

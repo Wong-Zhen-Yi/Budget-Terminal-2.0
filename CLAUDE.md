@@ -941,6 +941,100 @@ adding handlers.
   `run_batched`; React unmounts the page and React Query holds the payload, so there is
   nothing to defer.
 
+- **Signals is page40, and its file is called `signal_scanner2_page.py`.** Grep for `_p40_`
+  (engine `services/signal_engine.py`, models `services/signal_models.py`). This page is
+  the one deliberate *extension* of the reference rather than a port of it: the sourcing
+  funnel, four of the scored factors, the regime block, the trade plan and the walk-forward
+  are this app's, and each is called out below. The reference's own maths is still the
+  origin of `ramp`, `atrFraction`, `rsiFraction`, the RSI/MACD/EMA/ATR readings, the
+  partial-credit idea and the VWAP extension filter.
+- **The score is always out of 100. Never let the denominator move.** The reference shrank
+  `maxScore` to 84 when the benchmark was missing, which divided the same raw points by
+  less and silently *promoted* verdicts — 68 points read STRONG_LONG on a broken scan and
+  only LONG on a healthy one. A block that cannot be scored earns zero and caps the class
+  at WATCH instead. `classifySignal` still takes a `maximum`, but every caller passes 100.
+- **`atrFraction` scores zero when ATR is missing, and `finite()` guards null before
+  `Number()`.** The reference returned full credit for any positive distance with no ATR,
+  so a data-poor ticker collected every distance check for free. The `finite()` hazard is
+  the same one Valuation's `finiteOrNull` and Economic's `finite()` document: `Number(null)`
+  is 0, so an absent high used to make one true range the size of the whole price and left
+  a bogus ATR behind it.
+- **An intraday frame older than its age bound is reported, not scored.** `maxEntryAgeSeconds`
+  is 900 and `maxSetupAgeSeconds` 1800; past those, `timeframeRead` answers `kind: 'stale'`,
+  the setup and entry blocks score zero and `tradeStatus` is `STALE_DATA` with the class
+  capped at WATCH. The entry frame runs `dropOpen: false` so it can read a live bar, which
+  is exactly why it used to score a days-old one as live price and VWAP — the normal case,
+  because the page is most often opened outside market hours. Age is the whole test; a
+  closed market fails it within fifteen minutes and no holiday calendar is needed.
+- **The universe funnel is three stages, and only the last two cost requests.** Two screener
+  pages (`SIGNAL_SCREEN_OFFSETS`) give 400 names; the prefilter multiplies the screener
+  row's own `averageDailyVolume3Month` by its price, so cutting to ~250 costs nothing. The
+  reference spent one daily chart per candidate to learn the same number, which was half the
+  scan's budget. The top 60 by that estimate then buy 730 days of daily history **under the
+  `trend` cache key the scoring pass reuses**, and liquidity is confirmed from those same
+  bars. There is no separate `liquidity` role any more; adding one back would re-download a
+  subset of data the scan already holds.
+- **The shortlist is ranked by setup, not by size.** Every candidate has already cleared the
+  $20M floor, so ranking on liquidity alone reproduced the same mega-caps every day —
+  `rankSignalCandidates` blends the stage-one daily score 70/30 against a liquidity
+  percentile. That is what puts a PLTR or a LITE in front of a name three times its size,
+  and it is why only 30 of the 60 confirmed names pay for intraday history.
+- **`evaluateDailySignalAtIndex` is the lookahead-safe path, and two things depend on it.**
+  It is the port of the reference's `evaluate_signal_at_index`, which the first pass dropped.
+  Stage one of the funnel and the walk-forward both call it, so a candidate is ranked by
+  exactly the model the validation measures. Indicators are computed **once** per frame and
+  read by index — every array `calculateIndicators` builds is causal — so the backtest is
+  linear. Recomputing per index would make 30 tickers of 730 bars quadratic.
+- **The walk-forward is indicative, not tradeable, and the page says so.** `chartBars`
+  back-adjusts the whole OHLC history by today's `adjclose/close` ratio, so a replayed bar
+  carries split and dividend information from after its own date. That is standard
+  back-adjustment and it does not touch the live scan, but the caveat has to stay on screen
+  beside the numbers.
+- **Four factors exist because the reference's ten checks are about four ideas.** Three
+  near-collinear reads of one close against its own EMAs, two views of one MACD, a 21-day
+  window sitting inside the 63-day one, and 26 points on a 5-minute breakout plus a
+  1-minute VWAP distance that both restate "price is up intraday". The additions each carry
+  information none of the others do: **ADX(14)** separates a trend from a chop, **OBV slope**
+  is accumulation rather than one busy session, **52-week position** is momentum quality that
+  is not another EMA distance, and **beta-adjusted alpha** replaces the raw ratio spread,
+  which mechanically flattered high-beta names in a rising tape.
+- **Relative volume is normalised by minute-of-day, not by a flat trailing mean.** Intraday
+  volume is U-shaped, so the reference's 20-bar mean rated every opening bar as elevated and
+  every midday bar as quiet for reasons unrelated to interest. The slot map is built as the
+  frame is walked, so it stays linear; below five samples of a slot it falls back to the flat
+  mean. DST moves a session's UTC slot by an hour twice a year, which costs at most one
+  boundary inside a 30-day window.
+- **The VWAP check is a hump, not a ramp.** Full credit from 0.15 to 0.75 ATR above VWAP,
+  fading to zero by 2 ATR. The reference's monotone ramp paid more the further price ran,
+  which is an incentive to chase; `TOO_EXTENDED` is now the tail of that curve rather than
+  only a bolt-on veto.
+- **The regime is scored once per scan and moves the thresholds.** `scoreRegime` reads the
+  SPY daily frame the relative block already needs plus one `^VIX` daily request. Under 40%
+  of its ten points the long cut rises 0.60 → 0.68 and strong 0.80 → 0.85, so the same setup
+  must score higher in a risk-off tape. Without that the engine fires at the same rate in
+  every market, which is the main reason a fixed-threshold scanner looks accurate in a bull
+  run and useless afterwards. The applied cuts are published on the payload so the page can
+  state them rather than hide them.
+- **The stop is never anchored to the daily 20-session high.** A daily 20-session range is
+  routinely three to five ATR, so anchoring there puts every stop further away than a 3 ATR
+  target and makes reward-to-risk unusable for exactly the trending names this page looks
+  for. The stop is the tighter of the EMA20 shelf and a 1.5 ATR give-back, which makes R:R a
+  direct readout of entry quality: a pullback entry reads high, a stretched one bottoms out
+  at 2.00. The gate that can actually fire is `maximumAtrPct` — a name whose daily ATR is
+  over 8% of price is a different instrument, and it is capped at WATCH.
+- **Signals fires nothing on mount and has no refresh timer.** `useSignalsLatest` asks for
+  `latestOnly`, which is a disk read; the scan is a mutation behind a button. A cold scan is
+  about 150 paced requests and 45s, and it changes the answer, so a background refetch would
+  both cost the app's whole rate budget and reshuffle the table under whoever is reading it.
+- **The persisted payload is versioned in its filename.** `signals-latest-v3.json`; the v2
+  file is simply not read. Bump it whenever the payload shape changes, or an old document
+  renders against components that no longer match it.
+- **Two documented departures beyond the scoring model.** There is no progress reporting —
+  an IPC request/response carries no intermediate frames, the same wall the Crypto, Economic,
+  ETF and Roll ports hit — so the status line and a pulsing bar stand in. And the reference's
+  `PaperTradingEngine` hook and `_p40_alert_states` have no port; this page reports, it does
+  not track positions.
+
 
 ## Porting behaviour from the PySide6 app
 
@@ -969,6 +1063,7 @@ decimal. Useful starting points:
 | Dictionary, all of it | `mixins/dictionary_page.py` (catalog `services/dictionary_catalog.py`, diagrams `services/chart_pattern_catalog.py`, smoke `scripts/test_dictionary_page.py`) |
 | Roll, all of it | `mixins/random_recommender.py` (page18; worker `workers/random_recommender.py`) |
 | IPO, all of it | `mixins/ipo_page.py` (page21; workers `workers/ipo_calendar.py`, smoke `scripts/test_ipo_calendar_cache.py`) |
+| Signals, the ported half | `mixins/signal_scanner2_page.py` (page40; engine `services/signal_engine.py`, models `services/signal_models.py`, presenters `mixins/signals_presenters.py`) |
 | ETF, all of it | `mixins/etf_analyser.py` (page13; issuers `etf_holdings.py`, arbitrage `services/etf_arbitrage.py`, quotes `workers/etf_heatmap.py`) |
 | Heatmap, all of it | `mixins/spy_heatmap.py` (presenters `mixins/spy_heatmap_presenters.py`, worker `workers/etf_heatmap.py`, issuer files `etf_holdings.py`, widget `widgets/etf_heatmap.py`) |
 | Fundamentals, all of it | `mixins/fundamentals_setup.py`, `mixins/fundamentals_render.py`, `workers/fundamentals.py`, `services/fundamentals_compare.py`, `services/sec_edgar.py` |
