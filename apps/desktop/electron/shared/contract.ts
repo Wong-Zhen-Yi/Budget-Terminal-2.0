@@ -290,6 +290,122 @@ export type PersonalFinanceMutation =
   | { type: 'setTotalsCurrency'; currency: FinanceCurrency }
   | { type: 'setGoal'; title?: string; targetAmount?: number; currency?: FinanceCurrency }
 
+/* ----------------------------------------------------------------- YouTube */
+
+export interface YouTubeVideo {
+  videoId: string
+  ticker: string
+  title: string
+  channel: string
+  viewCount: number | null
+  viewCountText: string
+  publishedText: string
+  publishedDays: number | null
+  publishedDaysText: string
+  durationText: string
+  url: string
+  thumbnailUrl: string
+  descriptionSnippet: string
+}
+
+export interface YouTubePayload {
+  items: YouTubeVideo[]
+  warnings: string[]
+  fetchedAt: number
+  fromCacheCount: number
+  fetchedCount: number
+  tickersTotal: number
+}
+
+export interface YouTubeRequest {
+  tickers: string[]
+  force?: boolean
+}
+
+export interface YouTubeThumbnailRequest {
+  videoId: string
+  thumbnailUrl: string
+}
+
+export interface YouTubeThumbnailPayload {
+  dataUri: string
+  resolvedUrl: string
+}
+
+export interface YouTubePageSettings {
+  /** -1 follows the reference's newest-first default; 0-6 address the table columns. */
+  sortColumn: number
+  sortDescending: boolean
+}
+
+/* ----------------------------------------------------------- institutions */
+
+export type InstitutionActivitySide = 'buy' | 'sell'
+
+export interface InstitutionActivityRow {
+  period: string
+  manager: string
+  managerId: string
+  symbol: string
+  company: string
+  activity: string
+  action: string
+  side: InstitutionActivitySide
+  shareChange: string
+  shareChangeValue: number
+  approxFlow: string
+  approxFlowValue: number
+  holdPrice: string
+  changeToPortfolio: string
+  changeToPortfolioPct: number
+  sourceUrl: string
+  historyUrl: string
+}
+
+export interface InstitutionManagerRow {
+  manager: string
+  managerId: string
+  period: string
+  buyCount: number
+  sellCount: number
+  topActivity: string[]
+  sourceUrl: string
+}
+
+export interface InstitutionActivityPayload {
+  periods: string[]
+  activePeriod: string
+  buyRows: InstitutionActivityRow[]
+  sellRows: InstitutionActivityRow[]
+  managerRows: InstitutionManagerRow[]
+  sourceUrls: { activity: string }
+  warnings: string[]
+  fetchedAt: string
+}
+
+export interface InstitutionTickerActivityPayload {
+  symbol: string
+  company: string
+  sector: string
+  periods: string[]
+  activePeriod: string
+  activityRows: InstitutionActivityRow[]
+  sourceUrls: { activity: string }
+  warnings: string[]
+  fetchedAt: string
+}
+
+export interface InstitutionActivityRequest {
+  limit?: number
+  quarter?: string
+  force?: boolean
+}
+
+export interface InstitutionTickerActivityRequest {
+  symbol: string
+  force?: boolean
+}
+
 export interface FxPayload {
   /** SGD per 1 USD, or null when Yahoo gave nothing usable. */
   usdSgd: number | null
@@ -352,6 +468,8 @@ export interface AppSettings {
   backtestPage: BacktestPageSettings
   /** Persisted filter/search controls for the automatic Signals scanner. */
   signalsPage: SignalsPageSettings
+  /** Persisted table sort for the portfolio YouTube feed. */
+  youtubePage: YouTubePageSettings
   /** Absolute path of the settings file, surfaced on the page. */
   sourcePath: string
 }
@@ -366,6 +484,7 @@ export type AppSettingsMutation =
   | { type: 'setTabObscured'; id: string; obscured: boolean }
   | { type: 'setBacktestPage'; value: BacktestPageSettings }
   | { type: 'setSignalsPage'; value: SignalsPageSettings }
+  | { type: 'setYouTubePage'; value: YouTubePageSettings }
 
 /** The four User Data buttons. Each one prompts in the renderer before it is sent. */
 export type MaintenanceAction =
@@ -1056,14 +1175,14 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'charts', label: 'Charts', implemented: true },
   { id: 'projections', label: 'Projections', implemented: true },
   { id: 'options', label: 'Options', implemented: true },
-  { id: 'etf', label: 'ETF', implemented: false },
+  { id: 'etf', label: 'ETF', implemented: true },
   { id: 'crypto', label: 'Crypto', implemented: true },
   { id: 'backtest', label: 'Backtest', implemented: true },
   { id: 'roll', label: 'Roll', implemented: true },
-  { id: 'ipo', label: 'IPO', implemented: false },
-  { id: 'institutions', label: 'Institutions', implemented: false },
+  { id: 'ipo', label: 'IPO', implemented: true },
+  { id: 'institutions', label: 'Institutions', implemented: true },
   { id: 'politics', label: 'Politics', implemented: false },
-  { id: 'youtube', label: 'YouTube', implemented: false },
+  { id: 'youtube', label: 'YouTube', implemented: true },
   { id: 'dictionary', label: 'Dictionary', implemented: true },
   { id: 'quant', label: 'Quant', implemented: false },
   { id: 'economic', label: 'Economic', implemented: true },
@@ -1803,6 +1922,112 @@ export interface HeatmapRequest {
   force?: boolean
 }
 
+/* ---------------------------------------------------------------- etf page */
+
+/**
+ * The ETF page (`mixins/etf_analyser.py`, page13) — any US ETF's full holdings list
+ * from its issuer's own published file, with an ETF-versus-basket arbitrage subtab and
+ * a left rail ranking the whole US ETF universe by net assets.
+ *
+ * `EtfHolding` in `etf_holdings.py`; `weight` is a fraction, so `0.0873` prints 8.73%.
+ * It stays nullable here because the Yahoo fallback can answer a row without one, and
+ * the reference sorts those to the bottom rather than dropping them.
+ */
+export interface EtfHoldingRow {
+  symbol: string
+  name: string
+  weight: number | null
+  sector: string
+}
+
+/** One entry of `sector_breakdown`, which is a percentage and not a fraction. */
+export interface EtfSectorSlice {
+  sector: string
+  percent: number
+}
+
+/** `EtfHoldingsResult`. The two money fields arrive pre-formatted, as they do there. */
+export interface EtfHoldingsPayload {
+  ticker: string
+  fundName: string
+  issuer: string
+  asOfDate: string
+  /** `'--'` when no source carried one, matching the dataclass default. */
+  expenseRatio: string
+  netAssets: string
+  holdings: EtfHoldingRow[]
+  /** Highest first, as `_enrich_with_yfinance` sorts it. */
+  sectorBreakdown: EtfSectorSlice[]
+  sourceUrl: string
+  /** True for the Yahoo fallback, which is a top-holdings list rather than the book. */
+  isPartial: boolean
+  coverageNote: string
+  fetchedAt: number
+}
+
+/** One quoted basket component. `weight` is the issuer weight, before normalisation. */
+export interface EtfArbitrageRow {
+  symbol: string
+  name: string
+  weight: number
+  price: number
+  movePct: number
+  /** The weight re-based over the holdings that answered, which is what the gap uses. */
+  normalizedWeight: number
+  contributionPct: number
+}
+
+/** `build_etf_arbitrage_snapshot`'s dict. */
+export interface EtfArbitragePayload {
+  ticker: string
+  /** Epoch milliseconds; `generated_at` is an ISO string there. */
+  generatedAt: number
+  etfPrice: number | null
+  etfMovePct: number | null
+  basketMovePct: number | null
+  gapPctPoints: number | null
+  gapBps: number | null
+  signal: string
+  quoteCoverage: number
+  totalHoldings: number
+  quotedWeight: number
+  loadedWeight: number
+  rows: EtfArbitrageRow[]
+}
+
+/** One row of the `ETF by AUM` rail. */
+export interface EtfAumRow {
+  ticker: string
+  netAssets: number
+}
+
+export interface EtfAumPayload {
+  rows: EtfAumRow[]
+  /** Yahoo's own `total`, which the loaded rows can fall short of. */
+  totalCount: number
+  missingCount: number
+  fetchedAt: number
+}
+
+export interface EtfHoldingsRequest {
+  ticker: string
+  force?: boolean
+}
+
+/**
+ * Arbitrage takes only the ticker: the holdings it compares against are the cached ones
+ * the main process already loaded, so a five-hundred-row basket does not cross IPC twice
+ * just to be quoted.
+ */
+export interface EtfArbitrageRequest {
+  ticker: string
+  force?: boolean
+}
+
+export interface EtfAumRequest {
+  force?: boolean
+}
+
 /* ------------------------------------------------------------ up/down page */
 
 export type UpDownSource = 'portfolio' | 'spy' | 'qqq' | 'custom'
@@ -2264,6 +2489,79 @@ export interface RollRequest {
   force?: boolean
 }
 
+/* --------------------------------------------------------------------- ipo */
+
+/**
+ * The IPO page (`mixins/ipo_page.py`, page21) — two independent scrapes of
+ * stockanalysis.com: completed IPOs for one year, and every upcoming US IPO through
+ * 31 December.
+ *
+ * Every cell except the date is the scraped text itself. The reference passes those
+ * strings straight into its table and never parses a dollar figure, so neither does this:
+ * a missing value is the literal `'--'`, not a `null` this app would then have to format.
+ * `shared/ipo.ts` owns the windows, the dedupe and the sort keys those strings need.
+ */
+export interface UpcomingIpoRow {
+  /** ISO `YYYY-MM-DD`, which is also what the table sorts the date column on. */
+  date: string
+  /** `Mmm DD, YYYY`, the reference's `%b %d, %Y`. */
+  dateDisplay: string
+  symbol: string
+  company: string
+  exchange: string
+  priceRange: string
+  sharesOffered: string
+  dealSize: string
+  marketCap: string
+  revenue: string
+}
+
+/** `Return` is `returnPct` here only because `return` is a reserved word. */
+export interface CompletedIpoRow {
+  date: string
+  dateDisplay: string
+  symbol: string
+  company: string
+  ipoPrice: string
+  currentPrice: string
+  returnPct: string
+}
+
+interface IpoPayloadBase {
+  source: string
+  sourceUrl: string
+  /** Epoch ms of the fetch behind these rows; 0 when nothing has ever been fetched. */
+  fetchedAt: number
+  fromCache: boolean
+  cacheAgeSeconds: number | null
+  /** True when a failed refresh fell back to the cache; `warning` then names the failure. */
+  stale: boolean
+  warning: string
+}
+
+export interface IpoUpcomingPayload extends IpoPayloadBase {
+  rows: UpcomingIpoRow[]
+  /** The `YYYY-12-31` the window ends on, so the status line need not recompute it. */
+  endDate: string
+  /** Always true. The reference labels every upcoming date an estimate. */
+  estimatedDates: boolean
+}
+
+export interface IpoCompletedPayload extends IpoPayloadBase {
+  rows: CompletedIpoRow[]
+  year: number
+}
+
+export interface IpoUpcomingRequest {
+  force?: boolean
+}
+
+export interface IpoCompletedRequest {
+  /** Defaults to the current year, which is the only one the reference ever asks for. */
+  year?: number
+  force?: boolean
+}
+
 export const CHANNELS = {
   quotes: 'dashboard:quotes',
   chart: 'dashboard:chart',
@@ -2291,6 +2589,9 @@ export const CHANNELS = {
   earningsCalendar: 'calendar:earnings',
   crypto: 'crypto:read',
   heatmap: 'heatmap:read',
+  etfHoldings: 'etf:holdings',
+  etfArbitrage: 'etf:arbitrage',
+  etfAum: 'etf:aum',
   upDown: 'up-down:read',
   upDownTargets: 'up-down:targets',
   stocks: 'stocks:read',
@@ -2299,8 +2600,14 @@ export const CHANNELS = {
   projections: 'projections:read',
   valuation: 'valuation:read',
   economic: 'economic:read',
+  institutionActivity: 'institutions:activity',
+  institutionTickerActivity: 'institutions:ticker-activity',
   roll: 'roll:read',
+  ipoUpcoming: 'ipo:upcoming',
+  ipoCompleted: 'ipo:completed',
   backtest: 'backtest:run',
+  youtube: 'youtube:read',
+  youtubeThumbnail: 'youtube:thumbnail',
   fundamentals: 'dashboard:fundamentals',
   fundamentalsPage: 'fundamentals:read',
   chartsHistory: 'charts:history',
@@ -2423,6 +2730,9 @@ export interface DesktopApi {
   ): Promise<Envelope<EarningsCalendarPayload>>
   crypto(request: CryptoRequest): Promise<Envelope<CryptoPayload>>
   heatmap(request: HeatmapRequest): Promise<Envelope<HeatmapPayload>>
+  etfHoldings(request: EtfHoldingsRequest): Promise<Envelope<EtfHoldingsPayload>>
+  etfArbitrage(request: EtfArbitrageRequest): Promise<Envelope<EtfArbitragePayload>>
+  etfAum(request: EtfAumRequest): Promise<Envelope<EtfAumPayload>>
   upDown(request: UpDownRequest): Promise<Envelope<UpDownPayload>>
   upDownTargets(request: UpDownTargetsRequest): Promise<Envelope<UpDownTargetsPayload>>
   stocks(request: StocksRequest): Promise<Envelope<StocksPayload>>
@@ -2433,8 +2743,20 @@ export interface DesktopApi {
   projections(request: ProjectionsRequest): Promise<Envelope<ProjectionsPayload>>
   valuation(request: ValuationRequest): Promise<Envelope<ValuationPayload>>
   economic(request: EconomicRequest): Promise<Envelope<EconomicPayload>>
+  institutionActivity(
+    request: InstitutionActivityRequest,
+  ): Promise<Envelope<InstitutionActivityPayload>>
+  institutionTickerActivity(
+    request: InstitutionTickerActivityRequest,
+  ): Promise<Envelope<InstitutionTickerActivityPayload>>
   roll(request: RollRequest): Promise<Envelope<RollPayload | null>>
+  ipoUpcoming(request: IpoUpcomingRequest): Promise<Envelope<IpoUpcomingPayload>>
+  ipoCompleted(request: IpoCompletedRequest): Promise<Envelope<IpoCompletedPayload>>
   backtest(request: BacktestRequest): Promise<Envelope<BacktestPayload>>
+  youtube(request: YouTubeRequest): Promise<Envelope<YouTubePayload>>
+  youtubeThumbnail(
+    request: YouTubeThumbnailRequest,
+  ): Promise<Envelope<YouTubeThumbnailPayload>>
   fundamentals(request: FundamentalsRequest): Promise<Envelope<FundamentalsPayload>>
   fundamentalsPage(request: FundamentalsPageRequest): Promise<Envelope<FundamentalsPagePayload>>
   returns(request: ReturnsRequest): Promise<Envelope<ReturnsPayload>>

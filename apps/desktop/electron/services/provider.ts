@@ -26,6 +26,12 @@ import type {
   CryptoRequest,
   HeatmapPayload,
   HeatmapRequest,
+  EtfArbitragePayload,
+  EtfArbitrageRequest,
+  EtfAumPayload,
+  EtfAumRequest,
+  EtfHoldingsPayload,
+  EtfHoldingsRequest,
   EarningsCalendarPayload,
   EarningsCalendarRequest,
   Envelope,
@@ -89,8 +95,20 @@ import type {
   ValuationRequest,
   EconomicPayload,
   EconomicRequest,
+  InstitutionActivityPayload,
+  InstitutionActivityRequest,
+  InstitutionTickerActivityPayload,
+  InstitutionTickerActivityRequest,
+  IpoCompletedPayload,
+  IpoCompletedRequest,
+  IpoUpcomingPayload,
+  IpoUpcomingRequest,
   RollPayload,
   RollRequest,
+  YouTubePayload,
+  YouTubeRequest,
+  YouTubeThumbnailPayload,
+  YouTubeThumbnailRequest,
 } from '../shared/contract.js'
 import { DEFAULT_CLOCK_COUNTRY, DEFAULT_OBSCURED_TABS, MACRO_SYMBOLS, TABS } from '../shared/contract.js'
 import {
@@ -106,6 +124,7 @@ import { normalizeEtfKey } from '../shared/heatmap.js'
 import { DEFAULT_RISK_FREE_RATE } from '../shared/optionsPage.js'
 import { describeError, err, failed, meta, ok, partial } from '../shared/envelope.js'
 import { DEFAULT_BACKTEST_PAGE_SETTINGS, emptyBacktestPayload } from '../shared/backtest.js'
+import { DEFAULT_YOUTUBE_PAGE_SETTINGS } from '../shared/youtube.js'
 import { cache } from './cache.js'
 import {
   cardsPath,
@@ -116,7 +135,26 @@ import {
   replaceCards,
 } from './cardsStore.js'
 import { CRYPTO_SOURCE, getCrypto } from './crypto.js'
+import {
+  clearIpoCache,
+  emptyCompletedIpoPayload,
+  emptyUpcomingIpoPayload,
+  getCompletedIpos,
+  getUpcomingIpos,
+  IPO_COMPLETED_SOURCE,
+  IPO_UPCOMING_SOURCE,
+} from './ipo.js'
 import { HEATMAP_SOURCE, emptyHeatmapPayload, getHeatmap } from './heatmap.js'
+import {
+  ETF_ARBITRAGE_SOURCE,
+  ETF_AUM_SOURCE,
+  ETF_HOLDINGS_SOURCE,
+  getEtfArbitrage,
+  getEtfAum,
+  getEtfHoldingsPage,
+  emptyEtfArbitragePayload,
+  emptyEtfHoldingsPayload,
+} from './etfPage.js'
 import {
   UP_DOWN_SOURCE,
   clearUpDownCaches,
@@ -202,6 +240,13 @@ import {
   getEconomic,
   type EconomicFetchResult,
 } from './economic.js'
+import {
+  clearInstitutionCaches,
+  getInstitutionActivity,
+  getInstitutionTickerActivity,
+  INSTITUTIONS_SOURCE,
+  type InstitutionFetchResult,
+} from './institutions.js'
 import { getRoll, ROLL_SOURCE } from './yahoo/roll.js'
 import { clearRiskFreeCache } from './riskFree.js'
 import {
@@ -213,6 +258,8 @@ import {
 import { getQuotes } from './yahoo/quotes.js'
 import { getTargets } from './yahoo/targets.js'
 import { BACKTEST_SOURCE, getBacktest } from './yahoo/backtest.js'
+import { clearYouTubeCache, getYouTube, YOUTUBE_SOURCE } from './youtube.js'
+import { getYouTubeThumbnail } from './youtubeImages.js'
 
 /**
  * The seam the renderer talks to.
@@ -223,6 +270,10 @@ import { BACKTEST_SOURCE, getBacktest } from './yahoo/backtest.js'
  */
 export interface MarketDataProvider {
   backtest(request: BacktestRequest): Promise<Envelope<BacktestPayload>>
+  youtube(request: YouTubeRequest): Promise<Envelope<YouTubePayload>>
+  youtubeThumbnail(
+    request: YouTubeThumbnailRequest,
+  ): Promise<Envelope<YouTubeThumbnailPayload>>
   quotes(request: QuotesRequest): Promise<Envelope<QuotesPayload>>
   chart(request: ChartRequest): Promise<Envelope<ChartPayload>>
   chartsHistory(request: ChartsHistoryRequest): Promise<Envelope<ChartsHistoryPayload>>
@@ -260,11 +311,22 @@ export interface MarketDataProvider {
   earningsCalendar(request: EarningsCalendarRequest): Promise<Envelope<EarningsCalendarPayload>>
   crypto(request: CryptoRequest): Promise<Envelope<CryptoPayload>>
   heatmap(request: HeatmapRequest): Promise<Envelope<HeatmapPayload>>
+  etfHoldings(request: EtfHoldingsRequest): Promise<Envelope<EtfHoldingsPayload>>
+  etfArbitrage(request: EtfArbitrageRequest): Promise<Envelope<EtfArbitragePayload>>
+  etfAum(request: EtfAumRequest): Promise<Envelope<EtfAumPayload>>
   upDown(request: UpDownRequest): Promise<Envelope<UpDownPayload>>
   upDownTargets(request: UpDownTargetsRequest): Promise<Envelope<UpDownTargetsPayload>>
   valuation(request: ValuationRequest): Promise<Envelope<ValuationPayload>>
   economic(request: EconomicRequest): Promise<Envelope<EconomicPayload>>
+  institutionActivity(
+    request: InstitutionActivityRequest,
+  ): Promise<Envelope<InstitutionActivityPayload>>
+  institutionTickerActivity(
+    request: InstitutionTickerActivityRequest,
+  ): Promise<Envelope<InstitutionTickerActivityPayload>>
   roll(request: RollRequest): Promise<Envelope<RollPayload | null>>
+  ipoUpcoming(request: IpoUpcomingRequest): Promise<Envelope<IpoUpcomingPayload>>
+  ipoCompleted(request: IpoCompletedRequest): Promise<Envelope<IpoCompletedPayload>>
   stocks(request: StocksRequest): Promise<Envelope<StocksPayload>>
   optionsChain(request: OptionsChainRequest): Promise<Envelope<OptionsChainPayload>>
   optionsExpirations(
@@ -345,6 +407,7 @@ const emptySettings: AppSettings = {
   obscuredTabs: [...DEFAULT_OBSCURED_TABS],
   backtestPage: DEFAULT_BACKTEST_PAGE_SETTINGS,
   signalsPage: { filter: 'all', search: '' },
+  youtubePage: DEFAULT_YOUTUBE_PAGE_SETTINGS,
   sourcePath: settingsPath(),
 }
 
@@ -443,6 +506,35 @@ function economicEnvelope(result: EconomicFetchResult): Envelope<EconomicPayload
       {
         cacheAgeSeconds: result.cacheAgeSeconds,
         ...(failureReason ? { failureReason } : {}),
+      },
+    ),
+    errors,
+  }
+}
+
+function institutionEnvelope<T extends { warnings: string[] }>(
+  result: InstitutionFetchResult<T>,
+): Envelope<T> {
+  const warnings = [...result.payload.warnings]
+  if (result.warning) {
+    warnings.push(`Live DATAROMA refresh failed; showing cached data. ${result.warning}`)
+  }
+  const errors = warnings.map((reason) => err(INSTITUTIONS_SOURCE, reason, 'institutions'))
+  const data = { ...result.payload, warnings }
+  return {
+    data,
+    meta: meta(
+      INSTITUTIONS_SOURCE,
+      result.stale
+        ? 'stale'
+        : errors.length
+          ? 'partial'
+          : result.fromCache
+            ? 'cached'
+            : 'fresh',
+      {
+        cacheAgeSeconds: result.cacheAgeSeconds,
+        ...(errors[0] ? { failureReason: errors[0].reason } : {}),
       },
     ),
     errors,
@@ -1157,6 +1249,58 @@ export const yahooProvider: MarketDataProvider = {
     }
   },
 
+  /**
+   * `_p13_handle_loaded_result` / `_p13_handle_error`.
+   *
+   * A Yahoo top-holdings fallback is a `partial` envelope rather than a failure: the
+   * reference renders those rows and says in its status line that they are not the full
+   * book, and dropping them would empty a page that has something useful to show.
+   */
+  async etfHoldings({ ticker, force }) {
+    const symbol = String(ticker ?? '').trim().toUpperCase()
+    try {
+      const { payload, errors } = await getEtfHoldingsPage(symbol, force)
+      if (!errors.length) return ok(payload, ETF_HOLDINGS_SOURCE)
+      return partial(payload, errors, ETF_HOLDINGS_SOURCE, payload.coverageNote)
+    } catch (error) {
+      return failed(emptyEtfHoldingsPayload(symbol), describeError(error), ETF_HOLDINGS_SOURCE)
+    }
+  },
+
+  /**
+   * `_p13_apply_arbitrage_result`. Partial quote coverage is normal — a basket of five
+   * hundred names nearly always has a few Yahoo will not quote — and the gap is still
+   * computed over the ones that answered, with the coverage cell saying how many.
+   */
+  async etfArbitrage({ ticker, force }) {
+    const symbol = String(ticker ?? '').trim().toUpperCase()
+    try {
+      const { payload, errors } = await getEtfArbitrage(symbol, force)
+      if (!errors.length) return ok(payload, ETF_ARBITRAGE_SOURCE)
+      return partial(
+        payload,
+        errors,
+        ETF_ARBITRAGE_SOURCE,
+        `${payload.totalHoldings - payload.quoteCoverage} of ${payload.totalHoldings} basket holdings are unquoted.`,
+      )
+    } catch (error) {
+      return failed(emptyEtfArbitragePayload(symbol), describeError(error), ETF_ARBITRAGE_SOURCE)
+    }
+  },
+
+  /** `_p13_on_aum_data_ready` / `_p13_on_aum_data_error`: the rail fails on its own. */
+  async etfAum({ force }) {
+    try {
+      return ok(await getEtfAum(force), ETF_AUM_SOURCE)
+    } catch (error) {
+      return failed(
+        { rows: [], totalCount: 0, missingCount: 0, fetchedAt: Date.now() },
+        describeError(error),
+        ETF_AUM_SOURCE,
+      )
+    }
+  },
+
   async upDown(request) {
     const empty: UpDownPayload = {
       source: request.source,
@@ -1214,6 +1358,44 @@ export const yahooProvider: MarketDataProvider = {
     }
   },
 
+  async institutionActivity(request) {
+    const empty: InstitutionActivityPayload = {
+      periods: [],
+      activePeriod: request.quarter?.trim() ?? '',
+      buyRows: [],
+      sellRows: [],
+      managerRows: [],
+      sourceUrls: { activity: '' },
+      warnings: [],
+      fetchedAt: '',
+    }
+    try {
+      return institutionEnvelope(await getInstitutionActivity(request))
+    } catch (error) {
+      return failed(empty, describeError(error), INSTITUTIONS_SOURCE)
+    }
+  },
+
+  async institutionTickerActivity(request) {
+    const symbol = request.symbol.toUpperCase().trim()
+    const empty: InstitutionTickerActivityPayload = {
+      symbol,
+      company: '',
+      sector: '',
+      periods: [],
+      activePeriod: '',
+      activityRows: [],
+      sourceUrls: { activity: '' },
+      warnings: [],
+      fetchedAt: '',
+    }
+    try {
+      return institutionEnvelope(await getInstitutionTickerActivity(request))
+    } catch (error) {
+      return failed(empty, describeError(error), INSTITUTIONS_SOURCE)
+    }
+  },
+
   /**
    * One dice throw over the liquid US screen.
    *
@@ -1233,6 +1415,33 @@ export const yahooProvider: MarketDataProvider = {
       )
     } catch (error) {
       return failed(null, describeError(error), ROLL_SOURCE)
+    }
+  },
+
+  /**
+   * `_p21_refresh_upcoming_ipo_calendar`. A stale cache standing in for a failed scrape is
+   * a `partial` envelope carrying the reason, not a failure: the table still has rows and
+   * the status line says where they came from.
+   */
+  async ipoUpcoming({ force }) {
+    try {
+      const { payload, errors } = await getUpcomingIpos(Boolean(force))
+      if (!errors.length) return ok(payload, IPO_UPCOMING_SOURCE)
+      return partial(payload, errors, IPO_UPCOMING_SOURCE, payload.warning)
+    } catch (error) {
+      return failed(emptyUpcomingIpoPayload(), describeError(error), IPO_UPCOMING_SOURCE)
+    }
+  },
+
+  /** `_p21_refresh_completed_ipos`, and independent of the upcoming feed by design. */
+  async ipoCompleted({ year, force }) {
+    const target = Number(year) || new Date().getFullYear()
+    try {
+      const { payload, errors } = await getCompletedIpos(target, Boolean(force))
+      if (!errors.length) return ok(payload, IPO_COMPLETED_SOURCE)
+      return partial(payload, errors, IPO_COMPLETED_SOURCE, payload.warning)
+    } catch (error) {
+      return failed(emptyCompletedIpoPayload(target), describeError(error), IPO_COMPLETED_SOURCE)
     }
   },
 
@@ -1394,6 +1603,41 @@ export const yahooProvider: MarketDataProvider = {
     }
   },
 
+  async youtube(request) {
+    const empty: YouTubePayload = {
+      items: [],
+      warnings: [],
+      fetchedAt: Date.now(),
+      fromCacheCount: 0,
+      fetchedCount: 0,
+      tickersTotal: request.tickers.length,
+    }
+    try {
+      const result = await getYouTube(request)
+      const errors = result.payload.warnings.map((reason) =>
+        err(YOUTUBE_SOURCE, reason, 'youtube', reason.match(/^([^:]+):/)?.[1]),
+      )
+      if (errors.length) {
+        return partial(result.payload, errors, YOUTUBE_SOURCE, errors[0].reason)
+      }
+      if (result.payload.fromCacheCount === result.payload.tickersTotal && result.payload.tickersTotal > 0) {
+        return {
+          data: result.payload,
+          meta: meta(YOUTUBE_SOURCE, 'cached', { cacheAgeSeconds: result.cacheAgeSeconds }),
+          errors: [],
+        }
+      }
+      return ok(result.payload, YOUTUBE_SOURCE)
+    } catch (error) {
+      return failed(empty, describeError(error), YOUTUBE_SOURCE)
+    }
+  },
+
+  async youtubeThumbnail(request) {
+    const { payload, errors } = await getYouTubeThumbnail(request)
+    return errors.length ? partial(payload, errors, 'YouTube image') : ok(payload, 'YouTube image')
+  },
+
   async settings() {
     try {
       return ok(await readSettings(), SETTINGS_SOURCE)
@@ -1477,6 +1721,9 @@ export const yahooProvider: MarketDataProvider = {
       await clearUpDownCaches()
       await clearRiskFreeCache()
       await clearEconomicCache()
+      await clearInstitutionCaches()
+      await clearYouTubeCache()
+      await clearIpoCache()
       return ok(
         {
           action: 'clearUserData' as const,
@@ -1502,6 +1749,9 @@ export const yahooProvider: MarketDataProvider = {
       await clearUpDownCaches()
       await clearRiskFreeCache()
       await clearEconomicCache()
+      await clearInstitutionCaches()
+      await clearYouTubeCache()
+      await clearIpoCache()
       return ok(
         {
           action: 'resetCache' as const,

@@ -25,6 +25,9 @@
     "probe:up-down": "npm run --workspace budget-terminal-desktop probe:up-down --",
     "probe:valuation": "npm run --workspace budget-terminal-desktop probe:valuation --",
     "probe:backtest": "npm run --workspace budget-terminal-desktop probe:backtest --",
-    "probe:roll": "npm run --workspace budget-terminal-desktop probe:roll --"
+    "probe:youtube": "npm run --workspace budget-terminal-desktop probe:youtube --",
+    "probe:roll": "npm run --workspace budget-terminal-desktop probe:roll --",
+    "probe:ipo": "npm run --workspace budget-terminal-desktop probe:ipo --",
+    "probe:institutions": "npm run --workspace budget-terminal-desktop probe:institutions --"
   }
 }

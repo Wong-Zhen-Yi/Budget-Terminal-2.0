@@ -35,6 +35,9 @@ export interface ScreenerQuote {
   eodprice?: number
   intradaymarketcap?: number
   'lastclosemarketcap.lasttwelvemonths'?: number
+  /** The ETF screen's own field, and the alias Yahoo answers it under. */
+  netAssets?: number
+  fundnetassets?: number
 }
 
 interface ScreenerResponse {
@@ -251,4 +254,30 @@ export async function screenEquityUniverse(): Promise<ScreenerQuote[]> {
     }
   }
   return [...bySymbol.values()]
+}
+
+/**
+ * One page of the ETF page's AUM rail: every US ETF with positive net assets, largest
+ * first, which is `_p13_fetch_aum_universe`'s `ETFQuery` verbatim.
+ *
+ * `quoteType: 'ETF'` is what `yf.ETFQuery` sets and it is the whole difference from the
+ * equity screens above — the same POST, the same crumb, the same rate gate.
+ */
+export function etfAumScreen(offset: number, size: number): Promise<EquityScreenPage> {
+  return postScreen({
+    size,
+    offset,
+    sortField: 'fundnetassets',
+    sortType: 'DESC',
+    quoteType: 'ETF',
+    query: {
+      operator: 'and',
+      operands: [
+        { operator: 'gt', operands: ['fundnetassets', 0] },
+        { operator: 'eq', operands: ['region', 'us'] },
+      ],
+    },
+    userId: '',
+    userIdType: 'guid',
+  })
 }

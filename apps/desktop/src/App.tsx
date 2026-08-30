@@ -16,7 +16,9 @@ import { ChartsPage } from '@/pages/ChartsPage'
 import { CryptoPage } from '@/pages/CryptoPage'
 import { DictionaryPage } from '@/pages/DictionaryPage'
 import { FundamentalsPage } from '@/pages/FundamentalsPage'
+import { EtfPage } from '@/pages/EtfPage'
 import { HeatmapPage } from '@/pages/HeatmapPage'
+import { InstitutionsPage } from '@/pages/InstitutionsPage'
 import { GlobalPage } from '@/pages/GlobalPage'
 import { PersonalFinancePage } from '@/pages/PersonalFinancePage'
 import { PortfolioPage } from '@/pages/PortfolioPage'
@@ -25,6 +27,7 @@ import { OptionsPage } from '@/pages/OptionsPage'
 import { ProjectionsPage } from '@/pages/ProjectionsPage'
 import { PreMarketPage } from '@/pages/PreMarketPage'
 import { PricePage } from '@/pages/PricePage'
+import { IpoPage } from '@/pages/IpoPage'
 import { RollPage } from '@/pages/RollPage'
 import { SignalsPage } from '@/pages/SignalsPage'
 import { TradingVolumesPage } from '@/pages/TradingVolumesPage'
@@ -33,6 +36,7 @@ import { ValuationPage } from '@/pages/ValuationPage'
 import { EconomicPage } from '@/pages/EconomicPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { StocksPage } from '@/pages/StocksPage'
+import { YouTubePage } from '@/pages/YouTubePage'
 import { useDataHealth } from '@/stores/dataHealth'
 import { useChartsStore } from '@/stores/charts'
 import { useFundamentalsStore } from '@/stores/fundamentals'
@@ -251,6 +255,8 @@ export function App() {
             <CalendarPage onStatusChange={handleStatusChange} />
           ) : activeTab === 'heatmap' ? (
             <HeatmapPage onStatusChange={handleStatusChange} onNavigate={handleStocksNavigate} />
+          ) : activeTab === 'etf' ? (
+            <EtfPage onStatusChange={handleStatusChange} onNavigate={handleStocksNavigate} />
           ) : activeTab === 'crypto' ? (
             <CryptoPage onStatusChange={handleStatusChange} />
           ) : activeTab === 'dictionary' ? (
@@ -271,8 +277,14 @@ export function App() {
             <ProjectionsPage onStatusChange={handleStatusChange} />
           ) : activeTab === 'roll' ? (
             <RollPage onStatusChange={handleStatusChange} onNavigate={handleStocksNavigate} />
+          ) : activeTab === 'ipo' ? (
+            <IpoPage onStatusChange={handleStatusChange} />
           ) : activeTab === 'backtest' ? (
             <BacktestPage onStatusChange={handleStatusChange} />
+          ) : activeTab === 'youtube' ? (
+            <YouTubePage onStatusChange={handleStatusChange} />
+          ) : activeTab === 'institutions' ? (
+            <InstitutionsPage onStatusChange={handleStatusChange} />
           ) : activeTab === SETTINGS_TAB_ID ? (
             <SettingsPage onStatusChange={handleStatusChange} />
           ) : (

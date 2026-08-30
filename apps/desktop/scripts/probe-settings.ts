@@ -98,6 +98,14 @@ async function main(): Promise<void> {
   check('Signals filter persists', signalsSettings.signalsPage.filter === 'blocked')
   check('Signals search persists', signalsSettings.signalsPage.search === 'NVDA')
 
+  console.log('\n-- YouTube page controls')
+  const youtubeSettings = await mutateSettings({
+    type: 'setYouTubePage',
+    value: { sortColumn: 3, sortDescending: true },
+  })
+  check('YouTube sort column persists', youtubeSettings.youtubePage.sortColumn === 3)
+  check('YouTube sort direction persists', youtubeSettings.youtubePage.sortDescending)
+
   /* --------------------------------------------------------------- maintenance */
 
   const portfolio = (await readPortfolios()).portfolios[0]

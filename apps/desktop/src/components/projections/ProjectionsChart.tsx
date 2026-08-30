@@ -224,16 +224,17 @@ export function ProjectionsChart({
     }
   }, [candles, timed])
 
-  if (!candles.length) {
-    return (
-      <div className="flex min-h-0 flex-1 items-center justify-center text-2xs text-text-dim">
-        {empty}
-      </div>
-    )
-  }
-
+  // The container stays mounted whether or not there are candles: the chart is created
+  // once, in a mount effect, so returning a different element while the load is in flight
+  // would leave that effect having run against a null ref with nothing to re-run it, and
+  // the chart would never appear. The empty message is an overlay instead.
   return (
     <div ref={containerRef} className="relative min-h-0 flex-1">
+      {candles.length ? null : (
+        <div className="absolute inset-0 z-10 flex items-center justify-center text-2xs text-text-dim">
+          {empty}
+        </div>
+      )}
       {hover ? (
         <div
           className="pointer-events-none absolute z-20 max-w-64 border border-border-strong bg-surface-raised px-2 py-1 text-2xs text-text shadow-lg"

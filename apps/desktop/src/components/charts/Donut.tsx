@@ -32,6 +32,12 @@ interface DonutProps {
   centerSubtext?: string
   /** 0..1 sweep, for the replayable totals animation. Omit to draw the full ring. */
   animationProgress?: number
+  /**
+   * Degrees clockwise from twelve o'clock to begin the first wedge at. Defaults to 0, so
+   * every existing caller is unchanged; the ETF page passes a negative angle to rotate
+   * its Others wedge back over the top, which is what `set_start_angle` does there.
+   */
+  startAngle?: number
 }
 
 const SIZE = 320
@@ -66,6 +72,7 @@ export function Donut({
   centerText,
   centerSubtext,
   animationProgress = 1,
+  startAngle = 0,
 }: DonutProps) {
   const positive = slices.filter((slice) => slice.value > 0)
   const total = positive.reduce((sum, slice) => sum + slice.value, 0)
@@ -77,8 +84,8 @@ export function Donut({
 
   // The sweep stops partway through the ring while the animation runs, so a wedge is
   // either whole, clipped, or not yet reached.
-  const swept = Math.max(0, Math.min(1, animationProgress)) * 360
-  let cursor = 0
+  const swept = startAngle + Math.max(0, Math.min(1, animationProgress)) * 360
+  let cursor = startAngle
   const wedges = positive.map((slice, index) => {
     const sweep = (slice.value / total) * 360
     const start = cursor

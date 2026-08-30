@@ -22,10 +22,14 @@ npm run probe:crypto           # all four Crypto stages; --offline for the pure 
 npm run probe:cards            # Cards math, persistence and models; --live adds Yahoo
 npm run probe:options -- AAPL  # chain Greeks, strategy ranking, both grids; --offline for the pure checks
 npm run probe:heatmap -- SPY   # index holdings, all seven intervals, sector split; --offline for the pure checks
+npm run probe:etf -- SPY       # issuer chain, donut, arbitrage and the AUM rail; --offline for the pure checks
+                               # `--no-aum` skips the twelve-page ETF screener sweep
 npm run probe:projections -- AAPL # chart, every expiration, the three paths; --offline for the pure checks
 npm run probe:up-down -- AAPL  # Up/Down counts and targets; --offline for deterministic math checks
 npm run probe:valuation -- NVDA # DCF, CAPM required return, derivation and peers; --offline for the pure checks
 npm run probe:economic         # all 49 series across five providers; --offline for the pure checks
+npm run probe:ipo              # both feeds into a throwaway cache, then a cached second load
+                               # `--offline` for dates, windows, dedupe, formatters, sort keys and both parsers
 npm run probe:roll             # a live roll, then a cached second one; --offline for the six evaluators
                                # pass pattern modes as arguments: `npm run probe:roll -- breakout bullish_flag`
 ```
@@ -69,11 +73,15 @@ and the **Valuation** page (a DCF over SEC-backed statements with every assumpti
 from history, the 10Y Treasury, analyst estimates and peers; seven tabs over one load), and
 the **Economic** page (49 US macro series across five keyless providers, an Overview grid
 and four group tabs with a history plot each, plus the treasury curve), and the
+**ETF** page (any US ETF's issuer-published holdings with a breakdown donut, an
+ETF-versus-basket arbitrage subtab and the US-universe AUM rail), and the
 **Dictionary** page (390 offline terms across 14 categories with ranked search, formula
 and economic-event detail, related navigation, and chart-pattern diagrams), and the
 **Roll** page (a weighted dice throw over the liquid US screen, with six technical pattern
 filters run over a year of daily bars, a scored-candidate table, a 1Y chart, top options
-by expiration, headlines and a roll history).
+by expiration, headlines and a roll history), and the **IPO** page (completed IPOs for the year beside every upcoming
+US IPO through year-end, from StockAnalysis with a Yahoo calendar fallback, cached on disk
+for a day).
 The remaining tabs are labels in `TABS`
 (`electron/shared/contract.ts`) and render a placeholder; `implemented: true` is what
 routes a tab to a real page in `App.tsx`.
@@ -444,9 +452,19 @@ adding handlers.
   alone; one file does not justify a dependency. It ports `_parse_xlsx_rows` — one sheet,
   shared strings, inline strings — and pads gaps from each cell's `r="B7"` reference so a
   row's indexes still line up with its header row.
-- **Only two of the reference's seven issuer providers are ported.** The Heatmap page has
-  exactly three buttons; ARK, iShares, Vanguard, First Trust and ProShares would be
-  unreachable code until the ETF page is migrated.
+- **All seven issuer providers are ported, in the reference's own order**, and the Heatmap
+  page shares the chain with the ETF page: ARK, iShares, SPDR, Invesco, Vanguard, First
+  Trust, ProShares, then the Yahoo top-holdings fallback. That order means the iShares
+  listing page — half a megabyte — is the first thing touched for *every* non-ARK ticker,
+  including SPY and QQQ, so it is cached for the holdings TTL. Removing that cache adds a
+  megabyte download to every Heatmap load.
+- **A provider that answers `null` is not a failure.** `null` means the issuer does not
+  publish the ticker and the chain moves on; only a thrown error records a reason. Both
+  fall through, which is why one issuer's outage cannot take the page down. Today iShares,
+  Vanguard and First Trust all fall through on every ticker — their pages changed shape
+  (no `productUrl` JSON, an SPA shell where the profile API was, a holdings table with no
+  `<th>` at all) — and the reference falls through on the same three for the same reasons.
+  Do not "fix" them against the live sites without checking the reference does the same.
 - **Two documented departures from the reference's page17.** The GICS sector map scraped
   from Wikipedia is applied to *all three* ETFs, not SPY alone: SSGA publishes a literal
   `-` in DIA's Sector column and Invesco's QQQ feed has no `sectorName`, so the reference
@@ -665,6 +683,54 @@ adding handlers.
 - **Dictionary has no persistence or refresh timer.** Search, category and selection are
   session state. F5 has no data to fetch; the catalog probe is the verification boundary.
 
+- **ETF is page13, and its file is called `etf_analyser.py`.** Grep for `_p13_`. The page
+  and the Heatmap page share `services/etf/holdings.ts`; only the ETF page reaches the
+  arbitrage and AUM services in `services/etfPage.ts`.
+- **The ETF page fires exactly one request as it mounts, and it is the AUM rail.**
+  `init_page13` calls `_p13_fetch_aum_universe()` and nothing else; every other load is a
+  button. There is no refresh timer either — one holdings load is an issuer download plus
+  a Yahoo enrichment call, and one arbitrage refresh is twenty-six batched spark requests
+  for a five-hundred-name basket.
+- **The AUM rail is the ETF screener, not the equity one.** `etfAumScreen` in
+  `yahoo/screener.ts` posts `quoteType: 'ETF'` with `fundnetassets`, which is what
+  `yf.ETFQuery` sets; everything else — the crumb, the warm-up, `paced()` — is shared with
+  the equity screens. The sweep is 250 at a time and stops on Yahoo's own `total` *or* a
+  short page, and `total` is only trusted when positive: an absent count would otherwise
+  end the sweep after the first page.
+- **Arbitrage quotes come from `spark`, and the ETF is the first symbol in the batch.**
+  The reference calls `EtfHeatmapWorker._fetch_quotes`, which is the same endpoint this
+  app's Heatmap page uses. Putting the ETF in the same request is what makes its move and
+  the basket's move the same moment rather than two.
+- **The basket move is weighted over the holdings that answered, not the whole book.**
+  `build_etf_arbitrage_snapshot` re-bases each quoted weight over `quoted_weight`, so an
+  unquoted 3% name cannot drag the basket toward zero. That is also why coverage is on the
+  summary strip and in the status line — a gap over half a basket is not a reading.
+- **Arbitrage takes only a ticker over IPC.** The holdings it compares are the ones the
+  main process already cached, so refreshing arbitrage never re-downloads the issuer file
+  and a five-hundred-row basket does not cross the bridge twice to be quoted.
+- **A Yahoo top-holdings fallback is a `partial` envelope, not a failure.** Ten rows
+  instead of five hundred, flagged `isPartial` with a `coverageNote` the status line
+  prints. Failing it instead would empty a page that has something true to show.
+- **The donut's Others wedge carries the uncovered remainder too.** `_p13_update_holdings_chart`
+  folds everything past the twelfth name *and* `1 - loaded_total` into Others, which is
+  why the centre reads coverage rather than 100%. The donut is built from every loaded
+  row, never the filtered ones: it describes the fund, not the search.
+- **Three documented departures from `mixins/etf_analyser.py`.** The donut's start angle
+  is negated: `set_start_angle` measures counter-clockwise from three o'clock and this
+  app's `Donut` measures clockwise from twelve, so the magnitude is the reference's — half
+  the Others wedge — and the sign follows this app's convention. The AUM rail has no
+  progress counter, the same wall the Crypto, Economic and Roll ports hit: an IPC
+  request/response carries no intermediate frames, so a busy line stands in for the
+  running `n/total loaded` text. And only the ticker is persisted, not the result — the
+  main process already caches the issuer file for six hours, and
+  `_p13_restore_startup_session` re-requests the ticker on restore anyway.
+- **BeautifulSoup has no port; `services/etf/html.ts` and `csv.ts` are its stand-ins.**
+  Same trade as `xlsx.ts`: the stdlib does this in Python and one parser does not justify
+  a dependency. `html.ts` is deliberately narrow — find a `<table>`, read its `<th>`s and
+  `<td>`s — and every caller checks the columns it wanted were actually there before
+  trusting a row. Quoting in `csv.ts` is not optional: iShares writes `"Apple Inc, Class
+  A"` and ARK writes `"1,234,567.89"`.
+
 - **Roll is page18, and its file is called `random_recommender.py`.** Grep for `_p18_`, not
   for the page's title. The worker of the same name holds the screening, the six pattern
   evaluators and the draw; the mixin holds the layout and every display string.
@@ -748,6 +814,74 @@ adding handlers.
   neither the labels nor the values legible.
 
 
+- **IPO is page21, and its file is called `ipo_page.py`.** Grep for `_p21_`. It is two
+  independent feeds — completed IPOs for one year, upcoming IPOs through 31 December —
+  and nothing on the page is financial maths: every cell but the
+  date is the scraped string, `'--'` included. `shared/ipo.ts` owns the only rules that
+  decide anything: the two windows, the two dedupe orderings and the two sort keys.
+- **stockanalysis.com stays outside `paced()`**, on the `fearGreed.ts` precedent, and
+  reuses `services/etf/html.ts` rather than growing a second HTML reader. Table selection
+  is header-driven exactly as the reference's is: `IPO Date` plus `Symbol` identifies the
+  upcoming table, and the extra `IPO Price` header is what tells the completed one apart.
+  `parseTables` lower-cases its headers, so every lookup is lower-cased too.
+- **The date window is re-applied on every cache read, not just on fetch.**
+  `_normalize_cached_rows` runs on the way in *and* the way out, which is why a table can
+  shrink without a refetch on the day one of its rows falls behind today. Skipping it on
+  read would leave yesterday's listings in the upcoming calendar indefinitely.
+- **The two dedupe orderings are each other's reverse**, and both sort before they dedupe:
+  upcoming ascending so the next listing is the top row, completed descending so the most
+  recent one is. The survivor of a duplicate pair is therefore whichever sorts first, and
+  the sort reads the company as scraped while the *key* case-folds it.
+- **`ipoNumericSortValue` strips the K/M/B suffix before it splits a range.** `$1.2B -
+  $2.4B` has to sort as 2.4 billion, not 2.4, and the last segment wins so a price range
+  sorts on its upper bound — which is also why the Return column uses
+  `ipoPercentSortValue` instead: the same split would read `-12.40%` as `12.40`.
+- **The page fires nothing on mount and has no refresh timer.** `init_page21` restores both
+  disk caches and stops. Refresh and F5 are the only loads, and one Refresh reloads both
+  feeds through `Promise.allSettled` so a failure in one still repaints the other.
+- **The disk cache is this app's own file, and the two feeds never share one.**
+  `%APPDATA%\BudgetTerminalElectron\ipo-cache\upcoming.json` and `completed-<year>.json`;
+  the reference's `%LOCALAPPDATA%\BudgetTerminal\ipo_calendar_cache\` is never written.
+  24h fresh, and a stale entry has no upper bound — a failed refresh should still show last
+  week's calendar rather than blanking the page. Keep the reference's asymmetry: the
+  upcoming fallback only counts when the stale cache still has rows, while an empty
+  completed year is itself an answer.
+- **Each feed has two sources, and the fallback is silent.** StockAnalysis first, then
+  Yahoo's IPO calendar; `fetch_live_payload` logs the switch at INFO and returns the rows,
+  so nothing is reported and the payload's `source` is the only thing that says which one
+  answered. Only when *both* fail does the load fall through to the stale disk cache and
+  the warning status line.
+- **`services/yahoo/ipoCalendar.ts` is the yfinance fallback, hand-rolled.**
+  `yahoo-finance2` has no calendars module, so it posts the body
+  `yf.Calendars._get_data` sends — `entityIdType: 'ipo_info'` against
+  `v1/finance/visualization` — through the client's own `_fetch`, exactly as
+  `yahoo/screener.ts` does for the equity screen. It needs the same `warmCrumb()`: the
+  crumb fetch fails outright against a cold cookie jar. Still behind `paced()`, unlike
+  the StockAnalysis scrape beside it.
+- **A Yahoo row is read by column *label*, not by position.** `Calendars._create_df`
+  builds its frame from the response's own labels and the reference then reads
+  `row['Date']` and `row['Company']`, so the labels are the contract —
+  `Exchange Short Name` renamed to `Exchange` included. The query is an `OR` over the
+  listing, filing and amendment dates and the row's own listing date is filtered
+  afterwards, which is what catches an IPO whose date moved.
+- **A completed row from Yahoo has no quote, and that is not a bug.** `Current` and
+  `Return` are hard-coded `'--'` there — `parse_yfinance_frame` does the same and the
+  reference's own smoke test asserts it. A StockAnalysis outage empties the Return column
+  rather than filling it wrongly. Yahoo's prices are sparse in general: 67 of 1,220 rows
+  for a year carried an offer price when this was written, because the list is full of
+  ETFs, trusts and warrants that have none.
+- **stockanalysis.com is behind a Cloudflare interactive challenge as of August 2026.**
+  A plain HTTP client gets `403` with `cf-mitigated: challenge` on both URLs, and so does
+  the PySide6 reference — this is the source, not the port. In practice the page therefore
+  runs on the Yahoo fallback today, which is why that fallback is worth keeping working.
+  Do not try to defeat the challenge.
+- **One documented departure from `mixins/ipo_page.py`:** there is no hidden-page render
+  deferral. `_p21_apply_*_payload` stashes a payload arriving while the page is hidden and
+  `_p21_on_show` replays it, because its table paints fifty rows at a time through
+  `run_batched`; React unmounts the page and React Query holds the payload, so there is
+  nothing to defer.
+
+
 ## Porting behaviour from the PySide6 app
 
 When adding a panel, find the reference first — the numbers are expected to match to the
@@ -774,6 +908,8 @@ decimal. Useful starting points:
 | Economic, all of it | `mixins/economic_page.py` (page42; presenters `mixins/economic_presenters.py`, providers and maths `services/economic.py`, worker `workers/economic.py`) |
 | Dictionary, all of it | `mixins/dictionary_page.py` (catalog `services/dictionary_catalog.py`, diagrams `services/chart_pattern_catalog.py`, smoke `scripts/test_dictionary_page.py`) |
 | Roll, all of it | `mixins/random_recommender.py` (page18; worker `workers/random_recommender.py`) |
+| IPO, all of it | `mixins/ipo_page.py` (page21; workers `workers/ipo_calendar.py`, smoke `scripts/test_ipo_calendar_cache.py`) |
+| ETF, all of it | `mixins/etf_analyser.py` (page13; issuers `etf_holdings.py`, arbitrage `services/etf_arbitrage.py`, quotes `workers/etf_heatmap.py`) |
 | Heatmap, all of it | `mixins/spy_heatmap.py` (presenters `mixins/spy_heatmap_presenters.py`, worker `workers/etf_heatmap.py`, issuer files `etf_holdings.py`, widget `widgets/etf_heatmap.py`) |
 | Fundamentals, all of it | `mixins/fundamentals_setup.py`, `mixins/fundamentals_render.py`, `workers/fundamentals.py`, `services/fundamentals_compare.py`, `services/sec_edgar.py` |
 | Shortcut wiring, tab picker, Obscure | `mixins/window_setup.py`, `mixins/window_lifecycle.py` |

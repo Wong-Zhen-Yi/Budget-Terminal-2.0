@@ -33,6 +33,7 @@ interface DataTableProps<T> {
   /** Row index gutter, like the reference app's numbered tables. */
   showIndex?: boolean
   onRowClick?: (row: T, index: number) => void
+  onRowDoubleClick?: (row: T, index: number) => void
   rowClassName?: (row: T, index: number) => string
   empty?: ReactNode
   /**
@@ -61,6 +62,7 @@ export function DataTable<T>({
   rowKey,
   showIndex = false,
   onRowClick,
+  onRowDoubleClick,
   rowClassName,
   empty = 'No data',
   layout = 'auto',
@@ -170,8 +172,11 @@ export function DataTable<T>({
             <tr
               key={rowKey(row, index)}
               onClick={onRowClick ? () => onRowClick(row, index) : undefined}
+              onDoubleClick={
+                onRowDoubleClick ? () => onRowDoubleClick(row, index) : undefined
+              }
               className={`border-b border-border/40 ${
-                onRowClick ? 'cursor-pointer hover:bg-surface-hover' : ''
+                onRowClick || onRowDoubleClick ? 'cursor-pointer hover:bg-surface-hover' : ''
               } ${rowClassName?.(row, index) ?? ''}`}
             >
               {showIndex ? (

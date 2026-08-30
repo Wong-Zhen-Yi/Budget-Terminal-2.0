@@ -14,6 +14,10 @@ import {
   DEFAULT_BACKTEST_PAGE_SETTINGS,
   normalizeBacktestPageSettings,
 } from '../shared/backtest.js'
+import {
+  DEFAULT_YOUTUBE_PAGE_SETTINGS,
+  normalizeYouTubePageSettings,
+} from '../shared/youtube.js'
 
 /**
  * The Settings page's own store.
@@ -33,6 +37,7 @@ const settingsSchema = z.object({
   obscuredTabs: z.array(z.string()).optional(),
   backtestPage: z.unknown().optional(),
   signalsPage: z.unknown().optional(),
+  youtubePage: z.unknown().optional(),
 })
 
 type StoredSettings = z.infer<typeof settingsSchema>
@@ -74,6 +79,7 @@ function emptySettings(): StoredSettings {
     obscuredTabs: [...DEFAULT_OBSCURED_TABS],
     backtestPage: DEFAULT_BACKTEST_PAGE_SETTINGS,
     signalsPage: DEFAULT_SIGNALS_PAGE_SETTINGS,
+    youtubePage: DEFAULT_YOUTUBE_PAGE_SETTINGS,
   }
 }
 
@@ -108,6 +114,7 @@ function normalize(settings: StoredSettings): StoredSettings {
   settings.obscuredTabs = keep(settings.obscuredTabs ?? [...DEFAULT_OBSCURED_TABS])
   settings.backtestPage = normalizeBacktestPageSettings(settings.backtestPage)
   settings.signalsPage = normalizeSignalsPageSettings(settings.signalsPage)
+  settings.youtubePage = normalizeYouTubePageSettings(settings.youtubePage)
   return settings
 }
 
@@ -151,6 +158,7 @@ function toPayload(settings: StoredSettings): AppSettings {
     obscuredTabs: [...(settings.obscuredTabs ?? [])],
     backtestPage: normalizeBacktestPageSettings(settings.backtestPage),
     signalsPage: normalizeSignalsPageSettings(settings.signalsPage),
+    youtubePage: normalizeYouTubePageSettings(settings.youtubePage),
     sourcePath: settingsPath(),
   }
 }
@@ -214,6 +222,10 @@ function apply(settings: StoredSettings, mutation: AppSettingsMutation): void {
     }
     case 'setSignalsPage': {
       settings.signalsPage = normalizeSignalsPageSettings(mutation.value)
+      return
+    }
+    case 'setYouTubePage': {
+      settings.youtubePage = normalizeYouTubePageSettings(mutation.value)
       return
     }
   }

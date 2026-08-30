@@ -172,6 +172,36 @@ holding Yahoo will not quote is drawn as a dashed outline rather than a neutral 
 missing data never reads as a flat move, and the coverage cell turns amber (red past half
 the book) to say how many there are.
 
+## What the ETF page shows
+
+Any US ETF's full holdings list, pulled from the issuer's own published file. Type a
+ticker and press Enter, or click a fund in the left rail — which ranks the whole US ETF
+universe by net assets, about five thousand funds, from one paged Yahoo screener sweep.
+The fund summary prints the name, issuer, as-of date, expense ratio, net assets and the
+number of holdings loaded, with the sector breakdown on the line below and a link to the
+issuer document the numbers came from.
+
+The Holdings subtab is the table beside a breakdown donut: the twelve largest names keep
+their own wedge and everything below them folds into Others, along with whatever share of
+the fund the loaded rows do not account for — which is why the centre reads coverage
+rather than 100%. The filter box narrows the table by ticker or name; the donut always
+describes the whole fund. Double-clicking a row opens the holding in Charts.
+
+The Arbitrage subtab compares the ETF's own session move against the weighted move of the
+holdings underneath it. The gap is a raw return gap in basis points, not a NAV premium:
+positive means the ETF is running rich to its basket. The basket move is weighted over
+the holdings that actually returned a quote, so the coverage cell is part of the reading —
+a gap computed over half the book is not a signal, and the status line says so.
+
+Seven issuers are tried in order — ARK, iShares, SPDR/State Street, Invesco, Vanguard,
+First Trust, ProShares — with Yahoo's top-holdings list underneath them all. A fund that
+lands on the Yahoo fallback shows ten rows instead of five hundred and says so rather than
+presenting them as the book. As of this writing SPDR, Invesco, ARK and ProShares answer
+with full holdings; iShares, Vanguard and First Trust have each changed their pages out
+from under the scraper and currently fall through to the fallback, exactly as they do in
+the PySide6 app. Nothing on the page refreshes on a timer: Load Holdings, a rail click,
+Refresh Arbitrage, Refresh AUM and F5 are the only things that fetch.
+
 ### Where holdings live
 
 This app owns its own store at `%APPDATA%\BudgetTerminalElectron\portfolio.json`. On

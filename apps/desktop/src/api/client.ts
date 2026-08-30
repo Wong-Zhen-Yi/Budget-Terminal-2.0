@@ -28,6 +28,12 @@ export const queryKeys = {
   earningsCalendar: (rangeKey: string) => ['earningsCalendar', rangeKey] as const,
   crypto: ['crypto'] as const,
   heatmap: (etf: string) => ['heatmap', etf] as const,
+  // One key per ticker, so switching back to a fund already loaded repaints instantly
+  // the way `_p13_last_result` does. Arbitrage is keyed the same way and separately: it
+  // is a second, opt-in load over the same basket, not part of the holdings payload.
+  etfHoldings: (ticker: string) => ['etfHoldings', ticker] as const,
+  etfArbitrage: (ticker: string) => ['etfArbitrage', ticker] as const,
+  etfAum: ['etfAum'] as const,
   upDown: (source: string, interval: string, symbols: string[]) =>
     ['upDown', source, interval, [...symbols].sort().join(',')] as const,
   stocks: (symbol: string) => ['stocks', symbol] as const,
@@ -49,12 +55,21 @@ export const queryKeys = {
     ['valuation', symbol, customPeers.join(',')] as const,
   // The whole catalog resolves from one load, so the page has a single key.
   economic: ['economic'] as const,
+  // Two feeds, two keys: a failed upcoming refresh must not evict the completed rows,
+  // and the completed year is part of its key so an older year is its own entry.
+  ipoUpcoming: ['ipoUpcoming'] as const,
+  ipoCompleted: (year: number) => ['ipoCompleted', year] as const,
+  institutionActivity: (quarter: string) => ['institutions', 'activity', quarter || 'latest'] as const,
+  institutionTickerActivity: (symbol: string) => ['institutions', 'ticker', symbol] as const,
   targets: (tickers: string[]) => ['targets', [...tickers].sort().join(',')] as const,
   news: (tickers: string[]) => ['news', [...tickers].sort().join(',')] as const,
   newsPage: (tickers: string[]) => ['newsPage', [...tickers].sort().join(',')] as const,
   newsTickerSearch: (tickers: string[]) => ['newsTickerSearch', tickers.join(',')] as const,
   newsPreview: (url: string) => ['newsPreview', url] as const,
   newsThumbnail: (url: string) => ['newsThumbnail', url] as const,
+  youtube: (tickers: string[]) => ['youtube', [...tickers].sort().join(',')] as const,
+  youtubeThumbnail: (videoId: string, thumbnailUrl: string) =>
+    ['youtubeThumbnail', videoId, thumbnailUrl] as const,
   fundamentals: (tickers: string[]) => ['fundamentals', [...tickers].sort().join(',')] as const,
   fundamentalsPage: (symbol: string) => ['fundamentalsPage', symbol] as const,
   returns: (tickers: string[], window: string) =>

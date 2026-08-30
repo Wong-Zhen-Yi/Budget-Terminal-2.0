@@ -31,12 +31,16 @@
     "probe:cards": "tsx scripts/probe-cards.ts",
     "probe:options": "tsx scripts/probe-options.ts",
     "probe:heatmap": "tsx scripts/probe-heatmap.ts",
+    "probe:etf": "tsx scripts/probe-etf.ts",
     "probe:projections": "tsx scripts/probe-projections.ts",
     "probe:up-down": "tsx scripts/probe-up-down.ts",
     "probe:valuation": "tsx scripts/probe-valuation.ts",
     "probe:economic": "tsx scripts/probe-economic.ts",
     "probe:roll": "tsx scripts/probe-roll.ts",
-    "probe:backtest": "tsx scripts/probe-backtest.ts"
+    "probe:ipo": "tsx scripts/probe-ipo.ts",
+    "probe:backtest": "tsx scripts/probe-backtest.ts",
+    "probe:youtube": "tsx scripts/probe-youtube.ts",
+    "probe:institutions": "tsx scripts/probe-institutions.ts"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

@@ -15,6 +15,11 @@ import type {
   CryptoRequest,
   EarningsCalendarRequest,
   HeatmapRequest,
+  InstitutionActivityRequest,
+  InstitutionTickerActivityRequest,
+  EtfArbitrageRequest,
+  EtfAumRequest,
+  EtfHoldingsRequest,
   Envelope,
   MaintenanceAction,
   MaintenanceResult,
@@ -47,7 +52,11 @@ import type {
   UpDownTargetsRequest,
   ValuationRequest,
   EconomicRequest,
+  IpoCompletedRequest,
+  IpoUpcomingRequest,
   RollRequest,
+  YouTubeRequest,
+  YouTubeThumbnailRequest,
   WindowAction,
 } from '../shared/contract.js'
 import { CHANNELS } from '../shared/contract.js'
@@ -141,6 +150,13 @@ export function registerIpcHandlers(): () => void {
   )
   ipcMain.handle(CHANNELS.crypto, (_event, request: CryptoRequest) => provider.crypto(request))
   ipcMain.handle(CHANNELS.heatmap, (_event, request: HeatmapRequest) => provider.heatmap(request))
+  ipcMain.handle(CHANNELS.etfHoldings, (_event, request: EtfHoldingsRequest) =>
+    provider.etfHoldings(request),
+  )
+  ipcMain.handle(CHANNELS.etfArbitrage, (_event, request: EtfArbitrageRequest) =>
+    provider.etfArbitrage(request),
+  )
+  ipcMain.handle(CHANNELS.etfAum, (_event, request: EtfAumRequest) => provider.etfAum(request))
   ipcMain.handle(CHANNELS.upDown, (_event, request: UpDownRequest) => provider.upDown(request))
   ipcMain.handle(CHANNELS.upDownTargets, (_event, request: UpDownTargetsRequest) =>
     provider.upDownTargets(request),
@@ -151,7 +167,21 @@ export function registerIpcHandlers(): () => void {
   ipcMain.handle(CHANNELS.economic, (_event, request: EconomicRequest) =>
     provider.economic(request),
   )
+  ipcMain.handle(CHANNELS.institutionActivity, (_event, request: InstitutionActivityRequest) =>
+    provider.institutionActivity(request),
+  )
+  ipcMain.handle(
+    CHANNELS.institutionTickerActivity,
+    (_event, request: InstitutionTickerActivityRequest) =>
+      provider.institutionTickerActivity(request),
+  )
   ipcMain.handle(CHANNELS.roll, (_event, request: RollRequest) => provider.roll(request))
+  ipcMain.handle(CHANNELS.ipoUpcoming, (_event, request: IpoUpcomingRequest) =>
+    provider.ipoUpcoming(request),
+  )
+  ipcMain.handle(CHANNELS.ipoCompleted, (_event, request: IpoCompletedRequest) =>
+    provider.ipoCompleted(request),
+  )
   ipcMain.handle(CHANNELS.stocks, (_event, request: StocksRequest) => provider.stocks(request))
   ipcMain.handle(CHANNELS.optionsChain, (_event, request: OptionsChainRequest) =>
     provider.optionsChain(request),
@@ -164,6 +194,12 @@ export function registerIpcHandlers(): () => void {
   )
   ipcMain.handle(CHANNELS.backtest, (_event, request: BacktestRequest) =>
     provider.backtest(request),
+  )
+  ipcMain.handle(CHANNELS.youtube, (_event, request: YouTubeRequest) =>
+    provider.youtube(request),
+  )
+  ipcMain.handle(CHANNELS.youtubeThumbnail, (_event, request: YouTubeThumbnailRequest) =>
+    provider.youtubeThumbnail(request),
   )
   ipcMain.handle(CHANNELS.settings, () => provider.settings())
   ipcMain.handle(CHANNELS.settingsMutate, (_event, mutation: AppSettingsMutation) =>
