@@ -7,9 +7,9 @@ import { Button } from '@/components/ui/Button'
 interface StrategyCardProps {
   model: CardModel
   interval: CardInterval
-  performance?: CardPerformance
-  loading: boolean
-  error?: string
+  performanceByInterval: Partial<Record<CardInterval, CardPerformance>>
+  loadingByInterval: Record<CardInterval, boolean>
+  errorByInterval: Partial<Record<CardInterval, string>>
   onInterval: (interval: CardInterval) => void
   onAction: () => void
   onHide?: () => void
@@ -25,9 +25,9 @@ interface StrategyCardProps {
 export function StrategyCard({
   model,
   interval,
-  performance,
-  loading,
-  error,
+  performanceByInterval,
+  loadingByInterval,
+  errorByInterval,
   onInterval,
   onAction,
   onHide,
@@ -39,17 +39,15 @@ export function StrategyCard({
   onDragEnd,
   onDrop,
 }: StrategyCardProps) {
+  const performance = performanceByInterval[interval]
+  const loading = loadingByInterval[interval]
+  const error = errorByInterval[interval]
   const preview = model.symbols.slice(0, 6).map((symbol) => {
     const weight = model.weights[symbol]
     return Number.isFinite(weight) ? `${symbol} ${weight.toFixed(0)}%` : symbol
   }).join(', ') + (model.symbols.length > 6 ? ` +${model.symbols.length - 6}` : '')
   const returnPct = performance?.returnPct
-  const returnText = error
-    ? 'Performance unavailable'
-    : returnPct === undefined
-      ? 'Performance --'
-      : `Performance ${returnPct > 0 ? '+' : ''}${returnPct.toFixed(2)}%`
-  const source = error
+  const source = error && !performance
     ? 'No data'
     : loading && !performance
       ? 'Loading...'
@@ -111,13 +109,8 @@ export function StrategyCard({
       <p className="truncate text-2xs text-text-muted" title={model.symbols.join(', ')}>
         {preview || 'No holdings'}
       </p>
-      <div className="mt-1 flex items-center gap-2">
-        <span className={`text-2xs font-semibold ${
-          error ? 'text-down' : returnPct === undefined ? 'text-text' : returnPct >= 0 ? 'text-up' : 'text-down'
-        }`}>
-          {returnText}
-        </span>
-        <span className="ml-auto truncate text-2xs text-text-muted" title={error}>
+      <div className="mt-1 flex justify-end">
+        <span className="truncate text-2xs text-text-muted" title={error}>
           {source}
         </span>
       </div>
@@ -126,11 +119,17 @@ export function StrategyCard({
         <StrategySparkline values={performance?.values ?? []} negative={(returnPct ?? 0) < 0} />
       </div>
 
-      <div className="grid grid-cols-3 gap-1">
+      <div className="grid gap-1">
         {([['1d', '1 Day'], ['30d', '30D'], ['1y', '1Y']] as const).map(([key, label]) => (
-          <Button key={key} variant="toggle" active={interval === key} onClick={() => onInterval(key)}>
-            {label}
-          </Button>
+          <TimeframeRow
+            key={key}
+            label={label}
+            active={interval === key}
+            performance={performanceByInterval[key]}
+            loading={loadingByInterval[key]}
+            error={errorByInterval[key]}
+            onClick={() => onInterval(key)}
+          />
         ))}
       </div>
       <div className="flex gap-1">
@@ -141,6 +140,55 @@ export function StrategyCard({
         {onRemove ? <Button variant="danger" onClick={onRemove}>Remove</Button> : null}
       </div>
     </article>
+  )
+}
+
+function TimeframeRow({
+  label,
+  active,
+  performance,
+  loading,
+  error,
+  onClick,
+}: {
+  label: string
+  active: boolean
+  performance?: CardPerformance
+  loading: boolean
+  error?: string
+  onClick: () => void
+}) {
+  const returnPct = performance?.returnPct
+  const returnText = loading && !performance
+    ? 'Loading…'
+    : returnPct === undefined
+      ? '--'
+      : `${returnPct > 0 ? '+' : ''}${returnPct.toFixed(2)}%`
+  const returnColor = returnPct === undefined
+    ? 'text-text-muted'
+    : returnPct >= 0
+      ? 'text-up'
+      : 'text-down'
+  const detail = error
+    ?? (performance?.missingSymbols.length
+      ? `Missing: ${performance.missingSymbols.join(', ')}`
+      : `${label} performance`)
+
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      title={detail}
+      onClick={onClick}
+      className={`no-drag flex h-7 w-full items-center justify-between border px-2 text-2xs transition-colors ${
+        active
+          ? 'border-accent bg-accent-dim text-text'
+          : 'border-border-strong bg-surface-raised text-text-muted hover:bg-surface-hover hover:text-text'
+      }`}
+    >
+      <span>{label}</span>
+      <span className={`font-semibold tabular-nums ${returnColor}`}>{returnText}</span>
+    </button>
   )
 }
 

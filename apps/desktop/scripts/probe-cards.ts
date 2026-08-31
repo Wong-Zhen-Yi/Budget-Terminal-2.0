@@ -76,6 +76,10 @@ function pureChecks(): void {
   }
   const equal = computeCardPerformance(base, series, '1y')
   assert(Math.abs(equal.returnPct) < 0.000001, 'opposite equal-weight returns should offset')
+  for (const interval of ['1d', '30d', '1y'] as const) {
+    const intervalResult = computeCardPerformance(base, series, interval)
+    assert(intervalResult.interval === interval, `${interval} performance should retain its timeframe`)
+  }
   const custom = computeCardPerformance(
     { ...base, weighting: 'custom', weights: { AAA: 80, BBB: 20 } },
     series,
@@ -141,7 +145,7 @@ async function liveCheck(): Promise<void> {
       shares: {},
       cashBalance: 0,
   }
-  for (const interval of ['1d', '30d'] as const) {
+  for (const interval of ['1d', '30d', '1y'] as const) {
     const result = await getCardsPerformance({ interval, force: true, cards: [card] })
     assert(
       result.payload.results[BUILTIN_INDEX_CARD_ID]?.values.length >= 2,

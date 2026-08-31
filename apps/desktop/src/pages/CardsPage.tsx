@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type PointerEvent } from 'react'
 
 import type {
+  CardInterval,
   CardPerformance,
   CardsMutation,
   CardsPerformanceRequest,
@@ -59,21 +60,18 @@ export function CardsPage({
     [state, portfolios],
   )
   const requests = useMemo<CardsPerformanceRequest[]>(() => {
-    if (!state) return []
-    return CARD_INTERVALS.flatMap((interval) => {
-      const cards = models.filter((model) => (state.intervals[model.id] ?? '1y') === interval)
-      return cards.length ? [{
-        interval,
-        cards: cards.map(({ id, symbols, weighting, weights, shares, cashBalance }) => ({
-          id,
-          symbols,
-          weighting,
-          weights,
-          shares,
-          cashBalance,
-        })),
-      }] : []
-    })
+    if (!state || !models.length) return []
+    return CARD_INTERVALS.map((interval) => ({
+      interval,
+      cards: models.map(({ id, symbols, weighting, weights, shares, cashBalance }) => ({
+        id,
+        symbols,
+        weighting,
+        weights,
+        shares,
+        cashBalance,
+      })),
+    }))
   }, [models, state])
   const performanceQueries = useCardsPerformance(requests)
   const [notice, setNotice] = useState('')
@@ -89,11 +87,17 @@ export function CardsPage({
     side: CardDropSide
   } | null>(null)
 
-  const performanceById = useMemo(() => {
-    const result: Record<string, CardPerformance> = {}
-    for (const query of performanceQueries) Object.assign(result, query.data?.data.results ?? {})
+  const performanceByInterval = useMemo(() => {
+    const result: Record<CardInterval, Record<string, CardPerformance>> = {
+      '1d': {},
+      '30d': {},
+      '1y': {},
+    }
+    requests.forEach((request, index) => {
+      Object.assign(result[request.interval], performanceQueries[index]?.data?.data.results ?? {})
+    })
     return result
-  }, [performanceQueries])
+  }, [performanceQueries, requests])
   const queryByInterval = useMemo(() => new Map(
     requests.map((request, index) => [request.interval, performanceQueries[index]]),
   ), [requests, performanceQueries])
@@ -201,19 +205,32 @@ export function CardsPage({
           <div className="grid min-w-[1030px] grid-cols-4 items-start gap-2.5">
             {models.map((model) => {
               const interval = state?.intervals[model.id] ?? '1y'
-              const query = queryByInterval.get(interval)
-              const error = query?.data?.errors.find((entry) => entry.symbol === model.id)?.reason
-                ?? (!performanceById[model.id] && query?.data?.meta.freshness === 'failed'
+              const cardPerformance: Partial<Record<CardInterval, CardPerformance>> = {}
+              const loadingByInterval: Record<CardInterval, boolean> = {
+                '1d': false,
+                '30d': false,
+                '1y': false,
+              }
+              const errorByInterval: Partial<Record<CardInterval, string>> = {}
+              for (const key of CARD_INTERVALS) {
+                const query = queryByInterval.get(key)
+                const performance = performanceByInterval[key][model.id]
+                cardPerformance[key] = performance
+                loadingByInterval[key] = query?.isFetching ?? false
+                errorByInterval[key] = query?.data?.errors.find(
+                  (entry) => entry.symbol === model.id,
+                )?.reason ?? (!performance && query?.data?.meta.freshness === 'failed'
                   ? query.data.meta.failureReason
                   : undefined)
+              }
               return (
                 <StrategyCard
                   key={model.id}
                   model={model}
                   interval={interval}
-                  performance={performanceById[model.id]}
-                  loading={query?.isFetching ?? false}
-                  error={error}
+                  performanceByInterval={cardPerformance}
+                  loadingByInterval={loadingByInterval}
+                  errorByInterval={errorByInterval}
                   onInterval={(next) => void commit(
                     { type: 'setInterval', id: model.id, interval: next },
                     `${model.name} interval set to ${next}.`,
@@ -297,7 +314,7 @@ export function CardsPage({
       {basket ? (
         <BasketDialog
           model={basket}
-          performance={performanceById[basket.id]}
+          performance={performanceByInterval[state?.intervals[basket.id] ?? '1y'][basket.id]}
           onClose={() => setBasket(null)}
           onOpenPortfolio={(portfolioId) => {
             void mutatePortfolio({ type: 'setActive', id: portfolioId }).then(() => {
