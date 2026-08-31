@@ -7,6 +7,9 @@ if not exist "node_modules" (
   call npm install || goto :failed
 )
 
+echo Checking Electron runtime...
+call npm run ensure:electron || goto :failed
+
 echo Starting Budget Terminal...
 call npm run dev
 if errorlevel 1 goto :failed

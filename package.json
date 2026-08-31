@@ -7,6 +7,8 @@
     "apps/desktop"
   ],
   "scripts": {
+    "postinstall": "npm run ensure:electron",
+    "ensure:electron": "node -e \"require('electron')\"",
     "dev": "npm run dev --workspace budget-terminal-desktop",
     "build": "npm run build --workspace budget-terminal-desktop",
     "typecheck": "npm run typecheck --workspace budget-terminal-desktop",
