@@ -7,6 +7,7 @@ import { useFundamentals, usePortfolio, usePortfolioMutation, useQuotes } from '
 import { useOptionQuotes } from '@/api/portfolioQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { Donut } from '@/components/charts/Donut'
+import { AddPositionsDialog } from '@/components/portfolio/AddPositionsDialog'
 import { DipFinderPanel, WeightPanel } from '@/components/portfolio/DipFinderPanel'
 import { HeatmapTab } from '@/components/portfolio/HeatmapTab'
 import { ManagePortfoliosDialog } from '@/components/portfolio/ManagePortfoliosDialog'
@@ -14,6 +15,7 @@ import { MetricsTab } from '@/components/portfolio/MetricsTab'
 import { MomentumTab } from '@/components/portfolio/MomentumTab'
 import { buildOptionRows, OptionsTable, totalOptionsPnl } from '@/components/portfolio/OptionsTable'
 import { PositionsTable } from '@/components/portfolio/PositionsTable'
+import { RemovePositionsDialog } from '@/components/portfolio/RemovePositionsDialog'
 import { SummaryBar } from '@/components/portfolio/SummaryBar'
 import { Button } from '@/components/ui/Button'
 import { Panel } from '@/components/ui/Panel'
@@ -50,7 +52,8 @@ export function PortfolioPage({
 
   const [subTab, setSubTab] = useState<SubTabId>('positions')
   const [managing, setManaging] = useState(false)
-  const [newTicker, setNewTicker] = useState('')
+  const [addingPositions, setAddingPositions] = useState(false)
+  const [removingPositions, setRemovingPositions] = useState(false)
   const [error, setError] = useState('')
 
   const rows = useMemo(
@@ -155,12 +158,24 @@ export function PortfolioPage({
     [mutate],
   )
 
-  const addPosition = useCallback(async () => {
-    const ticker = newTicker.trim().toUpperCase()
-    if (!ticker || !selected) return
-    const result = await send({ type: 'addPosition', portfolioId: selected.id, ticker })
-    if (!result.meta.failureReason) setNewTicker('')
-  }, [newTicker, selected, send])
+  /**
+   * Writes one ticker at a time so a refusal — a duplicate, say — costs only that ticker
+   * and the rest of the list still lands. The store queues the writes behind each other.
+   */
+  const eachTicker = useCallback(
+    async (mutation: 'addPosition' | 'removePosition', tickers: string[]) => {
+      if (!selected) return []
+      const failures: string[] = []
+      for (const ticker of tickers) {
+        const result = await mutate({ type: mutation, portfolioId: selected.id, ticker })
+        if (result.meta.failureReason) failures.push(`${ticker}: ${result.meta.failureReason}`)
+      }
+      // The dialog reports its own failures, so the page-level line stays clear.
+      setError('')
+      return failures
+    },
+    [selected, mutate],
+  )
 
   const exportTickers = useCallback(async () => {
     if (!selected) return
@@ -276,23 +291,15 @@ export function PortfolioPage({
                     </span>
                   ) : (
                     <>
-                      <input
-                        aria-label="New ticker"
-                        placeholder="Ticker"
-                        value={newTicker}
-                        spellCheck={false}
-                        onChange={(event) => setNewTicker(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') void addPosition()
-                        }}
-                        className="h-6 w-24 border border-border-strong bg-surface px-2 text-2xs text-text uppercase outline-none focus:border-accent"
-                      />
-                      <Button
-                        variant="accent"
-                        onClick={() => void addPosition()}
-                        disabled={!newTicker.trim()}
-                      >
+                      <Button variant="accent" onClick={() => setAddingPositions(true)}>
                         + Add Position
+                      </Button>
+                      <Button
+                        variant="danger"
+                        onClick={() => setRemovingPositions(true)}
+                        disabled={!selected.tickers.length}
+                      >
+                        - Remove Position
                       </Button>
                     </>
                   )}
@@ -386,6 +393,22 @@ export function PortfolioPage({
           cashAmount={cashAmount}
           currentValues={currentValues}
           visible
+        />
+      ) : null}
+
+      {addingPositions ? (
+        <AddPositionsDialog
+          existing={selected.tickers}
+          onClose={() => setAddingPositions(false)}
+          onSubmit={(tickers) => eachTicker('addPosition', tickers)}
+        />
+      ) : null}
+
+      {removingPositions ? (
+        <RemovePositionsDialog
+          rows={rows}
+          onClose={() => setRemovingPositions(false)}
+          onSubmit={(tickers) => eachTicker('removePosition', tickers)}
         />
       ) : null}
 

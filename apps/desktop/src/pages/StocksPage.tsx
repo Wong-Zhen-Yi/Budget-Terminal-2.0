@@ -330,7 +330,7 @@ function DescriptionPanel({ payload, warning }: { payload: StocksPayload | null;
 }
 
 const newsColumns: Array<Column<StocksNewsRow>> = [
-  { key: 'headline', header: 'Headline', width: '55%', cell: (row) => row.title },
+  { key: 'headline', header: 'Headline', width: '55%', wrap: true, cell: (row) => row.title },
   { key: 'ticker', header: 'Ticker', width: '13%', align: 'center', cell: (row) => row.ticker },
   { key: 'source', header: 'Source', width: '20%', align: 'center', cell: (row) => row.source },
   { key: 'time', header: 'Time', width: '12%', align: 'center', numeric: true, cell: (row) => row.publishedAt ? new Date(row.publishedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--' },
