@@ -249,7 +249,7 @@ export function BmnrPage({
         />
       </div>
 
-      <div className="grid min-h-[280px] shrink-0 grid-cols-1 gap-2 xl:h-[310px] xl:min-h-0 xl:grid-cols-12">
+      <div className="grid min-h-[280px] grid-cols-1 gap-2 xl:min-h-[300px] xl:flex-[31_1_0%] xl:grid-cols-12">
         <Panel
           className="min-h-[280px] xl:col-span-4 xl:h-full xl:min-h-0"
           title="Treasury Basis — Live vs SEC Filed"
@@ -272,7 +272,7 @@ export function BmnrPage({
             </PanelMessage>
           ) : null}
           <div className="flex min-h-0 flex-1 flex-col">
-            <div className="flex h-[140px] shrink-0 flex-col overflow-hidden">
+            <div className="flex h-[140px] shrink-0 flex-col overflow-hidden xl:h-[40%] xl:max-h-[190px] xl:min-h-[140px]">
               <Donut
                 slices={(payload?.composition.slices ?? []).map((slice, index) => ({
                   label: slice.label,
@@ -296,7 +296,7 @@ export function BmnrPage({
         </Panel>
       </div>
 
-      <div className="grid min-h-[180px] shrink-0 grid-cols-1 gap-2 xl:h-[270px] xl:min-h-0 xl:grid-cols-12">
+      <div className="grid min-h-[180px] grid-cols-1 gap-2 xl:min-h-[240px] xl:flex-[27_1_0%] xl:grid-cols-12">
         <Panel
           className="min-h-[180px] xl:col-span-5 xl:h-full xl:min-h-0"
           title="Quarterly Treasury & Dilution"

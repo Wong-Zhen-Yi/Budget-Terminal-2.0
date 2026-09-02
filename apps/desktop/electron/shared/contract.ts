@@ -1194,6 +1194,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'etf', label: 'ETF', implemented: true },
   { id: 'crypto', label: 'Crypto', implemented: true },
   { id: 'bmnr', label: 'BMNR', implemented: true },
+  { id: 'gold', label: 'Gold', implemented: true },
   { id: 'backtest', label: 'Backtest', implemented: true },
   { id: 'roll', label: 'Roll', implemented: true },
   { id: 'ipo', label: 'IPO', implemented: true },
@@ -2175,6 +2176,117 @@ export interface BmnrRequest extends BackgroundRequest {
   force?: boolean
 }
 
+/* ------------------------------------------------------ Gold fundamentals */
+
+export const GOLD_BLOCKS = ['market', 'demand', 'aboveGround', 'etf', 'mining'] as const
+export type GoldBlock = (typeof GOLD_BLOCKS)[number]
+export type GoldBlockStatus = 'loaded' | 'unavailable'
+export type GoldFrequency = 'live' | 'monthly' | 'quarterly' | 'annual' | 'derived'
+export type GoldUnit = 'usd' | 'usdPerOz' | 'tonnes' | 'percent' | 'years'
+
+/** One displayed Gold value, carrying the provenance needed for mixed-frequency data. */
+export interface GoldValue {
+  value: number | null
+  unit: GoldUnit
+  asOf: string
+  source: string
+  frequency: GoldFrequency
+  note?: string
+}
+
+export interface GoldMarket {
+  futuresPrice: GoldValue
+  futuresChangePct: GoldValue
+  gldPrice: GoldValue
+  gldChangePct: GoldValue
+}
+
+export interface GoldQuarterPoint {
+  period: string
+  mineProduction: number | null
+  producerHedging: number | null
+  recycledGold: number | null
+  totalSupply: number | null
+  jewellery: number | null
+  technology: number | null
+  barAndCoin: number | null
+  etfDemand: number | null
+  centralBanks: number | null
+  otcAndOther: number | null
+  totalDemand: number | null
+  averagePrice: number | null
+}
+
+export interface GoldQuarterly {
+  asOf: string
+  source: string
+  sourceUrl: string
+  periods: GoldQuarterPoint[]
+}
+
+export interface GoldStockSlice {
+  label: string
+  tonnes: number
+  sharePct: number | null
+}
+
+export interface GoldAboveGround {
+  asOf: string
+  source: string
+  total: GoldValue
+  belowGroundReserves: GoldValue
+  belowGroundResources: GoldValue
+  slices: GoldStockSlice[]
+  reconciliationGap: number | null
+}
+
+export interface GoldEtf {
+  asOf: string
+  source: string
+  sourceUrl: string
+  holdings: GoldValue
+  aum: GoldValue
+  monthlyFlowUsd: GoldValue
+  monthlyDemand: GoldValue
+}
+
+export interface GoldMiningRow {
+  country: string
+  priorProduction: number
+  production: number
+  reserves: number
+  reserveLifeYears: number | null
+  estimated: boolean
+}
+
+export interface GoldMining {
+  asOf: string
+  source: string
+  sourceUrl: string
+  rows: GoldMiningRow[]
+}
+
+export interface GoldDerived {
+  latestSupply: GoldValue
+  latestDemand: GoldValue
+  stockToFlow: GoldValue
+}
+
+export interface GoldPayload {
+  fetchedAt: string
+  market: GoldMarket
+  quarterly: GoldQuarterly | null
+  aboveGround: GoldAboveGround | null
+  etf: GoldEtf | null
+  mining: GoldMining | null
+  derived: GoldDerived
+  progress: Record<GoldBlock, GoldBlockStatus>
+}
+
+export interface GoldRequest extends BackgroundRequest {
+  force?: boolean
+}
+
 /* ------------------------------------------------------------ heatmap page */
 
 /**
@@ -3060,6 +3172,7 @@ export const CHANNELS = {
   earningsCalendar: 'calendar:earnings',
   crypto: 'crypto:read',
   bmnr: 'bmnr:read',
+  gold: 'gold:read',
   heatmap: 'heatmap:read',
   etfHoldings: 'etf:holdings',
   etfArbitrage: 'etf:arbitrage',
@@ -3206,6 +3319,7 @@ export interface DesktopApi {
   ): Promise<Envelope<EarningsCalendarPayload>>
   crypto(request: CryptoRequest): Promise<Envelope<CryptoPayload>>
   bmnr(request: BmnrRequest): Promise<Envelope<BmnrPayload>>
+  gold(request: GoldRequest): Promise<Envelope<GoldPayload>>
   heatmap(request: HeatmapRequest): Promise<Envelope<HeatmapPayload>>
   etfHoldings(request: EtfHoldingsRequest): Promise<Envelope<EtfHoldingsPayload>>
   etfArbitrage(request: EtfArbitrageRequest): Promise<Envelope<EtfArbitragePayload>>

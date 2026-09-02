@@ -14,6 +14,7 @@ import { CardsPage } from '@/pages/CardsPage'
 import { CalendarPage } from '@/pages/CalendarPage'
 import { ChartsPage } from '@/pages/ChartsPage'
 import { BmnrPage } from '@/pages/BmnrPage'
+import { GoldPage } from '@/pages/GoldPage'
 import { CryptoPage } from '@/pages/CryptoPage'
 import { DictionaryPage } from '@/pages/DictionaryPage'
 import { FundamentalsPage } from '@/pages/FundamentalsPage'
@@ -415,6 +416,8 @@ function renderPage({
       <CryptoPage onStatusChange={onStatusChange} />
     ) : tabId === 'bmnr' ? (
       <BmnrPage onStatusChange={onStatusChange} />
+    ) : tabId === 'gold' ? (
+      <GoldPage onStatusChange={onStatusChange} />
     ) : tabId === 'dictionary' ? (
       <DictionaryPage onStatusChange={onStatusChange} />
     ) : tabId === 'charts' ? (

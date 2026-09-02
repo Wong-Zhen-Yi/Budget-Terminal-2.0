@@ -79,6 +79,7 @@ const TAB_ORDER = [
   // Deliberately not adjacent to `crypto`: warm tasks run strictly sequentially and both
   // pages call CoinGecko's keyless tier, which rate-limits by the minute.
   'bmnr',
+  'gold',
   'youtube',
   'heatmap',
   'trading-volumes',
@@ -428,6 +429,19 @@ function buildTasks(
         queryKey: queryKeys.bmnr,
         queryFn: () => api.bmnr({ background: true }),
         staleTime: Infinity,
+      }),
+  })
+
+  // Public WGC and USGS documents are long-cached in main; the two Yahoo proxy quotes
+  // are the only fast-moving part of this fundamentals page.
+  tasks.push({
+    tab: 'gold',
+    label: 'Gold fundamentals',
+    run: (client) =>
+      client.prefetchQuery({
+        queryKey: queryKeys.gold,
+        queryFn: () => api.gold({ background: true }),
+        staleTime: 60_000,
       }),
   })
 

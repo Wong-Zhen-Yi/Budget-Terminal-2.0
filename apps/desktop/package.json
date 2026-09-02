@@ -28,6 +28,7 @@
     "probe:charts": "tsx scripts/probe-charts.ts",
     "probe:dictionary": "tsx scripts/probe-dictionary.ts",
     "probe:bmnr": "tsx scripts/probe-bmnr.ts",
+    "probe:gold": "tsx scripts/probe-gold.ts",
     "probe:crypto": "tsx scripts/probe-crypto.ts",
     "probe:cards": "tsx scripts/probe-cards.ts",
     "probe:options": "tsx scripts/probe-options.ts",
@@ -62,6 +63,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5.101.4",
     "lightweight-charts": "^5.2.1",
+    "pdfjs-dist": "^6.3.289",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "yahoo-finance2": "^4.0.2",

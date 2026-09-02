@@ -14,6 +14,7 @@ import type {
   CalendarMonthRequest,
   BmnrRequest,
   CryptoRequest,
+  GoldRequest,
   EarningsCalendarRequest,
   HeatmapRequest,
   InstitutionActivityRequest,
@@ -177,6 +178,7 @@ export function registerIpcHandlers(): () => void {
   handle(CHANNELS.crypto, (request: CryptoRequest) => provider.crypto(request))
 
   handle(CHANNELS.bmnr, (request: BmnrRequest) => provider.bmnr(request))
+  handle(CHANNELS.gold, (request: GoldRequest) => provider.gold(request))
   handle(CHANNELS.heatmap, (request: HeatmapRequest) => provider.heatmap(request))
   handle(CHANNELS.etfHoldings, (request: EtfHoldingsRequest) =>
     provider.etfHoldings(request),

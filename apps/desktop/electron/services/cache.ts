@@ -45,6 +45,11 @@ export const TTL = {
   // and three Yahoo quotes. Matched to `crypto` because it is the same CoinGecko free tier
   // and the same rate budget, and the page has no refresh timer either.
   bmnr: 5 * 60_000,
+  // Gold's market strip is near-live, while its physical datasets update monthly,
+  // quarterly or annually and are cached independently by `services/gold.ts`.
+  goldMarket: 60_000,
+  goldWgc: 24 * 60 * 60_000,
+  goldMining: 7 * 24 * 60 * 60_000,
 } as const
 
 export interface CachedResult<T> {

@@ -26,6 +26,8 @@ import type {
   BmnrPayload,
   BmnrRequest,
   CryptoRequest,
+  GoldPayload,
+  GoldRequest,
   HeatmapPayload,
   HeatmapRequest,
   EtfArbitragePayload,
@@ -131,6 +133,8 @@ import {
 } from '../shared/analytics.js'
 import { BMNR_BLOCKS } from '../shared/contract.js'
 import { emptyBmnrPayload } from '../shared/bmnr.js'
+import { GOLD_BLOCKS } from '../shared/contract.js'
+import { emptyGoldPayload } from '../shared/gold.js'
 import { CRYPTO_HEATMAP_LIMIT, CRYPTO_STAGES, localIsoSeconds } from '../shared/crypto.js'
 import { normalizeEtfKey } from '../shared/heatmap.js'
 import { DEFAULT_RISK_FREE_RATE } from '../shared/optionsPage.js'
@@ -148,6 +152,7 @@ import {
   replaceCards,
 } from './cardsStore.js'
 import { BMNR_SOURCE, getBmnr } from './bmnr.js'
+import { GOLD_SOURCE, getGold } from './gold.js'
 import { CRYPTO_SOURCE, getCrypto } from './crypto.js'
 import {
   clearIpoCache,
@@ -341,6 +346,7 @@ export interface MarketDataProvider {
   earningsCalendar(request: EarningsCalendarRequest): Promise<Envelope<EarningsCalendarPayload>>
   crypto(request: CryptoRequest): Promise<Envelope<CryptoPayload>>
   bmnr(request: BmnrRequest): Promise<Envelope<BmnrPayload>>
+  gold(request: GoldRequest): Promise<Envelope<GoldPayload>>
   heatmap(request: HeatmapRequest): Promise<Envelope<HeatmapPayload>>
   etfHoldings(request: EtfHoldingsRequest): Promise<Envelope<EtfHoldingsPayload>>
   etfArbitrage(request: EtfArbitrageRequest): Promise<Envelope<EtfArbitragePayload>>
@@ -1279,6 +1285,22 @@ export const yahooProvider: MarketDataProvider = {
       )
     } catch (error) {
       return failed(emptyBmnrPayload(), describeError(error), BMNR_SOURCE)
+    }
+  },
+
+  async gold({ force }) {
+    try {
+      const { payload, errors } = await getGold(force)
+      if (!errors.length) return ok(payload, GOLD_SOURCE)
+      const dead = GOLD_BLOCKS.filter((block) => payload.progress[block] === 'unavailable')
+      return partial(
+        payload,
+        errors,
+        GOLD_SOURCE,
+        dead.length ? `${dead.length} Gold data source(s) were unavailable.` : 'Gold refresh used stale source data.',
+      )
+    } catch (error) {
+      return failed(emptyGoldPayload(), describeError(error), GOLD_SOURCE)
     }
   },
 
