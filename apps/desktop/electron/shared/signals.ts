@@ -51,6 +51,7 @@ export const SIGNAL_FILTERS: ReadonlyArray<{ label: string; value: SignalsFilter
   { label: 'Long setups', value: 'long' },
   { label: 'Watch', value: 'watch' },
   { label: 'Blocked (extended)', value: 'blocked' },
+  { label: 'Market closed', value: 'market_closed' },
   { label: 'Stale intraday', value: 'stale' },
   { label: 'Too new to score', value: 'too_new' },
   { label: 'Data errors', value: 'error' },
@@ -149,6 +150,14 @@ export const SIGNAL_CONFIG = {
   /** An intraday frame older than this is not a live read of anything. */
   maxEntryAgeSeconds: 900,
   maxSetupAgeSeconds: 1800,
+  /**
+   * How long a daily bar is still forming. A daily bar is stamped at its session open, so
+   * "age < 86400" calls a completed session partial until the next one opens and drops it
+   * for the whole overnight window — the daily blocks then score a session-old bar every
+   * time the page is opened outside US hours. A regular session is 6.5 hours; measuring
+   * from the bar's own stamp keeps this correct across DST.
+   */
+  dailyFormingSeconds: 23_400,
   regimeTrendFullAtr: 2,
   regimeAlignmentFullAtr: 1,
   vixLookback: 252,
@@ -202,6 +211,16 @@ export const SIGNAL_MAX_SCORE = TREND_MAX + MOMENTUM_MAX + VOLUME_MAX + ENTRY_MA
 /** The part of the score a daily bar alone supports: trend, momentum, daily volume, relative. */
 const DAILY_VOLUME_MAX = SIGNAL_CONFIG.dailyRelativeVolumeWeight + SIGNAL_CONFIG.obvSlopeWeight
 export const SIGNAL_DAILY_MAX_SCORE = TREND_MAX + MOMENTUM_MAX + DAILY_VOLUME_MAX + RELATIVE_MAX
+
+/**
+ * What a scan can reach with the US session shut: everything but the 18 entry points and
+ * the intraday leg of the volume block. This is a *display* denominator only. Classification
+ * always divides by SIGNAL_MAX_SCORE, because a narrower denominator over the same raw
+ * points is exactly the silent promotion the fixed-100 rule exists to prevent — a closed
+ * market caps the class at WATCH regardless of what this reads.
+ */
+export const SIGNAL_CLOSED_MAX_SCORE =
+  SIGNAL_MAX_SCORE - ENTRY_MAX - SIGNAL_CONFIG.intradayRelativeVolumeWeight
 
 export interface CalculatedBar extends SignalBar {
   emaFast: number | null
@@ -683,12 +702,48 @@ export function calculateIndicators(
   })
 }
 
+/**
+ * Is the US extended session running?
+ *
+ * Pre-market opens at 04:00 ET and the post-market closes at 20:00 ET, and Yahoo's intraday
+ * frames carry both, so that window is exactly when an intraday bar can be live. Outside it
+ * a stale frame means the market is shut, not that the feed broke — which is the difference
+ * between a page worth reading and one that reports nothing but STALE_DATA to anyone whose
+ * afternoon is the middle of the US night.
+ *
+ * No holiday calendar, matching the Roll page's weekday fallback: on the nine or so market
+ * holidays a year this says OPEN and every result reports STALE_DATA, which is conservative
+ * in the right direction — it never claims a closed market when one is trading.
+ */
+export function usExtendedSessionOpen(now: number): boolean {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(now))
+  const field = (type: string) => parts.find((part) => part.type === type)?.value ?? ''
+  const weekday = field('weekday')
+  if (weekday === 'Sat' || weekday === 'Sun') return false
+  // Intl renders midnight as "24" in some runtimes, so fold it back to 0.
+  const hour = Number(field('hour')) % 24
+  const minutes = hour * 60 + Number(field('minute'))
+  return Number.isFinite(minutes) && minutes >= 4 * 60 && minutes < 20 * 60
+}
+
 function timeframeRead(
   bars: SignalBar[],
   minimumBars: number,
   barSeconds: number,
   now: number,
-  { includeVwap = false, dropOpen = true, slotVolume = false, maximumAgeSeconds = 0 } = {},
+  {
+    includeVwap = false,
+    dropOpen = true,
+    slotVolume = false,
+    maximumAgeSeconds = 0,
+    formingSeconds = barSeconds,
+  } = {},
 ): TimeframeRead {
   const required = minimumBars + (dropOpen ? 1 : 0)
   const blank: SignalTimeframeBar = { asOf: null, partial: false, dropped: false }
@@ -710,7 +765,7 @@ function timeframeRead(
   }
   const last = calculated[calculated.length - 1]
   const elapsed = (now - last.timestamp) / 1000
-  const partial = elapsed >= 0 && elapsed < barSeconds
+  const partial = elapsed >= 0 && elapsed < formingSeconds
   const dropped = partial && dropOpen
   const row = dropped ? calculated[calculated.length - 2] : last
   const provenance: SignalTimeframeBar = { asOf: new Date(row.timestamp).toISOString(), partial, dropped }
@@ -1057,7 +1112,9 @@ export function scoreRegime(
   now = Date.now(),
 ): SignalRegime {
   const label = benchmarkSymbol.trim().toUpperCase() || 'SPY'
-  const read = timeframeRead(benchmark, SIGNAL_CONFIG.emaLong, 86_400, now)
+  const read = timeframeRead(benchmark, SIGNAL_CONFIG.emaLong, 86_400, now, {
+    formingSeconds: SIGNAL_CONFIG.dailyFormingSeconds,
+  })
   if (!read.row) return neutralRegime(`Market regime was not scored: no usable ${label} history.`)
   const row = read.row
   const warnings: string[] = []
@@ -1193,6 +1250,7 @@ export function dataErrorSignal(ticker: string, message: string): SignalResult {
     risk: null,
     signal: 'NONE',
     tradeStatus: 'DATA_ERROR',
+    marketClosed: false,
     reasons: [],
     warnings: [message],
     indicators: {},
@@ -1218,11 +1276,16 @@ export function evaluateSignal(
     benchmarkSymbol?: string
     regime?: SignalRegime
     now?: number
+    /** Overrides the clock-derived session state; the scan resolves it once per run. */
+    marketOpen?: boolean
   } = {},
 ): SignalResult {
   const now = options.now ?? Date.now()
+  const marketOpen = options.marketOpen ?? usExtendedSessionOpen(now)
   const reads: Record<SignalRole, TimeframeRead> = {
-    trend: timeframeRead(frames.trend, SIGNAL_CONFIG.emaLong, 86_400, now),
+    trend: timeframeRead(frames.trend, SIGNAL_CONFIG.emaLong, 86_400, now, {
+      formingSeconds: SIGNAL_CONFIG.dailyFormingSeconds,
+    }),
     momentum: timeframeRead(frames.momentum, SIGNAL_CONFIG.macdSlow + SIGNAL_CONFIG.macdSignal, 3_600, now),
     setup: timeframeRead(
       frames.setup,
@@ -1368,9 +1431,14 @@ export function evaluateSignal(
     ? 'NONE'
     : classifySignal(rawScore, trendScore, SIGNAL_MAX_SCORE, regime.longThreshold, regime.strongThreshold)
 
+  // A frame that came back empty or short is a broken feed whatever the clock says; only a
+  // frame that read fine and is merely old is explained by a closed session.
+  const marketClosed = !marketOpen && intraday.length > 0 && intraday.every(([, read]) => read.kind === 'stale')
+
   const caps: string[] = []
   if (!benchmarkScored) caps.push('the benchmark history is missing')
-  if (intraday.length) caps.push('the intraday frames are not live')
+  if (marketClosed) caps.push('the US market is closed, so the intraday blocks are not scored')
+  else if (intraday.length) caps.push('the intraday frames are not live')
   if (!risk) caps.push('no workable stop could be placed under the entry')
   else if (risk.atrPct !== null && risk.atrPct > SIGNAL_CONFIG.maximumAtrPct) {
     caps.push(`the daily ATR is ${risk.atrPct.toFixed(1)}% of price, over the ${SIGNAL_CONFIG.maximumAtrPct}% ceiling for a swing entry`)
@@ -1391,9 +1459,16 @@ export function evaluateSignal(
   let error = ''
   if (intraday.length) {
     const messages = intraday.map(([role, read]) => `${role}: ${read.status}`)
-    warnings.push(...messages)
-    tradeStatus = 'STALE_DATA'
-    if (intraday.some(([, read]) => read.kind === 'missing')) error = messages.join('; ')
+    tradeStatus = marketClosed ? 'MARKET_CLOSED' : 'STALE_DATA'
+    if (marketClosed) {
+      warnings.push(
+        `The US market is closed, so the ${ENTRY_MAX + SIGNAL_CONFIG.intradayRelativeVolumeWeight} intraday points were unreachable. ` +
+        `This is a daily read scored ${formatSignalScore(rawScore, SIGNAL_CLOSED_MAX_SCORE)}; no live entry is confirmed.`,
+      )
+    } else {
+      warnings.push(...messages)
+      if (intraday.some(([, read]) => read.kind === 'missing')) error = messages.join('; ')
+    }
   }
   if (context.length) {
     const messages = context.map(([role, read]) => `${role}: ${read.status}`)
@@ -1437,6 +1512,7 @@ export function evaluateSignal(
     risk,
     signal,
     tradeStatus,
+    marketClosed,
     reasons,
     warnings,
     indicators,
@@ -1448,8 +1524,18 @@ export function evaluateSignal(
 
 /* -------------------------------------------------------------- presentation */
 
+/**
+ * The denominator to print. Narrows to the reachable total when the session was shut, so a
+ * strong daily read is legible instead of looking like a 55/100 failure. Classification
+ * never sees this.
+ */
+export function signalDisplayMaxScore(result: SignalResult): number {
+  return result.marketClosed ? SIGNAL_CLOSED_MAX_SCORE : result.maxScore
+}
+
 export function signalScoreFraction(result: SignalResult): number {
-  return result.maxScore > 0 ? result.rawScore / result.maxScore : 0
+  const maximum = signalDisplayMaxScore(result)
+  return maximum > 0 ? result.rawScore / maximum : 0
 }
 
 export function signalVisible(result: SignalResult, filter: SignalsFilter, search: string): boolean {
@@ -1459,6 +1545,7 @@ export function signalVisible(result: SignalResult, filter: SignalsFilter, searc
   if (filter === 'long') return result.tradeStatus === 'VALID_LONG'
   if (filter === 'watch') return result.tradeStatus === 'WATCH'
   if (filter === 'blocked') return result.tradeStatus === 'TOO_EXTENDED'
+  if (filter === 'market_closed') return result.tradeStatus === 'MARKET_CLOSED'
   if (filter === 'stale') return result.tradeStatus === 'STALE_DATA'
   if (filter === 'too_new') return result.tradeStatus === 'INSUFFICIENT_HISTORY'
   if (filter === 'error') return result.tradeStatus === 'DATA_ERROR'
@@ -1471,6 +1558,7 @@ export function summarizeSignals(results: SignalResult[]): Record<string, number
     validLong: results.filter((result) => result.tradeStatus === 'VALID_LONG').length,
     blocked: results.filter((result) => result.tradeStatus === 'TOO_EXTENDED').length,
     watch: results.filter((result) => result.tradeStatus === 'WATCH').length,
+    marketClosed: results.filter((result) => result.tradeStatus === 'MARKET_CLOSED').length,
     stale: results.filter((result) => result.tradeStatus === 'STALE_DATA').length,
     tooNew: results.filter((result) => result.tradeStatus === 'INSUFFICIENT_HISTORY').length,
     errors: results.filter((result) => result.tradeStatus === 'DATA_ERROR').length,

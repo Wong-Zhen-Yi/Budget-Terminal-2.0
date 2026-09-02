@@ -18,6 +18,7 @@ import {
   evaluateSignal,
   neutralRegime,
   rankSignalCandidates,
+  usExtendedSessionOpen,
   scoreRegime,
   signalBacktestSamples,
   signalCandidateFromQuote,
@@ -75,7 +76,7 @@ let latestPayload: SignalsPayload | null = null
 
 function latestSignalsPath(): string {
   const appData = process.env.APPDATA ?? join(process.env.USERPROFILE ?? '', 'AppData', 'Roaming')
-  return join(appData, 'BudgetTerminalElectron', 'signals-latest-v3.json')
+  return join(appData, 'BudgetTerminalElectron', 'signals-latest-v4.json')
 }
 
 function validStoredPayload(value: unknown): value is SignalsPayload {
@@ -331,8 +332,9 @@ export async function getLatestSignals(): Promise<SignalsPayload | null> {
 
 export async function clearLatestSignals(): Promise<void> {
   latestPayload = null
-  // The v2 document is never read, but Clear cache should not leave it behind forever.
-  const targets = [latestSignalsPath(), latestSignalsPath().replace('-v3.json', '-v2.json')]
+  // The superseded documents are never read, but Clear cache should not leave them behind.
+  const current = latestSignalsPath()
+  const targets = [current, ...['-v3.json', '-v2.json'].map((old) => current.replace('-v4.json', old))]
   for (const target of targets) {
     try {
       await unlink(target)
@@ -371,6 +373,11 @@ export async function getSignals(request: SignalsRequest = {}): Promise<SignalsP
     ? scoreRegime(benchmark, volatility, BENCHMARK_SYMBOL)
     : neutralRegime(`Market regime was not scored: no usable ${BENCHMARK_SYMBOL} history.`)
 
+  // Resolved once so every result in a scan agrees on the session, even if the run straddles
+  // 20:00 ET — a table where half the rows say MARKET_CLOSED and half say STALE_DATA would
+  // read as a feed fault rather than a closing bell.
+  const marketOpen = usExtendedSessionOpen(Date.now())
+
   const results: SignalResult[] = tickers.map((ticker) => {
     const frames = Object.fromEntries(
       (Object.keys(roleResults) as SignalRole[]).map((role) => [role, roleResults[role].frames[ticker] ?? []]),
@@ -380,6 +387,7 @@ export async function getSignals(request: SignalsRequest = {}): Promise<SignalsP
         benchmark,
         benchmarkSymbol: BENCHMARK_SYMBOL,
         regime,
+        marketOpen,
       })
     } catch (error) {
       return dataErrorSignal(

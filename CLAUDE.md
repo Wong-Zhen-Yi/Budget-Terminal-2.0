@@ -18,7 +18,10 @@ npm run probe:news               # all three news lanes; --offline, --feeds-only
 npm run probe:stocks -- AAPL     # complete Stocks workspace; use --offline for deterministic checks
 npm run probe:fundamentals -- AAPL # SEC/Yahoo statements, charts and filings; --offline for fixtures
 npm run probe:charts -- AAPL # five-tab Charts workspace; use --offline for deterministic checks
+npm run patterns:png           # cheat-sheet PNG examples; `-- --check` verifies they are current
 npm run probe:crypto           # all four Crypto stages; --offline for the pure checks
+npm run probe:bmnr             # live + filed BMNR treasury, NAV bridge, composition, history
+                               # --offline for the pure checks and every XBRL fixture
 npm run probe:cards            # Cards math, persistence and models; --live adds Yahoo
 npm run probe:options -- AAPL  # chain Greeks, strategy ranking, both grids; --offline for the pure checks
 npm run probe:heatmap -- SPY   # index holdings, all seven intervals, sector split; --offline for the pure checks
@@ -81,7 +84,10 @@ and economic-event detail, related navigation, and chart-pattern diagrams), and 
 filters run over a year of daily bars, a scored-candidate table, a 1Y chart, top options
 by expiration, headlines and a roll history), and the **IPO** page (completed IPOs for the year beside every upcoming
 US IPO through year-end, from StockAnalysis with a Yahoo calendar fallback, cached on disk
-for a day).
+for a day), and the **BMNR** page (BitMine Immersion's Ethereum treasury: the live ETH count
+and percent of ETH supply from CoinGecko beside the filed balance sheet from SEC XBRL, with
+a NAV/mNAV bridge, a residual-anchored asset composition, quarterly ETH-versus-dilution
+history and an ETH price sensitivity ladder).
 The remaining tabs are labels in `TABS`
 (`electron/shared/contract.ts`) and render a placeholder; `implemented: true` is what
 routes a tab to a real page in `App.tsx`.
@@ -722,9 +728,41 @@ adding handlers.
   Category filtering happens before ranking, and an empty query retains alphabetical order.
 - **Related terms always clear the active filters.** A related entry may not be reachable
   inside the current query or category, so following one resets both controls before
-  selecting it. Chart-pattern entries reuse `shared/chartPatterns.ts` for their diagrams.
+  selecting it. Chart-pattern entries reuse `shared/chartPatterns.ts` for their diagrams —
+  the same three candlestick examples the Cheat Sheet draws, through the same
+  `PatternChart`.
 - **Dictionary has no persistence or refresh timer.** Search, category and selection are
   session state. F5 has no data to fetch; the catalog probe is the verification boundary.
+
+- **A cheat-sheet pattern is defined by its own geometry, never by a shared squiggle.**
+  The first port gave all 24 entries one of three generic zig-zag paths chosen by bias, so
+  a Head and Shoulders and a Bull Flag drew the same line. Each entry now carries a
+  *skeleton* in `shared/chartPatterns.ts` — the pivots and boundaries that make it that
+  pattern and nothing else — which `shared/patternCandles.ts` walks into OHLC bars. The
+  probe asserts no two patterns share a close series, which is the regression that bug
+  would trip.
+- **The wobble is damped to zero at every named pivot, and the pivot bar is then snapped.**
+  Without the damping a peak lands somewhere near its resistance line instead of on it;
+  without the snap its wick stops short. `probe:charts` checks every guide is touched by at
+  least two bars, in all 72 examples — that one assertion covers the whole chain from
+  skeleton to drawn line.
+- **`arc()` needs `edges: 'extreme'` wherever the rim is a drawn level.** A saucer's rim
+  points are plain path points by default, so nothing snaps to them and the Rim / Cup rim
+  guide describes a line the bars only pass near. Rounding Bottom and Cup and Handle pass
+  it; the probe caught the omission.
+- **Every bearish twin is `mirrorSkeleton` of its bullish partner**, labels flipped through
+  `FLIPPED_LABELS`, so Ascending and Descending Triangle cannot drift apart. The seeds are
+  per-id, so the twins are mirror *structures* carrying their own noise rather than literal
+  reflections.
+- **The two Neutral patterns get a third variant that breaks the other way.** A symmetrical
+  triangle and a megaphone do not pick a side, so `NEUTRAL_VARIANT_SHAPES` replaces the
+  Extended variant with a downside break, and the breakout-direction assertion in the probe
+  skips Neutral for that reason.
+- **`layoutPattern` is shared so an exported PNG cannot disagree with the card.**
+  `scripts/render-pattern-images.ts` rasterizes through the same layout the `PatternChart`
+  SVG uses, hand-rolled on `node:zlib` on the `services/etf/xlsx.ts` precedent — one output
+  format does not justify a dependency. `npm run patterns:png -- --check` fails when
+  `docs/chart-patterns/` no longer matches the catalog.
 
 - **ETF is page13, and its file is called `etf_analyser.py`.** Grep for `_p13_`. The page
   and the Heatmap page share `services/etf/holdings.ts`; only the ETF page reaches the
@@ -959,6 +997,29 @@ adding handlers.
   the same one Valuation's `finiteOrNull` and Economic's `finite()` document: `Number(null)`
   is 0, so an absent high used to make one true range the size of the whole price and left
   a bogus ATR behind it.
+- **A closed US session is `MARKET_CLOSED`, not `STALE_DATA`.** The two are different
+  facts: one says the market is shut, the other says the feed is broken, and reporting the
+  first as the second made the page useless to anyone whose working day is the US night —
+  every result read STALE_DATA and nothing said why. `usExtendedSessionOpen` decides it from
+  the ET clock (weekdays, 04:00-20:00, the window Yahoo's intraday frames actually cover),
+  resolved **once per scan** in `getSignals` so a run straddling 20:00 ET cannot report half
+  its rows each way. Only `kind: 'stale'` maps across; an empty or short frame is a feed
+  fault whatever the clock says. There is no holiday calendar, matching the Roll page's
+  weekday fallback — on a market holiday every result reports STALE_DATA, which errs toward
+  claiming *less* than it knows.
+- **The closed-session denominator is presentation only, and the class is still capped.**
+  `SIGNAL_CLOSED_MAX_SCORE` is 78 — the 18 entry points and the 4 intraday volume points are
+  unreachable, not failed — and `signalDisplayMaxScore` narrows the printed figure so a
+  strong daily read is legible instead of looking like a 55/100 failure. `classifySignal`
+  still divides by `SIGNAL_MAX_SCORE` and a closed market still caps at WATCH, which is what
+  keeps this from being the silent promotion the fixed-100 rule above exists to prevent.
+- **A daily bar is stamped at its session open, so it stops forming after 6.5 hours, not 24.**
+  `timeframeRead`'s `partial` test is `age < barSeconds`, which is right for a 1m or 5m bar
+  and wrong for a daily one: it called a finished session partial until the *next* session
+  opened and dropped it, so from 16:00 ET until 09:30 ET the next morning the trend,
+  momentum, relative and regime blocks all scored a session-old bar. The two daily reads
+  pass `formingSeconds: SIGNAL_CONFIG.dailyFormingSeconds` (23,400). Measuring from the bar's
+  own stamp rather than a wall-clock hour is what keeps it right across DST.
 - **An intraday frame older than its age bound is reported, not scored.** `maxEntryAgeSeconds`
   is 900 and `maxSetupAgeSeconds` 1800; past those, `timeframeRead` answers `kind: 'stale'`,
   the setup and entry blocks score zero and `tradeStatus` is `STALE_DATA` with the class
@@ -1026,8 +1087,8 @@ adding handlers.
   `latestOnly`, which is a disk read; the scan is a mutation behind a button. A cold scan is
   about 150 paced requests and 45s, and it changes the answer, so a background refetch would
   both cost the app's whole rate budget and reshuffle the table under whoever is reading it.
-- **The persisted payload is versioned in its filename.** `signals-latest-v3.json`; the v2
-  file is simply not read. Bump it whenever the payload shape changes, or an old document
+- **The persisted payload is versioned in its filename.** `signals-latest-v4.json`; the
+  older files are simply not read. Bump it whenever the payload shape changes, or an old document
   renders against components that no longer match it.
 - **Two documented departures beyond the scoring model.** There is no progress reporting —
   an IPC request/response carries no intermediate frames, the same wall the Crypto, Economic,
@@ -1037,6 +1098,92 @@ adding handlers.
 
 
 ## Porting behaviour from the PySide6 app
+
+- **BMNR is not a port; the PySide6 app has no such page.** Grep for `bmnr` only in this
+  repo. It exists because BitMine Immersion is an Ethereum treasury company — the equity is
+  a wrapper around a pile of ETH — so the questions worth asking about it are not the ones
+  Stocks or Fundamentals answer.
+- **The BMNR page has two sources that disagree by design, and they are never blended.**
+  CoinGecko's treasury endpoint carries a live ETH count; the last filed 10-Q carries an
+  authoritative one that can be a quarter old (5,901,112 against 5,700,049 when this was
+  written). The guarantee is structural rather than a convention: there is no bare `number`
+  anywhere in the live or derived surface of `BmnrPayload` — every figure is a `BmnrValue`
+  carrying `basis`, `asOf` and `source`, so a renderer cannot print one without the label in
+  hand, and the thirteen figures that genuinely mix a live and a filed input are marked
+  `basis: 'cross'`. The probe walks a built payload and asserts exactly that set.
+- **`CryptoAssetNumberOfUnits` changed its XBRL unit bucket mid-year.** The FY2026 Q1 and Q2
+  10-Qs report it under the unit `Integer` and Q3 under `cryptoAsset`, so reading one bucket
+  makes either the history or the latest count invisible. `selectInstantFacts` in
+  `shared/bmnr.ts` merges across every matching bucket; `secEdgar`'s own `unitValues`
+  returns the *first* matching bucket and stops, which is correct for its single-unit specs
+  and wrong here. That helper is exported through `secTesting` purely so the probe can
+  assert it as a negative control.
+- **`CryptoAssetFairValue` and `CryptoAssetFairValueNoncurrent` are the same number.** They
+  are a ladder, not a sum — adding them doubles the entire ETH book. Every tag list in
+  `BMNR_FACT_LADDERS` is first-present-wins for the same reason.
+- **A fact's `fy`/`fp` describe the filing, not the period.** The 2025-08-31 balance sheet
+  rides along as a comparative in the 10-Q filed 2026-07-14 and carries that filing's
+  `fy: 2026, fp: 'Q3'`, so trusting it labelled two different quarters `FY2026 Q3`.
+  `bmnrFiscalPeriod` derives the period from the date and BMNR's 31 August year end
+  instead — which is also why `periodLabel()` from `shared/fundamentalsPage.ts` must not be
+  reused here: it would call the May 2026 quarter `2026-Q2`.
+- **The BMNR history is cut at crypto materiality, not at the first crypto fact.** BitMine
+  tagged small bitcoin-mining balances from 2022 — 0.2% to 3.3% of assets — while it was a
+  shell with a few million dollars of assets and a share count on the far side of an
+  unrestated reverse split. Those quarters put a 2,495-share row and a 113x step into the
+  dilution table. `BMNR_TREASURY_ERA_MIN_SHARE` is 0.1, and the two eras separate cleanly:
+  mining never exceeds 3.3%, treasury never drops below 89%.
+- **The asset composition is anchored on the residual, not on a tag list.** Half the
+  plausible component tags are absent at any given quarter (`PropertyPlantAndEquipmentNet`
+  is tagged at 2026-02-28 and gone at 2026-05-31), and the named lines fall $291.9M short of
+  `Assets`. Total assets is the truth and the unnamed remainder is its own slice, so the
+  donut adds up to the balance sheet rather than to whatever happened to be tagged.
+  Components are read only at the latest date — never carried forward. A *negative* residual
+  means a tag was double-counted and raises `overAllocated` instead of drawing a slice.
+- **BMNR NAV is anchored on filed equity, and the reconciliation gap is a live check.**
+  `stockholdersEquity + (liveCryptoValue - filedCryptoFairValue)` — three inputs rather than
+  five, and non-controlling interest excluded by construction rather than by a
+  `MinorityInterest` subtraction most quarters never tag. `navBuildUp` rebuilds the same
+  figure from the asset side; on real data the gap between them is *exactly*
+  `MinorityInterest` (548,000 at 2026-05-31), which the NAV Bridge panel prints with a ✓ and
+  the probe asserts. NAV is structurally conservative — it marks crypto live but takes cash,
+  other assets and liabilities from a balance sheet up to a quarter old — and the panel says
+  so on screen rather than in a tooltip.
+- **The per-share denominator is the 10-Q cover page, not the balance sheet.** BMNR issued
+  roughly 24M shares (4.1%) between the 2026-05-31 balance sheet and its 2026-07-09 cover
+  date. All three counts — cover, balance sheet, and Yahoo's `marketCap / sharePrice` — ride
+  on the payload and are shown side by side; none is averaged, because an average would
+  invent a share count that was never outstanding.
+- **`CryptoAssetCost` is not a cost basis.** 19.07B against a 10.87B carrying value: it is
+  cumulative gross purchases including ETH since sold, so the per-unit figure ($3,346) is
+  not what BitMine paid for the ETH it still holds. It is labelled "gross cost per ETH
+  purchased" and `filedCarryingValuePerEth` ($1,907) sits beside it.
+- **CoinGecko's 0 is a sentinel; a filing's 0 is a number.** `total_entry_value_usd: 0` for
+  BMNR sits beside a real 450,300,476 for Bit Digital in the same response, so it means
+  "not disclosed". `reportedOrNull` handles that one case and nothing else —
+  `MinorityInterest: 0` is real and goes through `finiteOrNull`, which is the same
+  `Number(null) === 0` hazard Valuation and Economic document.
+- **Never take `companies[0]` from the treasury list.** BMNR is the first row only because
+  it is the largest holder today; a rank change would render SharpLink's holdings under
+  BMNR's name with no error raised anywhere. `pickTreasuryRow` matches on the symbol.
+- **The BMNR page reaches three hosts and only one is Yahoo.** CoinGecko stays outside
+  `paced()` on the `fearGreed.ts` precedent; SEC has its own 200ms limiter, disk cache and
+  seven-day stale fallback inside `secEdgar.ts`. Only the three Yahoo quotes go through the
+  Yahoo gate. `fetchSecFactsDocument` is a new export beside `fetchSecCompanyBundle` rather
+  than a widening of `SPECS` — that pipeline emits nine fixed `FundamentalSeriesKey`s shared
+  with the Fundamentals and Valuation pages, and a page needing `CryptoAssetNumberOfUnits`
+  cannot be served without changing what those two see. Passing the CIK directly skips the
+  `company_tickers.json` round trip, and the disk entry is shared per CIK, so opening
+  Fundamentals on BMNR warms this page for free.
+- **BMNR has no refresh timer and is not in `PAGE_KEEP_ALIVE`.** Refresh and F5 are the only
+  refetches, like Crypto. It qualifies for keep-alive but does not need it: that set is for
+  pages expensive to *rebuild*, and a donut plus four tables repaints instantly off the
+  hour-long `gcTime`. Its warm task sits away from `crypto` in `TAB_ORDER` because warm
+  tasks run sequentially and both pages call CoinGecko's keyless tier.
+- **CoinGecko's `/companies/public_treasury/` is documented as a Pro-tier endpoint** even
+  though it answers keyless today. The live half of this page is the fragile half; the SEC
+  half is the durable one, and each degrades alone.
+
 
 When adding a panel, find the reference first — the numbers are expected to match to the
 decimal. Useful starting points:
@@ -1056,6 +1203,7 @@ decimal. Useful starting points:
 | News, all of it | `mixins/news.py` (feeds `workers/news_sources.py`, reader `workers/news_preview.py`, dedupe `services/news_analysis.py`) |
 | Stocks, all of it | `mixins/stocks_page.py` (plus its linked workers, services, persistence and smoke tests) |
 | Crypto, all of it | `mixins/crypto.py` (worker `workers/crypto.py`, feeds `workers/news_sources.py`) |
+| BMNR | No reference — this page is new to this repo. `shared/bmnr.ts` is the whole model. |
 | Options, all of it | `mixins/options_chain.py` (presenters `mixins/options_chain_presenters.py`, Greeks `services/options_analysis.py`, fetching `services/options_data.py`) |
 | Projections, all of it | `mixins/charts_options_top_volume.py` (page28; presenters `mixins/options_chain_presenters.py`) |
 | Valuation, all of it | `mixins/valuation.py` (page23; maths `services/valuation.py`, fetch and peers `workers/valuation.py`, Treasury `services/risk_free.py`) |

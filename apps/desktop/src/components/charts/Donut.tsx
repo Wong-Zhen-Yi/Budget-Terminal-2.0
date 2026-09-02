@@ -32,6 +32,8 @@ interface DonutProps {
   centerSubtext?: string
   /** 0..1 sweep, for the replayable totals animation. Omit to draw the full ring. */
   animationProgress?: number
+  /** Dense dashboard treatment: smaller chart and a two-column legend. */
+  compact?: boolean
   /**
    * Degrees clockwise from twelve o'clock to begin the first wedge at. Defaults to 0, so
    * every existing caller is unchanged; the ETF page passes a negative angle to rotate
@@ -73,6 +75,7 @@ export function Donut({
   centerSubtext,
   animationProgress = 1,
   startAngle = 0,
+  compact = false,
 }: DonutProps) {
   const positive = slices.filter((slice) => slice.value > 0)
   const total = positive.reduce((sum, slice) => sum + slice.value, 0)
@@ -100,8 +103,21 @@ export function Donut({
   })
 
   return (
-    <div className="flex min-h-0 flex-1 flex-wrap items-center justify-center gap-8 p-4">
-      <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="h-full max-h-[340px] min-h-[220px] w-auto">
+    <div
+      className={
+        compact
+          ? 'flex min-h-0 flex-1 items-center justify-center gap-4 p-2'
+          : 'flex min-h-0 flex-1 flex-wrap items-center justify-center gap-8 p-4'
+      }
+    >
+      <svg
+        viewBox={`0 0 ${SIZE} ${SIZE}`}
+        className={
+          compact
+            ? 'h-full max-h-[150px] min-h-[110px] w-auto shrink-0'
+            : 'h-full max-h-[340px] min-h-[220px] w-auto'
+        }
+      >
         {wedges.map((wedge, index) =>
           wedge.path ? (
             <path key={index} d={wedge.path} fill={wedge.color}>
@@ -133,12 +149,30 @@ export function Donut({
         ) : null}
       </svg>
 
-      <ul className="flex flex-col gap-1">
+      <ul
+        className={
+          compact ? 'grid min-w-0 flex-1 grid-cols-2 gap-x-3 gap-y-1' : 'flex flex-col gap-1'
+        }
+      >
         {wedges.map((wedge, index) => (
-          <li key={index} className="flex items-center gap-2">
-            <span className="size-3 shrink-0" style={{ background: wedge.color }} />
-            <span className="w-20 text-2xs text-text">{wedge.label}</span>
-            <span className="num text-2xs text-text-muted">{wedge.percent.toFixed(1)}%</span>
+          <li key={index} className={`flex min-w-0 items-center ${compact ? 'gap-1' : 'gap-2'}`}>
+            <span
+              className={`${compact ? 'size-2' : 'size-3'} shrink-0`}
+              style={{ background: wedge.color }}
+            />
+            <span
+              className={
+                compact
+                  ? 'min-w-0 flex-1 truncate text-[10px] text-text'
+                  : 'w-20 text-2xs text-text'
+              }
+              title={wedge.label}
+            >
+              {wedge.label}
+            </span>
+            <span className={`num shrink-0 text-text-muted ${compact ? 'text-[10px]' : 'text-2xs'}`}>
+              {wedge.percent.toFixed(1)}%
+            </span>
           </li>
         ))}
       </ul>

@@ -331,8 +331,8 @@ function DescriptionPanel({ payload, warning }: { payload: StocksPayload | null;
 
 const newsColumns: Array<Column<StocksNewsRow>> = [
   { key: 'headline', header: 'Headline', width: '55%', wrap: true, cell: (row) => row.title },
-  { key: 'ticker', header: 'Ticker', width: '13%', align: 'center', cell: (row) => row.ticker },
-  { key: 'source', header: 'Source', width: '20%', align: 'center', cell: (row) => row.source },
+  { key: 'ticker', header: 'Ticker', width: '13%', align: 'center', wrap: true, cell: (row) => row.ticker },
+  { key: 'source', header: 'Source', width: '20%', align: 'center', wrap: true, cell: (row) => row.source },
   { key: 'time', header: 'Time', width: '12%', align: 'center', numeric: true, cell: (row) => row.publishedAt ? new Date(row.publishedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--' },
 ]
 
@@ -341,12 +341,12 @@ function NewsPanel({ rows, loading, warning }: { rows: StocksNewsRow[]; loading:
 }
 
 const institutionalColumns: Array<Column<StocksInstitutionalRow>> = [
-  { key: 'holder', header: 'Holder', width: '32%', cell: (row) => row.holder },
+  { key: 'holder', header: 'Holder', width: '32%', wrap: true, cell: (row) => row.holder },
   { key: 'pctHeld', header: '% Held', align: 'right', numeric: true, cell: (row) => row.pctHeld },
   { key: 'shares', header: 'Shares', align: 'right', numeric: true, cell: (row) => row.shares },
   { key: 'value', header: 'Value', align: 'right', numeric: true, cell: (row) => row.value },
   { key: 'change', header: 'Change', align: 'right', numeric: true, cell: (row) => row.pctChange },
-  { key: 'reported', header: 'Reported', align: 'right', cell: (row) => row.reported },
+  { key: 'reported', header: 'Reported', align: 'right', wrap: true, cell: (row) => row.reported },
 ]
 
 function InstitutionalPanel({ rows, loading, warning }: { rows: StocksInstitutionalRow[]; loading: boolean; warning?: string }) {
@@ -354,10 +354,10 @@ function InstitutionalPanel({ rows, loading, warning }: { rows: StocksInstitutio
 }
 
 const insiderColumns: Array<Column<StocksInsiderRow>> = [
-  { key: 'date', header: 'Date', cell: (row) => row.date },
-  { key: 'insider', header: 'Insider', cell: (row) => row.insider },
-  { key: 'title', header: 'Title/Relation', cell: (row) => row.title },
-  { key: 'transaction', header: 'Transaction', cell: (row) => row.transaction },
+  { key: 'date', header: 'Date', wrap: true, cell: (row) => row.date },
+  { key: 'insider', header: 'Insider', wrap: true, cell: (row) => row.insider },
+  { key: 'title', header: 'Title/Relation', wrap: true, cell: (row) => row.title },
+  { key: 'transaction', header: 'Transaction', wrap: true, cell: (row) => row.transaction },
   { key: 'shares', header: 'Shares', align: 'right', numeric: true, cell: (row) => row.shares },
   { key: 'value', header: 'Value', align: 'right', numeric: true, cell: (row) => row.value },
 ]

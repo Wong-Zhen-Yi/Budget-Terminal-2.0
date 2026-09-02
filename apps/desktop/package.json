@@ -27,6 +27,7 @@
     "probe:calendar": "tsx scripts/probe-calendar.ts",
     "probe:charts": "tsx scripts/probe-charts.ts",
     "probe:dictionary": "tsx scripts/probe-dictionary.ts",
+    "probe:bmnr": "tsx scripts/probe-bmnr.ts",
     "probe:crypto": "tsx scripts/probe-crypto.ts",
     "probe:cards": "tsx scripts/probe-cards.ts",
     "probe:options": "tsx scripts/probe-options.ts",
@@ -42,7 +43,8 @@
     "probe:backtest": "tsx scripts/probe-backtest.ts",
     "probe:quant": "tsx scripts/probe-quant.ts",
     "probe:youtube": "tsx scripts/probe-youtube.ts",
-    "probe:institutions": "tsx scripts/probe-institutions.ts"
+    "probe:institutions": "tsx scripts/probe-institutions.ts",
+    "patterns:png": "tsx scripts/render-pattern-images.ts"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

@@ -19,6 +19,7 @@ import {
   SIGNAL_INDICATOR_FIELDS,
   SIGNAL_ROLE_LABELS,
   SIGNAL_SCORE_COMPONENTS,
+  signalDisplayMaxScore,
   signalScoreFraction,
   signalVisible,
   summarizeSignals,
@@ -255,7 +256,7 @@ export function SignalsPage({
     {
       key: 'score',
       header: 'Score',
-      cell: (result) => <span className={toneClass[resultTone(result)]}>{formatSignalScore(result.rawScore, result.maxScore)}</span>,
+      cell: (result) => <span className={toneClass[resultTone(result)]}>{formatSignalScore(result.rawScore, signalDisplayMaxScore(result))}</span>,
       sortValue: signalScoreFraction,
       align: 'right',
       numeric: true,
@@ -290,6 +291,7 @@ export function SignalsPage({
     ['Valid longs', payload ? counts.validLong : '—', 'muted'],
     ['Blocked', payload ? counts.blocked : '—', 'muted'],
     ['Watch', payload ? counts.watch : '—', 'muted'],
+    ['Market closed', payload ? counts.marketClosed : '—', 'muted'],
     ['Stale intraday', payload ? counts.stale : '—', 'muted'],
     ['Data errors', payload ? counts.errors : '—', 'muted'],
     ['Regime', regime ? label(regime.label) : '—', regime ? regimeTone(regime.label) : 'muted'],
@@ -344,7 +346,7 @@ export function SignalsPage({
 
       <div className="shrink-0 space-y-1 text-[10px] leading-4 text-text-dim">
         <p>
-          Universe: US common stocks · price ≥ $5 · market cap ≥ $2B · screener dollar volume ≥ $20M, confirmed against a 20-session median · shortlisted by the daily sub-model. Context timeframes score the last closed bar; an intraday frame older than 15 minutes is reported stale rather than scored. Every check awards partial credit, with distances measured in ATR of the timeframe being scored, and the score is always out of 100 — a block that cannot be scored earns nothing and caps the result at WATCH. Relative strength is beta-adjusted alpha against SPY. In a risk-off regime the long and strong thresholds rise, so the same setup has to score higher.
+          Universe: US common stocks · price ≥ $5 · market cap ≥ $2B · screener dollar volume ≥ $20M, confirmed against a 20-session median · shortlisted by the daily sub-model. Context timeframes score the last closed bar; an intraday frame older than 15 minutes is reported stale rather than scored. With the US extended session (04:00–20:00 ET) shut the 22 intraday points are unreachable, so results read MARKET CLOSED and are scored out of 78 — a daily read, never a confirmed entry. Every check awards partial credit, with distances measured in ATR of the timeframe being scored, and the score is always out of 100 — a block that cannot be scored earns nothing and caps the result at WATCH. Relative strength is beta-adjusted alpha against SPY. In a risk-off regime the long and strong thresholds rise, so the same setup has to score higher.
         </p>
         <p>{describeUniverse(payload)}</p>
       </div>
@@ -406,7 +408,7 @@ function SignalDetail({
     <aside className="min-h-0 min-w-0 flex-1 overflow-auto border border-border p-3">
       <h2 className="text-sm font-semibold text-text">{result.ticker} · {formatSignalPrice(result.price)}</h2>
       <p className={`whitespace-pre-line py-1 text-2xs ${toneClass[tone]}`}>
-        {candidate ? `Quality rank #${candidate.qualityRank}` : 'Quality rank unavailable'} · Technical signal {label(result.signal)} · Score {formatSignalScore(result.rawScore, result.maxScore)}{`\n`}Final trade status: {label(result.tradeStatus)}
+        {candidate ? `Quality rank #${candidate.qualityRank}` : 'Quality rank unavailable'} · Technical signal {label(result.signal)} · Score {formatSignalScore(result.rawScore, signalDisplayMaxScore(result))}{`\n`}Final trade status: {label(result.tradeStatus)}
       </p>
 
       <table className="my-2 w-full border-collapse text-2xs">

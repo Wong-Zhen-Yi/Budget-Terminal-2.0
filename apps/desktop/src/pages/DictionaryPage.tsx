@@ -8,6 +8,7 @@ import {
   searchDictionaryEntries,
   type DictionaryEntry,
 } from '@shared/dictionary'
+import { PatternChart } from '@/components/charts/PatternChart'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 
 const ALL_CATEGORIES = 'All categories'
@@ -224,34 +225,37 @@ function EmptyDetail({ query, category }: { query: string; category: string }) {
 }
 
 function PatternDiagram({ pattern }: { pattern: ChartPattern }) {
-  const color = pattern.bias === 'Bullish' ? '#26c281' : pattern.bias === 'Bearish' ? '#f0554e' : '#2f6fd0'
-  const path = pattern.path
-    .map(([x, y], index) => `${index ? 'L' : 'M'} ${x} ${100 - y}`)
-    .join(' ')
+  const [exampleId, setExampleId] = useState(pattern.examples[0].id)
+  const example =
+    pattern.examples.find((entry) => entry.id === exampleId) ?? pattern.examples[0]
+
   return (
-    <svg
-      role="img"
-      aria-label={`${pattern.name} schematic chart pattern`}
-      viewBox="0 0 100 100"
-      className="aspect-video w-full border border-border bg-[#0d1420]"
-      preserveAspectRatio="none"
-    >
-      {[25, 50, 75].map((y) => (
-        <line key={y} x1="0" x2="100" y1={y} y2={y} stroke="#334155" strokeWidth="0.5" strokeDasharray="1 2" />
-      ))}
-      {pattern.guides.map((guide, index) => (
-        <line
-          key={`${guide.label}-${index}`}
-          x1={guide.start[0]}
-          y1={100 - guide.start[1]}
-          x2={guide.end[0]}
-          y2={100 - guide.end[1]}
-          stroke="#7d8ea6"
-          strokeDasharray="3 2"
-          strokeWidth="0.8"
-        />
-      ))}
-      <path d={path} fill="none" stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" />
-    </svg>
+    <figure className="border border-border bg-[#0d1420]">
+      <div className="flex items-center gap-1 border-b border-border px-2 py-1">
+        {pattern.examples.map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            onClick={() => setExampleId(entry.id)}
+            className={`h-5 border px-1.5 text-[10px] ${
+              entry.id === example.id
+                ? 'border-accent bg-accent-dim text-text'
+                : 'border-border-strong text-text-muted hover:text-text'
+            }`}
+          >
+            {entry.label}
+          </button>
+        ))}
+        <span className="ml-auto text-[10px] text-text-dim">{pattern.bias} · {pattern.family}</span>
+      </div>
+      <PatternChart
+        example={example}
+        className="h-48 w-full"
+        ariaLabel={`${pattern.name} candlestick example, ${example.label}`}
+      />
+      <figcaption className="select-text border-t border-border px-2 py-1 text-[10px] text-text-muted">
+        {example.caption}
+      </figcaption>
+    </figure>
   )
 }

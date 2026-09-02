@@ -1193,6 +1193,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'projections', label: 'Projections', implemented: true },
   { id: 'etf', label: 'ETF', implemented: true },
   { id: 'crypto', label: 'Crypto', implemented: true },
+  { id: 'bmnr', label: 'BMNR', implemented: true },
   { id: 'backtest', label: 'Backtest', implemented: true },
   { id: 'roll', label: 'Roll', implemented: true },
   { id: 'ipo', label: 'IPO', implemented: true },
@@ -1573,6 +1574,8 @@ export type SignalTradeStatus =
   | 'WATCH'
   | 'VALID_LONG'
   | 'TOO_EXTENDED'
+  /** The US session is shut, so the intraday blocks were not scored. Not a feed failure. */
+  | 'MARKET_CLOSED'
   | 'STALE_DATA'
   | 'INSUFFICIENT_HISTORY'
   | 'DATA_ERROR'
@@ -1583,6 +1586,7 @@ export type SignalsFilter =
   | 'long'
   | 'watch'
   | 'blocked'
+  | 'market_closed'
   | 'stale'
   | 'too_new'
   | 'error'
@@ -1675,6 +1679,12 @@ export interface SignalResult {
   risk: SignalRisk | null
   signal: SignalClass
   tradeStatus: SignalTradeStatus
+  /**
+   * The US session was shut when this was scored, so the 22 intraday points were
+   * unreachable rather than failed. The class is still capped at WATCH and `maxScore` is
+   * still 100 — only the displayed denominator narrows, and only for presentation.
+   */
+  marketClosed: boolean
   reasons: SignalReason[]
   warnings: string[]
   indicators: Record<string, number | string | null>
@@ -1925,6 +1935,243 @@ export interface CryptoPayload {
 }
 
 export interface CryptoRequest extends BackgroundRequest {
+  force?: boolean
+}
+
+/* ----------------------------------------------------------- BMNR treasury */
+
+/**
+ * The BMNR page — BitMine Immersion Technologies, an Ethereum treasury company.
+ *
+ * Not a port: the PySide6 app has no equivalent page. The equity is essentially a wrapper
+ * around a pile of ETH, so the page answers how much ETH is held, what share of supply
+ * that is, what cash and other assets sit beside it, and what the market pays per unit of
+ * the treasury.
+ *
+ * Two sources that disagree by design. CoinGecko's treasury endpoint carries a *live* ETH
+ * count updated within days; the last filed 10-Q carries an authoritative count that can be
+ * a quarter old. They are never blended. That guarantee is structural rather than a
+ * convention: there is no bare `number` anywhere in the live or derived surface below —
+ * every figure is a `BmnrValue` carrying its basis, its as-of date and its source, so a
+ * renderer physically cannot print one without the label in hand.
+ */
+export const BMNR_SYMBOL = 'BMNR'
+export const BMNR_ETH_SYMBOL = 'ETH-USD'
+/** BitMine Immersion Technologies. A CIK never changes and this page's ticker is fixed. */
+export const BMNR_CIK = '0001829311'
+
+/**
+ * Which of the two irreconcilable counts a figure was computed from.
+ *
+ * `live` is CoinGecko's ETH count and Yahoo's prices — continuous and unaudited.
+ * `filed` is the balance sheet in the last 10-Q — months old and authoritative.
+ * `cross` is the few figures that deliberately use one of each. Always labelled, never
+ * presented as either.
+ */
+export type BmnrBasis = 'live' | 'filed' | 'cross'
+
+/** One number that cannot be read honestly without knowing where and when it came from. */
+export interface BmnrValue {
+  value: number | null
+  /** `YYYY-MM-DD` for a filed figure; a local ISO stamp for a live one. */
+  asOf: string
+  /** `'CoinGecko'`, `'Yahoo Finance'`, `'SEC 10-Q filed 2026-07-14'`, `'derived'`. */
+  source: string
+  basis: BmnrBasis
+  /** Set when the figure needs a caveat — a fallback source was used, say. */
+  note?: string
+}
+
+/* --------------------------------------------------------------- live block */
+
+export interface BmnrCohort {
+  companyCount: number
+  /** The endpoint's root `total_holdings`: the sum across listed treasuries, NOT ETH supply. */
+  totalHoldings: number | null
+  totalValueUsd: number | null
+  /** Root `market_cap_dominance` — the cohort's share of ETH market cap, not of supply. */
+  marketCapDominancePct: number | null
+  /** BMNR's holdings as a percent of the cohort's. */
+  bmnrShareOfCohortPct: number | null
+}
+
+export interface BmnrLiveTreasury {
+  ethHeld: BmnrValue
+  /** `percentage_of_total_supply`, already a percent (4.89), not a fraction. */
+  supplyPct: BmnrValue
+  ethValueUsd: BmnrValue
+  /** `total_entry_value_usd`; null when CoinGecko reports its `0` "not disclosed" sentinel. */
+  entryValueUsd: BmnrValue
+  /** `total_current_value_usd / total_holdings` — CoinGecko's own internal ETH price. */
+  impliedEthPrice: BmnrValue
+  /** `ethHeld / (supplyPct / 100)` — the supply the percentage was struck against. */
+  impliedEthSupply: BmnrValue
+  cohort: BmnrCohort
+}
+
+/* -------------------------------------------------------------- filed block */
+
+/** One balance-sheet date out of `companyfacts`, amendments already resolved. */
+export interface BmnrFiledQuarter {
+  endDate: string
+  /** `FY2026 Q3 · May 2026`. Fiscal, not calendar — BMNR's year ends 31 August. */
+  label: string
+  form: string
+  fiscalYear: number | null
+  fiscalPeriod: string
+  filedDate: string
+  accession: string
+  ethUnits: number | null
+  /** Which `units` bucket won — `Integer` or `cryptoAsset`. Surfaced, because it changed. */
+  ethUnitsUnit: string
+  cryptoFairValue: number | null
+  cryptoCost: number | null
+  cash: number | null
+  totalAssets: number | null
+  liabilities: number | null
+  stockholdersEquity: number | null
+  stockholdersEquityInclNci: number | null
+  minorityInterest: number | null
+  sharesOutstanding: number | null
+  /** Asset lines beyond crypto and cash, keyed by us-gaap tag. Absent tags are omitted. */
+  components: Record<string, number>
+}
+
+export interface BmnrFiledTreasury {
+  cik: string
+  /** Ascending by `endDate`. */
+  quarters: BmnrFiledQuarter[]
+  latest: BmnrFiledQuarter | null
+  /**
+   * `dei:EntityCommonStockSharesOutstanding` — the 10-Q cover page, dated weeks *after* the
+   * balance sheet it ships with. Kept separate on purpose: averaging it against
+   * `CommonStockSharesOutstanding` would invent a share count that was never outstanding.
+   */
+  coverShares: BmnrValue
+  freshness: SecFreshness
+  cacheAgeSeconds: number
+  warnings: string[]
+}
+
+/* ------------------------------------------------------------- market block */
+
+export interface BmnrMarket {
+  sharePrice: BmnrValue
+  shareChangePct: BmnrValue
+  marketCap: BmnrValue
+  ethPrice: BmnrValue
+  ethChangePct: BmnrValue
+  /** `marketCap / sharePrice` — a third share count, shown for comparison, never averaged. */
+  impliedShares: BmnrValue
+}
+
+/* ------------------------------------------------------------ derived block */
+
+export interface BmnrDerived {
+  /** The denominator every per-share figure below actually used. */
+  shares: BmnrValue
+  cryptoValue: BmnrValue
+  /** Total assets less the crypto book and cash, per the filed balance sheet. */
+  otherAssets: BmnrValue
+  nav: BmnrValue
+  navBuildUp: BmnrValue
+  /** `navBuildUp - nav`; equals `minorityInterest` when the filing tags one. */
+  navReconciliationGap: BmnrValue
+  navPerShare: BmnrValue
+  mnav: BmnrValue
+  premiumPct: BmnrValue
+  ethPerShare: BmnrValue
+  ethPer1000Shares: BmnrValue
+  ethValuePerShare: BmnrValue
+  /** `CryptoAssetCost / ethUnits`. Cumulative gross purchases per unit, NOT a cost basis. */
+  impliedGrossCostPerEth: BmnrValue
+  /** `CryptoAssetFairValue / ethUnits`. The honest per-unit carrying value. */
+  filedCarryingValuePerEth: BmnrValue
+  /** Live ETH price against the filed gross cost. Cross-basis by construction. */
+  costVsSpotPct: BmnrValue
+  cryptoShareOfAssetsPct: BmnrValue
+  cashShareOfAssetsPct: BmnrValue
+  otherShareOfAssetsPct: BmnrValue
+  /** `live.ethHeld - latest.ethUnits`: ETH accumulated since the last balance-sheet date. */
+  unfiledEth: BmnrValue
+  unfiledEthPct: BmnrValue
+  /** The filed count against the live implied supply. Cross-basis, and labelled so. */
+  filedSupplyPct: BmnrValue
+  shareCountGap: BmnrValue
+  shareCountGapPct: BmnrValue
+}
+
+/* ---------------------------------------------------- composition & history */
+
+export interface BmnrHoldingSlice {
+  label: string
+  value: number
+  /** The us-gaap tag it was read from, or `residual`. */
+  tag: string
+  sharePct: number | null
+}
+
+export interface BmnrComposition {
+  asOf: string
+  totalAssets: number | null
+  /** Every slice including crypto, cash and the residual; sums to `totalAssets`. */
+  slices: BmnrHoldingSlice[]
+  /** The non-crypto, non-cash subset — the "other holdings" table. */
+  otherSlices: BmnrHoldingSlice[]
+  otherTotal: number | null
+  /** True when named components exceeded total assets — a double-count regression. */
+  overAllocated: boolean
+}
+
+export interface BmnrQuarterPoint {
+  endDate: string
+  label: string
+  shares: number | null
+  ethUnits: number | null
+  ethUnitsUnit: string
+  ethPer1000Shares: number | null
+  qoqSharesPct: number | null
+  qoqEthPct: number | null
+  /** `qoqEthPct - qoqSharesPct`: positive means the raise bought more ETH than it diluted. */
+  accretionPct: number | null
+  /** Both series rebased to 100 at their own first non-null point, for the overlay chart. */
+  sharesIndexed: number | null
+  ethPerShareIndexed: number | null
+}
+
+export interface BmnrSensitivityRow {
+  /** -25, -10, 0, 10, 25. */
+  shockPct: number
+  ethPrice: number | null
+  navPerShare: number | null
+  mnav: number | null
+  premiumPct: number | null
+}
+
+/* ------------------------------------------------------------ page payload */
+
+export const BMNR_BLOCKS = ['treasury', 'filings', 'market'] as const
+export type BmnrBlock = (typeof BMNR_BLOCKS)[number]
+export type BmnrBlockStatus = 'loaded' | 'unavailable'
+
+export interface BmnrPayload {
+  /** Local ISO stamp to the second, as the Crypto page's is. */
+  fetchedAt: string
+  symbol: string
+  companyName: string
+  live: BmnrLiveTreasury | null
+  filed: BmnrFiledTreasury | null
+  market: BmnrMarket
+  derived: BmnrDerived
+  composition: BmnrComposition
+  history: BmnrQuarterPoint[]
+  sensitivity: BmnrSensitivityRow[]
+  filings: SecFiling[]
+  /** The Crypto page's stage-map idiom: an IPC round trip carries no intermediate frames. */
+  progress: Record<BmnrBlock, BmnrBlockStatus>
+}
+
+export interface BmnrRequest extends BackgroundRequest {
   force?: boolean
 }
 
@@ -2812,6 +3059,7 @@ export const CHANNELS = {
   calendarMonth: 'calendar:month',
   earningsCalendar: 'calendar:earnings',
   crypto: 'crypto:read',
+  bmnr: 'bmnr:read',
   heatmap: 'heatmap:read',
   etfHoldings: 'etf:holdings',
   etfArbitrage: 'etf:arbitrage',
@@ -2957,6 +3205,7 @@ export interface DesktopApi {
     request: EarningsCalendarRequest,
   ): Promise<Envelope<EarningsCalendarPayload>>
   crypto(request: CryptoRequest): Promise<Envelope<CryptoPayload>>
+  bmnr(request: BmnrRequest): Promise<Envelope<BmnrPayload>>
   heatmap(request: HeatmapRequest): Promise<Envelope<HeatmapPayload>>
   etfHoldings(request: EtfHoldingsRequest): Promise<Envelope<EtfHoldingsPayload>>
   etfArbitrage(request: EtfArbitrageRequest): Promise<Envelope<EtfArbitragePayload>>

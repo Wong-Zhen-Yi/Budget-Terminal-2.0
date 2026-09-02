@@ -109,9 +109,98 @@ async function runOffline(): Promise<void> {
   assert.equal(CHART_PATTERN_CATALOG.length, 24)
   assert.equal(new Set(CHART_PATTERN_CATALOG.map((pattern) => pattern.id)).size, 24)
   assert.deepEqual([...new Set(CHART_PATTERN_CATALOG.map((pattern) => pattern.family))].sort(), ['Channel', 'Compression', 'Continuation', 'Reversal'])
+
+  const closeSignatures = new Map<string, string>()
   for (const pattern of CHART_PATTERN_CATALOG) {
-    assert.ok(pattern.path.length >= 2)
     assert.ok(pattern.recognition && pattern.confirmation && pattern.invalidation && pattern.target)
+    assert.equal(pattern.examples.length, 3, `${pattern.id} carries three examples`)
+    assert.equal(new Set(pattern.examples.map((example) => example.id)).size, 3)
+
+    for (const example of pattern.examples) {
+      assert.ok(example.candles.length >= 30, `${pattern.id}/${example.id} has bars`)
+      for (const candle of example.candles) {
+        assert.ok(candle.high >= Math.max(candle.open, candle.close) - 1e-9, `${pattern.id} high brackets the body`)
+        assert.ok(candle.low <= Math.min(candle.open, candle.close) + 1e-9, `${pattern.id} low brackets the body`)
+      }
+      // Every guide must actually be touched by the bars it describes. This is what
+      // proves the pivots snapped onto the drawn line rather than near it, and it is
+      // the whole chain — skeleton, synthesis, guide placement — in one assertion.
+      for (const guide of example.guides) {
+        const span = guide.end[0] - guide.start[0]
+        const at = (index: number) =>
+          guide.start[1] + ((guide.end[1] - guide.start[1]) * (index - guide.start[0])) / (span || 1)
+        const touches = example.candles.filter((candle, index) => {
+          if (index < guide.start[0] - 1 || index > guide.end[0] + 1) return false
+          const level = at(index)
+          return Math.abs(candle.high - level) < 0.8 || Math.abs(candle.low - level) < 0.8
+        })
+        assert.ok(touches.length >= 2, `${pattern.id}/${example.id} touches ${guide.label} twice`)
+      }
+      // A confirmed break resolves the way the bias says it does.
+      if (example.breakout && pattern.bias !== 'Neutral') {
+        const last = example.candles[example.candles.length - 1].close
+        const atBreak = example.candles[Math.round(example.breakout.x)].close
+        assert.ok(
+          pattern.bias === 'Bullish' ? last > atBreak : last < atBreak,
+          `${pattern.id}/${example.id} resolves ${pattern.bias}`,
+        )
+      }
+    }
+
+    // The bug this catalog replaced: 24 patterns sharing three generic zig-zags.
+    const signature = pattern.examples[0].candles.map((candle) => candle.close.toFixed(2)).join(',')
+    const clash = closeSignatures.get(signature)
+    assert.ok(!clash, `${pattern.id} draws its own shape, not ${clash ?? ''}`)
+    closeSignatures.set(signature, pattern.id)
+  }
+
+  const byId = new Map(CHART_PATTERN_CATALOG.map((pattern) => [pattern.id, pattern]))
+  const example = (id: string) => byId.get(id)!.examples[0]
+  const highs = (id: string) => example(id).candles.map((candle) => candle.high)
+  const lows = (id: string) => example(id).candles.map((candle) => candle.low)
+
+  // Head and Shoulders: the head is the highest point and it sits in the middle.
+  const hs = highs('head_and_shoulders')
+  const headIndex = hs.indexOf(Math.max(...hs))
+  assert.ok(headIndex > hs.length * 0.3 && headIndex < hs.length * 0.55, 'the head is the middle peak')
+  assert.ok(Math.max(...hs.slice(0, Math.round(hs.length * 0.25))) < hs[headIndex], 'left shoulder is lower')
+  assert.ok(Math.max(...hs.slice(Math.round(hs.length * 0.6))) < hs[headIndex], 'right shoulder is lower')
+
+  // Inverse Head and Shoulders is the same statement upside down.
+  const ihs = lows('inverse_head_and_shoulders')
+  const troughIndex = ihs.indexOf(Math.min(...ihs))
+  assert.ok(troughIndex > ihs.length * 0.3 && troughIndex < ihs.length * 0.55, 'the head is the middle trough')
+
+  // Ascending Triangle: flat highs over rising lows, and the reverse for its twin.
+  const ascending = example('ascending_triangle')
+  const window = ascending.candles.slice(4, Math.round(ascending.candles.length * 0.78))
+  const topFour = window.map((candle) => candle.high).sort((a, b) => b - a).slice(0, 4)
+  assert.ok(topFour[0] - topFour[3] < 3, 'the ascending triangle tops are flat')
+  const half = Math.round(window.length / 2)
+  assert.ok(
+    Math.min(...window.slice(half).map((candle) => candle.low)) >
+      Math.min(...window.slice(0, half).map((candle) => candle.low)) + 5,
+    'the ascending triangle lows rise',
+  )
+  const descending = example('descending_triangle')
+  const descendingWindow = descending.candles.slice(4, Math.round(descending.candles.length * 0.78))
+  const bottomFour = descendingWindow.map((candle) => candle.low).sort((a, b) => a - b).slice(0, 4)
+  assert.ok(bottomFour[3] - bottomFour[0] < 3, 'the descending triangle bottoms are flat')
+
+  // Compression narrows, a megaphone widens, a channel holds its width.
+  const gap = (id: string, at: number) => {
+    const [upper, lower] = byId.get(id)!.examples[0].guides
+    const span = (guide: (typeof upper)) =>
+      guide.start[1] + (guide.end[1] - guide.start[1]) * at
+    return Math.abs(span(upper) - span(lower))
+  }
+  for (const id of ['symmetrical_triangle', 'rising_wedge', 'falling_wedge', 'bull_pennant', 'bear_pennant']) {
+    assert.ok(gap(id, 0.9) < gap(id, 0.1) - 5, `${id} converges`)
+  }
+  assert.ok(gap('broadening_formation', 0.9) > gap('broadening_formation', 0.1) + 5, 'the megaphone widens')
+  for (const id of ['ascending_channel', 'descending_channel']) {
+    assert.ok(Math.abs(gap(id, 0.9) - gap(id, 0.1)) < 5, `${id} stays parallel`)
+    assert.equal(byId.get(id)!.examples[0].breakout, undefined, `${id} has no break marker`)
   }
 
   const cache = new TtlCache()

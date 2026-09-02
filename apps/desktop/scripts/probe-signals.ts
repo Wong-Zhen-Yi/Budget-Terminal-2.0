@@ -14,9 +14,12 @@ import {
   scoreRegime,
   signalBacktestSamples,
   signalCandidateFromQuote,
+  signalDisplayMaxScore,
   signalVisible,
   summarizeBacktestSamples,
   summarizeSignals,
+  usExtendedSessionOpen,
+  SIGNAL_CLOSED_MAX_SCORE,
   SIGNAL_MAX_SCORE,
   type SignalBar,
   type SignalFrames,
@@ -205,11 +208,48 @@ function scoringChecks(): void {
     volumes: stale.setup.map((bar) => bar.volume ?? 0),
     end: staleEnd,
   })
-  const staleResult = evaluateSignal('STALE', stale, { benchmark, benchmarkSymbol: 'SPY', regime, now: NOW })
+  const staleResult = evaluateSignal('STALE', stale, {
+    benchmark, benchmarkSymbol: 'SPY', regime, now: NOW, marketOpen: true,
+  })
   assert.equal(staleResult.tradeStatus, 'STALE_DATA')
+  assert.equal(staleResult.marketClosed, false)
   assert.equal(staleResult.entryScore, 0)
   assert.ok(staleResult.timeframeStatus.entry.startsWith('Stale'))
   assert.notEqual(staleResult.signal, 'STRONG_LONG')
+
+  // The same frames with the session shut are MARKET_CLOSED, not a feed fault: the intraday
+  // points were unreachable rather than failed. The class is still capped and the raw score
+  // is unchanged — only the printed denominator narrows.
+  const closedResult = evaluateSignal('CLOSED', stale, {
+    benchmark, benchmarkSymbol: 'SPY', regime, now: NOW, marketOpen: false,
+  })
+  assert.equal(closedResult.tradeStatus, 'MARKET_CLOSED')
+  assert.equal(closedResult.marketClosed, true)
+  assert.equal(closedResult.rawScore, staleResult.rawScore)
+  assert.equal(closedResult.maxScore, SIGNAL_MAX_SCORE)
+  assert.equal(signalDisplayMaxScore(closedResult), SIGNAL_CLOSED_MAX_SCORE)
+  assert.equal(SIGNAL_CLOSED_MAX_SCORE, 78)
+  assert.notEqual(closedResult.signal, 'LONG')
+  assert.notEqual(closedResult.signal, 'STRONG_LONG')
+  assert.ok(closedResult.warnings.some((warning) => warning.includes('US market is closed')))
+  assert.equal(signalVisible(closedResult, 'market_closed', ''), true)
+  assert.equal(signalVisible(closedResult, 'stale', ''), false)
+
+  // A closed session never explains an empty frame; that is still a data error.
+  const closedButBroken = { ...stale, entry: [] }
+  assert.equal(
+    evaluateSignal('BROKE', closedButBroken, { now: NOW, marketOpen: false }).tradeStatus,
+    'STALE_DATA',
+  )
+
+  // The extended session runs 04:00-20:00 ET on weekdays. 02:21 ET on a Wednesday - the
+  // clock this bug was reported at - is shut; 13:30 ET the same week is open.
+  assert.equal(usExtendedSessionOpen(Date.UTC(2026, 8, 2, 6, 21)), false)
+  assert.equal(usExtendedSessionOpen(Date.UTC(2026, 8, 2, 17, 30)), true)
+  assert.equal(usExtendedSessionOpen(Date.UTC(2026, 8, 2, 8, 30)), true, 'pre-market 04:30 ET')
+  assert.equal(usExtendedSessionOpen(Date.UTC(2026, 8, 2, 23, 30)), true, '19:30 ET, inside post-market')
+  assert.equal(usExtendedSessionOpen(Date.UTC(2026, 8, 3, 0, 30)), false, '20:30 ET, after the post-market close')
+  assert.equal(usExtendedSessionOpen(Date.UTC(2026, 8, 5, 17, 30)), false, 'Saturday 13:30 ET')
 
   assert.equal(classifySignal(39.99, 22, 100), 'NONE')
   assert.equal(classifySignal(40, 22, 100), 'WATCH')
@@ -231,6 +271,19 @@ function scoringChecks(): void {
   assert.equal(scored.timeframeBars.setup.partial, true)
   assert.equal(scored.timeframeBars.setup.dropped, true)
   assert.equal(scored.timeframeStatus.setup, 'Available (last closed bar)')
+
+  // A daily bar is stamped at its session open, so "age < 86400" called a finished session
+  // partial and dropped it all night, scoring every daily block a session behind. Seven
+  // hours after the open the session has closed and its bar is the one to read; two hours
+  // after the open it is still forming and the prior session is.
+  const daily = bullishFrames()
+  const dailyOpen = daily.trend[daily.trend.length - 1].timestamp
+  const closedRead = evaluateSignal('DAILY', daily, { now: dailyOpen + 7 * 60 * 60 * 1000 })
+  assert.equal(closedRead.timeframeBars.trend.dropped, false)
+  assert.equal(Date.parse(closedRead.timeframeBars.trend.asOf ?? ''), dailyOpen)
+  const openRead = evaluateSignal('DAILY', daily, { now: dailyOpen + 2 * 60 * 60 * 1000 })
+  assert.equal(openRead.timeframeBars.trend.dropped, true)
+  assert.notEqual(Date.parse(openRead.timeframeBars.trend.asOf ?? ''), dailyOpen)
 }
 
 function indicatorChecks(): void {
@@ -371,7 +424,8 @@ async function offlineChecks(): Promise<void> {
   console.log(
     'Signals offline checks passed: screener-field prefilter, completed-session liquidity, setup-weighted ranking, ' +
     'the fixed 100-point denominator, ADX, beta-adjusted alpha, slot-normalised volume, the null-ATR guard, ' +
-    'stale intraday handling, regime-shifted thresholds, the trade plan, and a lookahead-safe walk-forward.',
+    'stale intraday handling, closed-session reporting, the daily forming window, '  +
+    'regime-shifted thresholds, the trade plan, and a lookahead-safe walk-forward.',
   )
 }
 
@@ -410,7 +464,7 @@ async function main(): Promise<void> {
   )
   for (const result of payload.results.slice(0, 12)) {
     console.log(
-      `${result.ticker.padEnd(7)} ${result.rawScore.toFixed(1).padStart(5)}/${String(result.maxScore).padEnd(4)} ` +
+      `${result.ticker.padEnd(7)} ${result.rawScore.toFixed(1).padStart(5)}/${String(signalDisplayMaxScore(result)).padEnd(4)} ` +
       `R:R ${(result.risk?.rewardToRisk?.toFixed(2) ?? '  --').padStart(5)}  ` +
       `${result.signal.padEnd(12)} ${result.tradeStatus}`,
     )

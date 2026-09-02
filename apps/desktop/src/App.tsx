@@ -13,6 +13,7 @@ import { BacktestPage } from '@/pages/BacktestPage'
 import { CardsPage } from '@/pages/CardsPage'
 import { CalendarPage } from '@/pages/CalendarPage'
 import { ChartsPage } from '@/pages/ChartsPage'
+import { BmnrPage } from '@/pages/BmnrPage'
 import { CryptoPage } from '@/pages/CryptoPage'
 import { DictionaryPage } from '@/pages/DictionaryPage'
 import { FundamentalsPage } from '@/pages/FundamentalsPage'
@@ -412,6 +413,8 @@ function renderPage({
       <EtfPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'crypto' ? (
       <CryptoPage onStatusChange={onStatusChange} />
+    ) : tabId === 'bmnr' ? (
+      <BmnrPage onStatusChange={onStatusChange} />
     ) : tabId === 'dictionary' ? (
       <DictionaryPage onStatusChange={onStatusChange} />
     ) : tabId === 'charts' ? (

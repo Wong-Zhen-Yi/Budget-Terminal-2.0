@@ -28,6 +28,7 @@ export const queryKeys = {
     ['calendarMonth', year, month, [...tickers].sort().join(',')] as const,
   earningsCalendar: (rangeKey: string) => ['earningsCalendar', rangeKey] as const,
   crypto: ['crypto'] as const,
+  bmnr: ['bmnr'] as const,
   heatmap: (etf: string) => ['heatmap', etf] as const,
   // One key per ticker, so switching back to a fund already loaded repaints instantly
   // the way `_p13_last_result` does. Arbitrage is keyed the same way and separately: it

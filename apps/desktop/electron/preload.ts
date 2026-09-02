@@ -37,6 +37,7 @@ const api: DesktopApi = {
   calendarMonth: (request) => ipcRenderer.invoke(CHANNELS.calendarMonth, request),
   earningsCalendar: (request) => ipcRenderer.invoke(CHANNELS.earningsCalendar, request),
   crypto: (request) => ipcRenderer.invoke(CHANNELS.crypto, request),
+  bmnr: (request) => ipcRenderer.invoke(CHANNELS.bmnr, request),
   heatmap: (request) => ipcRenderer.invoke(CHANNELS.heatmap, request),
   etfHoldings: (request) => ipcRenderer.invoke(CHANNELS.etfHoldings, request),
   etfArbitrage: (request) => ipcRenderer.invoke(CHANNELS.etfArbitrage, request),

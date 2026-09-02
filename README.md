@@ -95,7 +95,10 @@ ticker is fetched again after restart.
 ## What the Charts page shows
 
 Charts is a five-tab workstation: Main, Multi Charts, Compare, Relationship, and a
-24-pattern offline Cheat Sheet. Main supports one-minute through monthly history,
+24-pattern offline Cheat Sheet. Each cheat-sheet pattern draws three synthetic
+candlestick examples of its own geometry — textbook, noisy and extended — with its
+neckline or boundaries marked and the confirming break flagged; `npm run patterns:png`
+exports the same charts to `apps/desktop/docs/chart-patterns/`. Main supports one-minute through monthly history,
 including same-session synthetic four-hour candles, three price styles, volume, RSI and
 RSI average, daily MA200 alignment, portfolio average price, support/resistance,
 Fibonacci levels, replay, polling, focus mode, and persisted SVG drawings. Multi Charts

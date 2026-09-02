@@ -19,6 +19,7 @@
     "probe:calendar": "npm run --workspace budget-terminal-desktop probe:calendar --",
     "probe:charts": "npm run --workspace budget-terminal-desktop probe:charts --",
     "probe:dictionary": "npm run --workspace budget-terminal-desktop probe:dictionary --",
+    "probe:bmnr": "npm run --workspace budget-terminal-desktop probe:bmnr --",
     "probe:crypto": "npm run --workspace budget-terminal-desktop probe:crypto --",
     "probe:cards": "npm run --workspace budget-terminal-desktop probe:cards --",
     "probe:price": "npm run --workspace budget-terminal-desktop probe:price --",

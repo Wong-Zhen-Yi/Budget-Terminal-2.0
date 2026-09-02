@@ -76,6 +76,9 @@ const TAB_ORDER = [
   // A twelve-page screener sweep and a thumbnail fetch per video; both cost real
   // requests, so they sit behind everything that does not.
   'etf',
+  // Deliberately not adjacent to `crypto`: warm tasks run strictly sequentially and both
+  // pages call CoinGecko's keyless tier, which rate-limits by the minute.
+  'bmnr',
   'youtube',
   'heatmap',
   'trading-volumes',
@@ -413,6 +416,18 @@ function buildTasks(
         queryKey: queryKeys.etfAum,
         queryFn: () => api.etfAum({ background: true }),
         staleTime: ETF_AUM_STALE_MS,
+      }),
+  })
+
+  // One CoinGecko call, two SEC calls behind their own disk cache and three Yahoo quotes.
+  tasks.push({
+    tab: 'bmnr',
+    label: 'BMNR treasury',
+    run: (client) =>
+      client.prefetchQuery({
+        queryKey: queryKeys.bmnr,
+        queryFn: () => api.bmnr({ background: true }),
+        staleTime: Infinity,
       }),
   })
 

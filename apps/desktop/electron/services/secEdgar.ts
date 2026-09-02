@@ -552,6 +552,103 @@ export async function fetchSecCompanyBundle(symbolInput: string, force = false):
   }
 }
 
+export interface SecFactsDocument {
+  /** Zero-padded ten-digit CIK the document was fetched under. */
+  cik: string
+  /** The raw `companyfacts` JSON exactly as SEC returned it. */
+  facts: Record<string, unknown>
+  /** `normalizeFilings` output; empty when `includeFilings` is false or submissions failed. */
+  filings: SecFiling[]
+  freshness: SecFreshness
+  cacheAgeSeconds: number
+  warnings: string[]
+}
+
+/**
+ * The raw cached `companyfacts` document, for callers that read their own tags.
+ *
+ * `fetchSecCompanyBundle` above normalises into the nine fixed `FundamentalSeriesKey`s the
+ * Fundamentals and Valuation pages share. A page that needs a tag outside that set — the
+ * BMNR page and its `CryptoAssetNumberOfUnits`, say — cannot be served by widening `SPECS`
+ * without changing what those two pages see. This hands back the document instead and lets
+ * the caller do its own selection, while still going through the same 200ms `paceSec` gate,
+ * the same disk cache and the same seven-day stale fallback. Both callers share one cache
+ * entry per CIK, so opening Fundamentals on a ticker warms this path for free.
+ *
+ * `target` accepts a CIK directly so a fixed-ticker page skips the `company_tickers.json`
+ * round trip entirely — two SEC requests rather than three.
+ */
+export async function fetchSecFactsDocument(
+  target: { cik: string } | { symbol: string },
+  { force = false, includeFilings = true }: { force?: boolean; includeFilings?: boolean } = {},
+): Promise<SecFactsDocument> {
+  const warnings: string[] = []
+  let tickerFreshness: SecFreshness | null = null
+  let tickerAge = 0
+  let cik: string
+
+  if ('cik' in target) {
+    const numeric = Number(String(target.cik).trim())
+    if (!Number.isFinite(numeric) || numeric <= 0) throw new Error(`Invalid CIK: ${target.cik}`)
+    cik = String(numeric).padStart(10, '0')
+  } else {
+    const tickers = await cachedJson('tickers', 'company_tickers', SEC_TICKERS_URL, TICKERS_TTL, force)
+    tickerFreshness = tickers.metadata.freshness
+    tickerAge = tickers.metadata.cacheAgeSeconds
+    const wanted = normalizeTicker(target.symbol)
+    const entry = Object.values(tickers.payload).map(record).find((item) => normalizeTicker(String(item.ticker ?? '')) === wanted)
+    if (!entry) throw new Error(`No domestic SEC filer mapping was found for ${target.symbol}.`)
+    cik = String(Number(entry.cik_str)).padStart(10, '0')
+  }
+
+  const [factsResult, submissionsResult] = await Promise.allSettled([
+    cachedJson('companyfacts', cik, SEC_FACTS_URL.replace('{cik}', cik), FACTS_TTL, force),
+    includeFilings
+      ? cachedJson('submissions', cik, SEC_SUBMISSIONS_URL.replace('{cik}', cik), SUBMISSIONS_TTL, force)
+      : Promise.resolve(null),
+  ])
+
+  if (factsResult.status !== 'fulfilled') {
+    // No cached fallback was available inside `cachedJson`, so there is nothing to return.
+    throw new Error(`SEC facts unavailable: ${String(factsResult.reason)}`)
+  }
+  const facts = factsResult.value.payload
+  const factsMeta = factsResult.value.metadata
+  if (factsMeta.warning) warnings.push(`SEC facts refresh failed; using cached data: ${factsMeta.warning}`)
+
+  let filings: SecFiling[] = []
+  let submissionsMeta: CacheMetadata | null = null
+  if (submissionsResult.status === 'fulfilled' && submissionsResult.value) {
+    submissionsMeta = submissionsResult.value.metadata
+    if (submissionsMeta.warning) warnings.push(`SEC submissions refresh failed; using cached data: ${submissionsMeta.warning}`)
+    filings = normalizeFilings(submissionsResult.value.payload, cik)
+  } else if (submissionsResult.status === 'rejected') {
+    warnings.push(`SEC submissions unavailable: ${String(submissionsResult.reason)}`)
+  }
+
+  const freshnessValues = [
+    ...(tickerFreshness ? [tickerFreshness] : []),
+    factsMeta.freshness,
+    ...(submissionsMeta ? [submissionsMeta.freshness] : []),
+  ]
+  const freshness: SecFreshness = freshnessValues.includes('stale')
+    ? 'stale'
+    : freshnessValues.includes('fresh')
+      ? 'fresh'
+      : freshnessValues.includes('cached')
+        ? 'cached'
+        : 'failed'
+
+  return {
+    cik,
+    facts,
+    filings,
+    freshness,
+    cacheAgeSeconds: Math.max(tickerAge, factsMeta.cacheAgeSeconds, submissionsMeta?.cacheAgeSeconds ?? 0),
+    warnings,
+  }
+}
+
 export const secTesting = {
   cachedJson,
   cacheRoot,
@@ -564,4 +661,8 @@ export const secTesting = {
   normalizeStatements,
   normalizeFilings,
   sortSeries,
+  // `rank` and `unitValues` are exported for `probe-bmnr.ts`, which asserts its own copies
+  // of the amendment-precedence string and the unit-key matcher against these.
+  rank,
+  unitValues,
 }

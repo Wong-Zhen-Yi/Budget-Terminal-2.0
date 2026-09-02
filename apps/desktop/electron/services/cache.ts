@@ -41,6 +41,10 @@ export const TTL = {
   // The Crypto page has no refresh timer, like the reference's `init_page19`. This only
   // stops a tab revisit from spending CoinGecko's free-tier rate budget again.
   crypto: 5 * 60_000,
+  // The BMNR page: one CoinGecko call, two SEC calls behind their own six-hour disk cache
+  // and three Yahoo quotes. Matched to `crypto` because it is the same CoinGecko free tier
+  // and the same rate budget, and the page has no refresh timer either.
+  bmnr: 5 * 60_000,
 } as const
 
 export interface CachedResult<T> {
