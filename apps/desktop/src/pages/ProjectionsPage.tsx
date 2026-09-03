@@ -9,6 +9,7 @@ import {
   emptyProjectionModel,
   emptyProjectionPaths,
   projectionAggregate,
+  projectionCoverageWarning,
   projectionHeadlines,
   projectionMetaText,
   projectionPrice,
@@ -94,7 +95,9 @@ export function ProjectionsPage({
 
   const model = useMemo(
     () =>
-      payload ? buildProjectionSummaries(payload.buckets, currentClose) : emptyProjectionModel(),
+      payload
+        ? buildProjectionSummaries(payload.buckets, currentClose, payload.marketDate)
+        : emptyProjectionModel(),
     [payload, currentClose],
   )
   const paths = useMemo(
@@ -103,6 +106,12 @@ export function ProjectionsPage({
   )
   const headlines = useMemo(() => projectionHeadlines(model), [model])
   const aggregate = useMemo(() => projectionAggregate(model), [model])
+  /**
+   * The chain's own shortfall, which nothing else on the strip can show: every figure
+   * there is computed over the rows that survived the quality filters, so the more of
+   * the feed is unusable the more confident the tile looks.
+   */
+  const coverageWarning = useMemo(() => projectionCoverageWarning(model), [model])
 
   /** The selected type filter's top ten per expiration, as `prepare_top_volume_records`. */
   const buckets = useMemo(
@@ -209,8 +218,22 @@ export function ProjectionsPage({
     else if (populated < buckets.length) {
       text += ` | ${buckets.length - populated} expirations returned no rows`
     }
+    // A degraded chain outranks a full one with a thin expiration: the rows are all
+    // there and every projection built on them is the one that is not trustworthy.
+    if (coverageWarning) return { text: `${text} | ${coverageWarning}`, tone: 'warning' }
     return { text, tone: chartError || populated < buckets.length ? 'warning' : 'positive' }
-  }, [armed, buckets.length, chartError, payload, populated, query.data, query.isFetching, rowTotal, symbol])
+  }, [
+    armed,
+    buckets.length,
+    chartError,
+    coverageWarning,
+    payload,
+    populated,
+    query.data,
+    query.isFetching,
+    rowTotal,
+    symbol,
+  ])
 
   const stats = payload?.stats
 
@@ -295,7 +318,9 @@ export function ProjectionsPage({
           }
           meta={
             aggregate
-              ? `${aggregate.expirationCount.toLocaleString('en-US')} expirations | ${aggregate.includedContractCount.toLocaleString('en-US')} valid contracts`
+              ? `${aggregate.expirationCount.toLocaleString('en-US')}/${aggregate.coverage.expirationCount.toLocaleString('en-US')} expirations | ` +
+                `${aggregate.coverage.quotedContractCount.toLocaleString('en-US')} mid + ` +
+                `${aggregate.coverage.fallbackContractCount.toLocaleString('en-US')} session trades`
               : 'No projection coverage'
           }
         />

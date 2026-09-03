@@ -22,7 +22,8 @@ import { formatExpiration } from './optionsPage.js'
 /** `P28_PROXY_SOURCE_NOTE`, printed above the strip and at the top of the export. */
 export const PROXY_SOURCE_NOTE =
   'Call and put paths are separate options-implied scenarios built from full-chain ' +
-  'bid/ask midpoints, break-even prices; the combined path is their ' +
+  'bid/ask midpoints and break-even prices, with same-session last trades used at ' +
+  'minimum quality when Yahoo omits a midpoint; the combined path is their ' +
   'confidence-and-coverage-weighted center. All paths use liquidity quality, ' +
   'moneyness, and implied-volatility plausibility checks. They are not true forecasts: ' +
   'volume and open interest do not reveal whether trades were bought or sold, and ' +
@@ -30,11 +31,67 @@ export const PROXY_SOURCE_NOTE =
 
 /** `P28_PROXY_MAX_SPREAD_PCT`: wider than this and the contract is thrown away. */
 export const PROXY_MAX_SPREAD_PCT = 0.6
+/** The reference's minimum spread-quality weight, also used by a fresh last-trade fallback. */
+export const PROXY_MIN_PRICE_QUALITY_WEIGHT = 0.15
 /** `P28_PROXY_MONEYNESS_SOFT_LIMIT`: where the moneyness downweight bottoms out. */
 export const PROXY_MONEYNESS_SOFT_LIMIT = 0.35
 export const PROXY_MIN_MONEYNESS_WEIGHT = 0.1
 /** `P28_PROXY_IV_RANGE_MULTIPLIER`: candidates outside 1.5 expected moves are clamped. */
 export const PROXY_IV_RANGE_MULTIPLIER = 1.5
+
+/**
+ * The band an implied volatility has to land in before it is allowed to size the
+ * plausibility check, and the reason this page needs one at all.
+ *
+ * A bare `iv > 0` test cannot tell a reading from a sentinel, and Yahoo answers a chain
+ * with three kinds of non-reading that all pass it:
+ *
+ * - `1e-5`, its floor for "not computed". `expectedMove` then comes out at a hundredth
+ *   of a cent, the band collapses to zero width and *every* candidate is clamped to
+ *   exactly the spot — which is why a broken chain used to print a call projection equal
+ *   to the close, to the cent, with a `-0.00%` change beside it.
+ * - `0`, which skipped the clamp altogether and let a $2,500 strike on a $224 underlying
+ *   put its $2,640 break-even into the median at full weight. That is the same
+ *   `Number(null) === 0` hazard `shared/valuation.ts` and `services/economic.ts`
+ *   document, and here it is what drew a projection path spiking to $1,600.
+ * - 500-600%, which makes the band wider than the price and so no check at all.
+ *
+ * Outside this band the value is treated as *absent* rather than as a reading: it no
+ * longer counts toward `ivCoverage`, and the row falls back to the expiration's or the
+ * chain's own median plausible volatility for its band. A row that can reach none of
+ * the three is not banded, and a summary with no banded row at all is withheld — the
+ * methodology note promises an implied-volatility plausibility check, and an anchor no
+ * check could run against is exactly the lottery-strike median the check exists to stop.
+ */
+export const PROXY_MIN_PLAUSIBLE_IV = 0.01
+export const PROXY_MAX_PLAUSIBLE_IV = 5
+
+/**
+ * The confidence score's count term saturates at twelve contracts, and the two sample
+ * shape terms are degenerate below that: dispersion around a single candidate is zero,
+ * which collects the term's full 0.2 for having nothing to disagree with. A one-contract
+ * anchor therefore scored 0.6 and printed "Moderate confidence".
+ *
+ * Under `PROXY_MIN_ANCHOR_CONTRACTS` there is no median to take and the side is
+ * withheld; under the saturation sample the score still stands (it is what weights the
+ * combined blend) but the printed label is capped at Moderate.
+ */
+export const PROXY_MIN_ANCHOR_CONTRACTS = 4
+export const PROXY_CONFIDENCE_FULL_SAMPLE = 12
+
+/**
+ * How much of a side's final signal weight may be dragged into the plausibility band
+ * before the anchor stops describing the market and starts describing the band.
+ *
+ * Clamping is meant to be exceptional — the comment on `projectionSideSummary` calls a
+ * clamped candidate a far-OTM lottery strike, which is a tail. Once most of a side is
+ * clamped, every clamped candidate sits on the *same* edge, so the weighted median is
+ * that edge: the calls and the puts of one expiration both came back at $269.76 on a
+ * corrupt chain, which is spot plus the bound to the cent rather than two readings that
+ * happened to agree. Dispersion cannot catch it either — candidates piled on one value
+ * disperse by zero and collect the term's full credit for it.
+ */
+export const PROXY_MAX_CLAMPED_SHARE = 0.5
 
 export type ProjectionSide = 'calls' | 'puts' | 'combined'
 export const PROJECTION_SIDES: readonly ProjectionSide[] = ['calls', 'puts', 'combined']
@@ -93,22 +150,83 @@ export function numericValue(value: unknown): number | null {
 }
 
 /**
- * `_p28_effective_option_price`: the bid/ask midpoint, and its spread as a fraction of
- * that midpoint.
- *
- * A row with no two-sided quote has no usable price at all — the last trade is
- * deliberately not a fallback, because a stale print is exactly what the quality
- * filters exist to keep out of the anchor.
+ * An implied volatility only where it is a plausible one; see `PROXY_MIN_PLAUSIBLE_IV`
+ * for what the three rejected classes are and why `iv > 0` cannot separate them.
  */
+export function plausibleImpliedVolatility(value: unknown): number | null {
+  const iv = numericValue(value)
+  if (iv === null) return null
+  return iv >= PROXY_MIN_PLAUSIBLE_IV && iv <= PROXY_MAX_PLAUSIBLE_IV ? iv : null
+}
+
+/** The plain median of a sample, used only for the two fallback volatility tiers. */
+function median(values: readonly number[]): number | null {
+  if (!values.length) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const middle = Math.floor(sorted.length / 2)
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2
+}
+
+/**
+ * Every plausible implied volatility carried by a set of rows, for the fallback band.
+ *
+ * The rows are not filtered to a side: a chain's volatility surface is one surface, and
+ * on a feed this degraded the calls and the puts of one expiration rarely both carry a
+ * reading.
+ */
+export function plausibleIvSample(rows: readonly OptionsRawRow[]): number[] {
+  const sample: number[] = []
+  for (const row of rows) {
+    const iv = plausibleImpliedVolatility(row.impliedVolatility)
+    if (iv !== null) sample.push(iv)
+  }
+  return sample
+}
+
+/**
+ * `_p28_effective_option_price`: prefer the bid/ask midpoint, and use Yahoo's last trade
+ * only when it belongs to the same underlying regular-market session.
+ *
+ * The market date comes from Yahoo's underlying quote rather than the machine clock, so
+ * pre-market, weekends and holidays still compare against the session the option chain
+ * belongs to. An accepted trade carries no spread and receives the minimum price-quality
+ * weight downstream; a stale or undated trade remains unusable.
+ */
+export type ProjectionPriceSource = 'midpoint' | 'same-session-last'
+
 export function effectiveOptionPrice(row: {
   bid?: unknown
   ask?: unknown
-}): { mid: number; spreadPct: number | null } | null {
+  lastPrice?: unknown
+  lastTradeDate?: unknown
+  volume?: unknown
+}, marketDate = ''): {
+  mid: number
+  spreadPct: number | null
+  source: ProjectionPriceSource
+} | null {
   const bid = numericValue(row.bid)
   const ask = numericValue(row.ask)
-  if (bid === null || ask === null || bid <= 0 || ask <= 0 || ask < bid) return null
-  const mid = (bid + ask) / 2
-  return { mid, spreadPct: mid > 0 ? (ask - bid) / mid : null }
+  if (bid !== null && ask !== null && bid > 0 && ask > 0 && ask >= bid) {
+    const mid = (bid + ask) / 2
+    return { mid, spreadPct: mid > 0 ? (ask - bid) / mid : null, source: 'midpoint' }
+  }
+
+  const lastPrice = numericValue(row.lastPrice)
+  const volume = numericValue(row.volume)
+  const tradeDate = String(row.lastTradeDate ?? '').trim()
+  const sessionDate = String(marketDate ?? '').trim()
+  if (
+    lastPrice === null ||
+    lastPrice <= 0 ||
+    volume === null ||
+    volume <= 0 ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(sessionDate) ||
+    tradeDate !== sessionDate
+  ) {
+    return null
+  }
+  return { mid: lastPrice, spreadPct: null, source: 'same-session-last' }
 }
 
 /** `_p28_spread_quality_weight`. */
@@ -118,7 +236,10 @@ export function spreadQualityWeight(spreadPct: number | null): {
 } {
   if (spreadPct === null) return { weight: 0, wide: true }
   if (spreadPct > PROXY_MAX_SPREAD_PCT) return { weight: 0, wide: true }
-  return { weight: Math.max(0.15, 1 - spreadPct / PROXY_MAX_SPREAD_PCT), wide: false }
+  return {
+    weight: Math.max(PROXY_MIN_PRICE_QUALITY_WEIGHT, 1 - spreadPct / PROXY_MAX_SPREAD_PCT),
+    wide: false,
+  }
 }
 
 /** `_p28_moneyness_quality_weight`: far strikes count, but lottery volume cannot lead. */
@@ -136,8 +257,12 @@ export function liquidityWeight(input: {
   strike: number
   spot: number
   spreadPct: number | null
+  priceSource?: ProjectionPriceSource
 }): { weight: number; wide: boolean } {
-  const spread = spreadQualityWeight(input.spreadPct)
+  const spread =
+    input.priceSource === 'same-session-last'
+      ? { weight: PROXY_MIN_PRICE_QUALITY_WEIGHT, wide: false }
+      : spreadQualityWeight(input.spreadPct)
   if (spread.wide || input.volume <= 0) return { weight: 0, wide: spread.wide }
   const moneyness = moneynessQualityWeight(input.strike, input.spot)
   const liquidity = Math.sqrt(input.volume) * (1 + Math.log1p(Math.max(input.openInterest, 0)))
@@ -180,6 +305,21 @@ export function confidenceLabel(score: number): ConfidenceLabel {
   return 'Low'
 }
 
+/**
+ * The label a sample of this size has actually earned.
+ *
+ * Two of the score's five terms reward a degenerate sample rather than a good one —
+ * dispersion around a handful of candidates is near zero for want of anything to
+ * disagree with — so the top label is withheld until the count term's own saturation
+ * sample is reached. The score itself is untouched; it is what weights the combined
+ * blend, and moving it would change every projected price too.
+ */
+export function sampleCappedConfidenceLabel(score: number, contracts: number): ConfidenceLabel {
+  const label = confidenceLabel(score)
+  if (label === 'High' && contracts < PROXY_CONFIDENCE_FULL_SAMPLE) return 'Moderate'
+  return label
+}
+
 /* --------------------------------------------------------------- summaries */
 
 export interface ProjectionSummary {
@@ -194,6 +334,8 @@ export interface ProjectionSummary {
   confidenceScore: number
   confidenceLabel: ConfidenceLabel
   includedContractCount: number
+  midpointContractCount: number
+  fallbackContractCount: number
   totalVolume: number
   totalOpenInterest: number
   totalPremium: number
@@ -201,7 +343,19 @@ export interface ProjectionSummary {
   wideSpreadCount: number
   medianSpreadPct: number
   dispersionPct: number
+  /** The share of included contracts carrying a plausible reading of their own. */
   ivCoverage: number
+  /**
+   * The share that got a plausibility band at all, their own reading or a fallback. It
+   * is `ivCoverage` on a healthy chain and separates from it only where the feed has
+   * stopped publishing volatilities, which is exactly when the page needs to say so.
+   */
+  bandCoverage: number
+  /**
+   * The share of final signal weight the band had to drag in. Exceptional on a healthy
+   * chain; over `PROXY_MAX_CLAMPED_SHARE` the side is withheld entirely.
+   */
+  clampedShare: number
   concentration: number
 }
 
@@ -238,6 +392,15 @@ export function projectionSideSummary(
     expiry: string
     daysOut: number
     currentClose: number | null
+    /**
+     * The volatility to size the band with for a row carrying no plausible one of its
+     * own — the expiration's own median where it has one, else the chain's. Absent, a
+     * row without its own reading simply goes unbanded and, if no row in the side is
+     * banded at all, the summary is withheld.
+     */
+    fallbackIv?: number | null
+    /** Yahoo's latest underlying regular-market date, enabling same-session trades only. */
+    marketDate?: string
   },
 ): ProjectionSummary | null {
   const spot = numericValue(options.currentClose)
@@ -249,8 +412,13 @@ export function projectionSideSummary(
   let totalOpenInterest = 0
   let totalPremium = 0
   let wideSpreadCount = 0
-  let quoteRows = 0
+  let priceRows = 0
+  let midpointRows = 0
+  let fallbackRows = 0
   let ivRows = 0
+  let bandedRows = 0
+  let clampedWeight = 0
+  const fallbackIv = plausibleImpliedVolatility(options.fallbackIv)
   const candidatePairs: Array<[number, number]> = []
   const spreads: number[] = []
   const weights: number[] = []
@@ -259,7 +427,7 @@ export function projectionSideSummary(
     if (row.type !== wantedType) continue
     const strike = numericValue(row.strike)
     const volume = numericValue(row.volume) ?? 0
-    const priced = effectiveOptionPrice(row)
+    const priced = effectiveOptionPrice(row, options.marketDate)
     const openInterest = numericValue(row.openInterest) ?? 0
     if (strike === null || volume <= 0 || priced === null || priced.mid <= 0) continue
 
@@ -269,28 +437,36 @@ export function projectionSideSummary(
       strike,
       spot,
       spreadPct: priced.spreadPct,
+      priceSource: priced.source,
     })
     if (liquidity.wide) wideSpreadCount += 1
     let weight = liquidity.weight
     if (weight <= 0) continue
 
-    quoteRows += 1
+    priceRows += 1
+    if (priced.source === 'midpoint') midpointRows += 1
+    else fallbackRows += 1
     let candidate = side === 'calls' ? strike + priced.mid : strike - priced.mid
-    const iv = numericValue(row.impliedVolatility)
-    if (iv !== null && iv > 0 && options.daysOut > 0) {
-      ivRows += 1
-      const expectedMove = spot * iv * Math.sqrt(Math.max(options.daysOut, 1) / 365)
+    // The row's own reading is what `ivCoverage` reports; the band will settle for the
+    // expiration's or the chain's median when the row has none.
+    const iv = plausibleImpliedVolatility(row.impliedVolatility)
+    if (iv !== null) ivRows += 1
+    const bandIv = iv ?? fallbackIv
+    if (bandIv !== null && options.daysOut > 0) {
+      bandedRows += 1
+      const expectedMove = spot * bandIv * Math.sqrt(Math.max(options.daysOut, 1) / 365)
       const bound = PROXY_IV_RANGE_MULTIPLIER * expectedMove
       const low = spot - bound
       const high = spot + bound
       if (candidate < low || candidate > high) {
         weight *= 0.25
+        clampedWeight += weight
         candidate = Math.min(Math.max(candidate, low), high)
       }
     }
     candidatePairs.push([candidate, weight])
     weights.push(weight)
-    if (priced.spreadPct !== null) spreads.push(priced.spreadPct)
+    if (priced.source === 'midpoint' && priced.spreadPct !== null) spreads.push(priced.spreadPct)
     totalVolume += volume
     totalOpenInterest += openInterest
     totalPremium += priced.mid * volume * 100
@@ -298,6 +474,16 @@ export function projectionSideSummary(
 
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0)
   if (!candidatePairs.length || totalWeight <= 0) return null
+  // No banded row means no plausibility check could be run on this side at all, and a
+  // weighted median of unchecked break-evens is the far-OTM lottery strike the check
+  // exists to keep out of the anchor. Below the sample floor there is no median to take.
+  if (!bandedRows) return null
+  if (priceRows < PROXY_MIN_ANCHOR_CONTRACTS) return null
+  // The weighted median can only be forced onto the band's edge when clamped candidates
+  // own a majority of the final weight. Counting rows over-rejects numerous tiny far
+  // strikes even though they cannot move the result.
+  const clampedShare = clampedWeight / totalWeight
+  if (clampedShare > PROXY_MAX_CLAMPED_SHARE) return null
   const projectedPrice = weightedPercentile(candidatePairs, 0.5)
   if (projectedPrice === null) return null
 
@@ -313,15 +499,17 @@ export function projectionSideSummary(
       ),
       0.5,
     ) ?? 0
-  const ivCoverage = quoteRows ? ivRows / quoteRows : 0
+  const ivCoverage = priceRows ? ivRows / priceRows : 0
+  const bandCoverage = priceRows ? bandedRows / priceRows : 0
+  const midpointCoverage = priceRows ? midpointRows / priceRows : 0
   const concentration = weights.length ? Math.max(...weights) / totalWeight : 1
   const score = Math.max(
     0,
     Math.min(
       1,
-      Math.min(quoteRows / 12, 1) * 0.25 +
+      Math.min(priceRows / 12, 1) * 0.25 +
         ivCoverage * 0.2 +
-        Math.max(0, 1 - medianSpread / PROXY_MAX_SPREAD_PCT) * 0.2 +
+        Math.max(0, 1 - medianSpread / PROXY_MAX_SPREAD_PCT) * midpointCoverage * 0.2 +
         Math.max(0, 1 - Math.min(dispersion / 0.25, 1)) * 0.2 +
         Math.max(0, 1 - concentration) * 0.15,
     ),
@@ -337,8 +525,10 @@ export function projectionSideSummary(
     projectedChange: change,
     projectedChangePct: (change / spot) * 100,
     confidenceScore: score,
-    confidenceLabel: confidenceLabel(score),
-    includedContractCount: quoteRows,
+    confidenceLabel: sampleCappedConfidenceLabel(score, priceRows),
+    includedContractCount: priceRows,
+    midpointContractCount: midpointRows,
+    fallbackContractCount: fallbackRows,
     totalVolume,
     totalOpenInterest,
     totalPremium,
@@ -347,6 +537,8 @@ export function projectionSideSummary(
     medianSpreadPct: medianSpread,
     dispersionPct: dispersion,
     ivCoverage,
+    clampedShare,
+    bandCoverage,
     concentration,
   }
 }
@@ -387,8 +579,12 @@ export function combinedProjectionSummary(
     projectedChange: change,
     projectedChangePct: (change / spot) * 100,
     confidenceScore: score,
-    confidenceLabel: confidenceLabel(score),
+    // The weaker side already sets the score; the cap is the weaker side's sample too,
+    // because a center is not better evidenced than the thinner half it was built on.
+    confidenceLabel: sampleCappedConfidenceLabel(score, Math.min(callContracts, putContracts)),
     includedContractCount: callContracts + putContracts,
+    midpointContractCount: call.midpointContractCount + put.midpointContractCount,
+    fallbackContractCount: call.fallbackContractCount + put.fallbackContractCount,
     totalVolume: 0,
     totalOpenInterest: 0,
     totalPremium: call.totalPremium + put.totalPremium,
@@ -397,8 +593,32 @@ export function combinedProjectionSummary(
     medianSpreadPct: 0,
     dispersionPct: 0,
     ivCoverage: 0,
+    bandCoverage: 0,
+    clampedShare: 0,
     concentration: 0,
   }
+}
+
+/**
+ * What the chain offered, against what survived to an anchor.
+ *
+ * The aggregate tile can only count what got through, so on its own it reads *better*
+ * the more of the chain is discarded — the coverage strip read "High (78%) | 334 valid
+ * contracts" on a load where 89% of the rows had no two-sided quote at all. These are
+ * the denominators that make it honest, and they are recorded as the buckets are walked
+ * because nothing downstream of `buildProjectionSummaries` sees a raw row again.
+ */
+export interface ProjectionChainCoverage {
+  /** Expirations fetched, against those that produced at least one side anchor. */
+  expirationCount: number
+  anchoredExpirationCount: number
+  /** Contract rows fetched, against those with a usable observed price. */
+  contractCount: number
+  quotedContractCount: number
+  /** Rows recovered from a positive last trade in Yahoo's latest market session. */
+  fallbackContractCount: number
+  /** Price-resolved rows carrying a plausible implied volatility of their own. */
+  plausibleIvCount: number
 }
 
 export interface ProjectionModel {
@@ -407,35 +627,79 @@ export interface ProjectionModel {
   calls: Record<string, ProjectionSummary>
   puts: Record<string, ProjectionSummary>
   combined: Record<string, ProjectionSummary>
+  coverage: ProjectionChainCoverage
 }
 
 export function emptyProjectionModel(): ProjectionModel {
-  return { bucketOrder: [], calls: {}, puts: {}, combined: {} }
+  return {
+    bucketOrder: [],
+    calls: {},
+    puts: {},
+    combined: {},
+    coverage: {
+      expirationCount: 0,
+      anchoredExpirationCount: 0,
+      contractCount: 0,
+      quotedContractCount: 0,
+      fallbackContractCount: 0,
+      plausibleIvCount: 0,
+    },
+  }
 }
 
-/** `_p28_build_projection_summaries` over every fetched expiration. */
+/**
+ * `_p28_build_projection_summaries` over every fetched expiration.
+ *
+ * The one addition to the reference's loop is the fallback volatility the band falls
+ * back on, resolved in two tiers before any side is summarised: an expiration's own
+ * median plausible reading, else the whole chain's. A chain publishing no plausible
+ * volatility anywhere resolves to neither, and every side is then withheld rather than
+ * anchored on break-evens nothing could check — see `PROXY_MIN_PLAUSIBLE_IV`.
+ */
 export function buildProjectionSummaries(
   buckets: readonly OptionsExpirationBucket[],
   currentClose: number | null,
+  marketDate = '',
 ): ProjectionModel {
   const model = emptyProjectionModel()
+  const chainIv = median(buckets.flatMap((bucket) => plausibleIvSample(bucket.rows)))
+
   for (const bucket of buckets) {
     model.bucketOrder.push(bucket.expiry)
     const records = projectionRecords(bucket.rows)
+
+    model.coverage.expirationCount += 1
+    model.coverage.contractCount += bucket.rows.length
+    for (const row of records) {
+      const priced = effectiveOptionPrice(row, marketDate)
+      if (priced === null) continue
+      if (priced.source === 'midpoint') model.coverage.quotedContractCount += 1
+      else model.coverage.fallbackContractCount += 1
+      if (plausibleImpliedVolatility(row.impliedVolatility) !== null) {
+        model.coverage.plausibleIvCount += 1
+      }
+    }
+
+    const fallbackIv = median(plausibleIvSample(bucket.rows)) ?? chainIv
     const call = projectionSideSummary(records, {
       side: 'calls',
       expiry: bucket.expiry,
       daysOut: bucket.daysOut,
       currentClose,
+      fallbackIv,
+      marketDate,
     })
     const put = projectionSideSummary(records, {
       side: 'puts',
       expiry: bucket.expiry,
       daysOut: bucket.daysOut,
       currentClose,
+      fallbackIv,
+      marketDate,
     })
     if (call) model.calls[bucket.expiry] = call
     if (put) model.puts[bucket.expiry] = put
+    if (call || put) model.coverage.anchoredExpirationCount += 1
     const combined = combinedProjectionSummary(call, put)
     if (combined) model.combined[bucket.expiry] = combined
   }
@@ -471,6 +735,8 @@ export interface ProjectionAggregate {
   confidenceLabel: ConfidenceLabel
   includedContractCount: number
   expirationCount: number
+  /** What the chain offered, so the tile's own figures have a denominator. */
+  coverage: ProjectionChainCoverage
 }
 
 /**
@@ -495,10 +761,57 @@ export function projectionAggregate(model: ProjectionModel): ProjectionAggregate
     ) / Math.max(weighted, 1)
   return {
     confidenceScore: score,
-    confidenceLabel: confidenceLabel(score),
+    // Capped on the same argument as a side's: a tile summing three four-contract
+    // anchors has not earned the top label whatever the weighted score comes out at.
+    confidenceLabel: sampleCappedConfidenceLabel(score, contracts),
     includedContractCount: contracts,
     expirationCount: expirations,
+    coverage: model.coverage,
   }
+}
+
+/**
+ * The one line the page prints when the chain itself is the problem rather than the
+ * ticker.
+ *
+ * Every figure on the strip is computed over the rows that survived, so a feed that has
+ * stopped publishing quotes makes the tile read *better* rather than worse — this is the
+ * only place the discarded share is visible, and it is why the whole page can look
+ * confident about an anchor built on four contracts out of three thousand.
+ */
+export function projectionCoverageWarning(model: ProjectionModel): string | null {
+  const coverage = model.coverage
+  if (!coverage.contractCount) return null
+  const quoted = coverage.quotedContractCount
+  const fallback = coverage.fallbackContractCount
+  const priced = quoted + fallback
+  const parts: string[] = []
+  if (quoted / coverage.contractCount < 0.5) {
+    parts.push(
+      `${(coverage.contractCount - quoted).toLocaleString('en-US')} of ` +
+        `${coverage.contractCount.toLocaleString('en-US')} contracts had no two-sided quote`,
+    )
+  }
+  if (fallback) {
+    parts.push(
+      `${fallback.toLocaleString('en-US')} same-session last trades were used as ` +
+        'minimum-quality price fallbacks',
+    )
+  }
+  if (priced && coverage.plausibleIvCount / priced < 0.5) {
+    parts.push(
+      `${Math.round((1 - coverage.plausibleIvCount / priced) * 100)}% of priced contracts ` +
+        'carried no usable implied volatility',
+    )
+  }
+  if (coverage.anchoredExpirationCount < coverage.expirationCount) {
+    parts.push(
+      `${coverage.expirationCount - coverage.anchoredExpirationCount} of ` +
+        `${coverage.expirationCount} expirations could not be anchored`,
+    )
+  }
+  if (!parts.length) return null
+  return `Upstream chain data is incomplete: ${parts.join('; ')}.`
 }
 
 /* ------------------------------------------------------------ weekly paths */
@@ -626,12 +939,19 @@ export function projectionChangeText(summary: ProjectionSummary | null | undefin
 
 /** The strip's meta line under each headline value. */
 export function projectionMetaText(summary: ProjectionSummary): string {
-  return [
+  const parts = [
     summary.expirationDisplay,
     projectionChangeText(summary),
     `${summary.confidenceLabel} confidence`,
     `Contracts ${summary.includedContractCount.toLocaleString('en-US')}`,
-  ].join(' | ')
+  ]
+  if (summary.fallbackContractCount) {
+    parts.push(
+      `Prices ${summary.midpointContractCount.toLocaleString('en-US')} mid / ` +
+        `${summary.fallbackContractCount.toLocaleString('en-US')} session`,
+    )
+  }
+  return parts.join(' | ')
 }
 
 /** `_p28_update_section_projection_label`, the one line each expiration panel carries. */
@@ -672,6 +992,8 @@ function headlineLine(label: string, summary: ProjectionSummary | null): string 
     `Confidence ${summary.confidenceLabel} (${percentAt(summary.confidenceScore, 0)})`,
     `Premium ${projectionPrice(summary.totalPremium)}`,
     `Contracts ${summary.includedContractCount.toLocaleString('en-US')}`,
+    `Prices ${summary.midpointContractCount.toLocaleString('en-US')} midpoint / ` +
+      `${summary.fallbackContractCount.toLocaleString('en-US')} session trade`,
   ]
   return `- ${label}: ${pieces.filter(Boolean).join(' | ')}`
 }
@@ -724,9 +1046,15 @@ export function buildProjectionsExport(input: ProjectionsExportInput): string {
           0,
         )}) | Expirations ${aggregate.expirationCount} | Contracts ${aggregate.includedContractCount.toLocaleString(
           'en-US',
-        )}`
+        )} | Price Inputs ${aggregate.coverage.quotedContractCount.toLocaleString(
+          'en-US',
+        )} midpoint / ${aggregate.coverage.fallbackContractCount.toLocaleString(
+          'en-US',
+        )} session trade`
       : '- Data Confidence: Unavailable',
   )
+  const coverageWarning = projectionCoverageWarning(input.model)
+  if (coverageWarning) lines.push(`- Coverage Warning: ${coverageWarning}`)
   lines.push('')
 
   const hasSides =
@@ -735,8 +1063,8 @@ export function buildProjectionsExport(input: ProjectionsExportInput): string {
     lines.push('No options-volume projection was available from the loaded option-chain rows.', '')
   } else {
     lines.push(
-      '| Side | Expiration | Projection | Vs Close | Confidence | Contracts | Total Premium | Median Spread | IV Coverage |',
-      '| --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: |',
+      '| Side | Expiration | Projection | Vs Close | Confidence | Contracts | Price Inputs | Total Premium | Median Spread | IV Coverage |',
+      '| --- | --- | ---: | ---: | --- | ---: | --- | ---: | ---: | ---: |',
     )
     for (const side of PROJECTION_SIDES) {
       const title = side === 'calls' ? 'Calls' : side === 'puts' ? 'Puts' : 'Combined'
@@ -746,6 +1074,8 @@ export function buildProjectionsExport(input: ProjectionsExportInput): string {
             `${projectionPrice(summary.projectedPrice)} | ${projectionChangeText(summary)} | ` +
             `${summary.confidenceLabel} (${percentAt(summary.confidenceScore, 0)}) | ` +
             `${summary.includedContractCount.toLocaleString('en-US')} | ` +
+            `${summary.midpointContractCount.toLocaleString('en-US')} midpoint / ` +
+            `${summary.fallbackContractCount.toLocaleString('en-US')} session | ` +
             `${projectionPrice(summary.totalPremium)} | ` +
             `${percentAt(summary.medianSpreadPct, 1)} | ${percentAt(summary.ivCoverage, 0)} |`,
         )

@@ -14,6 +14,7 @@ import { CardsPage } from '@/pages/CardsPage'
 import { CalendarPage } from '@/pages/CalendarPage'
 import { ChartsPage } from '@/pages/ChartsPage'
 import { BmnrPage } from '@/pages/BmnrPage'
+import { BondsPage } from '@/pages/BondsPage'
 import { GoldPage } from '@/pages/GoldPage'
 import { OilPage } from '@/pages/OilPage'
 import { CryptoPage } from '@/pages/CryptoPage'
@@ -65,7 +66,7 @@ const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
  * heavy analytics on the on-screen sub-tab via `enabled`; Charts takes an opt-in
  * `pollSeconds`. None of those may be added without dealing with that first.
  */
-const PAGE_KEEP_ALIVE = new Set(['trading-volumes', 'heatmap', 'economic', 'etf', 'quant'])
+const PAGE_KEEP_ALIVE = new Set(['trading-volumes', 'heatmap', 'bonds', 'economic', 'etf', 'quant'])
 
 /** How many hidden pages to hold besides the one on screen. */
 const KEEP_ALIVE_LIMIT = 3
@@ -425,6 +426,8 @@ function renderPage({
       <OilPage onStatusChange={onStatusChange} />
     ) : tabId === 'dictionary' ? (
       <DictionaryPage onStatusChange={onStatusChange} />
+    ) : tabId === 'bonds' ? (
+      <BondsPage onStatusChange={onStatusChange} />
     ) : tabId === 'charts' ? (
       <ChartsPage onStatusChange={onStatusChange} />
     ) : tabId === 'stocks' ? (

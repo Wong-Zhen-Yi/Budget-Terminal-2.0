@@ -43,6 +43,7 @@ export function emptyProjections(
     stats: null,
     chartError: '',
     spotPrice: 0,
+    marketDate: '',
     buckets: [],
     generatedAt: 0,
   }
@@ -78,6 +79,7 @@ export async function getProjections(
       stats: chart?.stats ?? null,
       chartError: chart ? '' : failures.find((entry) => entry.block === 'Chart')?.reason ?? '',
       spotPrice: sweep.payload.spotPrice,
+      marketDate: sweep.payload.marketDate,
       buckets: sweep.payload.buckets,
       generatedAt: Date.now(),
     },

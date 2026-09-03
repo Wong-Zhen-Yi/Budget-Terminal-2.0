@@ -60,17 +60,7 @@ async function requestFeed(url: string, userAgent: string): Promise<Response> {
   })
 }
 
-/**
- * One feed's body, with the two defences the reference does not need because `requests`
- * and a Python agent string do not attract the same refusals.
- */
-async function fetchFeedBody(url: string): Promise<FeedBody> {
-  let response = await requestFeed(url, FEED_HEADERS['User-Agent'])
-  if (AGENT_REJECTIONS.has(response.status)) {
-    response = await requestFeed(url, BROWSER_USER_AGENT)
-  }
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
-
+async function readFeedBody(response: Response): Promise<FeedBody> {
   const contentType = response.headers.get('content-type') ?? ''
   const xml = await response.text()
   // A consent or paywall interstitial answers 200 with HTML. Parsing it would yield zero
@@ -79,6 +69,36 @@ async function fetchFeedBody(url: string): Promise<FeedBody> {
     throw new Error('Feed returned HTML, not RSS.')
   }
   return { xml, contentType }
+}
+
+/**
+ * One feed's body, with the two defences the reference does not need because `requests`
+ * and a Python agent string do not attract the same refusals.
+ *
+ * A refusal is not always a status code. `AGENT_REJECTIONS` covers the host that answers
+ * 403; a host that instead *hangs* on the polite agent kills the request on the timeout,
+ * and retrying only on a status left that feed permanently dark. So a transport failure —
+ * a timeout, a reset — retries as a browser too, and only where that would actually change
+ * the agent: a feed already flagged `browserAgent` has nothing left to try, which is what
+ * keeps a genuinely dead feed to one timeout rather than two.
+ */
+async function fetchFeedBody(feed: NewsFeedConfig): Promise<FeedBody> {
+  const firstAgent = feed.browserAgent ? BROWSER_USER_AGENT : FEED_HEADERS['User-Agent']
+  const canRetry = firstAgent !== BROWSER_USER_AGENT
+
+  let response: Response | null = null
+  try {
+    response = await requestFeed(feed.url, firstAgent)
+  } catch (error) {
+    if (!canRetry) throw error
+  }
+
+  if (canRetry && (response === null || AGENT_REJECTIONS.has(response.status))) {
+    response = await requestFeed(feed.url, BROWSER_USER_AGENT)
+  }
+  if (response === null) throw new Error('Feed request failed.')
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return readFeedBody(response)
 }
 
 /**
@@ -108,7 +128,7 @@ export async function loadFeed(
     const hit = await cache.resolveWithStaleFallback<FeedBody>(
       `news-feed:${feed.url}`,
       TTL.newsFeed,
-      () => fetchFeedBody(feed.url),
+      () => fetchFeedBody(feed),
       { force },
     )
     const ageMs = hit.ageSeconds * 1000

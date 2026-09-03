@@ -19,7 +19,13 @@ function signed(value: number | null): string {
   return value === null ? '—' : `${value >= 0 ? '+' : '-'}${Math.abs(value).toFixed(2)}`
 }
 
-export function YieldCurvePanel({ curve }: { curve: EconomicYieldCurve | null | undefined }) {
+export function YieldCurvePanel({
+  curve,
+  className = '',
+}: {
+  curve: EconomicYieldCurve | null | undefined
+  className?: string
+}) {
   const tenors = curve?.tenors ?? []
   const front = tenors.find((item) => item.seriesId === 'DGS3MO')?.yieldPct ?? null
   const tenYear = tenors.find((item) => item.seriesId === 'DGS10')?.yieldPct ?? null
@@ -64,7 +70,7 @@ export function YieldCurvePanel({ curve }: { curve: EconomicYieldCurve | null | 
   const summary = describeCurve(curve)
 
   return (
-    <Panel title="Treasury curve">
+    <Panel title="Treasury curve" className={className}>
       <div className="flex min-h-0 flex-1 gap-2 p-2">
         <div className="flex min-h-0 w-[320px] shrink-0 border border-border bg-surface">
           <DataTable

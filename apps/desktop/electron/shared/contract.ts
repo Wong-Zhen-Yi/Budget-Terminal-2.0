@@ -1203,6 +1203,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'politics', label: 'Politics', implemented: true },
   { id: 'youtube', label: 'YouTube', implemented: true },
   { id: 'dictionary', label: 'Dictionary', implemented: true },
+  { id: 'bonds', label: 'Bonds', implemented: true },
   { id: 'economic', label: 'Economic', implemented: true },
   { id: 'price', label: 'Price', implemented: true },
   { id: 'settings', label: 'Settings', implemented: true },
@@ -2728,6 +2729,8 @@ export interface OptionsExpirationsRequest {
 export interface OptionsExpirationsPayload {
   symbol: string
   spotPrice: number
+  /** Yahoo's latest underlying regular-market session, formatted as `YYYY-MM-DD` in New York. */
+  marketDate: string
   /** The raw chain for every live expiration, ascending. */
   buckets: import('./optionsPage.js').OptionsExpirationBucket[]
   /** The sorted union of every strike quoted across those chains. */
@@ -2783,6 +2786,8 @@ export interface ProjectionsPayload {
    */
   chartError: string
   spotPrice: number
+  /** Yahoo's latest underlying regular-market session, used to validate last-trade fallbacks. */
+  marketDate: string
   /** Every live expiration's raw chain, ascending, as the Options sweep returns it. */
   buckets: import('./optionsPage.js').OptionsExpirationBucket[]
   generatedAt: number

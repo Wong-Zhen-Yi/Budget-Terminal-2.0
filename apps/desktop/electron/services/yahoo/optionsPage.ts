@@ -14,6 +14,7 @@ import {
   filterLiveExpiries,
   isOptionsExpiryClosed,
   normalizeRiskFreeRate,
+  optionsMarketDate,
 } from '../../shared/optionsPage.js'
 import { describeError } from '../../shared/envelope.js'
 import { cache, TTL } from '../cache.js'
@@ -46,6 +47,18 @@ function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10)
 }
 
+function dateValue(value: unknown): Date | null {
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value : null
+  if (typeof value !== 'number' && typeof value !== 'string') return null
+  const parsed = new Date(value)
+  return Number.isFinite(parsed.getTime()) ? parsed : null
+}
+
+function marketDate(value: unknown): string {
+  const date = dateValue(value)
+  return date ? optionsMarketDate(date) : ''
+}
+
 interface ChainFetch {
   rows: OptionsRawRow[]
   /** The underlying's regular-market price, which the same response carries. */
@@ -73,6 +86,7 @@ function toRows(symbol: string, expiration: string, chain: {
       openInterest: Number(contract.openInterest) || 0,
       impliedVolatility: Number(contract.impliedVolatility) || 0,
       inTheMoney: Boolean(contract.inTheMoney),
+      lastTradeDate: marketDate(contract.lastTradeDate),
     })
   }
   ;(chain.calls ?? []).forEach((contract) => push(contract, 'Call'))
@@ -98,11 +112,14 @@ async function fetchChain(symbol: string, expiration: string): Promise<ChainFetc
   }
 }
 
-async function fetchExpirations(symbol: string): Promise<{ expiries: string[]; spot: number }> {
+async function fetchExpirations(
+  symbol: string,
+): Promise<{ expiries: string[]; spot: number; marketDate: string }> {
   const result = await paced(() => yahoo.options(symbol))
   return {
     expiries: (result.expirationDates ?? []).map(isoDate),
     spot: Number(result.quote?.regularMarketPrice) || 0,
+    marketDate: marketDate(result.quote?.regularMarketTime),
   }
 }
 
@@ -256,7 +273,14 @@ export async function getOptionsExpirations(
       reason: `No current listed options expirations were available for ${symbol}.`,
     })
     return {
-      payload: { symbol, spotPrice: listing.spot, buckets: [], strikes: [], generatedAt: Date.now() },
+      payload: {
+        symbol,
+        spotPrice: listing.spot,
+        marketDate: listing.marketDate,
+        buckets: [],
+        strikes: [],
+        generatedAt: Date.now(),
+      },
       failures,
     }
   }
@@ -284,6 +308,7 @@ export async function getOptionsExpirations(
     payload: {
       symbol,
       spotPrice: listing.spot,
+      marketDate: listing.marketDate,
       buckets,
       strikes: collectStrikes(buckets),
       generatedAt: Date.now(),

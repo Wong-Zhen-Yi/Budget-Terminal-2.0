@@ -581,7 +581,13 @@ export function useWarmPages(settings: AppSettings | undefined): WarmProgress {
         earningsYear: current.earningsYear,
         ipoYear: current.ipoYear,
       },
-    ).filter((task) => !current.hidden.has(task.tab))
+    ).filter((task) =>
+      task.tab === 'economic'
+        // Bonds and Economic share the same rates payload. Warm it whenever either page
+        // is visible, but still skip the long provider load when both are hidden.
+        ? !(current.hidden.has('economic') && current.hidden.has('bonds'))
+        : !current.hidden.has(task.tab),
+    )
 
     if (!tasks.length) return
 

@@ -12,19 +12,27 @@ import {
   effectiveOptionPrice,
   liquidityWeight,
   moneynessQualityWeight,
+  plausibleImpliedVolatility,
+  plausibleIvSample,
   projectionAggregate,
   projectionChangeText,
+  projectionCoverageWarning,
   projectionHeadlines,
   projectionPrice,
   projectionRecords,
   projectionSideSummary,
   projectionsRange,
   PROJECTIONS_TIMEFRAMES,
+  sampleCappedConfidenceLabel,
   sectionProjectionLabel,
   spreadQualityWeight,
   weightedPercentile,
+  PROXY_IV_RANGE_MULTIPLIER,
+  PROXY_MAX_PLAUSIBLE_IV,
   PROXY_MAX_SPREAD_PCT,
   PROXY_MIN_MONEYNESS_WEIGHT,
+  PROXY_MIN_PRICE_QUALITY_WEIGHT,
+  PROXY_MIN_PLAUSIBLE_IV,
 } from '../electron/shared/projections.js'
 import { getProjections } from '../electron/services/yahoo/projections.js'
 
@@ -73,16 +81,47 @@ function close(actual: number, expected: number, epsilon = 1e-9): void {
 
 function runOffline(): void {
   // -------------------------------------------------------------- weights
-  // `_p28_effective_option_price`: a two-sided quote only, and the spread is a fraction
-  // of the midpoint rather than of the ask.
+  // `_p28_effective_option_price`: a midpoint wins even when a last trade is present,
+  // and its spread is a fraction of the midpoint rather than of the ask.
   const priced = effectiveOptionPrice({ bid: 1.9, ask: 2.1 })
   assert.ok(priced)
   close(priced.mid, 2)
+  assert.equal(priced.source, 'midpoint')
   assert.notEqual(priced.spreadPct, null)
   close(priced.spreadPct ?? 0, 0.1)
   assert.equal(effectiveOptionPrice({ bid: 0, ask: 2.1 }), null)
   assert.equal(effectiveOptionPrice({ bid: 2.2, ask: 2.1 }), null)
   assert.equal(effectiveOptionPrice({ bid: null, ask: 2.1 }), null)
+  const preferredMidpoint = effectiveOptionPrice(
+    { bid: 1.9, ask: 2.1, lastPrice: 99, lastTradeDate: '2025-01-31', volume: 10 },
+    '2025-01-31',
+  )
+  assert.ok(preferredMidpoint)
+  assert.equal(preferredMidpoint.source, 'midpoint')
+  close(preferredMidpoint.mid, 2)
+
+  const freshTrade = effectiveOptionPrice(
+    { bid: 0, ask: 0, lastPrice: 2, lastTradeDate: '2025-01-31', volume: 10 },
+    '2025-01-31',
+  )
+  assert.ok(freshTrade)
+  assert.equal(freshTrade.source, 'same-session-last')
+  close(freshTrade.mid, 2)
+  assert.equal(freshTrade.spreadPct, null)
+  assert.equal(
+    effectiveOptionPrice(
+      { bid: 0, ask: 0, lastPrice: 2, lastTradeDate: '2025-01-30', volume: 10 },
+      '2025-01-31',
+    ),
+    null,
+  )
+  assert.equal(
+    effectiveOptionPrice(
+      { bid: 0, ask: 0, lastPrice: 2, lastTradeDate: '2025-01-31', volume: 0 },
+      '2025-01-31',
+    ),
+    null,
+  )
 
   // `_p28_spread_quality_weight`: 0.15 is the floor, and past 60% the row is dropped.
   close(spreadQualityWeight(0).weight, 1)
@@ -106,6 +145,17 @@ function runOffline(): void {
     spreadPct: 0,
   })
   close(weighted.weight, 10)
+  close(
+    liquidityWeight({
+      volume: 100,
+      openInterest: 0,
+      strike: 100,
+      spot: 100,
+      spreadPct: null,
+      priceSource: 'same-session-last',
+    }).weight,
+    10 * PROXY_MIN_PRICE_QUALITY_WEIGHT,
+  )
   assert.equal(
     liquidityWeight({ volume: 100, openInterest: 0, strike: 100, spot: 100, spreadPct: 0.9 })
       .weight,
@@ -128,12 +178,15 @@ function runOffline(): void {
   assert.equal(confidenceLabel(0.44), 'Low')
 
   // ------------------------------------------------------- side summaries
-  // Three tight calls around a $100 spot. Break-evens are 96+2=98, 100+2=102 and
-  // 104+2=106; the mid strike carries the most weight, so the weighted median is 102.
+  // Four tight calls around a $100 spot. Break-evens are 96+2=98, 100+2=102, 104+2=106
+  // and 108+2=110; the mid strike carries the most weight, so the weighted median is
+  // 102. Four is `PROXY_MIN_ANCHOR_CONTRACTS`, the smallest sample that has a median at
+  // all — three used to be enough, and one contract used to print "Moderate".
   const calls = [
     row({ strike: 96, bid: 1.9, ask: 2.1, volume: 100, openInterest: 100 }),
     row({ strike: 100, bid: 1.9, ask: 2.1, volume: 400, openInterest: 100 }),
     row({ strike: 104, bid: 1.9, ask: 2.1, volume: 100, openInterest: 100 }),
+    row({ strike: 108, bid: 1.9, ask: 2.1, volume: 100, openInterest: 100 }),
   ]
   const callSummary = projectionSideSummary(calls, {
     side: 'calls',
@@ -145,12 +198,24 @@ function runOffline(): void {
   close(callSummary.projectedPrice, 102)
   close(callSummary.projectedChange, 2)
   close(callSummary.projectedChangePct, 2)
-  assert.equal(callSummary.includedContractCount, 3)
-  close(callSummary.totalVolume, 600)
-  close(callSummary.totalPremium, 2 * 600 * 100)
+  assert.equal(callSummary.includedContractCount, 4)
+  assert.equal(callSummary.midpointContractCount, 4)
+  assert.equal(callSummary.fallbackContractCount, 0)
+  close(callSummary.totalVolume, 700)
+  close(callSummary.totalPremium, 2 * 700 * 100)
   close(callSummary.ivCoverage, 1)
+  // Every row carries a plausible 30% reading of its own, so the band never reaches a
+  // fallback and nothing had to be dragged into it.
+  close(callSummary.bandCoverage, 1)
+  close(callSummary.clampedShare, 0)
   close(callSummary.medianSpreadPct, 0.1)
   assert.equal(callSummary.expirationDisplay, "FEB 21 '25")
+  // Under the count term's own saturation sample the top label is withheld whatever the
+  // other four terms award — a four-contract median is not "High" evidence.
+  assert.equal(sampleCappedConfidenceLabel(0.95, 4), 'Moderate')
+  assert.equal(sampleCappedConfidenceLabel(0.95, 12), 'High')
+  assert.equal(sampleCappedConfidenceLabel(0.5, 4), 'Moderate')
+  assert.equal(sampleCappedConfidenceLabel(0.2, 4), 'Low')
 
   // The same chain read as puts gives break-evens 94, 98 and 102 — the mirror image.
   const putSummary = projectionSideSummary(
@@ -180,14 +245,169 @@ function runOffline(): void {
     null,
   )
 
+  // Too few contracts to take a median of: the side is withheld rather than anchored on
+  // a single print. This is the shape that used to render "$224.41 | Contracts 1".
+  assert.equal(
+    projectionSideSummary(calls.slice(0, 3), {
+      side: 'calls',
+      expiry: '2025-02-21',
+      daysOut: 30,
+      currentClose: 100,
+    }),
+    null,
+  )
+
   // A break-even outside 1.5 expected moves is clamped *and* quartered in weight, not
-  // dropped: 30d at 30% IV is a 8.60 expected move, so the band ends at 112.90.
-  const clamped = projectionSideSummary(
-    [row({ strike: 200, bid: 1.9, ask: 2.1, volume: 10_000, openInterest: 0 })],
+  // dropped: 30d at 30% IV is an 8.60 expected move, so the band ends at 112.90. One far
+  // strike against three tight ones is a minority, so the side still stands — and the
+  // quartered weight is what stops the lottery strike moving the median off 102.
+  const bandEdge = 100 + PROXY_IV_RANGE_MULTIPLIER * 100 * 0.3 * Math.sqrt(30 / 365)
+  const minorityClamped = projectionSideSummary(
+    [
+      ...calls.slice(0, 3),
+      row({ strike: 200, bid: 1.9, ask: 2.1, volume: 10_000, openInterest: 0 }),
+    ],
     { side: 'calls', expiry: '2025-02-21', daysOut: 30, currentClose: 100 },
   )
-  assert.ok(clamped)
-  close(clamped.projectedPrice, 100 + 1.5 * 100 * 0.3 * Math.sqrt(30 / 365), 1e-9)
+  assert.ok(minorityClamped)
+  const clampedOutlierWeight =
+    liquidityWeight({
+      volume: 10_000,
+      openInterest: 0,
+      strike: 200,
+      spot: 100,
+      spreadPct: 0.1,
+    }).weight * 0.25
+  const tightWeights = calls.slice(0, 3).reduce(
+    (sum, entry) =>
+      sum +
+      liquidityWeight({
+        volume: entry.volume,
+        openInterest: entry.openInterest,
+        strike: entry.strike,
+        spot: 100,
+        spreadPct: 0.1,
+      }).weight,
+    0,
+  )
+  close(
+    minorityClamped.clampedShare,
+    clampedOutlierWeight / (tightWeights + clampedOutlierWeight),
+  )
+  close(minorityClamped.projectedPrice, 102)
+  assert.ok(minorityClamped.projectedPrice < bandEdge)
+
+  // Past `PROXY_MAX_CLAMPED_SHARE` every surviving candidate sits on the same band edge,
+  // so the "projection" is the edge rather than the market: the side is withheld. This
+  // is what a chain of nonsense quotes rendered as calls and puts agreeing to the cent.
+  assert.equal(
+    projectionSideSummary(
+      [200, 300, 400, 500].map((strike) =>
+        row({ strike, bid: 1.9, ask: 2.1, volume: 10_000, openInterest: 0 }),
+      ),
+      { side: 'calls', expiry: '2025-02-21', daysOut: 30, currentClose: 100 },
+    ),
+    null,
+  )
+
+  // Row counts do not drive a weighted median. Five tiny far strikes outnumber four
+  // strong near-money rows, but their post-clamp signal weight is nowhere near half, so
+  // they cannot force the anchor onto the band edge and must not veto the side.
+  const lowInfluenceOutliers = projectionSideSummary(
+    [
+      ...calls,
+      ...[200, 300, 400, 500, 600].map((strike) =>
+        row({ strike, bid: 1.9, ask: 2.1, volume: 1, openInterest: 0 }),
+      ),
+    ],
+    { side: 'calls', expiry: '2025-02-21', daysOut: 30, currentClose: 100 },
+  )
+  assert.ok(lowInfluenceOutliers)
+  assert.ok(lowInfluenceOutliers.clampedShare < 0.5)
+
+  // A Yahoo-shaped chain with zero bid/ask fields is recoverable only when its trades
+  // belong to the same underlying session. Both sides at one expiry restore Combined.
+  const fallbackRows = [
+    ...calls.map((entry) => ({
+      ...entry,
+      bid: 0,
+      ask: 0,
+      lastTradeDate: '2025-01-31',
+    })),
+    ...calls.map((entry) => ({
+      ...entry,
+      type: 'Put' as const,
+      bid: 0,
+      ask: 0,
+      lastTradeDate: '2025-01-31',
+    })),
+  ]
+  const fallbackModel = buildProjectionSummaries(
+    [{ expiry: '2025-02-21', daysOut: 30, rows: fallbackRows }],
+    100,
+    '2025-01-31',
+  )
+  assert.equal(Object.keys(fallbackModel.calls).length, 1)
+  assert.equal(Object.keys(fallbackModel.puts).length, 1)
+  assert.equal(Object.keys(fallbackModel.combined).length, 1)
+  assert.equal(fallbackModel.calls['2025-02-21'].midpointContractCount, 0)
+  assert.equal(fallbackModel.calls['2025-02-21'].fallbackContractCount, 4)
+  assert.ok(fallbackModel.calls['2025-02-21'].confidenceScore < callSummary.confidenceScore)
+  assert.equal(fallbackModel.coverage.quotedContractCount, 0)
+  assert.equal(fallbackModel.coverage.fallbackContractCount, 8)
+  assert.ok(projectionCoverageWarning(fallbackModel)?.includes('8 same-session last trades'))
+
+  // ------------------------------------------------- implied-volatility sentinels
+  // Yahoo's three non-readings all pass a bare `iv > 0`, and each corrupted the anchor a
+  // different way. None of them is allowed to size the band.
+  assert.equal(plausibleImpliedVolatility(0.3), 0.3)
+  assert.equal(plausibleImpliedVolatility(0.00001), null) // its "not computed" floor
+  assert.equal(plausibleImpliedVolatility(0), null)
+  assert.equal(plausibleImpliedVolatility(5.44), null) // 544%, seen on live LEAPS rows
+  assert.equal(plausibleImpliedVolatility(null), null)
+  assert.equal(plausibleImpliedVolatility(PROXY_MIN_PLAUSIBLE_IV), PROXY_MIN_PLAUSIBLE_IV)
+  assert.equal(plausibleImpliedVolatility(PROXY_MAX_PLAUSIBLE_IV), PROXY_MAX_PLAUSIBLE_IV)
+
+  // The 1e-5 floor used to collapse the band to zero width and clamp every candidate to
+  // exactly the spot. Treated as absent, the rows keep their own break-evens and the
+  // median is the 102 the readings actually support.
+  const sentinelCalls = calls.map((entry) => ({ ...entry, impliedVolatility: 0.00001 }))
+  const sentinelSummary = projectionSideSummary(sentinelCalls, {
+    side: 'calls',
+    expiry: '2025-02-21',
+    daysOut: 30,
+    currentClose: 100,
+    fallbackIv: 0.3,
+  })
+  assert.ok(sentinelSummary)
+  close(sentinelSummary.projectedPrice, 102)
+  // The reading was a sentinel, so coverage says so — but the fallback still banded it.
+  close(sentinelSummary.ivCoverage, 0)
+  close(sentinelSummary.bandCoverage, 1)
+
+  // A zero used to skip the clamp altogether, which is how a $200 strike's $202
+  // break-even reached the median at full weight on a $100 spot. With no fallback to
+  // reach, no row is banded and the side is withheld rather than anchored unchecked.
+  assert.equal(
+    projectionSideSummary(
+      calls.map((entry) => ({ ...entry, impliedVolatility: 0 })),
+      { side: 'calls', expiry: '2025-02-21', daysOut: 30, currentClose: 100 },
+    ),
+    null,
+  )
+
+  // `plausibleIvSample` reads a whole chain's readings, both sides together, and skips
+  // every sentinel class on the way.
+  assert.deepEqual(
+    plausibleIvSample([
+      row({ impliedVolatility: 0.25 }),
+      row({ impliedVolatility: 0.00001 }),
+      row({ impliedVolatility: 0, type: 'Put' }),
+      row({ impliedVolatility: 6, type: 'Put' }),
+      row({ impliedVolatility: 0.35, type: 'Put' }),
+    ]),
+    [0.25, 0.35],
+  )
 
   // `_p28_prepare_projection_records`: untraded and zero-strike rows never reach it.
   assert.equal(
@@ -201,7 +421,7 @@ function runOffline(): void {
   assert.ok(combined)
   close(combined.projectedPrice, 100)
   assert.equal(combined.side, 'combined')
-  assert.equal(combined.includedContractCount, 6)
+  assert.equal(combined.includedContractCount, 8)
   // The combined confidence is the weaker side's, not the blend of the two.
   close(combined.confidenceScore, Math.min(callSummary.confidenceScore, putSummary.confidenceScore))
   assert.equal(combinedProjectionSummary(callSummary, null), null)
@@ -212,9 +432,15 @@ function runOffline(): void {
     {
       expiry: '2025-03-07',
       daysOut: 44,
+      // Four a side, the sample floor. Identical rows, so the weighted median is their
+      // shared break-even: 104+4=108 for the calls and 104-4=100 for the puts.
       rows: [
-        row({ expiration: '2025-03-07', strike: 104, bid: 3.9, ask: 4.1 }),
-        row({ expiration: '2025-03-07', strike: 104, bid: 3.9, ask: 4.1, type: 'Put' }),
+        ...Array.from({ length: 4 }, () =>
+          row({ expiration: '2025-03-07', strike: 104, bid: 3.9, ask: 4.1 }),
+        ),
+        ...Array.from({ length: 4 }, () =>
+          row({ expiration: '2025-03-07', strike: 104, bid: 3.9, ask: 4.1, type: 'Put' }),
+        ),
       ],
     },
   ]
@@ -234,7 +460,42 @@ function runOffline(): void {
   assert.equal(aggregate.expirationCount, 2)
   // Calls and puts only: the combined anchors are derived from them and are not counted
   // a second time.
-  assert.equal(aggregate.includedContractCount, 3 + 3 + 1 + 1)
+  assert.equal(aggregate.includedContractCount, 4 + 4 + 4 + 4)
+  // The denominators the tile needs to stay honest: it can only count what survived the
+  // quality filters, so without these a chain that publishes nothing reads as coverage.
+  assert.equal(aggregate.coverage.expirationCount, 2)
+  assert.equal(aggregate.coverage.anchoredExpirationCount, 2)
+  assert.equal(aggregate.coverage.contractCount, 16)
+  assert.equal(aggregate.coverage.quotedContractCount, 16)
+  assert.equal(aggregate.coverage.fallbackContractCount, 0)
+  assert.equal(aggregate.coverage.plausibleIvCount, 16)
+  // Nothing is wrong with this chain, so there is no warning to print.
+  assert.equal(projectionCoverageWarning(model), null)
+
+  // A chain answering with the sentinels Yahoo currently returns: rows are there, quotes
+  // are not, and the page has to say so rather than anchor on the handful that survive.
+  const degraded = buildProjectionSummaries(
+    [
+      {
+        expiry: '2025-02-21',
+        daysOut: 30,
+        rows: Array.from({ length: 20 }, (_, index) =>
+          row({ strike: 90 + index, bid: 0, ask: 0, impliedVolatility: 0.00001 }),
+        ),
+      },
+    ],
+    100,
+  )
+  assert.equal(Object.keys(degraded.calls).length, 0)
+  assert.equal(degraded.coverage.contractCount, 20)
+  assert.equal(degraded.coverage.quotedContractCount, 0)
+  assert.equal(degraded.coverage.fallbackContractCount, 0)
+  assert.equal(degraded.coverage.anchoredExpirationCount, 0)
+  const warning = projectionCoverageWarning(degraded)
+  assert.ok(warning)
+  assert.ok(warning.includes('20 of 20 contracts had no two-sided quote'))
+  assert.ok(warning.includes('1 of 1 expirations could not be anchored'))
+  assert.equal(projectionAggregate(degraded), null)
 
   assert.equal(
     sectionProjectionLabel(model, '2025-02-21'),
@@ -288,6 +549,8 @@ function runOffline(): void {
   assert.ok(markdown.includes('- Current Chart Close: $100.00'))
   assert.ok(markdown.includes("- Nearest Call Projection: FEB 21 '25 $102.00 | +$2.00 (+2.00%)"))
   assert.ok(markdown.includes('| Side | Expiration | Projection |'))
+  assert.ok(markdown.includes('| Price Inputs |'))
+  assert.ok(markdown.includes('4 midpoint / 0 session trade'))
   assert.ok(markdown.includes("| Combined | FEB 21 '25 |"))
   assert.ok(markdown.includes("### FEB 21 '25"))
   assert.ok(markdown.endsWith('\n'))
@@ -327,12 +590,13 @@ async function runLive(symbol: string, timeframe: ChartsInterval): Promise<void>
     : ''
   console.log(
     `candles=${payload.candles.length} interval=${payload.interval || 'none'} ` +
-      `close=${currentClose === null ? 'none' : currentClose.toFixed(2)} asOf=${asOf || 'none'}`,
+      `close=${currentClose === null ? 'none' : currentClose.toFixed(2)} ` +
+      `asOf=${asOf || 'none'} marketDate=${payload.marketDate || 'none'}`,
   )
   if (payload.chartError) console.log(`  ! chart: ${payload.chartError}`)
   for (const failure of failures) console.log(`  ! ${failure.block}: ${failure.reason}`)
 
-  const model = buildProjectionSummaries(payload.buckets, currentClose)
+  const model = buildProjectionSummaries(payload.buckets, currentClose, payload.marketDate)
   console.log(
     `expirations=${payload.buckets.length} ` +
       `rows=${payload.buckets.reduce((sum, bucket) => sum + bucket.rows.length, 0)} ` +
@@ -365,6 +629,17 @@ async function runLive(symbol: string, timeframe: ChartsInterval): Promise<void>
         : 'unavailable'
     }`,
   )
+  // What the chain offered against what survived. Every other figure printed here is
+  // computed over the survivors, so this is the only line that can report a bad feed.
+  const chain = model.coverage
+  console.log(
+    `  chain     ${chain.anchoredExpirationCount}/${chain.expirationCount} expirations anchored | ` +
+      `${chain.quotedContractCount} midpoint + ${chain.fallbackContractCount} session trade / ` +
+      `${chain.contractCount} contracts | ` +
+      `${chain.plausibleIvCount} with a usable IV`,
+  )
+  const coverageWarning = projectionCoverageWarning(model)
+  if (coverageWarning) console.log(`  warning   ${coverageWarning}`)
 
   for (const bucket of payload.buckets.slice(0, 8)) {
     const top = topVolumeRecords(bucket.rows, 'calls')

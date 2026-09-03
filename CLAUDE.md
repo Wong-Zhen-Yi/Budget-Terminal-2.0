@@ -471,10 +471,27 @@ adding handlers.
   renderer derives the type filter, the strike list and the strike selection from it. That
   makes changing the Both/Calls/Puts filter or the strike instant instead of a reload —
   the reference reloads on both and only its chain cache keeps that cheap.
-- **Options has no refresh timer, and nothing loads on mount.** `init_page5` fires no
-  request at all: every load is a button. A sweep is one Yahoo request per listed expiry
-  (21 for AAPL), so an automatic refetch would be the second most expensive thing in the
-  app after Trading Volumes.
+- **Options has no refresh timer, and only a stored ticker loads on mount.** `init_page5`
+  fires no request at all; here `stores/options.ts` persists the symbol *and* a `loaded`
+  flag, so a restored ticker arms both queries and fetches once on the first mount of a
+  session — the same restore `_p13_restore_startup_session` does for the ETF page. Within
+  a session the hour-long `gcTime` answers instead, so re-entering the tab is free, and a
+  page never visited costs nothing because there is no warm task for it. Everything else
+  is still a button: a sweep is one Yahoo request per listed expiry (21 for AAPL), so an
+  automatic refetch would be the second most expensive thing in the app after Trading
+  Volumes.
+- **One ticker load arms all three subtabs, and Top Volume is the default one.** The
+  reference gives each subtab its own button because it has no shared payload; here the
+  sweep already feeds two of the three, so the ticker field loads the chain and the sweep
+  together and switching subtabs never asks for another load. Entering a *new* ticker only
+  arms the queries — they have no entry for it and fetch it themselves; re-entering the
+  one on screen is a refresh and forces both lanes. The chain's resolved expiry is written
+  into the query cache under its own key before `setExpiry` moves onto it, or following
+  the response would refetch the chain that just arrived.
+- **The strike view selects the strike nearest the spot when nothing is picked.**
+  `_p5_populate_strike_combo` leaves its box on a placeholder, which left the third view
+  empty behind a dropdown on every load. The placeholder is only offered while the
+  selection is genuinely null.
 - **The summary grid's highlights are ranked before the display sort.** `summaryHighlights`
   ranks the records as loaded, so re-sorting a panel moves rows without repainting which
   one is the highest-volume contract. The low ranks explicitly exclude the rows the top
@@ -578,10 +595,13 @@ adding handlers.
   confidence-and-count weighted between the two sides, but a center built on one strong
   side and one weak one is only as trustworthy as the weak one — and the coverage tile
   counts calls and puts only, because every combined anchor is derived from them.
-- **The last trade is deliberately not a price fallback.** `effectiveOptionPrice` needs a
-  two-sided quote; a row without one contributes nothing. A stale print is exactly what
-  the quality filters exist to keep out, and this is the opposite of the Options page's
-  chain, which backfills a zero IV from the row's own mid.
+- **A last trade is only a price fallback inside its own Yahoo market session.**
+  `effectiveOptionPrice` always prefers a two-sided midpoint. When Yahoo zeroes bid and
+  ask, a positive last trade with volume may stand in only when its New York trade date
+  matches the underlying quote's `regularMarketTime` date. That date comes from Yahoo,
+  not the machine clock, so pre-market, weekends and holidays remain coherent. The
+  fallback receives the minimum 0.15 price-quality weight and no spread-confidence
+  credit; an undated or stale trade contributes nothing. The Options page is unchanged.
 - **One documented departure from `_p28_weekly_x_by_date`.** The reference plots against
   bar *indexes*, so it parks each weekly point on a synthetic slot five indexes past the
   last bar and relabels the axis by hand; `ProjectionsChart` plots the paths at their real
@@ -593,6 +613,51 @@ adding handlers.
   window Yahoo answers (6d for 1m, 59d for 5m and 15m, 729d for 1h), so `3M` on a 5-minute
   chart resolves to the reference's `60d` rather than to a shorter one. Narrowing them to
   match the period text would cost bars.
+- **An implied volatility has to be plausible before it may size the band, and `iv > 0`
+  cannot tell a reading from a sentinel.** Yahoo answers a chain with three non-readings
+  that all pass that test, and each corrupted the anchor differently: `1e-5` (its "not
+  computed" floor) collapses the band to zero width so *every* candidate clamps to exactly
+  the spot — which is how the strip printed a call projection equal to the close with a
+  `-0.00%` beside it; `0` skips the clamp entirely and let a $2,500 strike on a $224 NVDA
+  put its $2,640 break-even into the median at full weight, drawing the path that spiked
+  to $1,600; and 500-600% makes the band wider than the price. `PROXY_MIN_PLAUSIBLE_IV`
+  and `PROXY_MAX_PLAUSIBLE_IV` bound it, outside which the value is *absent* rather than a
+  reading — it stops counting toward `ivCoverage` and the row falls back to the
+  expiration's, then the chain's, median plausible volatility. This is the same
+  `Number(null) === 0` family hazard `shared/valuation.ts`, `services/economic.ts`,
+  `shared/oil.ts` and the Signals engine each document.
+- **A side no plausibility check could run against is withheld, not anchored.** Three
+  rules, and each has a different failure it exists to stop: no banded row at all means
+  the methodology note's promised check never ran; under `PROXY_MIN_ANCHOR_CONTRACTS`
+  there is no median to take (a one-contract anchor used to print "Moderate confidence",
+  because dispersion around a single candidate is zero and collects the term's full
+  credit for having nothing to disagree with); and past `PROXY_MAX_CLAMPED_SHARE` every
+  surviving signal weight sits on the *same* band edge, so the anchor describes the band
+  rather than the market — that is what made one expiration's calls and puts agree to the
+  cent at $269.76. The share is weight-based because the result is a weighted median:
+  numerous tiny far-strike rows cannot force it onto the edge, while a majority of final
+  weight can. A majority-clamped signal is a broken feed rather than a reading.
+- **The confidence *label* is capped by sample size; the score is not.** Two of the
+  score's five terms reward a degenerate sample, so the top label is withheld below
+  `PROXY_CONFIDENCE_FULL_SAMPLE` — the count term's own saturation point. The score is
+  left alone deliberately: it is what weights the combined blend, so moving it would
+  change every projected price too. The combined side is capped on the *weaker* side's
+  count, on the same argument that already makes its score the weaker side's.
+- **The coverage tile counts only what survived, so it needs `model.coverage` to stay
+  honest.** Every figure on the strip is computed over the rows that got through the
+  quality filters, which means the more of the feed is unusable the more confident the
+  page looks — it read "High (78%) | 334 valid contracts" on an NVDA load where 2,884 of
+  3,219 contracts had no two-sided quote and 15 of 19 expirations produced nothing.
+  `buildProjectionSummaries` records the chain's own denominators as it walks the buckets
+  because nothing downstream sees a raw row again, and `projectionCoverageWarning` is the
+  one line that can report a bad feed. It outranks a thin expiration in the status line.
+- **Yahoo's option chain is itself degraded as of September 2026.** `bid`, `ask` and
+  `openInterest` come back as `0` for roughly 90% of
+  contracts with `lastPrice` and `volume` intact beside them, and a scattering of LEAPS
+  rows carry impossible quotes (a $2,500-strike NVDA call bid at $138 on a $224
+  underlying). The same-session fallback recovers current trades without admitting stale
+  prints, while the coverage strip reports midpoint and fallback counts separately. Do
+  not widen the fallback beyond an exact match to Yahoo's latest regular-market date.
 - **Projections has no refresh timer, and its tables paint only the top ranks.**
   `init_page28` creates no timer; Load, the timeframe buttons and F5 are the only refetches.
   `_p28_render_option_tables` passes empty tuples for both *low* highlight backgrounds,

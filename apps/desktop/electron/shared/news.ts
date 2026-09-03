@@ -22,6 +22,14 @@ export interface NewsFeedConfig {
   url: string
   /** Added before the phrase points, per `NewsFeed.score_bonus`. */
   scoreBonus: number
+  /**
+   * Skip the polite agent and ask as a browser from the first attempt.
+   *
+   * Set only on a host known to refuse the default agent by *hanging* rather than by
+   * answering 403 — see the Nasdaq entry below. Without it the feed burns its whole
+   * timeout on an attempt that cannot succeed before the retry is even reached.
+   */
+  browserAgent?: boolean
 }
 
 /** `KEYLESS_TRADER_NEWS_FEEDS` (`workers/news_sources.py:24-31`). */
@@ -43,9 +51,14 @@ export const NEWS_FEEDS: ReadonlyArray<NewsFeedConfig> = [
     scoreBonus: 1,
   },
   {
+    // nasdaq.com is the one feed here that refuses the polite agent by tarpitting it: the
+    // request never answers and dies on the timeout, which reads as an outage rather than
+    // as a refusal. With a browser agent it answers in about 100ms. The other five are
+    // served identically either way, so only this one asks as a browser.
     source: 'Nasdaq Markets',
     url: 'https://www.nasdaq.com/feed/rssoutbound?category=Markets',
     scoreBonus: 1,
+    browserAgent: true,
   },
   { source: 'Investing.com', url: 'https://www.investing.com/rss/news_25.rss', scoreBonus: 1 },
 ]

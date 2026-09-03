@@ -27,6 +27,7 @@ import {
   useOptionsExpirations,
   useRefreshOptionsChain,
   useRefreshOptionsExpirations,
+  useSeedOptionsChain,
 } from '@/api/optionsQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { OptionChainTable } from '@/components/options/OptionChainTable'
@@ -47,8 +48,15 @@ import { useOptionsPage, type OptionsTab } from '@/stores/options'
  * and the strike selection reorder what is already loaded instead of refetching — the
  * reference reloads on both, and only its cache keeps that cheap.
  *
- * Nothing loads on mount. `init_page5` fires no request either: every load on this page
- * comes from a button, because a chain sweep is one Yahoo request per listed expiry.
+ * Entering a ticker loads the whole workspace, not the subtab that happens to be on
+ * screen: one chain request plus the sweep arms all three views at once, so switching
+ * subtabs never asks for another load. The reference makes each subtab its own button
+ * because it has no shared payload; here the sweep already feeds two of the three.
+ *
+ * The symbol and the fact that it was loaded are both persisted, so a restart restores
+ * the workspace: the two queries come back armed and fetch once for the stored ticker,
+ * the way `_p13_restore_startup_session` re-requests the ETF page's ticker. Within a
+ * session the query cache answers instead, so re-entering the tab costs nothing.
  */
 
 const TABS: ReadonlyArray<{ id: OptionsTab; label: string }> = [
@@ -70,6 +78,21 @@ function gridColumns(count: number): number {
   if (count <= 1) return 1
   if (count <= 4) return 2
   return 3
+}
+
+/**
+ * The strike nearest the spot, used when nothing is selected yet. `_p5_populate_strike_combo`
+ * leaves the box on its placeholder; here a load has to paint something, and the ATM
+ * strike is the one row of the board every reader wants first.
+ */
+function nearestStrike(sweep: OptionsExpirationsPayload): number | null {
+  if (!sweep.strikes.length) return null
+  if (!Number.isFinite(sweep.spotPrice) || sweep.spotPrice <= 0) return sweep.strikes[0]
+  let best = sweep.strikes[0]
+  for (const strike of sweep.strikes) {
+    if (Math.abs(strike - sweep.spotPrice) < Math.abs(best - sweep.spotPrice)) best = strike
+  }
+  return best
 }
 
 function failureOf(envelope: Envelope<unknown> | undefined, block: string): string | undefined {
@@ -95,6 +118,7 @@ export function OptionsPage({
     strategy,
     typeFilter,
     selectedStrike,
+    loaded,
     summarySort,
     setSymbol,
     setTab,
@@ -102,21 +126,24 @@ export function OptionsPage({
     setStrategy,
     setTypeFilter,
     setSelectedStrike,
+    setLoaded,
     setSummarySort,
   } = useOptionsPage()
   const [draft, setDraft] = useState(symbol)
-  // Nothing fetches until the tab in question has been asked for at least once.
-  const [armed, setArmed] = useState({ chain: false, sweep: false })
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ text: string; tone: Tone } | null>(null)
 
-  const chainQuery = useOptionsChain(symbol, expiry, armed.chain)
-  const sweepQuery = useOptionsExpirations(symbol, armed.sweep)
+  // Both lanes are armed together: `loaded` is one flag for the whole workspace, and it
+  // is persisted, so a restored ticker fetches on the first mount of a session.
+  const chainQuery = useOptionsChain(symbol, expiry, loaded)
+  const sweepQuery = useOptionsExpirations(symbol, loaded)
   const refreshChain = useRefreshOptionsChain()
   const refreshSweep = useRefreshOptionsExpirations()
+  const seedChain = useSeedOptionsChain()
 
   const chain = chainQuery.data?.data
   const sweep = sweepQuery.data?.data
+  const loading = busy || chainQuery.isFetching || sweepQuery.isFetching
 
   useEffect(() => setDraft(symbol), [symbol])
 
@@ -131,15 +158,23 @@ export function OptionsPage({
   }, [onStatusChange, chainQuery.data, chainQuery.isFetching, sweepQuery.data, sweepQuery.isFetching])
 
   // The response resolves the expiry when the stored one is gone; follow it so the
-  // dropdown and the query key agree on the next load.
+  // dropdown and the query key agree on the next load. The payload is written under the
+  // resolved key first, or moving onto it would refetch the chain that just arrived.
   useEffect(() => {
-    if (chain?.expiry && chain.expiry !== expiry) setExpiry(chain.expiry)
-  }, [chain?.expiry, expiry, setExpiry])
+    const envelope = chainQuery.data
+    const resolved = envelope?.data.expiry
+    if (!envelope || !resolved || resolved === expiry) return
+    seedChain(envelope.data.symbol, resolved, envelope)
+    setExpiry(resolved)
+  }, [chainQuery.data, expiry, seedChain, setExpiry])
 
   // Same for the strike: a reload keeps the previous pick only while it is still quoted.
+  // With nothing picked — a fresh ticker, or the pick fell off the board — the strike
+  // nearest the spot is selected so the third view has something to show on a load
+  // rather than an empty grid behind a dropdown.
   useEffect(() => {
     if (!sweep) return
-    const matched = matchStrike(sweep.strikes, selectedStrike)
+    const matched = matchStrike(sweep.strikes, selectedStrike) ?? nearestStrike(sweep)
     if (matched !== selectedStrike) setSelectedStrike(matched)
   }, [sweep, selectedStrike, setSelectedStrike])
 
@@ -153,7 +188,7 @@ export function OptionsPage({
       const target = nextExpiry ?? (ticker === symbol ? expiry : '')
       setSymbol(ticker)
       setExpiry(target)
-      setArmed((state) => ({ ...state, chain: true }))
+      setLoaded(true)
       setNotice(null)
       setBusy(true)
       try {
@@ -162,7 +197,7 @@ export function OptionsPage({
         setBusy(false)
       }
     },
-    [draft, expiry, refreshChain, setExpiry, setSymbol, symbol],
+    [draft, expiry, refreshChain, setExpiry, setLoaded, setSymbol, symbol],
   )
 
   const loadSweep = useCallback(async () => {
@@ -172,7 +207,7 @@ export function OptionsPage({
       return
     }
     setSymbol(ticker)
-    setArmed((state) => ({ ...state, sweep: true }))
+    setLoaded(true)
     setNotice(null)
     setBusy(true)
     try {
@@ -180,13 +215,36 @@ export function OptionsPage({
     } finally {
       setBusy(false)
     }
-  }, [draft, refreshSweep, setSymbol])
+  }, [draft, refreshSweep, setLoaded, setSymbol])
 
-  /** `_p5_load_active_subtab`: the shared Load button drives whichever tab is on screen. */
-  const loadActive = useCallback(() => {
-    if (tab === 'chain') return void loadChain()
-    return void loadSweep()
-  }, [loadChain, loadSweep, tab])
+  /**
+   * The ticker field loads every view, replacing `_p5_load_active_subtab`'s per-subtab
+   * button. A ticker that is not the one on screen only needs arming — the two queries
+   * have no entry for it and fetch it themselves; re-entering the same ticker is a
+   * refresh, so both lanes are forced. They run together: the chain is one request and
+   * the sweep is one per listed expiry, and serialising them would only make the chain
+   * wait behind twenty of them.
+   */
+  const loadWorkspace = useCallback(async () => {
+    const ticker = draft.trim().toUpperCase()
+    if (!ticker) {
+      setNotice({ text: 'Enter a ticker above to load the chain, top volume and strikes.', tone: 'muted' })
+      return
+    }
+    const isReload = loaded && ticker === symbol
+    const target = ticker === symbol ? expiry : ''
+    setSymbol(ticker)
+    setExpiry(target)
+    setLoaded(true)
+    setNotice(null)
+    if (!isReload) return
+    setBusy(true)
+    try {
+      await Promise.allSettled([refreshChain(ticker, target), refreshSweep(ticker)])
+    } finally {
+      setBusy(false)
+    }
+  }, [draft, expiry, loaded, refreshChain, refreshSweep, setExpiry, setLoaded, setSymbol, symbol])
 
   const exportChain = useCallback(async () => {
     if (!chain || !chain.rows.length || !chain.expiry) {
@@ -260,7 +318,7 @@ export function OptionsPage({
           className="flex items-center gap-1"
           onSubmit={(event) => {
             event.preventDefault()
-            loadActive()
+            void loadWorkspace()
           }}
         >
           <input
@@ -270,8 +328,8 @@ export function OptionsPage({
             aria-label="Options ticker"
             className="h-8 w-44 border border-border-strong bg-surface-raised px-2 text-2xs font-semibold tracking-wide text-text outline-none focus:border-accent"
           />
-          <Button type="submit" variant="accent" disabled={busy}>
-            {busy ? 'Loading...' : 'Load Current Tab'}
+          <Button type="submit" variant="accent" disabled={loading}>
+            {loading ? 'Loading...' : 'Load Ticker'}
           </Button>
         </form>
         <Button variant="accent" onClick={() => void exportTopVolume()}>
@@ -298,7 +356,7 @@ export function OptionsPage({
       {tab === 'chain' ? (
         <ChainTab
           payload={chain}
-          armed={armed.chain}
+          armed={loaded}
           loading={chainQuery.isFetching}
           warning={failureOf(chainQuery.data, 'Chain')}
           expiry={expiry}
@@ -311,18 +369,18 @@ export function OptionsPage({
       ) : tab === 'top-volume' ? (
         <SummaryGrid
           title="Top Options by Volume"
-          armed={armed.sweep}
+          armed={loaded}
           loading={sweepQuery.isFetching}
           payload={sweep}
           buckets={topVolumeBuckets}
           sort={summarySort}
           onSort={setSummarySort}
           envelope={sweepQuery.data}
-          emptyHint="Enter a ticker above to view options by top volume across all available expirations."
+          emptyHint="Enter a ticker above to load the chain, top volume and strikes together."
           controls={
             <>
               <Button variant="accent" onClick={() => void loadSweep()}>
-                Load Options by Top Volume
+                Reload Top Volume
               </Button>
               <span className="ml-2 text-2xs font-semibold text-text">Type:</span>
               {OPTIONS_TYPE_FILTERS.map((entry) => (
@@ -342,18 +400,18 @@ export function OptionsPage({
       ) : (
         <SummaryGrid
           title="Options by Strike"
-          armed={armed.sweep}
+          armed={loaded}
           loading={sweepQuery.isFetching}
           payload={sweep}
           buckets={strikeBuckets}
           sort={summarySort}
           onSort={setSummarySort}
           envelope={sweepQuery.data}
-          emptyHint="Enter a ticker above, load strikes, then choose a strike to view matching options across all available expirations."
+          emptyHint="Enter a ticker above to load every expiration; the strike nearest the spot is selected for you."
           controls={
             <>
               <Button variant="accent" onClick={() => void loadSweep()}>
-                Load Strikes
+                Reload Strikes
               </Button>
               <span className="ml-2 text-2xs font-semibold text-text">Strike:</span>
               <Select
@@ -361,7 +419,7 @@ export function OptionsPage({
                 className="w-28"
                 value={selectedStrike === null ? '' : String(selectedStrike)}
                 options={[
-                  { value: '', label: 'Select strike' },
+                  ...(selectedStrike === null ? [{ value: '', label: 'Select strike' }] : []),
                   ...(sweep?.strikes ?? []).map((strike) => ({
                     value: String(strike),
                     label: formatStrikeOption(strike),
@@ -424,7 +482,7 @@ function ChainTab({
   // sources, and — under a strategy — how many rows it highlighted and why the top one.
   const status = useMemo(() => {
     if (warning) return { text: warning, tone: 'negative' as Tone }
-    if (!armed) return { text: 'Enter a ticker above to view the full options chain.', tone: 'muted' as Tone }
+    if (!armed) return { text: 'Enter a ticker above to load the chain, top volume and strikes.', tone: 'muted' as Tone }
     if (loading && !rows.length) return { text: 'Loading chain...', tone: 'warning' as Tone }
     if (!rows.length) return { text: 'No chain data available.', tone: 'muted' as Tone }
     let text = `Chain updated at ${clockNow()}`
@@ -444,7 +502,7 @@ function ChainTab({
     <div className="flex min-h-0 flex-1 flex-col gap-1">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border border-border bg-surface px-2 py-1">
         <Button variant="accent" onClick={onLoad}>
-          Load Chain
+          Reload Chain
         </Button>
         <Button variant="accent" onClick={onExport}>
           Export Chain

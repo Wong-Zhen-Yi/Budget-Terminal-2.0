@@ -26,6 +26,8 @@ export interface OptionsRawRow {
   openInterest: number
   impliedVolatility: number
   inTheMoney: boolean
+  /** US options-market date of Yahoo's last trade, used only by Projections fallback pricing. */
+  lastTradeDate?: string
 }
 
 /** A chain row after `_p5_enrich_chain`: IV backfilled, Greeks attached. */

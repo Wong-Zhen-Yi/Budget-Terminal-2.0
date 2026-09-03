@@ -1638,6 +1638,7 @@ export const yahooProvider: MarketDataProvider = {
     const empty = {
       symbol: normalized,
       spotPrice: 0,
+      marketDate: '',
       buckets: [],
       strikes: [],
       generatedAt: 0,

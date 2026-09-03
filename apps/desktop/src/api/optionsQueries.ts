@@ -60,6 +60,28 @@ export function useRefreshOptionsChain(): (symbol: string, expiry: string) => Pr
   )
 }
 
+/**
+ * Write a chain payload under a second key.
+ *
+ * A load with no expiry asks under the empty key and Yahoo resolves the nearest one, so
+ * following the response with `setExpiry` changes the query key onto an entry that does
+ * not exist and fetches the very same chain a second time. Seeding the resolved key
+ * first is what `useRefreshOptionsChain` already does for the forced path.
+ */
+export function useSeedOptionsChain(): (
+  symbol: string,
+  expiry: string,
+  envelope: Envelope<OptionsChainPayload>,
+) => void {
+  const queryClient = useQueryClient()
+  return useCallback(
+    (symbol, expiry, envelope) => {
+      queryClient.setQueryData(queryKeys.optionsChain(symbol, expiry), envelope)
+    },
+    [queryClient],
+  )
+}
+
 export function useRefreshOptionsExpirations(): (symbol: string) => Promise<void> {
   const queryClient = useQueryClient()
   return useCallback(
