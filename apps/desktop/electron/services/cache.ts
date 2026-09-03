@@ -50,6 +50,14 @@ export const TTL = {
   goldMarket: 60_000,
   goldWgc: 24 * 60 * 60_000,
   goldMining: 7 * 24 * 60 * 60_000,
+  // Oil mixes four update cadences. The EIA weekly survey lands once a week and each of
+  // its series pages is a full history download, so it is held for hours; the OPEC basket
+  // is published once a session; the dated futures strip is thirteen paced Yahoo requests
+  // and does not need to move with the front-month tick.
+  oilMarket: 60_000,
+  oilCurve: 15 * 60_000,
+  oilEia: 6 * 60 * 60_000,
+  oilOpec: 6 * 60 * 60_000,
 } as const
 
 export interface CachedResult<T> {

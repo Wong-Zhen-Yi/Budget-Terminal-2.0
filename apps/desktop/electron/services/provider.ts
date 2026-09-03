@@ -28,6 +28,8 @@ import type {
   CryptoRequest,
   GoldPayload,
   GoldRequest,
+  OilPayload,
+  OilRequest,
   HeatmapPayload,
   HeatmapRequest,
   EtfArbitragePayload,
@@ -135,6 +137,8 @@ import { BMNR_BLOCKS } from '../shared/contract.js'
 import { emptyBmnrPayload } from '../shared/bmnr.js'
 import { GOLD_BLOCKS } from '../shared/contract.js'
 import { emptyGoldPayload } from '../shared/gold.js'
+import { OIL_BLOCKS } from '../shared/contract.js'
+import { emptyOilPayload } from '../shared/oil.js'
 import { CRYPTO_HEATMAP_LIMIT, CRYPTO_STAGES, localIsoSeconds } from '../shared/crypto.js'
 import { normalizeEtfKey } from '../shared/heatmap.js'
 import { DEFAULT_RISK_FREE_RATE } from '../shared/optionsPage.js'
@@ -153,6 +157,7 @@ import {
 } from './cardsStore.js'
 import { BMNR_SOURCE, getBmnr } from './bmnr.js'
 import { GOLD_SOURCE, getGold } from './gold.js'
+import { OIL_SOURCE, getOil } from './oil.js'
 import { CRYPTO_SOURCE, getCrypto } from './crypto.js'
 import {
   clearIpoCache,
@@ -347,6 +352,7 @@ export interface MarketDataProvider {
   crypto(request: CryptoRequest): Promise<Envelope<CryptoPayload>>
   bmnr(request: BmnrRequest): Promise<Envelope<BmnrPayload>>
   gold(request: GoldRequest): Promise<Envelope<GoldPayload>>
+  oil(request: OilRequest): Promise<Envelope<OilPayload>>
   heatmap(request: HeatmapRequest): Promise<Envelope<HeatmapPayload>>
   etfHoldings(request: EtfHoldingsRequest): Promise<Envelope<EtfHoldingsPayload>>
   etfArbitrage(request: EtfArbitrageRequest): Promise<Envelope<EtfArbitragePayload>>
@@ -1304,6 +1310,22 @@ export const yahooProvider: MarketDataProvider = {
     }
   },
 
+
+  async oil({ force }) {
+    try {
+      const { payload, errors } = await getOil(force)
+      if (!errors.length) return ok(payload, OIL_SOURCE)
+      const dead = OIL_BLOCKS.filter((block) => payload.progress[block] === 'unavailable')
+      return partial(
+        payload,
+        errors,
+        OIL_SOURCE,
+        dead.length ? `${dead.length} Oil data source(s) were unavailable.` : 'Oil refresh used stale source data.',
+      )
+    } catch (error) {
+      return failed(emptyOilPayload(), describeError(error), OIL_SOURCE)
+    }
+  },
   async heatmap({ etf, force }) {
     const key = normalizeEtfKey(etf)
     try {

@@ -1195,6 +1195,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'crypto', label: 'Crypto', implemented: true },
   { id: 'bmnr', label: 'BMNR', implemented: true },
   { id: 'gold', label: 'Gold', implemented: true },
+  { id: 'oil', label: 'Oil', implemented: true },
   { id: 'backtest', label: 'Backtest', implemented: true },
   { id: 'roll', label: 'Roll', implemented: true },
   { id: 'ipo', label: 'IPO', implemented: true },
@@ -2287,6 +2288,169 @@ export interface GoldRequest extends BackgroundRequest {
   force?: boolean
 }
 
+/* ------------------------------------------------------- Oil fundamentals */
+
+export const OIL_BLOCKS = ['market', 'curve', 'inventories', 'flows', 'benchmarks'] as const
+export type OilBlock = (typeof OIL_BLOCKS)[number]
+export type OilBlockStatus = 'loaded' | 'unavailable'
+export type OilFrequency = 'live' | 'daily' | 'weekly' | 'derived'
+/** `kb` is thousand barrels and `kbd` thousand barrels per day — EIA's own weekly units. */
+export type OilUnit = 'usd' | 'usdPerBbl' | 'usdPerGal' | 'kb' | 'kbd' | 'percent' | 'days'
+
+/**
+ * One displayed Oil figure with the provenance a mixed-frequency page needs.
+ *
+ * The page prints a live futures quote beside a weekly EIA survey and a daily OPEC
+ * settlement, so a bare number is never enough: `frequency` and `asOf` are what stop a
+ * reader treating a five-day-old inventory print as a live one.
+ */
+export interface OilValue {
+  value: number | null
+  unit: OilUnit
+  asOf: string
+  source: string
+  frequency: OilFrequency
+  note?: string
+}
+
+export interface OilMarket {
+  wtiPrice: OilValue
+  wtiChangePct: OilValue
+  brentPrice: OilValue
+  brentChangePct: OilValue
+  gasolinePrice: OilValue
+  gasolineChangePct: OilValue
+  dieselPrice: OilValue
+  dieselChangePct: OilValue
+}
+
+export type OilCurveShape = 'backwardation' | 'contango' | 'flat'
+
+export interface OilCurvePoint {
+  symbol: string
+  /** Contract month as `MMM YY`, e.g. `Oct 26`. */
+  label: string
+  monthsOut: number
+  price: number
+  /** Premium over the front contract, in percent; `null` on the front month itself. */
+  premiumPct: number | null
+}
+
+export interface OilCurve {
+  asOf: string
+  source: string
+  shape: OilCurveShape
+  points: OilCurvePoint[]
+  frontPrice: OilValue
+  /** Front contract minus the last contract on the strip: positive is backwardation. */
+  frontToBackSpread: OilValue
+  annualisedRollYield: OilValue
+}
+
+export interface OilPoint {
+  date: string
+  value: number
+}
+
+export const OIL_STOCK_KEYS = [
+  'crude',
+  'spr',
+  'cushing',
+  'gasoline',
+  'distillate',
+  'totalPetroleum',
+] as const
+export const OIL_BENCHMARK_KEYS = [
+  'wtiSpot',
+  'brentSpot',
+  'retailGasoline',
+  'retailDiesel',
+] as const
+export const OIL_FLOW_KEYS = [
+  'production',
+  'netImports',
+  'exports',
+  'refinerInput',
+  'utilization',
+  'productSupplied',
+  'gasolineSupplied',
+] as const
+export type OilStockKey = (typeof OIL_STOCK_KEYS)[number]
+export type OilFlowKey = (typeof OIL_FLOW_KEYS)[number]
+export type OilBenchmarkKey = (typeof OIL_BENCHMARK_KEYS)[number]
+export type OilSeriesKey = OilStockKey | OilFlowKey | OilBenchmarkKey
+
+/** One EIA weekly series, already reduced to the comparisons the page prints. */
+export interface OilSeries {
+  key: OilSeriesKey
+  label: string
+  unit: OilUnit
+  asOf: string
+  latest: number | null
+  /** Change against the immediately preceding weekly observation. */
+  weekChange: number | null
+  yearAgo: number | null
+  /** Mean of the same calendar week across the five preceding years. */
+  fiveYearAverage: number | null
+  /** Latest against that five-year mean, in percent — the headline inventory statistic. */
+  deviationPct: number | null
+  history: OilPoint[]
+}
+
+export interface OilEiaBlock {
+  asOf: string
+  source: string
+  sourceUrl: string
+  releaseDate: string | null
+  nextReleaseDate: string | null
+  series: OilSeries[]
+}
+
+export interface OilOpec {
+  asOf: string
+  source: string
+  sourceUrl: string
+  basketPrice: OilValue
+  dayChange: OilValue
+  monthAverage: OilValue
+  history: OilPoint[]
+}
+
+/**
+ * EIA's own weekly price assessments, with the OPEC basket alongside when it is
+ * reachable. The basket is optional inside this lane rather than a lane of its own: it is
+ * published from behind a WAF that refuses this client, so the panel has to stand up
+ * without it.
+ */
+export interface OilBenchmarks {
+  prices: OilEiaBlock
+  opec: OilOpec | null
+}
+
+export interface OilDerived {
+  brentWtiSpread: OilValue
+  crackSpread321: OilValue
+  daysOfSupply: OilValue
+  basketToBrent: OilValue
+  spotVsFutures: OilValue
+  crudeVsFiveYear: OilValue
+}
+
+export interface OilPayload {
+  fetchedAt: string
+  market: OilMarket
+  curve: OilCurve | null
+  inventories: OilEiaBlock | null
+  flows: OilEiaBlock | null
+  benchmarks: OilBenchmarks | null
+  derived: OilDerived
+  progress: Record<OilBlock, OilBlockStatus>
+}
+
+export interface OilRequest extends BackgroundRequest {
+  force?: boolean
+}
+
 /* ------------------------------------------------------------ heatmap page */
 
 /**
@@ -3173,6 +3337,7 @@ export const CHANNELS = {
   crypto: 'crypto:read',
   bmnr: 'bmnr:read',
   gold: 'gold:read',
+  oil: 'oil:read',
   heatmap: 'heatmap:read',
   etfHoldings: 'etf:holdings',
   etfArbitrage: 'etf:arbitrage',
@@ -3320,6 +3485,7 @@ export interface DesktopApi {
   crypto(request: CryptoRequest): Promise<Envelope<CryptoPayload>>
   bmnr(request: BmnrRequest): Promise<Envelope<BmnrPayload>>
   gold(request: GoldRequest): Promise<Envelope<GoldPayload>>
+  oil(request: OilRequest): Promise<Envelope<OilPayload>>
   heatmap(request: HeatmapRequest): Promise<Envelope<HeatmapPayload>>
   etfHoldings(request: EtfHoldingsRequest): Promise<Envelope<EtfHoldingsPayload>>
   etfArbitrage(request: EtfArbitrageRequest): Promise<Envelope<EtfArbitragePayload>>

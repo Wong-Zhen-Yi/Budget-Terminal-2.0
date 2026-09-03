@@ -21,6 +21,7 @@
     "probe:dictionary": "npm run --workspace budget-terminal-desktop probe:dictionary --",
     "probe:bmnr": "npm run --workspace budget-terminal-desktop probe:bmnr --",
     "probe:gold": "npm run --workspace budget-terminal-desktop probe:gold --",
+    "probe:oil": "npm run --workspace budget-terminal-desktop probe:oil --",
     "probe:crypto": "npm run --workspace budget-terminal-desktop probe:crypto --",
     "probe:cards": "npm run --workspace budget-terminal-desktop probe:cards --",
     "probe:price": "npm run --workspace budget-terminal-desktop probe:price --",

@@ -80,6 +80,7 @@ const TAB_ORDER = [
   // pages call CoinGecko's keyless tier, which rate-limits by the minute.
   'bmnr',
   'gold',
+  'oil',
   'youtube',
   'heatmap',
   'trading-volumes',
@@ -380,6 +381,20 @@ function buildTasks(
         }),
     })
   }
+
+  // The EIA weekly grid and the OPEC archive are long-cached in main and the dated futures
+  // strip is thirteen paced requests, so warming this page is what keeps a first visit from
+  // paying for all of it at once.
+  tasks.push({
+    tab: 'oil',
+    label: 'Oil fundamentals',
+    run: (client) =>
+      client.prefetchQuery({
+        queryKey: queryKeys.oil,
+        queryFn: () => api.oil({ background: true }),
+        staleTime: 60_000,
+      }),
+  })
 
   if (every.length) {
     tasks.push({

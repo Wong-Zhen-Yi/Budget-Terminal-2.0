@@ -30,6 +30,7 @@ export const queryKeys = {
   crypto: ['crypto'] as const,
   bmnr: ['bmnr'] as const,
   gold: ['gold'] as const,
+  oil: ['oil'] as const,
   heatmap: (etf: string) => ['heatmap', etf] as const,
   // One key per ticker, so switching back to a fund already loaded repaints instantly
   // the way `_p13_last_result` does. Arbitrage is keyed the same way and separately: it

@@ -22,6 +22,8 @@ npm run patterns:png           # cheat-sheet PNG examples; `-- --check` verifies
 npm run probe:crypto           # all four Crypto stages; --offline for the pure checks
 npm run probe:bmnr             # live + filed BMNR treasury, NAV bridge, composition, history
                                # --offline for the pure checks and every XBRL fixture
+npm run probe:oil              # all five Oil lanes: EIA weekly grid, the WTI strip, benchmarks
+                               # --offline for the parsers, the five-year mean and the crack spread
 npm run probe:cards            # Cards math, persistence and models; --live adds Yahoo
 npm run probe:options -- AAPL  # chain Greeks, strategy ranking, both grids; --offline for the pure checks
 npm run probe:heatmap -- SPY   # index holdings, all seven intervals, sector split; --offline for the pure checks
@@ -87,7 +89,10 @@ US IPO through year-end, from StockAnalysis with a Yahoo calendar fallback, cach
 for a day), and the **BMNR** page (BitMine Immersion's Ethereum treasury: the live ETH count
 and percent of ETH supply from CoinGecko beside the filed balance sheet from SEC XBRL, with
 a NAV/mNAV bridge, a residual-anchored asset composition, quarterly ETH-versus-dilution
-history and an ETH price sensitivity ladder).
+history and an ETH price sensitivity ladder), and the **Oil** page (the physical crude
+barrel: EIA weekly inventories and supply/demand against their five-year bands, the WTI
+futures term structure, the 3-2-1 crack spread, days of supply, and EIA spot and retail
+assessments beside the OPEC basket).
 The remaining tabs are labels in `TABS`
 (`electron/shared/contract.ts`) and render a placeholder; `implemented: true` is what
 routes a tab to a real page in `App.tsx`.
@@ -1097,6 +1102,86 @@ adding handlers.
   not track positions.
 
 
+- **Oil is new to this repo; the PySide6 app has no such page.** Grep for `oil` only here.
+  It exists because a crude price on its own says nothing about why: the questions worth
+  asking are about the physical barrel — how much is in the tank, how much is coming out of
+  the ground, what refiners are paying to turn it into fuel, and whether the market wants
+  barrels now or later. `shared/oil.ts` is the whole model.
+- **The Oil page reaches three hosts and only one is Yahoo.** EIA and OPEC are fetched
+  directly and stay **outside** `paced()`, on the `fearGreed.ts` precedent — two government
+  and inter-governmental hosts behind the Yahoo gate would let one slow document server
+  throttle the whole app. Only the four product quotes and the dated strip go through the
+  Yahoo gate.
+- **EIA's `dnav` HTML grid is the keyless route, and it is the only one.** The v2 API needs
+  a registered key, and FRED **retired its EIA weekly petroleum mirrors** — `WCESTUS1` and
+  every sibling now 404 on `fredgraph.csv`. Do not "simplify" this parser back onto FRED;
+  the series are not there. The `hist_xls` files are old binary BIFF, which is a worse trade
+  than the HTML the handler already serves.
+- **A `dnav` cell carries `MM/DD`, so the year comes from the row label.** The grid is
+  `Year-Month` x `Week n`, and a week ending 31 December is filed under the following
+  January (1 January under the preceding December). `parseEiaSeriesHtml` nudges the year
+  when the cell's month and the row's month sit on opposite sides of the turn — without it
+  one observation a year lands twelve months away and corrupts both the year-ago pair and
+  the five-year mean.
+- **EIA marks an absence four ways and every one of them must become `null`.** `-` is none
+  reported, `--` not applicable, `NA` not available and `W` withheld to avoid disclosing an
+  individual company. This is the same `Number(null) === 0` hazard `shared/valuation.ts` and
+  `services/economic.ts` document, and here a zero would read as an empty tank.
+- **The dollars tests come first in `unitFromTitle`.** `Dollars per Barrel` also matches
+  `barrel`, so checking the inventory case first would print a WTI spot assessment as a
+  thousand-barrel stock level. The page's own parenthetical wins over the spec, so a series
+  that changes its reporting basis cannot keep an old label.
+- **The five-year mean is withheld unless all five anniversaries are present.** It is the
+  single most-watched number on the page, and averaging three years under a label that says
+  five would misstate it. The lookup is on dates with a half-week tolerance rather than
+  `index - 52`, for the reason `services/economic.ts` gives, and `shiftIsoYears` clamps 29
+  February onto the 28th — rolling into March moves the anniversary outside the window and
+  silently drops a year out of the mean.
+- **The "vs 5Y" colour is tri-state, like the Economic page's `higherIsBetter`.** On a stock
+  series the sign reads unambiguously — a build above the band is bearish for crude, a draw
+  is bullish — so that column is coloured *against* the usual green-is-up convention. On a
+  flow series it does not: production above its band is bearish while refinery utilization
+  above its band is bullish, so those stay neutral rather than stating a judgement the
+  number does not support.
+- **The 3-2-1 crack spread converts at 42 gallons, and forgetting it is the whole bug.**
+  RBOB and ULSD are quoted in dollars per *gallon* and WTI in dollars per *barrel*, so
+  `(2 x RBOB + 1 x ULSD) x 42 - 3 x WTI, over 3`. Dropping the factor makes a gross refining
+  margin read as roughly minus the crude price; `npm run probe:oil -- --offline` asserts the
+  converted figure sits far above the unconverted one, which is the assertion that catches it.
+- **Days of supply excludes the SPR deliberately.** Commercial crude in thousand barrels over
+  refiner crude runs in thousand barrels a day; the units cancel to days of cover. Reserve
+  barrels are not available to refiners on demand, so folding them in roughly doubles a
+  figure that is supposed to describe commercial tightness.
+- **The strip starts one month out because `CL=F` already is the front contract.** Quoting
+  both the continuous symbol and its own underlying month spends a paced request to learn the
+  same price twice. The shape is read front-to-back rather than between adjacent months: one
+  illiquid contract can invert a single step of an otherwise clean curve, and the question the
+  panel answers is about the whole strip. A month that does not answer is dropped, not carried
+  as a gap.
+- **opec.org refuses this client at its Cloudflare edge.** `curl` is served and Node is not —
+  both `fetch` (undici) and `node:https` get a 403 block page, on TLS and header fingerprinting
+  rather than a solvable challenge. This is the same situation `services/ipo.ts` documents for
+  stockanalysis.com, and **no attempt is made to defeat it**. The basket is therefore optional
+  *inside* the benchmarks lane rather than a lane of its own: EIA's own spot and retail
+  assessments carry that panel, and the basket row prints its own absence rather than
+  disappearing, so a reader who expects it is told the source refused rather than left to
+  wonder. If the edge ever relents the row fills in with no other change.
+- **EIA's price assessments are not the futures quotes, and the page never blends them.** The
+  spot series are a survey of physical transactions and the market strip is an exchange
+  settlement; `spotVsFutures` puts a survey *week* against a live *tick*, so it is labelled a
+  staleness check rather than a tradeable basis. Every figure that mixes two sources or two
+  frequencies is `frequency: 'derived'` and carries a note saying so, and the probe walks the
+  derived block and asserts exactly that.
+- **One cold Oil refresh is a few megabytes, which is why the EIA lanes are held for hours.**
+  Each series page carries the full history back to the 1980s at roughly a quarter of a
+  megabyte and there is no way to ask the handler for a shorter window; seventeen series at
+  four concurrent downloads is the cost. The weekly survey lands once a week, so a six-hour
+  TTL is generous rather than tight.
+- **Oil has no refresh timer beyond the minute tick, and that tick is for the quotes.** The
+  EIA and OPEC lanes answer from cache on nearly every tick and the dated strip has its own
+  fifteen-minute TTL, so the recurring cost is four Yahoo quotes. Refresh and F5 are the only
+  things that force the document lanes.
+
 ## Porting behaviour from the PySide6 app
 
 - **BMNR is not a port; the PySide6 app has no such page.** Grep for `bmnr` only in this
@@ -1204,6 +1289,7 @@ decimal. Useful starting points:
 | Stocks, all of it | `mixins/stocks_page.py` (plus its linked workers, services, persistence and smoke tests) |
 | Crypto, all of it | `mixins/crypto.py` (worker `workers/crypto.py`, feeds `workers/news_sources.py`) |
 | BMNR | No reference — this page is new to this repo. `shared/bmnr.ts` is the whole model. |
+| Oil | No reference — this page is new to this repo. `shared/oil.ts` is the whole model. |
 | Options, all of it | `mixins/options_chain.py` (presenters `mixins/options_chain_presenters.py`, Greeks `services/options_analysis.py`, fetching `services/options_data.py`) |
 | Projections, all of it | `mixins/charts_options_top_volume.py` (page28; presenters `mixins/options_chain_presenters.py`) |
 | Valuation, all of it | `mixins/valuation.py` (page23; maths `services/valuation.py`, fetch and peers `workers/valuation.py`, Treasury `services/risk_free.py`) |

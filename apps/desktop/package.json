@@ -29,6 +29,7 @@
     "probe:dictionary": "tsx scripts/probe-dictionary.ts",
     "probe:bmnr": "tsx scripts/probe-bmnr.ts",
     "probe:gold": "tsx scripts/probe-gold.ts",
+    "probe:oil": "tsx scripts/probe-oil.ts",
     "probe:crypto": "tsx scripts/probe-crypto.ts",
     "probe:cards": "tsx scripts/probe-cards.ts",
     "probe:options": "tsx scripts/probe-options.ts",
