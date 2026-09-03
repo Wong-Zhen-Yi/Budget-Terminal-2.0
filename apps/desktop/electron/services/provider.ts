@@ -979,18 +979,17 @@ export const yahooProvider: MarketDataProvider = {
       reason: '',
     }
     try {
-      const batch = await getClosesBatch(
-        held.map((position) => position.ticker),
-        lookback,
-        force,
-      )
+      // The benchmark is optional — without it alpha and beta are omitted and everything
+      // else still computes — and it is independent of the holdings, so it is requested
+      // alongside them rather than after them. The rate gate still decides what runs when.
+      const [batch, benchmark] = await Promise.all([
+        getClosesBatch(held.map((position) => position.ticker), lookback, force),
+        getCloses(benchmarkSymbol, lookback, force).catch(() => null),
+      ])
       const { series, included, excluded } = buildPortfolioSeries(held, batch.closes, cashAmount)
       if (series.dates.length < 2) {
         return ok({ ...base, excludedTickers: excluded, reason: 'No common historical window' })
       }
-      // The benchmark is optional: without it alpha and beta are omitted and everything
-      // else still computes.
-      const benchmark = await getCloses(benchmarkSymbol, lookback, force).catch(() => null)
       const { metrics, note } = computeRiskMetrics(series, benchmark)
       return ok(
         {

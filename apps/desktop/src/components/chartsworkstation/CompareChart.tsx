@@ -16,6 +16,21 @@ export function CompareChart({ payload, showIntervalLabels }: { payload: ChartsC
     return () => observer.disconnect()
   }, [])
   const model = useMemo(() => payload ? buildCompareModel(payload) : null, [payload])
+  /**
+   * Each series' value indexed by timestamp, for the interval labels below.
+   *
+   * They used to `.find()` back into the normalized series per label, which is a linear
+   * scan inside a loop inside a loop — five symbols of a year of daily bars is hundreds of
+   * thousands of comparisons, re-run on every frame the ResizeObserver fires while a
+   * splitter is being dragged.
+   */
+  const valueByTime = useMemo(() => {
+    const lookup: Record<string, Map<number, number>> = {}
+    for (const symbol of model?.symbols ?? []) {
+      lookup[symbol] = new Map((model?.normalized[symbol] ?? []).map((point) => [point.time, point.value]))
+    }
+    return lookup
+  }, [model])
   const geometry = useMemo(() => {
     if (!model?.symbols.length) return null
     const all = model.symbols.flatMap((symbol) => model.normalized[symbol] ?? [])
@@ -44,7 +59,7 @@ export function CompareChart({ payload, showIntervalLabels }: { payload: ChartsC
           const color = COLORS[symbolIndex % COLORS.length]
           const path = points.map((point, index) => `${index ? 'L' : 'M'} ${geometry.x(point.time)} ${geometry.y(point.value)}`).join(' ')
           const last = points.at(-1)!
-          return <g key={symbol}><path d={path} fill="none" stroke={color} strokeWidth="2" /><text x={geometry.x(last.time) + 6} y={geometry.y(last.value) + 4} fill={color} fontSize="11" fontWeight="600">{symbol} {last.value >= 0 ? '+' : ''}{last.value.toFixed(1)}%</text>{showIntervalLabels ? model.intervalChanges[symbol].map((point, index) => index % labelEvery === 0 ? <text key={point.time} x={geometry.x(point.time)} y={geometry.y(model.normalized[symbol].find((entry) => entry.time === point.time)?.value ?? 0) - 6} fill={color} fontSize="9" textAnchor="middle">{point.value >= 0 ? '+' : ''}{point.value.toFixed(1)}%</text> : null) : null}</g>
+          return <g key={symbol}><path d={path} fill="none" stroke={color} strokeWidth="2" /><text x={geometry.x(last.time) + 6} y={geometry.y(last.value) + 4} fill={color} fontSize="11" fontWeight="600">{symbol} {last.value >= 0 ? '+' : ''}{last.value.toFixed(1)}%</text>{showIntervalLabels ? model.intervalChanges[symbol].map((point, index) => index % labelEvery === 0 ? <text key={point.time} x={geometry.x(point.time)} y={geometry.y(valueByTime[symbol]?.get(point.time) ?? 0) - 6} fill={color} fontSize="9" textAnchor="middle">{point.value >= 0 ? '+' : ''}{point.value.toFixed(1)}%</text> : null) : null}</g>
         })}
         {geometry.times.map((time, index) => index % labelEvery === 0 ? <text key={time} x={geometry.x(time)} y={size.height - 8} fill="var(--color-text-muted)" fontSize="10" textAnchor="middle">{new Date(time * 1000).toISOString().slice(0, 10)}</text> : null)}
       </svg>

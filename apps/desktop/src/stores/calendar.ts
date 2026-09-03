@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 
 import {
   addMonths,
+  calendarToday,
   startOfWeek,
   type CalendarTimezoneId,
   type EarningsRangeMode,
@@ -45,7 +46,10 @@ interface CalendarState {
   setEarningsChangedOnly: (earningsChangedOnly: boolean) => void
 }
 
-const today = new Date().toISOString().slice(0, 10)
+// The machine's own civil date, not the UTC one: `toISOString()` opens the page on the
+// previous day for anyone east of Greenwich, which on the 1st is the previous month and
+// on 1 January the previous year.
+const today = calendarToday('local')
 const currentYear = Number(today.slice(0, 4))
 
 export const useCalendarPage = create<CalendarState>()(

@@ -126,21 +126,23 @@ export function App() {
    * treemap must not overwrite that.
    */
   const statusHandlers = useRef(new Map<string, (next: PanelStatus[], path: string) => void>())
-  const statusFor = useCallback(
-    (tabId: string) => {
-      const cached = statusHandlers.current.get(tabId)
-      if (cached) return cached
-      const handler = (next: PanelStatus[], path: string) => {
-        if (activeTabRef.current !== tabId) return
-        setPanels(next)
-        setSourcePath(path)
-        record(tabId, next)
-      }
-      statusHandlers.current.set(tabId, handler)
-      return handler
-    },
-    [record],
-  )
+  // Read through a ref rather than closed over: the handlers are cached for the life of
+  // the session, so a cached one would go on calling whichever `record` existed when it
+  // was first created.
+  const recordRef = useRef(record)
+  recordRef.current = record
+  const statusFor = useCallback((tabId: string) => {
+    const cached = statusHandlers.current.get(tabId)
+    if (cached) return cached
+    const handler = (next: PanelStatus[], path: string) => {
+      if (activeTabRef.current !== tabId) return
+      setPanels(next)
+      setSourcePath(path)
+      recordRef.current(tabId, next)
+    }
+    statusHandlers.current.set(tabId, handler)
+    return handler
+  }, [])
 
   const setChartsSymbol = useChartsStore((state) => state.setSymbol)
   const setStocksSymbol = useStocksPage((state) => state.setSymbol)

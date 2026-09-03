@@ -7,6 +7,7 @@
     "apps/desktop"
   ],
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks || exit 0",
     "postinstall": "npm run ensure:electron",
     "ensure:electron": "node -e \"require('electron')\"",
     "dev": "npm run dev --workspace budget-terminal-desktop",
@@ -35,6 +36,19 @@
     "probe:roll": "npm run --workspace budget-terminal-desktop probe:roll --",
     "probe:ipo": "npm run --workspace budget-terminal-desktop probe:ipo --",
     "probe:politics": "npm run --workspace budget-terminal-desktop probe:politics --",
-    "probe:institutions": "npm run --workspace budget-terminal-desktop probe:institutions --"
+    "probe:institutions": "npm run --workspace budget-terminal-desktop probe:institutions --",
+    "probe:rate": "npm run --workspace budget-terminal-desktop probe:rate --",
+    "probe:store": "npm run --workspace budget-terminal-desktop probe:store --",
+    "probe:analytics": "npm run --workspace budget-terminal-desktop probe:analytics --",
+    "probe:finance": "npm run --workspace budget-terminal-desktop probe:finance --",
+    "probe:settings": "npm run --workspace budget-terminal-desktop probe:settings --",
+    "probe:global": "npm run --workspace budget-terminal-desktop probe:global --",
+    "probe:pre-market": "npm run --workspace budget-terminal-desktop probe:pre-market --",
+    "probe:trading-volumes": "npm run --workspace budget-terminal-desktop probe:trading-volumes --",
+    "probe:news": "npm run --workspace budget-terminal-desktop probe:news --",
+    "probe:options": "npm run --workspace budget-terminal-desktop probe:options --",
+    "probe:etf": "npm run --workspace budget-terminal-desktop probe:etf --",
+    "probe:projections": "npm run --workspace budget-terminal-desktop probe:projections --",
+    "probe:economic": "npm run --workspace budget-terminal-desktop probe:economic --"
   }
 }

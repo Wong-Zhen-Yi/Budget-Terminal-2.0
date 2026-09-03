@@ -16,9 +16,23 @@ async function fetchQuote(symbol: string): Promise<Quote> {
       includePrePost: true,
     }),
   )
-  const closes = result.quotes
-    .map((row) => row.close)
-    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+  // Yahoo repeats the current session as an extra live row on top of the bar that
+  // already covers it. Left in, `closes[-1]` and `closes[-2]` are both today and the
+  // day's change collapses to the intraday delta — the same hazard `fetchCloses` in
+  // `history.ts` and `dropSyntheticQuoteBar` in `chart.ts` each guard against.
+  const closes: number[] = []
+  let previousDate = ''
+  for (const row of result.quotes) {
+    const close = row.close
+    if (typeof close !== 'number' || !Number.isFinite(close)) continue
+    const date = row.date.toISOString().slice(0, 10)
+    if (date === previousDate) {
+      closes[closes.length - 1] = close
+      continue
+    }
+    previousDate = date
+    closes.push(close)
+  }
 
   if (closes.length >= 2) {
     const price = closes[closes.length - 1]

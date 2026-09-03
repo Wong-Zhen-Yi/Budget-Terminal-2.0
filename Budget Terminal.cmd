@@ -2,9 +2,11 @@
 title Budget Terminal
 cd /d "%~dp0"
 
-if not exist "node_modules" (
-  echo Installing dependencies, this only happens once...
-  call npm install || goto :failed
+echo Syncing dependencies...
+call npm install --no-audit --no-fund
+if errorlevel 1 (
+  if not exist "node_modules" goto :failed
+  echo WARNING: npm install failed; starting with the existing node_modules.
 )
 
 echo Checking Electron runtime...

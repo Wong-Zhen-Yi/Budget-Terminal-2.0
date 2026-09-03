@@ -572,10 +572,17 @@ async function resolveBls(catalog: readonly EconomicSeries[]): Promise<Resolved>
 }
 
 async function resolveNyfed(catalog: readonly EconomicSeries[]): Promise<Resolved> {
+  // Concurrently and settled individually. Serially, EFFR and SOFR were two round trips
+  // deep against a host that already gets a doubled timeout; unsettled, a throw on the
+  // first one lost the second as well and sent both to the FRED fallback.
+  const settled = await Promise.allSettled(
+    catalog.map((series) => fetchNyfedRate(series.providerKey ?? '')),
+  )
   const resolved: Resolved = new Map()
-  for (const series of catalog) {
-    resolved.set(series.seriesId, await fetchNyfedRate(series.providerKey ?? ''))
-  }
+  catalog.forEach((series, index) => {
+    const outcome = settled[index]
+    resolved.set(series.seriesId, outcome.status === 'fulfilled' ? outcome.value : [])
+  })
   return resolved
 }
 

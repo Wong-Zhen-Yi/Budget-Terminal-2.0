@@ -433,11 +433,14 @@ async function buildPeerRows(
 ): Promise<{ rows: ValuationPeerRow[]; warnings: string[] }> {
   const infos: Record<string, PeerInfo> = { [symbol]: info }
   const warnings: string[] = []
-  for (const peer of customPeers) {
-    const loaded = await peerInfo(peer, force)
+  // Concurrently, like the auto candidates below: each is one paced Yahoo request, and
+  // waiting them out one at a time made a five-peer list five round trips deep.
+  const custom = await Promise.all(customPeers.map((peer) => peerInfo(peer, force)))
+  customPeers.forEach((peer, index) => {
+    const loaded = custom[index]
     if (loaded && peerInfoHasUsableData(loaded)) infos[peer] = loaded
     else warnings.push(`${peer} returned no usable peer data.`)
-  }
+  })
   const candidates = peerCandidateSymbols(symbol, info).filter((peer) => !(peer in infos))
   const loaded = await Promise.all(candidates.map((peer) => peerInfo(peer, force)))
   candidates.forEach((peer, index) => {

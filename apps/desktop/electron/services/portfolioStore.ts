@@ -25,6 +25,17 @@ import {
 } from '../shared/contract.js'
 
 /**
+ * Today as a civil date in the machine's own zone, which is what `date.today()` is.
+ *
+ * `new Date().toISOString().slice(0, 10)` is the UTC date, so for anyone east of
+ * Greenwich a position opened in the morning is stamped with yesterday.
+ */
+function todayIso(now = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
+
+/**
  * The holdings store, owned by this app.
  *
  * It is seeded once from the PySide6 app's `user_data.json` and then never reads it
@@ -715,7 +726,7 @@ function apply(document: StoredDocument, mutation: PortfolioMutation): void {
         contracts: 1,
         premium: 0,
         status: 'Open',
-        openDate: new Date().toISOString().slice(0, 10),
+        openDate: todayIso(),
       })
       return
     }

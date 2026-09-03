@@ -531,17 +531,57 @@ export function useWarmPages(settings: AppSettings | undefined): WarmProgress {
   const started = useRef(false)
   const payload = portfolioQuery.data?.data
 
+  /**
+   * Everything the task list is built from, read through a ref.
+   *
+   * The effect below used to list all of these as dependencies. The warm-up takes
+   * minutes, and any of them changing inside that window — a portfolio edit, a Settings
+   * toggle, typing a ticker into Stocks, paging the Calendar — ran the effect's cleanup,
+   * which set `cancelled` and abandoned the warm-up part way through. The re-run then hit
+   * the `started` guard and returned, so nothing ever restarted it: every page behind the
+   * one being warmed at that moment silently went back to fetching on mount. Only
+   * `ready` gates the effect now, and it flips false to true exactly once.
+   */
+  const inputs = useRef({
+    payload,
+    hidden,
+    stocksSymbol,
+    fundamentalsSymbol,
+    calendarYear,
+    calendarMonth,
+    earningsYear,
+    ipoYear,
+  })
+  inputs.current = {
+    payload,
+    hidden,
+    stocksSymbol,
+    fundamentalsSymbol,
+    calendarYear,
+    calendarMonth,
+    earningsYear,
+    ipoYear,
+  }
+
+  // Wait for the holdings document — nearly every task keys off it — and for Settings,
+  // which says which pages are worth warming at all.
+  const ready = Boolean(payload && settings)
+
   useEffect(() => {
-    // Wait for the holdings document — nearly every task keys off it — and for Settings,
-    // which says which pages are worth warming at all.
-    if (started.current || !payload || !settings) return
+    if (started.current || !ready) return
     started.current = true
 
+    const current = inputs.current
     const tasks = buildTasks(
-      payload,
-      { stocks: stocksSymbol, fundamentals: fundamentalsSymbol },
-      { year: calendarYear, month: calendarMonth, earningsYear, ipoYear },
-    ).filter((task) => !hidden.has(task.tab))
+      current.payload,
+      { stocks: current.stocksSymbol, fundamentals: current.fundamentalsSymbol },
+      {
+        year: current.calendarYear,
+        month: current.calendarMonth,
+        earningsYear: current.earningsYear,
+        ipoYear: current.ipoYear,
+      },
+    ).filter((task) => !current.hidden.has(task.tab))
 
     if (!tasks.length) return
 
@@ -566,18 +606,7 @@ export function useWarmPages(settings: AppSettings | undefined): WarmProgress {
     return () => {
       cancelled = true
     }
-  }, [
-    payload,
-    settings,
-    hidden,
-    queryClient,
-    stocksSymbol,
-    fundamentalsSymbol,
-    calendarYear,
-    calendarMonth,
-    earningsYear,
-    ipoYear,
-  ])
+  }, [ready, queryClient])
 
   return progress
 }

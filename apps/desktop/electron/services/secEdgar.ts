@@ -149,6 +149,23 @@ function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? value as Record<string, unknown> : {}
 }
 
+/**
+ * The CIK for a ticker out of SEC's `company_tickers.json`.
+ *
+ * That document is roughly ten thousand entries, and this used to run
+ * `Object.values(...).map(record).find(...)` — which allocated a ten-thousand-element
+ * array on every Fundamentals, Valuation or BMNR lookup just to read one row out of it.
+ * Scanning the values directly costs nothing and allocates nothing.
+ */
+function findCikEntry(payload: unknown, symbol: string): Record<string, unknown> | null {
+  const wanted = normalizeTicker(symbol)
+  for (const value of Object.values(record(payload))) {
+    const entry = record(value)
+    if (normalizeTicker(String(entry.ticker ?? '')) === wanted) return entry
+  }
+  return null
+}
+
 function cacheRoot(): string {
   const local = process.env.LOCALAPPDATA ?? join(process.env.USERPROFILE ?? '', 'AppData', 'Local')
   return join(local, 'BudgetTerminalElectron', 'cache', 'sec')
@@ -484,8 +501,7 @@ export async function fetchSecCompanyBundle(symbolInput: string, force = false):
   const empty = { annual: emptyFundamentalSeriesMap(), quarterly: emptyFundamentalSeriesMap() }
   try {
     const tickers = await cachedJson('tickers', 'company_tickers', SEC_TICKERS_URL, TICKERS_TTL, force)
-    const wanted = normalizeTicker(symbol)
-    const entry = Object.values(tickers.payload).map(record).find((item) => normalizeTicker(String(item.ticker ?? '')) === wanted)
+    const entry = findCikEntry(tickers.payload, symbol)
     if (!entry) {
       return {
         ...empty,
@@ -595,8 +611,7 @@ export async function fetchSecFactsDocument(
     const tickers = await cachedJson('tickers', 'company_tickers', SEC_TICKERS_URL, TICKERS_TTL, force)
     tickerFreshness = tickers.metadata.freshness
     tickerAge = tickers.metadata.cacheAgeSeconds
-    const wanted = normalizeTicker(target.symbol)
-    const entry = Object.values(tickers.payload).map(record).find((item) => normalizeTicker(String(item.ticker ?? '')) === wanted)
+    const entry = findCikEntry(tickers.payload, target.symbol)
     if (!entry) throw new Error(`No domestic SEC filer mapping was found for ${target.symbol}.`)
     cik = String(Number(entry.cik_str)).padStart(10, '0')
   }
