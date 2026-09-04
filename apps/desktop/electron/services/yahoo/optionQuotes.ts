@@ -10,9 +10,16 @@ import { paced, yahoo } from './client.js'
  * volume, open interest and implied volatility for the exact contract held.
  */
 
-async function fetchExpiries(ticker: string): Promise<string[]> {
+/**
+ * The `optexp:` entry is shared with the Options page (`yahoo/options.ts`), so whichever
+ * page loads first pays for the round trip and the other reads it free. That sharing only
+ * holds while both sides cache the same shape: the cached value stays Yahoo's `Date[]`
+ * and the ISO mapping the Expiry dropdown wants happens on the way out. Caching the
+ * mapped strings here instead left the Options page sorting strings with `getTime`.
+ */
+async function fetchExpiries(ticker: string): Promise<Date[]> {
   const result = await paced(() => yahoo.options(ticker))
-  return (result.expirationDates ?? []).map((date) => date.toISOString().slice(0, 10))
+  return result.expirationDates ?? []
 }
 
 interface ContractQuote {
@@ -67,7 +74,7 @@ export async function getOptionQuotes({
     tickers.map((ticker) =>
       cache
         .resolve(`optexp:${ticker}`, TTL.options, () => fetchExpiries(ticker), { force })
-        .then((result) => result.value),
+        .then((result) => result.value.map((date) => date.toISOString().slice(0, 10))),
     ),
   )
   const expiries: OptionQuotesPayload['expiries'] = {}

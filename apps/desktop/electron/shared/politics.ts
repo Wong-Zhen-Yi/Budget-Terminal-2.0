@@ -2,6 +2,10 @@ import type { PoliticsParty, PoliticsTrade } from './contract.js'
 
 export const POLITICS_PAGE_SIZE = 100
 export const POLITICS_CACHE_TTL_MS = 4 * 60 * 60 * 1000
+/** Ceiling on an export's page walk; a request for every page still stops at `totalPages`. */
+export const POLITICS_EXPORT_MAX_PAGES = 500
+/** Capitol Trades sits outside the Yahoo rate gate, so a deep walk paces itself. */
+export const POLITICS_EXPORT_PAGE_DELAY_MS = 200
 
 const SECTOR_DATA: Record<string, string[]> = {
   Technology: ['AAPL', 'MSFT', 'NVDA', 'AVGO', 'ORCL', 'ASML', 'ADBE', 'AMD', 'CRM', 'CSCO'],
@@ -190,17 +194,27 @@ function extractNextPayload(html: string, pushStart: number): string {
   }
 }
 
+export interface PoliticsHtmlParse {
+  trades: PoliticsTrade[]
+  rawCount: number
+  /** Trade count across every page, as reported by the source's paginator. */
+  totalCount: number
+  totalPages: number
+}
+
+const EMPTY_PARSE: PoliticsHtmlParse = { trades: [], rawCount: 0, totalCount: 0, totalPages: 0 }
+
 /** Parse the React Server Component payload used by capitoltrades.com. */
-export function parsePoliticsHtml(html: string): { trades: PoliticsTrade[]; rawCount: number } {
+export function parsePoliticsHtml(html: string): PoliticsHtmlParse {
   const marker = html.indexOf('_txId')
-  if (marker < 0) return { trades: [], rawCount: 0 }
+  if (marker < 0) return EMPTY_PARSE
   const pushStart = html.lastIndexOf('self.__next_f.push', marker)
-  if (pushStart < 0) return { trades: [], rawCount: 0 }
+  if (pushStart < 0) return EMPTY_PARSE
   const payload = extractNextPayload(html, pushStart)
   const dataMarker = payload.indexOf('"data":[{')
-  if (dataMarker < 0) return { trades: [], rawCount: 0 }
+  if (dataMarker < 0) return EMPTY_PARSE
   const arrayStart = payload.indexOf('[', dataMarker)
-  if (arrayStart < 0) return { trades: [], rawCount: 0 }
+  if (arrayStart < 0) return EMPTY_PARSE
   let depth = 0
   let arrayEnd = -1
   let inString = false
@@ -223,21 +237,22 @@ export function parsePoliticsHtml(html: string): { trades: PoliticsTrade[]; rawC
       }
     }
   }
-  if (arrayEnd < 0) return { trades: [], rawCount: 0 }
+  if (arrayEnd < 0) return EMPTY_PARSE
   let raw: unknown
   try {
     raw = JSON.parse(payload.slice(arrayStart, arrayEnd))
   } catch {
-    return { trades: [], rawCount: 0 }
+    return EMPTY_PARSE
   }
-  if (!Array.isArray(raw)) return { trades: [], rawCount: 0 }
+  if (!Array.isArray(raw)) return EMPTY_PARSE
   const trades = raw.flatMap((entry): PoliticsTrade[] => {
     const record = recordOf(entry)
     const politician = recordOf(record.politician)
     const issuer = recordOf(record.issuer)
     const rawTicker = String(issuer.issuerTicker ?? '')
+    // Roughly a third of every page is a holding the source has no ticker for — municipal
+    // debt, treasuries, LLCs, private funds. Those are real disclosed trades, so they stay.
     const ticker = rawTicker.split(':')[0].trim().toUpperCase()
-    if (!ticker) return []
     const assetDescription = String(issuer.issuerName ?? '')
     const amountValue = parsePoliticsAmount(record.value) ?? 0
     return [{
@@ -255,7 +270,15 @@ export function parsePoliticsHtml(html: string): { trades: PoliticsTrade[]; rawC
     }]
   })
   trades.sort((left, right) => right.transactionDate.localeCompare(left.transactionDate))
-  return { trades, rawCount: raw.length }
+  // The paginator that follows the data array carries the full result size; without it the
+  // page can only guess at the last page from a full-looking batch.
+  const totals = /"totalCount":(\d+),"totalPages":(\d+)/.exec(payload)
+  return {
+    trades,
+    rawCount: raw.length,
+    totalCount: totals ? Number(totals[1]) : 0,
+    totalPages: totals ? Number(totals[2]) : 0,
+  }
 }
 
 export function filterPoliticsTrades(

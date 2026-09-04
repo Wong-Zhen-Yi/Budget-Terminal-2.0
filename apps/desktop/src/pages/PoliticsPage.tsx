@@ -8,6 +8,7 @@ import {
   politicsClipboard,
   politicsFlowSlices,
   politicsTopCounts,
+  POLITICS_PAGE_SIZE,
   type PoliticsFilters,
 } from '@shared/politics'
 import { api } from '@/api/client'
@@ -39,6 +40,7 @@ const TONE_CLASS: Record<Tone, string> = {
   warning: 'text-warn',
   negative: 'text-down',
 }
+const EXPORT_ALL = 'All'
 const DEFAULT_FILTERS: PoliticsFilters = {
   politician: 'All',
   ticker: '',
@@ -88,11 +90,14 @@ export function PoliticsPage({
   const [draft, setDraft] = useState<PoliticsFilters>(DEFAULT_FILTERS)
   const [filters, setFilters] = useState<PoliticsFilters>(DEFAULT_FILTERS)
   const [exporting, setExporting] = useState(false)
+  const [exportPages, setExportPages] = useState('5')
   const [notice, setNotice] = useState<{ text: string; tone: Tone } | null>(null)
 
   const envelope = query.data
   const payload = envelope?.data
   const trades = payload?.page === page ? payload.trades : []
+  const totalPages = payload?.page === page ? payload.totalPages : 0
+  const totalCount = payload?.page === page ? payload.totalCount : 0
 
   useEffect(() => {
     onStatusChange(
@@ -150,16 +155,26 @@ export function PoliticsPage({
       return { text: `Error: ${envelope.meta.failureReason ?? 'Politics data unavailable'}`, tone: 'negative' }
     }
     if (!payload || payload.page !== page) return { text: `Fetching page ${page}...`, tone: 'muted' }
-    if (payload.stale) return { text: `Page ${page} - ${trades.length} trades; stale cache shown`, tone: 'warning' }
-    return { text: `Page ${page} - ${trades.length} trades`, tone: 'positive' }
-  }, [notice, query.isFetching, page, envelope, payload, trades.length])
+    const scope = totalPages
+      ? `Page ${page} of ${totalPages} - ${trades.length} of ${totalCount.toLocaleString('en-US')} trades`
+      : `Page ${page} - ${trades.length} trades`
+    if (payload.stale) return { text: `${scope}; stale cache shown`, tone: 'warning' }
+    return { text: scope, tone: 'positive' }
+  }, [notice, query.isFetching, page, envelope, payload, trades.length, totalPages, totalCount])
 
   const exportTrades = useCallback(async () => {
     if (exporting) return
+    // 'All' becomes 0, which the service reads as "walk every page the source reports".
+    const pages = exportPages === EXPORT_ALL ? 0 : Number(exportPages)
     setExporting(true)
-    setNotice({ text: 'Exporting pages 1-5...', tone: 'muted' })
+    setNotice({
+      text: pages > 0
+        ? `Exporting pages 1-${pages}...`
+        : `Exporting every page${totalPages ? ` (${totalPages})` : ''}; this takes a while...`,
+      tone: 'muted',
+    })
     try {
-      const result = await api.politicsExport({ pages: 5 })
+      const result = await api.politicsExport({ pages })
       if (!result.data.trades.length) {
         setNotice({
           text: result.meta.failureReason ? `Export error: ${result.meta.failureReason}` : 'No trades to export',
@@ -168,14 +183,17 @@ export function PoliticsPage({
         return
       }
       await api.writeClipboard(politicsClipboard(result.data.trades))
+      const covered = result.data.totalPages
+        ? ` from ${result.data.pagesFetched} of ${result.data.totalPages} pages`
+        : ` from ${result.data.pagesFetched} page(s)`
       setNotice({
-        text: `Copied ${result.data.trades.length} trades to clipboard`,
+        text: `Copied ${result.data.trades.length.toLocaleString('en-US')} trades${covered} to clipboard`,
         tone: result.errors.length ? 'warning' : 'positive',
       })
     } finally {
       setExporting(false)
     }
-  }, [exporting])
+  }, [exporting, exportPages, totalPages])
 
   const tradeColumns = useMemo<Array<Column<PoliticsTrade>>>(() => [
     { key: 'politician', header: 'Politician', cell: (row) => row.politician, sortValue: (row) => row.politician },
@@ -188,9 +206,12 @@ export function PoliticsPage({
       width: '100px',
     },
     {
+      // Municipal debt, treasuries, LLCs and private funds are disclosed without a ticker.
       key: 'ticker',
       header: 'Ticker',
-      cell: (row) => <span className="text-accent">{row.ticker}</span>,
+      cell: (row) => row.ticker
+        ? <span className="text-accent">{row.ticker}</span>
+        : <span className="text-text-muted" title={row.assetDescription}>--</span>,
       sortValue: (row) => row.ticker,
       width: '76px',
     },
@@ -216,6 +237,13 @@ export function PoliticsPage({
       <div className="flex shrink-0 items-center gap-3">
         <h1 className="text-sm font-semibold text-text">Congressional Stock Trades</h1>
         <span className={`ml-auto text-2xs ${TONE_CLASS[status.tone]}`}>{status.text}</span>
+        <SelectFilter
+          label="Export"
+          value={exportPages}
+          values={['5', '25', '50', EXPORT_ALL]}
+          onChange={setExportPages}
+          className="w-16"
+        />
         <Button onClick={() => void exportTrades()} disabled={exporting}>
           {exporting ? 'Exporting...' : 'Export for LLM'}
         </Button>
@@ -246,7 +274,7 @@ export function PoliticsPage({
             rowKey={(row, index) => `${row.politician}-${row.ticker}-${row.transactionDate}-${row.disclosureDate}-${index}`}
             layout="fixed"
             defaultSort={{ key: 'transactionDate', direction: 'desc' }}
-            onRowDoubleClick={(row) => onNavigate('charts', row.ticker)}
+            onRowDoubleClick={(row) => { if (row.ticker) onNavigate('charts', row.ticker) }}
             empty={query.isFetching ? `Fetching page ${page}...` : 'No matching trades'}
           />
         </Panel>
@@ -299,8 +327,20 @@ export function PoliticsPage({
 
       <div className="flex shrink-0 items-center justify-center gap-2">
         <Button onClick={() => { setNotice(null); setPage((current) => Math.max(1, current - 1)) }} disabled={page <= 1 || query.isFetching}>&lt; Prev</Button>
-        <span className="w-16 text-center text-2xs text-text-muted">Page {page}</span>
-        <Button onClick={() => { setNotice(null); setPage((current) => current + 1) }} disabled={query.isFetching || !payload || payload.page !== page || payload.rawCount < 100}>Next &gt;</Button>
+        <span className="w-24 text-center text-2xs text-text-muted">
+          Page {page}{totalPages ? ` / ${totalPages}` : ''}
+        </span>
+        <Button
+          onClick={() => { setNotice(null); setPage((current) => current + 1) }}
+          disabled={
+            query.isFetching ||
+            !payload ||
+            payload.page !== page ||
+            (totalPages ? page >= totalPages : payload.rawCount < POLITICS_PAGE_SIZE)
+          }
+        >
+          Next &gt;
+        </Button>
       </div>
     </div>
   )

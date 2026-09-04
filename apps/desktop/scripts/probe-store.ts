@@ -90,6 +90,90 @@ async function main(): Promise<void> {
   show('reorder', await mutatePortfolios({ type: 'reorder', order: [created.id, id] }))
   show('removePosition NVDA', await mutatePortfolios({ type: 'removePosition', portfolioId: id, ticker: 'NVDA' }))
 
+  console.log('\n-- option tracker')
+  show('addOption', await mutatePortfolios({ type: 'addOption', portfolioId: id }))
+  const added = (await readPortfolios()).portfolios.find((p) => p.id === id)!.options.at(-1)!
+  console.log(
+    `   ok    new row defaults to ${added.strategy}/${added.status}, ${added.contracts} contract, ` +
+      `opened ${added.openDate}`,
+  )
+  // Live marks are derived, never stored: a fresh row must read as unpriced.
+  console.log(
+    `   ${added.currentPrice === 0 && added.volume === 0 && added.openInterest === 0 && added.impliedVolatility === 0 ? 'ok   ' : 'FAIL '} live fields start empty`,
+  )
+  if (added.currentPrice !== 0) process.exitCode = 1
+
+  await mutatePortfolios({
+    type: 'setOption',
+    portfolioId: id,
+    rowId: added.rowId,
+    patch: {
+      ticker: ' spy ',
+      strategy: 'Covered Call',
+      expiry: '2026-12-18',
+      strike: 640,
+      contracts: 2,
+      premium: 12.35,
+      status: 'Open',
+    },
+  })
+  const edited = (await readPortfolios()).portfolios
+    .find((p) => p.id === id)!
+    .options.find((option) => option.rowId === added.rowId)!
+  console.log(
+    `   ok    setOption -> ${edited.ticker} ${edited.strategy} ${edited.expiry} ` +
+      `${edited.strike} x${edited.contracts} @ ${edited.premium} (${edited.status})`,
+  )
+  if (edited.ticker !== 'SPY') {
+    console.log('   FAIL  the ticker was not trimmed and upper-cased')
+    process.exitCode = 1
+  }
+
+  // A patch is partial: untouched fields survive, and a junk number is ignored rather
+  // than blanking the cell the user did not edit.
+  await mutatePortfolios({
+    type: 'setOption',
+    portfolioId: id,
+    rowId: added.rowId,
+    patch: { strike: Number.NaN, premium: 13.5 },
+  })
+  const patched = (await readPortfolios()).portfolios
+    .find((p) => p.id === id)!
+    .options.find((option) => option.rowId === added.rowId)!
+  console.log(
+    `   ${patched.strike === 640 && patched.premium === 13.5 && patched.ticker === 'SPY' ? 'ok   ' : 'FAIL '} ` +
+      `a NaN strike is ignored and the rest of the row survives (strike=${patched.strike} premium=${patched.premium})`,
+  )
+  if (patched.strike !== 640 || patched.premium !== 13.5) process.exitCode = 1
+
+  // The Combined view restates every portfolio's rows under a prefixed id, so the
+  // Personal Finance page can key its live marks without two portfolios colliding.
+  const combined = (await readPortfolios()).portfolios.find((p) => p.readOnly)
+  if (combined) {
+    console.log(
+      `   ${combined.options.some((option) => option.rowId === `${id}:${added.rowId}`) ? 'ok   ' : 'FAIL '} ` +
+        `Combined restates the row as ${id}:${added.rowId}`,
+    )
+  }
+
+  await expectRejected('setOption on a removed row', async () => {
+    await mutatePortfolios({ type: 'removeOption', portfolioId: id, rowId: added.rowId })
+    return mutatePortfolios({
+      type: 'setOption',
+      portfolioId: id,
+      rowId: added.rowId,
+      patch: { premium: 1 },
+    })
+  })
+  const afterRemove = (await readPortfolios()).portfolios.find((p) => p.id === id)!.options
+  console.log(`   ok    removeOption left ${afterRemove.length} row(s)`)
+  await expectRejected('addOption on the Combined view', () =>
+    mutatePortfolios({ type: 'addOption', portfolioId: 'combined' }),
+  )
+  await expectRejected('setOption on an unknown portfolio', () =>
+    mutatePortfolios({ type: 'setOption', portfolioId: 'portfolio_99', rowId: 'x', patch: {} }),
+  )
+
   console.log('\n-- rejected edits')
   await expectRejected('duplicate ticker', () =>
     mutatePortfolios({ type: 'addPosition', portfolioId: id, ticker: first.tickers[0] ?? 'AAPL' }).then(() =>

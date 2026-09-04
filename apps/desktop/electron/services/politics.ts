@@ -12,7 +12,10 @@ import {
   normalizePoliticsTrade,
   parsePoliticsHtml,
   POLITICS_CACHE_TTL_MS,
+  POLITICS_EXPORT_MAX_PAGES,
+  POLITICS_EXPORT_PAGE_DELAY_MS,
   POLITICS_PAGE_SIZE,
+  type PoliticsHtmlParse,
 } from '../shared/politics.js'
 import { httpGet } from './news/http.js'
 
@@ -21,7 +24,7 @@ export const POLITICS_SOURCE_URL = 'https://www.capitoltrades.com/trades'
 
 const REQUEST_TIMEOUT_MS = 30_000
 const MAX_RESPONSE_BYTES = 16 * 1024 * 1024
-const CACHE_VERSION = 1
+const CACHE_VERSION = 2
 
 const REQUEST_HEADERS: Record<string, string> = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -50,11 +53,15 @@ function normalizePage(value: unknown, page: number): PoliticsPagePayload | null
       })
     : []
   const rawCount = Number(payload.rawCount)
+  const totalCount = Number(payload.totalCount)
+  const totalPages = Number(payload.totalPages)
   const fetchedAt = Number(payload.fetchedAt)
   return {
     page,
     trades,
     rawCount: Number.isFinite(rawCount) ? Math.max(Math.trunc(rawCount), 0) : trades.length,
+    totalCount: Number.isFinite(totalCount) ? Math.max(Math.trunc(totalCount), 0) : 0,
+    totalPages: Number.isFinite(totalPages) ? Math.max(Math.trunc(totalPages), 0) : 0,
     fetchedAt: Number.isFinite(fetchedAt) ? fetchedAt : 0,
     fromCache: false,
     cacheAgeSeconds: null,
@@ -92,9 +99,7 @@ export async function clearPoliticsCache(): Promise<void> {
   await rm(dirname(cachePath(1)), { recursive: true, force: true })
 }
 
-export async function fetchPoliticsLivePage(
-  page: number,
-): Promise<{ trades: PoliticsTrade[]; rawCount: number }> {
+export async function fetchPoliticsLivePage(page: number): Promise<PoliticsHtmlParse> {
   const url = `${POLITICS_SOURCE_URL}?page=${page}&pageSize=${POLITICS_PAGE_SIZE}`
   let status = 0
   let html = ''
@@ -171,6 +176,8 @@ export async function getPoliticsPage(
       page,
       trades: result.trades,
       rawCount: result.rawCount,
+      totalCount: result.totalCount,
+      totalPages: result.totalPages,
       fetchedAt: Date.now(),
       fromCache: false,
       cacheAgeSeconds: 0,
@@ -191,22 +198,34 @@ export async function getPoliticsPage(
   }
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => { setTimeout(resolve, ms) })
+}
+
 export interface PoliticsExportFetchResult {
   payload: PoliticsExportPayload
   errors: EnvelopeError[]
 }
 
+/** `requestedPages <= 0` walks every page the source reports. */
 export async function getPoliticsExport(requestedPages = 5): Promise<PoliticsExportFetchResult> {
-  const pages = Math.min(Math.max(Math.trunc(requestedPages) || 5, 1), 5)
+  const requested = Math.trunc(requestedPages)
+  const pages = requested <= 0
+    ? POLITICS_EXPORT_MAX_PAGES
+    : Math.min(requested, POLITICS_EXPORT_MAX_PAGES)
   const trades: PoliticsTrade[] = []
   const errors: EnvelopeError[] = []
   let pagesFetched = 0
+  let totalPages = 0
   for (let page = 1; page <= pages; page += 1) {
     try {
+      if (page > 1) await delay(POLITICS_EXPORT_PAGE_DELAY_MS)
       const result = await fetchPoliticsLivePage(page)
+      if (result.totalPages) totalPages = result.totalPages
       if (!result.trades.length) break
       trades.push(...result.trades)
       pagesFetched = page
+      if (totalPages && page >= totalPages) break
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
       errors.push(err(POLITICS_SOURCE, reason, `politics-export-${page}`))
@@ -214,7 +233,7 @@ export async function getPoliticsExport(requestedPages = 5): Promise<PoliticsExp
     }
   }
   trades.sort((left, right) => right.transactionDate.localeCompare(left.transactionDate))
-  return { payload: { trades, pagesFetched, fetchedAt: Date.now() }, errors }
+  return { payload: { trades, pagesFetched, totalPages, fetchedAt: Date.now() }, errors }
 }
 
 export function emptyPoliticsPage(page = 1): PoliticsPagePayload {
@@ -222,6 +241,8 @@ export function emptyPoliticsPage(page = 1): PoliticsPagePayload {
     page,
     trades: [],
     rawCount: 0,
+    totalCount: 0,
+    totalPages: 0,
     fetchedAt: 0,
     fromCache: false,
     cacheAgeSeconds: null,

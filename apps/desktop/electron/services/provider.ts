@@ -1554,13 +1554,15 @@ export const yahooProvider: MarketDataProvider = {
   },
 
   async politicsExport({ pages }) {
+    // 0 means every page, so the usual `|| 5` fallback would silently cap a full export.
+    const requested = Number(pages)
     try {
-      const { payload, errors } = await getPoliticsExport(Number(pages) || 5)
+      const { payload, errors } = await getPoliticsExport(Number.isFinite(requested) ? requested : 5)
       if (!errors.length) return ok(payload, POLITICS_SOURCE)
       return partial(payload, errors, POLITICS_SOURCE, errors[0]?.reason)
     } catch (error) {
       return failed(
-        { trades: [], pagesFetched: 0, fetchedAt: 0 },
+        { trades: [], pagesFetched: 0, totalPages: 0, fetchedAt: 0 },
         describeError(error),
         POLITICS_SOURCE,
       )

@@ -61,21 +61,40 @@ const rawRows = [
     txDate: '2026-08-26',
     pubDate: '2026-08-28',
   },
+  {
+    // Roughly a third of a live page: a disclosed holding the source has no ticker for.
+    _txId: 'four',
+    politician: { firstName: 'John', lastName: 'Smith', party: 'republican' },
+    issuer: { issuerTicker: null, issuerName: 'US TREASURY BILLS' },
+    chamber: 'senate',
+    txType: 'buy',
+    value: 100_000,
+    txDate: '2026-08-25',
+    pubDate: '2026-08-29',
+  },
 ]
 
-const payload = `0:{"data":${JSON.stringify(rawRows)},"more":true}`
+const payload =
+  `0:{"data":${JSON.stringify(rawRows)},"more":true}` +
+  ',{"className":"mt-6","searchParams":{},"totalCount":37062,"totalPages":371}'
 const fixture = `<html><script>self.__next_f.push(${JSON.stringify([1, payload])})</script></html>`
 
 function checkParsing(): void {
   const parsed = parsePoliticsHtml(fixture)
-  equal(parsed.rawCount, 3, 'raw count includes every Capitol Trades record')
-  equal(parsed.trades.length, 3, 'all ticker-bearing records survive')
+  equal(parsed.rawCount, 4, 'raw count includes every Capitol Trades record')
+  equal(parsed.trades.length, 4, 'every record survives, ticker or not')
+  equal(parsed.totalCount, 37_062, 'the paginator total is read')
+  equal(parsed.totalPages, 371, 'the paginator page count is read')
   equal(parsed.trades[0].ticker, 'AAPL', 'the market suffix is removed from a ticker')
   equal(parsed.trades[0].party, 'Democrat', 'party names normalize')
   equal(parsed.trades[0].theme, 'Technology', 'known tickers use the sector catalog')
   equal(parsed.trades[1].tradeType, 'Sale (Partial)', 'partial sales normalize before full sales')
   equal(parsed.trades[1].amountValue, 250_000, 'compact dollar values parse')
   equal(parsed.trades[2].theme, 'Technology', 'asset-description keywords infer a theme')
+  const tickerless = parsed.trades.find((trade) => trade.assetDescription === 'US TREASURY BILLS')
+  assert(tickerless, 'a holding without a ticker is kept')
+  equal(tickerless.ticker, '', 'a tickerless holding carries an empty ticker')
+  equal(tickerless.amountValue, 100_000, 'a tickerless holding keeps its value')
   equal(parsePoliticsHtml('<html>no RSC payload</html>').rawCount, 0, 'missing data parses empty')
 }
 
@@ -109,7 +128,11 @@ function checkPageMath(): void {
   equal(flow[0].buy, 1_500_000, 'purchases add to buy flow')
   equal(flow[0].sell, 0, 'exchanges do not count as a sale')
   equal(flow.find((row) => row.theme === 'Energy')?.sell, 250_000, 'sales add to sell flow')
-  equal(politicsFlowSlices(flow).length, 2, 'positive gross themes become donut slices')
+  equal(politicsFlowSlices(flow).length, 3, 'positive gross themes become donut slices')
+  assert(
+    !politicsTopCounts(trades, 'ticker').some(([ticker]) => !ticker),
+    'the ticker leaderboard skips tickerless holdings',
+  )
   assert(politicsClipboard(trades).includes('Jane Doe | House | Democrat | AAPL'), 'export columns')
 }
 

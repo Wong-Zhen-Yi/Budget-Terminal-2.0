@@ -3289,8 +3289,11 @@ export interface PoliticsTrade {
 export interface PoliticsPagePayload {
   page: number
   trades: PoliticsTrade[]
-  /** Count before rows without a ticker are discarded; controls whether Next is enabled. */
+  /** Rows on this page as the source returned them; equals `trades.length`. */
   rawCount: number
+  /** Trades across every page, from the source's paginator; 0 when it could not be read. */
+  totalCount: number
+  totalPages: number
   fetchedAt: number
   fromCache: boolean
   cacheAgeSeconds: number | null
@@ -3301,6 +3304,8 @@ export interface PoliticsPagePayload {
 export interface PoliticsExportPayload {
   trades: PoliticsTrade[]
   pagesFetched: number
+  /** Pages the source says exist, so a capped export can say what it left behind. */
+  totalPages: number
   fetchedAt: number
 }
 
@@ -3310,7 +3315,7 @@ export interface PoliticsPageRequest extends BackgroundRequest {
 }
 
 export interface PoliticsExportRequest {
-  /** The reference export reads pages 1 through 5. */
+  /** The reference export reads pages 1 through 5; the page offers deeper pulls. */
   pages?: number
 }
 
