@@ -2,11 +2,72 @@ import type { Quote } from '../../shared/contract.js'
 import { cache, TTL } from '../cache.js'
 import { paced, periodStart, yahoo } from './client.js'
 
+interface QuoteChartResult {
+  quotes: Array<{ date: Date; close: number | null }>
+  meta?: {
+    regularMarketPrice?: number
+    regularMarketTime?: Date
+    chartPreviousClose?: number
+    previousClose?: number
+  }
+}
+
+function finite(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+/** Build a current quote from Yahoo's chart response without mistaking an older bar for it. */
+export function quoteFromChart(symbol: string, result: QuoteChartResult): Quote | null {
+  const closes: Array<{ date: string; value: number }> = []
+  for (const row of result.quotes) {
+    if (!finite(row.close)) continue
+    const close = { date: row.date.toISOString().slice(0, 10), value: row.close }
+    if (closes.at(-1)?.date === close.date) {
+      closes[closes.length - 1] = close
+    } else {
+      closes.push(close)
+    }
+  }
+
+  const metaPrice = result.meta?.regularMarketPrice
+  if (finite(metaPrice)) {
+    const marketDate = result.meta?.regularMarketTime?.toISOString().slice(0, 10)
+    const latest = closes.at(-1)
+    const previous = latest?.date === marketDate
+      ? closes.at(-2)?.value
+      : latest?.value
+    const fallbackPrevious = result.meta?.chartPreviousClose ?? result.meta?.previousClose
+    const previousClose = finite(previous)
+      ? previous
+      : finite(fallbackPrevious)
+        ? fallbackPrevious
+        : metaPrice
+    const absChange = metaPrice - previousClose
+    return {
+      symbol,
+      price: metaPrice,
+      change: previousClose ? (absChange / previousClose) * 100 : 0,
+      absChange,
+    }
+  }
+
+  if (closes.length < 2) return null
+  const price = closes[closes.length - 1].value
+  const previous = closes[closes.length - 2].value
+  const absChange = price - previous
+  return {
+    symbol,
+    price,
+    change: previous ? (absChange / previous) * 100 : 0,
+    absChange,
+  }
+}
+
 /**
- * Quotes come from a 5-day daily chart and the last two closes, matching
- * `_download_batch_data` + `price_payload` in the PySide6 app. `quote()` is one cheap
- * call but is the endpoint that breaks first when Yahoo rotates its crumb handling,
- * so it is the fallback rather than the primary.
+ * Quotes come from a 5-day daily chart. Its meta block carries the current regular-market
+ * price while its rows provide the previous close. `quote()` is one cheap call but is the
+ * endpoint that breaks first when Yahoo rotates its crumb handling, so it remains the
+ * fallback rather than the primary.
  */
 async function fetchQuote(symbol: string): Promise<Quote> {
   const result = await paced(() =>
@@ -16,50 +77,7 @@ async function fetchQuote(symbol: string): Promise<Quote> {
       includePrePost: true,
     }),
   )
-  // Yahoo repeats the current session as an extra live row on top of the bar that
-  // already covers it. Left in, `closes[-1]` and `closes[-2]` are both today and the
-  // day's change collapses to the intraday delta — the same hazard `fetchCloses` in
-  // `history.ts` and `dropSyntheticQuoteBar` in `chart.ts` each guard against.
-  const closes: number[] = []
-  let previousDate = ''
-  for (const row of result.quotes) {
-    const close = row.close
-    if (typeof close !== 'number' || !Number.isFinite(close)) continue
-    const date = row.date.toISOString().slice(0, 10)
-    if (date === previousDate) {
-      closes[closes.length - 1] = close
-      continue
-    }
-    previousDate = date
-    closes.push(close)
-  }
-
-  if (closes.length >= 2) {
-    const price = closes[closes.length - 1]
-    const previous = closes[closes.length - 2]
-    const absChange = price - previous
-    return {
-      symbol,
-      price,
-      change: previous ? (absChange / previous) * 100 : 0,
-      absChange,
-    }
-  }
-
-  // Thin or halted symbols can return a single bar; the meta block still carries a price.
-  const metaPrice = result.meta?.regularMarketPrice
-  const metaPrevious = result.meta?.chartPreviousClose ?? result.meta?.previousClose
-  if (typeof metaPrice === 'number' && Number.isFinite(metaPrice)) {
-    const previous = typeof metaPrevious === 'number' ? metaPrevious : metaPrice
-    const absChange = metaPrice - previous
-    return {
-      symbol,
-      price: metaPrice,
-      change: previous ? (absChange / previous) * 100 : 0,
-      absChange,
-    }
-  }
-  return fetchQuoteFallback(symbol)
+  return quoteFromChart(symbol, result) ?? fetchQuoteFallback(symbol)
 }
 
 async function fetchQuoteFallback(symbol: string): Promise<Quote> {

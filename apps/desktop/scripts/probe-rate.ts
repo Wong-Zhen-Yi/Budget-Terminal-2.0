@@ -4,7 +4,9 @@
  *
  *   npm run probe:rate
  */
-import { getQuote } from '../electron/services/yahoo/quotes.js'
+import assert from 'node:assert/strict'
+
+import { getQuote, quoteFromChart } from '../electron/services/yahoo/quotes.js'
 import { RateGate, isRateLimitError, rateGate } from '../electron/services/yahoo/rateGate.js'
 
 const SYMBOLS = [
@@ -12,7 +14,54 @@ const SYMBOLS = [
   'UNH', 'XOM', 'WMT', 'MA', 'PG', 'JNJ', 'HD', 'COST', 'ORCL', 'BAC',
 ]
 
+function probeQuoteSelection(): void {
+  const previous = 324.96
+  const current = 328.21
+  const baseRows = [
+    { date: new Date('2026-09-01T13:30:00Z'), close: 325.13 },
+    { date: new Date('2026-09-02T13:30:00Z'), close: previous },
+  ]
+  const meta = {
+    regularMarketPrice: current,
+    regularMarketTime: new Date('2026-09-03T20:00:01Z'),
+    // Yahoo can report a period-level chartPreviousClose here. The daily rows are the
+    // authoritative source for the immediately preceding session when they exist.
+    chartPreviousClose: 314.58,
+  }
+
+  const incomplete = quoteFromChart('AAPL', {
+    quotes: [...baseRows, { date: new Date('2026-09-03T13:30:00Z'), close: null }],
+    meta,
+  })
+  assert.equal(incomplete?.price, current)
+  assert.equal(incomplete?.absChange, current - previous)
+
+  const complete = quoteFromChart('AAPL', {
+    quotes: [...baseRows, { date: new Date('2026-09-03T13:30:00Z'), close: current }],
+    meta,
+  })
+  assert.equal(complete?.price, current)
+  assert.equal(complete?.absChange, current - previous)
+
+  const duplicated = quoteFromChart('AAPL', {
+    quotes: [
+      ...baseRows,
+      { date: new Date('2026-09-03T13:30:00Z'), close: 327 },
+      { date: new Date('2026-09-03T20:00:01Z'), close: current },
+    ],
+    meta,
+  })
+  assert.equal(duplicated?.absChange, current - previous)
+
+  const historical = quoteFromChart('AAPL', { quotes: baseRows })
+  assert.equal(historical?.price, previous)
+  assert.equal(historical?.absChange, previous - 325.13)
+
+  console.log('quote selection current-price checks passed')
+}
+
 async function main(): Promise<void> {
+  probeQuoteSelection()
   const started = Date.now()
   let peakInFlight = 0
   const sampler = setInterval(() => {
