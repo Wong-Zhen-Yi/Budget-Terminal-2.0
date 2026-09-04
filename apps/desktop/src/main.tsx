@@ -8,10 +8,9 @@ import './styles/theme.css'
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      // Yahoo is the only upstream and it is rate limited; retrying a failure straight
-      // away just spends the budget. One retry, then show the panel's error state.
-      retry: 1,
-      retryDelay: 2000,
+      // Services handle stale fallback and provider cooldowns. Retrying IPC failures
+      // here makes each mounted panel repeat the same failed provider work.
+      retry: false,
       refetchOnWindowFocus: false,
       // Every page unmounts on a tab switch — `App.tsx` renders one at a time — so its
       // queries lose their observer immediately and the 5-minute default evicts them.

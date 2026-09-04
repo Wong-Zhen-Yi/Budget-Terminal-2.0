@@ -18,6 +18,7 @@
  */
 
 import { paced, yahoo } from './client.js'
+import { cache } from '../cache.js'
 
 const SPARK_URL = 'https://query1.finance.yahoo.com/v8/finance/spark'
 
@@ -105,15 +106,31 @@ export interface SparkBatch {
  * A chunk that fails only costs its own twenty symbols, which then land in `missing` and
  * render as no-data tiles — the same degradation the reference reports as a partial load.
  */
-export async function fetchSparkCloses(symbols: string[], range = '1y'): Promise<SparkBatch> {
-  const unique = [...new Set(symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean))]
+export async function fetchSparkCloses(symbols: string[], range = '1y', force = false): Promise<SparkBatch> {
+  const unique = [...new Set(symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean))].sort()
+  const series: Record<string, SparkSeries> = {}
+  const needed = unique.filter((symbol) => {
+    const hit = force ? null : cache.get<SparkSeries>(`spark:${range}:${symbol}`)
+    if (hit) series[symbol] = hit.value
+    return !hit
+  })
   const chunks: string[][] = []
-  for (let index = 0; index < unique.length; index += SPARK_BATCH_SIZE) {
-    chunks.push(unique.slice(index, index + SPARK_BATCH_SIZE))
+  for (let index = 0; index < needed.length; index += SPARK_BATCH_SIZE) {
+    chunks.push(needed.slice(index, index + SPARK_BATCH_SIZE))
   }
 
-  const settled = await Promise.allSettled(chunks.map((chunk) => fetchChunk(chunk, range)))
-  const series: Record<string, SparkSeries> = {}
+  // Reuse constituent histories across Heatmap indexes and ETF arbitrage. Identical
+  // concurrent chunks share a request; failed chunks keep the existing missing state.
+  const settled = await Promise.allSettled(chunks.map(async (chunk) => {
+    const result = await cache.resolve(`spark-batch:${range}:${chunk.join(',')}`, 0, async () => {
+      const rows = await fetchChunk(chunk, range)
+      for (const [symbol, value] of Object.entries(rows)) {
+        cache.set(`spark:${range}:${symbol}`, value, 120_000)
+      }
+      return rows
+    }, { force: true })
+    return result.value
+  }))
   for (const outcome of settled) {
     if (outcome.status === 'fulfilled') Object.assign(series, outcome.value)
   }

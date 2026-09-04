@@ -62,6 +62,10 @@ function probeQuoteSelection(): void {
 
 async function main(): Promise<void> {
   probeQuoteSelection()
+  if (process.argv.includes('--offline')) {
+    assert.ok(await probeLanes())
+    return
+  }
   const started = Date.now()
   let peakInFlight = 0
   const sampler = setInterval(() => {

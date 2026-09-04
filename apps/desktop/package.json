@@ -12,6 +12,7 @@
     "probe": "tsx scripts/probe.ts",
     "probe:portfolio": "tsx scripts/probe-portfolio.ts",
     "probe:rate": "tsx scripts/probe-rate.ts",
+    "probe:loading": "tsx scripts/probe-loading.ts",
     "probe:store": "tsx scripts/probe-store.ts",
     "probe:analytics": "tsx scripts/probe-analytics.ts",
     "probe:finance": "tsx scripts/probe-finance.ts",

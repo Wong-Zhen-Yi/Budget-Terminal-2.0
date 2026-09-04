@@ -134,7 +134,7 @@ export interface EtfArbitrageFetchResult {
 /** `_QUOTE_CACHE_TTL_SECONDS`, shared with the Heatmap page's own quote window. */
 const ARBITRAGE_TTL_MS = 120_000
 
-async function fetchArbitrage(symbol: string): Promise<EtfArbitrageFetchResult> {
+async function fetchArbitrage(symbol: string, force: boolean): Promise<EtfArbitrageFetchResult> {
   // The holdings are already cached by ticker, so refreshing arbitrage does not re-fetch
   // the issuer file — exactly as the reference hands `_p13_last_result` to the service.
   const source = await getEtfHoldings(symbol)
@@ -153,7 +153,7 @@ async function fetchArbitrage(symbol: string): Promise<EtfArbitrageFetchResult> 
     byYahooSymbol.set(key, [...(byYahooSymbol.get(key) ?? []), entry])
   }
 
-  const { series, missing } = await fetchSparkCloses([...byYahooSymbol.keys()])
+  const { series, missing } = await fetchSparkCloses([...byYahooSymbol.keys()], '1y', force)
   const quotes = new Map<string, EtfQuote>()
   for (const [key, entry] of Object.entries(series)) {
     const quote: EtfQuote = {
@@ -177,7 +177,7 @@ export function getEtfArbitrage(ticker: string, force = false): Promise<EtfArbit
   const symbol = ticker.trim().toUpperCase()
   if (!symbol) return Promise.reject(new Error('Load an ETF before refreshing arbitrage.'))
   return cache
-    .resolve(`etf-arbitrage:${symbol}`, ARBITRAGE_TTL_MS, () => fetchArbitrage(symbol), { force })
+    .resolve(`etf-arbitrage:${symbol}`, ARBITRAGE_TTL_MS, () => fetchArbitrage(symbol, force), { force })
     .then((result) => result.value)
 }
 

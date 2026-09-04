@@ -569,8 +569,6 @@ export function useWarmPages(settings: AppSettings | undefined): WarmProgress {
 
   useEffect(() => {
     if (started.current || !ready) return
-    started.current = true
-
     const current = inputs.current
     const tasks = buildTasks(
       current.payload,
@@ -592,9 +590,21 @@ export function useWarmPages(settings: AppSettings | undefined): WarmProgress {
     if (!tasks.length) return
 
     let cancelled = false
-    void (async () => {
+    // Defer startup so StrictMode's trial effect can clean up before marking this run
+    // started. Otherwise the real effect skips a warm-up that was already cancelled.
+    const run = async () => {
+      started.current = true
       for (const [index, task] of tasks.entries()) {
+        // Let visible queries finish before spending more provider budget. Recheck
+        // visibility each time: Settings can change during a long warm-up.
+        while (!cancelled && (document.hidden || queryClient.isFetching() > 0)) {
+          await new Promise((resolve) => setTimeout(resolve, 250))
+        }
         if (cancelled) return
+        const hiddenNow = inputs.current.hidden
+        if (task.tab === 'economic'
+          ? hiddenNow.has('economic') && hiddenNow.has('bonds')
+          : hiddenNow.has(task.tab)) continue
         setProgress({ active: true, done: index, total: tasks.length, label: task.label })
         // A page that cannot be warmed is not an error here: it falls back to fetching
         // when the user opens it, exactly as it did before.
@@ -603,14 +613,18 @@ export function useWarmPages(settings: AppSettings | undefined): WarmProgress {
         } catch {
           /* the page reports its own failure when it mounts */
         }
+        // Yield between pages so navigation and its foreground queries can start.
+        await new Promise((resolve) => setTimeout(resolve, 250))
       }
       if (!cancelled) {
         setProgress({ active: false, done: tasks.length, total: tasks.length, label: '' })
       }
-    })()
+    }
+    const timer = setTimeout(() => void run(), 250)
 
     return () => {
       cancelled = true
+      clearTimeout(timer)
     }
   }, [ready, queryClient])
 

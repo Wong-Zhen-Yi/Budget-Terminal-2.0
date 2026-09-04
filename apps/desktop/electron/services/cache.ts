@@ -70,6 +70,7 @@ export interface CachedResult<T> {
 export class TtlCache {
   private readonly entries = new Map<string, Entry<unknown>>()
   private readonly inFlight = new Map<string, Promise<unknown>>()
+  private readonly failures = new Map<string, { error: unknown; retryAt: number }>()
 
   get<T>(key: string, { allowStale = false } = {}): CachedResult<T> | null {
     const entry = this.entries.get(key) as Entry<T> | undefined
@@ -80,15 +81,18 @@ export class TtlCache {
   }
 
   set<T>(key: string, value: T, ttlMs: number): void {
+    this.failures.delete(key)
     this.entries.set(key, { value, storedAt: Date.now(), ttlMs })
   }
 
   delete(key: string): void {
     this.entries.delete(key)
+    this.failures.delete(key)
   }
 
   clear(): void {
     this.entries.clear()
+    this.failures.clear()
   }
 
   /**
@@ -108,10 +112,22 @@ export class TtlCache {
     const existing = this.inFlight.get(key) as Promise<T> | undefined
     if (existing) return { value: await existing, ageSeconds: 0, fromCache: false }
 
-    const pending = loader()
+    // A failed provider must not be retried by every panel or repeated Reload click.
+    // Keep the original error so envelope handlers still report the actual failure.
+    const failure = this.failures.get(key)
+    if (failure && Date.now() < failure.retryAt) throw failure.error
+    this.failures.delete(key)
+
+    const pending = Promise.resolve().then(loader)
       .then((value) => {
         this.set(key, value, ttlMs)
         return value
+      })
+      .catch((error: unknown) => {
+        // Bound retained errors even for scans over many different symbols.
+        if (this.failures.size >= 1000) this.failures.delete(this.failures.keys().next().value!)
+        this.failures.set(key, { error, retryAt: Date.now() + 10_000 })
+        throw error
       })
       .finally(() => {
         this.inFlight.delete(key)

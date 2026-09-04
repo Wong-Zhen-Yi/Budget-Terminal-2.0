@@ -112,7 +112,7 @@ async function fetchHeatmap(etf: HeatmapEtfKey, force: boolean): Promise<Heatmap
     byYahooSymbol.set(key, [...(byYahooSymbol.get(key) ?? []), seed.symbol])
   }
 
-  const { series, missing } = await fetchSparkCloses([...byYahooSymbol.keys()])
+  const { series, missing } = await fetchSparkCloses([...byYahooSymbol.keys()], '1y', force)
   const quotes = new Map<string, { price: number; changes: HeatmapHolding['changes'] }>()
   for (const [key, entry] of Object.entries(series)) {
     const changes = changesFromCloses(entry.dates, entry.closes)
