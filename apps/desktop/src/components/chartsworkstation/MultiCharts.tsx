@@ -34,18 +34,18 @@ export function MultiCharts({ onStatus }: { onStatus: (meta: EnvelopeMeta | unde
   const portfolioData = portfolio.data?.data
   const activePortfolio = portfolioData?.portfolios.find((entry) => entry.id === portfolioData.activeId)
     ?? portfolioData?.portfolios.find((entry) => entry.id === portfolioData.mainId)
-  const protectedSymbols = activePortfolio?.tickers ?? []
-  const baseSymbols = mode === 'portfolio' ? [...protectedSymbols, ...custom] : watchlist
+  const protectedSymbols = useMemo(() => activePortfolio?.tickers ?? [], [activePortfolio?.tickers])
   const symbols = useMemo(() => {
+    const baseSymbols = mode === 'portfolio' ? [...protectedSymbols, ...custom] : watchlist
     const unique = [...new Set(baseSymbols)]
     const rank = new Map(order.map((symbol, index) => [symbol, index]))
     return [...unique].sort((left, right) => (rank.get(left) ?? 9999) - (rank.get(right) ?? 9999))
-  }, [baseSymbols, order])
+  }, [mode, protectedSymbols, custom, watchlist, order])
 
   const reportCard = useCallback((symbol: string, meta: EnvelopeMeta | undefined, loading: boolean) => {
     setCardHealth((current) => {
       const previous = current[symbol]
-      if (previous?.meta === meta && previous.loading === loading) return current
+      if (previous && previous.meta === meta && previous.loading === loading) return current
       return { ...current, [symbol]: { meta, loading } }
     })
   }, [])
