@@ -1,43 +1,14 @@
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
-import type {
-  SignalCandidate,
-  SignalRegime,
-  SignalResult,
-  SignalsPayload,
-  SignalsRequest,
-  SignalValidation,
-} from '../../shared/contract.js'
+import type { DayTradingCandidate, SignalsPayload, SignalsRequest } from '../../shared/contract.js'
 import {
-  alignBenchmark,
-  calculateIndicators,
-  completedMedianDollarVolume,
-  dataErrorSignal,
-  evaluateDailySignalAtIndex,
-  evaluateSignal,
-  neutralRegime,
-  rankSignalCandidates,
-  usExtendedSessionOpen,
-  scoreRegime,
-  signalBacktestSamples,
-  signalCandidateFromQuote,
-  summarizeBacktestSamples,
-  SIGNAL_CONFIG,
-  SIGNAL_CONFIRM_LIMIT,
-  SIGNAL_EXCHANGES,
-  SIGNAL_MINIMUM_DOLLAR_VOLUME,
-  SIGNAL_SCREEN_OFFSETS,
-  SIGNAL_SCREEN_PAGE_SIZE,
-  SIGNAL_SCREEN_TARGET,
-  type AlignedBenchmark,
-  type BacktestSample,
-  type CalculatedBar,
-  type SignalBar,
-  type SignalQuoteCandidate,
-  type SignalFrames,
-  type SignalRole,
+  completedMedianDollarVolume, signalCandidateFromQuote,
+  SIGNAL_EXCHANGES, SIGNAL_MINIMUM_DOLLAR_VOLUME, SIGNAL_SCREEN_OFFSETS,
+  SIGNAL_SCREEN_PAGE_SIZE, SIGNAL_SCREEN_TARGET,
+  type SignalBar, type SignalQuoteCandidate,
 } from '../../shared/signals.js'
+import { dayTradingSession, evaluateDayTrading, validDayTradingPayload } from '../../shared/dayTrading.js'
 import { cache } from '../cache.js'
 import { paced, yahoo } from './client.js'
 import { equitySignalsScreen } from './screener.js'
@@ -46,11 +17,10 @@ export const SIGNALS_SOURCE = 'Yahoo Finance'
 
 const DAY = 24 * 60 * 60 * 1000
 const UNIVERSE_TTL = DAY
-const BENCHMARK_SYMBOL = 'SPY'
-const VOLATILITY_SYMBOL = '^VIX'
+
 
 interface UniversePayload {
-  candidates: SignalCandidate[]
+  candidates: DayTradingCandidate[]
   sourcedAt: string
   sourceCandidateCount: number
   prefilteredCount: number
@@ -60,38 +30,19 @@ interface UniversePayload {
 }
 
 interface RoleRequest {
-  interval: '1d' | '1h' | '5m' | '1m'
+  interval: '1d' | '1m'
   lookbackDays: number
   ttlMs: number
 }
 
-const ROLE_REQUESTS: Record<SignalRole, RoleRequest> = {
-  trend: { interval: '1d', lookbackDays: 730, ttlMs: 4 * 60 * 60 * 1000 },
-  momentum: { interval: '1h', lookbackDays: 180, ttlMs: 15 * 60 * 1000 },
-  setup: { interval: '5m', lookbackDays: 30, ttlMs: 2 * 60 * 1000 },
-  entry: { interval: '1m', lookbackDays: 7, ttlMs: 45 * 1000 },
-}
-
+const DAILY_REQUEST: RoleRequest = { interval: '1d', lookbackDays: 90, ttlMs: 4 * 60 * 60 * 1000 }
+const ENTRY_REQUEST: RoleRequest = { interval: '1m', lookbackDays: 7, ttlMs: 45 * 1000 }
 let latestPayload: SignalsPayload | null = null
+let inFlight: Promise<SignalsPayload> | null = null
 
 function latestSignalsPath(): string {
   const appData = process.env.APPDATA ?? join(process.env.USERPROFILE ?? '', 'AppData', 'Roaming')
-  return join(appData, 'BudgetTerminalElectron', 'signals-latest-v4.json')
-}
-
-function validStoredPayload(value: unknown): value is SignalsPayload {
-  if (!value || typeof value !== 'object') return false
-  const payload = value as Partial<SignalsPayload>
-  const age = Date.now() - Date.parse(String(payload.completedAt ?? ''))
-  return (
-    Array.isArray(payload.candidates) &&
-    Array.isArray(payload.results) &&
-    Array.isArray(payload.validation) &&
-    Boolean(payload.regime) &&
-    Number.isFinite(age) &&
-    age >= 0 &&
-    age <= 7 * DAY
-  )
+  return join(appData, 'BudgetTerminalElectron', 'signals-latest-v5.json')
 }
 
 async function saveLatestSignals(payload: SignalsPayload): Promise<void> {
@@ -179,32 +130,6 @@ async function fetchBars(
   return result.value
 }
 
-async function fetchRole(
-  symbols: string[],
-  role: SignalRole,
-  force: boolean,
-): Promise<{ frames: Record<string, SignalBar[]>; errors: Record<string, string> }> {
-  const request = ROLE_REQUESTS[role]
-  const settled = await Promise.allSettled(
-    symbols.map((symbol) => fetchBars(symbol, request, force, role)),
-  )
-  const frames: Record<string, SignalBar[]> = {}
-  const errors: Record<string, string> = {}
-  settled.forEach((outcome, index) => {
-    const symbol = symbols[index]
-    if (outcome.status === 'fulfilled') frames[symbol] = outcome.value
-    else errors[symbol] = outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason)
-  })
-  return { frames, errors }
-}
-
-/**
- * Page the screener rather than taking one top-100 slice.
- *
- * A single market-cap page returns the same mega-caps every day, so the shortlist could
- * never contain anything the user had not already seen. A failed page degrades the pool
- * instead of failing the scan, exactly as `screenEquityUniverse` handles its twelve.
- */
 async function screenCandidates(): Promise<{ screened: number; rows: SignalQuoteCandidate[] }> {
   const settled = await Promise.allSettled(
     SIGNAL_SCREEN_OFFSETS.map((offset) =>
@@ -225,58 +150,34 @@ async function screenCandidates(): Promise<{ screened: number; rows: SignalQuote
   return { screened, rows: [...bySymbol.values()].slice(0, SIGNAL_SCREEN_TARGET) }
 }
 
-/**
- * Source the universe in two stages.
- *
- * Stage one prefilters on the screener's own average-volume fields, which costs no
- * requests — the reference downloaded a daily chart per candidate to learn the same thing.
- * Stage two buys 730 days of daily history for the survivors under the `trend` cache key
- * the scoring pass will reuse, confirms liquidity from those same bars, and scores the
- * daily sub-model so intraday history is only bought for names that earned it.
- */
+/** Confirm liquidity in screener dollar-volume order; retain up to 30 eligible names. */
 async function sourceUniverse(force: boolean): Promise<UniversePayload & { fromCache: boolean }> {
   const sessionDate = localSessionDate()
   const resolved = await cache.resolve(
-    `signals:universe:${sessionDate}`,
+    `signals:day-trading-universe-v5:${sessionDate}`,
     UNIVERSE_TTL,
     async () => {
       const { screened, rows } = await screenCandidates()
       const prefiltered = rows
         .filter((row) => row.estimatedDollarVolume >= SIGNAL_MINIMUM_DOLLAR_VOLUME)
         .sort((left, right) => right.estimatedDollarVolume - left.estimatedDollarVolume)
-      const confirming = prefiltered.slice(0, SIGNAL_CONFIRM_LIMIT)
-
-      const daily = ROLE_REQUESTS.trend
-      const benchmark = await fetchBars(BENCHMARK_SYMBOL, daily, force, 'trend').catch(() => [] as SignalBar[])
-      const settled = await Promise.allSettled(
-        confirming.map((row) => fetchBars(row.ticker, daily, force, 'trend')),
-      )
-
-      const passed: SignalCandidate[] = []
-      confirming.forEach((row, index) => {
-        const outcome = settled[index]
-        if (outcome.status !== 'fulfilled') return
-        const bars = outcome.value
-        const medianDollarVolume = completedMedianDollarVolume(bars, sessionDate)
-        if (medianDollarVolume === null || medianDollarVolume < SIGNAL_MINIMUM_DOLLAR_VOLUME) return
-        const calculated = calculateIndicators(bars)
-        const aligned = benchmark.length ? alignBenchmark(calculated, benchmark) : null
-        const preScore = evaluateDailySignalAtIndex(calculated, calculated.length - 1, aligned)
-        passed.push({
-          ...row,
-          medianDollarVolume,
-          dailyPreScore: preScore.fraction,
-          qualityRank: 1,
-          reasons: [
-            `Market cap $${(row.marketCap / 1e9).toFixed(1)}B`,
-            `20-session median dollar volume $${(medianDollarVolume / 1e6).toFixed(1)}M`,
-            `Daily sub-model scored ${preScore.score.toFixed(1)}/${preScore.maxScore} before intraday data`,
-            `Listed on ${row.exchange}`,
-          ],
+      const passed: DayTradingCandidate[] = []
+      // Check successive batches until 30 pass, so failed top names do not discard
+      // eligible liquid names farther down the screen. All requests remain paced.
+      for (let offset = 0; offset < prefiltered.length && passed.length < 30; offset += 30) {
+        const batch = prefiltered.slice(offset, offset + 30)
+        const settled = await Promise.allSettled(batch.map((row) => fetchBars(row.ticker, DAILY_REQUEST, force, 'liquidity-v5')))
+        batch.forEach((row, index) => {
+          const outcome = settled[index]
+          if (outcome.status !== 'fulfilled') return
+          const medianDollarVolume = completedMedianDollarVolume(outcome.value, sessionDate)
+          if (medianDollarVolume === null || medianDollarVolume < SIGNAL_MINIMUM_DOLLAR_VOLUME) return
+          passed.push({ ...row, medianDollarVolume, qualityRank: passed.length + 1,
+            reasons: [`20-session median dollar volume $${(medianDollarVolume / 1e6).toFixed(1)}M`, `Listed on ${row.exchange}`],
+          })
         })
-      })
-
-      const candidates = rankSignalCandidates(passed)
+      }
+      const candidates = passed.slice(0, 30)
       return {
         candidates,
         sourcedAt: new Date().toISOString(),
@@ -292,38 +193,11 @@ async function sourceUniverse(force: boolean): Promise<UniversePayload & { fromC
   return { ...resolved.value, fromCache: resolved.fromCache }
 }
 
-/**
- * Measure the daily sub-model against what actually happened next.
- *
- * This runs over the daily frames the scan already downloaded, so it costs nothing beyond
- * arithmetic, and it is the only claim on this page that is observed rather than asserted.
- */
-function buildValidation(
-  frames: Record<string, SignalBar[]>,
-  tickers: string[],
-  benchmark: SignalBar[],
-): SignalValidation[] {
-  const prepared: Array<{ rows: CalculatedBar[]; aligned: AlignedBenchmark | null }> = []
-  for (const ticker of tickers) {
-    const bars = frames[ticker]
-    if (!bars || bars.length <= SIGNAL_CONFIG.backtestWarmup) continue
-    const rows = calculateIndicators(bars)
-    prepared.push({ rows, aligned: benchmark.length ? alignBenchmark(rows, benchmark) : null })
-  }
-  if (!prepared.length) return []
-  return SIGNAL_CONFIG.backtestHorizons.map((horizon) => {
-    const samples: BacktestSample[] = prepared.flatMap((entry) =>
-      signalBacktestSamples(entry.rows, entry.aligned, horizon),
-    )
-    return summarizeBacktestSamples(samples, horizon, prepared.length)
-  })
-}
-
 export async function getLatestSignals(): Promise<SignalsPayload | null> {
-  if (latestPayload) return latestPayload
+  if (latestPayload && validDayTradingPayload(latestPayload)) return latestPayload
   try {
     const value: unknown = JSON.parse(await readFile(latestSignalsPath(), 'utf8'))
-    latestPayload = validStoredPayload(value) ? value : null
+    latestPayload = validDayTradingPayload(value) ? value : null
   } catch {
     latestPayload = null
   }
@@ -334,7 +208,7 @@ export async function clearLatestSignals(): Promise<void> {
   latestPayload = null
   // The superseded documents are never read, but Clear cache should not leave them behind.
   const current = latestSignalsPath()
-  const targets = [current, ...['-v3.json', '-v2.json'].map((old) => current.replace('-v4.json', old))]
+  const targets = [current, ...['-v4.json', '-v3.json', '-v2.json'].map((old) => current.replace('-v5.json', old))]
   for (const target of targets) {
     try {
       await unlink(target)
@@ -344,82 +218,40 @@ export async function clearLatestSignals(): Promise<void> {
   }
 }
 
-/** Source the liquid universe, collect four timeframes, and isolate failures per ticker. */
-export async function getSignals(request: SignalsRequest = {}): Promise<SignalsPayload> {
+/** Scan requests share one promise, including concurrent windows and manual refreshes. */
+export function getSignals(request: SignalsRequest = {}): Promise<SignalsPayload> {
+  if (inFlight) return inFlight
+  inFlight = scanSignals(request).finally(() => { inFlight = null })
+  return inFlight
+}
+
+async function scanSignals(request: SignalsRequest): Promise<SignalsPayload> {
   const startedAt = new Date().toISOString()
+  await getLatestSignals()
   const universe = await sourceUniverse(Boolean(request.forceUniverseRefresh))
-  if (!universe.candidates.length) {
-    throw new Error('No liquid US equities passed the automatic universe filters')
-  }
-  const force = Boolean(request.forceMarketRefresh)
-  const tickers = universe.candidates.map((candidate) => candidate.ticker)
-  const symbolsByRole: Record<SignalRole, string[]> = {
-    // The benchmark drives relative strength and the regime; the volatility index only the
-    // regime. Both ride the daily cache the universe pass already warmed.
-    trend: [...tickers, BENCHMARK_SYMBOL, VOLATILITY_SYMBOL],
-    momentum: tickers,
-    setup: tickers,
-    entry: tickers,
-  }
-  const [trend, momentum, setup, entry] = await Promise.all(
-    (Object.keys(symbolsByRole) as SignalRole[]).map((role) =>
-      fetchRole(symbolsByRole[role], role, force),
-    ),
-  )
-  const roleResults = { trend, momentum, setup, entry }
-  const benchmark = roleResults.trend.frames[BENCHMARK_SYMBOL] ?? []
-  const volatility = roleResults.trend.frames[VOLATILITY_SYMBOL] ?? []
-  const regime: SignalRegime = benchmark.length
-    ? scoreRegime(benchmark, volatility, BENCHMARK_SYMBOL)
-    : neutralRegime(`Market regime was not scored: no usable ${BENCHMARK_SYMBOL} history.`)
-
-  // Resolved once so every result in a scan agrees on the session, even if the run straddles
-  // 20:00 ET — a table where half the rows say MARKET_CLOSED and half say STALE_DATA would
-  // read as a feed fault rather than a closing bell.
-  const marketOpen = usExtendedSessionOpen(Date.now())
-
-  const results: SignalResult[] = tickers.map((ticker) => {
-    const frames = Object.fromEntries(
-      (Object.keys(roleResults) as SignalRole[]).map((role) => [role, roleResults[role].frames[ticker] ?? []]),
-    ) as SignalFrames
-    try {
-      return evaluateSignal(ticker, frames, {
-        benchmark,
-        benchmarkSymbol: BENCHMARK_SYMBOL,
-        regime,
-        marketOpen,
-      })
-    } catch (error) {
-      return dataErrorSignal(
-        ticker,
-        `Signal calculation failed: ${error instanceof Error ? error.message : String(error)}`,
-      )
-    }
+  if (!universe.candidates.length) throw new Error('No liquid US equities passed the universe filters')
+  const settled = await Promise.allSettled(universe.candidates.map((candidate) =>
+    fetchBars(candidate.ticker, ENTRY_REQUEST, Boolean(request.forceMarketRefresh), 'day-trading-v5'),
+  ))
+  const now = Date.now()
+  const session = dayTradingSession(now)
+  const results = universe.candidates.flatMap((candidate, index) => {
+    const outcome = settled[index]
+    const error = outcome.status === 'rejected'
+      ? outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason) : null
+    // Keep previous levels and timestamps when this ticker's request fails.
+    const previous = latestPayload?.results.filter((row) => row.ticker === candidate.ticker && row.session === session.date)
+    if (error && previous?.length) return previous.map((row) => ({ ...row, status: 'error' as const, error }))
+    return evaluateDayTrading(candidate.ticker, outcome.status === 'fulfilled' ? outcome.value : [], now, error)
   })
-  const errors = Object.fromEntries(
-    results.flatMap((result) => result.error ? [[result.ticker, result.error]] : []),
-  )
+  const errors = Object.fromEntries(results.flatMap((row) => row.error ? [[row.ticker, row.error]] : []))
   latestPayload = {
-    candidates: universe.candidates,
-    results,
-    source: SIGNALS_SOURCE,
-    sourcedAt: universe.sourcedAt,
-    startedAt,
-    completedAt: new Date().toISOString(),
-    sourceCandidateCount: universe.sourceCandidateCount,
-    prefilteredCount: universe.prefilteredCount,
-    confirmedCount: universe.confirmedCount,
-    rejectedCandidateCount: universe.rejectedCandidateCount,
-    passedFilterCount: universe.passedFilterCount,
-    regime,
-    validation: buildValidation(roleResults.trend.frames, tickers, benchmark),
-    errors,
-    universeFromCache: universe.fromCache,
+    version: 5, session: session.date, marketOpen: session.open,
+    candidates: universe.candidates, results, source: SIGNALS_SOURCE,
+    sourcedAt: universe.sourcedAt, startedAt, completedAt: new Date(now).toISOString(),
+    sourceCandidateCount: universe.sourceCandidateCount, prefilteredCount: universe.prefilteredCount,
+    confirmedCount: universe.confirmedCount, errors, universeFromCache: universe.fromCache,
   }
-  try {
-    await saveLatestSignals(latestPayload)
-  } catch {
-    // A cache write must not turn a healthy live scan into a failed scan.
-  }
+  try { await saveLatestSignals(latestPayload) } catch { /* A disk error must not discard a healthy scan. */ }
   return latestPayload
 }

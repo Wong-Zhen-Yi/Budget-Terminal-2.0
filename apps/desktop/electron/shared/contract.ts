@@ -479,7 +479,7 @@ export interface AppSettings {
   obscuredTabs: string[]
   /** Persisted controls for the standalone Backtest page. */
   backtestPage: BacktestPageSettings
-  /** Persisted filter/search controls for the automatic Signals scanner. */
+  /** Persisted setup, status and search controls for Day Trading. */
   signalsPage: SignalsPageSettings
   /** Persisted tab/filter/input controls for the Quant workspace. */
   quantPage: QuantPageSettings
@@ -1188,7 +1188,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'charts', label: 'Charts', implemented: true },
   { id: 'valuation', label: 'Valuation', implemented: true },
   { id: 'options', label: 'Options', implemented: true },
-  { id: 'signals', label: 'Signals', implemented: true },
+  { id: 'signals', label: 'Day Trading', implemented: true },
   { id: 'quant', label: 'Quant', implemented: true },
   { id: 'projections', label: 'Projections', implemented: true },
   { id: 'etf', label: 'ETF', implemented: true },
@@ -1599,7 +1599,8 @@ export type SignalsFilter =
 export type SignalRegimeLabel = 'RISK_ON' | 'NEUTRAL' | 'RISK_OFF'
 
 export interface SignalsPageSettings {
-  filter: SignalsFilter
+  filter: 'all' | DayTradingStatus
+  setup: 'all' | DayTradingSetup
   search: string
 }
 
@@ -1712,7 +1713,7 @@ export interface SignalCandidate {
   reasons: string[]
 }
 
-export interface SignalsPayload {
+export interface LegacySignalsPayload {
   candidates: SignalCandidate[]
   results: SignalResult[]
   source: string
@@ -1734,6 +1735,49 @@ export interface SignalsRequest extends BackgroundRequest {
   latestOnly?: boolean
   forceMarketRefresh?: boolean
   forceUniverseRefresh?: boolean
+}
+
+export type DayTradingSetup = 'opening_range' | 'vwap_pullback'
+export type DayTradingStatus = 'ready' | 'watching' | 'expired' | 'invalidated' | 'market_closed' | 'stale' | 'error'
+
+export interface DayTradingResult {
+  id: string
+  ticker: string
+  setup: DayTradingSetup
+  session: string
+  status: DayTradingStatus
+  confirmedAt: string | null
+  invalidatedAt: string | null
+  barTime: string | null
+  latestPrice: number | null
+  entry: number | null
+  stop: number | null
+  target1: number | null
+  target2: number | null
+  openingHigh: number | null
+  openingLow: number | null
+  vwap: number | null
+  reasons: string[]
+  error: string | null
+}
+
+export type DayTradingCandidate = Omit<SignalCandidate, 'dailyPreScore'>
+
+export interface SignalsPayload {
+  version: 5
+  session: string
+  marketOpen: boolean
+  candidates: DayTradingCandidate[]
+  results: DayTradingResult[]
+  source: string
+  sourcedAt: string
+  startedAt: string
+  completedAt: string
+  sourceCandidateCount: number
+  prefilteredCount: number
+  confirmedCount: number
+  errors: Record<string, string>
+  universeFromCache: boolean
 }
 
 /* -------------------------------------------------------------------- price */

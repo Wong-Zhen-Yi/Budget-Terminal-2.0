@@ -7,7 +7,7 @@ import type {
   SignalResult,
   SignalRisk,
   SignalsFilter,
-  SignalsPayload,
+  LegacySignalsPayload,
   SignalTimeframeBar,
   SignalValidation,
 } from './contract.js'
@@ -1604,7 +1604,7 @@ export function formatSignalAge(timestamp: string, now = Date.now()): string {
   return days === 1 ? '1 day ago' : `${days} days ago`
 }
 
-export function describeSignalsFreshness(payload: SignalsPayload | null, now = Date.now()): { text: string; tone: 'muted' | 'positive' | 'warning' } {
+export function describeSignalsFreshness(payload: LegacySignalsPayload | null, now = Date.now()): { text: string; tone: 'muted' | 'positive' | 'warning' } {
   if (!payload) return { text: 'No scan yet — click Refresh now.', tone: 'muted' }
   const completed = new Date(payload.completedAt)
   const ageMs = Math.max(now - completed.getTime(), 0)

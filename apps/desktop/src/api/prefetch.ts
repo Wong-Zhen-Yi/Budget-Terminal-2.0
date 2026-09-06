@@ -65,7 +65,6 @@ const TAB_ORDER = [
   'calendar',
   'politics',
   // Disk-cached in the main process, so a warm hit is usually a file read.
-  'signals',
   'economic',
   'ipo',
   'institutions',
@@ -292,19 +291,6 @@ function buildTasks(
             rangeKey: earnings.rangeKey,
             background: true,
           }),
-        staleTime: Infinity,
-      }),
-  })
-
-  // `latestOnly`: the page restores the last session's scan on mount and never starts a
-  // costly one itself, so this warms exactly what opening the tab would ask for.
-  tasks.push({
-    tab: 'signals',
-    label: 'Signals',
-    run: (client) =>
-      client.prefetchQuery({
-        queryKey: queryKeys.signals,
-        queryFn: () => api.signals({ latestOnly: true, background: true }),
         staleTime: Infinity,
       }),
   })

@@ -458,7 +458,7 @@ const emptySettings: AppSettings = {
   obscuredTabs: [...DEFAULT_OBSCURED_TABS],
   backtestPage: DEFAULT_BACKTEST_PAGE_SETTINGS,
   quantPage: DEFAULT_QUANT_PAGE_SETTINGS,
-  signalsPage: { filter: 'all', search: '' },
+  signalsPage: { filter: 'all', setup: 'all', search: '' },
   youtubePage: DEFAULT_YOUTUBE_PAGE_SETTINGS,
   sourcePath: settingsPath(),
 }

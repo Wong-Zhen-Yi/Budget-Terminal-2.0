@@ -1,29 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-
-import type {
-  SignalCandidate,
-  SignalResult,
-  SignalsFilter,
-  SignalsPayload,
-} from '@shared/contract'
+import type { DayTradingResult, SignalsPageSettings } from '@shared/contract'
 import {
-  describeSignalsFreshness,
-  formatSignalAge,
-  formatSignalMoney,
-  formatSignalPercent,
-  formatSignalPrice,
-  formatSignalRatio,
-  formatSignalScore,
-  marketOpen,
-  SIGNAL_FILTERS,
-  SIGNAL_INDICATOR_FIELDS,
-  SIGNAL_ROLE_LABELS,
-  SIGNAL_SCORE_COMPONENTS,
-  signalDisplayMaxScore,
-  signalScoreFraction,
-  signalVisible,
-  summarizeSignals,
-} from '@shared/signals'
+  DAY_TRADING_SETUPS, DAY_TRADING_STATUSES, DEFAULT_DAY_TRADING_SETTINGS,
+  dayTradingSession, dayTradingStatus, dayTradingVisible, normalizeDayTradingSettings, shouldRefreshDayTrading,
+} from '@shared/dayTrading'
 import { useSignalsLatest, useSignalsScan } from '@/api/signalsQueries'
 import { useSettings, useSettingsMutation } from '@/api/settingsQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
@@ -31,413 +11,146 @@ import { Button } from '@/components/ui/Button'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { SearchInput } from '@/components/ui/SearchInput'
 import { Select } from '@/components/ui/Select'
-import { Splitter } from '@/components/ui/Splitter'
 
-type Tone = 'muted' | 'positive' | 'warning' | 'negative'
-
-const toneClass: Record<Tone, string> = {
-  muted: 'text-text-muted',
-  positive: 'text-up',
-  warning: 'text-warn',
-  negative: 'text-down',
+const money = (value: number | null) => value === null ? '—' : value.toFixed(2)
+const timestamp = (value: string | null) => value ? new Date(value).toLocaleString('en-US', {
+  timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+}) + ' ET' : '—'
+const age = (value: string | null, now: number) => {
+  if (!value) return '—'
+  const seconds = Math.max(0, Math.floor((now - Date.parse(value) - 60_000) / 1000))
+  return seconds < 60 ? `${seconds}s` : seconds < 3600 ? `${Math.floor(seconds / 60)}m` : `${Math.floor(seconds / 3600)}h`
 }
+const statusColor = (status: DayTradingResult['status']) => status === 'ready' ? 'text-up'
+  : status === 'error' || status === 'invalidated' ? 'text-down' : status === 'stale' ? 'text-warn' : 'text-text-muted'
+const statusOptions = [{ value: 'all' as const, label: 'All statuses' },
+  ...Object.entries(DAY_TRADING_STATUSES).map(([value, label]) => ({ value: value as DayTradingResult['status'], label }))]
+const setupOptions = [{ value: 'all' as const, label: 'All setups' },
+  ...Object.entries(DAY_TRADING_SETUPS).map(([value, label]) => ({ value: value as DayTradingResult['setup'], label }))]
 
-function resultTone(result: SignalResult): Tone {
-  if (result.tradeStatus === 'DATA_ERROR') return 'negative'
-  if (result.tradeStatus === 'TOO_EXTENDED' || result.tradeStatus === 'WATCH') return 'warning'
-  if (result.tradeStatus === 'VALID_LONG') return 'positive'
-  return 'muted'
-}
-
-function regimeTone(label: string): Tone {
-  return label === 'RISK_ON' ? 'positive' : label === 'RISK_OFF' ? 'negative' : 'warning'
-}
-
-function label(value: string): string {
-  return value.replaceAll('_', ' ')
-}
-
-function describeUniverse(payload: SignalsPayload | null): string {
-  if (!payload) return 'Universe has not been sourced yet. Click Refresh now to run a scan.'
-  const cacheLabel = payload.universeFromCache ? 'cached universe' : 'live universe refresh'
-  return (
-    `Universe sourced ${new Date(payload.sourcedAt).toLocaleString()} (${formatSignalAge(payload.sourcedAt)}) · ` +
-    `${payload.sourceCandidateCount} screened · ${payload.prefilteredCount} passed the free liquidity prefilter · ` +
-    `${payload.confirmedCount} confirmed on daily history · ${payload.candidates.length} shortlisted for intraday data · ${cacheLabel}`
-  )
-}
-
-function detailWarnings(result: SignalResult): string[] {
-  const warnings = result.warnings.map((warning) => `⚠ ${warning}`)
-  const frames = Object.entries(SIGNAL_ROLE_LABELS).flatMap(([role, roleLabel]) => {
-    const status = result.timeframeStatus[role]
-    if (!status) return []
-    const bar = result.timeframeBars[role]
-    const parts = [status]
-    if (bar?.asOf) parts.push(`bar ${bar.asOf.replace('T', ' ').replace('.000Z', ' UTC')}`)
-    if (bar?.dropped) parts.push('live bar excluded')
-    else if (bar?.partial) parts.push('bar still forming')
-    return [`${roleLabel}: ${parts.join(' · ')}`]
-  })
-  return warnings.length || frames.length
-    ? [...warnings, ...(warnings.length && frames.length ? [''] : []), ...frames]
-    : ['No warnings.']
-}
-
-function riskLines(result: SignalResult): string[] {
-  const risk = result.risk
-  if (!risk) {
-    return ['No trade plan: the daily ATR or a workable stop below the current price was unavailable.']
-  }
-  return [
-    `Entry (last price): ${formatSignalPrice(risk.entry)}`,
-    `Stop: ${formatSignalPrice(risk.stop)}  (${formatSignalRatio(risk.stopDistanceAtr)} ATR, ${formatSignalPrice(risk.riskPerShare)} per share)`,
-    `Target: ${formatSignalPrice(risk.target)}  (${formatSignalPrice(risk.rewardPerShare)} per share)`,
-    `Reward to risk: ${formatSignalRatio(risk.rewardToRisk)}  (a 3 ATR objective against this stop; a pullback entry reads high, a stretched one bottoms out near 2)`,
-    `Daily ATR: ${formatSignalPercent(risk.atrPct)} of price  (a long is capped at WATCH above 8%)`,
-    `Position size risking 1% of capital: ${formatSignalPercent(risk.positionSizePct)} of capital`,
-  ]
-}
-
-function validationLines(payload: SignalsPayload | null): string[] {
-  if (!payload?.validation.length) {
-    return ['No walk-forward measurement yet. Run a scan to score the daily model over its own history.']
-  }
-  const lines: string[] = []
-  for (const entry of payload.validation) {
-    lines.push(`${entry.horizonSessions}-session forward return · ${entry.tickers} ticker(s) · ${entry.samples} observation(s)`)
-    lines.push('  band        n      hit rate   mean     median')
-    for (const band of entry.bands) {
-      lines.push(
-        `  ${band.band.padEnd(10)} ${String(band.samples).padStart(5)}  ` +
-        `${(band.hitRate * 100).toFixed(1).padStart(8)}%  ` +
-        `${band.meanForwardReturn.toFixed(2).padStart(6)}%  ${band.medianForwardReturn.toFixed(2).padStart(6)}%`,
-      )
-    }
-    lines.push('')
-  }
-  lines.push(
-    'Measured on the daily blocks only — trend, momentum, daily volume and relative strength —',
-    'over the same history this scan downloaded. History is back-adjusted for splits and',
-    'dividends, so these are indicative of the score’s ordering, not a tradeable backtest.',
-  )
-  return lines
-}
-
-export function SignalsPage({
-  onStatusChange,
-}: {
-  onStatusChange: (panels: PanelStatus[], sourcePath: string) => void
-}) {
+export function SignalsPage({ onStatusChange }: { onStatusChange: (panels: PanelStatus[], sourcePath: string) => void }) {
   const latest = useSignalsLatest()
   const scan = useSignalsScan()
   const settings = useSettings()
   const saveSettings = useSettingsMutation()
+  const [controls, setControls] = useState<SignalsPageSettings>(DEFAULT_DAY_TRADING_SETTINGS)
+  const [selected, setSelected] = useState('')
+  const [now, setNow] = useState(Date.now)
+  const [visible, setVisible] = useState(() => document.visibilityState === 'visible')
   const hydrated = useRef(false)
-  const [filter, setFilter] = useState<SignalsFilter>('all')
-  const [search, setSearch] = useState('')
-  const [selectedTicker, setSelectedTicker] = useState('')
-  const [tableWidth, setTableWidth] = useState(880)
-  const [now, setNow] = useState(() => new Date())
-
-  const envelope = scan.data ?? latest.data
+  const busy = useRef(false)
+  const lastStarted = useRef(-Infinity)
+  const envelope = latest.data
   const payload = envelope?.data ?? null
+  const session = dayTradingSession(now)
+  const runScan = useCallback(async (force = false) => {
+    if (busy.current) return
+    busy.current = true
+    lastStarted.current = Date.now()
+    try {
+      await scan.mutateAsync({ forceMarketRefresh: force, forceUniverseRefresh: force })
+    } catch { /* The mutation error is displayed beside the preserved query data. */ }
+    finally { busy.current = false }
+  }, [scan.mutateAsync])
 
   useEffect(() => {
-    onStatusChange(
-      [{ label: 'Signals', envelope, loading: latest.isPending || scan.isPending }],
-      '',
-    )
+    onStatusChange([{ label: 'Day Trading', envelope, loading: latest.isPending || scan.isPending }], '')
   }, [onStatusChange, envelope, latest.isPending, scan.isPending])
-
   useEffect(() => {
-    const saved = settings.data?.data.signalsPage
-    if (!saved || hydrated.current) return
+    if (!settings.data?.data || hydrated.current) return
     hydrated.current = true
-    setFilter(saved.filter)
-    setSearch(saved.search)
+    setControls(normalizeDayTradingSettings(settings.data.data.signalsPage))
   }, [settings.data])
-
   useEffect(() => {
     if (!hydrated.current) return
-    const timer = setTimeout(() => {
-      void saveSettings({ type: 'setSignalsPage', value: { filter, search } })
-    }, 150)
+    const timer = setTimeout(() => { void saveSettings({ type: 'setSignalsPage', value: controls }) }, 150)
     return () => clearTimeout(timer)
-  }, [filter, search, saveSettings])
-
+  }, [controls, saveSettings])
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 60_000)
-    return () => clearInterval(timer)
-  }, [])
-
-  const visibleResults = useMemo(
-    () => (payload?.results ?? []).filter((result) => signalVisible(result, filter, search)),
-    [payload, filter, search],
-  )
-  const candidates = useMemo(
-    () => new Map((payload?.candidates ?? []).map((candidate) => [candidate.ticker, candidate])),
-    [payload],
-  )
-
-  useEffect(() => {
-    if (selectedTicker && visibleResults.some((result) => result.ticker === selectedTicker)) return
-    setSelectedTicker(visibleResults[0]?.ticker ?? '')
-  }, [selectedTicker, visibleResults])
-
-  const selectedResult = payload?.results.find((result) => result.ticker === selectedTicker) ?? null
-  const selectedCandidate = candidates.get(selectedTicker) ?? null
-  const counts = summarizeSignals(payload?.results ?? [])
-  const freshness = describeSignalsFreshness(payload)
-  const regime = payload?.regime ?? null
-
-  const status = useMemo<{ text: string; tone: Tone }>(() => {
-    if (scan.isPending) return { text: 'Sourcing and ranking liquid US equities…', tone: 'warning' }
-    if (scan.data?.meta.freshness === 'failed') {
-      return { text: `Scan failed: ${scan.data.meta.failureReason ?? 'Signals unavailable'}`, tone: 'negative' }
+    const tick = () => {
+      const time = Date.now()
+      setNow(time)
+      if (shouldRefreshDayTrading(time, document.visibilityState === 'visible', busy.current, lastStarted.current)) void runScan()
     }
-    if (latest.data?.meta.freshness === 'failed' && !payload) {
-      return { text: `Signals unavailable: ${latest.data.meta.failureReason ?? 'Unknown error'}`, tone: 'negative' }
+    const visibility = () => {
+      const shown = document.visibilityState === 'visible'
+      setVisible(shown)
+      if (shown) lastStarted.current = -Infinity
+      tick()
     }
-    return freshness
-  }, [scan.isPending, scan.data, latest.data, payload, freshness])
+    tick()
+    const timer = setInterval(tick, 1000)
+    document.addEventListener('visibilitychange', visibility)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', visibility)
+    }
+  }, [runScan])
 
-  const runScan = useCallback((force: boolean) => {
-    scan.mutate({
-      forceMarketRefresh: force,
-      forceUniverseRefresh: force,
-    })
-  }, [scan])
-
-  const columns = useMemo<Array<Column<SignalResult>>>(() => [
-    {
-      key: 'rank',
-      header: 'Rank',
-      cell: (result) => candidates.get(result.ticker)?.qualityRank ?? '—',
-      sortValue: (result) => candidates.get(result.ticker)?.qualityRank ?? null,
-      align: 'right',
-      numeric: true,
-      width: '54px',
-    },
-    {
-      key: 'ticker',
-      header: 'Ticker',
-      cell: (result) => <span className={toneClass[resultTone(result)]}>{result.ticker}</span>,
-      sortValue: (result) => result.ticker,
-      width: '72px',
-    },
-    {
-      key: 'price',
-      header: 'Price',
-      cell: (result) => <span className={toneClass[resultTone(result)]}>{formatSignalPrice(result.price ?? candidates.get(result.ticker)?.price)}</span>,
-      sortValue: (result) => result.price ?? candidates.get(result.ticker)?.price ?? null,
-      align: 'right',
-      numeric: true,
-      width: '84px',
-    },
-    {
-      key: 'marketCap',
-      header: 'Market Cap',
-      cell: (result) => formatSignalMoney(candidates.get(result.ticker)?.marketCap),
-      sortValue: (result) => candidates.get(result.ticker)?.marketCap ?? null,
-      align: 'right',
-      numeric: true,
-      width: '96px',
-    },
-    {
-      key: 'dollarVolume',
-      header: '20D $ Volume',
-      cell: (result) => formatSignalMoney(candidates.get(result.ticker)?.medianDollarVolume),
-      sortValue: (result) => candidates.get(result.ticker)?.medianDollarVolume ?? null,
-      align: 'right',
-      numeric: true,
-      width: '106px',
-    },
-    {
-      key: 'score',
-      header: 'Score',
-      cell: (result) => <span className={toneClass[resultTone(result)]}>{formatSignalScore(result.rawScore, signalDisplayMaxScore(result))}</span>,
-      sortValue: signalScoreFraction,
-      align: 'right',
-      numeric: true,
-      width: '76px',
-    },
-    {
-      key: 'rewardToRisk',
-      header: 'R:R',
-      cell: (result) => formatSignalRatio(result.risk?.rewardToRisk),
-      sortValue: (result) => result.risk?.rewardToRisk ?? null,
-      align: 'right',
-      numeric: true,
-      width: '56px',
-    },
-    {
-      key: 'signal',
-      header: 'Signal',
-      cell: (result) => <span className={toneClass[resultTone(result)]}>{label(result.signal)}</span>,
-      sortValue: (result) => ({ NONE: 0, WATCH: 1, LONG: 2, STRONG_LONG: 3 })[result.signal],
-      width: '104px',
-    },
-    {
-      key: 'tradeStatus',
-      header: 'Trade Status',
-      cell: (result) => <span title={result.error || result.warnings.join('\n')} className={toneClass[resultTone(result)]}>{label(result.tradeStatus)}</span>,
-      sortValue: (result) => result.tradeStatus,
-    },
-  ], [candidates])
-
-  const metricValues: Array<[string, string | number, Tone]> = [
-    ['Shortlisted', payload ? payload.candidates.length : '—', 'muted'],
-    ['Valid longs', payload ? counts.validLong : '—', 'muted'],
-    ['Blocked', payload ? counts.blocked : '—', 'muted'],
-    ['Watch', payload ? counts.watch : '—', 'muted'],
-    ['Market closed', payload ? counts.marketClosed : '—', 'muted'],
-    ['Stale intraday', payload ? counts.stale : '—', 'muted'],
-    ['Data errors', payload ? counts.errors : '—', 'muted'],
-    ['Regime', regime ? label(regime.label) : '—', regime ? regimeTone(regime.label) : 'muted'],
-    [
-      'Long / strong cut',
-      regime ? `${Math.round(regime.longThreshold * 100)} / ${Math.round(regime.strongThreshold * 100)}` : '—',
-      'muted',
-    ],
-    ['Last scan', payload ? formatSignalAge(payload.completedAt) : '—', 'muted'],
+  const rows = useMemo(() => (payload?.results ?? []).map((row) => {
+    const status = dayTradingStatus(row, now)
+    return { ...row, status: (scan.isError || envelope?.meta.freshness === 'failed') && status === 'ready' ? 'stale' as const : status }
+  }), [payload, now, envelope?.meta.freshness, scan.isError])
+  const filtered = rows.filter((row) => dayTradingVisible(row, controls))
+  const detail = filtered.find((row) => row.id === selected) ?? filtered[0]
+  const columns: Column<DayTradingResult>[] = [
+    { key: 'ticker', header: 'Ticker', cell: (row) => row.ticker, width: '75px', sortValue: (row) => row.ticker },
+    { key: 'setup', header: 'Setup', cell: (row) => DAY_TRADING_SETUPS[row.setup], width: '155px', wrap: true },
+    { key: 'status', header: 'Status', cell: (row) => <span className={statusColor(row.status)}>{DAY_TRADING_STATUSES[row.status]}</span>, width: '110px', wrap: true,
+      sortValue: (row) => Object.keys(DAY_TRADING_STATUSES).indexOf(row.status) },
+    { key: 'time', header: 'Signal time (ET)', cell: (row) => timestamp(row.confirmedAt), width: '155px', wrap: true, sortValue: (row) => row.confirmedAt },
+    ...(['latestPrice', 'entry', 'stop', 'target1', 'target2'] as const).map((key, index) => ({
+      key, header: ['Latest', 'Entry', 'Stop', '1R target', '2R target'][index], cell: (row: DayTradingResult) => money(row[key]),
+      width: '80px', numeric: true, align: 'right' as const, sortValue: (row: DayTradingResult) => row[key],
+    })),
+    { key: 'age', header: 'Data age', cell: (row) => age(row.barTime, now), width: '90px', align: 'right', sortValue: (row) => row.barTime },
   ]
-
-  const empty = !payload
-    ? 'No scan yet. Click Refresh now to source and score liquid US leaders.'
-    : payload.results.length && !visibleResults.length
-      ? 'No results match this filter.'
-      : 'The last scan produced no results. Try Force full re-download.'
-
-  const maximumTableWidth = Math.max(420, window.innerWidth - 380)
-
+  const failure = scan.error?.message ?? (envelope?.meta.freshness === 'failed' ? envelope.meta.failureReason : null)
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
-      <div className="flex shrink-0 items-baseline gap-3">
-        <h1 className="text-sm font-semibold text-text">Signals</h1>
-        <p className="text-2xs text-text-muted">
-          Screens the liquid US market, then scores Daily → Hourly → 5-minute → 1-minute analysis out of 100 against the day's regime. Decision support only.
-        </p>
-      </div>
-
+      <header className="flex shrink-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h1 className="text-sm font-semibold text-text">Day Trading</h1>
+        <p className="text-2xs text-text-muted">Long US stocks · 5-minute opening range breakouts · VWAP pullbacks</p>
+      </header>
       <section className="flex shrink-0 flex-wrap items-center gap-2 border border-border bg-surface p-2">
-        <span className={`text-2xs font-medium ${marketOpen(now) ? 'text-up' : 'text-text-muted'}`}>
-          US MARKET {marketOpen(now) ? 'OPEN' : 'CLOSED'}
-        </span>
-        <Button variant="accent" disabled={scan.isPending} onClick={() => runScan(false)}>
-          {scan.isPending ? 'Refreshing…' : 'Refresh now'}
-        </Button>
-        <Button disabled={scan.isPending} onClick={() => runScan(true)} title="Re-source the universe and re-download every timeframe, ignoring caches.">
-          Force full re-download
-        </Button>
-        <Select value={filter} options={SIGNAL_FILTERS} onChange={setFilter} className="w-40" aria-label="Signal filter" />
-        <SearchInput value={search} onChange={setSearch} placeholder="Search ticker" className="w-36" aria-label="Search ticker" />
-        <span className={`ml-auto text-right text-2xs ${toneClass[status.tone]}`}>{status.text}</span>
+        <span className={`text-2xs ${session.open ? 'text-up' : 'text-text-muted'}`}>US MARKET {session.open ? 'OPEN' : 'CLOSED'}</span>
+        <Button variant="accent" disabled={scan.isPending} onClick={() => void runScan()}>{scan.isPending ? 'Refreshing…' : 'Refresh now'}</Button>
+        <Button disabled={scan.isPending} onClick={() => void runScan(true)}>Force full re-download</Button>
+        <Select value={controls.setup} options={setupOptions} onChange={(setup) => setControls((old) => ({ ...old, setup }))} className="!w-48" aria-label="Setup filter" />
+        <Select value={controls.filter} options={statusOptions} onChange={(filter) => setControls((old) => ({ ...old, filter }))} className="!w-36" aria-label="Status filter" />
+        <SearchInput value={controls.search} onChange={(search) => setControls((old) => ({ ...old, search }))} placeholder="Search ticker" className="w-32" aria-label="Search ticker" />
+        <span className="text-2xs text-text-muted">{scan.isPending ? 'Scan in progress' : visible && session.open ? 'Auto-refresh: 60s' : 'Auto-refresh paused'}</span>
       </section>
-
-      <section className="flex shrink-0 gap-6 border border-border bg-surface px-3 py-2">
-        {metricValues.map(([caption, value, tone]) => (
-          <div key={caption} className="min-w-16">
-            <div className="text-[10px] text-text-dim">{caption}</div>
-            <div className={`num text-xs font-semibold ${tone === 'muted' ? 'text-text' : toneClass[tone]}`}>{value}</div>
-          </div>
-        ))}
-      </section>
-
-      <div className="shrink-0 space-y-1 text-[10px] leading-4 text-text-dim">
-        <p>
-          Universe: US common stocks · price ≥ $5 · market cap ≥ $2B · screener dollar volume ≥ $20M, confirmed against a 20-session median · shortlisted by the daily sub-model. Context timeframes score the last closed bar; an intraday frame older than 15 minutes is reported stale rather than scored. With the US extended session (04:00–20:00 ET) shut the 22 intraday points are unreachable, so results read MARKET CLOSED and are scored out of 78 — a daily read, never a confirmed entry. Every check awards partial credit, with distances measured in ATR of the timeframe being scored, and the score is always out of 100 — a block that cannot be scored earns nothing and caps the result at WATCH. Relative strength is beta-adjusted alpha against SPY. In a risk-off regime the long and strong thresholds rise, so the same setup has to score higher.
-        </p>
-        <p>{describeUniverse(payload)}</p>
+      <div className="shrink-0 space-y-1 border border-border bg-surface px-3 py-2 text-2xs text-text-muted">
+        <p><span className="text-up">{rows.filter((row) => row.status === 'ready').length} Ready</span> · {payload?.candidates.length ?? 0} stocks · {filtered.length} setups shown · Yahoo Finance polling · Last scan: {timestamp(payload?.completedAt ?? null)}</p>
+        <p>Regular session only. Completed 1-minute candles; data age is measured from candle close. Ready expires after 2 minutes. Entry, stop and 1R/2R targets are signal references, not executed trades.</p>
+        <p>Universe: price ≥ $5 · market cap ≥ $2B · 20-session median dollar volume ≥ $20M · up to 30 names by screener dollar volume.</p>
+        {failure ? <p role="alert" className="text-down">Refresh failed: {failure}. Showing previous results where available.</p> : null}
+        {payload && Object.keys(payload.errors).length > 0 ? <p role="alert" className="text-warn">{Object.keys(payload.errors).length} ticker(s) have incomplete data. Inspect their details.</p> : null}
       </div>
-
-      {scan.isPending ? <div className="h-1 shrink-0 animate-pulse bg-accent" /> : null}
-
-      <div className="flex min-h-0 flex-1">
-        <div className="flex min-h-0 shrink-0 flex-col overflow-hidden border border-border" style={{ width: tableWidth }}>
-          <DataTable
-            columns={columns}
-            rows={visibleResults}
-            rowKey={(result) => result.ticker}
-            layout="fixed"
-            defaultSort={{ key: 'score', direction: 'desc' }}
-            onRowClick={(result) => setSelectedTicker(result.ticker)}
-            rowClassName={(result) => result.ticker === selectedTicker ? 'bg-accent-dim/60' : ''}
-            empty={empty}
-          />
-        </div>
-        <Splitter onDrag={(clientX) => setTableWidth(Math.min(Math.max(clientX, 420), maximumTableWidth))} />
-        <SignalDetail candidate={selectedCandidate} result={selectedResult} payload={payload} />
+      <div className="flex min-h-0 flex-1 flex-col gap-2 xl:flex-row">
+        <section className="flex min-h-48 min-w-0 flex-1 flex-col overflow-hidden border border-border">
+          <DataTable columns={columns} rows={filtered} rowKey={(row) => row.id} layout="fixed" minWidth="1050px" defaultSort={{ key: 'status', direction: 'asc' }}
+            onRowClick={(row) => setSelected(row.id)} rowClassName={(row) => row.id === detail?.id ? 'bg-accent-dim/60' : ''}
+            empty={payload ? 'No setups match these filters.' : scan.isPending ? 'Loading liquid US stocks…' : 'No scan yet. Click Refresh now; automatic scans run during the regular session.'} />
+        </section>
+        <aside className="max-h-64 shrink-0 overflow-y-auto border border-border bg-surface p-3 text-2xs xl:max-h-none xl:w-72" aria-label="Setup details">
+          {detail ? <>
+            <h2 className="mb-2 text-sm font-semibold text-text">{detail.ticker} · {DAY_TRADING_SETUPS[detail.setup]}</h2>
+            <p className={`mb-2 ${statusColor(detail.status)}`}>{DAY_TRADING_STATUSES[detail.status]}</p>
+            <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
+              {([['Entry reference', money(detail.entry)], ['Stop', money(detail.stop)], ['1R target', money(detail.target1)], ['2R target', money(detail.target2)],
+                ['Opening high', money(detail.openingHigh)], ['Opening low', money(detail.openingLow)], ['Session VWAP', money(detail.vwap)],
+                ['Latest close', money(detail.latestPrice)], ['Session', detail.session], ['Signal confirmed', timestamp(detail.confirmedAt)],
+                ['Provider bar start', timestamp(detail.barTime)], ['Data age', age(detail.barTime, now)]]).map(([label, value]) => <div key={label}><dt className="text-text-dim">{label}</dt><dd className="break-words text-text">{value}</dd></div>)}
+            </dl>
+            <div className="mt-3 space-y-2 leading-5 text-text-muted">{detail.reasons.map((reason) => <p key={reason}>{reason}</p>)}</div>
+            {detail.invalidatedAt ? <p className="mt-2 text-down">Stop touched at {timestamp(detail.invalidatedAt)}.</p> : null}
+            {detail.error ? <p className="mt-2 text-down">{detail.error}</p> : null}
+            <p className="mt-3 leading-5 text-text-dim">Latest confirmation per setup. Stops are checked against subsequent completed candle lows. Targets express risk multiples; no fill or performance is assumed.</p>
+          </> : <p className="text-text-muted">Select a setup to inspect its conditions and reference levels.</p>}
+        </aside>
       </div>
     </div>
-  )
-}
-
-function SignalDetail({
-  candidate,
-  result,
-  payload,
-}: {
-  candidate: SignalCandidate | null
-  result: SignalResult | null
-  payload: SignalsPayload | null
-}) {
-  if (!result) {
-    return (
-      <aside className="min-h-0 min-w-0 flex-1 overflow-auto border border-border p-3">
-        <h2 className="text-sm font-semibold text-text">Select a signal result</h2>
-        <p className="pt-2 text-2xs text-text-muted">Click Refresh now to scan, then select a result.</p>
-      </aside>
-    )
-  }
-
-  const tone = resultTone(result)
-  const indicatorLines = SIGNAL_INDICATOR_FIELDS.map(([name, key, unit]) => {
-    const value = result.indicators[key]
-    const numeric = typeof value === 'number' && Number.isFinite(value) ? value : null
-    return `${name}: ${numeric === null ? 'Unavailable' : `${unit === '$' ? '$' : ''}${numeric.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${unit === '$' ? '' : unit}`}`
-  })
-  const qualityReasons = (candidate?.reasons ?? []).map((reason) => `✓ ${reason}`)
-  const scoredReasons = result.reasons.flatMap((reason) => {
-    const glyph = reason.points >= reason.weight - 1e-9 ? '✓' : reason.points > 0 ? '◐' : '○'
-    const awarded = `+${Number(reason.points.toFixed(2))} of ${Number(reason.weight.toFixed(2))}`
-    return [`${glyph} ${reason.name} (${awarded})`, `   ${reason.description}`]
-  })
-
-  return (
-    <aside className="min-h-0 min-w-0 flex-1 overflow-auto border border-border p-3">
-      <h2 className="text-sm font-semibold text-text">{result.ticker} · {formatSignalPrice(result.price)}</h2>
-      <p className={`whitespace-pre-line py-1 text-2xs ${toneClass[tone]}`}>
-        {candidate ? `Quality rank #${candidate.qualityRank}` : 'Quality rank unavailable'} · Technical signal {label(result.signal)} · Score {formatSignalScore(result.rawScore, signalDisplayMaxScore(result))}{`\n`}Final trade status: {label(result.tradeStatus)}
-      </p>
-
-      <table className="my-2 w-full border-collapse text-2xs">
-        <thead><tr className="bg-surface-raised text-text-muted"><th className="px-2 py-1 text-left">Component</th><th className="px-2 py-1 text-right">Score</th><th className="px-2 py-1 text-left">Evidence</th></tr></thead>
-        <tbody>
-          {SIGNAL_SCORE_COMPONENTS.map(([name, scoreKey, maxKey, evidence]) => (
-            <tr key={name} className="border-b border-border/40">
-              <td className="px-2 py-1 text-text">{name}</td>
-              <td className="num px-2 py-1 text-right text-text">{formatSignalScore(result[scoreKey], result[maxKey])}</td>
-              <td className="px-2 py-1 text-text-muted">{evidence}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <DetailBlock title="Risk and trade plan" lines={riskLines(result)} />
-      <DetailBlock title="Indicator values" lines={indicatorLines} />
-      <DetailBlock title="Why this ticker was selected" lines={[...qualityReasons, ...(qualityReasons.length && scoredReasons.length ? [''] : []), ...scoredReasons]} />
-      <DetailBlock title="Measured forward returns by score band" lines={validationLines(payload)} />
-      <DetailBlock title="Bar freshness, warnings and data health" lines={detailWarnings(result)} />
-    </aside>
-  )
-}
-
-function DetailBlock({ title, lines }: { title: string; lines: string[] }) {
-  return (
-    <section className="mt-3">
-      <h3 className="pb-1 text-2xs font-semibold text-text">{title}</h3>
-      <pre className="whitespace-pre-wrap border border-border bg-bg p-2 font-mono text-[10px] leading-4 text-text-muted">{lines.join('\n')}</pre>
-    </section>
   )
 }

@@ -105,9 +105,10 @@ async function main(): Promise<void> {
   console.log('\n-- Signals page controls')
   const signalsSettings = await mutateSettings({
     type: 'setSignalsPage',
-    value: { filter: 'blocked', search: 'NVDA' },
+    value: { filter: 'ready', setup: 'vwap_pullback', search: 'NVDA' },
   })
-  check('Signals filter persists', signalsSettings.signalsPage.filter === 'blocked')
+  check('Signals filter persists', signalsSettings.signalsPage.filter === 'ready')
+  check('Day Trading setup persists', signalsSettings.signalsPage.setup === 'vwap_pullback')
   check('Signals search persists', signalsSettings.signalsPage.search === 'NVDA')
 
   console.log('\n-- Quant page controls')
