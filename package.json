@@ -26,6 +26,7 @@
     "probe:crypto": "npm run --workspace budget-terminal-desktop probe:crypto --",
     "probe:cards": "npm run --workspace budget-terminal-desktop probe:cards --",
     "probe:price": "npm run --workspace budget-terminal-desktop probe:price --",
+    "probe:market-cap": "npm run --workspace budget-terminal-desktop probe:market-cap --",
     "probe:signals": "npm run --workspace budget-terminal-desktop probe:signals --",
     "probe:heatmap": "npm run --workspace budget-terminal-desktop probe:heatmap --",
     "probe:up-down": "npm run --workspace budget-terminal-desktop probe:up-down --",

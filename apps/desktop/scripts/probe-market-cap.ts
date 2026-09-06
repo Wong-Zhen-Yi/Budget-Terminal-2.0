@@ -1,6 +1,7 @@
 import { priceToSalesValue, getMarketCapSales } from '../electron/services/yahoo/marketCapSales.js'
 import assert from 'node:assert/strict'
-import { marketCapRowFromQuote, rankMarketCapRows, MARKET_CAP_TTL, MARKET_CAP_TIERS, marketCapInTier } from '../electron/shared/marketCap.js'
+import { marketCapRowFromQuote, rankMarketCapRows, marketCapSummary, marketCapTier, MARKET_CAP_TTL, MARKET_CAP_TIERS, marketCapInTier } from '../electron/shared/marketCap.js'
+import type { MarketCapRow } from '../electron/shared/contract.js'
 import { getMarketCap, marketCapEnvelope } from '../electron/services/yahoo/marketCap.js'
 import { TtlCache } from '../electron/services/cache.js'
 import type { ScreenerQuote } from '../electron/services/yahoo/screener.js'
@@ -73,6 +74,33 @@ const failedMid = await marketCapEnvelope(false, tierStore, async () => { throw 
 assert.equal(failedMid.meta.freshness, 'failed')
 assert.equal(failedMid.data.rows.length, 0)
 console.log('PASS: tier boundaries, provider filtering, and per-tier cache isolation')
+
+const summaryRow = (ticker: string, cap: number, eps: number | null, pe: number | null): MarketCapRow =>
+  ({ rank: 0, ticker, name: ticker, exchange: 'Nasdaq', marketCap: cap, price: 1, trailingEps: eps, trailingPe: pe, forwardPe: null })
+const empty = marketCapSummary([])
+assert.deepEqual([empty.counted, empty.rankedCap, empty.largestCap, empty.profitable], [0, 0, 0, 0])
+assert.deepEqual([empty.topTenShare, empty.medianCap, empty.medianTrailingPe], [null, null, null])
+// Twelve rows so the top-ten share is a real subset and the median averages a middle pair.
+const twelve = Array.from({ length: 12 }, (_, i) => summaryRow(`S${i}`, (i + 1) * 1e9, i === 0 ? 0 : i % 3 === 0 ? -1 : 2, i % 4 === 0 ? null : (i + 1) * 2))
+const summary = marketCapSummary(twelve)
+assert.equal(summary.rankedCap, 78e9)
+assert.equal(summary.largestCap, 12e9)
+assert.equal(summary.medianCap, 6.5e9)
+// The ten largest are 3e9..12e9; the two smallest are excluded.
+assert.equal(summary.topTenShare, 75e9 / 78e9)
+assert.ok(summary.topTenShare !== null && summary.topTenShare > 0 && summary.topTenShare <= 1)
+// A zero EPS is not profitable, and neither is a negative one.
+assert.equal(summary.profitable, twelve.filter((row) => (row.trailingEps ?? 0) > 0).length)
+assert.equal(summary.counted, 12)
+// Null and non-positive P/Es are left out of the median rather than counted as zero.
+assert.equal(marketCapSummary([summaryRow('A', 1e9, 1, 10), summaryRow('B', 1e9, 1, null), summaryRow('C', 1e9, 1, -4)]).medianTrailingPe, 10)
+assert.equal(marketCapSummary([summaryRow('A', 1e9, 1, 10), summaryRow('B', 1e9, 1, 20)]).medianTrailingPe, 15)
+// Every tier needs a caption for its toggle button, and must still resolve by id.
+for (const range of MARKET_CAP_TIERS) {
+  assert.ok(range.short.length > 0 && range.short.length <= 6)
+  assert.equal(marketCapTier(range.id).id, range.id)
+}
+console.log('PASS: market-cap summary stats and tier captions')
 console.log('PASS: market-cap filtering, ranking, pagination, cache, force refresh, and stale fallback')
 if (!process.argv.includes('--offline')) {
   const sales = await getMarketCapSales(['NVDA', 'AAPL', 'GOOGL'])
