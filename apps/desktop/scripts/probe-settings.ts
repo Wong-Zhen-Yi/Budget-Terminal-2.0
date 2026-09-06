@@ -18,7 +18,7 @@ const scratch = mkdtempSync(join(tmpdir(), 'bt-settings-'))
 process.env.APPDATA = scratch
 process.env.LOCALAPPDATA = scratch
 
-const { mutateSettings, readSettings, settingsPath } = await import(
+const { mutateSettings, readSettings, settingsPath, replaceSettings } = await import(
   '../electron/services/settingsStore.js'
 )
 const { TABS } = await import('../electron/shared/contract.js')
@@ -54,7 +54,14 @@ function check(label: string, condition: boolean): void {
 async function main(): Promise<void> {
   console.log(`settings path : ${settingsPath()}`)
 
-  show('defaults', await readSettings())
+  const defaults = await readSettings()
+  show('defaults', defaults)
+  check('Market Cap follows Price by default', defaults.tabOrder.indexOf('market-cap') === defaults.tabOrder.indexOf('price') + 1)
+  const oldOrder = defaults.tabOrder.filter((id) => id !== 'market-cap').reverse()
+  const upgraded = await replaceSettings({ ...defaults, tabOrder: oldOrder })
+  check('existing settings gain Market Cap once', upgraded.tabOrder.filter((id) => id === 'market-cap').length === 1)
+  check('existing tab order is preserved', upgraded.tabOrder.filter((id) => id !== 'market-cap').join(',') === oldOrder.join(','))
+  await mutateSettings({ type: 'resetNavigation' })
 
   show('clock market SG', await mutateSettings({ type: 'setClockCountry', code: 'sg' }))
   show('24-hour clock', await mutateSettings({ type: 'setTime12h', value: false }))

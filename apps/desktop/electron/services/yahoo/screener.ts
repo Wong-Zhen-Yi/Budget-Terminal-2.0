@@ -1,3 +1,5 @@
+import type { MarketCapTier } from '../../shared/contract.js'
+import { MARKET_CAP_EXCHANGES, marketCapTier } from '../../shared/marketCap.js'
 import { paced, yahoo } from './client.js'
 
 /**
@@ -27,6 +29,9 @@ export interface ScreenerQuote {
   previousClose?: number
   regularMarketVolume?: number
   marketCap?: number
+  epsTrailingTwelveMonths?: number
+  trailingPE?: number
+  forwardPE?: number
   averageDailyVolume10Day?: number
   averageDailyVolume3Month?: number
   sharesOutstanding?: number
@@ -78,7 +83,22 @@ function warmCrumb(): Promise<void> {
   return warmed
 }
 
-async function postScreen(body: Record<string, unknown>): Promise<EquityScreenPage> {
+export function equityMarketCapScreen(offset: number, size = SCREEN_PAGE_SIZE, tier: MarketCapTier = 'all'): Promise<EquityScreenPage> {
+  const range = marketCapTier(tier)
+  return postScreen({
+    size, offset, sortField: 'intradaymarketcap', sortType: 'DESC', quoteType: 'EQUITY',
+    query: { operator: 'and', operands: [
+      { operator: 'eq', operands: ['region', 'us'] },
+      { operator: 'gt', operands: ['intradaymarketcap', 0] },
+      ...(range.minimum > 0 ? [{ operator: 'gte', operands: ['intradaymarketcap', range.minimum] }] : []),
+      ...(range.maximum !== null ? [{ operator: 'lt', operands: ['intradaymarketcap', range.maximum] }] : []),
+      { operator: 'or', operands: MARKET_CAP_EXCHANGES.map((exchange) => ({ operator: 'eq', operands: ['exchange', exchange] })) },
+    ] },
+    userId: '', userIdType: 'guid',
+  }, true)
+}
+
+async function postScreen(body: Record<string, unknown>, strict = false): Promise<EquityScreenPage> {
   await warmCrumb()
   const response = (await paced(() =>
     yahoo._fetch(
@@ -96,6 +116,7 @@ async function postScreen(body: Record<string, unknown>): Promise<EquityScreenPa
     ),
   )) as ScreenerResponse
   const result = response.finance?.result?.[0]
+  if (strict && (!result || !Array.isArray(result.quotes))) throw new Error('Yahoo returned an invalid market-cap screen.')
   return {
     total: Number.isFinite(Number(result?.total)) ? Number(result?.total) : 0,
     quotes: result?.quotes ?? [],

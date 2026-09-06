@@ -5,7 +5,7 @@
   "type": "module",
   "main": "./out/main/main.js",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "electron-vite dev --watch",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -20,6 +20,7 @@
     "probe:global": "tsx scripts/probe-global.ts",
     "probe:pre-market": "tsx scripts/probe-pre-market.ts",
     "probe:trading-volumes": "tsx scripts/probe-trading-volumes.ts",
+    "probe:market-cap": "tsx scripts/probe-market-cap.ts",
     "probe:price": "tsx scripts/probe-price.ts",
     "probe:signals": "tsx scripts/probe-signals.ts",
     "probe:news": "tsx scripts/probe-news.ts",

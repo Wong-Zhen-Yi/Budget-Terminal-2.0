@@ -31,6 +31,7 @@ import type {
   FxRequest,
   GlobalMarketsRequest,
   PreMarketRequest,
+  MarketCapRequest,
   PriceScreenRequest,
   SignalsRequest,
   TradingVolumesRequest,
@@ -167,6 +168,8 @@ export function registerIpcHandlers(): () => void {
   handle(CHANNELS.signals, (request: SignalsRequest) =>
     provider.signals(request),
   )
+  handle(CHANNELS.marketCapSales, (request: { symbols: string[]; force?: boolean }) => provider.marketCapSales(request))
+  handle(CHANNELS.marketCap, (request: MarketCapRequest) => provider.marketCap(request)),
   handle(CHANNELS.priceScreen, (request: PriceScreenRequest) =>
     provider.priceScreen(request),
   )

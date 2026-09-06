@@ -1206,6 +1206,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'bonds', label: 'Bonds', implemented: true },
   { id: 'economic', label: 'Economic', implemented: true },
   { id: 'price', label: 'Price', implemented: true },
+  { id: 'market-cap', label: 'Market Cap', implemented: true },
   { id: 'settings', label: 'Settings', implemented: true },
 ]
 
@@ -1738,6 +1739,29 @@ export interface SignalsRequest extends BackgroundRequest {
 /* -------------------------------------------------------------------- price */
 
 /** One major-exchange U.S. equity returned by the Price market screen. */
+export interface MarketCapRow {
+  rank: number
+  ticker: string
+  name: string
+  marketCap: number
+  price: number | null
+  exchange: string
+  trailingEps: number | null
+  trailingPe: number | null
+  forwardPe: number | null
+}
+
+export interface MarketCapPayload {
+  rows: MarketCapRow[]
+  source: string
+  asOf: string
+  candidateCount: number
+}
+
+export type MarketCapTier = 'all' | 'mega' | 'large' | 'mid' | 'small' | 'micro' | 'nano'
+
+export interface MarketCapRequest { force?: boolean; tier?: MarketCapTier }
+
 export interface PriceScreenRow {
   ticker: string
   name: string
@@ -3341,6 +3365,8 @@ export const CHANNELS = {
   preMarket: 'pre-market:read',
   tradingVolumes: 'trading-volumes:read',
   signals: 'signals:scan',
+  marketCapSales: 'market-cap:sales',
+  marketCap: 'market-cap:screen',
   priceScreen: 'price:screen',
   calendarMonth: 'calendar:month',
   earningsCalendar: 'calendar:earnings',
@@ -3487,6 +3513,8 @@ export interface DesktopApi {
   preMarket(request: PreMarketRequest): Promise<Envelope<PreMarketPayload>>
   tradingVolumes(request: TradingVolumesRequest): Promise<Envelope<TradingVolumesPayload>>
   signals(request: SignalsRequest): Promise<Envelope<SignalsPayload | null>>
+  marketCapSales(request: { symbols: string[]; force?: boolean }): Promise<Envelope<Record<string, number | null>>>
+  marketCap(request: MarketCapRequest): Promise<Envelope<MarketCapPayload>>
   priceScreen(request: PriceScreenRequest): Promise<Envelope<PriceScreenPayload>>
   calendarMonth(request: CalendarMonthRequest): Promise<Envelope<CalendarMonthPayload>>
   earningsCalendar(

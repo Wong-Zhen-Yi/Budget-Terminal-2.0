@@ -1,4 +1,4 @@
-import type { DesktopApi } from '@shared/contract'
+import type { DesktopApi, MarketCapTier } from '@shared/contract'
 
 declare global {
   interface Window {
@@ -13,6 +13,7 @@ declare global {
 export const api: DesktopApi = window.api
 
 export const queryKeys = {
+  marketCap: (tier: MarketCapTier) => ['marketCap', tier] as const,
   portfolio: ['portfolio'] as const,
   cards: ['cards'] as const,
   cardsPerformance: (signature: string) => ['cardsPerformance', signature] as const,

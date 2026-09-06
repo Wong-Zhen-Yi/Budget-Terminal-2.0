@@ -49,6 +49,8 @@ import type {
   GlobalMarketsRequest,
   PreMarketPayload,
   PreMarketRequest,
+  MarketCapPayload,
+  MarketCapRequest,
   PriceScreenPayload,
   PriceScreenRequest,
   QuantPairDetail,
@@ -234,6 +236,8 @@ import {
 } from './yahoo/fundamentalsPage.js'
 import { getGlobalMarkets } from './yahoo/globalMarkets.js'
 import { getPreMarket, PRE_MARKET_SOURCE } from './yahoo/preMarket.js'
+import { getMarketCapSales } from './yahoo/marketCapSales.js'
+import { marketCapEnvelope } from './yahoo/marketCap.js'
 import { getPriceScreen, PRICE_SCREEN_SOURCE } from './yahoo/priceScreen.js'
 import {
   clearLatestSignals,
@@ -345,6 +349,8 @@ export interface MarketDataProvider {
   globalMarkets(request: GlobalMarketsRequest): Promise<Envelope<GlobalMarketsPayload>>
   preMarket(request: PreMarketRequest): Promise<Envelope<PreMarketPayload>>
   tradingVolumes(request: TradingVolumesRequest): Promise<Envelope<TradingVolumesPayload>>
+  marketCapSales(request: { symbols: string[]; force?: boolean }): Promise<Envelope<Record<string, number | null>>>
+  marketCap(request: MarketCapRequest): Promise<Envelope<MarketCapPayload>>
   priceScreen(request: PriceScreenRequest): Promise<Envelope<PriceScreenPayload>>
   signals(request: SignalsRequest): Promise<Envelope<SignalsPayload | null>>
   calendarMonth(request: CalendarMonthRequest): Promise<Envelope<CalendarMonthPayload>>
@@ -1205,6 +1211,9 @@ export const yahooProvider: MarketDataProvider = {
       return failed(await getLatestSignals(), describeError(error), SIGNALS_SOURCE)
     }
   },
+
+  marketCapSales: (request) => getMarketCapSales(request.symbols, request.force),
+  marketCap: (request) => marketCapEnvelope(request?.force, undefined, undefined, request?.tier),
 
   async priceScreen({ minimumPrice, maximumPrice }) {
     const empty: PriceScreenPayload = {

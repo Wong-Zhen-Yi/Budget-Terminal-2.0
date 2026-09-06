@@ -30,6 +30,7 @@ import { NewsPage } from '@/pages/NewsPage'
 import { OptionsPage } from '@/pages/OptionsPage'
 import { ProjectionsPage } from '@/pages/ProjectionsPage'
 import { PreMarketPage } from '@/pages/PreMarketPage'
+import { MarketCapPage } from '@/pages/MarketCapPage'
 import { PricePage } from '@/pages/PricePage'
 import { QuantPage } from '@/pages/QuantPage'
 import { IpoPage } from '@/pages/IpoPage'
@@ -404,6 +405,8 @@ function renderPage({
       <UpDownPage onStatusChange={onStatusChange} />
     ) : tabId === 'trading-volumes' ? (
       <TradingVolumesPage onStatusChange={onStatusChange} />
+    ) : tabId === 'market-cap' ? (
+      <MarketCapPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'price' ? (
       <PricePage onStatusChange={onStatusChange} />
     ) : tabId === 'signals' ? (
