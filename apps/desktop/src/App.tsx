@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { SETTINGS_TAB_ID, TABS } from '@shared/contract'
+import { WORKSPACES } from '@shared/navigation'
 import { useWarmPages } from '@/api/prefetch'
 import { useReloadAll } from '@/api/queries'
 import { useSettings, useSettingsMutation } from '@/api/settingsQueries'
+import { PageCache } from '@/components/chrome/PageCache'
 import { StatusBar, type PanelStatus } from '@/components/chrome/StatusBar'
 import { TabBar } from '@/components/chrome/TabBar'
 import { TabPicker } from '@/components/chrome/TabPicker'
@@ -53,26 +55,6 @@ import { useOptionsPage } from '@/stores/options'
 import { useStocksPage } from '@/stores/stocks'
 
 const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
-
-/**
- * Pages that stay mounted after you switch away from them, hidden rather than destroyed.
- *
- * Their data already survives a tab switch (the query cache holds an hour, see
- * `main.tsx`), so what this buys is the *render*: a five-hundred-tile treemap, a
- * hundred-row table and a log-log dot plot are all laid out in pixels from a measured
- * container, and rebuilding that from scratch is what makes re-entry feel slow.
- *
- * The list is an allowlist, not a default, because keeping a page mounted is only safe
- * when it neither polls nor gates a query on being visible. These pages set
- * `refetchInterval: false` and hold no visibility flag. Pre-Market (15-minute timer) and
- * the Dashboard (60-second quotes) would poll forever once visited; Portfolio gates its
- * heavy analytics on the on-screen sub-tab via `enabled`; Charts takes an opt-in
- * `pollSeconds`. None of those may be added without dealing with that first.
- */
-const PAGE_KEEP_ALIVE = new Set(['trading-volumes', 'heatmap', 'bonds', 'economic', 'etf', 'quant'])
-
-/** How many hidden pages to hold besides the one on screen. */
-const KEEP_ALIVE_LIMIT = 3
 
 export function App() {
   const [activeTab, setActiveTab] = useState('dashboard')
@@ -202,13 +184,20 @@ export function App() {
     }
   }, [reloadAll])
 
-  /** `_step_main_tab`: forward or back through the visible tabs, wrapping at both ends. */
+  const workspaceTabs = useMemo(() => [
+    ...WORKSPACES.flatMap((workspace) =>
+      visibleTabs.filter((tab) => tab.implemented && workspace.pages.includes(tab.id)),
+    ),
+    ...visibleTabs.filter((tab) => tab.implemented && tab.id === SETTINGS_TAB_ID),
+  ], [visibleTabs])
+
+  /** Step through visible pages, wrapping at both ends. */
   const stepTab = useCallback(
-    (direction: -1 | 1) => {
-      if (!visibleTabs.length) return
-      const current = visibleTabs.findIndex((tab) => tab.id === activeTabRef.current)
-      const next = current < 0 ? 0 : (current + direction + visibleTabs.length) % visibleTabs.length
-      setActiveTab(visibleTabs[next].id)
+    (direction: -1 | 1, tabs = visibleTabs) => {
+      if (!tabs.length) return
+      const current = tabs.findIndex((tab) => tab.id === activeTabRef.current)
+      const next = current < 0 ? 0 : (current + direction + tabs.length) % tabs.length
+      setActiveTab(tabs[next].id)
     },
     [visibleTabs],
   )
@@ -236,7 +225,7 @@ export function App() {
       if (event.key === 'Tab' && event.ctrlKey && !event.altKey) {
         if (pickerOpen) return
         event.preventDefault()
-        stepTab(event.shiftKey ? -1 : 1)
+        stepTab(event.shiftKey ? -1 : 1, workspaceTabs)
         return
       }
 
@@ -285,35 +274,17 @@ export function App() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [pickerOpen, reload, stepTab, toggleObscure])
+  }, [pickerOpen, reload, stepTab, toggleObscure, workspaceTabs])
 
   const hideCurrent = obscured && (settings?.obscuredTabs ?? []).includes(activeTab)
 
-  /**
-   * The allowlisted pages currently mounted, most recently visited first.
-   *
-   * The active page is folded in during render rather than waiting for the effect below,
-   * so arriving on one of these tabs paints on the same frame instead of flashing empty.
-   * A page hidden in Settings is dropped: it is unreachable, and holding its treemap
-   * mounted would be paying for a page the user has taken out of the strip.
-   */
-  const [visited, setVisited] = useState<string[]>([])
-  const residents = useMemo(() => {
-    const ordered = PAGE_KEEP_ALIVE.has(activeTab)
-      ? [activeTab, ...visited.filter((id) => id !== activeTab)]
-      : visited
-    const shown = new Set(visibleTabs.map((tab) => tab.id))
-    return ordered.filter((id) => shown.has(id)).slice(0, KEEP_ALIVE_LIMIT)
-  }, [activeTab, visited, visibleTabs])
-
-  useEffect(() => {
-    if (!PAGE_KEEP_ALIVE.has(activeTab)) return
-    setVisited((was) =>
-      was[0] === activeTab
-        ? was
-        : [activeTab, ...was.filter((id) => id !== activeTab)].slice(0, KEEP_ALIVE_LIMIT),
-    )
-  }, [activeTab])
+  const visibleIds = useMemo(() => visibleTabs.map((tab) => tab.id), [visibleTabs])
+  const renderCachedPage = useCallback((tabId: string) => renderPage({
+    tabId,
+    onStatusChange: statusFor(tabId),
+    onNavigate: handleStocksNavigate,
+    onSelectTab: setActiveTab,
+  }), [statusFor, handleStocksNavigate])
 
   return (
     <div className="flex h-full flex-col bg-bg">
@@ -345,32 +316,7 @@ export function App() {
                 hideCurrent ? 'pointer-events-none blur-md select-none' : ''
               }`}
             >
-              {residents.map((id) => (
-                // A hidden resident keeps its component tree, so re-entry is a repaint rather
-                // than a rebuild. `display: none` reports 0x0 to the ResizeObserver every
-                // pixel-measured chart on these pages uses; each falls back to its own default
-                // until the page is shown again and the observer fires with the real box.
-                <div
-                  key={id}
-                  className={id === activeTab ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}
-                >
-                  {renderPage({
-                    tabId: id,
-                    onStatusChange: statusFor(id),
-                    onNavigate: handleStocksNavigate,
-                    onSelectTab: setActiveTab,
-                  })}
-                </div>
-              ))}
-
-              {PAGE_KEEP_ALIVE.has(activeTab)
-                ? null
-                : renderPage({
-                    tabId: activeTab,
-                    onStatusChange: statusFor(activeTab),
-                    onNavigate: handleStocksNavigate,
-                    onSelectTab: setActiveTab,
-                  })}
+              <PageCache activeTab={activeTab} visibleIds={visibleIds} renderPage={renderCachedPage} />
             </div>
 
             {hideCurrent ? (

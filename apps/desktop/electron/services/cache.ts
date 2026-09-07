@@ -38,12 +38,11 @@ export const TTL = {
   // A publisher thumbnail is immutable once fetched; the long TTL is what keeps a card
   // grid from re-downloading a hundred images every time the page is revisited.
   newsImage: 6 * 60 * 60_000,
-  // The Crypto page has no refresh timer, like the reference's `init_page19`. This only
-  // stops a tab revisit from spending CoinGecko's free-tier rate budget again.
-  crypto: 5 * 60_000,
+  // Match CoinGecko public market data freshness and the active Crypto page's timer.
+  crypto: 60_000,
   // The BMNR page: one CoinGecko call, two SEC calls behind their own six-hour disk cache
-  // and three Yahoo quotes. Matched to `crypto` because it is the same CoinGecko free tier
-  // and the same rate budget, and the page has no refresh timer either.
+  // and three Yahoo quotes. Cache revisits to conserve the shared CoinGecko budget;
+  // this page has no refresh timer.
   bmnr: 5 * 60_000,
   // Gold's market strip is near-live, while its physical datasets update monthly,
   // quarterly or annually and are cached independently by `services/gold.ts`.

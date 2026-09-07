@@ -16,7 +16,7 @@ export type IndicatorKey = 'volume' | 'rsi' | 'ma200'
  */
 const MIN_LEFT_WIDTH = 400
 const MAX_LEFT_WIDTH = 820
-const MIN_OPTIONS_WIDTH = 520
+const MIN_OPTIONS_WIDTH = 320
 const MAX_OPTIONS_WIDTH = 1000
 const DEFAULT_WIDTHS = { leftWidth: MIN_LEFT_WIDTH, optionsWidth: MIN_OPTIONS_WIDTH }
 const STORE_VERSION = 4

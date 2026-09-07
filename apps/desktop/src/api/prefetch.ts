@@ -19,6 +19,7 @@ const INSTITUTIONS_STALE_MS = 4 * 60 * 60 * 1000
 /** `AUM_STALE_MS` in `etfQueries.ts`. */
 const ETF_AUM_STALE_MS = 6 * 60 * 60 * 1000
 import { usePortfolio } from './queries'
+import { waitForWarmSlot, warmQuery } from './warmQueue'
 
 /**
  * Warm every page's data at startup, so switching tabs lands on a loaded page instead of
@@ -130,7 +131,7 @@ function buildTasks(
       tab: 'dashboard',
       label: 'Quotes',
       run: (client) =>
-        client.prefetchQuery({
+        warmQuery(client, {
           queryKey: queryKeys.quotes(active),
           queryFn: () => api.quotes({ holdings: active, background: true }),
           staleTime: QUOTE_REFRESH_MS / 2,
@@ -140,7 +141,7 @@ function buildTasks(
       tab: 'dashboard',
       label: 'Targets',
       run: (client) =>
-        client.prefetchQuery({
+        warmQuery(client, {
           queryKey: queryKeys.targets(active),
           queryFn: () => api.targets({ tickers: active, background: true }),
           staleTime: Infinity,
@@ -150,7 +151,7 @@ function buildTasks(
       tab: 'dashboard',
       label: 'Dashboard news',
       run: (client) =>
-        client.prefetchQuery({
+        warmQuery(client, {
           queryKey: queryKeys.news(active),
           queryFn: () => api.news({ tickers: active, background: true }),
           staleTime: Infinity,
@@ -160,7 +161,7 @@ function buildTasks(
       tab: 'portfolio',
       label: 'Portfolio fundamentals',
       run: (client) =>
-        client.prefetchQuery({
+        warmQuery(client, {
           queryKey: queryKeys.fundamentals(active),
           queryFn: () => api.fundamentals({ tickers: active, background: true }),
           staleTime: Infinity,
@@ -175,7 +176,7 @@ function buildTasks(
     tab: 'cards',
     label: 'Cards',
     run: (client) =>
-      client.prefetchQuery({
+      warmQuery(client, {
         queryKey: queryKeys.cards,
         queryFn: () => api.cards(),
         staleTime: Infinity,
@@ -186,7 +187,7 @@ function buildTasks(
     tab: 'personal-finance',
     label: 'Personal Finance',
     run: (client) =>
-      client.prefetchQuery({
+      warmQuery(client, {
         queryKey: queryKeys.personalFinance,
         queryFn: () => api.personalFinance(),
         staleTime: Infinity,
@@ -196,7 +197,7 @@ function buildTasks(
     tab: 'personal-finance',
     label: 'FX rate',
     run: (client) =>
-      client.prefetchQuery({
+      warmQuery(client, {
         queryKey: queryKeys.fx,
         queryFn: () => api.fx({ background: true }),
         staleTime: FX_REFRESH_MS / 2,
@@ -207,7 +208,7 @@ function buildTasks(
       tab: 'personal-finance',
       label: 'Brokerage quotes',
       run: (client) =>
-        client.prefetchQuery({
+        warmQuery(client, {
           queryKey: queryKeys.quotes(editable),
           queryFn: () => api.quotes({ holdings: editable, background: true }),
           staleTime: QUOTE_REFRESH_MS / 2,
@@ -219,7 +220,7 @@ function buildTasks(
     tab: 'global',
     label: 'Global markets',
     run: (client) =>
-      client.prefetchQuery({
+      warmQuery(client, {
         queryKey: queryKeys.globalMarkets,
         queryFn: () => api.globalMarkets({ background: true }),
         staleTime: Infinity,
@@ -230,7 +231,7 @@ function buildTasks(
     tab: 'pre-market',
     label: 'Pre-Market',
     run: (client) =>
-      client.prefetchQuery({
+      warmQuery(client, {
         queryKey: queryKeys.preMarket,
         queryFn: () => api.preMarket({ background: true }),
         staleTime: PRE_MARKET_REFRESH_MS / 2,
@@ -242,7 +243,7 @@ function buildTasks(
       tab: 'up-down',
       label: 'Up/Down',
       run: (client) =>
-        client.prefetchQuery({
+        warmQuery(client, {
           queryKey: queryKeys.upDown('portfolio', '1d', upDown),
           queryFn: () => api.upDown({ source: 'portfolio', interval: '1d', symbols: upDown, background: true }),
           staleTime: Infinity,
@@ -254,7 +255,7 @@ function buildTasks(
     tab: 'calendar',
     label: 'Calendar month',
     run: (client) =>
-      client.prefetchQuery({
+      warmQuery(client, {
         queryKey: queryKeys.calendarMonth(main, calendar.year, calendar.month),
         queryFn: () =>
           api.calendarMonth({
@@ -271,7 +272,7 @@ function buildTasks(
     tab: 'politics',
     label: 'Politics',
     run: (client) =>
-      client.prefetchQuery({
+      warmQuery(client, {
         queryKey: queryKeys.politicsPage(1),
         queryFn: () => api.politicsPage({ page: 1, background: true }),
         staleTime: 4 * 60 * 60 * 1000,
@@ -283,7 +284,7 @@ function buildTasks(
     tab: 'calendar',
     label: 'Earnings calendar',
     run: (client) =>
-      client.prefetchQuery({
+      warmQuery(client, {
         queryKey: queryKeys.earningsCalendar(earnings.rangeKey),
         queryFn: () =>
           api.earningsCalendar({
@@ -302,7 +303,7 @@ function buildTasks(
     tab: 'economic',
     label: 'Economic',
     run: (client) =>
-      client.prefetchQuery({
+      warmQuery(client, {
         queryKey: queryKeys.economic,
         queryFn: () => api.economic({ background: true }),
         staleTime: Infinity,
@@ -315,7 +316,7 @@ function buildTasks(
     tab: 'ipo',
     label: 'Upcoming IPOs',
     run: (client) =>
-      client.prefetchQuery({
+      warmQuery(client, {
         queryKey: queryKeys.ipoUpcoming,
         queryFn: () => api.ipoUpcoming({ background: true }),
         staleTime: IPO_STALE_MS,
@@ -325,7 +326,7 @@ function buildTasks(
     tab: 'ipo',
     label: 'Completed IPOs',
     run: (client) =>
-      client.prefetchQuery({
+      warmQuery(client, {
         queryKey: queryKeys.ipoCompleted(calendar.ipoYear),
         queryFn: () => api.ipoCompleted({ year: calendar.ipoYear, background: true }),
         staleTime: IPO_STALE_MS,
@@ -337,7 +338,7 @@ function buildTasks(
     tab: 'institutions',
     label: 'Institutions',
     run: (client) =>
-      client.prefetchQuery({
+      warmQuery(client, {
         queryKey: queryKeys.institutionActivity(''),
         queryFn: () => api.institutionActivity({ quarter: '', limit: 50, background: true }),
         staleTime: INSTITUTIONS_STALE_MS,
@@ -349,7 +350,7 @@ function buildTasks(
       tab: 'stocks',
       label: `Stocks ${symbols.stocks}`,
       run: (client) =>
-        client.prefetchQuery({
+        warmQuery(client, {
           queryKey: queryKeys.stocks(symbols.stocks),
           queryFn: () => api.stocks({ symbol: symbols.stocks, background: true }),
           staleTime: Infinity,
@@ -361,7 +362,7 @@ function buildTasks(
       tab: 'fundamentals',
       label: `Fundamentals ${symbols.fundamentals}`,
       run: (client) =>
-        client.prefetchQuery({
+        warmQuery(client, {
           queryKey: queryKeys.fundamentalsPage(symbols.fundamentals),
           queryFn: () => api.fundamentalsPage({ symbol: symbols.fundamentals, background: true }),
           staleTime: Infinity,
@@ -376,7 +377,7 @@ function buildTasks(
     tab: 'oil',
     label: 'Oil fundamentals',
     run: (client) =>
-      client.prefetchQuery({
+      warmQuery(client, {
         queryKey: queryKeys.oil,
         queryFn: () => api.oil({ background: true }),
         staleTime: 60_000,
@@ -388,7 +389,7 @@ function buildTasks(
       tab: 'news',
       label: 'News',
       run: (client) =>
-        client.prefetchQuery({
+        warmQuery(client, {
           queryKey: queryKeys.newsPage(every),
           queryFn: () => api.newsPage({ tickers: every, background: true }),
           staleTime: Infinity,
@@ -398,12 +399,18 @@ function buildTasks(
 
   tasks.push({
     tab: 'forex',
-    label: 'Forex',
-    run: async (client) => {
-      await client.prefetchQuery({ queryKey: queryKeys.forexQuotes, queryFn: () => api.forexQuotes({ background: true }), staleTime: 60_000 })
-      await client.prefetchQuery({ queryKey: queryKeys.forexHistory('EUR/USD', '1M'), queryFn: () => api.forexHistory({ pair: 'EUR/USD', range: '1M', background: true }), staleTime: 60_000 })
-      await client.prefetchQuery({ queryKey: queryKeys.forexNews('EUR/USD'), queryFn: () => api.forexNews({ pair: 'EUR/USD', background: true }), staleTime: 300_000 })
-    },
+    label: 'Forex quotes',
+    run: (client) => warmQuery(client, { queryKey: queryKeys.forexQuotes, queryFn: () => api.forexQuotes({ background: true }), staleTime: 60_000 }),
+  })
+  tasks.push({
+    tab: 'forex',
+    label: 'Forex history',
+    run: (client) => warmQuery(client, { queryKey: queryKeys.forexHistory('EUR/USD', '1M'), queryFn: () => api.forexHistory({ pair: 'EUR/USD', range: '1M', background: true }), staleTime: 60_000 }),
+  })
+  tasks.push({
+    tab: 'forex',
+    label: 'Forex news',
+    run: (client) => warmQuery(client, { queryKey: queryKeys.forexNews('EUR/USD'), queryFn: () => api.forexNews({ pair: 'EUR/USD', background: true }), staleTime: 300_000 }),
   })
 
   // Three unrelated hosts and six Yahoo quotes; cheap next to Trading Volumes, but it is
@@ -412,7 +419,7 @@ function buildTasks(
     tab: 'crypto',
     label: 'Crypto',
     run: (client) =>
-      client.prefetchQuery({
+      warmQuery(client, {
         queryKey: queryKeys.crypto,
         queryFn: () => api.crypto({ background: true }),
         staleTime: Infinity,
@@ -425,7 +432,7 @@ function buildTasks(
     tab: 'etf',
     label: 'ETF AUM rail',
     run: (client) =>
-      client.prefetchQuery({
+      warmQuery(client, {
         queryKey: queryKeys.etfAum,
         queryFn: () => api.etfAum({ background: true }),
         staleTime: ETF_AUM_STALE_MS,
@@ -437,7 +444,7 @@ function buildTasks(
     tab: 'bmnr',
     label: 'BMNR treasury',
     run: (client) =>
-      client.prefetchQuery({
+      warmQuery(client, {
         queryKey: queryKeys.bmnr,
         queryFn: () => api.bmnr({ background: true }),
         staleTime: Infinity,
@@ -450,7 +457,7 @@ function buildTasks(
     tab: 'gold',
     label: 'Gold fundamentals',
     run: (client) =>
-      client.prefetchQuery({
+      warmQuery(client, {
         queryKey: queryKeys.gold,
         queryFn: () => api.gold({ background: true }),
         staleTime: 60_000,
@@ -463,7 +470,7 @@ function buildTasks(
       tab: 'youtube',
       label: 'YouTube',
       run: (client) =>
-        client.prefetchQuery({
+        warmQuery(client, {
           queryKey: queryKeys.youtube(every),
           queryFn: () => api.youtube({ tickers: every, background: true }),
           staleTime: Infinity,
@@ -478,7 +485,7 @@ function buildTasks(
     tab: 'heatmap',
     label: 'Heatmap',
     run: (client) =>
-      client.prefetchQuery({
+      warmQuery(client, {
         queryKey: queryKeys.heatmap('SPY'),
         queryFn: () => api.heatmap({ etf: 'SPY', background: true }),
         staleTime: HEATMAP_STALE_MS,
@@ -491,7 +498,7 @@ function buildTasks(
     tab: 'trading-volumes',
     label: 'Trading Volumes',
     run: (client) =>
-      client.prefetchQuery({
+      warmQuery(client, {
         queryKey: queryKeys.tradingVolumes,
         queryFn: () => api.tradingVolumes({ background: true }),
         staleTime: Infinity,
@@ -562,7 +569,9 @@ export function useWarmPages(settings: AppSettings | undefined): WarmProgress {
 
   // Wait for the holdings document — nearly every task keys off it — and for Settings,
   // which says which pages are worth warming at all.
-  const ready = Boolean(payload && settings)
+  const readyRef = useRef(false)
+  readyRef.current ||= Boolean(payload && settings)
+  const ready = readyRef.current
 
   useEffect(() => {
     if (started.current || !ready) return
@@ -592,11 +601,13 @@ export function useWarmPages(settings: AppSettings | undefined): WarmProgress {
     const run = async () => {
       started.current = true
       for (const [index, task] of tasks.entries()) {
-        // Let visible queries finish before spending more provider budget. Recheck
-        // visibility each time: Settings can change during a long warm-up.
-        while (!cancelled && (document.hidden || queryClient.isFetching() > 0)) {
-          await new Promise((resolve) => setTimeout(resolve, 250))
-        }
+        // Give mounted queries a head start, bounded so polling or a stuck foreground
+        // request cannot starve warm-up. Main's rate gate still prioritizes foreground.
+        await waitForWarmSlot({
+          isHidden: () => document.hidden,
+          isForegroundFetching: () => queryClient.isFetching({ type: 'active' }) > 0,
+          isCancelled: () => cancelled,
+        })
         if (cancelled) return
         const hiddenNow = inputs.current.hidden
         if (task.tab === 'economic'
@@ -607,8 +618,8 @@ export function useWarmPages(settings: AppSettings | undefined): WarmProgress {
         // when the user opens it, exactly as it did before.
         try {
           await task.run(queryClient)
-        } catch {
-          /* the page reports its own failure when it mounts */
+        } catch (error) {
+          console.warn(`[warm-up] ${task.label}:`, error)
         }
         // Yield between pages so navigation and its foreground queries can start.
         await new Promise((resolve) => setTimeout(resolve, 250))

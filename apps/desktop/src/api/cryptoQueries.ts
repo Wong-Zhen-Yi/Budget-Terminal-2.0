@@ -1,24 +1,29 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 
 import type { CryptoPayload, Envelope } from '@shared/contract'
 import { api, queryKeys } from './client'
 import { forcing } from './queries'
 
-/**
- * The Crypto page's single query.
- *
- * `refetchInterval: false` on purpose: `init_page19` fires one load and Refresh is the
- * only thing that repeats it, so a background refetch would spend CoinGecko's free-tier
- * budget on a page nobody is looking at. Refresh and F5 are the only ways it refetches —
- * the same rule as Trading Volumes and News.
- */
+// Match the main-process crypto cache lifetime without forcing provider requests.
+const CRYPTO_REFRESH_MS = 60_000
+
+/** Poll while mounted; switching pages unmounts Crypto and stops its timer. */
 export function useCrypto(): UseQueryResult<Envelope<CryptoPayload>> {
+  const [visible, setVisible] = useState(() => !document.hidden)
+  useEffect(() => {
+    const update = () => setVisible(!document.hidden)
+    document.addEventListener('visibilitychange', update)
+    return () => document.removeEventListener('visibilitychange', update)
+  }, [])
+
   return useQuery({
+    enabled: visible,
     queryKey: queryKeys.crypto,
     queryFn: () => api.crypto({ force: forcing() }),
-    staleTime: Infinity,
-    refetchInterval: false,
+    staleTime: CRYPTO_REFRESH_MS,
+    refetchInterval: visible ? CRYPTO_REFRESH_MS : false,
+    refetchIntervalInBackground: false,
     placeholderData: (previous) => previous,
   })
 }

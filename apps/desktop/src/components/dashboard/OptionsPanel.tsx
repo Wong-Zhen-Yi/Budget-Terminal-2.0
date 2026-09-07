@@ -2,6 +2,7 @@ import type { OptionBucket, OptionRow } from '@shared/contract'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Panel } from '@/components/ui/Panel'
 import { decimals, integer } from '@/lib/format'
+import './OptionsPanel.css'
 
 const columns: Array<Column<OptionRow>> = [
   { key: 'ticker', header: 'Ticker', cell: (row) => row.ticker },
@@ -19,7 +20,6 @@ const columns: Array<Column<OptionRow>> = [
     numeric: true,
     cell: (row) => decimals(row.strike, 1),
   },
-  { key: 'exp', header: 'Exp', align: 'right', numeric: true, cell: (row) => row.expiration },
   {
     key: 'price',
     header: 'Price',
@@ -60,7 +60,7 @@ export function OptionsPanel({
       ] satisfies OptionBucket[])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-1">
+    <div className="dashboard-options flex min-h-0 min-w-0 flex-1 flex-col gap-1">
       {shown.map((bucket) => (
         <Panel
           key={bucket.key}

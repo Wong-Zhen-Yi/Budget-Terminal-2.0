@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { QueryClient } from '@tanstack/react-query'
+import { waitForWarmSlot, warmQuery } from '../src/api/warmQueue.js'
 
 import { cache, TtlCache } from '../electron/services/cache.js'
 import { yahoo } from '../electron/services/yahoo/client.js'
@@ -70,4 +72,64 @@ try {
   Object.defineProperty(yahoo, '_fetch', { configurable: true, value: originalFetch })
   cache.clear()
 }
-console.log('Loading checks passed: single-flight, cache reuse, force refresh, failure cooldown, stale fallback, overlapping ETF histories.')
+const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } })
+try {
+  // A stuck warm request releases the queue and leaves its key retryable on mount.
+  let finishLate!: (value: string) => void
+  await assert.rejects(warmQuery(client, {
+    queryKey: ['stuck'], staleTime: Infinity,
+    queryFn: () => new Promise<string>((resolve) => { finishLate = resolve }),
+  }, 20), /timed out/)
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  assert.equal(client.getQueryState(['stuck'])?.fetchStatus, 'idle')
+  assert.equal(await warmQuery(client, {
+    queryKey: ['next'], staleTime: Infinity, queryFn: async () => 'next loaded',
+  }), 'next loaded')
+  assert.equal(await client.fetchQuery({ queryKey: ['stuck'], queryFn: async () => 'recovered' }), 'recovered')
+  finishLate('obsolete result')
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(client.getQueryData(['stuck']), 'recovered')
+
+  await assert.rejects(warmQuery(client, {
+    queryKey: ['failed'], staleTime: Infinity,
+    queryFn: async () => ({ data: [], meta: { freshness: 'failed' } }),
+  }), /load failed/)
+  assert.equal(client.getQueryState(['failed'])?.status, 'error')
+  const stale = { data: [42], meta: { freshness: 'stale' } }
+  assert.deepEqual(await warmQuery(client, {
+    queryKey: ['fallback'], staleTime: Infinity, queryFn: async () => stale,
+  }), stale)
+
+  // Joining foreground work must have a deadline without cancelling that work.
+  let finishForeground!: (value: number) => void
+  const foreground = client.fetchQuery({
+    queryKey: ['shared'], queryFn: () => new Promise<number>((resolve) => { finishForeground = resolve }),
+  })
+  await assert.rejects(warmQuery(client, {
+    queryKey: ['shared'], staleTime: Infinity, queryFn: async () => 0,
+  }, 20), /timed out/)
+  assert.equal(client.getQueryState(['shared'])?.fetchStatus, 'fetching')
+  finishForeground(42)
+  assert.equal(await foreground, 42)
+
+  // Constant foreground polling may delay warm-up, but cannot starve it forever.
+  await Promise.race([
+    waitForWarmSlot({
+      isHidden: () => false, isForegroundFetching: () => true, isCancelled: () => false,
+      foregroundGraceMs: 20, pollMs: 5,
+    }),
+    new Promise<never>((_resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Warm-up starved')), 500)
+      timer.unref()
+    }),
+  ])
+  let cancelled = false
+  const hiddenWait = waitForWarmSlot({
+    isHidden: () => true, isForegroundFetching: () => false, isCancelled: () => cancelled, pollMs: 5,
+  })
+  cancelled = true
+  await hiddenWait
+} finally {
+  client.clear()
+}
+console.log('Loading checks passed: cache deduplication, stale fallback, warm-up deadlines, retry after failure, foreground isolation, bounded foreground wait and cancellation.')

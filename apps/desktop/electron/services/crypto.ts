@@ -448,9 +448,8 @@ async function fetchCrypto(force: boolean): Promise<CryptoFetchResult> {
 /**
  * One cached load of the whole page.
  *
- * The reference has no refresh timer on this page either — `init_page19` fires once and
- * Refresh is the only thing that repeats it — so the TTL exists only to stop a tab
- * revisit from spending CoinGecko's rate budget again.
+ * Automatic refreshes and tab revisits respect the one-minute cache to conserve
+ * provider requests. Manual Refresh bypasses it with force.
  */
 export function getCrypto(force = false): Promise<CryptoFetchResult> {
   return cache

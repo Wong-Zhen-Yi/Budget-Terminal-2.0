@@ -1,0 +1,30 @@
+.dashboard-options > section > header {
+  height: auto;
+  min-height: 2.25rem;
+  flex-wrap: wrap;
+  column-gap: 0.5rem;
+  row-gap: 0.125rem;
+  padding: 0.25rem;
+}
+
+.dashboard-options h2 {
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+}
+
+.dashboard-options > section > header > div {
+  flex-shrink: 0;
+}
+
+.dashboard-options th,
+.dashboard-options td {
+  padding-left: 0.25rem;
+  padding-right: 0.25rem;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.dashboard-options th:first-child {
+  width: 1.5rem;
+}
