@@ -67,6 +67,7 @@ import type {
   YouTubeThumbnailRequest,
   WindowAction,
 } from '../shared/contract.js'
+import { getForexQuotes, getForexHistory, getForexNews } from '../services/forex.js'
 import { CHANNELS } from '../shared/contract.js'
 import { ok } from '../shared/envelope.js'
 import { yahooProvider } from '../services/provider.js'
@@ -182,6 +183,9 @@ export function registerIpcHandlers(): () => void {
   handle(CHANNELS.crypto, (request: CryptoRequest) => provider.crypto(request))
 
   handle(CHANNELS.bmnr, (request: BmnrRequest) => provider.bmnr(request))
+  handle(CHANNELS.forexQuotes, getForexQuotes)
+  handle(CHANNELS.forexHistory, getForexHistory)
+  handle(CHANNELS.forexNews, getForexNews)
   handle(CHANNELS.gold, (request: GoldRequest) => provider.gold(request))
   handle(CHANNELS.oil, (request: OilRequest) => provider.oil(request))
   handle(CHANNELS.heatmap, (request: HeatmapRequest) => provider.heatmap(request))

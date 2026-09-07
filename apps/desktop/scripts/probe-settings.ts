@@ -63,6 +63,13 @@ async function main(): Promise<void> {
   check('existing tab order is preserved', upgraded.tabOrder.filter((id) => id !== 'market-cap').join(',') === oldOrder.join(','))
   await mutateSettings({ type: 'resetNavigation' })
 
+  const beforeForex = defaults.tabOrder.filter((id) => id !== 'forex').reverse()
+  const withForex = await replaceSettings({ ...defaults, tabOrder: beforeForex })
+  check('existing settings gain Forex once', withForex.tabOrder.filter((id) => id === 'forex').length === 1)
+  check('Forex upgrade preserves existing order', withForex.tabOrder.filter((id) => id !== 'forex').join(',') === beforeForex.join(','))
+  check('Forex can be hidden', (await mutateSettings({ type: 'setTabHidden', id: 'forex', hidden: true })).hiddenTabs.includes('forex'))
+  await mutateSettings({ type: 'resetNavigation' })
+
   show('clock market SG', await mutateSettings({ type: 'setClockCountry', code: 'sg' }))
   show('24-hour clock', await mutateSettings({ type: 'setTime12h', value: false }))
   show('hide Global', await mutateSettings({ type: 'setTabHidden', id: 'global', hidden: true }))

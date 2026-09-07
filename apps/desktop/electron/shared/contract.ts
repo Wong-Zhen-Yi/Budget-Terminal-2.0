@@ -7,6 +7,8 @@
  * degrades on its own instead of blanking the page.
  */
 
+import type { ForexRequest, ForexPairRequest, ForexHistoryRequest, ForexQuotesPayload, ForexHistoryPayload, ForexNewsPayload } from './forex.js'
+
 export type Freshness = 'fresh' | 'cached' | 'stale' | 'partial' | 'failed'
 
 export interface EnvelopeMeta {
@@ -1192,6 +1194,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'quant', label: 'Quant', implemented: true },
   { id: 'projections', label: 'Projections', implemented: true },
   { id: 'etf', label: 'ETF', implemented: true },
+  { id: 'forex', label: 'Forex', implemented: true },
   { id: 'crypto', label: 'Crypto', implemented: true },
   { id: 'bmnr', label: 'BMNR', implemented: true },
   { id: 'gold', label: 'Gold', implemented: true },
@@ -3414,6 +3417,9 @@ export const CHANNELS = {
   priceScreen: 'price:screen',
   calendarMonth: 'calendar:month',
   earningsCalendar: 'calendar:earnings',
+  forexQuotes: 'forex:quotes',
+  forexHistory: 'forex:history',
+  forexNews: 'forex:news',
   crypto: 'crypto:read',
   bmnr: 'bmnr:read',
   gold: 'gold:read',
@@ -3564,6 +3570,9 @@ export interface DesktopApi {
   earningsCalendar(
     request: EarningsCalendarRequest,
   ): Promise<Envelope<EarningsCalendarPayload>>
+  forexQuotes(request: ForexRequest): Promise<Envelope<ForexQuotesPayload>>
+  forexHistory(request: ForexHistoryRequest): Promise<Envelope<ForexHistoryPayload>>
+  forexNews(request: ForexPairRequest): Promise<Envelope<ForexNewsPayload>>
   crypto(request: CryptoRequest): Promise<Envelope<CryptoPayload>>
   bmnr(request: BmnrRequest): Promise<Envelope<BmnrPayload>>
   gold(request: GoldRequest): Promise<Envelope<GoldPayload>>

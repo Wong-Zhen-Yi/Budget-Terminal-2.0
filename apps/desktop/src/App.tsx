@@ -15,6 +15,7 @@ import { CalendarPage } from '@/pages/CalendarPage'
 import { ChartsPage } from '@/pages/ChartsPage'
 import { BmnrPage } from '@/pages/BmnrPage'
 import { BondsPage } from '@/pages/BondsPage'
+import { ForexPage } from '@/pages/ForexPage'
 import { GoldPage } from '@/pages/GoldPage'
 import { OilPage } from '@/pages/OilPage'
 import { CryptoPage } from '@/pages/CryptoPage'
@@ -419,6 +420,8 @@ function renderPage({
       <HeatmapPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'etf' ? (
       <EtfPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
+    ) : tabId === 'forex' ? (
+      <ForexPage onStatusChange={onStatusChange} />
     ) : tabId === 'crypto' ? (
       <CryptoPage onStatusChange={onStatusChange} />
     ) : tabId === 'bmnr' ? (

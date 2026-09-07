@@ -28,6 +28,9 @@ export const queryKeys = {
   calendarMonth: (tickers: string[], year: number, month: number) =>
     ['calendarMonth', year, month, [...tickers].sort().join(',')] as const,
   earningsCalendar: (rangeKey: string) => ['earningsCalendar', rangeKey] as const,
+  forexQuotes: ['forexQuotes'] as const,
+  forexHistory: (pair: string, range: string) => ['forexHistory', pair, range] as const,
+  forexNews: (pair: string) => ['forexNews', pair] as const,
   crypto: ['crypto'] as const,
   bmnr: ['bmnr'] as const,
   gold: ['gold'] as const,

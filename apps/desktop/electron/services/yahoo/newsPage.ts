@@ -129,7 +129,7 @@ export function fetchPortfolioNews(ticker: string, force = false): Promise<NewsA
 const HEADLINE_FEED = 'https://feeds.finance.yahoo.com/rss/2.0/headline'
 const HEADLINE_TIMEOUT_MS = 6_000
 
-async function fetchHeadlineFeed(symbol: string): Promise<NewsArticle[]> {
+export async function fetchHeadlineFeed(symbol: string, limit = MACRO_NEWS_LIMIT): Promise<NewsArticle[]> {
   const url = `${HEADLINE_FEED}?s=${encodeURIComponent(symbol)}&region=US&lang=en-US`
   const response = await paced(() =>
     fetch(url, {
@@ -141,7 +141,7 @@ async function fetchHeadlineFeed(symbol: string): Promise<NewsArticle[]> {
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
   return parseRssItems(await response.text())
-    .slice(0, MACRO_NEWS_LIMIT)
+    .slice(0, limit)
     .map((item) => {
       const publishedAt = parseNewsTimestamp(item.published)
       const article: NewsArticle = {

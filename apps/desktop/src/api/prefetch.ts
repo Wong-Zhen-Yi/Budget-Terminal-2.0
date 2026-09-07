@@ -71,6 +71,7 @@ const TAB_ORDER = [
   'stocks',
   'fundamentals',
   'news',
+  'forex',
   'crypto',
   // A twelve-page screener sweep and a thumbnail fetch per video; both cost real
   // requests, so they sit behind everything that does not.
@@ -394,6 +395,16 @@ function buildTasks(
         }),
     })
   }
+
+  tasks.push({
+    tab: 'forex',
+    label: 'Forex',
+    run: async (client) => {
+      await client.prefetchQuery({ queryKey: queryKeys.forexQuotes, queryFn: () => api.forexQuotes({ background: true }), staleTime: 60_000 })
+      await client.prefetchQuery({ queryKey: queryKeys.forexHistory('EUR/USD', '1M'), queryFn: () => api.forexHistory({ pair: 'EUR/USD', range: '1M', background: true }), staleTime: 60_000 })
+      await client.prefetchQuery({ queryKey: queryKeys.forexNews('EUR/USD'), queryFn: () => api.forexNews({ pair: 'EUR/USD', background: true }), staleTime: 300_000 })
+    },
+  })
 
   // Three unrelated hosts and six Yahoo quotes; cheap next to Trading Volumes, but it is
   // the one page whose upstream (CoinGecko's free tier) rate-limits by the minute.
