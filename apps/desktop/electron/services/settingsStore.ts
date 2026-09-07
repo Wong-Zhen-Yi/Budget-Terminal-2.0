@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
+import { DEFAULT_FAVORITE_TABS } from '../shared/navigation.js'
 
 import type { AppSettings, AppSettingsMutation } from '../shared/contract.js'
 import {
@@ -42,6 +43,8 @@ const settingsSchema = z.object({
   time12h: z.boolean().catch(true),
   tabOrder: z.array(z.string()).catch([]),
   hiddenTabs: z.array(z.string()).catch([]),
+  favoriteTabs: z.array(z.string()).catch([...DEFAULT_FAVORITE_TABS]),
+  sidebarCollapsed: z.boolean().catch(false),
   obscuredTabs: z.array(z.string()).optional(),
   backtestPage: z.unknown().optional(),
   signalsPage: z.unknown().optional(),
@@ -70,6 +73,8 @@ function emptySettings(): StoredSettings {
     time12h: true,
     tabOrder: [...KNOWN_TABS],
     hiddenTabs: [],
+    favoriteTabs: [...DEFAULT_FAVORITE_TABS],
+    sidebarCollapsed: false,
     // A fresh install obscures Personal Finance, like `DEFAULT_PRIVACY_SETTINGS`.
     obscuredTabs: [...DEFAULT_OBSCURED_TABS],
     backtestPage: DEFAULT_BACKTEST_PAGE_SETTINGS,
@@ -107,6 +112,7 @@ function normalize(settings: StoredSettings): StoredSettings {
     ...new Set(ids.filter((id) => KNOWN_TABS.includes(id) && id !== SETTINGS_TAB_ID)),
   ]
   settings.hiddenTabs = keep(settings.hiddenTabs)
+  settings.favoriteTabs = keep(settings.favoriteTabs)
   settings.obscuredTabs = keep(settings.obscuredTabs ?? [...DEFAULT_OBSCURED_TABS])
   settings.backtestPage = normalizeBacktestPageSettings(settings.backtestPage)
   settings.signalsPage = normalizeSignalsPageSettings(settings.signalsPage)
@@ -165,6 +171,8 @@ function toPayload(settings: StoredSettings): AppSettings {
     time12h: settings.time12h,
     tabOrder: [...settings.tabOrder],
     hiddenTabs: [...settings.hiddenTabs],
+    favoriteTabs: [...settings.favoriteTabs],
+    sidebarCollapsed: settings.sidebarCollapsed,
     obscuredTabs: [...(settings.obscuredTabs ?? [])],
     backtestPage: normalizeBacktestPageSettings(settings.backtestPage),
     signalsPage: normalizeSignalsPageSettings(settings.signalsPage),
@@ -210,6 +218,17 @@ function apply(settings: StoredSettings, mutation: AppSettingsMutation): void {
       if (to < 0 || to >= settings.tabOrder.length) return
       const [moved] = settings.tabOrder.splice(from, 1)
       settings.tabOrder.splice(to, 0, moved)
+      return
+    }
+    case 'setTabFavorite': {
+      if (mutation.id === SETTINGS_TAB_ID || !KNOWN_TABS.includes(mutation.id)) {
+        throw new Error(`Cannot favorite page ${mutation.id}.`)
+      }
+      settings.favoriteTabs = toggle(settings.favoriteTabs, mutation.id, mutation.favorite)
+      return
+    }
+    case 'setSidebarCollapsed': {
+      settings.sidebarCollapsed = mutation.value
       return
     }
     case 'resetNavigation': {

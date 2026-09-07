@@ -23,6 +23,8 @@ const fallbackSettings: AppSettings = {
   time12h: true,
   tabOrder: TABS.map((tab) => tab.id),
   hiddenTabs: [],
+  favoriteTabs: [],
+  sidebarCollapsed: false,
   obscuredTabs: [],
   backtestPage: DEFAULT_BACKTEST_PAGE_SETTINGS,
   signalsPage: { filter: 'all', setup: 'all', search: '' },

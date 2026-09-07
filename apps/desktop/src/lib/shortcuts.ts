@@ -12,6 +12,7 @@ export interface ShortcutRow {
 }
 
 export const SHORTCUTS: ReadonlyArray<ShortcutRow> = [
+  { keys: 'Ctrl+K', behavior: 'Open or close page search. Search by page or workspace name.' },
   {
     keys: 'Ctrl+Tab',
     behavior:

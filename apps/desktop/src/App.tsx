@@ -3,10 +3,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { SETTINGS_TAB_ID, TABS } from '@shared/contract'
 import { useWarmPages } from '@/api/prefetch'
 import { useReloadAll } from '@/api/queries'
-import { useSettings } from '@/api/settingsQueries'
+import { useSettings, useSettingsMutation } from '@/api/settingsQueries'
 import { StatusBar, type PanelStatus } from '@/components/chrome/StatusBar'
 import { TabBar } from '@/components/chrome/TabBar'
 import { TabPicker } from '@/components/chrome/TabPicker'
+import { WorkspaceHeader, WorkspaceSidebar } from '@/components/chrome/WorkspaceNavigation'
 import { isTextEntry } from '@/lib/shortcuts'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { BacktestPage } from '@/pages/BacktestPage'
@@ -86,6 +87,34 @@ export function App() {
 
   const settingsQuery = useSettings()
   const settings = settingsQuery.data?.data
+  const mutateSettings = useSettingsMutation()
+  const [savingFavorite, setSavingFavorite] = useState(false)
+  const [savingSidebar, setSavingSidebar] = useState(false)
+  const toggleSidebar = async () => {
+    if (savingSidebar || !settings) return
+    setSavingSidebar(true)
+    try {
+      const result = await mutateSettings({ type: 'setSidebarCollapsed', value: !settings.sidebarCollapsed })
+      if (result.errors.length) setNotice(result.errors.map((error) => error.reason).join(' · '))
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not save sidebar preference.')
+    } finally {
+      setSavingSidebar(false)
+    }
+  }
+  const favorites = settings?.favoriteTabs ?? []
+  const toggleFavorite = async () => {
+    if (savingFavorite || !settings) return
+    setSavingFavorite(true)
+    try {
+      const result = await mutateSettings({ type: 'setTabFavorite', id: activeTab, favorite: !favorites.includes(activeTab) })
+      if (result.errors.length) setNotice(result.errors.map((error) => error.reason).join(' · '))
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not save favorite.')
+    } finally {
+      setSavingFavorite(false)
+    }
+  }
   const record = useDataHealth((state) => state.record)
   // Every page's data is warmed at startup, one call at a time, so switching tabs lands
   // on a loaded page rather than a spinner.
@@ -197,6 +226,12 @@ export function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setPickerOpen((open) => !open)
+        return
+      }
+
       // Ctrl+Tab cycles regardless of what has focus, but not over the open picker.
       if (event.key === 'Tab' && event.ctrlKey && !event.altKey) {
         if (pickerOpen) return
@@ -283,9 +318,7 @@ export function App() {
   return (
     <div className="flex h-full flex-col bg-bg">
       <TabBar
-        tabs={visibleTabs}
-        activeTab={activeTab}
-        onSelectTab={setActiveTab}
+        onOpenPicker={() => setPickerOpen(true)}
         onReload={() => void reload()}
         reloading={reloading}
         clockCountry={settings?.clockCountry ?? 'US'}
@@ -294,49 +327,62 @@ export function App() {
         onToggleObscure={toggleObscure}
       />
 
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        {/* Blurred and inert, matching the reference's blur effect plus `setEnabled(False)`. */}
-        <div
-          aria-hidden={hideCurrent}
-          className={`flex min-h-0 flex-1 flex-col ${
-            hideCurrent ? 'pointer-events-none blur-md select-none' : ''
-          }`}
-        >
-          {residents.map((id) => (
-            // A hidden resident keeps its component tree, so re-entry is a repaint rather
-            // than a rebuild. `display: none` reports 0x0 to the ResizeObserver every
-            // pixel-measured chart on these pages uses; each falls back to its own default
-            // until the page is shown again and the observer fires with the real box.
+      <div className="flex min-h-0 flex-1">
+        <WorkspaceSidebar
+          tabs={visibleTabs} activeTab={activeTab} onSelectTab={setActiveTab} favorites={favorites}
+          collapsed={settings?.sidebarCollapsed ?? false} onToggleCollapsed={() => void toggleSidebar()}
+          saving={savingSidebar || !settings}
+        />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <WorkspaceHeader tabs={visibleTabs} activeTab={activeTab} onSelectTab={setActiveTab}
+            favorite={favorites.includes(activeTab)} onToggleFavorite={() => void toggleFavorite()}
+            saving={savingFavorite || !settings} />
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            {/* Blurred and inert, matching the reference's blur effect plus `setEnabled(False)`. */}
             <div
-              key={id}
-              className={id === activeTab ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}
+              aria-hidden={hideCurrent}
+              className={`flex min-h-0 flex-1 flex-col ${
+                hideCurrent ? 'pointer-events-none blur-md select-none' : ''
+              }`}
             >
-              {renderPage({
-                tabId: id,
-                onStatusChange: statusFor(id),
-                onNavigate: handleStocksNavigate,
-                onSelectTab: setActiveTab,
-              })}
+              {residents.map((id) => (
+                // A hidden resident keeps its component tree, so re-entry is a repaint rather
+                // than a rebuild. `display: none` reports 0x0 to the ResizeObserver every
+                // pixel-measured chart on these pages uses; each falls back to its own default
+                // until the page is shown again and the observer fires with the real box.
+                <div
+                  key={id}
+                  className={id === activeTab ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}
+                >
+                  {renderPage({
+                    tabId: id,
+                    onStatusChange: statusFor(id),
+                    onNavigate: handleStocksNavigate,
+                    onSelectTab: setActiveTab,
+                  })}
+                </div>
+              ))}
+
+              {PAGE_KEEP_ALIVE.has(activeTab)
+                ? null
+                : renderPage({
+                    tabId: activeTab,
+                    onStatusChange: statusFor(activeTab),
+                    onNavigate: handleStocksNavigate,
+                    onSelectTab: setActiveTab,
+                  })}
             </div>
-          ))}
 
-          {PAGE_KEEP_ALIVE.has(activeTab)
-            ? null
-            : renderPage({
-                tabId: activeTab,
-                onStatusChange: statusFor(activeTab),
-                onNavigate: handleStocksNavigate,
-                onSelectTab: setActiveTab,
-              })}
-        </div>
-
-        {hideCurrent ? (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <p className="border border-border-strong bg-surface px-3 py-2 text-2xs text-text-muted">
-              This page is obscured. Press Ctrl+Shift+H to reveal it.
-            </p>
+            {hideCurrent ? (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <p className="border border-border-strong bg-surface px-3 py-2 text-2xs text-text-muted">
+                  This page is obscured. Press Ctrl+Shift+H to reveal it.
+                </p>
+              </div>
+            ) : null}
           </div>
-        ) : null}
+
+        </div>
       </div>
 
       <StatusBar

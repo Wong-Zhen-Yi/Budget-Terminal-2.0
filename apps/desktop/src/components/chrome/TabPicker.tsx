@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { workspaceFor } from '@shared/navigation'
 
 interface PickerTab {
   id: string
@@ -35,18 +36,26 @@ export function TabPicker({
   const [highlighted, setHighlighted] = useState(0)
   const input = useRef<HTMLInputElement>(null)
 
-  useEffect(() => input.current?.focus(), [])
+  useEffect(() => {
+    const previous = document.activeElement
+    input.current?.focus()
+    return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus() }
+  }, [])
 
   const matches = useMemo(() => {
     const needle = query.trim().toLowerCase()
     return tabs
-      .map((tab, order) => ({ tab, order, score: rank(tab.label, needle) }))
+      .map((tab, order) => ({ tab, order, score: rank(tab.label, needle) ?? (workspaceFor(tab.id)?.label.toLowerCase().includes(needle) ? 3 : null) }))
       .filter((entry): entry is { tab: PickerTab; order: number; score: number } =>
         entry.score !== null,
       )
       .sort((a, b) => a.score - b.score || a.order - b.order)
       .map((entry) => entry.tab)
   }, [tabs, query])
+
+  useEffect(() => {
+    input.current?.closest('[role=dialog]')?.querySelector(`[data-result-index="${highlighted}"]`)?.scrollIntoView({ block: 'nearest' })
+  }, [highlighted])
 
   // A narrowing query can leave the highlight past the end of the list.
   const active = Math.min(highlighted, Math.max(0, matches.length - 1))
@@ -55,14 +64,28 @@ export function TabPicker({
     <div
       role="presentation"
       onClick={onClose}
-      className="fixed inset-0 z-40 flex justify-end bg-black/30 pt-14 pr-4"
+      className="fixed inset-0 z-40 flex justify-center bg-black/50 px-4 pt-16"
     >
       <div
         role="dialog"
         aria-label="Page search"
+        aria-modal="true"
+        onKeyDown={(event) => {
+          if (event.key !== 'Tab') return
+          const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('input, button:not(:disabled)'))
+          const next = event.shiftKey ? controls.at(-1) : controls[0]
+          if (event.target === (event.shiftKey ? controls[0] : controls.at(-1))) {
+            event.preventDefault()
+            next?.focus()
+          }
+        }}
         onClick={(event) => event.stopPropagation()}
-        className="flex h-fit max-h-[70vh] w-80 flex-col border border-border-strong bg-surface shadow-2xl"
+        className="flex h-fit max-h-[70vh] w-full max-w-lg flex-col rounded border border-border-strong bg-surface shadow-2xl"
       >
+        <div className="flex items-center justify-between border-b border-border px-3 py-2 text-2xs text-text-muted">
+          <span>Find a page · {tabs.length} available</span>
+          <button type="button" onClick={onClose} className="px-2 py-1 hover:text-text">Close (Esc)</button>
+        </div>
         <input
           ref={input}
           value={query}
@@ -75,14 +98,14 @@ export function TabPicker({
           onKeyDown={(event) => {
             if (event.key === 'ArrowDown') {
               event.preventDefault()
-              setHighlighted((value) => Math.min(value + 1, matches.length - 1))
+              setHighlighted((value) => Math.max(0, Math.min(value + 1, matches.length - 1)))
             } else if (event.key === 'ArrowUp') {
               event.preventDefault()
               setHighlighted((value) => Math.max(value - 1, 0))
             } else if (event.key === 'Enter') {
               event.preventDefault()
               const chosen = matches[active]
-              if (chosen) onSelect(chosen.id)
+              if (chosen?.implemented) onSelect(chosen.id)
             } else if (event.key === 'Escape' || event.key === '`') {
               event.preventDefault()
               // Without this the window-level handler sees the same backtick and
@@ -98,6 +121,8 @@ export function TabPicker({
             <li key={tab.id}>
               <button
                 type="button"
+                data-result-index={index}
+                disabled={!tab.implemented}
                 onMouseEnter={() => setHighlighted(index)}
                 onClick={() => onSelect(tab.id)}
                 className={`flex h-8 w-full items-center gap-2 px-2 text-left text-2xs ${
@@ -105,6 +130,7 @@ export function TabPicker({
                 }`}
               >
                 <span className="truncate">{tab.label}</span>
+                <span className="ml-auto text-text-dim">{workspaceFor(tab.id)?.label ?? 'Preferences'}</span>
                 {!tab.implemented ? (
                   <span className="ml-auto shrink-0 text-text-dim">not migrated</span>
                 ) : null}

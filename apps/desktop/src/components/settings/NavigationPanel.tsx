@@ -39,7 +39,7 @@ export function NavigationPanel({
       <div className="flex flex-col gap-2 p-2">
         <SectionHeader
           title="Visible Pages"
-          hint="Choose which main pages appear in navigation and set their order."
+          hint="Choose visible pages and their order within each workspace. Favorites are managed from the page header."
         />
         <ul className="max-h-96 overflow-y-auto border border-border bg-bg">
           {tabs.map((tab) => {

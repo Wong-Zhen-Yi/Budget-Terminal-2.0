@@ -455,6 +455,8 @@ const emptySettings: AppSettings = {
   time12h: true,
   tabOrder: TABS.map((tab) => tab.id),
   hiddenTabs: [],
+  favoriteTabs: ['dashboard', 'portfolio', 'charts'],
+  sidebarCollapsed: false,
   obscuredTabs: [...DEFAULT_OBSCURED_TABS],
   backtestPage: DEFAULT_BACKTEST_PAGE_SETTINGS,
   quantPage: DEFAULT_QUANT_PAGE_SETTINGS,

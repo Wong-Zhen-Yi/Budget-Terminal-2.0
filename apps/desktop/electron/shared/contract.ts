@@ -477,6 +477,9 @@ export interface AppSettings {
   tabOrder: string[]
   /** Tab ids kept out of the strip. Never contains `SETTINGS_TAB_ID`. */
   hiddenTabs: string[]
+  /** Pinned page shortcuts, in pin order. Hidden pages retain their pin. */
+  favoriteTabs: string[]
+  sidebarCollapsed: boolean
   /** Tab ids the Obscure button blurs and locks. */
   obscuredTabs: string[]
   /** Persisted controls for the standalone Backtest page. */
@@ -496,6 +499,8 @@ export type AppSettingsMutation =
   | { type: 'setClockCountry'; code: string }
   | { type: 'setTime12h'; value: boolean }
   | { type: 'setTabHidden'; id: string; hidden: boolean }
+  | { type: 'setTabFavorite'; id: string; favorite: boolean }
+  | { type: 'setSidebarCollapsed'; value: boolean }
   | { type: 'moveTab'; id: string; direction: -1 | 1 }
   | { type: 'resetNavigation' }
   | { type: 'setTabObscured'; id: string; obscured: boolean }
