@@ -54,7 +54,10 @@ export interface WarmProgress {
   label: string
 }
 
-/** Cheapest pages first, so the heavy two are what is left running in the background. */
+/** Heatmap is the slowest page; always warm it after every other background task. */
+const LAST_BACKGROUND_PAGE = 'heatmap'
+
+/** Cheapest pages first; LAST_BACKGROUND_PAGE is pinned after even unlisted pages. */
 const TAB_ORDER = [
   'dashboard',
   'portfolio',
@@ -83,7 +86,6 @@ const TAB_ORDER = [
   'gold',
   'oil',
   'youtube',
-  'heatmap',
   'trading-volumes',
 ]
 
@@ -492,8 +494,7 @@ function buildTasks(
       }),
   })
 
-  // Last, and by a wide margin the most expensive: a twelve-page screen plus a hundred
-  // daily charts, roughly half a minute behind the rate gate.
+  // A costly twelve-page screen plus a hundred daily charts, warmed before Heatmap.
   tasks.push({
     tab: 'trading-volumes',
     label: 'Trading Volumes',
@@ -506,6 +507,7 @@ function buildTasks(
   })
 
   const rank = (tab: string) => {
+    if (tab === LAST_BACKGROUND_PAGE) return Infinity
     const index = TAB_ORDER.indexOf(tab)
     return index < 0 ? TAB_ORDER.length : index
   }
