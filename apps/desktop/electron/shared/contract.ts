@@ -1187,6 +1187,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'calendar', label: 'Calendar', implemented: true },
   { id: 'pre-market', label: 'Pre-Market', implemented: true },
   { id: 'trading-volumes', label: 'Trading Volumes', implemented: true },
+  { id: 'beta', label: 'Beta', implemented: true },
   { id: 'heatmap', label: 'Heatmap', implemented: true },
   { id: 'cards', label: 'Cards', implemented: true },
   { id: 'up-down', label: 'Up/Down', implemented: true },
@@ -1564,6 +1565,8 @@ export interface TradingVolumeRow {
    * deferred Replay animation drops in without a contract change; nothing reads it yet.
    */
   marketCapHistory: MarketCapPoint[]
+  /** Rolling 60-session adjusted-return beta versus the S&P 500. */
+  betaHistory?: MarketCapPoint[]
 }
 
 export interface TradingVolumesPayload {

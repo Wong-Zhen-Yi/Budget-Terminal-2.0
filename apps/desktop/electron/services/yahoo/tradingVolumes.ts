@@ -5,6 +5,7 @@ import {
   marketCapHistory,
   priceReturns,
 } from '../../shared/tradingVolumes.js'
+import { rollingBeta } from '../../shared/tradingBeta.js'
 import { cache, TTL } from '../cache.js'
 import { getCloseVolumeBatch } from './history.js'
 import { screenEquityUniverse, type ScreenerQuote } from './screener.js'
@@ -16,7 +17,7 @@ import { screenEquityUniverse, type ScreenerQuote } from './screener.js'
  * pull three years of daily bars for those 100 to fill in every other column.
  */
 
-const CACHE_KEY = 'trading-volumes:data'
+const CACHE_KEY = 'trading-volumes:data:v2'
 const SOURCE = 'Yahoo Finance'
 
 export const TRADING_VOLUMES_SOURCE = SOURCE
@@ -108,7 +109,7 @@ async function fetchAll(force: boolean): Promise<TradingVolumesPayload> {
   const now = new Date()
   const start = new Date(Date.UTC(now.getUTCFullYear() - 3, now.getUTCMonth(), now.getUTCDate()))
   const { series, missing } = await getCloseVolumeBatch(
-    rows.map((row) => row.ticker),
+    [...rows.map((row) => row.ticker), '^GSPC'],
     start,
     force,
   )
@@ -136,6 +137,10 @@ async function fetchAll(force: boolean): Promise<TradingVolumesPayload> {
     row.oneYearPriceReturnPct = returns.oneYear
     row.threeYearPriceReturnPct = returns.threeYear
 
+    row.betaHistory = rollingBeta(
+      { dates: history.dates, values: history.adjustedCloses ?? [] },
+      { dates: series['^GSPC']?.dates ?? [], values: series['^GSPC']?.adjustedCloses ?? [] },
+    )
     row.marketCapHistory = marketCapHistory(history, row.marketCap)
   }
 

@@ -41,6 +41,7 @@ import { IpoPage } from '@/pages/IpoPage'
 import { PoliticsPage } from '@/pages/PoliticsPage'
 import { RollPage } from '@/pages/RollPage'
 import { SignalsPage } from '@/pages/SignalsPage'
+import { BetaPage } from '@/pages/BetaPage'
 import { TradingVolumesPage } from '@/pages/TradingVolumesPage'
 import { UpDownPage } from '@/pages/UpDownPage'
 import { ValuationPage } from '@/pages/ValuationPage'
@@ -398,6 +399,8 @@ function renderPage({
       <UpDownPage onStatusChange={onStatusChange} />
     ) : tabId === 'trading-volumes' ? (
       <TradingVolumesPage onStatusChange={onStatusChange} />
+    ) : tabId === 'beta' ? (
+      <BetaPage onStatusChange={onStatusChange} />
     ) : tabId === 'market-cap' ? (
       <MarketCapPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'price' ? (

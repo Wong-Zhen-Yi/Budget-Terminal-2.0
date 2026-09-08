@@ -163,6 +163,7 @@ export interface CloseVolumeSeries {
   dates: string[]
   closes: number[]
   volumes: number[]
+  adjustedCloses?: number[]
 }
 
 export async function fetchCloseVolume(symbol: string, start: Date): Promise<CloseVolumeSeries> {
@@ -170,6 +171,7 @@ export async function fetchCloseVolume(symbol: string, start: Date): Promise<Clo
   const dates: string[] = []
   const closes: number[] = []
   const volumes: number[] = []
+  const adjustedCloses: number[] = []
   let previousDate = ''
 
   for (const row of result.quotes) {
@@ -182,16 +184,18 @@ export async function fetchCloseVolume(symbol: string, start: Date): Promise<Clo
       // Yahoo repeats the last session as a live row; keep the newer value.
       closes[closes.length - 1] = close
       volumes[volumes.length - 1] = volume
+      adjustedCloses[adjustedCloses.length - 1] = row.adjclose ?? NaN
       continue
     }
     previousDate = date
     dates.push(date)
     closes.push(close)
     volumes.push(volume)
+    adjustedCloses.push(row.adjclose ?? NaN)
   }
 
   if (!dates.length) throw new Error(`No history returned for ${symbol}.`)
-  return { dates, closes, volumes }
+  return { dates, closes, volumes, adjustedCloses }
 }
 
 export interface CloseVolumeBatch {
@@ -216,7 +220,7 @@ export async function getCloseVolumeBatch(
     unique.map((symbol) =>
       cache
         .resolve(
-          `close-volume:${symbol}:${stamp}`,
+          `close-volume:v2:${symbol}:${stamp}`,
           TTL.chartDaily,
           () => fetchCloseVolume(symbol, start),
           { force },
