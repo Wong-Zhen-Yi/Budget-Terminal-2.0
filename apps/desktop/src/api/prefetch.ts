@@ -32,8 +32,8 @@ import { waitForWarmSlot, warmQuery } from './warmQueue'
  *
  * Two rules keep this from being a burst of hundreds of Yahoo calls:
  *
- * - the tasks run strictly one after another, cheapest pages first, so whichever tab is
- *   on screen finishes long before Trading Volumes starts, and
+ * - the tasks run strictly one after another in the configured page priority order,
+ *   yielding to foreground requests between tasks, and
  * - hidden tabs are skipped — a page taken out of the strip in Settings has no reason to
  *   spend the rate budget.
  *
@@ -57,36 +57,31 @@ export interface WarmProgress {
 /** Heatmap is the slowest page; always warm it after every other background task. */
 const LAST_BACKGROUND_PAGE = 'heatmap'
 
-/** Cheapest pages first; LAST_BACKGROUND_PAGE is pinned after even unlisted pages. */
+/** Background page priority; LAST_BACKGROUND_PAGE is pinned after even unlisted pages. */
 const TAB_ORDER = [
   'dashboard',
   'portfolio',
-  'cards',
+  'news',
   'personal-finance',
   'global',
   'pre-market',
-  'up-down',
+  'trading-volumes',
   'calendar',
-  'politics',
-  // Disk-cached in the main process, so a warm hit is usually a file read.
-  'economic',
-  'ipo',
-  'institutions',
   'stocks',
   'fundamentals',
-  'news',
+  'cards',
   'forex',
   'crypto',
-  // A twelve-page screener sweep and a thumbnail fetch per video; both cost real
-  // requests, so they sit behind everything that does not.
-  'etf',
-  // Deliberately not adjacent to `crypto`: warm tasks run strictly sequentially and both
-  // pages call CoinGecko's keyless tier, which rate-limits by the minute.
   'bmnr',
   'gold',
   'oil',
   'youtube',
-  'trading-volumes',
+  'etf',
+  'economic',
+  'ipo',
+  'up-down',
+  'politics',
+  'institutions',
 ]
 
 /** The four different holding sets the pages ask for, from one document. */
