@@ -20,7 +20,7 @@ function statusTooltip(status: MarketStatus): string {
   ].join('\n')
 }
 
-/** The eleven columns of `P26_TABLE_COLUMNS`, in order. */
+/** Index values and performance for the selected interval. */
 export function GlobalTable({
   rows,
   interval,
@@ -90,6 +90,18 @@ export function GlobalTable({
       numeric: true,
       cell: (row) => thousands(row.lastClose),
       sortValue: (row) => row.lastClose,
+    },
+    {
+      key: 'intradayRange',
+      header: 'Intraday Range',
+      align: 'right',
+      numeric: true,
+      cell: (row) => (
+        <span title={`Latest session (${row.lastDate || '--'}), low – high`}>
+          {thousands(row.dayLow)} – {thousands(row.dayHigh)}
+        </span>
+      ),
+      sortValue: (row) => row.dayLow,
     },
     {
       key: 'startClose',

@@ -27,8 +27,9 @@ export function buildGlobalLlmExport(payload: GlobalMarketsPayload, rows: Mapped
     `Intervals: ${GLOBAL_INTERVALS.join(', ')}. Performance is percent change from start close to latest close.`,
     'Market status is inferred from Yahoo chart timing metadata and displayed in the Settings clock timezone.',
     '',
-    `| Region | Country | Index | Symbol | Market | Session (Clock TZ) | Last Date | Last Close | ${GLOBAL_INTERVALS.join(' | ')} |`,
-    `|---|---|---|---:|---:|---|---:|---:|${GLOBAL_INTERVALS.map(() => '---:').join('|')}|`,
+    'Intraday range is the latest session low–high, dated by Last Date, independent of the performance interval.',
+    `| Region | Country | Index | Symbol | Market | Session (Clock TZ) | Last Date | Last Close | Intraday Low | Intraday High | ${GLOBAL_INTERVALS.join(' | ')} |`,
+    `|---|---|---|---:|---:|---|---:|---:|---:|---:|${GLOBAL_INTERVALS.map(() => '---:').join('|')}|`,
   ]
 
   for (const entry of rows) {
@@ -42,6 +43,8 @@ export function buildGlobalLlmExport(payload: GlobalMarketsPayload, rows: Mapped
         entry.status.session,
         entry.lastDate || '--',
         thousands(entry.lastClose),
+        thousands(entry.dayLow),
+        thousands(entry.dayHigh),
         ...GLOBAL_INTERVALS.map((interval) => {
           const payloadForInterval = entry.intervals?.[interval]
           return payloadForInterval?.available

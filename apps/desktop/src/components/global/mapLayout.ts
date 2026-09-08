@@ -18,7 +18,7 @@ export interface Rect {
 }
 
 /**
- * Fonts for the three lines of a callout.
+ * Fonts for the four lines of a callout.
  *
  * Canvas and SVG text does not follow `--text-2xs` in `styles/theme.css`, so these move
  * by hand when the type scale does — the same caveat as `PriceChart`'s `fontSize`. Sizes
@@ -392,6 +392,7 @@ export interface LabelInput {
   country: string
   label: string
   statusText: string
+  rangeText: string
   /** Whether the status line leads with a coloured open/closed dot. */
   showStatus: boolean
   changeColor: string
@@ -408,9 +409,9 @@ export interface PlacedLabel {
   statusColor: string
   showStatus: boolean
   /** Already elided to their boxes. */
-  lines: { country: string; label: string; status: string }
+  lines: { country: string; label: string; status: string; range: string }
   /** Top-aligned text rows inside the box, from `_draw_markers`. */
-  rows: { country: Rect; label: Rect; status: Rect }
+  rows: { country: Rect; label: Rect; status: Rect; range: Rect }
   dot: Point
 }
 
@@ -428,7 +429,7 @@ export function layoutLabels(inputs: LabelInput[], area: MapRect): PlacedLabel[]
   const occupied: Rect[] = []
   const leaders: Segment[] = []
   const protectedPins = inputs.map((item) => pinHitRect(item.point))
-  const height = FONTS.country.height + FONTS.title.height + FONTS.detail.height + 12
+  const height = FONTS.country.height + FONTS.title.height + 2 * FONTS.detail.height + 13
 
   const crowding = inputs.map((item, index) =>
     inputs.reduce(
@@ -448,6 +449,7 @@ export function layoutLabels(inputs: LabelInput[], area: MapRect): PlacedLabel[]
       textWidth(item.country, FONTS.country),
       textWidth(item.label, FONTS.title),
       textWidth(item.statusText, FONTS.detail) + (item.showStatus ? DOT_INSET : 0),
+      textWidth(item.rangeText, FONTS.detail),
     )
     const width = Math.min(Math.max(widest + 16, 70), 150)
 
@@ -466,6 +468,7 @@ export function layoutLabels(inputs: LabelInput[], area: MapRect): PlacedLabel[]
     const label: Rect = { x: textLeft, y: bottom(country) - 1, width: textSpan, height: FONTS.title.height + 1 }
     const status: Rect = { x: textLeft, y: bottom(label), width: textSpan, height: FONTS.detail.height + 1 }
     const statusSpan = item.showStatus ? Math.max(1, status.width - DOT_INSET) : status.width
+    const range: Rect = { x: textLeft, y: bottom(status), width: textSpan, height: FONTS.detail.height + 1 }
 
     placed.push({
       key: item.key,
@@ -480,10 +483,12 @@ export function layoutLabels(inputs: LabelInput[], area: MapRect): PlacedLabel[]
         country: elide(item.country, textSpan, FONTS.country),
         label: elide(item.label, textSpan, FONTS.title),
         status: elide(item.statusText, statusSpan, FONTS.detail),
+        range: elide(item.rangeText, textSpan, FONTS.detail),
       },
       rows: {
         country,
         label,
+        range,
         status: item.showStatus ? { ...status, x: status.x + DOT_INSET, width: statusSpan } : status,
       },
       dot: { x: status.x + 4, y: status.y + Math.max(5, FONTS.detail.height / 2) },

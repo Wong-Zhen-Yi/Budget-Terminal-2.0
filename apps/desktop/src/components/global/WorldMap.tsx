@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { GlobalIndexRow, GlobalInterval } from '@shared/contract'
 import type { MarketStatus } from '@shared/globalMarkets'
-import { performancePercent } from '@/lib/format'
+import { performancePercent, thousands } from '@/lib/format'
 import { FONT_FAMILY, FONTS, layoutLabels, type LabelInput } from './mapLayout'
 import {
   loadWorldFeatures,
@@ -99,12 +99,23 @@ function statusColor(row: MappedRow, palette: Palette): string {
   return palette.muted
 }
 
+export function intradayRangeText(row: Pick<GlobalIndexRow, 'dayLow' | 'dayHigh'>): string {
+  const { dayLow, dayHigh } = row
+  if (typeof dayLow !== 'number' || typeof dayHigh !== 'number' ||
+    !Number.isFinite(dayLow) || !Number.isFinite(dayHigh) || dayLow <= 0 || dayHigh < dayLow) {
+    return 'Day range --'
+  }
+  return `Day range ${((dayHigh - dayLow) / dayLow * 100).toFixed(2)}%`
+}
+
 function tooltip(row: MappedRow, interval: GlobalInterval): string {
   const payload = performance(row, interval)
   const parts = [
     row.name || row.symbol || '--',
     `${row.country || '--'} | ${row.symbol || '--'}`,
     pctText(row, interval),
+    `Intraday range (${row.lastDate || '--'}): ${thousands(row.dayLow)} – ${thousands(row.dayHigh)}`,
+    `${intradayRangeText(row)} (high − low) / low × 100`,
     row.status.session,
     `Clock timezone: ${row.status.clockTimezone}`,
     `Exchange timezone: ${row.status.exchangeTimezone}`,
@@ -250,6 +261,7 @@ export function WorldMap({
         ? `${row.status.market} | ${pctText(row, interval)}`
         : pctText(row, interval),
       showStatus: Boolean(row.status.market.trim()),
+      rangeText: intradayRangeText(row),
       changeColor: rowColor(row, interval, palette),
       statusColor: statusColor(row, palette),
     }))
@@ -343,6 +355,16 @@ export function WorldMap({
               dominantBaseline="text-before-edge"
             >
               {label.lines.status}
+            </text>
+            <text
+              x={label.rows.range.x}
+              y={label.rows.range.y}
+              fill={palette.text}
+              fontFamily={FONT_FAMILY}
+              fontSize={FONTS.detail.size}
+              dominantBaseline="text-before-edge"
+            >
+              {label.lines.range}
             </text>
           </g>
         ))}

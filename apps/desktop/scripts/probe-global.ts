@@ -15,6 +15,65 @@ import {
 } from '../electron/shared/contract.js'
 import { formatMarketTiming } from '../electron/shared/globalMarkets.js'
 import { yahooProvider } from '../electron/services/provider.js'
+import assert from 'node:assert/strict'
+import { getGlobalMarkets } from '../electron/services/yahoo/globalMarkets.js'
+import { yahoo } from '../electron/services/yahoo/client.js'
+
+async function offline(): Promise<void> {
+  const client = yahoo as unknown as { chart: unknown }
+  const original = client.chart
+  client.chart = (async () => ({
+    meta: { exchangeTimezoneName: 'America/Sao_Paulo' },
+    quotes: [
+      { date: new Date('2026-09-04T13:00:00Z'), close: 100, low: 50, high: 200 },
+      { date: new Date('2026-09-07T13:00:00Z'), close: 110, low: 101, high: 115 },
+      { date: new Date('2026-09-08T00:00:00Z'), close: 112, low: 112, high: 112 },
+    ],
+  }))
+  try {
+    const payload = await getGlobalMarkets(true)
+    assert.equal(payload.missing.length, 0)
+    for (const row of payload.rows) {
+      assert.equal(row.lastDate, '2026-09-07')
+      assert.equal(row.dayLow, 101)
+      assert.equal(row.dayHigh, 115)
+      assert.equal(row.lastClose, 112)
+    }
+    const { createElement } = await import('react')
+    const { renderToStaticMarkup } = await import('react-dom/server')
+    const { GlobalTable } = await import('../src/components/global/GlobalTable.js')
+    const { intradayRangeText } = await import('../src/components/global/WorldMap.js')
+    assert.equal(intradayRangeText({ dayLow: 100, dayHigh: 102.5 }), 'Day range 2.50%')
+    assert.equal(intradayRangeText({ dayLow: 100, dayHigh: 100 }), 'Day range 0.00%')
+    assert.equal(intradayRangeText({ dayLow: null, dayHigh: null }), 'Day range --')
+    assert.equal(intradayRangeText({ dayLow: 0, dayHigh: 100 }), 'Day range --')
+    assert.equal(intradayRangeText({ dayLow: 100, dayHigh: 99 }), 'Day range --')
+    const { buildGlobalLlmExport } = await import('../src/components/global/llmExport.js')
+    const rows = payload.rows.map((row) => ({
+      ...row, status: formatMarketTiming(row.marketTiming, 'UTC'),
+    }))
+    for (const interval of ['1D', '1Y'] as const) {
+      const html = renderToStaticMarkup(createElement(GlobalTable, { rows, interval, loading: false }))
+      assert.ok(html.includes('Intraday Range'))
+      assert.ok(html.includes('101.00 – 115.00'))
+    }
+    assert.ok(buildGlobalLlmExport(payload, rows).includes('101.00 | 115.00'))
+    client.chart = (async () => ({
+      meta: { exchangeTimezoneName: 'UTC' },
+      quotes: [
+        { date: new Date('2026-09-04'), close: 100, low: 50, high: 200 },
+        { date: new Date('2026-09-07'), close: 110, low: null, high: null },
+      ],
+    }))
+    for (const row of (await getGlobalMarkets(true)).rows) {
+      assert.equal(row.dayLow, null)
+      assert.equal(row.dayHigh, null)
+    }
+    console.log('PASS: latest session range, synthetic quote, exchange date, missing range, table render and export')
+  } finally {
+    client.chart = original
+  }
+}
 
 function close(value: number | null | undefined): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '--'
@@ -38,6 +97,7 @@ function intervalCell(row: GlobalIndexRow, interval: GlobalInterval): string {
 }
 
 async function main(): Promise<void> {
+  if (process.argv.includes('--offline')) return offline()
   const settings = (await yahooProvider.settings()).data
   const zone =
     CLOCK_COUNTRIES.find((entry) => entry.code === settings.clockCountry)?.zone ??
@@ -63,6 +123,8 @@ async function main(): Promise<void> {
     ['Market', 8, 'left'],
     ['Session (Clock TZ)', 30, 'left'],
     ['Last Close', 12, 'right'],
+    ['Intraday Low', 14, 'right'],
+    ['Intraday High', 14, 'right'],
     ['Start Close', 12, 'right'],
     ['End Close', 12, 'right'],
     ['Perf %', 9, 'right'],
@@ -83,6 +145,8 @@ async function main(): Promise<void> {
       status.market,
       status.session,
       close(row.lastClose),
+      close(row.dayLow),
+      close(row.dayHigh),
       performance?.available ? close(performance.startClose) : '--',
       performance?.available ? close(performance.endClose) : '--',
       performance?.available ? pct(performance.changePct) : '--',

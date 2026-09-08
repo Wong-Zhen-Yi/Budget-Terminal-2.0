@@ -42,6 +42,8 @@ function epochSeconds(value: unknown): number | null {
 interface SymbolResult {
   series: DatedSeries
   timing: MarketTiming
+  dayLow: number | null
+  dayHigh: number | null
 }
 
 /**
@@ -109,7 +111,15 @@ async function fetchSymbol(symbol: string, start: Date): Promise<SymbolResult> {
   }
 
   if (!dates.length) throw new Error(`No history returned for ${symbol}.`)
-  return { series: { dates, values }, timing }
+  // Merge the latest exchange-local session, including Yahoo's synthetic quote bar.
+  // Never substitute an older session when the latest session has no valid range.
+  const session = dates[dates.length - 1]
+  const bars = result.quotes.filter((row) => stamp(row.date) === session &&
+    typeof row.low === 'number' && Number.isFinite(row.low) && row.low > 0 &&
+    typeof row.high === 'number' && Number.isFinite(row.high) && row.high >= row.low)
+  const dayLow = bars.length ? Math.min(...bars.map((row) => row.low!)) : null
+  const dayHigh = bars.length ? Math.max(...bars.map((row) => row.high!)) : null
+  return { series: { dates, values }, timing, dayLow, dayHigh }
 }
 
 function emptyTiming(symbol: string): MarketTiming {
@@ -131,6 +141,8 @@ function buildRow(config: GlobalIndexConfig, result: SymbolResult | null): Globa
   return {
     ...config,
     lastClose: last >= 0 ? series.values[last] : null,
+    dayLow: result?.dayLow ?? null,
+    dayHigh: result?.dayHigh ?? null,
     lastDate: last >= 0 ? series.dates[last] : '',
     intervals: calculateAllIntervals(series),
     marketTiming: result?.timing ?? emptyTiming(config.symbol),

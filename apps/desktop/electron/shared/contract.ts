@@ -1393,6 +1393,8 @@ export interface MarketTiming {
 
 export interface GlobalIndexRow extends GlobalIndexConfig {
   lastClose: number | null
+  dayLow: number | null
+  dayHigh: number | null
   lastDate: string
   intervals: Record<GlobalInterval, IntervalPerformance>
   marketTiming: MarketTiming
