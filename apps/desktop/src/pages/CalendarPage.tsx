@@ -302,6 +302,13 @@ function MonthlyCalendar({
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2">
       <div className="flex shrink-0 items-center gap-1 border border-border bg-surface px-2 py-1">
         <h1 className="text-xs font-semibold text-text">Calendar</h1>
+        <Button
+          onClick={() => state.setDetailsCollapsed(!state.detailsCollapsed)}
+          aria-expanded={!state.detailsCollapsed}
+          aria-controls="calendar-details"
+        >
+          {state.detailsCollapsed ? 'Show information' : 'Hide information'}
+        </Button>
         <div className="ml-auto flex items-center gap-1">
           <Button onClick={() => state.changeMonth(-1)} aria-label="Previous month">◀</Button>
           <span className="min-w-32 text-center text-2xs font-semibold text-warn">{monthLabel(state.year, state.month)}</span>
@@ -340,7 +347,11 @@ function MonthlyCalendar({
         />
       </div>
 
-      <div className="grid max-h-40 shrink-0 grid-cols-1 gap-2 overflow-auto xl:h-40 xl:max-h-none xl:grid-cols-5 xl:overflow-visible">
+      <div
+        id="calendar-details"
+        hidden={state.detailsCollapsed}
+        className={state.detailsCollapsed ? 'hidden' : 'grid max-h-40 shrink-0 grid-cols-1 gap-2 overflow-auto xl:h-40 xl:max-h-none xl:grid-cols-5 xl:overflow-visible'}
+      >
         <DetailPanel title="Upcoming Earnings & Corporate Events">
           <DetailTable
             headers={['Date', 'Ticker', 'Event', 'Details']}

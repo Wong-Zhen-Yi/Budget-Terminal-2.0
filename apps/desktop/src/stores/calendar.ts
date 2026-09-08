@@ -22,6 +22,7 @@ interface CalendarState {
   showCompany: boolean
   showOptions: boolean
   showMarketHolidays: boolean
+  detailsCollapsed: boolean
   earningsMode: EarningsRangeMode
   earningsYear: number
   earningsWeekStart: string
@@ -30,6 +31,7 @@ interface CalendarState {
   earningsChangedOnly: boolean
 
   setSubTab: (subTab: CalendarSubTab) => void
+  setDetailsCollapsed: (collapsed: boolean) => void
   initialize: (today: string) => void
   setTimezone: (timezone: CalendarTimezoneId, today: string) => void
   changeMonth: (delta: number) => void
@@ -64,6 +66,7 @@ export const useCalendarPage = create<CalendarState>()(
       showCompany: true,
       showOptions: true,
       showMarketHolidays: true,
+      detailsCollapsed: false,
       earningsMode: 'year',
       earningsYear: currentYear,
       earningsWeekStart: startOfWeek(today),
@@ -72,6 +75,7 @@ export const useCalendarPage = create<CalendarState>()(
       earningsChangedOnly: false,
 
       setSubTab: (subTab) => set({ subTab }),
+      setDetailsCollapsed: (detailsCollapsed) => set({ detailsCollapsed }),
       initialize: (present) =>
         set((state) => state.initialized ? {} : {
           initialized: true,
@@ -97,7 +101,7 @@ export const useCalendarPage = create<CalendarState>()(
     {
       name: 'budget-terminal:calendar',
       version: 1,
-      partialize: (state) => ({ timezone: state.timezone }),
+      partialize: (state) => ({ timezone: state.timezone, detailsCollapsed: state.detailsCollapsed }),
     },
   ),
 )
