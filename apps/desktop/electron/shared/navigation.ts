@@ -1,7 +1,7 @@
 /** Stable workspace membership; user ordering still applies within each workspace. */
 export const WORKSPACES = [
   { id: 'overview', label: 'Overview', pages: ['dashboard', 'news', 'calendar', 'youtube', 'dictionary'] },
-  { id: 'markets', label: 'Markets', pages: ['pre-market', 'heatmap', 'up-down', 'trading-volumes', 'beta', 'market-cap', 'price', 'etf', 'forex', 'crypto', 'gold', 'oil'] },
+  { id: 'markets', label: 'Markets', pages: ['pre-market', 'heatmap', 'up-down', 'trading-volumes', 'beta', 'market-cap', 'price', 'etf', 'sp500', 'forex', 'crypto', 'gold', 'oil'] },
   { id: 'research', label: 'Research', pages: ['stocks', 'fundamentals', 'valuation', 'bmnr', 'institutions'] },
   { id: 'trading', label: 'Trading', pages: ['charts', 'options', 'signals', 'quant', 'backtest', 'roll'] },
   { id: 'macro', label: 'Macro & events', pages: ['global', 'economic', 'bonds', 'ipo', 'politics'] },

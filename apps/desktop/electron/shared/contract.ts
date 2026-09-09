@@ -1,3 +1,4 @@
+import type { Sp500Request, Sp500Data, Sp500BreadthRequest, Sp500Breadth } from './sp500.js'
 /**
  * The IPC contract shared verbatim by the Electron main process and the renderer.
  *
@@ -1200,6 +1201,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'quant', label: 'Quant', implemented: true },
   { id: 'projections', label: 'Projections', implemented: true },
   { id: 'etf', label: 'ETF', implemented: true },
+  { id: 'sp500', label: 'S&P500', implemented: true },
   { id: 'forex', label: 'Forex', implemented: true },
   { id: 'crypto', label: 'Crypto', implemented: true },
   { id: 'bmnr', label: 'BMNR', implemented: true },
@@ -3432,6 +3434,8 @@ export const CHANNELS = {
   forexNews: 'forex:news',
   crypto: 'crypto:read',
   bmnr: 'bmnr:read',
+  sp500: 'sp500:read',
+  sp500Breadth: 'sp500:breadth',
   gold: 'gold:read',
   oil: 'oil:read',
   heatmap: 'heatmap:read',
@@ -3585,6 +3589,8 @@ export interface DesktopApi {
   forexNews(request: ForexPairRequest): Promise<Envelope<ForexNewsPayload>>
   crypto(request: CryptoRequest): Promise<Envelope<CryptoPayload>>
   bmnr(request: BmnrRequest): Promise<Envelope<BmnrPayload>>
+  sp500(request: Sp500Request): Promise<Envelope<Sp500Data>>
+  sp500Breadth(request: Sp500BreadthRequest): Promise<Envelope<Sp500Breadth>>
   gold(request: GoldRequest): Promise<Envelope<GoldPayload>>
   oil(request: OilRequest): Promise<Envelope<OilPayload>>
   heatmap(request: HeatmapRequest): Promise<Envelope<HeatmapPayload>>

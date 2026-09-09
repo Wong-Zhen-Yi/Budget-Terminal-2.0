@@ -1,3 +1,5 @@
+import type { Sp500Request, Sp500Data, Sp500BreadthRequest, Sp500Breadth } from '../shared/sp500.js'
+import { getSp500, getSp500Breadth } from './sp500.js'
 import { readFile, writeFile } from 'node:fs/promises'
 import { z } from 'zod'
 
@@ -357,6 +359,8 @@ export interface MarketDataProvider {
   earningsCalendar(request: EarningsCalendarRequest): Promise<Envelope<EarningsCalendarPayload>>
   crypto(request: CryptoRequest): Promise<Envelope<CryptoPayload>>
   bmnr(request: BmnrRequest): Promise<Envelope<BmnrPayload>>
+  sp500(request: Sp500Request): Promise<Envelope<Sp500Data>>
+  sp500Breadth(request: Sp500BreadthRequest): Promise<Envelope<Sp500Breadth>>
   gold(request: GoldRequest): Promise<Envelope<GoldPayload>>
   oil(request: OilRequest): Promise<Envelope<OilPayload>>
   heatmap(request: HeatmapRequest): Promise<Envelope<HeatmapPayload>>
@@ -1303,6 +1307,9 @@ export const yahooProvider: MarketDataProvider = {
       return failed(emptyBmnrPayload(), describeError(error), BMNR_SOURCE)
     }
   },
+
+  sp500: getSp500,
+  sp500Breadth: getSp500Breadth,
 
   async gold({ force }) {
     try {

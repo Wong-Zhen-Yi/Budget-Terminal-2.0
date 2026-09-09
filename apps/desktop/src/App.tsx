@@ -1,3 +1,4 @@
+import { Sp500Page } from '@/pages/Sp500Page'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { SETTINGS_TAB_ID, TABS } from '@shared/contract'
@@ -421,6 +422,8 @@ function renderPage({
       <CryptoPage onStatusChange={onStatusChange} />
     ) : tabId === 'bmnr' ? (
       <BmnrPage onStatusChange={onStatusChange} />
+    ) : tabId === 'sp500' ? (
+      <Sp500Page onStatusChange={onStatusChange} />
     ) : tabId === 'gold' ? (
       <GoldPage onStatusChange={onStatusChange} />
     ) : tabId === 'oil' ? (

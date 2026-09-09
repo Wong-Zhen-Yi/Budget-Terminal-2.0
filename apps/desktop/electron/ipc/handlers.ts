@@ -1,3 +1,4 @@
+import type { Sp500Request, Sp500BreadthRequest } from '../shared/sp500.js'
 import { BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
 import { writeFile } from 'node:fs/promises'
 
@@ -186,6 +187,8 @@ export function registerIpcHandlers(): () => void {
   handle(CHANNELS.forexQuotes, getForexQuotes)
   handle(CHANNELS.forexHistory, getForexHistory)
   handle(CHANNELS.forexNews, getForexNews)
+  handle(CHANNELS.sp500, (request: Sp500Request) => provider.sp500(request))
+  handle(CHANNELS.sp500Breadth, (request: Sp500BreadthRequest) => provider.sp500Breadth(request))
   handle(CHANNELS.gold, (request: GoldRequest) => provider.gold(request))
   handle(CHANNELS.oil, (request: OilRequest) => provider.oil(request))
   handle(CHANNELS.heatmap, (request: HeatmapRequest) => provider.heatmap(request))
