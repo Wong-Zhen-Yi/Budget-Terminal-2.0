@@ -143,6 +143,11 @@ export function OptionsPage({
 
   const chain = chainQuery.data?.data
   const sweep = sweepQuery.data?.data
+  const tickerPrice = loaded && draft.trim().toUpperCase() === symbol
+    ? [sweep, chain].find((payload) =>
+        payload?.symbol === symbol && Number.isFinite(payload.spotPrice) && payload.spotPrice > 0,
+      )?.spotPrice
+    : undefined
   const loading = busy || chainQuery.isFetching || sweepQuery.isFetching
 
   useEffect(() => setDraft(symbol), [symbol])
@@ -328,6 +333,13 @@ export function OptionsPage({
             aria-label="Options ticker"
             className="h-8 w-44 border border-border-strong bg-surface-raised px-2 text-2xs font-semibold tracking-wide text-text outline-none focus:border-accent"
           />
+          <span
+            className="num px-1 text-2xs font-semibold text-text whitespace-nowrap"
+            title="Current underlying price"
+            aria-label="Current underlying price"
+          >
+            {currency(tickerPrice)}
+          </span>
           <Button type="submit" variant="accent" disabled={loading}>
             {loading ? 'Loading...' : 'Load Ticker'}
           </Button>
