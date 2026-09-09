@@ -56,6 +56,8 @@ export function BarChart({
   const values = ordered.map((bar) => bar.value)
   const maximum = Math.max(...values, 0)
   const minimum = signed ? Math.min(...values, 0) : 0
+  // Negative values print their labels below the bar, above the ticker axis.
+  const bottomLabelSpace = minimum < 0 ? '1.25rem' : '0rem'
   // A flat series would divide by zero; give it a nominal span instead.
   const span = maximum - minimum || 1
   const zeroRatio = (maximum - 0) / span
@@ -69,11 +71,14 @@ export function BarChart({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="relative flex min-h-0 flex-1 items-stretch gap-2 px-2 pt-5">
+      <div
+        className="relative flex min-h-0 flex-1 items-stretch gap-2 px-2 pt-5"
+        style={{ paddingBottom: bottomLabelSpace }}
+      >
         {signed ? (
           <div
             className="pointer-events-none absolute inset-x-2 border-t border-border-strong"
-            style={{ top: `calc(1.25rem + (100% - 1.25rem) * ${zeroRatio})` }}
+            style={{ top: `calc(1.25rem + (100% - 1.25rem - ${bottomLabelSpace}) * ${zeroRatio})` }}
           />
         ) : null}
         {ordered.map((bar, barIndex) => {
