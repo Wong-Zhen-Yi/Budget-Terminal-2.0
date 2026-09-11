@@ -124,6 +124,58 @@ type StoredDocument = z.infer<typeof documentSchema>
 
 const STORE_VERSION = 2
 
+// Imports must fail on missing or malformed data instead of applying the recovery
+// defaults used when reading an older local store.
+const importEntrySchema = z.object({ id: z.string(), desc: z.string(), amount: z.number().finite() })
+const importDocumentSchema = z.object({
+  version: z.number().int().min(1).max(STORE_VERSION),
+  activeId: z.string().nullable(),
+  mainId: z.string().nullable(),
+  order: z.array(z.string()),
+  portfolios: z.record(z.string(), z.object({
+    id: z.string(),
+    name: z.string(),
+    tickers: z.array(z.string()),
+    holdings: z.record(z.string(), z.object({
+      ticker: z.string(),
+      shares: z.number().finite(),
+      avgPrice: z.number().finite(),
+      includeInWeight: z.boolean(),
+    })),
+    cashBalance: z.number().finite(),
+    marginDebt: z.number().finite(),
+    includeCashInWeight: z.boolean(),
+    options: z.array(z.object({
+      rowId: z.string(),
+      ticker: z.string(),
+      strategy: z.string(),
+      expiry: z.string(),
+      strike: z.number().finite(),
+      contracts: z.number().finite(),
+      premium: z.number().finite(),
+      status: z.string(),
+      openDate: z.string(),
+    })),
+  })),
+  // Version 1 backups predate the finance book.
+  personalFinance: z.object({
+    cash: z.array(importEntrySchema),
+    debt: z.array(importEntrySchema),
+    recurringBills: z.array(importEntrySchema.extend({
+      frequency: z.enum(['monthly', 'yearly']),
+      currency: z.enum(['SGD', 'USD']),
+    })),
+    totalsCurrency: z.enum(['SGD', 'USD']),
+    goal: z.object({
+      title: z.string(),
+      targetAmount: z.number().finite(),
+      currency: z.enum(['SGD', 'USD']),
+    }),
+  }).optional(),
+}).refine((document) => document.version === 1 || document.personalFinance !== undefined, {
+  message: 'The backup is missing its personal finance book.',
+})
+
 function emptyFinance(): StoredFinance {
   return {
     cash: [],
@@ -361,6 +413,7 @@ function withDefaultPortfolio(document: StoredDocument): StoredDocument {
 /* ------------------------------------------------------------------- access */
 
 let cached: StoredDocument | null = null
+let loading: Promise<StoredDocument> | null = null
 /** Serialises writes so two rapid edits cannot interleave read-modify-write. */
 let writeChain: Promise<void> = Promise.resolve()
 
@@ -405,27 +458,42 @@ function isAbsentOrDamaged(error: unknown): boolean {
 
 async function loadDocument(): Promise<StoredDocument> {
   if (cached) return cached
+  // Reads can initialize/backfill the file too, so share that work even when the
+  // callers are outside the mutation queue.
+  if (!loading) {
+    loading = readDocument().then((document) => {
+      cached = document
+      return document
+    }).finally(() => { loading = null })
+  }
+  return loading
+}
+
+async function readDocument(): Promise<StoredDocument> {
+  let document: StoredDocument
+  let needsPersist = false
   try {
     const raw = await readFile(storePath(), 'utf8')
     const parsed = documentSchema.safeParse(JSON.parse(raw))
     if (!parsed.success) {
-      cached = withDefaultPortfolio(emptyDocument())
-      return cached
+      return withDefaultPortfolio(emptyDocument())
     }
     // A document written before the Personal Finance page existed has no section of its
     // own. Seeding only happens when this file is missing entirely, so without this the
     // page would open empty for everyone who already ran the app.
     const backfill = !parsed.data.personalFinance
     if (backfill) parsed.data.personalFinance = await seedFinanceFromLegacy()
-    cached = normalize(parsed.data)
-    if (backfill) await persist(cached)
+    document = normalize(parsed.data)
+    needsPersist = backfill
   } catch (error) {
     if (!isAbsentOrDamaged(error)) throw error
-    const seeded = await seedFromLegacy()
-    await persist(seeded)
-    cached = seeded
+    document = await seedFromLegacy()
+    needsPersist = true
   }
-  return cached
+  // Keep write errors outside the read-recovery catch: ENOENT during a save does
+  // not mean the original book was absent.
+  if (needsPersist) await persist(document)
+  return document
 }
 
 function cleanAmount(value: number): number {
@@ -765,10 +833,11 @@ export async function mutatePortfolios(mutation: PortfolioMutation): Promise<Por
   let failure: unknown = null
   const run = writeChain.then(async () => {
     try {
-      const document = await loadDocument()
+      const document = structuredClone(await loadDocument())
       apply(document, mutation)
-      cached = normalize(document)
-      await persist(cached)
+      normalize(document)
+      await persist(document)
+      cached = document
     } catch (error) {
       failure = error
     }
@@ -878,11 +947,12 @@ export async function mutatePersonalFinance(
   let failure: unknown = null
   const run = writeChain.then(async () => {
     try {
-      const document = await loadDocument()
+      const document = structuredClone(await loadDocument())
       document.personalFinance = document.personalFinance ?? emptyFinance()
       applyFinance(document.personalFinance, mutation)
-      cached = normalize(document)
-      await persist(cached)
+      normalize(document)
+      await persist(document)
+      cached = document
     } catch (error) {
       failure = error
     }
@@ -927,16 +997,18 @@ async function writeRollback(reason: string): Promise<string> {
 
 /** Validate an exported document and make it the live store. Returns the rollback path. */
 export async function importUserData(source: unknown): Promise<string> {
-  const parsed = documentSchema.safeParse(source)
+  const parsed = importDocumentSchema.safeParse(source)
   if (!parsed.success) throw new Error('The backup does not contain a valid holdings store.')
   let failure: unknown = null
   let rollback = ''
   const run = writeChain.then(async () => {
     try {
+      await loading
       rollback = await writeRollback('before-import')
       parsed.data.personalFinance = parsed.data.personalFinance ?? emptyFinance()
-      cached = normalize(parsed.data)
-      await persist(cached)
+      const document = normalize(parsed.data)
+      await persist(document)
+      cached = document
     } catch (error) {
       failure = error
     }
@@ -958,9 +1030,11 @@ export async function clearUserData(): Promise<string> {
   let rollback = ''
   const run = writeChain.then(async () => {
     try {
+      await loading
       rollback = await writeRollback('before-clear')
-      cached = withDefaultPortfolio(emptyDocument())
-      await persist(cached)
+      const document = withDefaultPortfolio(emptyDocument())
+      await persist(document)
+      cached = document
     } catch (error) {
       failure = error
     }

@@ -13,6 +13,7 @@ import type {
   ReturnTimeframe,
 } from '@shared/contract'
 import { api, queryKeys } from './client'
+import { computeExposure } from '@shared/analytics'
 
 /**
  * The Portfolio page's analytics queries.
@@ -73,6 +74,18 @@ export function useAnalytics(
     ),
     queryFn: () =>
       api.analytics({ positions, cashAmount, currentValues, benchmarkSymbol, lookback }),
+    // Exposure uses live quotes. Recompute it when inputs change while retaining
+    // cached historical metrics, avoiding history requests on every quote tick.
+    select: (envelope) => ({
+      ...envelope,
+      data: {
+        ...envelope.data,
+        exposure: computeExposure(
+          positions.filter((position) => position.shares > 0).length + (cashAmount > 0 ? 1 : 0),
+          currentValues,
+        ),
+      },
+    }),
     enabled: enabled && (positions.length > 0 || cashAmount > 0),
     staleTime: Infinity,
   })

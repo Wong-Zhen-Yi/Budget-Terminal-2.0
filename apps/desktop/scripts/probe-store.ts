@@ -4,19 +4,87 @@
  *
  *   npm run probe:store
  *
- * APPDATA is redirected to a scratch directory first, so this reads your real
- * user_data.json (seeding only ever reads it) but never touches your real store.
+ * Both data directories are redirected to scratch space, so fixtures never read
+ * or write the real portfolio or legacy store.
  */
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import assert from 'node:assert/strict'
+import { mkdir, readFile, rmdir, writeFile } from 'node:fs/promises'
 
 const scratch = mkdtempSync(join(tmpdir(), 'bt-store-'))
 process.env.APPDATA = scratch
+process.env.LOCALAPPDATA = scratch
 
-const { legacyStorePath, mutatePortfolios, readPortfolios, storePath } = await import(
+const {
+  legacyStorePath, mutatePortfolios, readPortfolios, storePath,
+  readPersonalFinance, mutatePersonalFinance, importUserData, exportUserData,
+  clearUserData, resetStoreCache,
+} = await import(
   '../electron/services/portfolioStore.js'
 )
+
+async function regressionChecks(): Promise<void> {
+  // First-run reads and a queued edit must share initialization.
+  await Promise.all([
+    ...Array.from({ length: 16 }, (_, index) => index % 2 ? readPersonalFinance() : readPortfolios()),
+    mutatePortfolios({ type: 'setCash', portfolioId: 'portfolio_1', cashBalance: 1234 }),
+  ])
+  assert.equal((await readPortfolios()).portfolios[0].cashBalance, 1234)
+  await mutatePersonalFinance({ type: 'addEntry', category: 'cash' })
+  const baseline = await exportUserData()
+  const disk = await readFile(storePath(), 'utf8')
+  const damaged = JSON.parse(disk)
+  damaged.portfolios.portfolio_1.holdings = { AAPL: { shares: 'broken' } }
+  for (const invalid of [{}, { unrelated: true }, damaged]) {
+    await assert.rejects(importUserData(invalid), /valid holdings store/)
+    assert.deepEqual(await exportUserData(), baseline)
+    assert.equal(await readFile(storePath(), 'utf8'), disk)
+  }
+
+  // A directory at the temporary file path reliably forces a save failure even
+  // when the probe runs with elevated permissions.
+  const blocked = `${storePath()}.${process.pid}.tmp`
+  await mkdir(blocked)
+  try {
+    for (const write of [
+      () => mutatePortfolios({ type: 'setCash', portfolioId: 'portfolio_1', cashBalance: 999 }),
+      () => mutatePersonalFinance({ type: 'addEntry', category: 'cash' }),
+      () => importUserData({ ...JSON.parse(disk), portfolios: {}, order: [] }),
+      () => clearUserData(),
+    ]) {
+      await assert.rejects(write())
+      assert.deepEqual(await exportUserData(), baseline)
+      assert.equal(await readFile(storePath(), 'utf8'), disk)
+    }
+  } finally {
+    await rmdir(blocked)
+  }
+  await mutatePortfolios({ type: 'rename', id: 'portfolio_1', name: 'After failure' })
+  resetStoreCache()
+  assert.equal((await readPortfolios()).portfolios[0].cashBalance, 1234)
+  assert.equal((await readPersonalFinance()).cash.length, 1)
+
+  // Valid current and v1 exports remain importable; concurrent v1 reads share
+  // the finance backfill write just as first-run reads share their seed write.
+  await importUserData(baseline)
+  const legacy = JSON.parse(disk)
+  legacy.version = 1
+  delete legacy.personalFinance
+  await importUserData(legacy)
+  assert.equal((await readPortfolios()).portfolios[0].cashBalance, 1234)
+  await writeFile(storePath(), JSON.stringify(legacy), 'utf8')
+  resetStoreCache()
+  await mkdir(blocked)
+  await assert.rejects(readPortfolios())
+  await rmdir(blocked)
+  await Promise.all(Array.from({ length: 16 }, () => readPortfolios()))
+  assert.equal(JSON.parse(await readFile(storePath(), 'utf8')).version, 2)
+  assert.equal((await readPortfolios()).portfolios[0].cashBalance, 1234)
+  await clearUserData()
+  console.log('Store regressions passed: import validation, save failures, concurrent initialization/backfill and retry.')
+}
 
 function show(label: string, payload: Awaited<ReturnType<typeof readPortfolios>>): void {
   console.log(`\n-- ${label}`)
@@ -48,6 +116,7 @@ async function expectRejected(label: string, run: () => Promise<unknown>): Promi
 }
 
 async function main(): Promise<void> {
+  await regressionChecks()
   console.log(`seed source : ${legacyStorePath()}`)
   console.log(`store path  : ${storePath()}`)
 

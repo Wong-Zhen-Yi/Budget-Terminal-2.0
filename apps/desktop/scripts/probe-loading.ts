@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict'
-import { QueryClient } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { computeExposure, emptyRiskMetrics } from '../electron/shared/analytics.js'
+import { ok } from '../electron/shared/envelope.js'
+import type { AnalyticsPayload } from '../electron/shared/contract.js'
 import { waitForWarmSlot, warmQuery } from '../src/api/warmQueue.js'
 
 import { cache, TtlCache } from '../electron/services/cache.js'
@@ -133,3 +138,43 @@ try {
   client.clear()
 }
 console.log('Loading checks passed: cache deduplication, stale fallback, warm-up deadlines, retry after failure, foreground isolation, bounded foreground wait and cancellation.')
+
+// Exercise the real analytics hook and Metrics tab with cached history, then
+// render again as initially missing quotes arrive and subsequently change.
+const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'window')
+let historyCalls = 0
+Object.defineProperty(globalThis, 'window', {
+  configurable: true,
+  value: { api: { analytics: async () => { historyCalls += 1; throw new Error('Unexpected history request') } } },
+})
+const metricsClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+try {
+  const { queryKeys } = await import('../src/api/client.js')
+  const { positionsSignature } = await import('../src/api/portfolioQueries.js')
+  const { MetricsTab } = await import('../src/components/portfolio/MetricsTab.js')
+  const positions = [{ ticker: 'AAPL', shares: 10 }]
+  const history = ok<AnalyticsPayload>({
+    metrics: { ...emptyRiskMetrics(), beta: 1.25 },
+    exposure: computeExposure(1, {}),
+    benchmarkSymbol: 'SPY', lookback: '1y', startDate: '2025-01-01', endDate: '2026-01-01',
+    historyPoints: 252, includedTickers: ['AAPL'], excludedTickers: [], note: '', reason: '',
+  })
+  const key = queryKeys.analytics(positionsSignature(positions, 0), 'SPY', '1y')
+  metricsClient.setQueryData(key, history)
+  const render = (currentValues: Record<string, number>) => renderToStaticMarkup(
+    createElement(QueryClientProvider, { client: metricsClient },
+      createElement(MetricsTab, { positions, cashAmount: 0, currentValues, visible: true })),
+  )
+  assert.match(render({}), /\$0\.00/)
+  assert.match(render({ AAPL: 2000 }), /\$2,000\.00/)
+  const updated = render({ AAPL: 2500 })
+  assert.match(updated, /\$2,500\.00/)
+  assert.match(updated, /1\.25x/)
+  assert.equal(historyCalls, 0)
+  assert.deepEqual(metricsClient.getQueryData(key), history)
+  console.log('Metrics renderer smoke passed: exposure follows quote arrivals and updates without refetching or changing cached history.')
+} finally {
+  metricsClient.clear()
+  if (windowDescriptor) Object.defineProperty(globalThis, 'window', windowDescriptor)
+  else Reflect.deleteProperty(globalThis, 'window')
+}
