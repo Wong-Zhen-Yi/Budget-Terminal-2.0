@@ -389,6 +389,20 @@
     "chartPatternId": null
   },
   {
+    "entryId": "average-directional-index",
+    "term": "Average Directional Index",
+    "aliases": [
+      "ADX"
+    ],
+    "category": "Technical Indicators",
+    "definition": "An indicator that measures trend strength without indicating trend direction.",
+    "whyItMatters": "Higher readings suggest a stronger trend, but the signal lags price and needs directional context.",
+    "sections": [],
+    "keywords": [],
+    "relatedEntryIds": [],
+    "chartPatternId": null
+  },
+  {
     "entryId": "average-true-range",
     "term": "Average True Range",
     "aliases": [
@@ -713,6 +727,18 @@
     "chartPatternId": null
   },
   {
+    "entryId": "blue-chip-stock",
+    "term": "Blue-Chip Stock",
+    "aliases": [],
+    "category": "Market Basics",
+    "definition": "Shares of a large, established, financially sound company with a long operating record.",
+    "whyItMatters": "Blue chips are often held for relative stability, but size and history do not guarantee future returns.",
+    "sections": [],
+    "keywords": [],
+    "relatedEntryIds": [],
+    "chartPatternId": null
+  },
+  {
     "entryId": "bollinger-bands",
     "term": "Bollinger Bands",
     "aliases": [],
@@ -734,6 +760,45 @@
     "sections": [],
     "keywords": [],
     "relatedEntryIds": [],
+    "chartPatternId": null
+  },
+  {
+    "entryId": "book-value-per-share",
+    "term": "Book Value per Share",
+    "aliases": [
+      "BVPS"
+    ],
+    "category": "Valuation & Formulas",
+    "definition": "Common shareholders’ equity divided by shares outstanding.",
+    "whyItMatters": "It provides an accounting-based per-share value that can differ greatly from market price.",
+    "sections": [
+      {
+        "title": "Formula",
+        "body": "Book value per share = Common shareholders’ equity ÷ Shares outstanding"
+      },
+      {
+        "title": "Variables",
+        "body": "Common shareholders’ equity excludes preferred claims; shares outstanding is the common share count on the same date."
+      },
+      {
+        "title": "Worked example",
+        "body": "$4B of common equity across 200M shares equals $20 per share."
+      },
+      {
+        "title": "Interpretation and limitation",
+        "body": "Historical-cost accounting and unrecorded intangibles can make book value a poor proxy for economic value."
+      }
+    ],
+    "keywords": [
+      "formula",
+      "calculation",
+      "ratio"
+    ],
+    "relatedEntryIds": [
+      "price-to-book-ratio",
+      "shares-outstanding",
+      "retained-earnings"
+    ],
     "chartPatternId": null
   },
   {
@@ -985,6 +1050,25 @@
     "chartPatternId": null
   },
   {
+    "entryId": "calendar-spread",
+    "term": "Calendar Spread",
+    "aliases": [
+      "Time Spread",
+      "Horizontal Spread"
+    ],
+    "category": "Options",
+    "definition": "A position that sells a near-term option and buys a longer-term option at the same strike.",
+    "whyItMatters": "It profits from time decay and volatility changes but carries defined and shifting risk.",
+    "sections": [],
+    "keywords": [],
+    "relatedEntryIds": [
+      "theta",
+      "implied-volatility",
+      "option-premium"
+    ],
+    "chartPatternId": null
+  },
+  {
     "entryId": "call-option",
     "term": "Call Option",
     "aliases": [],
@@ -998,6 +1082,45 @@
       "strike-price",
       "delta",
       "implied-volatility"
+    ],
+    "chartPatternId": null
+  },
+  {
+    "entryId": "capital-asset-pricing-model",
+    "term": "Capital Asset Pricing Model",
+    "aliases": [
+      "CAPM"
+    ],
+    "category": "Risk & Performance",
+    "definition": "A model estimating an asset’s expected return as the risk-free rate plus beta times the equity risk premium.",
+    "whyItMatters": "It links systematic risk to required return but depends on beta estimates and a single-factor assumption.",
+    "sections": [
+      {
+        "title": "Formula",
+        "body": "Expected return = Risk-free rate + Beta × (Market return − Risk-free rate)"
+      },
+      {
+        "title": "Variables",
+        "body": "The risk-free rate is the return on a default-free asset; beta is sensitivity to the market; the term in parentheses is the equity risk premium."
+      },
+      {
+        "title": "Worked example",
+        "body": "A 4% risk-free rate, beta of 1.2, and 6% premium imply 4% + 1.2 × 6% = 11.2%."
+      },
+      {
+        "title": "Interpretation and limitation",
+        "body": "CAPM is sensitive to its inputs and ignores risks beyond broad market exposure."
+      }
+    ],
+    "keywords": [
+      "formula",
+      "calculation",
+      "ratio"
+    ],
+    "relatedEntryIds": [
+      "beta",
+      "alpha",
+      "weighted-average-cost-of-capital"
     ],
     "chartPatternId": null
   },
@@ -1535,6 +1658,18 @@
     "chartPatternId": null
   },
   {
+    "entryId": "dark-pool",
+    "term": "Dark Pool",
+    "aliases": [],
+    "category": "Trading & Execution",
+    "definition": "A private trading venue where orders are not displayed publicly before execution.",
+    "whyItMatters": "It can reduce market impact for large orders but lowers pre-trade transparency.",
+    "sections": [],
+    "keywords": [],
+    "relatedEntryIds": [],
+    "chartPatternId": null
+  },
+  {
     "entryId": "day-order",
     "term": "Day Order",
     "aliases": [],
@@ -1544,6 +1679,45 @@
     "sections": [],
     "keywords": [],
     "relatedEntryIds": [],
+    "chartPatternId": null
+  },
+  {
+    "entryId": "days-sales-outstanding",
+    "term": "Days Sales Outstanding",
+    "aliases": [
+      "DSO"
+    ],
+    "category": "Fundamental Analysis",
+    "definition": "The average number of days a company takes to collect payment after a sale.",
+    "whyItMatters": "Rising DSO can signal weaker collections, aggressive revenue timing, or looser credit terms.",
+    "sections": [
+      {
+        "title": "Formula",
+        "body": "DSO = (Accounts receivable ÷ Revenue) × Days in period"
+      },
+      {
+        "title": "Variables",
+        "body": "Accounts receivable is the period-end or average balance; revenue and days cover the same period."
+      },
+      {
+        "title": "Worked example",
+        "body": "$150M receivables on $600M of quarterly revenue over 91 days is about 22.8 days."
+      },
+      {
+        "title": "Interpretation and limitation",
+        "body": "Seasonality and one-off large sales can distort a single-period figure."
+      }
+    ],
+    "keywords": [
+      "formula",
+      "calculation",
+      "ratio"
+    ],
+    "relatedEntryIds": [
+      "accounts-receivable",
+      "revenue",
+      "churn"
+    ],
     "chartPatternId": null
   },
   {
@@ -1612,6 +1786,21 @@
     "category": "Financial Statements",
     "definition": "Cash received before the related revenue is recognized.",
     "whyItMatters": "It can provide financing and visibility but is accompanied by a delivery obligation.",
+    "sections": [],
+    "keywords": [],
+    "relatedEntryIds": [],
+    "chartPatternId": null
+  },
+  {
+    "entryId": "deferred-tax",
+    "term": "Deferred Tax",
+    "aliases": [
+      "Deferred Tax Asset",
+      "Deferred Tax Liability"
+    ],
+    "category": "Financial Statements",
+    "definition": "Future tax effects arising from timing differences between accounting and tax treatment.",
+    "whyItMatters": "Deferred tax assets and liabilities can affect reported earnings and future cash taxes.",
     "sections": [],
     "keywords": [],
     "relatedEntryIds": [],
@@ -3774,6 +3963,20 @@
     "chartPatternId": null
   },
   {
+    "entryId": "leveraged-buyout",
+    "term": "Leveraged Buyout",
+    "aliases": [
+      "LBO"
+    ],
+    "category": "Corporate Actions & Earnings",
+    "definition": "An acquisition financed largely with borrowed money, often secured against the target’s assets.",
+    "whyItMatters": "Leverage can amplify equity returns but raises default risk if cash flows fall short.",
+    "sections": [],
+    "keywords": [],
+    "relatedEntryIds": [],
+    "chartPatternId": null
+  },
+  {
     "entryId": "limit-order",
     "term": "Limit Order",
     "aliases": [],
@@ -4093,6 +4296,24 @@
     "chartPatternId": null
   },
   {
+    "entryId": "modern-portfolio-theory",
+    "term": "Modern Portfolio Theory",
+    "aliases": [
+      "MPT"
+    ],
+    "category": "Investing & Portfolio Management",
+    "definition": "A framework for building portfolios that maximize expected return for a chosen level of risk.",
+    "whyItMatters": "It formalizes diversification but relies on unstable estimates of returns, variances, and correlations.",
+    "sections": [],
+    "keywords": [],
+    "relatedEntryIds": [
+      "diversification",
+      "correlation",
+      "risk-adjusted-return"
+    ],
+    "chartPatternId": null
+  },
+  {
     "entryId": "momentum",
     "term": "Momentum",
     "aliases": [],
@@ -4222,6 +4443,20 @@
     "category": "Valuation & Formulas",
     "definition": "An increase in the valuation multiple investors assign to a financial metric.",
     "whyItMatters": "Returns can exceed business growth when sentiment or rates lift the multiple.",
+    "sections": [],
+    "keywords": [],
+    "relatedEntryIds": [],
+    "chartPatternId": null
+  },
+  {
+    "entryId": "municipal-bond",
+    "term": "Municipal Bond",
+    "aliases": [
+      "Muni"
+    ],
+    "category": "Instruments",
+    "definition": "A debt security issued by a state, local government, or related public agency.",
+    "whyItMatters": "Interest may be tax-advantaged, but credit quality and liquidity vary widely across issuers.",
     "sections": [],
     "keywords": [],
     "relatedEntryIds": [],
@@ -4958,6 +5193,22 @@
     "sections": [],
     "keywords": [],
     "relatedEntryIds": [],
+    "chartPatternId": null
+  },
+  {
+    "entryId": "prospect-theory",
+    "term": "Prospect Theory",
+    "aliases": [],
+    "category": "Behavioral Finance",
+    "definition": "A theory describing how people value gains and losses asymmetrically relative to a reference point.",
+    "whyItMatters": "It helps explain loss aversion and the tendency to take more risk after losses.",
+    "sections": [],
+    "keywords": [],
+    "relatedEntryIds": [
+      "loss-aversion",
+      "mental-accounting",
+      "anchoring"
+    ],
     "chartPatternId": null
   },
   {
@@ -5994,6 +6245,43 @@
     "chartPatternId": null
   },
   {
+    "entryId": "standard-deviation",
+    "term": "Standard Deviation",
+    "aliases": [],
+    "category": "Risk & Performance",
+    "definition": "A measure of how far values disperse around their average.",
+    "whyItMatters": "It is the most common single-number gauge of return variability, though it treats upside and downside equally.",
+    "sections": [
+      {
+        "title": "Formula",
+        "body": "Standard deviation = √(Average of squared deviations from the mean)"
+      },
+      {
+        "title": "Variables",
+        "body": "Deviations are each observation minus the mean; squaring removes sign before averaging and taking the square root."
+      },
+      {
+        "title": "Worked example",
+        "body": "Returns whose squared deviations average 0.0004 have a 2% standard deviation."
+      },
+      {
+        "title": "Interpretation and limitation",
+        "body": "It assumes a reasonably stable distribution and can understate risk when returns have fat tails."
+      }
+    ],
+    "keywords": [
+      "formula",
+      "calculation",
+      "ratio"
+    ],
+    "relatedEntryIds": [
+      "volatility",
+      "annualized-volatility",
+      "sharpe-ratio"
+    ],
+    "chartPatternId": null
+  },
+  {
     "entryId": "stochastic-oscillator",
     "term": "Stochastic Oscillator",
     "aliases": [],
@@ -6262,6 +6550,18 @@
     "chartPatternId": null
   },
   {
+    "entryId": "three-white-soldiers",
+    "term": "Three White Soldiers",
+    "aliases": [],
+    "category": "Chart & Candlestick Patterns",
+    "definition": "Three consecutive long bullish candles that each open within the prior body and close near their highs.",
+    "whyItMatters": "It can signal a bullish reversal after a decline but may appear overextended.",
+    "sections": [],
+    "keywords": [],
+    "relatedEntryIds": [],
+    "chartPatternId": null
+  },
+  {
     "entryId": "time-in-force",
     "term": "Time in Force",
     "aliases": [],
@@ -6524,6 +6824,46 @@
     "sections": [],
     "keywords": [],
     "relatedEntryIds": [],
+    "chartPatternId": null
+  },
+  {
+    "entryId": "unemployment-rate",
+    "term": "Unemployment Rate",
+    "aliases": [],
+    "category": "Macroeconomics & Economic Events",
+    "definition": "The share of the labor force that is actively seeking work but not employed.",
+    "whyItMatters": "Scheduled releases matter mainly through the surprise versus expectations and the change in the expected economic path.",
+    "sections": [
+      {
+        "title": "Publisher and cadence",
+        "body": "Bureau of Labor Statistics"
+      },
+      {
+        "title": "How to read it",
+        "body": "Compare against expectations and weigh the participation rate, broader underemployment measures, and revisions."
+      },
+      {
+        "title": "Typical market channels",
+        "body": "Policy expectations, Treasury yields, the dollar, and cyclical sectors."
+      },
+      {
+        "title": "Caution",
+        "body": "It is a lagging indicator and can fall for unhelpful reasons, such as declining participation."
+      }
+    ],
+    "keywords": [
+      "economic calendar",
+      "release",
+      "actual",
+      "consensus",
+      "prior",
+      "Bureau of Labor Statistics"
+    ],
+    "relatedEntryIds": [
+      "jobs-report",
+      "initial-jobless-claims",
+      "jolts-report"
+    ],
     "chartPatternId": null
   },
   {
