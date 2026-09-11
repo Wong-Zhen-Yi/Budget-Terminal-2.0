@@ -57,6 +57,7 @@ import type {
   UpDownTargetsRequest,
   ValuationRequest,
   EconomicRequest,
+  MoneyRequest,
   IpoCompletedRequest,
   IpoUpcomingRequest,
   PoliticsExportRequest,
@@ -206,6 +207,7 @@ export function registerIpcHandlers(): () => void {
   handle(CHANNELS.valuation, (request: ValuationRequest) =>
     provider.valuation(request),
   )
+  handle(CHANNELS.money, (request: MoneyRequest) => provider.money(request))
   handle(CHANNELS.economic, (request: EconomicRequest) =>
     provider.economic(request),
   )

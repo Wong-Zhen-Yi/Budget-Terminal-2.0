@@ -1,3 +1,5 @@
+import { getMoney, clearMoneyCache } from './money.js'
+import type { MoneyPayload, MoneyRequest } from '../shared/money.js'
 import type { Sp500Request, Sp500Data, Sp500BreadthRequest, Sp500Breadth } from '../shared/sp500.js'
 import { getSp500, getSp500Breadth } from './sp500.js'
 import { readFile, writeFile } from 'node:fs/promises'
@@ -370,6 +372,7 @@ export interface MarketDataProvider {
   upDown(request: UpDownRequest): Promise<Envelope<UpDownPayload>>
   upDownTargets(request: UpDownTargetsRequest): Promise<Envelope<UpDownTargetsPayload>>
   valuation(request: ValuationRequest): Promise<Envelope<ValuationPayload>>
+  money(request: MoneyRequest): Promise<Envelope<MoneyPayload>>
   economic(request: EconomicRequest): Promise<Envelope<EconomicPayload>>
   institutionActivity(
     request: InstitutionActivityRequest,
@@ -644,9 +647,9 @@ function upDownEnvelope(result: UpDownFetchResult): Envelope<UpDownPayload> {
 }
 
 export const yahooProvider: MarketDataProvider = {
-  async quotes({ holdings }) {
+  async quotes({ holdings, force }) {
     const macroSymbols = MACRO_SYMBOLS.map((entry) => entry.symbol)
-    const batch = await getQuotes([...macroSymbols, ...holdings])
+    const batch = await getQuotes([...macroSymbols, ...holdings], force)
 
     const macro: QuotesPayload['macro'] = {}
     for (const entry of MACRO_SYMBOLS) {
@@ -1443,6 +1446,8 @@ export const yahooProvider: MarketDataProvider = {
     }
   },
 
+  money: (request) => getMoney(request),
+
   /**
    * An Economic load is `partial`, never `failed`, while any provider answered.
    *
@@ -1889,6 +1894,7 @@ export const yahooProvider: MarketDataProvider = {
       await clearUpDownCaches()
       await clearRiskFreeCache()
       await clearEconomicCache()
+      await clearMoneyCache()
       await clearInstitutionCaches()
       await clearYouTubeCache()
       await clearIpoCache()
@@ -1919,6 +1925,7 @@ export const yahooProvider: MarketDataProvider = {
       await clearUpDownCaches()
       await clearRiskFreeCache()
       await clearEconomicCache()
+      await clearMoneyCache()
       await clearInstitutionCaches()
       await clearYouTubeCache()
       await clearIpoCache()

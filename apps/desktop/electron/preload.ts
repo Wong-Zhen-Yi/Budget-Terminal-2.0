@@ -58,6 +58,7 @@ const api: DesktopApi = {
   optionsExpirations: (request) => ipcRenderer.invoke(CHANNELS.optionsExpirations, request),
   projections: (request) => ipcRenderer.invoke(CHANNELS.projections, request),
   valuation: (request) => ipcRenderer.invoke(CHANNELS.valuation, request),
+  money: (request) => ipcRenderer.invoke(CHANNELS.money, request),
   economic: (request) => ipcRenderer.invoke(CHANNELS.economic, request),
   institutionActivity: (request) => ipcRenderer.invoke(CHANNELS.institutionActivity, request),
   institutionTickerActivity: (request) =>

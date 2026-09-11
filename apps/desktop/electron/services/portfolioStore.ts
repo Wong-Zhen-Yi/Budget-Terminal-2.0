@@ -643,6 +643,8 @@ function toPortfolio(entry: StoredPortfolio): Portfolio {
 }
 
 export async function readPortfolios(): Promise<PortfolioPayload> {
+  // A read immediately after a cell blur must include the queued edit.
+  await writeChain
   const document = await loadDocument()
   const portfolios = document.order
     .map((id) => document.portfolios[id])

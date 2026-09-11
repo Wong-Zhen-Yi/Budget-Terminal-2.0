@@ -78,6 +78,7 @@ const TAB_ORDER = [
   'youtube',
   'etf',
   'economic',
+  'money',
   'ipo',
   'up-down',
   'politics',
@@ -295,6 +296,14 @@ function buildTasks(
   })
 
   // The slowest load in the app cold â€” five government hosts, about 45s â€” and the one
+  // with the most to gain: its six-hour disk cache means most warm-ups are nearly free.
+  tasks.push({
+    tab: 'money',
+    label: 'Money',
+    run: (client) => warmQuery(client, { queryKey: queryKeys.money, queryFn: () => api.money({ background: true }), staleTime: Infinity }),
+  })
+
+  // The slowest load in the app cold — five government hosts, about 45s — and the one
   // with the most to gain: its six-hour disk cache means most warm-ups are nearly free.
   tasks.push({
     tab: 'economic',

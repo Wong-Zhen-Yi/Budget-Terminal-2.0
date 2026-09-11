@@ -62,6 +62,7 @@ export const queryKeys = {
   valuation: (symbol: string, customPeers: string[]) =>
     ['valuation', symbol, customPeers.join(',')] as const,
   // The whole catalog resolves from one load, so the page has a single key.
+  money: ['money'] as const,
   economic: ['economic'] as const,
   // Two feeds, two keys: a failed upcoming refresh must not evict the completed rows,
   // and the completed year is part of its key so an older year is its own entry.

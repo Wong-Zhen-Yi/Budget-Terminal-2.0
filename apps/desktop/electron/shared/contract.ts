@@ -1,3 +1,5 @@
+import type { MoneyPayload, MoneyRequest } from './money.js'
+export type { MoneyPayload, MoneyRequest } from './money.js'
 import type { Sp500Request, Sp500Data, Sp500BreadthRequest, Sp500Breadth } from './sp500.js'
 /**
  * The IPC contract shared verbatim by the Electron main process and the renderer.
@@ -1215,6 +1217,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'youtube', label: 'YouTube', implemented: true },
   { id: 'dictionary', label: 'Dictionary', implemented: true },
   { id: 'bonds', label: 'Bonds', implemented: true },
+  { id: 'money', label: 'Money', implemented: true },
   { id: 'economic', label: 'Economic', implemented: true },
   { id: 'price', label: 'Price', implemented: true },
   { id: 'market-cap', label: 'Market Cap', implemented: true },
@@ -3449,6 +3452,7 @@ export const CHANNELS = {
   optionsExpirations: 'options:expirations',
   projections: 'projections:read',
   valuation: 'valuation:read',
+  money: 'money:read',
   economic: 'economic:read',
   institutionActivity: 'institutions:activity',
   institutionTickerActivity: 'institutions:ticker-activity',
@@ -3483,6 +3487,7 @@ export const CHANNELS = {
 
 export interface QuotesRequest extends BackgroundRequest {
   holdings: string[]
+  force?: boolean
 }
 export interface ChartRequest {
   symbol: string
@@ -3606,6 +3611,7 @@ export interface DesktopApi {
   ): Promise<Envelope<OptionsExpirationsPayload>>
   projections(request: ProjectionsRequest): Promise<Envelope<ProjectionsPayload>>
   valuation(request: ValuationRequest): Promise<Envelope<ValuationPayload>>
+  money(request: MoneyRequest): Promise<Envelope<MoneyPayload>>
   economic(request: EconomicRequest): Promise<Envelope<EconomicPayload>>
   institutionActivity(
     request: InstitutionActivityRequest,

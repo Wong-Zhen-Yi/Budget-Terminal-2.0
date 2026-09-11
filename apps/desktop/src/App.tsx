@@ -18,6 +18,7 @@ import { CardsPage } from '@/pages/CardsPage'
 import { CalendarPage } from '@/pages/CalendarPage'
 import { ChartsPage } from '@/pages/ChartsPage'
 import { BmnrPage } from '@/pages/BmnrPage'
+import { MoneyPage } from '@/pages/MoneyPage'
 import { BondsPage } from '@/pages/BondsPage'
 import { ForexPage } from '@/pages/ForexPage'
 import { GoldPage } from '@/pages/GoldPage'
@@ -430,6 +431,8 @@ function renderPage({
       <OilPage onStatusChange={onStatusChange} />
     ) : tabId === 'dictionary' ? (
       <DictionaryPage onStatusChange={onStatusChange} />
+    ) : tabId === 'money' ? (
+      <MoneyPage onStatusChange={onStatusChange} />
     ) : tabId === 'bonds' ? (
       <BondsPage onStatusChange={onStatusChange} />
     ) : tabId === 'charts' ? (

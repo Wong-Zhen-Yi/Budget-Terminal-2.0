@@ -32,6 +32,12 @@ async function regressionChecks(): Promise<void> {
     mutatePortfolios({ type: 'setCash', portfolioId: 'portfolio_1', cashBalance: 1234 }),
   ])
   assert.equal((await readPortfolios()).portfolios[0].cashBalance, 1234)
+  // Export reads issued before a blur-triggered write finishes include that edit.
+  const pendingEdit = mutatePortfolios({ type: 'setCash', portfolioId: 'portfolio_1', cashBalance: 4321 })
+  const exportSnapshot = await readPortfolios()
+  assert.equal(exportSnapshot.portfolios[0].cashBalance, 4321)
+  await pendingEdit
+  await mutatePortfolios({ type: 'setCash', portfolioId: 'portfolio_1', cashBalance: 1234 })
   await mutatePersonalFinance({ type: 'addEntry', category: 'cash' })
   const baseline = await exportUserData()
   const disk = await readFile(storePath(), 'utf8')

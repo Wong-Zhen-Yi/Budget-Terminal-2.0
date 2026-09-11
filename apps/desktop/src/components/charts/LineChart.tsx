@@ -27,7 +27,7 @@ interface LineChartProps {
   viewBox?: { width: number; height: number }
   /** Drop the value labels and x ticks for a chart too small to carry them. */
   axisLabels?: boolean
-  /** Roughly how many x labels to print. */
+  /** Maximum number of x labels; fewer are drawn when space is limited. */
   ticks?: number
 }
 
@@ -134,8 +134,15 @@ export function LineChart({
     )
   }
 
-  // Roughly `ticks` labels, whatever the series length.
-  const tickStep = Math.max(1, Math.ceil(labels.length / ticks))
+  // Budget for full labels, including the inward-facing endpoint labels. Using
+  // evenly spaced indices keeps every tick on its observation and includes the
+  // actual final date, rather than shifting an intermediate label to the left.
+  const labelWidth = Math.max(0, ...labels.map((label) => label.length * 7))
+  const availableWidth = Math.max(0, width - pad.left - pad.right)
+  const tickCount = Math.min(labels.length, Math.max(1, Math.floor(ticks)),
+    Math.max(1, Math.floor(availableWidth / (labelWidth * 1.5 + 12)) + 1))
+  const tickIndices = Array.from({ length: tickCount }, (_, index) =>
+    tickCount === 1 ? Math.floor((labels.length - 1) / 2) : Math.round(index * (labels.length - 1) / (tickCount - 1)))
 
   return (
     <div ref={containerRef} className="min-h-0 w-full flex-1 overflow-hidden">
@@ -188,22 +195,21 @@ export function LineChart({
 
         {/* The first and last labels anchor inwards; centred, they hang off the frame. */}
         {axisLabels
-          ? labels.map((label, index) =>
-              index % tickStep === 0 ? (
-                <text
-                  key={`${label}-${index}`}
-                  x={plot.x(index)}
-                  y={height - 8}
-                  fill="var(--color-text-muted)"
-                  fontSize={11}
-                  textAnchor={
-                    index === 0 ? 'start' : index + tickStep >= labels.length ? 'end' : 'middle'
-                  }
-                >
-                  {label}
-                </text>
-              ) : null,
-            )
+          ? tickIndices.map((index) => (
+              <text
+                key={`${labels[index]}-${index}`}
+                data-axis="x"
+                x={plot.x(index)}
+                y={height - 8}
+                fill="var(--color-text-muted)"
+                fontSize={11}
+                textAnchor={
+                  tickCount === 1 ? 'middle' : index === 0 ? 'start' : index === labels.length - 1 ? 'end' : 'middle'
+                }
+              >
+                {labels[index]}
+              </text>
+            ))
           : null}
       </svg>
     </div>

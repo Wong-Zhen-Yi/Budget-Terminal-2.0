@@ -55,6 +55,7 @@ export function PortfolioPage({
   const [addingPositions, setAddingPositions] = useState(false)
   const [removingPositions, setRemovingPositions] = useState(false)
   const [error, setError] = useState('')
+  const [exporting, setExporting] = useState(false)
 
   const rows = useMemo(
     () =>
@@ -184,34 +185,62 @@ export function PortfolioPage({
 
   /** A plain-text snapshot of the book, for pasting into a chat with a model. */
   const exportForLlm = useCallback(async () => {
-    if (!selected || !summary) return
-    const lines = [
-      `Portfolio: ${selected.name}`,
-      `Total: ${currency(summary.total)}  Stock P&L: ${currency(summary.stockPnl)}  Positions: ${summary.positionCount}`,
-      `Cash: ${currency(selected.cashBalance)}${selected.includeCashInWeight ? '' : ' (excluded from weight)'}  Margin: ${currency(selected.marginDebt)}`,
-      '',
-      '| Ticker | Shares | Avg Price | Cost | Price | Day % | Market Value | Weight | Gain | Growth | Size | Analyst PT |',
-      '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
-      ...rows.map(
-        (row) =>
-          `| ${[
-            row.ticker,
-            decimals(row.shares, row.shares % 1 === 0 ? 0 : 4),
-            currency(row.avgPrice),
-            currency(row.cost),
-            currency(row.price),
-            percent(row.changePercent),
-            currency(row.marketValue),
-            row.weight === null ? '--' : plainPercent(row.weight),
-            currency(row.dollarGain),
-            percent(row.growth, 1),
-            row.size === null ? '--' : currency(row.size, 0),
-            row.analystTarget === null ? '--' : currency(row.analystTarget),
-          ].join(' | ')} |`,
-      ),
-    ]
-    await api.saveText(`${selected.name}_portfolio.md`, lines.join('\n'))
-  }, [selected, summary, rows])
+    if (!selected || exporting) return
+    const portfolioId = selected.id
+    setExporting(true)
+    setError('')
+    try {
+      const snapshot = await api.portfolio()
+      if (snapshot.meta.freshness === 'failed') {
+        throw new Error(snapshot.meta.failureReason ?? 'Could not read the portfolio for export.')
+      }
+      const selected = snapshot.data.portfolios.find((entry) => entry.id === portfolioId)
+      if (!selected) throw new Error('This portfolio no longer exists. Please select a portfolio again.')
+      const [quotes, fundamentals] = await Promise.all([
+        api.quotes({ holdings: selected.tickers, force: true }),
+        api.fundamentals({ tickers: selected.tickers, force: true }),
+      ])
+      if (quotes.meta.freshness === 'failed' || selected.tickers.some((ticker) => !quotes.data.holdings[ticker])) {
+        throw new Error('Could not refresh all holding prices. Please retry the export.')
+      }
+      const rows = buildPositionRows(selected, quotes.data.holdings, fundamentals.data.fundamentals)
+      const summary = summarizePortfolio(selected, rows)
+      const lines = [
+        `Portfolio: ${selected.name}`,
+        `Exported: ${new Date().toISOString()}`,
+        ...[quotes, fundamentals].map((result) =>
+          `${result.meta.source}: ${result.meta.freshness}, fetched ${new Date(result.meta.fetchedAt).toISOString()}${result.meta.failureReason ? ` (${result.meta.failureReason})` : ''}`,
+        ),
+        `Total: ${currency(summary.total)}  Stock P&L: ${currency(summary.stockPnl)}  Positions: ${summary.positionCount}`,
+        `Cash: ${currency(selected.cashBalance)}${selected.includeCashInWeight ? '' : ' (excluded from weight)'}  Margin: ${currency(selected.marginDebt)}`,
+        '',
+        '| Ticker | Shares | Avg Price | Cost | Price | Day % | Market Value | Weight | Gain | Growth | Size | Analyst PT |',
+        '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+        ...rows.map(
+          (row) =>
+            `| ${[
+              row.ticker,
+              decimals(row.shares, row.shares % 1 === 0 ? 0 : 4),
+              currency(row.avgPrice),
+              currency(row.cost),
+              currency(row.price),
+              percent(row.changePercent),
+              currency(row.marketValue),
+              row.weight === null ? '--' : plainPercent(row.weight),
+              currency(row.dollarGain),
+              percent(row.growth, 1),
+              row.size === null ? '--' : currency(row.size, 0),
+              row.analystTarget === null ? '--' : currency(row.analystTarget),
+            ].join(' | ')} |`,
+        ),
+      ]
+      await api.saveText(`${selected.name}_portfolio.md`, lines.join('\n'))
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Portfolio export failed.')
+    } finally {
+      setExporting(false)
+    }
+  }, [selected, exporting])
 
   if (!selected || !summary) {
     return (
@@ -303,7 +332,9 @@ export function PortfolioPage({
                       </Button>
                     </>
                   )}
-                  <Button onClick={() => void exportForLlm()}>Export for LLM</Button>
+                  <Button onClick={() => void exportForLlm()} disabled={exporting}>
+                    {exporting ? 'Exporting...' : 'Export for LLM'}
+                  </Button>
                   <Button onClick={() => void exportTickers()} disabled={!selected.tickers.length}>
                     Export Tickers
                   </Button>

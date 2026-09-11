@@ -42,6 +42,8 @@
     "probe:projections": "tsx scripts/probe-projections.ts",
     "probe:up-down": "tsx scripts/probe-up-down.ts",
     "probe:valuation": "tsx scripts/probe-valuation.ts",
+    "probe:money": "tsx scripts/probe-money.ts",
+    "probe:money-ui": "tsx scripts/probe-money-ui.ts",
     "probe:economic": "tsx scripts/probe-economic.ts",
     "probe:bonds": "tsx scripts/probe-bonds.ts",
     "probe:roll": "tsx scripts/probe-roll.ts",

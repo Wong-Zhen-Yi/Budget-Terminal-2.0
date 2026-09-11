@@ -1,5 +1,7 @@
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { fetchSeriesCsv } from './fred.js'
+export { fetchSeriesCsv, parseFredCsv } from './fred.js'
 
 import type {
   EconomicGroup,
@@ -45,8 +47,6 @@ import {
  */
 
 /* --------------------------------------------------------------- endpoints */
-
-const FRED_CSV_URL = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}'
 
 const TREASURY_CSV_URL =
   'https://home.treasury.gov/resource-center/data-chart-center/interest-rates/' +
@@ -270,26 +270,6 @@ function sortPoints(points: EconomicPoint[]): EconomicPoint[] {
 }
 
 /**
- * Parse a FRED CSV body into ascending `(iso_date, value)` pairs.
- *
- * FRED emits `.` for a missing observation and has used both `DATE` and `observation_date`
- * as the first column header over time, so neither the header name nor the cell type can be
- * assumed.
- */
-export function parseFredCsv(text: string): EconomicPoint[] {
-  const rows = csvRows(text)
-  if (rows.length < 2 || rows[0].length < 2) return []
-  const points: EconomicPoint[] = []
-  for (const row of rows.slice(1)) {
-    const stamp = isoStamp(row[0] ?? '')
-    const value = cell(row[1])
-    if (!stamp || value === null) continue
-    points.push([stamp, value])
-  }
-  return sortPoints(points)
-}
-
-/**
  * Parse one yearly treasury rates CSV into `{column_label: points}`.
  *
  * The column set changes between years — `4 Mo` and `1.5 Month` were added partway
@@ -409,13 +389,6 @@ export function parseUmichCsv(text: string): EconomicPoint[] {
 }
 
 /* --------------------------------------------------------------- providers */
-
-/** Download one FRED series and return ascending `(iso_date, value)` pairs. */
-export async function fetchSeriesCsv(seriesId: string, timeoutMs = REQUEST_TIMEOUT_MS): Promise<EconomicPoint[]> {
-  const identifier = seriesId.trim().toUpperCase()
-  if (!identifier) return []
-  return parseFredCsv(await httpGet(FRED_CSV_URL.replace('{series_id}', identifier), timeoutMs))
-}
 
 /**
  * Download the daily par yield curve and merge the yearly files into one series per tenor.
