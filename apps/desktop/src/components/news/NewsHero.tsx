@@ -3,6 +3,7 @@ import { ageText, categoryLabel, categoryTone, signalText, type NewsTone } from 
 import { Button } from '@/components/ui/Button'
 import { Chip } from '@/components/ui/Chip'
 import { ageClass, tagTone } from './NewsCard'
+import { NewsTickerBadge } from './NewsTickerBadge'
 import { NewsThumb } from './NewsThumb'
 import { SignalMeter } from './SignalMeter'
 
@@ -23,12 +24,14 @@ const railClass: Record<NewsTone, string> = {
 
 export function NewsHero({
   article,
+  price,
   selected,
   onSelect,
   onOpen,
   showImages,
   now,
 }: {
+  price?: number
   article: NewsArticle
   selected: boolean
   onSelect: (article: NewsArticle) => void
@@ -61,12 +64,10 @@ export function NewsHero({
       ) : null}
 
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-        <div className="flex min-w-0 items-center gap-1.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <Chip tone="accent">TOP STORY</Chip>
           <span className="shrink-0 text-2xs text-text-muted">{categoryLabel(article)}</span>
-          {article.ticker && article.ticker !== 'OTHER' ? (
-            <Chip className="num">{article.ticker}</Chip>
-          ) : null}
+          <NewsTickerBadge ticker={article.ticker} price={price} />
           <SignalMeter score={article.score} label={signalText(article)} />
           <span
             className={`num ml-auto shrink-0 text-2xs ${ageClass(article.publishedAt, now)}`}

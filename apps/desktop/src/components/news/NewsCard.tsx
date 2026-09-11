@@ -3,6 +3,7 @@ import { memo } from 'react'
 import type { NewsArticle } from '@shared/contract'
 import { ageText, categoryLabel, categoryTone, signalText, type NewsTone } from '@shared/news'
 import { Chip, type ChipTone } from '@/components/ui/Chip'
+import { NewsTickerBadge } from './NewsTickerBadge'
 import { NewsThumb } from './NewsThumb'
 import { SignalMeter } from './SignalMeter'
 
@@ -60,12 +61,14 @@ export function ageClass(publishedAt: number, now: number): string {
 
 export const NewsCard = memo(function NewsCard({
   article,
+  price,
   selected,
   onSelect,
   onOpen,
   showImages,
   now,
 }: {
+  price?: number
   article: NewsArticle
   selected: boolean
   onSelect: (article: NewsArticle) => void
@@ -87,15 +90,11 @@ export const NewsCard = memo(function NewsCard({
           : 'border-border bg-surface hover:bg-surface-hover'
       }`}
     >
-      <div className="flex min-w-0 items-center gap-1.5">
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         <span className={`shrink-0 text-2xs font-semibold ${categoryTextClass[tone]}`}>
           {categoryLabel(article)}
         </span>
-        {article.ticker && article.ticker !== 'OTHER' ? (
-          <Chip className="num" title={article.ticker}>
-            {article.ticker}
-          </Chip>
-        ) : null}
+        <NewsTickerBadge ticker={article.ticker} price={price} />
         <span
           className={`num ml-auto shrink-0 text-2xs ${ageClass(article.publishedAt, now)}`}
           title={article.time}
@@ -119,7 +118,7 @@ export const NewsCard = memo(function NewsCard({
         ) : null}
       </div>
 
-      <div className="flex min-w-0 items-center gap-1.5">
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         <span className="min-w-0 truncate text-2xs text-text-dim">{article.source}</span>
         <SignalMeter score={article.score} label={signalText(article)} className="ml-auto" />
       </div>

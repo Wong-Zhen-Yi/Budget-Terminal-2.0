@@ -1,4 +1,4 @@
-import type { NewsArticle } from '@shared/contract'
+import type { NewsArticle, Quote } from '@shared/contract'
 import { NewsCard } from './NewsCard'
 
 /**
@@ -12,6 +12,7 @@ export function NewsSection({
   title,
   subtitle,
   articles,
+  quotes,
   visible,
   columns,
   selectedId,
@@ -25,6 +26,7 @@ export function NewsSection({
   title: string
   subtitle?: string
   articles: NewsArticle[]
+  quotes?: Record<string, Quote>
   /** How many to mount; the rest arrive a frame at a time. */
   visible: number
   columns: number
@@ -64,6 +66,7 @@ export function NewsSection({
             <NewsCard
               key={article.id}
               article={article}
+              price={quotes?.[article.ticker.trim().toUpperCase()]?.price}
               selected={article.id === selectedId}
               onSelect={onSelect}
               onOpen={onOpen}

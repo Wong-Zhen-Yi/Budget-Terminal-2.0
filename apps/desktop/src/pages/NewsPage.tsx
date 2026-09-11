@@ -9,7 +9,7 @@ import {
   useNewsTickerSearch,
   useRefreshNewsPage,
 } from '@/api/newsQueries'
-import { usePortfolio } from '@/api/queries'
+import { usePortfolio, useQuotes } from '@/api/queries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { useCardColumns, useProgressiveCount } from '@/components/news/hooks'
 import { NewsHero } from '@/components/news/NewsHero'
@@ -115,6 +115,15 @@ export function NewsPage({
     () => searchQuery.data?.data.articles ?? [],
     [searchQuery.data],
   )
+
+  const quoteTickers = useMemo(
+    () => [...new Set([...articles, ...searchArticles]
+      .map((article) => article.ticker?.trim().toUpperCase())
+      .filter((ticker): ticker is string => Boolean(ticker) && ticker !== 'OTHER'))].sort(),
+    [articles, searchArticles],
+  )
+  const quotesQuery = useQuotes(quoteTickers)
+  const quotes = quotesQuery.data?.data.holdings
 
   const groups = useMemo(
     () => splitNewsGroups(articles, filter, queryText, sort),
@@ -385,6 +394,7 @@ export function NewsPage({
           {hero ? (
             <NewsHero
               article={hero}
+              price={quotes?.[hero.ticker.trim().toUpperCase()]?.price}
               selected={hero.id === selectedId}
               onSelect={selectArticle}
               onOpen={openArticle}
@@ -398,6 +408,7 @@ export function NewsPage({
               title="Ticker Search"
               subtitle={searchTickers.join(', ')}
               articles={visibleSearch}
+              quotes={quotes}
               visible={visibleSearch.length}
               columns={columns}
               selectedId={selectedId}
@@ -412,6 +423,7 @@ export function NewsPage({
           <NewsSection
             title="Portfolio Spotlight"
             articles={groups.portfolio}
+            quotes={quotes}
             visible={portfolioVisible}
             columns={columns}
             selectedId={selectedId}
@@ -432,6 +444,7 @@ export function NewsPage({
           <NewsSection
             title="Market & Macro"
             articles={marketBody}
+            quotes={quotes}
             visible={marketVisible}
             columns={columns}
             selectedId={selectedId}
