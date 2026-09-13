@@ -44,7 +44,6 @@ export function useYouTubeThumbnail(
     enabled: Boolean(video && (videoId || thumbnailUrl)),
     refetchInterval: false,
     staleTime: Infinity,
-    gcTime: 30 * 60_000,
     retry: false,
   })
 }

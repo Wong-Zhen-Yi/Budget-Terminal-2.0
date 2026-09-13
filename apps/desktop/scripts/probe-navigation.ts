@@ -57,6 +57,9 @@ try {
           check(renders.a === before, 'Shell updates rerendered the page')
           await go('b')
           check(effects.a === 0 && effects.b === 1, 'Hidden effects were not suspended')
+          const retainedB = document.querySelector('[data-page-id="b"]')
+          retainedB.querySelector('button').click()
+          await settle()
           const stopped = ticks.a
           await settle()
           check(ticks.a === stopped, 'Hidden page kept polling')
@@ -66,15 +69,16 @@ try {
           check(original.querySelector('button').textContent === '1', 'Return lost page state')
           check(effects.a === 1 && effects.b === 0, 'Effects did not resume correctly')
           await go('c'); await go('d'); await go('e')
-          check(document.querySelectorAll('[data-page-id]').length === 4, 'Cache exceeded limit')
-          check(!document.querySelector('[data-page-id="b"]'), 'Least recent page was not evicted')
+          check(document.querySelectorAll('[data-page-id]').length === 5, 'Visited page was not retained')
+          check(document.querySelector('[data-page-id="b"]') === retainedB, 'Earlier page rebuilt its DOM')
           flushSync(() => hide('c'))
           await settle()
           check(!document.querySelector('[data-page-id="c"]'), 'Settings-hidden page was retained')
           await go('b')
-          check(document.querySelector('[data-page-id="b"] button').textContent === '0', 'Evicted page failed to mount')
+          check(document.querySelector('[data-page-id="b"]') === retainedB, 'Retained page rebuilt on return')
+          check(retainedB.querySelector('button').textContent === '1', 'Retained page lost local state')
           check(Object.values(effects).reduce((a, b) => a + b, 0) === 1, 'More than one page has active effects')
-          return 'PASS: cached DOM/state, shell render isolation, suspended polling, effect resume, LRU eviction, hidden-page removal'
+          return 'PASS: session-retained DOM/state, shell render isolation, suspended polling, effect resume, hidden-page removal'
         }
       `,
     },

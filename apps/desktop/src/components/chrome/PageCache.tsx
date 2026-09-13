@@ -6,17 +6,14 @@ interface PageCacheProps {
   renderPage: (tabId: string) => ReactNode
 }
 
-// Bound retained DOM and state to the active page plus three recent pages.
-const PAGE_LIMIT = 4
-
 export const PageCache = memo(function PageCache({ activeTab, visibleIds, renderPage }: PageCacheProps) {
-  const [recent, setRecent] = useState([activeTab])
-  const residents = [activeTab, ...recent.filter((id) => id !== activeTab && visibleIds.includes(id))]
-    .slice(0, PAGE_LIMIT)
+  const [retained, setRetained] = useState([activeTab])
+  const residents = [activeTab, ...retained.filter((id) => id !== activeTab && visibleIds.includes(id))]
 
-  // Adjust before committing so a newly selected page mounts only once.
-  if (residents.length !== recent.length || residents.some((id, index) => id !== recent[index])) {
-    setRecent(residents)
+  // Adjust before committing so a newly selected page mounts only once. Pages stay
+  // retained for the session unless the user explicitly hides them in Settings.
+  if (residents.length !== retained.length || residents.some((id, index) => id !== retained[index])) {
+    setRetained(residents)
   }
 
   return residents.map((id) => (

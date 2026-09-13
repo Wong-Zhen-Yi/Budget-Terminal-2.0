@@ -103,7 +103,6 @@ export function useNewsThumbnail(
     enabled: enabled && Boolean(url),
     refetchInterval: false,
     staleTime: Infinity,
-    gcTime: 30 * 60_000,
     retry: false,
   })
 }
