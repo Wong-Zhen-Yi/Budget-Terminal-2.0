@@ -29,6 +29,7 @@ import { dedupeArticles, normalizeTickerUniverse } from '../shared/news.js'
 import { cache, TTL } from './cache.js'
 import { loadFeed } from './news/feeds.js'
 import { paced, periodStart, yahoo } from './yahoo/client.js'
+import { trackApiRequest } from './apiUsage.js'
 
 /**
  * The Crypto page's data, ported from `CryptoMarketWorker` (`workers/crypto.py`).
@@ -78,9 +79,14 @@ interface CoinGeckoRow {
 }
 
 async function getJson(url: string): Promise<unknown> {
-  const response = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(TIMEOUT_MS) })
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
-  return response.json()
+  const providerId = url.startsWith('https://api.coingecko.com/')
+    ? 'coingecko'
+    : 'alternative'
+  return trackApiRequest(providerId, async () => {
+    const response = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(TIMEOUT_MS) })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    return response.json()
+  })
 }
 
 /* ------------------------------------------------------------------ stage 1 */

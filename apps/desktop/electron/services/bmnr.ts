@@ -8,6 +8,7 @@ import { cache, TTL } from './cache.js'
 import { fetchSecFactsDocument } from './secEdgar.js'
 import { getFundamentals } from './yahoo/fundamentals.js'
 import { getQuote } from './yahoo/quotes.js'
+import { trackApiRequest } from './apiUsage.js'
 
 /**
  * The BMNR page's data — three independent lanes over three different hosts.
@@ -49,9 +50,11 @@ export const BMNR_BLOCK_LABELS: Record<BmnrBlock, string> = {
 }
 
 async function getJson(url: string): Promise<unknown> {
-  const response = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(TIMEOUT_MS) })
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
-  return response.json()
+  return trackApiRequest('coingecko', async () => {
+    const response = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(TIMEOUT_MS) })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    return response.json()
+  })
 }
 
 export interface BmnrFetchResult {

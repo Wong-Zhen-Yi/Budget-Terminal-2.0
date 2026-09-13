@@ -1,4 +1,6 @@
-import type { Envelope, Freshness } from '@shared/contract'
+import { useEffect, useState } from 'react'
+
+import type { ApiProviderUsage, ApiUsageSnapshot, Envelope, Freshness } from '@shared/contract'
 import { timestampLabel } from '@/lib/format'
 
 export interface PanelStatus {
@@ -21,6 +23,69 @@ const toneFor: Record<Freshness, string> = {
   stale: 'text-text-muted',
   cached: 'text-text-muted',
   fresh: 'text-up',
+}
+
+const EMPTY_USAGE: ApiUsageSnapshot = { providers: [], sampledAt: 0 }
+
+function usageTone(provider: ApiProviderUsage): string {
+  if (provider.throttled || provider.percent >= 90) return 'bg-down'
+  if (provider.percent >= 60) return 'bg-warn'
+  return 'bg-up'
+}
+
+function ApiLimitBars() {
+  const [usage, setUsage] = useState<ApiUsageSnapshot>(EMPTY_USAGE)
+
+  useEffect(() => {
+    let mounted = true
+    const refresh = async () => {
+      try {
+        const next = await window.api.apiUsage()
+        if (mounted) setUsage(next)
+      } catch {
+        // The footer is diagnostic chrome; a closing/reloading main process should not
+        // turn a missed poll into a renderer error.
+      }
+    }
+    void refresh()
+    const timer = window.setInterval(() => void refresh(), 1_000)
+    return () => {
+      mounted = false
+      window.clearInterval(timer)
+    }
+  }, [])
+
+  return (
+    <div
+      className="flex min-w-0 max-w-[48vw] shrink-0 items-center gap-2 overflow-hidden"
+      aria-label="API request pressure"
+    >
+      <span className="shrink-0 tracking-wide text-text-dim">API LIMITS</span>
+      {usage.providers.length ? usage.providers.map((provider) => {
+        const title = provider.throttled
+          ? `${provider.label} rate limited; cooldown ${Math.ceil(provider.cooldownMs / 1000)}s`
+          : `${provider.label}: ${provider.requestCount}/${provider.softLimit} requests in ${provider.windowSeconds}s${provider.inFlight ? ` · ${provider.inFlight} active` : ''}`
+        return (
+          <div
+            key={provider.id}
+            className="flex shrink-0 items-center gap-1"
+            title={`${title}. Soft app-side budget, not a provider-reported quota.`}
+          >
+            <span className="text-text-muted">{provider.label.toUpperCase()}</span>
+            <span className="num w-8 text-right text-text-muted">{provider.percent}%</span>
+            <span className="h-2 w-12 border border-border-strong bg-bg" aria-hidden="true">
+              <span
+                className={`block h-full transition-[width] duration-300 ${usageTone(provider)}`}
+                style={{ width: `${provider.percent}%` }}
+              />
+            </span>
+          </div>
+        )
+      }) : (
+        <span className="text-text-dim">IDLE</span>
+      )}
+    </div>
+  )
 }
 
 /**
@@ -76,15 +141,15 @@ export function StatusBar({
   }
 
   return (
-    <footer className="flex h-8 shrink-0 items-center gap-3 border-t border-border bg-surface px-2 text-2xs">
-      <span className={tone}>{health}</span>
-      <span className="ml-auto truncate text-text-dim" title={sourcePath}>
+    <footer className="flex h-8 shrink-0 items-center gap-3 border-t border-border bg-surface px-2 text-2xs whitespace-nowrap">
+      <span className={`min-w-0 truncate ${tone}`}>{health}</span>
+      <span className="ml-auto min-w-0 truncate text-text-dim" title={sourcePath}>
         {sourcePath || 'no holdings file'}
       </span>
       <span className="text-text-dim">|</span>
-      <span className="text-text-muted">Data source: Yahoo Finance</span>
+      <ApiLimitBars />
       <span className="text-text-dim">|</span>
-      <span className="num text-text-muted">{timestampLabel(latest)}</span>
+      <span className="num shrink-0 text-text-muted">{timestampLabel(latest)}</span>
     </footer>
   )
 }

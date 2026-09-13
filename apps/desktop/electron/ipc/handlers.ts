@@ -76,9 +76,12 @@ import { yahooProvider } from '../services/provider.js'
 import { runWithPriority } from '../services/yahoo/client.js'
 import { watchPortfolios } from '../services/portfolioStore.js'
 import { isSafeExternalUrl } from '../services/urls.js'
+import { getApiUsageSnapshot } from '../services/apiUsage.js'
 
 export function registerIpcHandlers(): () => void {
   const provider = yahooProvider
+
+  ipcMain.handle(CHANNELS.apiUsage, () => getApiUsageSnapshot())
 
   /**
    * Register a provider channel in the rate gate lane its request asks for.

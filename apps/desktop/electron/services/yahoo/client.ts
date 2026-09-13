@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import YahooFinance from 'yahoo-finance2'
 
 import { rateGate, type Priority } from './rateGate.js'
+import { trackApiRequest } from '../apiUsage.js'
 
 /**
  * The single Yahoo client for the process.
@@ -31,7 +32,10 @@ export function runWithPriority<T>(priority: Priority, fn: () => Promise<T>): Pr
 }
 
 export function paced<T>(task: () => Promise<T>): Promise<T> {
-  return rateGate.run(task, priorityStore.getStore() ?? 'foreground')
+  return rateGate.run(
+    () => trackApiRequest('yahoo', task),
+    priorityStore.getStore() ?? 'foreground',
+  )
 }
 
 /** Days -> the `period1` timestamp Yahoo's chart endpoint expects. */

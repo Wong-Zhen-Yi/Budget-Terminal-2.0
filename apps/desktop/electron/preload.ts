@@ -8,6 +8,7 @@ import { CHANNELS } from './shared/contract.js'
  * off, so this bridge is the complete list of what page code can reach.
  */
 const api: DesktopApi = {
+  apiUsage: () => ipcRenderer.invoke(CHANNELS.apiUsage),
   quotes: (request) => ipcRenderer.invoke(CHANNELS.quotes, request),
   chart: (request) => ipcRenderer.invoke(CHANNELS.chart, request),
   chartsHistory: (request) => ipcRenderer.invoke(CHANNELS.chartsHistory, request),

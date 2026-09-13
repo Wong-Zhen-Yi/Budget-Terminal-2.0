@@ -6,6 +6,7 @@
  */
 import assert from 'node:assert/strict'
 
+import { ApiUsageTracker } from '../electron/services/apiUsage.js'
 import { getQuote, quoteFromChart } from '../electron/services/yahoo/quotes.js'
 import { RateGate, isRateLimitError, rateGate } from '../electron/services/yahoo/rateGate.js'
 
@@ -60,8 +61,47 @@ function probeQuoteSelection(): void {
   console.log('quote selection current-price checks passed')
 }
 
+async function probeApiUsage(): Promise<void> {
+  let now = 100_000
+  const tracker = new ApiUsageTracker({
+    test: {
+      label: 'Test API',
+      softLimit: 10,
+      windowMs: 60_000,
+      fallbackCooldownMs: 2_000,
+    },
+  }, () => now)
+
+  await Promise.all(Array.from({ length: 6 }, () => tracker.track('test', async () => undefined)))
+  let provider = tracker.snapshot().providers[0]
+  assert.equal(provider.requestCount, 6)
+  assert.equal(provider.percent, 60)
+  assert.equal(provider.throttled, false)
+
+  now += 60_001
+  provider = tracker.snapshot().providers[0]
+  assert.equal(provider.requestCount, 0)
+  assert.equal(provider.percent, 0)
+
+  await assert.rejects(
+    tracker.track('test', async () => { throw new Error('HTTP 429') }),
+    /429/,
+  )
+  provider = tracker.snapshot().providers[0]
+  assert.equal(provider.percent, 100)
+  assert.equal(provider.throttled, true)
+  assert.equal(provider.cooldownMs, 2_000)
+
+  now += 2_001
+  provider = tracker.snapshot().providers[0]
+  assert.equal(provider.throttled, false)
+  assert.equal(provider.percent, 10)
+  console.log('API usage rolling-window and throttle checks passed')
+}
+
 async function main(): Promise<void> {
   probeQuoteSelection()
+  await probeApiUsage()
   if (process.argv.includes('--offline')) {
     assert.ok(await probeLanes())
     return

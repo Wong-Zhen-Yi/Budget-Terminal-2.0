@@ -3395,6 +3395,25 @@ export interface PoliticsExportPayload {
   fetchedAt: number
 }
 
+export interface ApiProviderUsage {
+  id: string
+  label: string
+  /** Rolling request pressure against the app's conservative per-window soft limit. */
+  percent: number
+  requestCount: number
+  softLimit: number
+  windowSeconds: number
+  inFlight: number
+  throttled: boolean
+  cooldownMs: number
+  updatedAt: number
+}
+
+export interface ApiUsageSnapshot {
+  providers: ApiProviderUsage[]
+  sampledAt: number
+}
+
 export interface PoliticsPageRequest extends BackgroundRequest {
   page?: number
   force?: boolean
@@ -3406,6 +3425,7 @@ export interface PoliticsExportRequest {
 }
 
 export const CHANNELS = {
+  apiUsage: 'system:api-usage',
   quotes: 'dashboard:quotes',
   chart: 'dashboard:chart',
   options: 'dashboard:options',
@@ -3552,6 +3572,7 @@ export interface FxRequest extends BackgroundRequest {
 export type WindowAction = 'minimize' | 'maximize' | 'close'
 
 export interface DesktopApi {
+  apiUsage(): Promise<ApiUsageSnapshot>
   quotes(request: QuotesRequest): Promise<Envelope<QuotesPayload>>
   chart(request: ChartRequest): Promise<Envelope<ChartPayload>>
   chartsHistory(request: ChartsHistoryRequest): Promise<Envelope<ChartsHistoryPayload>>
