@@ -1,3 +1,4 @@
+import type { BitcoinPayload, BitcoinRequest } from './bitcoin.js'
 import type { MoneyPayload, MoneyRequest } from './money.js'
 export type { MoneyPayload, MoneyRequest } from './money.js'
 import type { Sp500Request, Sp500Data, Sp500BreadthRequest, Sp500Breadth } from './sp500.js'
@@ -1206,6 +1207,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'sp500', label: 'S&P500', implemented: true },
   { id: 'forex', label: 'Forex', implemented: true },
   { id: 'crypto', label: 'Crypto', implemented: true },
+  { id: 'bitcoin', label: 'Bitcoin', implemented: true },
   { id: 'bmnr', label: 'BMNR', implemented: true },
   { id: 'gold', label: 'Gold', implemented: true },
   { id: 'oil', label: 'Oil', implemented: true },
@@ -3456,6 +3458,7 @@ export const CHANNELS = {
   forexHistory: 'forex:history',
   forexNews: 'forex:news',
   crypto: 'crypto:read',
+  bitcoin: 'bitcoin:read',
   bmnr: 'bmnr:read',
   sp500: 'sp500:read',
   sp500Breadth: 'sp500:breadth',
@@ -3614,6 +3617,7 @@ export interface DesktopApi {
   forexHistory(request: ForexHistoryRequest): Promise<Envelope<ForexHistoryPayload>>
   forexNews(request: ForexPairRequest): Promise<Envelope<ForexNewsPayload>>
   crypto(request: CryptoRequest): Promise<Envelope<CryptoPayload>>
+  bitcoin(request: BitcoinRequest): Promise<Envelope<BitcoinPayload>>
   bmnr(request: BmnrRequest): Promise<Envelope<BmnrPayload>>
   sp500(request: Sp500Request): Promise<Envelope<Sp500Data>>
   sp500Breadth(request: Sp500BreadthRequest): Promise<Envelope<Sp500Breadth>>

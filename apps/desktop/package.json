@@ -31,6 +31,8 @@
     "probe:calendar": "tsx scripts/probe-calendar.ts",
     "probe:charts": "tsx scripts/probe-charts.ts",
     "probe:dictionary": "tsx scripts/probe-dictionary.ts",
+    "probe:bitcoin": "tsx scripts/probe-bitcoin.ts",
+    "probe:bitcoin-ui": "tsx scripts/probe-bitcoin-ui.ts",
     "probe:bmnr": "tsx scripts/probe-bmnr.ts",
     "probe:gold": "tsx scripts/probe-gold.ts",
     "probe:oil": "tsx scripts/probe-oil.ts",

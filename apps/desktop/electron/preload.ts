@@ -43,6 +43,7 @@ const api: DesktopApi = {
   forexHistory: (request) => ipcRenderer.invoke(CHANNELS.forexHistory, request),
   forexNews: (request) => ipcRenderer.invoke(CHANNELS.forexNews, request),
   crypto: (request) => ipcRenderer.invoke(CHANNELS.crypto, request),
+  bitcoin: (request) => ipcRenderer.invoke(CHANNELS.bitcoin, request),
   bmnr: (request) => ipcRenderer.invoke(CHANNELS.bmnr, request),
   sp500: (request) => ipcRenderer.invoke(CHANNELS.sp500, request),
   sp500Breadth: (request) => ipcRenderer.invoke(CHANNELS.sp500Breadth, request),

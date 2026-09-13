@@ -20,6 +20,7 @@ export const FRESHNESS = {
   newsPreview: 30 * 60_000,
   newsImage: 6 * 60 * 60_000,
   crypto: 60_000,
+  bitcoin: 60_000,
   bmnr: 5 * 60_000,
   goldMarket: 60_000,
   goldWgc: 24 * 60 * 60_000,

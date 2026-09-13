@@ -32,6 +32,7 @@ export const queryKeys = {
   forexHistory: (pair: string, range: string) => ['forexHistory', pair, range] as const,
   forexNews: (pair: string) => ['forexNews', pair] as const,
   crypto: ['crypto'] as const,
+  bitcoin: ['bitcoin'] as const,
   bmnr: ['bmnr'] as const,
   gold: ['gold'] as const,
   oil: ['oil'] as const,

@@ -51,6 +51,7 @@ export function queryFreshness(queryKey: QueryKey): number {
   if (root === 'forexNews') return FRESHNESS.forexNews
   if (root === 'tradingVolumes') return FRESHNESS.tradingVolumes
   if (root === 'crypto') return FRESHNESS.crypto
+  if (root === 'bitcoin') return FRESHNESS.bitcoin
   if (root === 'bmnr') return FRESHNESS.bmnr
   if (root === 'gold') return FRESHNESS.goldMarket
   if (root === 'oil') return FRESHNESS.oilMarket

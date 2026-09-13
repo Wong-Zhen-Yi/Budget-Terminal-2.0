@@ -17,6 +17,7 @@ import { BacktestPage } from '@/pages/BacktestPage'
 import { CardsPage } from '@/pages/CardsPage'
 import { CalendarPage } from '@/pages/CalendarPage'
 import { ChartsPage } from '@/pages/ChartsPage'
+import { BitcoinPage } from '@/pages/BitcoinPage'
 import { BmnrPage } from '@/pages/BmnrPage'
 import { MoneyPage } from '@/pages/MoneyPage'
 import { BondsPage } from '@/pages/BondsPage'
@@ -421,6 +422,8 @@ function renderPage({
       <ForexPage onStatusChange={onStatusChange} />
     ) : tabId === 'crypto' ? (
       <CryptoPage onStatusChange={onStatusChange} />
+    ) : tabId === 'bitcoin' ? (
+      <BitcoinPage onStatusChange={onStatusChange} />
     ) : tabId === 'bmnr' ? (
       <BmnrPage onStatusChange={onStatusChange} />
     ) : tabId === 'sp500' ? (

@@ -1,3 +1,4 @@
+import { getBitcoin } from '../services/bitcoin.js'
 import type { Sp500Request, Sp500BreadthRequest } from '../shared/sp500.js'
 import { BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
 import { writeFile } from 'node:fs/promises'
@@ -187,6 +188,7 @@ export function registerIpcHandlers(): () => void {
   )
   handle(CHANNELS.crypto, (request: CryptoRequest) => provider.crypto(request))
 
+  handle(CHANNELS.bitcoin, getBitcoin)
   handle(CHANNELS.bmnr, (request: BmnrRequest) => provider.bmnr(request))
   handle(CHANNELS.forexQuotes, getForexQuotes)
   handle(CHANNELS.forexHistory, getForexHistory)
