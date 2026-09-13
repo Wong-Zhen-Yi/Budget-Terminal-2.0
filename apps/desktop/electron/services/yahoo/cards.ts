@@ -7,7 +7,7 @@ import type {
 import { computeCardPerformance, normalizeCardSymbols, type CardPriceSeries } from '../../shared/cards.js'
 import { describeError, err } from '../../shared/envelope.js'
 import { cache } from '../cache.js'
-import { paced, yahoo } from './client.js'
+import { getYahooSeries } from './series.js'
 
 export const CARDS_SOURCE = 'Yahoo Finance'
 
@@ -39,16 +39,17 @@ function intervalConfig(interval: CardInterval): { period1: Date; interval: '5m'
 export async function fetchCardSeries(
   symbol: string,
   interval: CardInterval,
+  force = false,
 ): Promise<CardPriceSeries> {
   const config = intervalConfig(interval)
-  const result = await paced(() => yahoo.chart(symbol, config))
+  const result = await getYahooSeries({ symbol, start: config.period1, interval: config.interval, force })
   const points = new Map<number, number>()
-  for (const row of result.quotes) {
+  for (const row of result.rows) {
     const close = row.close
     if (typeof close !== 'number' || !Number.isFinite(close) || close <= 0) continue
     const timestamp = config.interval === '1d'
-      ? Date.parse(row.date.toISOString().slice(0, 10))
-      : row.date.getTime()
+      ? Date.parse(new Date(row.time * 1000).toISOString().slice(0, 10))
+      : row.time * 1000
     points.set(timestamp, close)
   }
   let timestamps = [...points.keys()].sort((a, b) => a - b)
@@ -76,7 +77,7 @@ async function getCardSeries(
   const result = await cache.resolve(
     `cards:${symbol}:${interval}`,
     TTL_BY_INTERVAL[interval],
-    () => fetchCardSeries(symbol, interval),
+    () => fetchCardSeries(symbol, interval, force),
     { force },
   )
   return result.value

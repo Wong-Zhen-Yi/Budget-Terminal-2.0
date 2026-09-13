@@ -10,6 +10,7 @@ import type {
 } from '@shared/contract'
 import { api, queryKeys } from './client'
 import { forcing } from './queries'
+import { queryFreshness } from './queryPersistence'
 
 export function useCards(): UseQueryResult<Envelope<CardsPayload>> {
   return useQuery({
@@ -43,7 +44,7 @@ export function useCardsPerformance(
       queryKey: cardsPerformanceKey(request),
       queryFn: () => api.cardsPerformance({ ...request, force: forcing() }),
       enabled: request.cards.length > 0,
-      staleTime: Infinity,
+      staleTime: queryFreshness(cardsPerformanceKey(request)),
     })),
   })
 }

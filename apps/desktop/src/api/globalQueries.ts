@@ -4,6 +4,7 @@ import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-q
 import type { Envelope, GlobalMarketsPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
 import { forcing } from './queries'
+import { queryFreshness } from './queryPersistence'
 
 /**
  * Seventeen world indexes in one call. Six years of daily history is the same answer all
@@ -14,7 +15,7 @@ export function useGlobalMarkets(): UseQueryResult<Envelope<GlobalMarketsPayload
   return useQuery({
     queryKey: queryKeys.globalMarkets,
     queryFn: () => api.globalMarkets({ force: forcing() }),
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.globalMarkets),
   })
 }
 

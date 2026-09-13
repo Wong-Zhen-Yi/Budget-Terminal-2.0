@@ -1,8 +1,9 @@
 import type { MarketCapTier } from '@shared/contract'
 import { useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { MARKET_CAP_TTL, marketCapInTier } from '@shared/marketCap'
+import { marketCapInTier } from '@shared/marketCap'
 import { api, queryKeys } from './client'
+import { queryFreshness } from './queryPersistence'
 import { forcing } from './queries'
 
 export function useMarketCap(tier: MarketCapTier) {
@@ -16,7 +17,7 @@ export function useMarketCap(tier: MarketCapTier) {
       }
       return result
     },
-    staleTime: MARKET_CAP_TTL,
+    staleTime: queryFreshness(queryKeys.marketCap(tier)),
     refetchInterval: false,
     refetchOnWindowFocus: false,
   })
@@ -29,11 +30,12 @@ export function useMarketCap(tier: MarketCapTier) {
 
 export function useMarketCapSales(symbols: string[]) {
   const force = useRef(false)
+  const key = ['marketCapSales', [...symbols].sort().join(',')] as const
   const query = useQuery({
-    queryKey: ['marketCapSales', [...symbols].sort().join(',')],
+    queryKey: key,
     queryFn: () => api.marketCapSales({ symbols, force: force.current || forcing() }),
     enabled: symbols.length > 0,
-    staleTime: MARKET_CAP_TTL,
+    staleTime: queryFreshness(key),
     refetchInterval: false,
     refetchOnWindowFocus: false,
   })

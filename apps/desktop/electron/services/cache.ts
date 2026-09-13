@@ -1,10 +1,19 @@
 /**
- * An in-memory TTL cache with single-flight coalescing.
- *
- * Two roles, both taken from the PySide6 app: `CacheManager` keeps a Reload from
- * refetching everything, and `DashboardFetchCoordinator` collapses identical in-flight
- * requests so two panels asking for the same symbol cause one upstream fetch.
+ * Process-wide TTL cache with single-flight coalescing and optional persistence.
+ * Tests construct an in-memory cache; the application singleton uses SQLite.
  */
+import { mkdirSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { deserialize, serialize } from 'node:v8'
+import { DatabaseSync, type StatementSync } from 'node:sqlite'
+
+import {
+  CACHE_SCHEMA_VERSION,
+  FRESHNESS,
+  SERVICE_CACHE_MAX_BYTES,
+} from '../shared/freshness.js'
+
+export const TTL = FRESHNESS
 
 interface Entry<T> {
   value: T
@@ -12,52 +21,18 @@ interface Entry<T> {
   ttlMs: number
 }
 
-export const TTL = {
-  quotes: 30_000,
-  chartIntraday: 60_000,
-  chartDaily: 5 * 60_000,
-  options: 5 * 60_000,
-  targets: 30 * 60_000,
-  news: 10 * 60_000,
-  profile: 12 * 60 * 60_000,
-  // The Personal Finance page refreshes FX on the reference's 300s cadence.
-  fx: 5 * 60_000,
-  // CNN recomputes the Fear & Greed score a few times an hour; the Pre-Market page's own
-  // refresh is every 15 minutes, so this only collapses a Reload landing on top of one.
-  fearGreed: 5 * 60_000,
-  // Trading Volumes costs a 12-page screen plus 100 daily charts, so it is the most
-  // expensive load in the app. The reference has no refresh timer at all; this only
-  // stops a page revisit from paying for the whole thing again.
-  tradingVolumes: 15 * 60_000,
-  // The News page is a second, wider news query than the Dashboard panel above, on the
-  // reference's own 15-minute `_DETAILS_CACHE_TTL_SECONDS`. Two entries, because the two
-  // paths ask Yahoo for different things and must not share a cache key.
-  newsPage: 15 * 60_000,
-  newsFeed: 15 * 60_000,
-  newsPreview: 30 * 60_000,
-  // A publisher thumbnail is immutable once fetched; the long TTL is what keeps a card
-  // grid from re-downloading a hundred images every time the page is revisited.
-  newsImage: 6 * 60 * 60_000,
-  // Match CoinGecko public market data freshness and the active Crypto page's timer.
-  crypto: 60_000,
-  // The BMNR page: one CoinGecko call, two SEC calls behind their own six-hour disk cache
-  // and three Yahoo quotes. Cache revisits to conserve the shared CoinGecko budget;
-  // this page has no refresh timer.
-  bmnr: 5 * 60_000,
-  // Gold's market strip is near-live, while its physical datasets update monthly,
-  // quarterly or annually and are cached independently by `services/gold.ts`.
-  goldMarket: 60_000,
-  goldWgc: 24 * 60 * 60_000,
-  goldMining: 7 * 24 * 60 * 60_000,
-  // Oil mixes four update cadences. The EIA weekly survey lands once a week and each of
-  // its series pages is a full history download, so it is held for hours; the OPEC basket
-  // is published once a session; the dated futures strip is thirteen paced Yahoo requests
-  // and does not need to move with the front-month tick.
-  oilMarket: 60_000,
-  oilCurve: 15 * 60_000,
-  oilEia: 6 * 60 * 60_000,
-  oilOpec: 6 * 60 * 60_000,
-} as const
+type RetentionClass = 'snapshot' | 'asset' | 'intraday' | 'history'
+
+interface CacheOptions {
+  path?: string
+  maxBytes?: number
+}
+
+interface DiskRow {
+  value: Uint8Array
+  stored_at: number
+  ttl_ms: number
+}
 
 export interface CachedResult<T> {
   value: T
@@ -66,38 +41,205 @@ export interface CachedResult<T> {
   fromCache: boolean
 }
 
+const cacheRoot = (): string => {
+  const local = process.env.LOCALAPPDATA ?? join(process.env.USERPROFILE ?? '', 'AppData', 'Local')
+  return join(local, 'BudgetTerminalElectron')
+}
+
+export const persistentCachePath = (): string => join(cacheRoot(), 'market-cache-v2.sqlite')
+
+function retentionClass(key: string): RetentionClass {
+  if (/image|thumbnail|preview/.test(key)) return 'asset'
+  if (/(?:^|:)(?:1m|2m|5m|15m|30m|60m|90m|1h)(?::|$)/.test(key)) return 'intraday'
+  if (/chart|history|closes|volume|spark|return|backtest|series/.test(key)) return 'history'
+  return 'snapshot'
+}
+
 export class TtlCache {
   private readonly entries = new Map<string, Entry<unknown>>()
   private readonly inFlight = new Map<string, Promise<unknown>>()
   private readonly failures = new Map<string, { error: unknown; retryAt: number }>()
+  private readonly maxBytes: number
+  private db: DatabaseSync | null = null
+  private selectEntry: StatementSync | null = null
+  private touchEntry: StatementSync | null = null
+  private upsertEntry: StatementSync | null = null
+  private deleteEntry: StatementSync | null = null
+
+  constructor(options: CacheOptions = {}) {
+    this.maxBytes = options.maxBytes ?? SERVICE_CACHE_MAX_BYTES
+    if (options.path) this.open(options.path)
+  }
+
+  private open(path: string): void {
+    try {
+      mkdirSync(dirname(path), { recursive: true })
+      const db = new DatabaseSync(path)
+      db.exec('PRAGMA journal_mode = WAL')
+      db.exec('PRAGMA synchronous = NORMAL')
+      db.exec('PRAGMA auto_vacuum = INCREMENTAL')
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS cache_entries (
+          key TEXT PRIMARY KEY,
+          value BLOB NOT NULL,
+          stored_at INTEGER NOT NULL,
+          ttl_ms INTEGER NOT NULL,
+          last_accessed INTEGER NOT NULL,
+          size_bytes INTEGER NOT NULL,
+          retention TEXT NOT NULL,
+          schema_version INTEGER NOT NULL
+        )
+      `)
+      db.exec(`DELETE FROM cache_entries WHERE schema_version != ${CACHE_SCHEMA_VERSION}`)
+      this.db = db
+      this.selectEntry = db.prepare(
+        'SELECT value, stored_at, ttl_ms FROM cache_entries WHERE key = ? AND schema_version = ?',
+      )
+      this.touchEntry = db.prepare('UPDATE cache_entries SET last_accessed = ? WHERE key = ?')
+      this.upsertEntry = db.prepare(`
+        INSERT INTO cache_entries
+          (key, value, stored_at, ttl_ms, last_accessed, size_bytes, retention, schema_version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET
+          value = excluded.value,
+          stored_at = excluded.stored_at,
+          ttl_ms = excluded.ttl_ms,
+          last_accessed = excluded.last_accessed,
+          size_bytes = excluded.size_bytes,
+          retention = excluded.retention,
+          schema_version = excluded.schema_version
+      `)
+      this.deleteEntry = db.prepare('DELETE FROM cache_entries WHERE key = ?')
+      this.prune()
+    } catch (error) {
+      console.warn('[cache] Persistent cache unavailable; using memory only.', error)
+      this.close()
+    }
+  }
 
   get<T>(key: string, { allowStale = false } = {}): CachedResult<T> | null {
-    const entry = this.entries.get(key) as Entry<T> | undefined
+    let entry = this.entries.get(key) as Entry<T> | undefined
+    if (!entry && this.selectEntry) {
+      try {
+        const row = this.selectEntry.get(key, CACHE_SCHEMA_VERSION) as unknown as DiskRow | undefined
+        if (row) {
+          entry = {
+            value: deserialize(Buffer.from(row.value)) as T,
+            storedAt: row.stored_at,
+            ttlMs: row.ttl_ms,
+          }
+          this.entries.set(key, entry)
+        }
+      } catch {
+        this.delete(key)
+        return null
+      }
+    }
     if (!entry) return null
-    const ageMs = Date.now() - entry.storedAt
+    const now = Date.now()
+    const ageMs = Math.max(0, now - entry.storedAt)
     if (ageMs > entry.ttlMs && !allowStale) return null
+    try {
+      this.touchEntry?.run(now, key)
+    } catch {
+      // Access timestamps are advisory; the value remains usable if touching fails.
+    }
     return { value: entry.value, ageSeconds: ageMs / 1000, fromCache: true }
   }
 
   set<T>(key: string, value: T, ttlMs: number): void {
     this.failures.delete(key)
-    this.entries.set(key, { value, storedAt: Date.now(), ttlMs })
+    const storedAt = Date.now()
+    this.entries.set(key, { value, storedAt, ttlMs })
+    if (!this.upsertEntry) return
+    try {
+      const encoded = serialize(value)
+      this.upsertEntry.run(
+        key,
+        encoded,
+        storedAt,
+        ttlMs,
+        storedAt,
+        encoded.byteLength,
+        retentionClass(key),
+        CACHE_SCHEMA_VERSION,
+      )
+      this.prune()
+    } catch (error) {
+      // Persistence must never turn a successful provider response into an app failure.
+      console.warn(`[cache] Could not persist ${key}.`, error)
+    }
   }
 
   delete(key: string): void {
     this.entries.delete(key)
     this.failures.delete(key)
+    try {
+      this.deleteEntry?.run(key)
+    } catch {
+      // Deleting an already-unavailable cache is equivalent to a miss.
+    }
   }
 
   clear(): void {
     this.entries.clear()
     this.failures.clear()
+    try {
+      this.db?.exec('DELETE FROM cache_entries; PRAGMA incremental_vacuum')
+    } catch (error) {
+      console.warn('[cache] Could not clear persistent cache.', error)
+    }
   }
 
-  /**
-   * Return the cached value, or run `loader` once for all concurrent callers.
-   * `force` skips the freshness check but still joins an in-flight load.
-   */
+  close(): void {
+    this.selectEntry = null
+    this.touchEntry = null
+    this.upsertEntry = null
+    this.deleteEntry = null
+    try {
+      this.db?.close()
+    } finally {
+      this.db = null
+    }
+  }
+
+  private prune(): void {
+    if (!this.db) return
+    const row = this.db.prepare('SELECT COALESCE(SUM(size_bytes), 0) AS total FROM cache_entries').get() as {
+      total: number
+    }
+    if (row.total <= this.maxBytes) return
+    const target = Math.floor(this.maxBytes * 0.9)
+    const candidates = this.db.prepare(`
+      SELECT key, size_bytes FROM cache_entries
+      ORDER BY
+        CASE
+          WHEN stored_at + ttl_ms < ? AND retention = 'snapshot' THEN 0
+          WHEN retention = 'intraday' THEN 1
+          WHEN retention = 'asset' THEN 2
+          WHEN retention = 'snapshot' THEN 3
+          ELSE 4
+        END,
+        last_accessed ASC
+    `).all(Date.now()) as unknown as Array<{ key: string; size_bytes: number }>
+    let total = row.total
+    const remove = this.db.prepare('DELETE FROM cache_entries WHERE key = ?')
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      for (const candidate of candidates) {
+        if (total <= target) break
+        remove.run(candidate.key)
+        this.entries.delete(candidate.key)
+        total -= candidate.size_bytes
+      }
+      this.db.exec('COMMIT')
+      this.db.exec('PRAGMA incremental_vacuum')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
   async resolve<T>(
     key: string,
     ttlMs: number,
@@ -111,8 +253,6 @@ export class TtlCache {
     const existing = this.inFlight.get(key) as Promise<T> | undefined
     if (existing) return { value: await existing, ageSeconds: 0, fromCache: false }
 
-    // A failed provider must not be retried by every panel or repeated Reload click.
-    // Keep the original error so envelope handlers still report the actual failure.
     const failure = this.failures.get(key)
     if (failure && Date.now() < failure.retryAt) throw failure.error
     this.failures.delete(key)
@@ -123,7 +263,6 @@ export class TtlCache {
         return value
       })
       .catch((error: unknown) => {
-        // Bound retained errors even for scans over many different symbols.
         if (this.failures.size >= 1000) this.failures.delete(this.failures.keys().next().value!)
         this.failures.set(key, { error, retryAt: Date.now() + 10_000 })
         throw error
@@ -135,10 +274,6 @@ export class TtlCache {
     return { value: await pending, ageSeconds: 0, fromCache: false }
   }
 
-  /**
-   * Like `resolve`, but on failure falls back to a stale entry when one exists.
-   * Returns `stale: true` so the caller can mark the envelope accordingly.
-   */
   async resolveWithStaleFallback<T>(
     key: string,
     ttlMs: number,
@@ -156,4 +291,6 @@ export class TtlCache {
   }
 }
 
-export const cache = new TtlCache()
+// Probe processes use injected/scratch caches and must never touch a developer's real cache.
+const runningProbe = process.argv.some((argument) => /(?:^|[\\/])probe-[^\\/]+\.[cm]?[jt]s$/.test(argument))
+export const cache = new TtlCache(runningProbe ? {} : { path: persistentCachePath() })

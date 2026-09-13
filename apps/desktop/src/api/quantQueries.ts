@@ -8,13 +8,14 @@ import type {
   QuantScanRequest,
 } from '@shared/contract'
 import { api, queryKeys } from './client'
+import { queryFreshness } from './queryPersistence'
 
 /** Opening Quant restores its latest 12-hour result but never starts the expensive scan. */
 export function useQuantLatest() {
   return useQuery({
     queryKey: queryKeys.quant,
     queryFn: () => api.quantScan({ latestOnly: true }),
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.quant),
   })
 }
 

@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { registerIpcHandlers } from './ipc/handlers.js'
+import { cache } from './services/cache.js'
 
 const dirname = fileURLToPath(new URL('.', import.meta.url))
 const isDev = !app.isPackaged
@@ -65,4 +66,5 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => {
   disposeIpc?.()
   disposeIpc = null
+  cache.close()
 })

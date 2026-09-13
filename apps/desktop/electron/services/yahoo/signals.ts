@@ -10,8 +10,8 @@ import {
 } from '../../shared/signals.js'
 import { dayTradingSession, evaluateDayTrading, validDayTradingPayload } from '../../shared/dayTrading.js'
 import { cache } from '../cache.js'
-import { paced, yahoo } from './client.js'
 import { equitySignalsScreen } from './screener.js'
+import { getYahooSeries } from './series.js'
 
 export const SIGNALS_SOURCE = 'Yahoo Finance'
 
@@ -120,8 +120,16 @@ async function fetchBars(
     request.ttlMs,
     async () => {
       const period1 = new Date(Date.now() - request.lookbackDays * DAY)
-      const chart = await paced(() => yahoo.chart(symbol, { period1, interval: request.interval }))
-      const bars = chartBars(chart as ChartResultLike)
+      const chart = await getYahooSeries({
+        symbol,
+        start: period1,
+        interval: request.interval,
+        force,
+      })
+      const bars = chartBars({ quotes: chart.rows.map((row) => ({
+        ...row,
+        date: new Date(row.time * 1000),
+      })) } as ChartResultLike)
       if (!bars.length) throw new Error(`No ${request.interval} history returned`)
       return bars
     },

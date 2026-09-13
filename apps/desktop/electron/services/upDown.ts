@@ -19,8 +19,8 @@ import {
 } from '../shared/upDown.js'
 import { cache } from './cache.js'
 import { getEtfHoldings, type EtfHoldingsResult } from './etf/holdings.js'
-import { paced, yahoo } from './yahoo/client.js'
 import { getFundamentals } from './yahoo/fundamentals.js'
+import { getYahooSeries } from './yahoo/series.js'
 
 export const UP_DOWN_SOURCE = 'Yahoo Finance Up/Down'
 
@@ -29,7 +29,6 @@ const PAYLOAD_TTL_MS = 15 * 60_000
 const HOLDINGS_TTL_MS = 24 * 60 * 60_000
 const TARGET_TTL_MS = 24 * 60 * 60_000
 const STALE_TTL_MS = 7 * 24 * 60 * 60_000
-const HISTORY_TTL_MS = 5 * 60_000
 
 interface DiskDocument<T> {
   version: number
@@ -137,27 +136,16 @@ async function fetchCloseSeries(
   force: boolean,
 ): Promise<UpDownCloseSeries> {
   const start = historyStart(interval)
-  const key = `up-down-history:${symbol}:${interval}:${start.toISOString().slice(0, 10)}`
-  const result = await cache.resolve(
-    key,
-    HISTORY_TTL_MS,
-    async () => {
-      const chart = await paced(() =>
-        yahoo.chart(yahooSymbol(symbol), { period1: start, interval: '1d' }),
-      )
-      const byDate = new Map<string, number>()
-      for (const quote of chart.quotes) {
-        const close = quote.close
-        if (typeof close !== 'number' || !Number.isFinite(close) || close <= 0) continue
-        byDate.set(quote.date.toISOString().slice(0, 10), close)
-      }
-      const points = [...byDate].sort(([left], [right]) => left.localeCompare(right))
-      if (points.length < 2) throw new Error(`No daily close history returned for ${symbol}.`)
-      return { dates: points.map(([date]) => date), values: points.map(([, close]) => close) }
-    },
-    { force },
-  )
-  return result.value
+  const chart = await getYahooSeries({ symbol: yahooSymbol(symbol), start, interval: '1d', force })
+  const byDate = new Map<string, number>()
+  for (const quote of chart.rows) {
+    const close = quote.close
+    if (close === null || close <= 0) continue
+    byDate.set(new Date(quote.time * 1000).toISOString().slice(0, 10), close)
+  }
+  const points = [...byDate].sort(([left], [right]) => left.localeCompare(right))
+  if (points.length < 2) throw new Error(`No daily close history returned for ${symbol}.`)
+  return { dates: points.map(([date]) => date), values: points.map(([, close]) => close) }
 }
 
 async function loadHoldings(

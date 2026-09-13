@@ -22,6 +22,7 @@ import { normalizeNewsSymbol } from '../../shared/news.js'
 import { cache, TTL } from '../cache.js'
 import { paced, yahoo } from './client.js'
 import { searchNews } from './newsPage.js'
+import { getYahooSeries } from './series.js'
 
 export const STOCKS_SOURCE = 'yahoo stocks'
 
@@ -76,41 +77,26 @@ function threeYearsAgo(): Date {
 }
 
 async function fetchChart(symbol: string, force: boolean): Promise<ChartResult> {
-  const resolved = await cache.resolveWithStaleFallback(
-    `stocks:chart:${symbol}`,
-    TTL.chartDaily,
-    async () => {
-      const result = await paced(() => yahoo.chart(symbol, { period1: threeYearsAgo(), interval: '1d' }))
-      const byTime = new Map<number, Candle>()
-      for (const row of result.quotes) {
-        if (
-          typeof row.open !== 'number' ||
-          typeof row.high !== 'number' ||
-          typeof row.low !== 'number' ||
-          typeof row.close !== 'number' ||
-          !Number.isFinite(row.close)
-        ) continue
-        const time = Math.floor(row.date.getTime() / 1000)
-        byTime.set(time, {
-          time,
+  const resolved = await getYahooSeries({ symbol, start: threeYearsAgo(), interval: '1d', force })
+  const candles = resolved.rows.flatMap((row): Candle[] =>
+    row.open !== null && row.high !== null && row.low !== null && row.close !== null
+      ? [{
+          time: row.time,
           open: row.open,
           high: row.high,
           low: row.low,
           close: row.close,
-          volume: typeof row.volume === 'number' && Number.isFinite(row.volume) ? row.volume : 0,
-        })
-      }
-      const candles = [...byTime.values()].sort((left, right) => left.time - right.time)
-      if (!candles.length) throw new Error(`No chart data returned for ${symbol}.`)
-      return {
-        candles,
-        currency: result.meta?.currency ?? 'USD',
-        longName: result.meta?.longName ?? result.meta?.shortName ?? symbol,
-      }
-    },
-    { force },
+          volume: row.volume ?? 0,
+        }]
+      : [],
   )
-  return { ...resolved.value, stale: resolved.stale }
+  if (!candles.length) throw new Error(`No chart data returned for ${symbol}.`)
+  return {
+    candles,
+    currency: resolved.currency,
+    longName: resolved.longName,
+    stale: resolved.stale,
+  }
 }
 
 async function statementFallback(symbol: string): Promise<Record<string, unknown>> {

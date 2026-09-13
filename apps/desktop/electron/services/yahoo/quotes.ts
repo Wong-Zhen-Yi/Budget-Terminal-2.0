@@ -97,33 +97,45 @@ async function fetchQuoteFallback(symbol: string): Promise<Quote> {
 
 /** One quote, cached for `TTL.quotes` and coalesced across concurrent callers. */
 export async function getQuote(symbol: string, force = false): Promise<Quote> {
-  const result = await cache.resolve(
+  return (await resolveQuote(symbol, force)).value
+}
+
+function resolveQuote(symbol: string, force = false) {
+  return cache.resolveWithStaleFallback(
     `quote:${symbol}`,
     TTL.quotes,
     () => fetchQuote(symbol),
     { force },
   )
-  return result.value
 }
 
 export interface QuoteBatch {
   quotes: Record<string, Quote>
   missing: string[]
   errors: Array<{ symbol: string; reason: string }>
+  fromCacheCount: number
+  staleCount: number
+  cacheAgeSeconds: number
 }
 
 /** Fetch many symbols concurrently; the rate gate decides how many actually run at once. */
 export async function getQuotes(symbols: string[], force = false): Promise<QuoteBatch> {
   const unique = [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))]
-  const settled = await Promise.allSettled(unique.map((symbol) => getQuote(symbol, force)))
+  const settled = await Promise.allSettled(unique.map((symbol) => resolveQuote(symbol, force)))
 
   const quotes: Record<string, Quote> = {}
   const missing: string[] = []
   const errors: Array<{ symbol: string; reason: string }> = []
+  let fromCacheCount = 0
+  let staleCount = 0
+  let cacheAgeSeconds = 0
   settled.forEach((outcome, index) => {
     const symbol = unique[index]
     if (outcome.status === 'fulfilled') {
-      quotes[symbol] = outcome.value
+      quotes[symbol] = outcome.value.value
+      if (outcome.value.fromCache) fromCacheCount += 1
+      if (outcome.value.stale) staleCount += 1
+      cacheAgeSeconds = Math.max(cacheAgeSeconds, outcome.value.ageSeconds)
     } else {
       missing.push(symbol)
       errors.push({
@@ -132,5 +144,5 @@ export async function getQuotes(symbols: string[], force = false): Promise<Quote
       })
     }
   })
-  return { quotes, missing, errors }
+  return { quotes, missing, errors, fromCacheCount, staleCount, cacheAgeSeconds }
 }

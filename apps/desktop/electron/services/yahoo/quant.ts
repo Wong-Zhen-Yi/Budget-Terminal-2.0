@@ -20,8 +20,8 @@ import {
   type SignalQuoteLike,
 } from '../../shared/signals.js'
 import { cache } from '../cache.js'
-import { paced, yahoo } from './client.js'
 import { equitySignalsScreen } from './screener.js'
+import { getYahooSeries } from './series.js'
 
 export const QUANT_SOURCE = 'Yahoo Finance'
 
@@ -88,11 +88,16 @@ async function fetchDaily(
     `quant:${role}:${symbol}:${lookbackDays}`,
     role === 'liquidity' ? UNIVERSE_TTL : HISTORY_TTL,
     async () => {
-      const chart = await paced(() => yahoo.chart(symbol, {
-        period1: new Date(Date.now() - lookbackDays * DAY),
+      const chart = await getYahooSeries({
+        symbol,
+        start: new Date(Date.now() - lookbackDays * DAY),
         interval: '1d',
-      }))
-      const bars = chartBars(chart as ChartResultLike)
+        force,
+      })
+      const bars = chartBars({ quotes: chart.rows.map((row) => ({
+        ...row,
+        date: new Date(row.time * 1000),
+      })) } as ChartResultLike)
       if (!bars.length) throw new Error('No daily history returned.')
       return bars
     },

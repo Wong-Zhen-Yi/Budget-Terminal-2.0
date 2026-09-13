@@ -18,9 +18,8 @@ import {
   normalizeSymbols,
   validateRelationshipSymbols,
 } from '../../shared/charts.js'
-import { cache, TTL } from '../cache.js'
 import { alignBackward, rsi, sma, toPoints } from '../indicators.js'
-import { paced, yahoo } from './client.js'
+import { getYahooSeries } from './series.js'
 
 const DAY = 24 * 60 * 60 * 1000
 
@@ -81,50 +80,10 @@ function periodBucket(time: number, interval: YahooInterval): string {
   return date.toISOString().slice(0, 10)
 }
 
-async function fetchCandles(symbol: string, start: Date, interval: YahooInterval, adjusted = false): Promise<{
+interface RawCandles {
   candles: Candle[]
   currency: string
   longName: string
-}> {
-  const result = await paced(() => yahoo.chart(symbol, { period1: start, interval }))
-  const received: Candle[] = []
-  for (const row of result.quotes) {
-    const close = adjusted && typeof row.adjclose === 'number' ? row.adjclose : row.close
-    const open = adjusted && typeof row.adjclose === 'number' ? row.adjclose : row.open
-    const high = adjusted && typeof row.adjclose === 'number' ? row.adjclose : row.high
-    const low = adjusted && typeof row.adjclose === 'number' ? row.adjclose : row.low
-    if (![open, high, low, close].every((value) => typeof value === 'number' && Number.isFinite(value))) continue
-    const candle: Candle = {
-      time: Math.floor(row.date.getTime() / 1000),
-      open: open as number,
-      high: high as number,
-      low: low as number,
-      close: close as number,
-      volume: typeof row.volume === 'number' && Number.isFinite(row.volume) ? row.volume : 0,
-    }
-    received.push(candle)
-  }
-  const candles = [...new Map(
-    received
-      .sort((left, right) => left.time - right.time)
-      .map((candle) => [candle.time, candle]),
-  ).values()]
-  if (candles.length > 1) {
-    const last = candles.at(-1)!
-    const flat = last.open === last.high && last.high === last.low && last.low === last.close
-    if (flat && last.volume === 0) candles.pop()
-  }
-  if (candles.length > 1 && (interval === '1wk' || interval === '1mo')) {
-    const last = candles.at(-1)!
-    const previous = candles.at(-2)!
-    if (periodBucket(last.time, interval) === periodBucket(previous.time, interval)) candles.pop()
-  }
-  if (!candles.length) throw new Error(`No chart data returned for ${symbol}.`)
-  return {
-    candles,
-    currency: result.meta?.currency ?? 'USD',
-    longName: result.meta?.longName ?? result.meta?.shortName ?? symbol,
-  }
 }
 
 async function cachedCandles(
@@ -133,17 +92,55 @@ async function cachedCandles(
   interval: YahooInterval,
   force: boolean,
   adjusted = false,
-): Promise<ChartsServiceResult<Awaited<ReturnType<typeof fetchCandles>>>> {
-  const stamp = start.toISOString().slice(0, 10)
-  const key = `${adjusted ? 'charts-adjusted' : 'charts-history'}:${symbol}:${interval}:${stamp}`
-  const ttl = ['1m', '5m', '15m', '1h'].includes(interval) ? TTL.chartIntraday : TTL.chartDaily
-  const result = await cache.resolveWithStaleFallback(
-    key,
-    ttl,
-    () => fetchCandles(symbol, start, interval, adjusted),
-    { force },
-  )
-  return { payload: result.value, stale: result.stale, fromCache: result.fromCache, cacheAgeSeconds: result.ageSeconds }
+): Promise<ChartsServiceResult<RawCandles>> {
+  const result = await getYahooSeries({
+    symbol,
+    start,
+    interval,
+    force,
+    variant: adjusted ? 'adjusted' : 'ohlcv',
+  })
+  const payload = fetchCandlesFromSeries(result, adjusted, interval)
+  return {
+    payload,
+    stale: result.stale,
+    fromCache: result.fromCache,
+    cacheAgeSeconds: result.cacheAgeSeconds,
+  }
+}
+
+function fetchCandlesFromSeries(
+  result: Awaited<ReturnType<typeof getYahooSeries>>,
+  adjusted: boolean,
+  interval: YahooInterval,
+): RawCandles {
+  const received: Candle[] = result.rows.flatMap((row) => {
+    const close = adjusted && row.adjclose !== null ? row.adjclose : row.close
+    const open = adjusted && row.adjclose !== null ? row.adjclose : row.open
+    const high = adjusted && row.adjclose !== null ? row.adjclose : row.high
+    const low = adjusted && row.adjclose !== null ? row.adjclose : row.low
+    if ([open, high, low, close].some((value) => value === null || !Number.isFinite(value))) return []
+    return [{
+      time: row.time,
+      open: open as number,
+      high: high as number,
+      low: low as number,
+      close: close as number,
+      volume: row.volume ?? 0,
+    }]
+  })
+  const candles = [...new Map(received.map((row) => [row.time, row])).values()]
+  if (candles.length > 1) {
+    const last = candles.at(-1)!
+    if (last.open === last.high && last.high === last.low && last.low === last.close && last.volume === 0) candles.pop()
+  }
+  if (candles.length > 1 && (interval === '1wk' || interval === '1mo')) {
+    const last = candles.at(-1)!
+    const previous = candles.at(-2)!
+    if (periodBucket(last.time, interval) === periodBucket(previous.time, interval)) candles.pop()
+  }
+  if (!candles.length) throw new Error('No usable chart data returned.')
+  return { candles, currency: result.currency, longName: result.longName }
 }
 
 async function dailyMa200(symbol: string, force: boolean): Promise<IndicatorPoint[]> {

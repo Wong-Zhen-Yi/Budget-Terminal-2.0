@@ -667,7 +667,18 @@ export const yahooProvider: MarketDataProvider = {
       holdings: holdingQuotes,
       missing: batch.missing,
     }
-    if (!batch.errors.length) return ok(payload, 'yahoo quotes')
+    if (!batch.errors.length) {
+      if (batch.staleCount > 0) {
+        return {
+          data: payload,
+          meta: meta('yahoo quotes', 'stale', { cacheAgeSeconds: batch.cacheAgeSeconds }),
+          errors: [],
+        }
+      }
+      return ok(payload, 'yahoo quotes', batch.fromCacheCount === Object.keys(batch.quotes).length
+        ? { freshness: 'cached', cacheAgeSeconds: batch.cacheAgeSeconds }
+        : {})
+    }
     return partial(
       payload,
       batch.errors.map((entry) =>
@@ -1889,6 +1900,8 @@ export const yahooProvider: MarketDataProvider = {
       await clearCards()
       // Cached market data outlives the book it was fetched for, so drop it too.
       cache.clear()
+      await clearLatestSignals()
+      await clearLatestQuant()
       await clearCalendarCaches()
       await clearSecCaches()
       await clearUpDownCaches()

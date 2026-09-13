@@ -3,6 +3,7 @@ import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-q
 
 import type { ChartsInterval, Envelope, ProjectionsPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
+import { queryFreshness } from './queryPersistence'
 
 /**
  * The Projections page's single query.
@@ -22,7 +23,7 @@ export function useProjections(
     queryKey: queryKeys.projections(symbol, timeframe),
     queryFn: () => api.projections({ symbol, timeframe }),
     enabled: enabled && Boolean(symbol),
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.projections(symbol, timeframe)),
     refetchInterval: false,
     placeholderData: (previous) => previous,
   })

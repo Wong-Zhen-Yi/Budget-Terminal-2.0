@@ -4,6 +4,7 @@ import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-q
 import type { Envelope, EconomicPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
 import { forcing } from './queries'
+import { queryFreshness } from './queryPersistence'
 
 /**
  * The Economic page has no refresh timer, like `init_page42`, which creates none.
@@ -18,7 +19,7 @@ export function useEconomic(enabled: boolean): UseQueryResult<Envelope<EconomicP
     queryKey: queryKeys.economic,
     queryFn: () => api.economic({ force: forcing() }),
     enabled,
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.economic),
     refetchInterval: false,
     placeholderData: (previous) => previous,
   })

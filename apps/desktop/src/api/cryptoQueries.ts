@@ -3,6 +3,7 @@ import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-q
 
 import type { CryptoPayload, Envelope } from '@shared/contract'
 import { api, queryKeys } from './client'
+import { queryFreshness } from './queryPersistence'
 import { forcing } from './queries'
 
 // Match the main-process crypto cache lifetime without forcing provider requests.
@@ -21,7 +22,7 @@ export function useCrypto(): UseQueryResult<Envelope<CryptoPayload>> {
     enabled: visible,
     queryKey: queryKeys.crypto,
     queryFn: () => api.crypto({ force: forcing() }),
-    staleTime: CRYPTO_REFRESH_MS,
+    staleTime: queryFreshness(queryKeys.crypto),
     refetchInterval: visible ? CRYPTO_REFRESH_MS : false,
     refetchIntervalInBackground: false,
     placeholderData: (previous) => previous,

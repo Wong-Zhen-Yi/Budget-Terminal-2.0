@@ -4,6 +4,7 @@ import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-q
 import type { Envelope, StocksPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
 import { forcing } from './queries'
+import { queryFreshness } from './queryPersistence'
 
 export function useStocks(
   symbol: string,
@@ -13,7 +14,7 @@ export function useStocks(
     queryKey: queryKeys.stocks(symbol),
     queryFn: () => api.stocks({ symbol, force: forcing() }),
     enabled: Boolean(symbol),
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.stocks(symbol)),
     placeholderData:
       snapshot?.symbol === symbol
         ? {

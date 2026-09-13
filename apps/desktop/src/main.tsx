@@ -1,8 +1,15 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient } from '@tanstack/react-query'
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 
 import { App } from './App'
+import { RENDERER_CACHE_MAX_AGE_MS } from '@shared/freshness'
+import {
+  RENDERER_CACHE_BUSTER,
+  rendererQueryPersister,
+  shouldPersistRemoteQuery,
+} from './api/queryPersistence'
 import './styles/theme.css'
 
 const queryClient = new QueryClient({
@@ -21,8 +28,16 @@ const queryClient = new QueryClient({
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{
+        persister: rendererQueryPersister,
+        maxAge: RENDERER_CACHE_MAX_AGE_MS,
+        buster: RENDERER_CACHE_BUSTER,
+        dehydrateOptions: { shouldDehydrateQuery: shouldPersistRemoteQuery },
+      }}
+    >
       <App />
-    </QueryClientProvider>
+    </PersistQueryClientProvider>
   </StrictMode>,
 )

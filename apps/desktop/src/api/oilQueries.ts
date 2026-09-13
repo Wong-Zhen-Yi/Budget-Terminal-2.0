@@ -3,6 +3,7 @@ import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-q
 
 import type { Envelope, OilPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
+import { queryFreshness } from './queryPersistence'
 import { forcing } from './queries'
 
 /**
@@ -14,7 +15,7 @@ export function useOil(): UseQueryResult<Envelope<OilPayload>> {
   return useQuery({
     queryKey: queryKeys.oil,
     queryFn: () => api.oil({ force: forcing() }),
-    staleTime: 60_000,
+    staleTime: queryFreshness(queryKeys.oil),
     refetchInterval: 60_000,
     placeholderData: (previous) => previous,
   })

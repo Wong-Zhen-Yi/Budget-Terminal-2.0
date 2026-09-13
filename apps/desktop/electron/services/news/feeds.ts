@@ -50,11 +50,18 @@ const AGENT_REJECTIONS = new Set([403, 406, 429])
 interface FeedBody {
   xml: string
   contentType: string
+  etag?: string
+  lastModified?: string
 }
 
-async function requestFeed(url: string, userAgent: string): Promise<Response> {
+async function requestFeed(url: string, userAgent: string, previous?: FeedBody): Promise<Response> {
   return fetch(url, {
-    headers: { ...FEED_HEADERS, 'User-Agent': userAgent },
+    headers: {
+      ...FEED_HEADERS,
+      'User-Agent': userAgent,
+      ...(previous?.etag ? { 'If-None-Match': previous.etag } : {}),
+      ...(previous?.lastModified ? { 'If-Modified-Since': previous.lastModified } : {}),
+    },
     signal: AbortSignal.timeout(NEWS_FEED_TIMEOUT_MS),
     redirect: 'follow',
   })
@@ -68,7 +75,12 @@ async function readFeedBody(response: Response): Promise<FeedBody> {
   if (!contentType.toLowerCase().includes('xml') && !/^\s*<(\?xml|rss|feed)\b/i.test(xml)) {
     throw new Error('Feed returned HTML, not RSS.')
   }
-  return { xml, contentType }
+  return {
+    xml,
+    contentType,
+    etag: response.headers.get('etag') ?? undefined,
+    lastModified: response.headers.get('last-modified') ?? undefined,
+  }
 }
 
 /**
@@ -82,21 +94,22 @@ async function readFeedBody(response: Response): Promise<FeedBody> {
  * the agent: a feed already flagged `browserAgent` has nothing left to try, which is what
  * keeps a genuinely dead feed to one timeout rather than two.
  */
-async function fetchFeedBody(feed: NewsFeedConfig): Promise<FeedBody> {
+async function fetchFeedBody(feed: NewsFeedConfig, previous?: FeedBody): Promise<FeedBody> {
   const firstAgent = feed.browserAgent ? BROWSER_USER_AGENT : FEED_HEADERS['User-Agent']
   const canRetry = firstAgent !== BROWSER_USER_AGENT
 
   let response: Response | null = null
   try {
-    response = await requestFeed(feed.url, firstAgent)
+    response = await requestFeed(feed.url, firstAgent, previous)
   } catch (error) {
     if (!canRetry) throw error
   }
 
   if (canRetry && (response === null || AGENT_REJECTIONS.has(response.status))) {
-    response = await requestFeed(feed.url, BROWSER_USER_AGENT)
+    response = await requestFeed(feed.url, BROWSER_USER_AGENT, previous)
   }
   if (response === null) throw new Error('Feed request failed.')
+  if (response.status === 304 && previous) return previous
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
   return readFeedBody(response)
 }
@@ -125,10 +138,11 @@ export async function loadFeed(
   }
 
   try {
+    const previous = cache.get<FeedBody>(`news-feed:${feed.url}`, { allowStale: true })
     const hit = await cache.resolveWithStaleFallback<FeedBody>(
       `news-feed:${feed.url}`,
       TTL.newsFeed,
-      () => fetchFeedBody(feed),
+      () => fetchFeedBody(feed, previous?.value),
       { force },
     )
     const ageMs = hit.ageSeconds * 1000

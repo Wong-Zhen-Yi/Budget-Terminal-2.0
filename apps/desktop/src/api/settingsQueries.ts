@@ -9,6 +9,7 @@ import type {
   MaintenanceResult,
 } from '@shared/contract'
 import { api, queryKeys } from './client'
+import { isRemoteQueryKey, removeRendererCache } from './queryPersistence'
 
 export function useSettings(): UseQueryResult<Envelope<AppSettings>> {
   return useQuery({
@@ -50,7 +51,18 @@ export function useMaintenance(): (
     async (action: MaintenanceAction) => {
       const result = await api.maintenance(action)
       if (result.data.performed && action !== 'exportUserData') {
-        await queryClient.invalidateQueries()
+        await removeRendererCache()
+        queryClient.removeQueries({
+          type: 'inactive',
+          predicate: (query) => isRemoteQueryKey(query.queryKey),
+        })
+        await queryClient.resetQueries({
+          type: 'active',
+          predicate: (query) => isRemoteQueryKey(query.queryKey),
+        })
+        await queryClient.invalidateQueries({
+          predicate: (query) => !isRemoteQueryKey(query.queryKey),
+        })
       }
       return result
     },

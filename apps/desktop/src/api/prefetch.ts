@@ -8,16 +8,7 @@ import { useIpoPage } from '@/stores/ipo'
 import { useFundamentalsStore } from '@/stores/fundamentals'
 import { useStocksPage } from '@/stores/stocks'
 import { api, queryKeys } from './client'
-import { FX_REFRESH_MS, PRE_MARKET_REFRESH_MS, QUOTE_REFRESH_MS } from './refreshRates'
-
-/** `_P17_REFRESH_TTL_SECONDS`, and what `useHeatmap` uses as its own `staleTime`. */
-const HEATMAP_STALE_MS = 120_000
-/** `IPO_STALE_MS` in `ipoQueries.ts`. */
-const IPO_STALE_MS = 24 * 60 * 60 * 1000
-/** `ACTIVITY_STALE_MS` in `institutionQueries.ts`. */
-const INSTITUTIONS_STALE_MS = 4 * 60 * 60 * 1000
-/** `AUM_STALE_MS` in `etfQueries.ts`. */
-const ETF_AUM_STALE_MS = 6 * 60 * 60 * 1000
+import { queryFreshness } from './queryPersistence'
 import { usePortfolio } from './queries'
 import { waitForWarmSlot, warmQuery } from './warmQueue'
 
@@ -132,7 +123,7 @@ function buildTasks(
         warmQuery(client, {
           queryKey: queryKeys.quotes(active),
           queryFn: () => api.quotes({ holdings: active, background: true }),
-          staleTime: QUOTE_REFRESH_MS / 2,
+          staleTime: queryFreshness(queryKeys.quotes(active)),
         }),
     })
     tasks.push({
@@ -142,7 +133,7 @@ function buildTasks(
         warmQuery(client, {
           queryKey: queryKeys.targets(active),
           queryFn: () => api.targets({ tickers: active, background: true }),
-          staleTime: Infinity,
+          staleTime: queryFreshness(queryKeys.targets(active)),
         }),
     })
     tasks.push({
@@ -152,7 +143,7 @@ function buildTasks(
         warmQuery(client, {
           queryKey: queryKeys.news(active),
           queryFn: () => api.news({ tickers: active, background: true }),
-          staleTime: Infinity,
+          staleTime: queryFreshness(queryKeys.news(active)),
         }),
     })
     tasks.push({
@@ -162,7 +153,7 @@ function buildTasks(
         warmQuery(client, {
           queryKey: queryKeys.fundamentals(active),
           queryFn: () => api.fundamentals({ tickers: active, background: true }),
-          staleTime: Infinity,
+          staleTime: queryFreshness(queryKeys.fundamentals(active)),
         }),
     })
   }
@@ -198,7 +189,7 @@ function buildTasks(
       warmQuery(client, {
         queryKey: queryKeys.fx,
         queryFn: () => api.fx({ background: true }),
-        staleTime: FX_REFRESH_MS / 2,
+        staleTime: queryFreshness(queryKeys.fx),
       }),
   })
   if (editable.length) {
@@ -209,7 +200,7 @@ function buildTasks(
         warmQuery(client, {
           queryKey: queryKeys.quotes(editable),
           queryFn: () => api.quotes({ holdings: editable, background: true }),
-          staleTime: QUOTE_REFRESH_MS / 2,
+          staleTime: queryFreshness(queryKeys.quotes(editable)),
         }),
     })
   }
@@ -221,7 +212,7 @@ function buildTasks(
       warmQuery(client, {
         queryKey: queryKeys.globalMarkets,
         queryFn: () => api.globalMarkets({ background: true }),
-        staleTime: Infinity,
+        staleTime: queryFreshness(queryKeys.globalMarkets),
       }),
   })
 
@@ -232,7 +223,7 @@ function buildTasks(
       warmQuery(client, {
         queryKey: queryKeys.preMarket,
         queryFn: () => api.preMarket({ background: true }),
-        staleTime: PRE_MARKET_REFRESH_MS / 2,
+        staleTime: queryFreshness(queryKeys.preMarket),
       }),
   })
 
@@ -244,7 +235,7 @@ function buildTasks(
         warmQuery(client, {
           queryKey: queryKeys.upDown('portfolio', '1d', upDown),
           queryFn: () => api.upDown({ source: 'portfolio', interval: '1d', symbols: upDown, background: true }),
-          staleTime: Infinity,
+          staleTime: queryFreshness(queryKeys.upDown('portfolio', '1d', upDown)),
         }),
     })
   }
@@ -262,7 +253,7 @@ function buildTasks(
             month: calendar.month,
             background: true,
           }),
-        staleTime: Infinity,
+        staleTime: queryFreshness(queryKeys.calendarMonth(main, calendar.year, calendar.month)),
       }),
   })
 
@@ -273,7 +264,7 @@ function buildTasks(
       warmQuery(client, {
         queryKey: queryKeys.politicsPage(1),
         queryFn: () => api.politicsPage({ page: 1, background: true }),
-        staleTime: 4 * 60 * 60 * 1000,
+        staleTime: queryFreshness(queryKeys.politicsPage(1)),
       }),
   })
   // The Earnings sub-tab opens on the whole current year, `earningsDateRange('year', ...)`.
@@ -291,7 +282,7 @@ function buildTasks(
             rangeKey: earnings.rangeKey,
             background: true,
           }),
-        staleTime: Infinity,
+        staleTime: queryFreshness(queryKeys.earningsCalendar(earnings.rangeKey)),
       }),
   })
 
@@ -300,10 +291,10 @@ function buildTasks(
   tasks.push({
     tab: 'money',
     label: 'Money',
-    run: (client) => warmQuery(client, { queryKey: queryKeys.money, queryFn: () => api.money({ background: true }), staleTime: Infinity }),
+    run: (client) => warmQuery(client, { queryKey: queryKeys.money, queryFn: () => api.money({ background: true }), staleTime: queryFreshness(queryKeys.money) }),
   })
 
-  // The slowest load in the app cold — five government hosts, about 45s — and the one
+  // The slowest load in the app cold â€” five government hosts, about 45s â€” and the one
   // with the most to gain: its six-hour disk cache means most warm-ups are nearly free.
   tasks.push({
     tab: 'economic',
@@ -312,7 +303,7 @@ function buildTasks(
       warmQuery(client, {
         queryKey: queryKeys.economic,
         queryFn: () => api.economic({ background: true }),
-        staleTime: Infinity,
+        staleTime: queryFreshness(queryKeys.economic),
       }),
   })
 
@@ -325,7 +316,7 @@ function buildTasks(
       warmQuery(client, {
         queryKey: queryKeys.ipoUpcoming,
         queryFn: () => api.ipoUpcoming({ background: true }),
-        staleTime: IPO_STALE_MS,
+        staleTime: queryFreshness(queryKeys.ipoUpcoming),
       }),
   })
   tasks.push({
@@ -335,7 +326,7 @@ function buildTasks(
       warmQuery(client, {
         queryKey: queryKeys.ipoCompleted(calendar.ipoYear),
         queryFn: () => api.ipoCompleted({ year: calendar.ipoYear, background: true }),
-        staleTime: IPO_STALE_MS,
+        staleTime: queryFreshness(queryKeys.ipoCompleted(calendar.ipoYear)),
       }),
   })
 
@@ -347,7 +338,7 @@ function buildTasks(
       warmQuery(client, {
         queryKey: queryKeys.institutionActivity(''),
         queryFn: () => api.institutionActivity({ quarter: '', limit: 50, background: true }),
-        staleTime: INSTITUTIONS_STALE_MS,
+        staleTime: queryFreshness(queryKeys.institutionActivity('')),
       }),
   })
 
@@ -359,7 +350,7 @@ function buildTasks(
         warmQuery(client, {
           queryKey: queryKeys.stocks(symbols.stocks),
           queryFn: () => api.stocks({ symbol: symbols.stocks, background: true }),
-          staleTime: Infinity,
+          staleTime: queryFreshness(queryKeys.stocks(symbols.stocks)),
         }),
     })
   }
@@ -371,7 +362,7 @@ function buildTasks(
         warmQuery(client, {
           queryKey: queryKeys.fundamentalsPage(symbols.fundamentals),
           queryFn: () => api.fundamentalsPage({ symbol: symbols.fundamentals, background: true }),
-          staleTime: Infinity,
+          staleTime: queryFreshness(queryKeys.fundamentalsPage(symbols.fundamentals)),
         }),
     })
   }
@@ -386,7 +377,7 @@ function buildTasks(
       warmQuery(client, {
         queryKey: queryKeys.oil,
         queryFn: () => api.oil({ background: true }),
-        staleTime: 60_000,
+        staleTime: queryFreshness(queryKeys.oil),
       }),
   })
 
@@ -398,7 +389,7 @@ function buildTasks(
         warmQuery(client, {
           queryKey: queryKeys.newsPage(every),
           queryFn: () => api.newsPage({ tickers: every, background: true }),
-          staleTime: Infinity,
+          staleTime: queryFreshness(queryKeys.newsPage(every)),
         }),
     })
   }
@@ -406,17 +397,17 @@ function buildTasks(
   tasks.push({
     tab: 'forex',
     label: 'Forex quotes',
-    run: (client) => warmQuery(client, { queryKey: queryKeys.forexQuotes, queryFn: () => api.forexQuotes({ background: true }), staleTime: 60_000 }),
+    run: (client) => warmQuery(client, { queryKey: queryKeys.forexQuotes, queryFn: () => api.forexQuotes({ background: true }), staleTime: queryFreshness(queryKeys.forexQuotes) }),
   })
   tasks.push({
     tab: 'forex',
     label: 'Forex history',
-    run: (client) => warmQuery(client, { queryKey: queryKeys.forexHistory('EUR/USD', '1M'), queryFn: () => api.forexHistory({ pair: 'EUR/USD', range: '1M', background: true }), staleTime: 60_000 }),
+    run: (client) => warmQuery(client, { queryKey: queryKeys.forexHistory('EUR/USD', '1M'), queryFn: () => api.forexHistory({ pair: 'EUR/USD', range: '1M', background: true }), staleTime: queryFreshness(queryKeys.forexHistory('EUR/USD', '1M')) }),
   })
   tasks.push({
     tab: 'forex',
     label: 'Forex news',
-    run: (client) => warmQuery(client, { queryKey: queryKeys.forexNews('EUR/USD'), queryFn: () => api.forexNews({ pair: 'EUR/USD', background: true }), staleTime: 300_000 }),
+    run: (client) => warmQuery(client, { queryKey: queryKeys.forexNews('EUR/USD'), queryFn: () => api.forexNews({ pair: 'EUR/USD', background: true }), staleTime: queryFreshness(queryKeys.forexNews('EUR/USD')) }),
   })
 
   // Three unrelated hosts and six Yahoo quotes; cheap next to Trading Volumes, but it is
@@ -428,7 +419,7 @@ function buildTasks(
       warmQuery(client, {
         queryKey: queryKeys.crypto,
         queryFn: () => api.crypto({ background: true }),
-        staleTime: Infinity,
+        staleTime: queryFreshness(queryKeys.crypto),
       }),
   })
 
@@ -441,7 +432,7 @@ function buildTasks(
       warmQuery(client, {
         queryKey: queryKeys.etfAum,
         queryFn: () => api.etfAum({ background: true }),
-        staleTime: ETF_AUM_STALE_MS,
+        staleTime: queryFreshness(queryKeys.etfAum),
       }),
   })
 
@@ -453,7 +444,7 @@ function buildTasks(
       warmQuery(client, {
         queryKey: queryKeys.bmnr,
         queryFn: () => api.bmnr({ background: true }),
-        staleTime: Infinity,
+        staleTime: queryFreshness(queryKeys.bmnr),
       }),
   })
 
@@ -466,7 +457,7 @@ function buildTasks(
       warmQuery(client, {
         queryKey: queryKeys.gold,
         queryFn: () => api.gold({ background: true }),
-        staleTime: 60_000,
+        staleTime: queryFreshness(queryKeys.gold),
       }),
   })
 
@@ -479,7 +470,7 @@ function buildTasks(
         warmQuery(client, {
           queryKey: queryKeys.youtube(every),
           queryFn: () => api.youtube({ tickers: every, background: true }),
-          staleTime: Infinity,
+          staleTime: queryFreshness(queryKeys.youtube(every)),
         }),
     })
   }
@@ -494,7 +485,7 @@ function buildTasks(
       warmQuery(client, {
         queryKey: queryKeys.heatmap('SPY'),
         queryFn: () => api.heatmap({ etf: 'SPY', background: true }),
-        staleTime: HEATMAP_STALE_MS,
+        staleTime: queryFreshness(queryKeys.heatmap('SPY')),
       }),
   })
 
@@ -506,7 +497,7 @@ function buildTasks(
       warmQuery(client, {
         queryKey: queryKeys.tradingVolumes,
         queryFn: () => api.tradingVolumes({ background: true }),
-        staleTime: Infinity,
+        staleTime: queryFreshness(queryKeys.tradingVolumes),
       }),
   })
 

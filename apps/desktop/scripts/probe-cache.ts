@@ -1,0 +1,146 @@
+import assert from 'node:assert/strict'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
+import { dehydrate, QueryClient } from '@tanstack/react-query'
+
+import { TtlCache } from '../electron/services/cache.js'
+import {
+  getYahooSeries,
+  type YahooSeriesInterval,
+  type YahooSeriesRow,
+} from '../electron/services/yahoo/series.js'
+import {
+  queryFreshness,
+  shouldPersistRemoteQuery,
+  trimPersistedClient,
+} from '../src/api/queryPersistence.js'
+
+const scratch = mkdtempSync(join(tmpdir(), 'bt-cache-'))
+const databasePath = join(scratch, 'cache.sqlite')
+
+function row(time: number, close: number): YahooSeriesRow {
+  return { time, open: close, high: close, low: close, close, adjclose: close, volume: 100 }
+}
+
+async function persistentCacheChecks(): Promise<void> {
+  const first = new TtlCache({ path: databasePath, maxBytes: 4_096 })
+  const saved = { when: new Date('2026-01-02T00:00:00Z'), bytes: Buffer.from('cache'), value: 7 }
+  first.set('snapshot:fixture', saved, 60_000)
+  first.close()
+
+  const reopened = new TtlCache({ path: databasePath, maxBytes: 4_096 })
+  const restored = reopened.get<typeof saved>('snapshot:fixture')
+  assert.equal(restored?.fromCache, true)
+  assert.equal(restored?.value.when.toISOString(), saved.when.toISOString())
+  assert.equal(restored?.value.bytes.toString(), 'cache')
+
+  let calls = 0
+  const [left, right] = await Promise.all([
+    reopened.resolve('single-flight', 60_000, async () => { calls += 1; return 1 }),
+    reopened.resolve('single-flight', 60_000, async () => { calls += 1; return 2 }),
+  ])
+  assert.equal(calls, 1)
+  assert.equal(left.value, right.value)
+
+  reopened.set('stale', { usable: true }, -1)
+  const fallback = await reopened.resolveWithStaleFallback(
+    'stale',
+    -1,
+    async () => { throw new Error('offline') },
+    { force: true },
+  )
+  assert.equal(fallback.stale, true)
+  reopened.close()
+
+  const database = new DatabaseSync(databasePath)
+  database.prepare('UPDATE cache_entries SET value = ? WHERE key = ?').run(Buffer.from([0, 1, 2]), 'snapshot:fixture')
+  database.close()
+  const corrupt = new TtlCache({ path: databasePath, maxBytes: 4_096 })
+  assert.equal(corrupt.get('snapshot:fixture', { allowStale: true }), null)
+  for (let index = 0; index < 8; index += 1) corrupt.set(`snapshot:${index}`, 'x'.repeat(900), 60_000)
+  corrupt.close()
+  const pruned = new DatabaseSync(databasePath)
+  const size = pruned.prepare('SELECT COALESCE(SUM(size_bytes), 0) AS total FROM cache_entries').get() as { total: number }
+  assert.ok(size.total <= 4_096)
+  pruned.close()
+}
+
+async function incrementalSeriesChecks(): Promise<void> {
+  const store = new TtlCache()
+  const originalNow = Date.now
+  let now = Date.UTC(2026, 0, 20)
+  Date.now = () => now
+  const calls: Array<{ start: number; end?: number }> = []
+  let fail = false
+  const loader = async (_symbol: string, _interval: YahooSeriesInterval, start: Date, end?: Date) => {
+    if (fail) throw new Error('provider offline')
+    calls.push({ start: start.getTime(), end: end?.getTime() })
+    const first = Math.floor(start.getTime() / 1000)
+    const last = Math.floor(Math.min(end?.getTime() ?? now, now) / 1000)
+    const rows: YahooSeriesRow[] = []
+    for (let time = first; time <= last; time += 86_400) rows.push(row(time, time))
+    return { rows, currency: 'USD', longName: 'Fixture' }
+  }
+
+  try {
+    const start = new Date(now - 30 * 86_400_000)
+    const cold = await getYahooSeries({ symbol: 'FIX', start, interval: '1d' }, store, loader)
+    assert.ok(cold.rows.length >= 30)
+    assert.equal(calls.length, 1)
+    await getYahooSeries({ symbol: 'FIX', start, interval: '1d' }, store, loader)
+    assert.equal(calls.length, 1, 'a fresh covered series makes no request')
+
+    now += 6 * 60_000
+    await getYahooSeries({ symbol: 'FIX', start, interval: '1d' }, store, loader)
+    assert.equal(calls.length, 2)
+    assert.ok(calls[1].start > start.getTime(), 'a stale series requests only its overlapping tail')
+
+    const earlier = new Date(start.getTime() - 10 * 86_400_000)
+    await getYahooSeries({ symbol: 'FIX', start: earlier, interval: '1d' }, store, loader)
+    assert.equal(calls.length, 4, 'earlier coverage backfills the head and refreshes the tail')
+    assert.equal(calls[2].start, earlier.getTime())
+
+    now += 8 * 86_400_000
+    await getYahooSeries({ symbol: 'FIX', start: earlier, interval: '1d' }, store, loader)
+    assert.equal(calls.at(-1)?.start, earlier.getTime(), 'weekly reconciliation reloads the requested range')
+
+    now += 6 * 60_000
+    fail = true
+    const stale = await getYahooSeries({ symbol: 'FIX', start: earlier, interval: '1d' }, store, loader)
+    assert.equal(stale.stale, true)
+    assert.ok(stale.rows.length > 0)
+  } finally {
+    Date.now = originalNow
+  }
+}
+
+function rendererPolicyChecks(): void {
+  const client = new QueryClient()
+  client.setQueryData(['quotes', 'AAPL'], {
+    data: { AAPL: 1 },
+    meta: { freshness: 'fresh', fetchedAt: Date.now() },
+    errors: [],
+  })
+  client.setQueryData(['portfolio'], { data: { private: true } })
+  client.setQueryData(['stocks', 'FAIL'], {
+    data: {},
+    meta: { freshness: 'failed', fetchedAt: Date.now() },
+    errors: [{ reason: 'offline' }],
+  })
+  const state = dehydrate(client, { shouldDehydrateQuery: shouldPersistRemoteQuery })
+  assert.deepEqual(state.queries.map((query) => query.queryKey), [['quotes', 'AAPL']])
+  assert.equal(queryFreshness(['quotes', 'AAPL']), 30_000)
+  const persisted = trimPersistedClient({ timestamp: Date.now(), buster: 'fixture', clientState: state })
+  assert.equal(persisted.clientState.queries.length, 1)
+}
+
+try {
+  await persistentCacheChecks()
+  await incrementalSeriesChecks()
+  rendererPolicyChecks()
+  console.log('Cache checks passed: restart persistence, serialization, corruption, pruning, single-flight, stale fallback and incremental ranges.')
+} finally {
+  rmSync(scratch, { recursive: true, force: true })
+}

@@ -7,7 +7,7 @@ import type {
 import { GLOBAL_MARKET_INDEXES } from '../../shared/contract.js'
 import { calculateAllIntervals, type DatedSeries } from '../../shared/globalMarkets.js'
 import { cache, TTL } from '../cache.js'
-import { paced, yahoo } from './client.js'
+import { getYahooSeries } from './series.js'
 
 /**
  * The Global page's seventeen world indexes, ported from `GlobalMarketsDataService`.
@@ -71,17 +71,18 @@ export function localDateStamper(zone: string): (date: Date) => string {
  * `history.ts`: adjusted closes so a split does not read as a 50% loss, and a repeated
  * trailing date collapsed onto the newer value.
  */
-async function fetchSymbol(symbol: string, start: Date): Promise<SymbolResult> {
-  const result = await paced(() => yahoo.chart(symbol, { period1: start, interval: '1d' }))
-  const stamp = localDateStamper(String(result.meta?.exchangeTimezoneName ?? '').trim())
+async function fetchSymbol(symbol: string, start: Date, force: boolean): Promise<SymbolResult> {
+  const result = await getYahooSeries({ symbol, start, interval: '1d', force, variant: 'adjusted' })
+  const meta = result.meta as Record<string, unknown> | undefined
+  const stamp = localDateStamper(String(meta?.exchangeTimezoneName ?? '').trim())
 
   const dates: string[] = []
   const values: number[] = []
   let previousDate = ''
-  for (const row of result.quotes) {
+  for (const row of result.rows) {
     const close = typeof row.adjclose === 'number' ? row.adjclose : row.close
     if (typeof close !== 'number' || !Number.isFinite(close) || close <= 0) continue
-    const date = stamp(row.date)
+    const date = stamp(new Date(row.time * 1000))
     if (date === previousDate) {
       values[values.length - 1] = close
       continue
@@ -91,13 +92,19 @@ async function fetchSymbol(symbol: string, start: Date): Promise<SymbolResult> {
     values.push(close)
   }
 
-  const meta = result.meta
-  const regular = meta?.currentTradingPeriod?.regular
-  const regularMarketTime = epochSeconds(meta?.regularMarketTime)
+  const typedMeta = meta as unknown as {
+    currentTradingPeriod?: { regular?: { start?: unknown; end?: unknown } }
+    regularMarketTime?: unknown
+    fullExchangeName?: unknown
+    exchangeName?: unknown
+    exchangeTimezoneName?: unknown
+  } | undefined
+  const regular = typedMeta?.currentTradingPeriod?.regular
+  const regularMarketTime = epochSeconds(typedMeta?.regularMarketTime)
   const timing: MarketTiming = {
     symbol,
-    exchangeName: String(meta?.fullExchangeName ?? meta?.exchangeName ?? '').trim(),
-    exchangeTimezone: String(meta?.exchangeTimezoneName ?? '').trim(),
+    exchangeName: String(typedMeta?.fullExchangeName ?? typedMeta?.exchangeName ?? '').trim(),
+    exchangeTimezone: String(typedMeta?.exchangeTimezoneName ?? '').trim(),
     regularStart: epochSeconds(regular?.start),
     regularEnd: epochSeconds(regular?.end),
     regularMarketTime,
@@ -114,9 +121,8 @@ async function fetchSymbol(symbol: string, start: Date): Promise<SymbolResult> {
   // Merge the latest exchange-local session, including Yahoo's synthetic quote bar.
   // Never substitute an older session when the latest session has no valid range.
   const session = dates[dates.length - 1]
-  const bars = result.quotes.filter((row) => stamp(row.date) === session &&
-    typeof row.low === 'number' && Number.isFinite(row.low) && row.low > 0 &&
-    typeof row.high === 'number' && Number.isFinite(row.high) && row.high >= row.low)
+  const bars = result.rows.filter((row) => stamp(new Date(row.time * 1000)) === session &&
+    row.low !== null && row.low > 0 && row.high !== null && row.high >= row.low)
   const dayLow = bars.length ? Math.min(...bars.map((row) => row.low!)) : null
   const dayHigh = bars.length ? Math.max(...bars.map((row) => row.high!)) : null
   return { series: { dates, values }, timing, dayLow, dayHigh }
@@ -149,11 +155,11 @@ function buildRow(config: GlobalIndexConfig, result: SymbolResult | null): Globa
   }
 }
 
-async function fetchAll(): Promise<GlobalMarketsPayload> {
+async function fetchAll(force: boolean): Promise<GlobalMarketsPayload> {
   const start = historyStart()
   // One symbol failing is a `--` row, not a blank page, so settle rather than race.
   const settled = await Promise.allSettled(
-    GLOBAL_MARKET_INDEXES.map((config) => fetchSymbol(config.symbol, start)),
+    GLOBAL_MARKET_INDEXES.map((config) => fetchSymbol(config.symbol, start, force)),
   )
 
   const rows: GlobalIndexRow[] = []
@@ -177,6 +183,6 @@ async function fetchAll(): Promise<GlobalMarketsPayload> {
 }
 
 export async function getGlobalMarkets(force = false): Promise<GlobalMarketsPayload> {
-  const result = await cache.resolve(CACHE_KEY, TTL.chartDaily, fetchAll, { force })
+  const result = await cache.resolve(CACHE_KEY, TTL.chartDaily, () => fetchAll(force), { force })
   return result.value
 }

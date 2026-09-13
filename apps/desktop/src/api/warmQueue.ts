@@ -1,4 +1,5 @@
 import type { QueryClient, QueryKey } from '@tanstack/react-query'
+import { queryFreshness } from './queryPersistence'
 
 const REQUEST_TIMEOUT_MS = 90_000
 
@@ -26,6 +27,8 @@ export async function warmQuery<T>(client: QueryClient, options: {
   // paused by React Query while offline. Never cancel a query another page is using.
   return withDeadline(() => client.fetchQuery({
     ...options,
+    // Hydrated pages are only skipped when they are still fresh by the shared policy.
+    staleTime: Math.min(options.staleTime, queryFreshness(options.queryKey)),
     retry: false,
     networkMode: 'always',
     queryFn: () => withDeadline(async () => {

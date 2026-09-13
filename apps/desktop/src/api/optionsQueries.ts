@@ -3,6 +3,7 @@ import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-q
 
 import type { Envelope, OptionsChainPayload, OptionsExpirationsPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
+import { queryFreshness } from './queryPersistence'
 
 /**
  * The Options page's two queries.
@@ -23,7 +24,7 @@ export function useOptionsChain(
     queryKey: queryKeys.optionsChain(symbol, expiry),
     queryFn: () => api.optionsChain({ symbol, expiry }),
     enabled: enabled && Boolean(symbol),
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.optionsChain(symbol, expiry)),
     refetchInterval: false,
     placeholderData: (previous) => previous,
   })
@@ -37,7 +38,7 @@ export function useOptionsExpirations(
     queryKey: queryKeys.optionsExpirations(symbol),
     queryFn: () => api.optionsExpirations({ symbol }),
     enabled: enabled && Boolean(symbol),
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.optionsExpirations(symbol)),
     refetchInterval: false,
     placeholderData: (previous) => previous,
   })

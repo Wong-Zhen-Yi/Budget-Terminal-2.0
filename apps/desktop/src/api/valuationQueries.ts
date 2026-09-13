@@ -4,6 +4,7 @@ import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-q
 import type { Envelope, ValuationPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
 import { forcing } from './queries'
+import { queryFreshness } from './queryPersistence'
 
 /**
  * The Valuation page has no refresh timer, like `init_page23`, which creates none: a load
@@ -19,7 +20,7 @@ export function useValuation(
     queryKey: queryKeys.valuation(symbol, customPeers),
     queryFn: () => api.valuation({ symbol, customPeers, force: forcing() }),
     enabled: enabled && Boolean(symbol),
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.valuation(symbol, customPeers)),
     refetchInterval: false,
     placeholderData: (previous) => previous,
   })

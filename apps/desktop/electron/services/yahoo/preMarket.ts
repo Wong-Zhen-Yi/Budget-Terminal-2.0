@@ -11,9 +11,9 @@ import { PRE_MARKET_FUTURES } from '../../shared/contract.js'
 import { dxyTrend, futuresDirection, rollingMean, vixRegime } from '../../shared/preMarket.js'
 import { cache, TTL } from '../cache.js'
 import { getFearGreed } from '../fearGreed.js'
-import { paced, yahoo } from './client.js'
 import { localDateStamper } from './globalMarkets.js'
 import { fetchCloses } from './history.js'
+import { getYahooSeries } from './series.js'
 
 /**
  * The Pre-Market page's six data blocks, ported from `PreMarketWorker`.
@@ -53,16 +53,16 @@ interface Bar {
  * live bar is the pre-market price, which is the whole point of the panel. The
  * prior-close rule below keeps it out of the comparison instead.
  */
-async function fetchFuturesBars(symbol: string): Promise<Bar[]> {
+async function fetchFuturesBars(symbol: string, force: boolean): Promise<Bar[]> {
   const start = daysAgo(5)
   const stamp = localDateStamper(FUTURES_ZONE)
   const read = async (interval: '1h' | '1d'): Promise<Bar[]> => {
-    const result = await paced(() => yahoo.chart(symbol, { period1: start, interval }))
+    const result = await getYahooSeries({ symbol, start, interval, force })
     const bars: Bar[] = []
-    for (const row of result.quotes ?? []) {
-      const close = typeof row.close === 'number' ? row.close : null
-      if (close === null || !Number.isFinite(close)) continue
-      bars.push({ session: stamp(row.date), close })
+    for (const row of result.rows) {
+      const close = row.close
+      if (close === null) continue
+      bars.push({ session: stamp(new Date(row.time * 1000)), close })
     }
     return bars
   }
@@ -85,10 +85,10 @@ function priorClose(bars: Bar[]): number | null {
   return bars[bars.length - 2].close
 }
 
-async function fetchFutures(): Promise<FuturesRow[]> {
+async function fetchFutures(force: boolean): Promise<FuturesRow[]> {
   const settled = await Promise.allSettled(
     PRE_MARKET_FUTURES.map(async ({ symbol, name }) => {
-      const bars = await fetchFuturesBars(symbol)
+      const bars = await fetchFuturesBars(symbol, force)
       if (bars.length < 2) return null
       const price = bars[bars.length - 1].close
       const prior = priorClose(bars)
@@ -104,13 +104,13 @@ async function fetchFutures(): Promise<FuturesRow[]> {
   )
 }
 
-async function fetchMacroSeries(symbol: string): Promise<MacroSeries> {
-  const series = await fetchCloses(symbol, yearsAgo(2))
+async function fetchMacroSeries(symbol: string, force: boolean): Promise<MacroSeries> {
+  const series = await fetchCloses(symbol, yearsAgo(2), force)
   return { dates: series.dates, values: series.values }
 }
 
-async function fetchDxy(): Promise<DxySnapshot> {
-  const series = await fetchMacroSeries('DX-Y.NYB')
+async function fetchDxy(force: boolean): Promise<DxySnapshot> {
+  const series = await fetchMacroSeries('DX-Y.NYB', force)
   const closes = series.values
   const level = closes[closes.length - 1]
   const previous = closes[closes.length - 2]
@@ -122,8 +122,8 @@ async function fetchDxy(): Promise<DxySnapshot> {
   }
 }
 
-async function fetchTnx(): Promise<TnxSnapshot> {
-  const series = await fetchMacroSeries('^TNX')
+async function fetchTnx(force: boolean): Promise<TnxSnapshot> {
+  const series = await fetchMacroSeries('^TNX', force)
   const closes = series.values
   const current = closes[closes.length - 1]
   const previous = closes[closes.length - 2]
@@ -139,8 +139,8 @@ async function fetchTnx(): Promise<TnxSnapshot> {
   }
 }
 
-async function fetchVix(): Promise<VixSnapshot> {
-  const series = await fetchMacroSeries('^VIX')
+async function fetchVix(force: boolean): Promise<VixSnapshot> {
+  const series = await fetchMacroSeries('^VIX', force)
   const closes = series.values
   const level = closes[closes.length - 1]
   return {
@@ -152,8 +152,8 @@ async function fetchVix(): Promise<VixSnapshot> {
   }
 }
 
-async function fetchMomentum(): Promise<SpyMomentumPayload> {
-  const series = await fetchCloses('SPY', yearsAgo(2))
+async function fetchMomentum(force: boolean): Promise<SpyMomentumPayload> {
+  const series = await fetchCloses('SPY', yearsAgo(2), force)
   const ma125 = rollingMean(series.values, 125)
   return {
     dates: series.dates,
@@ -166,12 +166,12 @@ async function fetchMomentum(): Promise<SpyMomentumPayload> {
 
 async function fetchAll(force: boolean): Promise<PreMarketPayload> {
   const [futures, dxy, tnx, vix, fearGreed, momentum] = await Promise.all([
-    fetchFutures().catch(() => [] as FuturesRow[]),
-    fetchDxy().catch(() => null),
-    fetchTnx().catch(() => null),
-    fetchVix().catch(() => null),
+    fetchFutures(force).catch(() => [] as FuturesRow[]),
+    fetchDxy(force).catch(() => null),
+    fetchTnx(force).catch(() => null),
+    fetchVix(force).catch(() => null),
     getFearGreed(force).catch(() => null),
-    fetchMomentum().catch(() => null),
+    fetchMomentum(force).catch(() => null),
   ])
 
   const missing: string[] = []

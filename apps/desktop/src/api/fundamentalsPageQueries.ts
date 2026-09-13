@@ -4,6 +4,7 @@ import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-q
 import type { Envelope, FundamentalsPagePayload } from '@shared/contract'
 import { api, queryKeys } from './client'
 import { forcing } from './queries'
+import { queryFreshness } from './queryPersistence'
 
 export function useFundamentalsPage(
   symbol: string,
@@ -13,7 +14,7 @@ export function useFundamentalsPage(
     queryKey: queryKeys.fundamentalsPage(symbol),
     queryFn: () => api.fundamentalsPage({ symbol, force: forcing() }),
     enabled: Boolean(symbol),
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.fundamentalsPage(symbol)),
     placeholderData:
       snapshot?.symbol === symbol
         ? {

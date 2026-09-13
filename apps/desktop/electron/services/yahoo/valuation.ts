@@ -26,6 +26,7 @@ import { cache, TTL } from '../cache.js'
 import { fetchRiskFreeSnapshot } from '../riskFree.js'
 import { paced, yahoo } from './client.js'
 import { getFundamentalsPage } from './fundamentalsPage.js'
+import { getYahooSeries } from './series.js'
 
 /**
  * The Valuation page's data load, ported from `workers/valuation.py`
@@ -461,12 +462,12 @@ async function buildPeerRows(
  * The five-year monthly close series behind the price-vs-fair-value band and the
  * historical P/E curve. The reference asks `history(period='5y', interval='1mo')`.
  */
-async function fetchPriceHistory(symbol: string): Promise<Array<{ date: string; close: number }>> {
+async function fetchPriceHistory(symbol: string, force: boolean): Promise<Array<{ date: string; close: number }>> {
   const period1 = new Date(Date.now() - 5 * 365 * 24 * 60 * 60_000)
-  const result = await paced(() => yahoo.chart(symbol, { period1, interval: '1mo' }))
-  return (result.quotes ?? [])
+  const result = await getYahooSeries({ symbol, start: period1, interval: '1mo', force })
+  return result.rows
     .map((row) => ({
-      date: row.date instanceof Date ? row.date.toISOString().slice(0, 10) : String(row.date ?? ''),
+      date: new Date(row.time * 1000).toISOString().slice(0, 10),
       close: finiteOrNull(row.close),
     }))
     .filter((point): point is { date: string; close: number } => Boolean(point.date) && point.close !== null)
@@ -646,7 +647,7 @@ async function fetchUncached(
 
   const [statementsResult, historyResult, marketResult] = await Promise.allSettled([
     getFundamentalsPage(symbol, force),
-    fetchPriceHistory(symbol),
+    fetchPriceHistory(symbol, force),
     fetchRiskFreeSnapshot(force),
   ])
 

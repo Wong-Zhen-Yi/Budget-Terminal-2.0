@@ -25,6 +25,7 @@ import { cache } from '../cache.js'
 import { paced, yahoo } from './client.js'
 import { searchNews } from './newsPage.js'
 import { equityRollScreen, type ScreenerQuote } from './screener.js'
+import { getYahooSeries } from './series.js'
 
 /**
  * The Roll page's data access, ported from `workers/random_recommender.py` (page18).
@@ -360,10 +361,16 @@ async function fetchHistory(symbol: string, force: boolean): Promise<RollBar[]> 
     `roll:history:${symbol}`,
     HISTORY_TTL,
     async () => {
-      const chart = await paced(() =>
-        yahoo.chart(symbol, { period1: new Date(Date.now() - 370 * DAY), interval: '1d' }),
-      )
-      const bars = normalizeBars((chart as { quotes: ChartQuoteLike[] }).quotes)
+      const chart = await getYahooSeries({
+        symbol,
+        start: new Date(Date.now() - 370 * DAY),
+        interval: '1d',
+        force,
+      })
+      const bars = normalizeBars(chart.rows.map((row) => ({
+        ...row,
+        date: new Date(row.time * 1000),
+      })) as ChartQuoteLike[])
       if (!bars.length) throw new Error(`No daily history returned for ${symbol}`)
       return bars
     },

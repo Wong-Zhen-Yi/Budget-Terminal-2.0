@@ -2,13 +2,14 @@ import { useCallback } from 'react'
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { SP500_PARTS, type Sp500BreadthRequest } from '@shared/sp500'
 import { api } from './client'
+import { queryFreshness } from './queryPersistence'
 import { forcing } from './queries'
 
 export function useSp500() {
   const client = useQueryClient()
   const queries = useQueries({ queries: SP500_PARTS.map((part) => ({
     queryKey: ['sp500', part], queryFn: () => api.sp500({ part, force: forcing() }),
-    staleTime: part === 'market' ? 60_000 : part === 'constituents' || part === 'valuation' ? 86400_000 : 21600_000,
+    staleTime: queryFreshness(['sp500', part]),
     refetchOnWindowFocus: false,
   })) })
   const breadth = useQuery({ queryKey: ['sp500Breadth'], queryFn: () => api.sp500Breadth({ action: 'status' }),

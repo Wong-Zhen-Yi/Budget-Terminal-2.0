@@ -11,11 +11,17 @@ export function parseFredCsv(text: string): EconomicPoint[] {
   return [...points.entries()].sort(([a], [b]) => a.localeCompare(b))
 }
 
-export async function fetchSeriesCsv(seriesId: string, timeoutMs = 15_000): Promise<EconomicPoint[]> {
+export async function fetchSeriesCsv(
+  seriesId: string,
+  timeoutMs = 15_000,
+  startDate?: string,
+): Promise<EconomicPoint[]> {
   const identifier = seriesId.trim().toUpperCase()
   if (!identifier) return []
   if (!/^[A-Z0-9_]+$/.test(identifier)) throw new Error('Invalid FRED series identifier')
-  const response = await fetch(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=${identifier}`, {
+  const query = new URLSearchParams({ id: identifier })
+  if (startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)) query.set('cosd', startDate)
+  const response = await fetch(`https://fred.stlouisfed.org/graph/fredgraph.csv?${query.toString()}`, {
     signal: AbortSignal.timeout(timeoutMs),
     headers: { 'User-Agent': 'BudgetTerminalElectron/0.1 (personal finance research tool)', Accept: 'text/csv' },
   })

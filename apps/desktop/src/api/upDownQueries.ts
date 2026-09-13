@@ -4,6 +4,7 @@ import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-q
 import type { Envelope, UpDownPayload, UpDownRequest } from '@shared/contract'
 import { api, queryKeys } from './client'
 import { forcing } from './queries'
+import { queryFreshness } from './queryPersistence'
 
 function keyOf(request: Omit<UpDownRequest, 'force'>) {
   return queryKeys.upDown(request.source, request.interval, request.symbols ?? [])
@@ -15,7 +16,7 @@ export function useUpDown(
   return useQuery({
     queryKey: keyOf(request),
     queryFn: () => api.upDown({ ...request, force: forcing() }),
-    staleTime: Infinity,
+    staleTime: queryFreshness(keyOf(request)),
     refetchInterval: false,
     placeholderData: (previous) => previous,
   })

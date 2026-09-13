@@ -1,0 +1,51 @@
+/**
+ * One source of truth for renderer staleness and main-process provider caching.
+ * A stale value remains usable as an offline/error fallback while it is refreshed.
+ */
+export const FRESHNESS = {
+  quotes: 30_000,
+  chartIntraday: 60_000,
+  chartDaily: 5 * 60_000,
+  options: 5 * 60_000,
+  targets: 30 * 60_000,
+  news: 10 * 60_000,
+  profile: 12 * 60 * 60_000,
+  fx: 5 * 60_000,
+  forexNews: 5 * 60_000,
+  preMarket: 15 * 60_000,
+  fearGreed: 5 * 60_000,
+  tradingVolumes: 15 * 60_000,
+  newsPage: 15 * 60_000,
+  newsFeed: 15 * 60_000,
+  newsPreview: 30 * 60_000,
+  newsImage: 6 * 60 * 60_000,
+  crypto: 60_000,
+  bmnr: 5 * 60_000,
+  goldMarket: 60_000,
+  goldWgc: 24 * 60 * 60_000,
+  goldMining: 7 * 24 * 60 * 60_000,
+  oilMarket: 60_000,
+  oilCurve: 15 * 60_000,
+  oilEia: 6 * 60 * 60_000,
+  oilOpec: 6 * 60 * 60_000,
+  calendar: 6 * 60 * 60_000,
+  economic: 6 * 60 * 60_000,
+  institutions: 4 * 60 * 60_000,
+  ipo: 24 * 60 * 60_000,
+  politics: 4 * 60 * 60_000,
+  etfAum: 6 * 60 * 60_000,
+  etfHoldings: 6 * 60 * 60_000,
+  etfArbitrage: 2 * 60_000,
+  youtube: 6 * 60 * 60_000,
+  heatmap: 2 * 60_000,
+  upDown: 15 * 60_000,
+  marketCap: 5 * 60_000,
+  sp500Market: 60_000,
+  sp500Reference: 24 * 60 * 60_000,
+  sp500History: 6 * 60 * 60_000,
+} as const
+
+export const RENDERER_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60_000
+export const RENDERER_CACHE_MAX_BYTES = 64 * 1024 * 1024
+export const SERVICE_CACHE_MAX_BYTES = 512 * 1024 * 1024
+export const CACHE_SCHEMA_VERSION = 2

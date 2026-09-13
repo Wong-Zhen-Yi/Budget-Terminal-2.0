@@ -8,6 +8,7 @@ import type {
   EtfHoldingsPayload,
 } from '@shared/contract'
 import { api, queryKeys } from './client'
+import { queryFreshness } from './queryPersistence'
 import { forcing } from './queries'
 
 /**
@@ -20,12 +21,6 @@ import { forcing } from './queries'
  * as Heatmap, Options, Crypto and Roll.
  */
 
-/** An issuer file changes once a day; the main process holds the same six hours. */
-const HOLDINGS_STALE_MS = 6 * 60 * 60 * 1000
-/** `_QUOTE_CACHE_TTL_SECONDS`: quotes go stale in two minutes, holdings do not. */
-const ARBITRAGE_STALE_MS = 120_000
-const AUM_STALE_MS = 6 * 60 * 60 * 1000
-
 /**
  * `_p13_load_etf`, plus `_p13_restore_startup_session`'s background refresh: the page
  * opens on the persisted ticker and re-requests it, so a restored workspace is never
@@ -37,7 +32,7 @@ export function useEtfHoldings(ticker: string): UseQueryResult<Envelope<EtfHoldi
     queryKey: queryKeys.etfHoldings(symbol),
     queryFn: () => api.etfHoldings({ ticker: symbol, force: forcing() }),
     enabled: Boolean(symbol),
-    staleTime: HOLDINGS_STALE_MS,
+    staleTime: queryFreshness(queryKeys.etfHoldings(ticker)),
     refetchInterval: false,
     placeholderData: (previous) => previous,
   })
@@ -57,7 +52,7 @@ export function useEtfArbitrage(
     queryKey: queryKeys.etfArbitrage(symbol),
     queryFn: () => api.etfArbitrage({ ticker: symbol, force: forcing() }),
     enabled: enabled && Boolean(symbol),
-    staleTime: ARBITRAGE_STALE_MS,
+    staleTime: queryFreshness(queryKeys.etfArbitrage(ticker)),
     refetchInterval: false,
     placeholderData: (previous) => previous,
   })
@@ -68,7 +63,7 @@ export function useEtfAum(): UseQueryResult<Envelope<EtfAumPayload>> {
   return useQuery({
     queryKey: queryKeys.etfAum,
     queryFn: () => api.etfAum({ force: forcing() }),
-    staleTime: AUM_STALE_MS,
+    staleTime: queryFreshness(queryKeys.etfAum),
     refetchInterval: false,
     placeholderData: (previous) => previous,
   })

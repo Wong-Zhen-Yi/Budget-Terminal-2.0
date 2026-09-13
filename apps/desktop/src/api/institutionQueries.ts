@@ -14,9 +14,8 @@ import type {
   InstitutionTickerActivityRequest,
 } from '@shared/contract'
 import { api, queryKeys } from './client'
+import { queryFreshness } from './queryPersistence'
 import { forcing } from './queries'
-
-const ACTIVITY_STALE_MS = 4 * 60 * 60 * 1000
 
 export function useInstitutionActivity(
   quarter: string,
@@ -25,7 +24,7 @@ export function useInstitutionActivity(
   return useQuery({
     queryKey: queryKeys.institutionActivity(normalized),
     queryFn: () => api.institutionActivity({ quarter: normalized, limit: 50, force: forcing() }),
-    staleTime: ACTIVITY_STALE_MS,
+    staleTime: queryFreshness(queryKeys.institutionActivity(quarter)),
     refetchInterval: false,
     placeholderData: (previous) => previous,
   })

@@ -4,6 +4,7 @@ import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-q
 import type { Envelope, TradingVolumesPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
 import { forcing } from './queries'
+import { queryFreshness } from './queryPersistence'
 
 /**
  * The whole page in one call: a twelve-page screen plus one hundred daily charts.
@@ -19,7 +20,7 @@ export function useTradingVolumes(): UseQueryResult<Envelope<TradingVolumesPaylo
     queryKey: queryKeys.tradingVolumes,
     queryFn: () => api.tradingVolumes({ force: forcing() }),
     refetchInterval: false,
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.tradingVolumes),
   })
 }
 

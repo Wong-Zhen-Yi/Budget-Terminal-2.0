@@ -15,6 +15,7 @@ import type {
 } from '@shared/contract'
 import { api, queryKeys } from './client'
 import { QUOTE_REFRESH_MS } from './refreshRates'
+import { queryFreshness } from './queryPersistence'
 
 /**
  * Invalidating a query re-runs its fetcher, but the main process answers that from its
@@ -68,7 +69,7 @@ export function useChart(
     queryKey: queryKeys.chart(symbol, timeframe),
     queryFn: () => api.chart({ symbol, timeframe, force: forcing() }),
     enabled: Boolean(symbol),
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.chart(symbol, timeframe)),
   })
 }
 
@@ -77,7 +78,7 @@ export function useOptions(symbol: string): UseQueryResult<Envelope<OptionsPaylo
     queryKey: queryKeys.options(symbol),
     queryFn: () => api.options({ symbol, force: forcing() }),
     enabled: Boolean(symbol),
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.options(symbol)),
   })
 }
 
@@ -86,7 +87,7 @@ export function useTargets(tickers: string[]): UseQueryResult<Envelope<TargetsPa
     queryKey: queryKeys.targets(tickers),
     queryFn: () => api.targets({ tickers, force: forcing() }),
     enabled: tickers.length > 0,
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.targets(tickers)),
   })
 }
 
@@ -95,7 +96,7 @@ export function useNews(tickers: string[]): UseQueryResult<Envelope<NewsPayload>
     queryKey: queryKeys.news(tickers),
     queryFn: () => api.news({ tickers, force: forcing() }),
     enabled: tickers.length > 0,
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.news(tickers)),
   })
 }
 
@@ -108,7 +109,7 @@ export function useFundamentals(tickers: string[]): UseQueryResult<Envelope<Fund
     queryKey: queryKeys.fundamentals(tickers),
     queryFn: () => api.fundamentals({ tickers, force: forcing() }),
     enabled: tickers.length > 0,
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.fundamentals(tickers)),
   })
 }
 

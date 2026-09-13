@@ -4,8 +4,9 @@ import { FOREX_PAIRS, FOREX_DAYS, FOREX_MARKET_MS, FOREX_NEWS_MS, forexPair, sel
 import { describeError, failed, ok } from '../shared/envelope.js'
 import { cache } from './cache.js'
 import { getQuote } from './yahoo/quotes.js'
-import { paced, periodStart, yahoo } from './yahoo/client.js'
+import { periodStart } from './yahoo/client.js'
 import { fetchHeadlineFeed } from './yahoo/newsPage.js'
+import { getYahooSeries } from './yahoo/series.js'
 
 const SOURCE = 'Yahoo Finance'
 
@@ -45,9 +46,14 @@ export async function getForexHistory(request: ForexHistoryRequest): Promise<Env
   return forexLane(`forex:history:${request.pair}:${request.range}`, FOREX_MARKET_MS, Boolean(request.force), empty, async () => {
     const pair = forexPair(request.pair)
     if (!Object.hasOwn(FOREX_DAYS, request.range)) throw new Error('Unsupported forex range.')
-    const result = await paced(() => yahoo.chart(pair.symbol, { period1: periodStart(FOREX_DAYS[request.range]), interval: request.range === '1W' ? '1h' : '1d' }))
-    const points = [...new Map(result.quotes.flatMap((row) => {
-      const time = row.date.getTime()
+    const result = await getYahooSeries({
+      symbol: pair.symbol,
+      start: periodStart(FOREX_DAYS[request.range]),
+      interval: request.range === '1W' ? '1h' : '1d',
+      force: Boolean(request.force),
+    })
+    const points = [...new Map(result.rows.flatMap((row) => {
+      const time = row.time * 1000
       return Number.isFinite(time) && typeof row.close === 'number' && Number.isFinite(row.close) && row.close > 0
         ? [[time, { time, value: row.close }] as const] : []
     })).values()].sort((a, b) => a.time - b.time)

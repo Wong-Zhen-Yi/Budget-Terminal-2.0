@@ -9,6 +9,7 @@ import type {
 } from '@shared/contract'
 import { api, queryKeys } from './client'
 import { forcing } from './queries'
+import { queryFreshness } from './queryPersistence'
 
 export function useYouTube(tickers: string[]): UseQueryResult<Envelope<YouTubePayload>> {
   return useQuery({
@@ -16,7 +17,7 @@ export function useYouTube(tickers: string[]): UseQueryResult<Envelope<YouTubePa
     queryFn: () => api.youtube({ tickers, force: forcing() }),
     enabled: tickers.length > 0,
     refetchInterval: false,
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.youtube(tickers)),
     retry: false,
   })
 }

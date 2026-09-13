@@ -3,6 +3,7 @@ import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-q
 
 import type { Envelope, IpoCompletedPayload, IpoUpcomingPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
+import { queryFreshness } from './queryPersistence'
 import { forcing } from './queries'
 
 /**
@@ -17,15 +18,12 @@ import { forcing } from './queries'
  * rows, which is the same isolation the two envelopes already carry.
  */
 
-/** `IPO_CALENDAR_CACHE_TTL_SECONDS`, matching the main process's own disk TTL. */
-const IPO_STALE_MS = 24 * 60 * 60 * 1000
-
 /** `_p21_restore_cached_ipo_calendar`, then `_p21_refresh_upcoming_ipo_calendar`. */
 export function useUpcomingIpos(): UseQueryResult<Envelope<IpoUpcomingPayload>> {
   return useQuery({
     queryKey: queryKeys.ipoUpcoming,
     queryFn: () => api.ipoUpcoming({ force: forcing() }),
-    staleTime: IPO_STALE_MS,
+    staleTime: queryFreshness(queryKeys.ipoUpcoming),
     refetchInterval: false,
     placeholderData: (previous) => previous,
   })
@@ -36,7 +34,7 @@ export function useCompletedIpos(year: number): UseQueryResult<Envelope<IpoCompl
   return useQuery({
     queryKey: queryKeys.ipoCompleted(year),
     queryFn: () => api.ipoCompleted({ year, force: forcing() }),
-    staleTime: IPO_STALE_MS,
+    staleTime: queryFreshness(queryKeys.ipoCompleted(year)),
     refetchInterval: false,
     placeholderData: (previous) => previous,
   })

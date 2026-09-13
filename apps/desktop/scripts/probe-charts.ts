@@ -224,8 +224,9 @@ async function runOffline(): Promise<void> {
 
   const chartClient = yahoo as unknown as { chart: (symbol: string) => Promise<unknown> }
   const originalChart = yahoo.chart.bind(yahoo) as unknown as (symbol: string) => Promise<unknown>
+  const fixtureStart = Math.floor((Date.now() - 240 * 86_400_000) / 1000)
   const fixtureQuotes = Array.from({ length: 240 }, (_, index) => ({
-    date: new Date((1_700_000_000 + index * 86_400) * 1000),
+    date: new Date((fixtureStart + index * 86_400) * 1000),
     open: 100 + index,
     high: 102 + index,
     low: 99 + index,

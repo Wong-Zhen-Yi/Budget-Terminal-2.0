@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ForexPair, ForexRange } from '@shared/forex'
 import { FOREX_MARKET_MS, FOREX_NEWS_MS } from '@shared/forex'
 import { api, queryKeys } from './client'
+import { queryFreshness } from './queryPersistence'
 import { forcing } from './queries'
 
 export function useForex(pair: ForexPair, range: ForexRange) {
@@ -13,9 +14,9 @@ export function useForex(pair: ForexPair, range: ForexRange) {
     return () => document.removeEventListener('visibilitychange', update)
   }, [])
   const common = { enabled: visible, refetchIntervalInBackground: false, retry: false } as const
-  const quotes = useQuery({ ...common, queryKey: queryKeys.forexQuotes, queryFn: () => api.forexQuotes({ force: forcing() }), staleTime: FOREX_MARKET_MS, refetchInterval: visible ? FOREX_MARKET_MS : false })
-  const history = useQuery({ ...common, queryKey: queryKeys.forexHistory(pair, range), queryFn: () => api.forexHistory({ pair, range, force: forcing() }), staleTime: FOREX_MARKET_MS, refetchInterval: visible ? FOREX_MARKET_MS : false })
-  const news = useQuery({ ...common, queryKey: queryKeys.forexNews(pair), queryFn: () => api.forexNews({ pair, force: forcing() }), staleTime: FOREX_NEWS_MS, refetchInterval: visible ? FOREX_NEWS_MS : false })
+  const quotes = useQuery({ ...common, queryKey: queryKeys.forexQuotes, queryFn: () => api.forexQuotes({ force: forcing() }), staleTime: queryFreshness(queryKeys.forexQuotes), refetchInterval: visible ? FOREX_MARKET_MS : false })
+  const history = useQuery({ ...common, queryKey: queryKeys.forexHistory(pair, range), queryFn: () => api.forexHistory({ pair, range, force: forcing() }), staleTime: queryFreshness(queryKeys.forexHistory(pair, range)), refetchInterval: visible ? FOREX_MARKET_MS : false })
+  const news = useQuery({ ...common, queryKey: queryKeys.forexNews(pair), queryFn: () => api.forexNews({ pair, force: forcing() }), staleTime: queryFreshness(queryKeys.forexNews(pair)), refetchInterval: visible ? FOREX_NEWS_MS : false })
   const client = useQueryClient()
   const refresh = async () => {
     // Fetch through QueryClient so an older in-flight request cannot overwrite Refresh.

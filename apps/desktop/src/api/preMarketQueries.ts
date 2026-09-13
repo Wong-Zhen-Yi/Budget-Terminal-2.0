@@ -3,6 +3,7 @@ import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-q
 
 import type { Envelope, PreMarketPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
+import { queryFreshness } from './queryPersistence'
 import { forcing } from './queries'
 import { PRE_MARKET_REFRESH_MS as REFRESH_MS } from './refreshRates'
 
@@ -20,7 +21,7 @@ export function usePreMarket(): UseQueryResult<Envelope<PreMarketPayload>> {
     queryFn: () => api.preMarket({ force: forcing() }),
     refetchInterval: REFRESH_MS,
     refetchIntervalInBackground: false,
-    staleTime: REFRESH_MS / 2,
+    staleTime: queryFreshness(queryKeys.preMarket),
   })
 }
 

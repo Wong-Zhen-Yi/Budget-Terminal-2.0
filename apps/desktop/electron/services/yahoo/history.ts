@@ -1,6 +1,5 @@
 import type { HeatmapInterval, MetricsLookback, ReturnTimeframe } from '../../shared/contract.js'
-import { cache, TTL } from '../cache.js'
-import { paced, yahoo } from './client.js'
+import { getYahooSeries, type YahooSeriesRow } from './series.js'
 
 /**
  * Daily close history, shared by Dip Finder, the Heatmap, Momentum Tracker and
@@ -78,18 +77,15 @@ export function windowStart(window: ReturnTimeframe | HeatmapInterval | MetricsL
  * unions above (the Pre-Market page wants a flat two years) get the same adjusted-close
  * preference and repeated-trailing-date collapse instead of writing their own.
  */
-export async function fetchCloses(symbol: string, start: Date): Promise<CloseSeries> {
-  const result = await paced(() =>
-    yahoo.chart(symbol, { period1: start, interval: '1d' }),
-  )
+function closeSeries(rows: YahooSeriesRow[]): CloseSeries {
   const dates: string[] = []
   const values: number[] = []
   let previousDate = ''
-  for (const row of result.quotes) {
+  for (const row of rows) {
     // Prefer the adjusted close so splits and dividends do not show up as returns.
     const close = typeof row.adjclose === 'number' ? row.adjclose : row.close
     if (typeof close !== 'number' || !Number.isFinite(close)) continue
-    const date = row.date.toISOString().slice(0, 10)
+    const date = new Date(row.time * 1000).toISOString().slice(0, 10)
     if (date === previousDate) {
       // Yahoo repeats the last session as a live row; keep the newer value.
       values[values.length - 1] = close
@@ -99,8 +95,14 @@ export async function fetchCloses(symbol: string, start: Date): Promise<CloseSer
     dates.push(date)
     values.push(close)
   }
-  if (dates.length < 2) throw new Error(`No history returned for ${symbol}.`)
   return { dates, values }
+}
+
+export async function fetchCloses(symbol: string, start: Date, force = false): Promise<CloseSeries> {
+  const result = await getYahooSeries({ symbol, start, interval: '1d', force })
+  const series = closeSeries(result.rows)
+  if (series.dates.length < 2) throw new Error(`No history returned for ${symbol}.`)
+  return series
 }
 
 export async function getCloses(
@@ -109,11 +111,10 @@ export async function getCloses(
   force = false,
 ): Promise<CloseSeries> {
   const start = windowStart(window)
-  const key = `closes:${symbol}:${start.toISOString().slice(0, 10)}`
-  const result = await cache.resolve(key, TTL.chartDaily, () => fetchCloses(symbol, start), {
-    force,
-  })
-  return result.value
+  const result = await getYahooSeries({ symbol, start, interval: '1d', force })
+  const series = closeSeries(result.rows)
+  if (series.dates.length < 2) throw new Error(`No history returned for ${symbol}.`)
+  return series
 }
 
 export interface CloseBatch {
@@ -166,20 +167,19 @@ export interface CloseVolumeSeries {
   adjustedCloses?: number[]
 }
 
-export async function fetchCloseVolume(symbol: string, start: Date): Promise<CloseVolumeSeries> {
-  const result = await paced(() => yahoo.chart(symbol, { period1: start, interval: '1d' }))
+function closeVolumeSeries(rows: YahooSeriesRow[]): CloseVolumeSeries {
   const dates: string[] = []
   const closes: number[] = []
   const volumes: number[] = []
   const adjustedCloses: number[] = []
   let previousDate = ''
 
-  for (const row of result.quotes) {
+  for (const row of rows) {
     const close = row.close
     const volume = row.volume
     if (typeof close !== 'number' || !Number.isFinite(close) || close <= 0) continue
     if (typeof volume !== 'number' || !Number.isFinite(volume)) continue
-    const date = row.date.toISOString().slice(0, 10)
+    const date = new Date(row.time * 1000).toISOString().slice(0, 10)
     if (date === previousDate) {
       // Yahoo repeats the last session as a live row; keep the newer value.
       closes[closes.length - 1] = close
@@ -194,8 +194,14 @@ export async function fetchCloseVolume(symbol: string, start: Date): Promise<Clo
     adjustedCloses.push(row.adjclose ?? NaN)
   }
 
-  if (!dates.length) throw new Error(`No history returned for ${symbol}.`)
   return { dates, closes, volumes, adjustedCloses }
+}
+
+export async function fetchCloseVolume(symbol: string, start: Date, force = false): Promise<CloseVolumeSeries> {
+  const result = await getYahooSeries({ symbol, start, interval: '1d', force })
+  const series = closeVolumeSeries(result.rows)
+  if (!series.dates.length) throw new Error(`No history returned for ${symbol}.`)
+  return series
 }
 
 export interface CloseVolumeBatch {
@@ -215,18 +221,13 @@ export async function getCloseVolumeBatch(
   force = false,
 ): Promise<CloseVolumeBatch> {
   const unique = [...new Set(symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean))]
-  const stamp = start.toISOString().slice(0, 10)
   const settled = await Promise.allSettled(
-    unique.map((symbol) =>
-      cache
-        .resolve(
-          `close-volume:v2:${symbol}:${stamp}`,
-          TTL.chartDaily,
-          () => fetchCloseVolume(symbol, start),
-          { force },
-        )
-        .then((result) => result.value),
-    ),
+    unique.map(async (symbol) => {
+      const result = await getYahooSeries({ symbol, start, interval: '1d', force })
+      const series = closeVolumeSeries(result.rows)
+      if (!series.dates.length) throw new Error(`No history returned for ${symbol}.`)
+      return series
+    }),
   )
 
   const series: Record<string, CloseVolumeSeries> = {}

@@ -7,6 +7,7 @@ import { getEtfHoldings } from './etf/holdings.js'
 import { textOf } from './etf/html.js'
 import { loadConstituents, CONSTITUENTS_URL } from './sp500Constituents.js'
 import { paced, yahoo } from './yahoo/client.js'
+import { getYahooSeries } from './yahoo/series.js'
 
 export const SPY_URL = 'https://www.ssga.com/us/en/individual/etfs/state-street-spdr-sp-500-etf-trust-spy'
 const HOURS6 = 6 * 60 * 60_000
@@ -30,12 +31,20 @@ export function completedPoints(rows: { date: Date; close?: number | null; adjcl
 }
 export function loadSp500History(symbol: string, force = false, breadth = false) {
   return cache.resolveWithStaleFallback(`sp500:history:${symbol}:${breadth ? 'breadth' : 'dashboard'}`, HOURS6, async () => {
-    const result = await paced(() => yahoo.chart(symbol, {
-      period1: new Date(Date.now() - (breadth ? 550 : 2300) * 86400_000), interval: '1d',
-    }))
-    const trading = result.meta as unknown as { currentTradingPeriod?: { regular?: { end?: number | Date } } }
-    const end = trading.currentTradingPeriod?.regular?.end
-    const points = completedPoints(result.quotes, symbol !== '^GSPC', new Date(), end instanceof Date ? end.getTime() / 1000 : end)
+    const result = await getYahooSeries({
+      symbol,
+      start: new Date(Date.now() - (breadth ? 550 : 2300) * 86400_000),
+      interval: '1d',
+      force,
+      variant: symbol === '^GSPC' ? 'ohlcv' : 'adjusted',
+    })
+    const trading = result.meta as { currentTradingPeriod?: { regular?: { end?: number | Date } } } | undefined
+    const end = trading?.currentTradingPeriod?.regular?.end
+    const points = completedPoints(result.rows.map((row) => ({
+      date: new Date(row.time * 1000),
+      close: row.close,
+      adjclose: row.adjclose,
+    })), symbol !== '^GSPC', new Date(), end instanceof Date ? end.getTime() / 1000 : end)
     if (points.length < 2) throw new Error(`No completed ${symbol} history.`)
     return points
   }, { force })

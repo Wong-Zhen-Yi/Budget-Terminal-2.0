@@ -7,9 +7,9 @@ import type {
   TimeframeSpec,
 } from '../../shared/contract.js'
 import { TIMEFRAMES } from '../../shared/contract.js'
-import { cache, TTL } from '../cache.js'
 import { alignBackward, rsi, sma, toPoints } from '../indicators.js'
-import { paced, periodStart, yahoo } from './client.js'
+import { periodStart } from './client.js'
+import { getYahooSeries } from './series.js'
 
 export function timeframeSpec(label: TimeframeLabel): TimeframeSpec {
   return TIMEFRAMES.find((entry) => entry.label === label) ?? TIMEFRAMES[4]
@@ -33,18 +33,18 @@ const MAX_LOOKBACK_DAYS: Record<string, number> = {
   '1h': 729,
 }
 
-async function fetchCandles(symbol: string, spec: TimeframeSpec): Promise<RawChart> {
+async function fetchCandles(symbol: string, spec: TimeframeSpec, force = false): Promise<RawChart> {
   const lookbackDays = Math.min(spec.lookbackDays, MAX_LOOKBACK_DAYS[spec.interval] ?? Infinity)
-  const result = await paced(() =>
-    yahoo.chart(symbol, {
-      period1: periodStart(lookbackDays),
-      interval: spec.interval,
-    }),
-  )
+  const result = await getYahooSeries({
+    symbol,
+    start: periodStart(lookbackDays),
+    interval: spec.interval,
+    force,
+  })
 
   const candles: Candle[] = []
   let previousTime = -Infinity
-  for (const row of result.quotes) {
+  for (const row of result.rows) {
     const { open, high, low, close } = row
     if (
       typeof open !== 'number' ||
@@ -55,7 +55,7 @@ async function fetchCandles(symbol: string, spec: TimeframeSpec): Promise<RawCha
     ) {
       continue
     }
-    const time = Math.floor(row.date.getTime() / 1000)
+    const time = row.time
     // lightweight-charts rejects a series that is not strictly ascending, and Yahoo
     // occasionally repeats the final bar of a session.
     if (time <= previousTime) continue
@@ -75,8 +75,8 @@ async function fetchCandles(symbol: string, spec: TimeframeSpec): Promise<RawCha
   if (!spec.intraday) dropPartialTrailingBar(candles, spec.interval)
   return {
     candles,
-    currency: result.meta?.currency ?? 'USD',
-    longName: result.meta?.longName ?? result.meta?.shortName ?? symbol,
+    currency: result.currency,
+    longName: result.longName,
   }
 }
 
@@ -129,17 +129,9 @@ function periodBucket(timeSeconds: number, interval: string): string {
  * same symbol shares it.
  */
 async function fetchDailyMa200(symbol: string, force: boolean): Promise<IndicatorPoint[]> {
-  const result = await cache.resolve(
-    `ma200:${symbol}`,
-    TTL.chartDaily,
-    async () => {
-      const daily = await fetchCandles(symbol, timeframeSpec('1 Day'))
-      const closes = daily.candles.map((candle) => candle.close)
-      return toPoints(daily.candles, sma(closes, 200))
-    },
-    { force },
-  )
-  return result.value
+  const daily = await fetchCandles(symbol, timeframeSpec('1 Day'), force)
+  const closes = daily.candles.map((candle) => candle.close)
+  return toPoints(daily.candles, sma(closes, 200))
 }
 
 function buildStats(symbol: string, raw: RawChart): ChartStats {
@@ -168,15 +160,7 @@ export async function getChart(
   force = false,
 ): Promise<ChartPayload> {
   const spec = timeframeSpec(timeframe)
-  const ttl = spec.intraday ? TTL.chartIntraday : TTL.chartDaily
-  const raw = (
-    await cache.resolve(
-      `chart:${symbol}:${spec.interval}:${spec.lookbackDays}`,
-      ttl,
-      () => fetchCandles(symbol, spec),
-      { force },
-    )
-  ).value
+  const raw = await fetchCandles(symbol, spec, force)
 
   const closes = raw.candles.map((candle) => candle.close)
   const rsiSeries = rsi(closes, 14)

@@ -14,6 +14,7 @@ import type {
 } from '@shared/contract'
 import { api, queryKeys } from './client'
 import { computeExposure } from '@shared/analytics'
+import { queryFreshness } from './queryPersistence'
 
 /**
  * The Portfolio page's analytics queries.
@@ -40,7 +41,7 @@ export function useReturns(
     queryKey: queryKeys.returns(tickers, window),
     queryFn: () => api.returns({ tickers, window }),
     enabled: enabled && tickers.length > 0,
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.returns(tickers, window)),
   })
 }
 
@@ -54,7 +55,7 @@ export function useMomentum(
     queryKey: queryKeys.momentum(positionsSignature(positions, cashAmount), timeframe),
     queryFn: () => api.momentum({ positions, cashAmount, timeframe }),
     enabled: enabled && (positions.length > 0 || cashAmount > 0),
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.momentum(positionsSignature(positions, cashAmount), timeframe)),
   })
 }
 
@@ -87,7 +88,7 @@ export function useAnalytics(
       },
     }),
     enabled: enabled && (positions.length > 0 || cashAmount > 0),
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.analytics(positionsSignature(positions, cashAmount), benchmarkSymbol, lookback)),
   })
 }
 
@@ -102,6 +103,6 @@ export function useOptionQuotes(
     queryKey: queryKeys.optionQuotes(signature),
     queryFn: () => api.optionQuotes({ positions }),
     enabled: enabled && positions.length > 0,
-    staleTime: 60_000,
+    staleTime: queryFreshness(queryKeys.optionQuotes(signature)),
   })
 }

@@ -11,6 +11,7 @@ import type {
 } from '@shared/contract'
 import { api, queryKeys } from './client'
 import { forcing } from './queries'
+import { queryFreshness } from './queryPersistence'
 
 export function useChartsHistory(
   request: ChartsHistoryRequest,
@@ -20,7 +21,7 @@ export function useChartsHistory(
     queryKey: queryKeys.chartsHistory(request.symbol, request.interval, request.range),
     queryFn: () => api.chartsHistory({ ...request, force: forcing() }),
     enabled: Boolean(request.symbol),
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.chartsHistory(request.symbol, request.interval, request.range)),
     refetchInterval: pollSeconds ? pollSeconds * 1000 : false,
     refetchIntervalInBackground: false,
   })
@@ -33,7 +34,7 @@ export function useChartsCompare(
     queryKey: queryKeys.chartsCompare(request.symbols, request.interval, request.range),
     queryFn: () => api.chartsCompare({ ...request, force: forcing() }),
     enabled: request.symbols.length > 0,
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.chartsCompare(request.symbols, request.interval, request.range)),
   })
 }
 
@@ -45,6 +46,6 @@ export function useChartsRelationship(
     queryKey: queryKeys.chartsRelationship(request.symbols, request.range, request.rollingWindow),
     queryFn: () => api.chartsRelationship({ ...request, force: forcing() }),
     enabled,
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.chartsRelationship(request.symbols, request.range, request.rollingWindow)),
   })
 }

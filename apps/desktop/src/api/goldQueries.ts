@@ -3,6 +3,7 @@ import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-q
 
 import type { Envelope, GoldPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
+import { queryFreshness } from './queryPersistence'
 import { forcing } from './queries'
 
 /** Physical lanes are long-cached in main; this minute tick refreshes only market proxies. */
@@ -10,7 +11,7 @@ export function useGold(): UseQueryResult<Envelope<GoldPayload>> {
   return useQuery({
     queryKey: queryKeys.gold,
     queryFn: () => api.gold({ force: forcing() }),
-    staleTime: 60_000,
+    staleTime: queryFreshness(queryKeys.gold),
     refetchInterval: 60_000,
     placeholderData: (previous) => previous,
   })

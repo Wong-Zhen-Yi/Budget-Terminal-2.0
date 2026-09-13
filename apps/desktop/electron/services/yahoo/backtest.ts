@@ -5,8 +5,7 @@ import type {
   BacktestRequest,
 } from '../../shared/contract.js'
 import { calculateBuyHoldBacktest, normalizeBacktestRows } from '../../shared/backtest.js'
-import { cache, TTL } from '../cache.js'
-import { paced, yahoo } from './client.js'
+import { getYahooSeries, type YahooSeriesRow } from './series.js'
 
 export const BACKTEST_SOURCE = 'Yahoo Finance adjusted history'
 
@@ -28,17 +27,22 @@ export async function fetchBacktestSeries(
 ): Promise<BacktestPriceSeries> {
   const symbol = symbolInput.trim().toUpperCase()
   if (!symbol) return { dates: [], values: [] }
-  const result = await paced(() =>
-    yahoo.chart(symbol, {
-      period1: new Date(Date.UTC(1970, 0, 1)),
-      interval: yahooInterval(interval),
-    }),
-  )
+  const result = await getYahooSeries({
+    symbol,
+    start: new Date(Date.UTC(1970, 0, 1)),
+    interval: yahooInterval(interval),
+    force: true,
+    variant: 'adjusted',
+  })
+  return backtestSeries(symbol, result.rows)
+}
+
+function backtestSeries(symbol: string, rows: YahooSeriesRow[]): BacktestPriceSeries {
   const byDate = new Map<string, number>()
-  for (const row of result.quotes) {
+  for (const row of rows) {
     const close = typeof row.adjclose === 'number' ? row.adjclose : row.close
     if (typeof close !== 'number' || !Number.isFinite(close) || close <= 0) continue
-    byDate.set(row.date.toISOString().slice(0, 10), close)
+    byDate.set(new Date(row.time * 1000).toISOString().slice(0, 10), close)
   }
   const dates = [...byDate.keys()].sort()
   if (dates.length < 2) throw new Error(`No history returned for ${symbol}.`)
@@ -50,12 +54,19 @@ async function cachedSeries(
   interval: BacktestInterval,
   force: boolean,
 ) {
-  return cache.resolveWithStaleFallback(
-    `backtest:${symbol}:${interval}`,
-    TTL.chartDaily,
-    () => fetchBacktestSeries(symbol, interval),
-    { force },
-  )
+  const result = await getYahooSeries({
+    symbol,
+    start: new Date(Date.UTC(1970, 0, 1)),
+    interval: yahooInterval(interval),
+    force,
+    variant: 'adjusted',
+  })
+  return {
+    value: backtestSeries(symbol, result.rows),
+    stale: result.stale,
+    fromCache: result.fromCache,
+    ageSeconds: result.cacheAgeSeconds,
+  }
 }
 
 export async function getBacktest(request: BacktestRequest): Promise<BacktestServiceResult> {

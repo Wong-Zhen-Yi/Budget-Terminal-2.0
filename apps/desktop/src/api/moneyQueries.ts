@@ -4,6 +4,7 @@ import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-q
 import type { Envelope, MoneyPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
 import { forcing } from './queries'
+import { queryFreshness } from './queryPersistence'
 
 /** Seven FRED series, refreshed on demand; the service owns freshness and stale fallback. */
 export function useMoney(enabled: boolean): UseQueryResult<Envelope<MoneyPayload>> {
@@ -11,7 +12,7 @@ export function useMoney(enabled: boolean): UseQueryResult<Envelope<MoneyPayload
     queryKey: queryKeys.money,
     queryFn: () => api.money({ force: forcing() }),
     enabled,
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.money),
     refetchInterval: false,
     placeholderData: (previous) => previous,
   })

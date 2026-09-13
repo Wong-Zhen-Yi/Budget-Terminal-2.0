@@ -3,10 +3,8 @@ import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-q
 
 import type { Envelope, HeatmapEtfKey, HeatmapPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
+import { queryFreshness } from './queryPersistence'
 import { forcing } from './queries'
-
-/** `_P17_REFRESH_TTL_SECONDS`: the reference throttles a repeat load to two minutes. */
-const HEATMAP_STALE_MS = 120_000
 
 /**
  * One query per index, so the three buttons hold three independent payloads the way
@@ -25,7 +23,7 @@ export function useHeatmap(etf: HeatmapEtfKey): UseQueryResult<Envelope<HeatmapP
   return useQuery({
     queryKey: queryKeys.heatmap(etf),
     queryFn: () => api.heatmap({ etf, force: forcing() }),
-    staleTime: HEATMAP_STALE_MS,
+    staleTime: queryFreshness(queryKeys.heatmap(etf)),
     refetchInterval: false,
     placeholderData: (previous) => previous,
   })

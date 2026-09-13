@@ -10,6 +10,7 @@ import type {
 } from '@shared/contract'
 import { api, queryKeys } from './client'
 import { forcing } from './queries'
+import { queryFreshness } from './queryPersistence'
 
 export function useCalendarMonth(
   request: Omit<CalendarMonthRequest, 'force'>,
@@ -19,7 +20,7 @@ export function useCalendarMonth(
     queryKey: queryKeys.calendarMonth(request.tickers, request.year, request.month),
     queryFn: () => api.calendarMonth({ ...request, force: forcing() }),
     enabled,
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.calendarMonth(request.tickers, request.year, request.month)),
     refetchInterval: false,
     placeholderData: (previous) => previous,
   })
@@ -46,7 +47,7 @@ export function useEarningsCalendar(
     queryKey: queryKeys.earningsCalendar(request.rangeKey),
     queryFn: () => api.earningsCalendar({ ...request, force: forcing() }),
     enabled,
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.earningsCalendar(request.rangeKey)),
     refetchInterval: false,
     placeholderData: (previous) => previous,
   })

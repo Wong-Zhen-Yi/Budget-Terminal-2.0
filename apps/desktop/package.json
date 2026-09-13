@@ -15,6 +15,7 @@
     "probe:loading": "tsx scripts/probe-loading.ts",
     "probe:navigation": "tsx scripts/probe-navigation.ts",
     "probe:store": "tsx scripts/probe-store.ts",
+    "probe:cache": "tsx scripts/probe-cache.ts",
     "probe:analytics": "tsx scripts/probe-analytics.ts",
     "probe:finance": "tsx scripts/probe-finance.ts",
     "probe:settings": "tsx scripts/probe-settings.ts",
@@ -71,6 +72,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.102.8",
+    "@tanstack/react-query-persist-client": "^5.102.8",
     "lightweight-charts": "^5.2.1",
     "pdfjs-dist": "^6.3.289",
     "react": "^19.2.8",

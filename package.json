@@ -41,6 +41,7 @@
     "probe:institutions": "npm run --workspace budget-terminal-desktop probe:institutions --",
     "probe:rate": "npm run --workspace budget-terminal-desktop probe:rate --",
     "probe:store": "npm run --workspace budget-terminal-desktop probe:store --",
+    "probe:cache": "npm run --workspace budget-terminal-desktop probe:cache --",
     "probe:analytics": "npm run --workspace budget-terminal-desktop probe:analytics --",
     "probe:finance": "npm run --workspace budget-terminal-desktop probe:finance --",
     "probe:settings": "npm run --workspace budget-terminal-desktop probe:settings --",

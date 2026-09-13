@@ -9,7 +9,11 @@ import { fetchSeriesCsv } from './fred.js'
 const FRESH_MS = 6 * 60 * 60_000
 const STALE_MS = 7 * 24 * 60 * 60_000
 const cachePath = () => join(process.env.APPDATA ?? join(process.env.USERPROFILE ?? '', 'AppData', 'Roaming'), 'BudgetTerminalElectron', 'money-cache', 'payload.json')
-type Download = (id: string) => Promise<EconomicPoint[]>
+type Download = (id: string, startDate?: string) => Promise<EconomicPoint[]>
+
+function mergeHistory(existing: EconomicPoint[], incoming: EconomicPoint[]): EconomicPoint[] {
+  return [...new Map([...existing, ...incoming]).entries()].sort(([left], [right]) => left.localeCompare(right))
+}
 
 async function readCache(): Promise<MoneySeries[]> {
   try {
@@ -25,7 +29,11 @@ export async function clearMoneyCache(): Promise<void> {
 }
 
 /** Injectable clock and download keep persistence/failure probes isolated and deterministic. */
-export async function loadMoney(request: MoneyRequest = {}, download: Download = fetchSeriesCsv, now = Date.now()): Promise<Envelope<MoneyPayload>> {
+export async function loadMoney(
+  request: MoneyRequest = {},
+  download: Download = (id, startDate) => fetchSeriesCsv(id, 15_000, startDate),
+  now = Date.now(),
+): Promise<Envelope<MoneyPayload>> {
   const cached = await readCache()
   const rows = await Promise.all(MONEY_SERIES.map(async (definition): Promise<MoneySeries> => {
     const prior = cached.find((row) => row.seriesId === definition.seriesId && row.history.length && row.fetchedAt !== null && row.fetchedAt <= now && now - row.fetchedAt <= STALE_MS)
@@ -33,7 +41,13 @@ export async function loadMoney(request: MoneyRequest = {}, download: Download =
       return { ...prior, ...definition, status: 'cached', error: null }
     }
     try {
-      const history = moneyWindow(normalizeMoney(await download(definition.seriesId), definition.sourceUnits), 11)
+      // Re-fetch three observations so revised releases replace their cached values.
+      const overlapDate = !request.force && prior?.history.length
+        ? prior.history[Math.max(0, prior.history.length - 3)][0]
+        : undefined
+      const downloaded = await download(definition.seriesId, overlapDate)
+      const normalized = normalizeMoney(downloaded, definition.sourceUnits)
+      const history = moneyWindow(mergeHistory(prior?.history ?? [], normalized), 11)
       if (!history.length) throw new Error('No observations returned')
       return { ...definition, history, fetchedAt: now, status: 'fresh', error: null }
     } catch (error) {

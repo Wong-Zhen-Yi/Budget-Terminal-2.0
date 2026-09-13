@@ -11,6 +11,7 @@ import type {
 } from '@shared/contract'
 import { api, queryKeys } from './client'
 import { forcing } from './queries'
+import { queryFreshness } from './queryPersistence'
 
 /**
  * The News page's queries.
@@ -28,7 +29,7 @@ export function useNewsPage(tickers: string[]): UseQueryResult<Envelope<NewsPage
     queryFn: () => api.newsPage({ tickers, force: forcing() }),
     enabled: tickers.length > 0,
     refetchInterval: false,
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.newsPage(tickers)),
   })
 }
 
@@ -60,7 +61,7 @@ export function useNewsTickerSearch(
     queryFn: () => api.newsTickerSearch({ tickers }),
     enabled: tickers.length > 0,
     refetchInterval: false,
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.newsTickerSearch(tickers)),
   })
 }
 

@@ -4,6 +4,7 @@ import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-q
 import type { BmnrPayload, Envelope } from '@shared/contract'
 import { api, queryKeys } from './client'
 import { forcing } from './queries'
+import { queryFreshness } from './queryPersistence'
 
 /**
  * The BMNR page's single query.
@@ -16,7 +17,7 @@ export function useBmnr(): UseQueryResult<Envelope<BmnrPayload>> {
   return useQuery({
     queryKey: queryKeys.bmnr,
     queryFn: () => api.bmnr({ force: forcing() }),
-    staleTime: Infinity,
+    staleTime: queryFreshness(queryKeys.bmnr),
     refetchInterval: false,
     placeholderData: (previous) => previous,
   })

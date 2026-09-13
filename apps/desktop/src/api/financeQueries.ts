@@ -8,6 +8,7 @@ import type {
   PersonalFinancePayload,
 } from '@shared/contract'
 import { api, queryKeys } from './client'
+import { queryFreshness } from './queryPersistence'
 import { FX_REFRESH_MS } from './refreshRates'
 
 export function usePersonalFinance(): UseQueryResult<Envelope<PersonalFinancePayload>> {
@@ -54,6 +55,6 @@ export function useFxRate(): UseQueryResult<Envelope<FxPayload>> {
     queryFn: () => api.fx({}),
     refetchInterval: FX_REFRESH_MS,
     refetchIntervalInBackground: false,
-    staleTime: FX_REFRESH_MS / 2,
+    staleTime: queryFreshness(queryKeys.fx),
   })
 }
