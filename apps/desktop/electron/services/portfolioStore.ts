@@ -7,7 +7,6 @@ import { randomUUID } from 'node:crypto'
 
 import type {
   FinanceCategory,
-  FinanceEntry,
   Holding,
   OptionPosition,
   PersonalFinanceMutation,
@@ -38,9 +37,9 @@ function todayIso(now = new Date()): string {
 /**
  * The holdings store, owned by this app.
  *
- * It is seeded once from the PySide6 app's `user_data.json` and then never reads it
- * again — from that point the two applications keep separate books. Writes are atomic
- * (temp file plus rename) so a crash mid-write cannot leave a truncated document.
+ * New stores start empty. Existing user data is read only from this app's store;
+ * restoring a backup requires an explicit import. Writes are atomic (temp file plus
+ * rename) so a crash mid-write cannot leave a truncated document.
  */
 
 /* -------------------------------------------------------------- the document */
@@ -206,188 +205,6 @@ export function storePath(): string {
   return join(appData, 'BudgetTerminalElectron', 'portfolio.json')
 }
 
-/** The PySide6 store, read exactly once to seed ours. */
-export function legacyStorePath(): string {
-  const localAppData =
-    process.env.LOCALAPPDATA ?? join(process.env.USERPROFILE ?? '', 'AppData', 'Local')
-  return join(localAppData, 'BudgetTerminal', 'user_data.json')
-}
-
-/* ------------------------------------------------------------------ seeding */
-
-const legacyHoldingSchema = z
-  .object({
-    shares: z.coerce.number().finite().catch(0),
-    avg_price: z.coerce.number().finite().catch(0),
-    include_in_weight: z.boolean().catch(true),
-  })
-  .partial()
-
-const legacyPortfolioSchema = z
-  .object({
-    name: z.string().optional(),
-    portfolio: z.array(z.string()).catch([]),
-    portfolio_tracker: z.record(z.string(), legacyHoldingSchema).catch({}),
-    cash_balance: z.coerce.number().finite().catch(0),
-    margin_debt: z.coerce.number().finite().catch(0),
-    include_cash_in_weight: z.boolean().catch(true),
-  })
-  .partial()
-
-const legacyEntrySchema = z
-  .object({
-    desc: z.string().catch(''),
-    description: z.string().optional(),
-    amount: z.coerce.number().finite().catch(0),
-  })
-  .partial()
-
-const legacyBillSchema = z
-  .object({
-    desc: z.string().catch('Recurring Bill'),
-    description: z.string().optional(),
-    amount: z.coerce.number().finite().catch(0),
-    frequency: z.string().catch('monthly'),
-    currency: z.string().catch('SGD'),
-  })
-  .partial()
-
-const legacyNetWorthSchema = z
-  .object({
-    cash: z.array(legacyEntrySchema).catch([]),
-    debt: z.array(legacyEntrySchema).catch([]),
-    recurring_bills: z.array(legacyBillSchema).catch([]),
-    totals_currency: z.string().catch('SGD'),
-    goal: z
-      .object({
-        title: z.string().catch('Net Worth Goal'),
-        target_amount: z.coerce.number().finite().catch(0),
-        currency: z.string().catch('SGD'),
-      })
-      .partial()
-      .optional(),
-  })
-  .partial()
-
-const legacyDocumentSchema = z
-  .object({
-    active_portfolio_id: z.string().optional(),
-    main_portfolio_id: z.string().optional(),
-    portfolio_order: z.array(z.string()).optional(),
-    portfolios: z.record(z.string(), legacyPortfolioSchema).optional(),
-    net_worth: legacyNetWorthSchema.optional(),
-  })
-  .partial()
-
-function legacyCurrency(value: string | undefined, fallback: 'SGD' | 'USD'): 'SGD' | 'USD' {
-  const text = String(value ?? '').trim().toUpperCase()
-  return text === 'SGD' || text === 'USD' ? text : fallback
-}
-
-/**
- * Map the PySide6 `net_worth` block onto ours.
- *
- * Read once, like the rest of the seeding: from then on the two apps keep separate
- * books. Rows gain an id here because the reference addresses them by table index.
- */
-function financeFromLegacy(source: z.infer<typeof legacyNetWorthSchema> | undefined): StoredFinance {
-  const finance = emptyFinance()
-  if (!source) return finance
-
-  const mapEntries = (rows: z.infer<typeof legacyEntrySchema>[] | undefined): FinanceEntry[] =>
-    (rows ?? []).map((row) => ({
-      id: randomUUID(),
-      desc: String(row.desc || row.description || '').trim(),
-      amount: row.amount ?? 0,
-    }))
-
-  finance.cash = mapEntries(source.cash)
-  finance.debt = mapEntries(source.debt)
-  finance.recurringBills = (source.recurring_bills ?? []).map((row) => {
-    const frequency = String(row.frequency ?? 'monthly').trim().toLowerCase()
-    return {
-      id: randomUUID(),
-      desc: String(row.desc || row.description || '').trim(),
-      amount: row.amount ?? 0,
-      frequency: frequency === 'yearly' ? ('yearly' as const) : ('monthly' as const),
-      currency: legacyCurrency(row.currency, 'SGD'),
-    }
-  })
-  finance.totalsCurrency = legacyCurrency(source.totals_currency, 'SGD')
-  finance.goal = {
-    title: String(source.goal?.title ?? '').trim() || 'Net Worth Goal',
-    targetAmount: source.goal?.target_amount ?? 0,
-    // The reference defaults the goal currency to the totals currency.
-    currency: legacyCurrency(source.goal?.currency, finance.totalsCurrency),
-  }
-  return finance
-}
-
-/** Read just the `net_worth` block, for a v1 document that predates this section. */
-async function seedFinanceFromLegacy(): Promise<StoredFinance> {
-  try {
-    const raw = await readFile(legacyStorePath(), 'utf8')
-    const result = legacyDocumentSchema.safeParse(JSON.parse(raw))
-    if (!result.success) return emptyFinance()
-    return financeFromLegacy(result.data.net_worth)
-  } catch {
-    return emptyFinance()
-  }
-}
-
-async function seedFromLegacy(): Promise<StoredDocument> {
-  const document = emptyDocument()
-  let parsed: z.infer<typeof legacyDocumentSchema>
-  try {
-    const raw = await readFile(legacyStorePath(), 'utf8')
-    const result = legacyDocumentSchema.safeParse(JSON.parse(raw))
-    if (!result.success) return withDefaultPortfolio(document)
-    parsed = result.data
-  } catch {
-    // No PySide6 install, or an unreadable file: start clean rather than fail.
-    return withDefaultPortfolio(document)
-  }
-
-  document.personalFinance = financeFromLegacy(parsed.net_worth)
-
-  const entries = parsed.portfolios ?? {}
-  const order = parsed.portfolio_order?.length ? parsed.portfolio_order : Object.keys(entries)
-  order.forEach((id, index) => {
-    const entry = entries[id]
-    if (!entry) return
-    const tickers = [
-      ...new Set((entry.portfolio ?? []).map((t) => t.trim().toUpperCase()).filter(Boolean)),
-    ]
-    const holdings: Record<string, Holding> = {}
-    for (const [rawTicker, source] of Object.entries(entry.portfolio_tracker ?? {})) {
-      const ticker = rawTicker.trim().toUpperCase()
-      if (!ticker) continue
-      holdings[ticker] = {
-        ticker,
-        shares: source.shares ?? 0,
-        avgPrice: source.avg_price ?? 0,
-        includeInWeight: source.include_in_weight ?? true,
-      }
-    }
-    document.portfolios[id] = {
-      id,
-      name: entry.name?.trim() || `Portfolio ${index + 1}`,
-      tickers,
-      holdings,
-      cashBalance: entry.cash_balance ?? 0,
-      marginDebt: entry.margin_debt ?? 0,
-      includeCashInWeight: entry.include_cash_in_weight ?? true,
-      options: [],
-    }
-    document.order.push(id)
-  })
-
-  if (!document.order.length) return withDefaultPortfolio(document)
-  document.mainId = pickExisting(document, parsed.main_portfolio_id) ?? document.order[0]
-  document.activeId = pickExisting(document, parsed.active_portfolio_id) ?? document.mainId
-  return document
-}
-
 function pickExisting(document: StoredDocument, id: string | undefined): string | null {
   return id && document.portfolios[id] ? id : null
 }
@@ -478,16 +295,14 @@ async function readDocument(): Promise<StoredDocument> {
     if (!parsed.success) {
       return withDefaultPortfolio(emptyDocument())
     }
-    // A document written before the Personal Finance page existed has no section of its
-    // own. Seeding only happens when this file is missing entirely, so without this the
-    // page would open empty for everyone who already ran the app.
+    // Older app documents gain an empty finance section, never data from another app.
     const backfill = !parsed.data.personalFinance
-    if (backfill) parsed.data.personalFinance = await seedFinanceFromLegacy()
+    if (backfill) parsed.data.personalFinance = emptyFinance()
     document = normalize(parsed.data)
     needsPersist = backfill
   } catch (error) {
     if (!isAbsentOrDamaged(error)) throw error
-    document = await seedFromLegacy()
+    document = withDefaultPortfolio(emptyDocument())
     needsPersist = true
   }
   // Keep write errors outside the read-recovery catch: ENOENT during a save does

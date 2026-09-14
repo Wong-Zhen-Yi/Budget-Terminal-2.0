@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -105,9 +105,18 @@ function pureChecks(): void {
 async function persistenceChecks(): Promise<void> {
   const folder = await mkdtemp(join(tmpdir(), 'budget-terminal-cards-'))
   const target = join(folder, 'strategies.json')
-  const missingLegacy = join(folder, 'missing-legacy.json')
+  const originalAppData = process.env.APPDATA
+  const originalLocalAppData = process.env.LOCALAPPDATA
+  process.env.APPDATA = folder
+  process.env.LOCALAPPDATA = folder
   try {
-    let state = await readCards(target, missingLegacy)
+    await mkdir(join(folder, 'BudgetTerminal'))
+    await writeFile(join(folder, 'BudgetTerminal', 'strategies.json'), JSON.stringify({
+      ...defaultCardsPayload(target),
+      customCards: [{ id: 'custom:legacy', name: 'Legacy fixture', symbols: ['TEST'], weighting: 'equal' }],
+    }))
+    let state = await readCards(target)
+    assert(!state.customCards.some((card) => card.id === 'custom:legacy'), 'old app cards must not be imported')
     assert(state.customCards.length === 3, 'a new Cards store should seed starter cards')
     state = await mutateCards({
       type: 'add',
@@ -115,23 +124,27 @@ async function persistenceChecks(): Promise<void> {
       symbols: ['NVDA', 'AVGO'],
       weighting: 'custom',
       weights: { NVDA: 70, AVGO: 30 },
-    }, target, missingLegacy)
+    }, target)
     const added = state.customCards.find((card) => card.name === 'AI Basket')
     assert(added?.weights.NVDA === 70, 'custom cards should persist normalized weights')
-    state = await mutateCards({ type: 'setInterval', id: added.id, interval: '30d' }, target, missingLegacy)
+    state = await mutateCards({ type: 'setInterval', id: added.id, interval: '30d' }, target)
     assert(state.intervals[added.id] === '30d', 'per-card intervals should persist')
     state = await mutateCards({
       type: 'setPortfolioVisible', portfolioId: 'portfolio_2', visible: false,
-    }, target, missingLegacy)
+    }, target)
     assert(state.hiddenPortfolioIds.includes('portfolio_2'), 'portfolio visibility should persist')
     state = await mutateCards({
       type: 'reorder', order: [added.id, BUILTIN_INDEX_CARD_ID],
-    }, target, missingLegacy)
+    }, target)
     assert(state.cardOrder[0] === added.id, 'card reorder should persist')
     state = await clearCards(target)
     assert(state.customCards.length === 0, 'clear should remove custom cards')
     assert(state.cardOrder.length === 1 && state.cardOrder[0] === BUILTIN_INDEX_CARD_ID, 'clear should retain Index')
   } finally {
+    if (originalAppData === undefined) delete process.env.APPDATA
+    else process.env.APPDATA = originalAppData
+    if (originalLocalAppData === undefined) delete process.env.LOCALAPPDATA
+    else process.env.LOCALAPPDATA = originalLocalAppData
     await rm(folder, { recursive: true, force: true })
   }
 }

@@ -1,5 +1,5 @@
 /**
- * Exercise the portfolio store end to end: seeding from the PySide6 file, then every
+ * Exercise the portfolio store end to end: clean initialization, then every
  * mutation the Portfolio page can make.
  *
  *   npm run probe:store
@@ -18,7 +18,7 @@ process.env.APPDATA = scratch
 process.env.LOCALAPPDATA = scratch
 
 const {
-  legacyStorePath, mutatePortfolios, readPortfolios, storePath,
+  mutatePortfolios, readPortfolios, storePath,
   readPersonalFinance, mutatePersonalFinance, importUserData, exportUserData,
   clearUserData, resetStoreCache,
 } = await import(
@@ -26,6 +26,19 @@ const {
 )
 
 async function regressionChecks(): Promise<void> {
+  const oldFolder = join(scratch, 'BudgetTerminal')
+  await mkdir(oldFolder, { recursive: true })
+  const oldData = JSON.stringify({
+    portfolio_order: ['old'],
+    portfolios: { old: { name: 'Legacy fixture', portfolio: ['TEST'], portfolio_tracker: { TEST: { shares: 99, avg_price: 10 } } } },
+    net_worth: { cash: [{ desc: 'Legacy cash', amount: 999 }] },
+  })
+  await writeFile(join(oldFolder, 'user_data.json'), oldData)
+  const initial = await readPortfolios()
+  assert.equal(initial.portfolios.length, 1)
+  assert.deepEqual(initial.portfolios[0].tickers, [])
+  assert.deepEqual((await readPersonalFinance()).cash, [])
+  assert.equal(await readFile(join(oldFolder, 'user_data.json'), 'utf8'), oldData)
   // First-run reads and a queued edit must share initialization.
   await Promise.all([
     ...Array.from({ length: 16 }, (_, index) => index % 2 ? readPersonalFinance() : readPortfolios()),
@@ -87,6 +100,7 @@ async function regressionChecks(): Promise<void> {
   await rmdir(blocked)
   await Promise.all(Array.from({ length: 16 }, () => readPortfolios()))
   assert.equal(JSON.parse(await readFile(storePath(), 'utf8')).version, 2)
+  assert.deepEqual((await readPersonalFinance()).cash, [])
   assert.equal((await readPortfolios()).portfolios[0].cashBalance, 1234)
   await clearUserData()
   console.log('Store regressions passed: import validation, save failures, concurrent initialization/backfill and retry.')
@@ -123,10 +137,9 @@ async function expectRejected(label: string, run: () => Promise<unknown>): Promi
 
 async function main(): Promise<void> {
   await regressionChecks()
-  console.log(`seed source : ${legacyStorePath()}`)
   console.log(`store path  : ${storePath()}`)
 
-  show('seeded from the PySide6 store', await readPortfolios())
+  show('initialized from the app store', await readPortfolios())
 
   const first = (await readPortfolios()).portfolios[0]
   const id = first.id

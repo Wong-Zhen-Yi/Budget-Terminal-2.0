@@ -1,4 +1,5 @@
 import type { DesktopApi, MarketCapTier } from '@shared/contract'
+import { createBrowserApi } from './browser'
 
 declare global {
   interface Window {
@@ -7,10 +8,12 @@ declare global {
 }
 
 /**
- * The preload bridge. Everything the renderer can do to the outside world goes
- * through here — there is no `fetch` to Yahoo from page code.
+ * Use the Electron preload when available, otherwise the local HTTP bridge.
+ * Provider requests stay in the backend in both environments.
  */
-export const api: DesktopApi = window.api
+export const isDesktop = !import.meta.env.BROWSER_MODE && Boolean(window.api)
+export const api: DesktopApi = window.api ?? createBrowserApi()
+if (!isDesktop) window.api = api
 
 export const queryKeys = {
   marketCap: (tier: MarketCapTier) => ['marketCap', tier] as const,

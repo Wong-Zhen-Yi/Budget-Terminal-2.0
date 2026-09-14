@@ -8,8 +8,8 @@
  * brokerage silo all track live quotes, so compare against a simultaneous reading of
  * the reference rather than against yesterday's numbers.
  *
- * The mutation half redirects APPDATA to a scratch directory first, so it reads your
- * real user_data.json (seeding only ever reads it) but never touches your real store.
+ * The mutation half redirects APPDATA and LOCALAPPDATA to a scratch directory.
+ * It never reads or writes the legacy app data.
  */
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -179,10 +179,12 @@ async function report(): Promise<void> {
 /** The write half, against a scratch store so the real one is never touched. */
 async function exerciseWrites(): Promise<void> {
   const scratch = mkdtempSync(join(tmpdir(), 'bt-finance-'))
+  const realLocalAppData = process.env.LOCALAPPDATA
   const realAppData = process.env.APPDATA
   process.env.APPDATA = scratch
+  process.env.LOCALAPPDATA = scratch
 
-  const { mutatePersonalFinance, readPersonalFinance, legacyStorePath, resetStoreCache, storePath } =
+  const { mutatePersonalFinance, readPersonalFinance, resetStoreCache, storePath } =
     await import('../electron/services/portfolioStore.js')
   // The report above already read the real store into the module cache; drop it so the
   // scratch directory genuinely exercises the seeding path.
@@ -206,12 +208,11 @@ async function exerciseWrites(): Promise<void> {
 
   try {
     console.log(`\n\n=== writes against a scratch store ===`)
-    console.log(`seed source : ${legacyStorePath()}`)
     console.log(`store path  : ${storePath()}`)
 
     const seeded = await readPersonalFinance()
     console.log(
-      `\n-- seeded from the PySide6 store: ${seeded.cash.length} cash, ${seeded.debt.length} debt, ` +
+      `\n-- initialized from the app store: ${seeded.cash.length} cash, ${seeded.debt.length} debt, ` +
         `${seeded.recurringBills.length} bill(s), totals=${seeded.totalsCurrency}, ` +
         `goal="${seeded.goal.title}" ${seeded.goal.targetAmount} ${seeded.goal.currency}`,
     )
@@ -295,6 +296,8 @@ async function exerciseWrites(): Promise<void> {
   } finally {
     if (realAppData === undefined) delete process.env.APPDATA
     else process.env.APPDATA = realAppData
+    if (realLocalAppData === undefined) delete process.env.LOCALAPPDATA
+    else process.env.LOCALAPPDATA = realLocalAppData
     resetStoreCache()
     rmSync(scratch, { recursive: true, force: true })
   }

@@ -5,3 +5,13 @@ out/
 *.log
 .DS_Store
 apps/desktop/AppData/
+
+# Personal runtime data and exported backups must never enter the repository.
+**/BudgetTerminalElectron/
+**/BudgetTerminal/
+**/portfolio.json
+**/user_data.json
+**/strategies.json
+**/budget-terminal-backup-*.json
+output/playwright/
+output/mockups/

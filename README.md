@@ -10,6 +10,45 @@ Unported pages remain visible as placeholders in the top bar.
 
 ## Running it
 
+On Windows, double-click **Budget Terminal Windows Browser.cmd** to start the
+local server and open your default browser. **Budget Terminal Windows Electron.cmd**
+starts the Electron app. On macOS, the separate browser launcher is
+**Launch Budget Terminal Macos Browser.command**. Keep the launcher's terminal open
+while using browser mode; press Ctrl+C to stop it.
+
+To use the app in a browser, run from the repository root:
+
+```bash
+npm install
+npm run dev:web
+```
+
+Open **http://127.0.0.1:3000** and keep the terminal running. Set `PORT` to use a
+different port. The browser version uses a local Node server for market-data requests,
+the shared Yahoo rate gate, caching, and saved data. It is a single-user local app;
+it binds only to the loopback interface and is not a public hosted service.
+
+For the built browser version:
+
+```bash
+npm run build:web
+npm run start:web
+```
+
+On Windows, browser and desktop mode share the existing app data under `APPDATA`
+and `LOCALAPPDATA`. Avoid editing the same data in both modes simultaneously.
+On other platforms, defaults live under `~/.budget-terminal/data` and
+`~/.budget-terminal/cache`; those environment variables can override the locations.
+Exports download through the browser, backup imports use a file picker, and copy
+buttons use the browser clipboard permission. Native window controls appear only in
+Electron. The generated `out/web` files need the Node server and cannot be used as
+a standalone static site.
+
+Run `npm run build:web` followed by `npm run probe:web` for the offline HTTP and
+backup checks. The probe uses temporary data directories.
+
+To run the Electron desktop version:
+
 ```bash
 npm run dev
 ```
@@ -22,7 +61,7 @@ after an install, npm skipped Electron's postinstall — run `node node_modules/
 | Panel | Data |
 |---|---|
 | Macro bar | SPY, DXY (`DX-Y.NYB`), VIX (`^VIX`), GLD, WTI (`CL=F`) |
-| Holdings | Read-only, from the PySide6 app's own store; weight and unrealised gain per row |
+| Holdings | Read-only, from this app's saved portfolio; weight and unrealised gain per row |
 | Analyst price targets | `quoteSummary.financialData.targetMeanPrice`; ETFs show `N/A` |
 | Live news feed | Yahoo search, filtered to articles that list the ticker, max 2 per holding |
 | Chart | Candles, volume and RSI in three panes, plus the 200-day MA |
@@ -63,8 +102,8 @@ equal- or custom-weight baskets, and one live basket per saved portfolio. Every 
 own unavailable/partial state. Cards can be reordered by drag, portfolio cards can be
 hidden and restored, and custom cards can be created, edited or removed.
 
-The page owns `%APPDATA%\BudgetTerminalElectron\strategies.json`, seeded once from the
-PySide6 Cards file when available. Card definitions, order, visibility and intervals are
+The page owns `%APPDATA%\BudgetTerminalElectron\strategies.json`, initialized with
+built-in starter cards. Old app files are never imported automatically. Card definitions, order, visibility and intervals are
 persisted; market data stays in the runtime cache. Backups, imports and Clear All User
 Data include Cards together with holdings and personal finance.
 
@@ -207,10 +246,12 @@ Refresh Arbitrage, Refresh AUM and F5 are the only things that fetch.
 
 ### Where holdings live
 
-This app owns its own store at `%APPDATA%\BudgetTerminalElectron\portfolio.json`. On
-first run it is seeded once from the PySide6 app's `user_data.json`, and after that the
-two applications keep separate books — editing here does not change the PySide6 app, and
-vice versa. Writes are atomic (temp file plus rename) and queue behind each other, so a
+This app owns its own store at `%APPDATA%\BudgetTerminalElectron\portfolio.json`.
+New stores start with one empty portfolio and empty personal-finance entries. Old
+PySide6 data is never imported automatically, including when upgrading older stores.
+Existing saved portfolios remain in AppData until explicitly changed or cleared.
+Use Settings to import a Budget Terminal backup intentionally. Personal runtime files
+and backups are excluded from Git. Writes are atomic (temp file plus rename) and queue behind each other, so a
 burst of cell edits cannot interleave and lose one.
 
 ## Architecture
@@ -313,9 +354,9 @@ pair through the shared Yahoo rate gate.
 npm run probe:store
 ```
 
-Seeds a scratch store from your PySide6 file and exercises every mutation plus every guard
+Initializes an empty scratch store, checks that legacy data is ignored, and exercises every mutation plus every guard
 (duplicate ticker, unknown portfolio, the five-portfolio cap, deleting the last one). It
-redirects `APPDATA` first, so your real store is never touched.
+redirects `APPDATA` and `LOCALAPPDATA` first, so your real store is never touched.
 
 ```bash
 npm run probe:analytics

@@ -17,12 +17,6 @@ export function cardsPath(): string {
   return join(appData, 'BudgetTerminalElectron', 'strategies.json')
 }
 
-export function legacyCardsPath(): string {
-  const localAppData =
-    process.env.LOCALAPPDATA ?? join(process.env.USERPROFILE ?? '', 'AppData', 'Local')
-  return join(localAppData, 'BudgetTerminal', 'strategies.json')
-}
-
 function storedDocument(payload: CardsPayload): Omit<CardsPayload, 'sourcePath'> {
   const { sourcePath: _sourcePath, ...document } = payload
   return document
@@ -44,7 +38,6 @@ function isMissing(error: unknown): boolean {
 
 export async function readCards(
   targetPath = cardsPath(),
-  legacyPath = legacyCardsPath(),
 ): Promise<CardsPayload> {
   try {
     return normalizeCardsPayload(JSON.parse(await readFile(targetPath, 'utf8')), targetPath)
@@ -59,14 +52,9 @@ export async function readCards(
     }
   }
 
-  let seeded = defaultCardsPayload(targetPath)
-  try {
-    seeded = normalizeCardsPayload(JSON.parse(await readFile(legacyPath, 'utf8')), targetPath)
-  } catch {
-    // A missing or damaged legacy document must not prevent the Electron page opening.
-  }
-  await persistCards(seeded, targetPath)
-  return seeded
+  const defaults = defaultCardsPayload(targetPath)
+  await persistCards(defaults, targetPath)
+  return defaults
 }
 
 let writeChain = Promise.resolve()
@@ -139,13 +127,12 @@ function applyMutation(state: CardsPayload, mutation: CardsMutation): void {
 export async function mutateCards(
   mutation: CardsMutation,
   targetPath = cardsPath(),
-  legacyPath = legacyCardsPath(),
 ): Promise<CardsPayload> {
   let result: CardsPayload | null = null
   let failure: unknown = null
   const run = writeChain.then(async () => {
     try {
-      const state = await readCards(targetPath, legacyPath)
+      const state = await readCards(targetPath)
       applyMutation(state, mutation)
       result = normalizeCardsPayload(state, targetPath)
       await persistCards(result, targetPath)
@@ -156,7 +143,7 @@ export async function mutateCards(
   writeChain = run
   await run
   if (failure) throw failure
-  return result ?? readCards(targetPath, legacyPath)
+  return result ?? readCards(targetPath)
 }
 
 /**
