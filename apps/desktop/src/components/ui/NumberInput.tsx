@@ -67,6 +67,11 @@ export function NumberInput({
         value={editing ? draft : display}
         inputMode="decimal"
         spellCheck={false}
+        // Keep selection drags in this editor, even when the pointer crosses another cell.
+        onPointerDown={(event) => {
+          if (event.button === 0) event.currentTarget.setPointerCapture(event.pointerId)
+        }}
+        onDragStart={(event) => event.preventDefault()}
         onFocus={(event) => {
           setEditing(true)
           setDraft(display)
