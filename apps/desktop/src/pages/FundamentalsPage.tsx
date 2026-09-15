@@ -66,8 +66,8 @@ export function FundamentalsPage({
   const primaryQuery = useFundamentalsPage(symbol, snapshot)
   const compareQuery = useFundamentalsPage(compareSymbol, null)
   const refresh = useRefreshFundamentalsPage()
-  const primaryPayload = primaryQuery.data?.data.symbol ? primaryQuery.data.data : null
-  const comparePayload = compareQuery.data?.data.symbol ? compareQuery.data.data : null
+  const primaryPayload = primaryQuery.data?.data.displayCurrency === 'USD' && primaryQuery.data.data.currencyVersion === 2 ? primaryQuery.data.data : null
+  const comparePayload = compareQuery.data?.data.displayCurrency === 'USD' && compareQuery.data.data.currencyVersion === 2 ? compareQuery.data.data : null
 
   useEffect(() => setDraft(symbol), [symbol])
   useEffect(() => setCompareDraft(compareSymbol), [compareSymbol])
@@ -280,7 +280,7 @@ export function FundamentalsPage({
       )}
 
       {fullscreen ? (
-        <Modal title={fullscreen.title} width="calc(100vw - 32px)" onClose={() => setFullscreen(null)}>
+        <Modal title={`${fullscreen.title} · ${fullscreen.series.every((series) => series.metric === 'sharesOutstanding') ? 'Shares' : 'USD'}${fullscreen.indexed ? ' · Indexed' : ''}`} width="calc(100vw - 32px)" onClose={() => setFullscreen(null)}>
           <div className="flex h-[calc(100vh-105px)] min-h-[420px] flex-col">
             <FundamentalsChartLegend model={fullscreen} fullscreen />
             <FundamentalsBarChart model={fullscreen} fullscreen />
@@ -306,6 +306,7 @@ function CompanyHeader({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <h1 className="text-sm font-semibold text-text">{primary.company.name || primary.symbol}</h1>
         <span className="num text-2xs font-semibold text-accent-hover">{primary.symbol}</span>
+        <span className="text-2xs text-text-muted">Amounts in USD</span>
         {subtitle ? <span className="text-2xs text-text-muted">{subtitle}</span> : null}
         <span className="ml-auto flex items-center gap-1">
           {primary.company.website ? <Button className="h-6" onClick={() => void api.openExternal(primary.company.website)}>Website</Button> : null}
@@ -314,6 +315,10 @@ function CompanyHeader({
       </div>
       <HeadlineMetricRow symbol={primary.symbol} metrics={computeHeadlineMetrics(primary)} />
       {compare ? <HeadlineMetricRow symbol={compare.symbol} metrics={computeHeadlineMetrics(compare)} comparison /> : null}
+      <p className="mt-1 text-2xs text-text-dim">
+        {[primary, ...(compare ? [compare] : [])].map((payload) => `${payload.symbol}: ${payload.currencyNote ?? 'USD'}`).join(' · ')}
+        {' · Foreign amounts use the latest available FX rate for all periods; share counts are unchanged.'}
+      </p>
     </section>
   )
 }
@@ -403,7 +408,7 @@ function PresentationControls({
       </label>
       <Button variant="toggle" active={indexed} className="ml-2 h-7" onClick={onIndexed}>Indexed</Button>
       <span className="ml-auto truncate text-2xs text-text-dim">
-        {indexed ? 'Oldest visible non-zero value = ±100' : 'Raw statement values'} · {period === 'annual' ? 'prior-year growth' : growthBasis === 'year_ago' ? 'year-over-year growth' : 'quarter-over-quarter growth'}
+        {indexed ? 'Oldest visible non-zero value = ±100' : 'Statement values in USD · shares in units'} · {period === 'annual' ? 'prior-year growth' : growthBasis === 'year_ago' ? 'year-over-year growth' : 'quarter-over-quarter growth'}
       </span>
     </>
   )

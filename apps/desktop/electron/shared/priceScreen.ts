@@ -21,6 +21,7 @@ export interface PriceScreenQuoteLike {
   shortName?: unknown
   displayName?: unknown
   regularMarketPrice?: unknown
+  regularMarketVolume?: unknown
   intradayprice?: unknown
   eodprice?: unknown
   marketCap?: unknown
@@ -84,6 +85,10 @@ export function priceScreenRowFromQuote(
     exchange: EXCHANGE_LABELS[exchangeCode] ?? exchangeCode,
     price,
     marketCap,
+    volume: typeof quote.regularMarketVolume === 'number' &&
+      Number.isFinite(quote.regularMarketVolume) && quote.regularMarketVolume >= 0
+      ? quote.regularMarketVolume
+      : null,
   }
 }
 

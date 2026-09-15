@@ -42,6 +42,11 @@ async function offlineChecks(): Promise<void> {
   assert.equal(priceScreenRowFromQuote(quote('HIGH', 200.01), 100, 200), null)
   assert.ok(priceScreenRowFromQuote(quote('MIN', 100), 100, 200))
   assert.ok(priceScreenRowFromQuote(quote('MAX', 200), 100, 200))
+  for (const volume of [12_345_678, 0, null, undefined, -1, Number.NaN, Infinity]) {
+    const row = priceScreenRowFromQuote({ ...quote('VOL'), regularMarketVolume: volume }, 100, 200)
+    assert.ok(row, 'Missing volume must not exclude an otherwise valid equity')
+    assert.equal(row.volume, typeof volume === 'number' && Number.isFinite(volume) && volume >= 0 ? volume : null)
+  }
 
   const rows: PriceScreenRow[] = Array.from({ length: 120 }, (_, index) => ({
     ticker: `T${String(index).padStart(3, '0')}`,
@@ -49,6 +54,7 @@ async function offlineChecks(): Promise<void> {
     exchange: 'NYSE',
     price: 100 + index / 10,
     marketCap: (120 - index) * 1_000_000,
+    volume: null,
   }))
   const ranked = rankPriceScreenRows(rows)
   assert.equal(ranked.length, 100)

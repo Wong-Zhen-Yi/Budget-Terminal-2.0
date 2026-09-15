@@ -35,6 +35,8 @@ function point(endDate: string, label: string, value: number, source: Fundamenta
 function fixturePayload(symbol = 'AAA'): FundamentalsPagePayload {
   const payload = emptyFundamentalsPagePayload(symbol)
   payload.company.name = `${symbol} Corporation`
+  payload.company.currency = 'USD'
+  payload.company.financialCurrency = 'USD'
   payload.facts = {
     trailingPe: 20,
     forwardPe: 18,
@@ -247,7 +249,79 @@ async function runOffline(): Promise<void> {
     price: async () => null,
   })
   assert.ok(secOnly.payload.annual.revenue.length > 0)
-  assert.equal(secOnly.failures.length, 3)
+  assert.equal(secOnly.failures.length, 4)
+
+  const foreign = fixturePayload('TSM')
+  foreign.company.financialCurrency = 'TWD'
+  const foreignFetchers = {
+    summary: async () => ({ company: foreign.company, facts: foreign.facts }),
+    annual: async () => [
+      { date: new Date('2023-12-31'), totalRevenue: 3200, ordinarySharesNumber: 100 },
+      { date: new Date('2024-12-31'), totalRevenue: 6400, totalDebt: 320, cashCashEquivalentsAndShortTermInvestments: 960 },
+    ],
+    quarterly: async () => [],
+    sec: async () => ({ annual: { ...emptyFundamentalsPagePayload('TSM').annual, revenue: [point('2022-12-31', '2022', 80, 'sec')] }, quarterly: emptyFundamentalsPagePayload('TSM').quarterly, metadata: foreign.sec }),
+    price: async () => 20,
+    usdRate: async (currency: string) => { assert.equal(currency, 'TWD'); return 1 / 32 },
+  }
+  const usd = (await fundamentalsPageTesting.fetchUncached('TSM', false, foreignFetchers)).payload
+  assert.equal(usd.displayCurrency, 'USD')
+  assert.deepEqual(usd.annual.revenue.map(item => item.value), [80, 100, 200])
+  assert.equal(usd.annual.sharesOutstanding[0].value, 100)
+  assert.equal(usd.facts.marketCap, foreign.facts.marketCap)
+  assert.equal(usd.facts.totalRevenue, 500 / 32)
+  assert.equal(usd.facts.ebitda, 180 / 32)
+  assert.equal(usd.facts.trailingPe, 20)
+  assert.equal(computeHeadlineMetrics(usd).netCash, 20)
+  assert.equal(computeHeadlineMetrics(usd).evRevenue, (2000 + 100 / 32 - 300 / 32) / 200)
+  assert.equal(usd.facts.priceToSales, 2000 / (500 / 32))
+  assert.equal(computeGrowth(usd.annual.revenue, 'prior_period').at(-1)?.growth, 100)
+  assert.equal(foreign.facts.totalRevenue, 500, 'Conversion must not mutate cached inputs')
+  const missingFx = await fundamentalsPageTesting.fetchUncached('TSM', false, {
+    ...foreignFetchers, usdRate: async () => { throw new Error('FX offline') },
+  })
+  assert.deepEqual(missingFx.payload.annual.revenue.map(item => item.value), [80])
+  assert.equal(missingFx.payload.facts.totalRevenue, null)
+  assert.equal(missingFx.payload.facts.marketCap, 2000)
+  assert.match(missingFx.payload.currencyNote!, /unavailable/)
+  foreign.company.currency = 'TWD'
+  const localListing = (await fundamentalsPageTesting.fetchUncached('2330.TW', false, foreignFetchers)).payload
+  assert.equal(localListing.facts.marketCap, 2000 / 32)
+  assert.equal(localListing.facts.currentPrice, 20 / 32)
+
+  const currencyCases = [
+    { symbol: 'AAPL', quote: 'USD', reporting: 'USD', capital: 'USD' },
+    { symbol: 'SAP.DE', quote: 'EUR', reporting: 'EUR', capital: 'EUR' },
+    { symbol: '7203.T', quote: 'JPY', reporting: 'JPY', capital: 'JPY' },
+    { symbol: '0700.HK', quote: 'HKD', reporting: 'CNY', capital: 'HKD' },
+    { symbol: 'SHEL.L', quote: 'GBp', reporting: 'USD', capital: 'GBP' },
+    { symbol: 'VOD.L', quote: 'GBp', reporting: 'EUR', capital: 'GBP' },
+    { symbol: 'FIXTURE.JO', quote: 'ZAc', reporting: 'ZAR', capital: 'ZAR' },
+  ]
+  const currencyRates: Record<string, number> = { USD: 1, EUR: 1.1, JPY: 0.007, HKD: 0.128, CNY: 0.14, GBp: 0.013, GBP: 1.3, ZAc: 0.0006, ZAR: 0.06 }
+  for (const test of currencyCases) {
+    const sample = fixturePayload(test.symbol)
+    const converted = await fundamentalsPageTesting.fetchUncached(test.symbol, false, {
+      ...foreignFetchers,
+      summary: async () => ({ company: { ...sample.company, currency: test.quote, financialCurrency: test.reporting }, facts: sample.facts }),
+      quarterly: async () => [{ date: new Date('2025-03-31'), totalRevenue: 3200, ordinarySharesNumber: 100 }],
+      usdRate: async currency => currencyRates[currency],
+    })
+    assert.equal(converted.payload.displayCurrency, 'USD', test.symbol)
+    assert.equal(converted.payload.facts.currentPrice, 20 * currencyRates[test.quote], test.symbol)
+    assert.equal(converted.payload.facts.marketCap, 2000 * currencyRates[test.capital], test.symbol)
+    assert.equal(converted.payload.annual.revenue.at(-1)?.value, 6400 * currencyRates[test.reporting], test.symbol)
+    assert.equal(converted.payload.quarterly.revenue[0]?.value, 3200 * currencyRates[test.reporting], test.symbol)
+    assert.equal(converted.payload.quarterly.sharesOutstanding[0]?.value, 100, test.symbol)
+    assert.ok(!converted.failures.some(failure => failure.operation === 'USD conversion'), test.symbol)
+  }
+  const unknownReporting = await fundamentalsPageTesting.fetchUncached('UNKNOWN', false, {
+    ...foreignFetchers,
+    summary: async () => ({ company: { ...foreign.company, currency: 'USD', financialCurrency: undefined }, facts: foreign.facts }),
+  })
+  assert.deepEqual(unknownReporting.payload.annual.revenue.map(item => item.value), [80], 'Do not assume statement currency matches listing currency')
+  assert.equal(unknownReporting.payload.facts.totalRevenue, null)
+  assert.equal(unknownReporting.payload.facts.marketCap, 2000)
 
   await checkSecCacheLifecycle()
   await checkYahooRateGateSource()
@@ -310,6 +384,8 @@ async function runLive(symbol: string): Promise<void> {
     growthBasis: 'year_ago',
   })
   assert.equal(payload.symbol, symbol)
+  assert.equal(payload.displayCurrency, 'USD')
+  assert.equal(payload.company.currency, 'USD')
   assert.ok(payload.company.name)
   assert.ok(payload.facts.currentPrice !== null || charts.some((chart) => chart.series.length))
   assert.equal(charts.length, 6)
@@ -319,13 +395,16 @@ async function runLive(symbol: string): Promise<void> {
       assert.equal(new Set(series.map((item) => item.label)).size, series.length, 'Statement labels must be unique.')
     }
   }
-  assert.ok(payload.sec.filings.length > 0, 'Expected SEC filings for a domestic live probe ticker.')
+  if (symbol === 'AAPL') assert.ok(payload.sec.filings.length > 0, 'Expected SEC filings for a domestic live probe ticker.')
   assert.ok(payload.sec.filings.every((filing) => /^https:\/\/www\.sec\.gov\/Archives\/edgar\/data\//.test(filing.documentUrl)))
   assert.ok(payload.sec.cik || !payload.sec.available)
   assert.ok(['fresh', 'cached', 'stale', 'failed', 'unavailable'].includes(payload.sec.freshness))
   console.log(JSON.stringify({
     symbol: payload.symbol,
     company: payload.company.name,
+    currencyNote: payload.currencyNote,
+    facts: payload.facts,
+    latestRevenue: payload.annual.revenue.at(-1),
     annualPeriods: Math.max(...Object.values(payload.annual).map((series) => series.length)),
     quarterlyPeriods: Math.max(...Object.values(payload.quarterly).map((series) => series.length)),
     chartFamilies: charts.map((chart) => ({ title: chart.title, series: chart.series.length, labels: chart.labels.length })),
@@ -338,7 +417,16 @@ async function runLive(symbol: string): Promise<void> {
 
 const args = process.argv.slice(2)
 await runOffline()
-if (!args.includes('--offline')) {
+if (args.includes('--currencies')) {
+  for (const symbol of ['AAPL', 'TSM', 'SHEL.L', '7203.T', '0700.HK', 'SAP.DE']) {
+    const { payload, failures } = await getFundamentalsPage(symbol, true)
+    assert.equal(payload.displayCurrency, 'USD')
+    assert.equal(payload.currencyVersion, 2)
+    assert.ok(!failures.some(failure => failure.operation === 'USD conversion'), `${symbol}: ${JSON.stringify(failures)}`)
+    assert.ok(payload.annual.revenue.length, `${symbol}: expected revenue`)
+    console.log(JSON.stringify({ symbol, currency: payload.company.currency, note: payload.currencyNote, marketCap: payload.facts.marketCap, latestRevenue: payload.annual.revenue.at(-1)?.value }))
+  }
+} else if (!args.includes('--offline')) {
   const symbol = args.find((argument) => !argument.startsWith('--'))?.trim().toUpperCase() || 'AAPL'
   await runLive(symbol)
 }

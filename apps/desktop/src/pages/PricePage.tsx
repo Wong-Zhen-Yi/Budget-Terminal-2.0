@@ -44,7 +44,7 @@ export function PricePage({
   const [payload, setPayload] = useState<PriceScreenPayload | null>(null)
   const [notice, setNotice] = useState<{ text: string; tone: Tone } | null>(null)
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null)
-  const [tableWidth, setTableWidth] = useState(600)
+  const [tableWidth, setTableWidth] = useState(780)
   const tickerElements = useRef(new Map<string, HTMLSpanElement>())
 
   const rankedRows = useMemo<RankedPriceRow[]>(
@@ -158,6 +158,15 @@ export function PricePage({
         width: '105px',
       },
       {
+        key: 'volume',
+        header: 'Volume',
+        cell: (row) => row.volume == null ? 'N/A' : row.volume.toLocaleString('en-US'),
+        sortValue: (row) => row.volume ?? null,
+        align: 'right',
+        numeric: true,
+        width: '115px',
+      },
+      {
         key: 'marketCap',
         header: 'Market Cap',
         cell: (row) => formatPriceScreenMarketCap(row.marketCap),
@@ -176,7 +185,7 @@ export function PricePage({
   }, [])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-2">
       <h1 className="shrink-0 text-sm font-semibold text-text">Price</h1>
 
       <section className="flex min-h-0 flex-1 flex-col gap-2 border border-border bg-surface p-2">
@@ -222,13 +231,14 @@ export function PricePage({
         <div className="flex min-h-0 flex-1">
           <div
             className="flex min-h-0 shrink-0 flex-col overflow-hidden border border-border"
-            style={{ width: tableWidth }}
+            style={{ width: tableWidth, maxWidth: '65%' }}
           >
             <DataTable
               columns={columns}
               rows={rankedRows}
               rowKey={(row) => row.ticker}
               layout="fixed"
+              minWidth="780px"
               defaultSort={{ key: 'marketCap', direction: 'desc' }}
               onRowClick={(row) => setSelectedTicker(row.ticker)}
               rowClassName={(row) =>

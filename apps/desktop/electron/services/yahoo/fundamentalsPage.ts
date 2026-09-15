@@ -41,6 +41,7 @@ export interface FundamentalsPageFetchers {
   quarterly(symbol: string, period1: Date): Promise<unknown>
   sec(symbol: string, force: boolean): Promise<SecCompanyBundle>
   price(symbol: string): Promise<number | null>
+  usdRate?(currency: string, force: boolean): Promise<number>
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -60,7 +61,7 @@ function emptyCompany(symbol: string): FundamentalsPageCompany {
     exchange: '',
     sector: '',
     industry: '',
-    currency: 'USD',
+    currency: '',
     website: '',
     irWebsite: '',
   }
@@ -201,7 +202,9 @@ async function fetchSummary(symbol: string): Promise<{
       exchange: String(price?.exchangeName ?? price?.exchange ?? ''),
       sector: String(profile?.sector ?? ''),
       industry: String(profile?.industry ?? ''),
-      currency: String(price?.currency ?? financial?.financialCurrency ?? 'USD'),
+      currency: String(price?.currency ?? ''),
+      quoteCurrency: String(price?.currency ?? ''),
+      financialCurrency: String(financial?.financialCurrency ?? ''),
       website: String(profile?.website ?? ''),
       irWebsite: String(profile?.irWebsite ?? ''),
     },
@@ -244,6 +247,38 @@ const defaultFetchers: FundamentalsPageFetchers = {
   quarterly: (symbol, period1) => paced(() => yahoo.fundamentalsTimeSeries(symbol, { period1, type: 'quarterly', module: 'all' })),
   sec: fetchSecCompanyBundle,
   price: priceFallback,
+  usdRate: fetchUsdRate,
+}
+
+function majorCurrency(currency: string): string {
+  return ({ GBp: 'GBP', GBX: 'GBP', ZAc: 'ZAR', ILA: 'ILS' }[currency] ?? currency).toUpperCase()
+}
+
+async function fetchUsdRate(currency: string, force: boolean): Promise<number> {
+  // Yahoo quotes these markets in minor units.
+  const major = majorCurrency(currency)
+  const minor = major !== currency.toUpperCase() || currency === 'GBp'
+  if (!/^[A-Z]{3}$/.test(major)) throw new Error('Reporting currency is unavailable')
+  if (major === 'USD') return 1
+  const result = await cache.resolveWithStaleFallback(
+    `fundamentals-usd-rate:${major}`,
+    TTL.quotes,
+    async () => {
+      const quote = await paced(() => yahoo.quote(`${major}USD=X`))
+      const rate = finite(quote.regularMarketPrice)
+      if (rate === null || rate <= 0) throw new Error(`No ${major}/USD exchange rate`)
+      return rate
+    },
+    { force },
+  )
+  if (result.stale) throw new Error(`Latest ${major}/USD exchange rate unavailable`)
+  return result.value / (minor ? 100 : 1)
+}
+
+function convertSeries(map: FundamentalSeriesMap, rate: number | null): FundamentalSeriesMap {
+  return Object.fromEntries(Object.entries(map).map(([key, points]) => [key,
+    key === 'sharesOutstanding' ? points : rate === null ? [] : points.map((item) => ({ ...item, value: item.value * rate })),
+  ])) as FundamentalSeriesMap
 }
 
 async function fetchUncached(
@@ -292,12 +327,47 @@ async function fetchUncached(
       }
   for (const warning of sec.metadata.warnings) failures.push({ source: 'SEC EDGAR', operation: 'fetch', reason: warning })
 
-  const annual = mergeSeriesMaps(yahooAnnual, sec.annual)
-  const quarterly = mergeSeriesMaps(yahooQuarterly, sec.quarterly)
+  if (facts.currentPrice === null) facts = { ...facts, currentPrice: await fetchers.price(symbol) }
+  const quoteCurrency = company.quoteCurrency ?? company.currency
+  const financialCurrency = company.financialCurrency ?? ''
+  // Yahoo market capitalization/EV use major units even when the share price is in pence/cents.
+  const capitalCurrency = majorCurrency(quoteCurrency)
+  const rates = new Map<string, number | null>()
+  for (const currency of new Set([quoteCurrency, financialCurrency, capitalCurrency])) {
+    try {
+      if (!currency) throw new Error('Source currency is unavailable')
+      const rate = currency === 'USD' ? 1 : await (fetchers.usdRate ?? fetchUsdRate)(currency, force)
+      if (!Number.isFinite(rate) || rate <= 0) throw new Error('Invalid exchange rate')
+      rates.set(currency, rate)
+    } catch (error) {
+      rates.set(currency, null)
+      failures.push({ source: 'Yahoo Finance', operation: 'USD conversion', reason: `${currency || 'Unknown currency'}: ${String(error)}; affected monetary values hidden.` })
+    }
+  }
+  const statementRate = rates.get(financialCurrency) ?? null
+  const quoteRate = rates.get(quoteCurrency) ?? null
+  const capitalRate = rates.get(capitalCurrency) ?? null
+  facts = { ...facts }
+  for (const key of ['enterpriseValue', 'marketCap', 'currentPrice', 'ebitda', 'totalRevenue', 'freeCashFlow', 'totalCash', 'totalDebt'] as const) {
+    const rate = key === 'currentPrice' ? quoteRate
+      : key === 'enterpriseValue' || key === 'marketCap' ? capitalRate : statementRate
+    facts[key] = facts[key] === null || rate === null ? null : facts[key] * rate
+  }
+  // Yahoo's cross-currency multiples/EV can mix listing and reporting units.
+  // Use comparable USD inputs; do not guess a unit for the supplied EV.
+  if (capitalCurrency !== financialCurrency) {
+    facts.priceToSales = facts.marketCap !== null && facts.totalRevenue
+      ? facts.marketCap / facts.totalRevenue : null
+    facts.enterpriseValue = facts.marketCap !== null && facts.totalDebt !== null && facts.totalCash !== null
+      ? facts.marketCap + facts.totalDebt - facts.totalCash : null
+  }
+  company = { ...company, currency: 'USD', quoteCurrency, financialCurrency }
+  // SEC's normalizer accepts only USD monetary units. Convert Yahoo before merging.
+  const annual = mergeSeriesMaps(convertSeries(yahooAnnual, statementRate), sec.annual)
+  const quarterly = mergeSeriesMaps(convertSeries(yahooQuarterly, statementRate), sec.quarterly)
   if (!annual.sharesOutstanding.length && facts.sharesOutstanding !== null) {
     annual.sharesOutstanding = [{ endDate: '9999-12-31', label: 'Current', value: facts.sharesOutstanding, source: 'yahoo' }]
   }
-  if (facts.currentPrice === null) facts = { ...facts, currentPrice: await fetchers.price(symbol) }
   const hasStatements = [...Object.values(annual), ...Object.values(quarterly)].some((series) => series.length)
   const hasCompanyInfo = company.name !== symbol || Boolean(company.website || company.exchange || company.sector || company.industry)
   if (!hasCompanyInfo && facts.currentPrice === null && !hasStatements) {
@@ -305,7 +375,15 @@ async function fetchUncached(
   }
   const warnings = [...new Set([...sec.metadata.warnings, ...failures.map((failure) => `${failure.source}: ${failure.reason}`)])]
   return {
-    payload: { symbol, company, facts, annual, quarterly, sec: sec.metadata, warnings, generatedAt: Date.now() },
+    payload: {
+      symbol, company, facts, annual, quarterly, sec: sec.metadata, warnings, generatedAt: Date.now(),
+      displayCurrency: 'USD',
+      currencyVersion: 2,
+      currencyNote: [...rates].filter(([currency]) => currency !== 'USD').map(([currency, rate]) =>
+        rate === null ? `${currency || 'Unknown currency'} → USD unavailable; affected values hidden`
+          : `1 ${currency} = ${rate.toPrecision(6)} USD`,
+      ).join(' · ') + (capitalCurrency !== financialCurrency ? ' · EV estimated as market cap + debt − cash' : '') || 'Reported in USD',
+    },
     failures,
   }
 }
@@ -314,7 +392,7 @@ export async function getFundamentalsPage(symbolInput: string, force = false): P
   const symbol = symbolInput.trim().toUpperCase()
   if (!symbol) throw new Error('Enter a ticker symbol.')
   const resolved = await cache.resolveWithStaleFallback(
-    `fundamentals-page:${symbol}`,
+    `fundamentals-page:usd-v2:${symbol}`,
     TTL.profile,
     () => fetchUncached(symbol, force),
     { force },

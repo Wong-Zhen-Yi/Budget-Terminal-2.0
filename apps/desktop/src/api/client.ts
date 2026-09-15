@@ -85,7 +85,7 @@ export const queryKeys = {
   youtubeThumbnail: (videoId: string, thumbnailUrl: string) =>
     ['youtubeThumbnail', videoId, thumbnailUrl] as const,
   fundamentals: (tickers: string[]) => ['fundamentals', [...tickers].sort().join(',')] as const,
-  fundamentalsPage: (symbol: string) => ['fundamentalsPage', symbol] as const,
+  fundamentalsPage: (symbol: string) => ['fundamentalsPage', symbol, 'usd-v2'] as const,
   returns: (tickers: string[], window: string) =>
     ['returns', window, [...tickers].sort().join(',')] as const,
   momentum: (signature: string, timeframe: string) => ['momentum', timeframe, signature] as const,

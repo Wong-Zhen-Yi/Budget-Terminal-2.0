@@ -578,6 +578,9 @@ export interface FundamentalsPageCompany {
   sector: string
   industry: string
   currency: string
+  /** Original Yahoo statement and listing currencies, before USD normalization. */
+  financialCurrency?: string
+  quoteCurrency?: string
   website: string
   irWebsite: string
 }
@@ -626,6 +629,10 @@ export interface FundamentalsSecMetadata {
 
 export interface FundamentalsPagePayload {
   symbol: string
+  /** Present only on currency-normalized snapshots. */
+  displayCurrency?: 'USD'
+  currencyVersion?: 2
+  currencyNote?: string
   company: FundamentalsPageCompany
   facts: FundamentalsPageFacts
   annual: FundamentalSeriesMap
@@ -1832,6 +1839,8 @@ export interface PriceScreenRow {
   exchange: string
   price: number
   marketCap: number
+  /** Shares traded in the latest regular market session; null when unavailable. */
+  volume: number | null
 }
 
 export interface PriceScreenPayload {

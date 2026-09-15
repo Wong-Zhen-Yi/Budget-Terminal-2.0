@@ -16,7 +16,7 @@ export function useFundamentalsPage(
     enabled: Boolean(symbol),
     staleTime: queryFreshness(queryKeys.fundamentalsPage(symbol)),
     placeholderData:
-      snapshot?.symbol === symbol
+      snapshot?.symbol === symbol && snapshot.displayCurrency === 'USD' && snapshot.currencyVersion === 2
         ? {
             data: snapshot,
             meta: {
