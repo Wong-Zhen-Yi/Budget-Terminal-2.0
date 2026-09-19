@@ -55,6 +55,7 @@ export function DipFinderPanel({ rows, visible }: DipFinderPanelProps) {
         bars={bars}
         format={(value) => percent(value, 1)}
         empty={query.isFetching ? 'Loading returns...' : 'No return data'}
+        minBarWidth={48}
       />
     </Panel>
   )
@@ -86,6 +87,7 @@ export function WeightPanel({ portfolio, rows }: { portfolio: Portfolio; rows: P
         signed={false}
         format={(value) => plainPercent(value)}
         empty="No weighted positions"
+        minBarWidth={48}
       />
     </Panel>
   )

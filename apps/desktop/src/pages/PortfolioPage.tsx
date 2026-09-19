@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { OptionPosition, PortfolioMutation, PositionInput } from '@shared/contract'
 import { buildPositionRows, summarizePortfolio } from '@shared/portfolioMath'
@@ -19,6 +19,7 @@ import { RemovePositionsDialog } from '@/components/portfolio/RemovePositionsDia
 import { SummaryBar } from '@/components/portfolio/SummaryBar'
 import { Button } from '@/components/ui/Button'
 import { Panel } from '@/components/ui/Panel'
+import { Splitter } from '@/components/ui/Splitter'
 import { currency, decimals, percent, plainPercent } from '@/lib/format'
 
 const SUB_TABS = [
@@ -30,6 +31,10 @@ const SUB_TABS = [
 ] as const
 
 type SubTabId = (typeof SUB_TABS)[number]['id']
+
+const MIN_PORTFOLIO_TABLES = 480
+const MIN_PORTFOLIO_ANALYTICS = 320
+const MIN_PORTFOLIO_TABLE_HEIGHT = 160
 
 export function PortfolioPage({
   onStatusChange,
@@ -56,6 +61,32 @@ export function PortfolioPage({
   const [removingPositions, setRemovingPositions] = useState(false)
   const [error, setError] = useState('')
   const [exporting, setExporting] = useState(false)
+  const [analyticsWidth, setAnalyticsWidth] = useState(416)
+  const [positionsSplit, setPositionsSplit] = useState(0.6)
+  const positionsLayoutRef = useRef<HTMLDivElement>(null)
+  const tablesStackRef = useRef<HTMLDivElement>(null)
+
+  const resizeAnalytics = useCallback((clientX: number) => {
+    const layout = positionsLayoutRef.current
+    if (!layout) return
+    const bounds = layout.getBoundingClientRect()
+    const maximum = bounds.width - MIN_PORTFOLIO_TABLES
+    setAnalyticsWidth(
+      Math.min(Math.max(bounds.right - clientX, MIN_PORTFOLIO_ANALYTICS), maximum),
+    )
+  }, [])
+
+  const resizeTables = useCallback((clientY: number) => {
+    const stack = tablesStackRef.current
+    if (!stack) return
+    const bounds = stack.getBoundingClientRect()
+    if (bounds.height <= MIN_PORTFOLIO_TABLE_HEIGHT * 2) return
+    const topHeight = Math.min(
+      Math.max(clientY - bounds.top, MIN_PORTFOLIO_TABLE_HEIGHT),
+      bounds.height - MIN_PORTFOLIO_TABLE_HEIGHT,
+    )
+    setPositionsSplit(topHeight / bounds.height)
+  }, [])
 
   const rows = useMemo(
     () =>
@@ -307,11 +338,12 @@ export function PortfolioPage({
       </div>
 
       {subTab === 'positions' ? (
-        <div className="flex min-h-0 flex-1 gap-2">
-          <div className="flex min-h-0 min-w-0 flex-[3] flex-col gap-2">
-            <Panel
-              title="Positions"
-              className="min-h-0 flex-[3]"
+        <div ref={positionsLayoutRef} className="flex min-h-0 flex-1">
+          <div ref={tablesStackRef} className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div className="flex min-h-0 flex-col" style={{ flex: `${positionsSplit} 1 0` }}>
+              <Panel
+                title="Positions"
+                className="min-h-0 flex-1"
               actions={
                 <div className="flex items-center gap-1">
                   {selected.readOnly ? (
@@ -340,8 +372,8 @@ export function PortfolioPage({
                   </Button>
                 </div>
               }
-            >
-              <PositionsTable
+              >
+                <PositionsTable
                 portfolio={selected}
                 rows={rows}
                 loading={quotesQuery.isLoading || fundamentalsQuery.isLoading}
@@ -357,12 +389,16 @@ export function PortfolioPage({
                 onRemove={(ticker) =>
                   void send({ type: 'removePosition', portfolioId: selected.id, ticker })
                 }
-              />
-            </Panel>
+                />
+              </Panel>
+            </div>
 
-            <Panel
-              title="Options Positions"
-              className="min-h-0 flex-[2]"
+            <Splitter orientation="horizontal" onDrag={resizeTables} />
+
+            <div className="flex min-h-0 flex-col" style={{ flex: `${1 - positionsSplit} 1 0` }}>
+              <Panel
+                title="Options Positions"
+                className="min-h-0 flex-1"
               actions={
                 selected.readOnly ? null : (
                   <Button
@@ -373,8 +409,8 @@ export function PortfolioPage({
                   </Button>
                 )
               }
-            >
-              <OptionsTable
+              >
+                <OptionsTable
                 portfolio={selected}
                 rows={optionRows}
                 expiries={optionQuotesQuery.data?.data.expiries ?? {}}
@@ -385,11 +421,17 @@ export function PortfolioPage({
                 onRemove={(rowId) =>
                   void send({ type: 'removeOption', portfolioId: selected.id, rowId })
                 }
-              />
-            </Panel>
+                />
+              </Panel>
+            </div>
           </div>
 
-          <div className="flex min-h-0 w-[26rem] shrink-0 flex-col gap-2">
+          <Splitter onDrag={resizeAnalytics} />
+
+          <div
+            className="flex min-h-0 shrink-0 flex-col gap-2"
+            style={{ width: analyticsWidth }}
+          >
             <DipFinderPanel rows={rows} visible={subTab === 'positions'} />
             <WeightPanel portfolio={selected} rows={rows} />
           </div>

@@ -29,6 +29,8 @@ interface BarChartProps {
   /** Order by descending magnitude, like the reference app's bar widget. */
   sortByMagnitude?: boolean
   empty?: string
+  /** Keeps dense category labels legible by allowing the chart to scroll horizontally. */
+  minBarWidth?: number
 }
 
 /**
@@ -42,6 +44,7 @@ export function BarChart({
   logScale = false,
   sortByMagnitude = false,
   empty = 'No data',
+  minBarWidth = 0,
 }: BarChartProps) {
   if (!bars.length) {
     return (
@@ -70,7 +73,11 @@ export function BarChart({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
+      <div
+        className="flex h-full min-h-0 flex-col"
+        style={minBarWidth ? { minWidth: ordered.length * minBarWidth } : undefined}
+      >
       <div
         className="relative flex min-h-0 flex-1 items-stretch gap-2 px-2 pt-5"
         style={{ paddingBottom: bottomLabelSpace }}
@@ -142,6 +149,7 @@ export function BarChart({
             {bar.label}
           </span>
         ))}
+      </div>
       </div>
     </div>
   )

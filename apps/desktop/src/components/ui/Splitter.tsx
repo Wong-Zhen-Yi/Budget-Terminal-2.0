@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react'
 
 interface SplitterProps {
-  /** Called with the pointer's x position, in pixels from the viewport's left edge. */
-  onDrag: (clientX: number) => void
+  /** Called with the pointer position on the divider's active axis. */
+  onDrag: (position: number) => void
+  orientation?: 'vertical' | 'horizontal'
 }
 
 /**
@@ -12,7 +13,7 @@ interface SplitterProps {
  * it always does — without it the column snaps back the moment the pointer crosses
  * into the chart canvas.
  */
-export function Splitter({ onDrag }: SplitterProps) {
+export function Splitter({ onDrag, orientation = 'vertical' }: SplitterProps) {
   const dragging = useRef(false)
 
   const stop = useCallback(() => {
@@ -24,7 +25,7 @@ export function Splitter({ onDrag }: SplitterProps) {
     const move = (event: PointerEvent) => {
       if (!dragging.current) return
       event.preventDefault()
-      onDrag(event.clientX)
+      onDrag(orientation === 'vertical' ? event.clientX : event.clientY)
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', stop)
@@ -32,17 +33,21 @@ export function Splitter({ onDrag }: SplitterProps) {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', stop)
     }
-  }, [onDrag, stop])
+  }, [onDrag, orientation, stop])
 
   return (
     <div
       role="separator"
-      aria-orientation="vertical"
+      aria-orientation={orientation}
       onPointerDown={() => {
         dragging.current = true
-        document.body.style.cursor = 'col-resize'
+        document.body.style.cursor = orientation === 'vertical' ? 'col-resize' : 'row-resize'
       }}
-      className="w-1 shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-accent-dim"
+      className={
+        orientation === 'vertical'
+          ? 'w-2 shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-accent-dim'
+          : 'h-2 shrink-0 cursor-row-resize bg-transparent transition-colors hover:bg-accent-dim'
+      }
     />
   )
 }
