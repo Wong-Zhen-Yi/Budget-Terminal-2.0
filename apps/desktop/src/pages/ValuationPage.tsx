@@ -13,6 +13,7 @@ import {
   valuationCurrencyWarnings,
 } from '@shared/valuation'
 import { useRefreshValuation, useValuation } from '@/api/valuationQueries'
+import { DataFreshness } from '@/components/ui/DataFreshness'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { Button } from '@/components/ui/Button'
 import { DataTable, type Column } from '@/components/ui/DataTable'
@@ -228,14 +229,16 @@ export function ValuationPage({
   )
   const query = useValuation(ticker, customPeers, armed)
   const refresh = useRefreshValuation()
-  const payload = query.data?.data
+  // A handoff must never label the previous ticker's valuation as the new ticker.
+  const envelope = query.data?.data.ticker === ticker ? query.data : undefined
+  const payload = envelope?.data
   const loaded = Boolean(payload && payload.generatedAt)
 
   useEffect(() => setDraft(ticker), [ticker])
 
   useEffect(() => {
-    onStatusChange([{ label: 'Valuation', envelope: query.data, loading: query.isFetching }], '')
-  }, [onStatusChange, query.data, query.isFetching])
+    onStatusChange([{ label: 'Valuation', envelope, loading: query.isFetching }], '')
+  }, [onStatusChange, envelope, query.isFetching])
 
   const assumptions = useMemo(
     () => savedAssumptions(assumptionsByTicker, ticker),
@@ -543,6 +546,7 @@ export function ValuationPage({
         </span>
       </div>
 
+      <DataFreshness envelope={envelope} loading={query.isFetching} />
       <section className="grid shrink-0 grid-cols-3 divide-x divide-border border border-border bg-surface py-1.5 lg:grid-cols-6">
         <Tile
           title="Verdict"

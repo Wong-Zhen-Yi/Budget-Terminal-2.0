@@ -24,11 +24,13 @@ function rank(label: string, query: string): number | null {
 
 export function TabPicker({
   tabs,
+  recent = [],
   onSelect,
   onClose,
 }: {
   /** The visible tabs, in navigation order. */
   tabs: PickerTab[]
+  recent?: string[]
   onSelect: (id: string) => void
   onClose: () => void
 }) {
@@ -49,9 +51,11 @@ export function TabPicker({
       .filter((entry): entry is { tab: PickerTab; order: number; score: number } =>
         entry.score !== null,
       )
-      .sort((a, b) => a.score - b.score || a.order - b.order)
+      .sort((a, b) => a.score - b.score || (!needle
+        ? (recent.includes(a.tab.id) ? recent.indexOf(a.tab.id) : Infinity) -
+          (recent.includes(b.tab.id) ? recent.indexOf(b.tab.id) : Infinity) : 0) || a.order - b.order)
       .map((entry) => entry.tab)
-  }, [tabs, query])
+  }, [tabs, query, recent])
 
   useEffect(() => {
     input.current?.closest('[role=dialog]')?.querySelector(`[data-result-index="${highlighted}"]`)?.scrollIntoView({ block: 'nearest' })
@@ -83,7 +87,7 @@ export function TabPicker({
         className="flex h-fit max-h-[70vh] w-full max-w-lg flex-col rounded border border-border-strong bg-surface shadow-2xl"
       >
         <div className="flex items-center justify-between border-b border-border px-3 py-2 text-2xs text-text-muted">
-          <span>Find a page · {tabs.length} available</span>
+          <span>Find a page · {query ? `${tabs.length} available` : 'recent pages first'}</span>
           <button type="button" onClick={onClose} className="px-2 py-1 hover:text-text">Close (Esc)</button>
         </div>
         <input
@@ -130,9 +134,10 @@ export function TabPicker({
                 }`}
               >
                 <span className="truncate">{tab.label}</span>
+                {!query && recent.includes(tab.id) ? <span className="text-text-dim">Recent</span> : null}
                 <span className="ml-auto text-text-dim">{workspaceFor(tab.id)?.label ?? 'Preferences'}</span>
                 {!tab.implemented ? (
-                  <span className="ml-auto shrink-0 text-text-dim">not migrated</span>
+                  <span className="ml-auto shrink-0 text-text-dim">unavailable</span>
                 ) : null}
               </button>
             </li>

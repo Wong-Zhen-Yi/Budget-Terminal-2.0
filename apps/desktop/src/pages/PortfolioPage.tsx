@@ -38,8 +38,10 @@ const MIN_PORTFOLIO_TABLE_HEIGHT = 160
 
 export function PortfolioPage({
   onStatusChange,
+  onNavigate,
 }: {
   onStatusChange: (panels: PanelStatus[], sourcePath: string) => void
+  onNavigate?: (tab: string, symbol?: string) => void
 }) {
   const portfolioQuery = usePortfolio()
   const mutate = usePortfolioMutation()
@@ -374,6 +376,7 @@ export function PortfolioPage({
               }
               >
                 <PositionsTable
+                  onResearch={(symbol) => onNavigate?.('stocks', symbol)}
                 portfolio={selected}
                 rows={rows}
                 loading={quotesQuery.isLoading || fundamentalsQuery.isLoading}

@@ -10,6 +10,7 @@ import { PageCache } from '@/components/chrome/PageCache'
 import { StatusBar, type PanelStatus } from '@/components/chrome/StatusBar'
 import { TabBar } from '@/components/chrome/TabBar'
 import { TabPicker } from '@/components/chrome/TabPicker'
+import { ResearchTicker } from '@/components/chrome/ResearchTicker'
 import { WorkspaceHeader, WorkspaceSidebar } from '@/components/chrome/WorkspaceNavigation'
 import { isTextEntry } from '@/lib/shortcuts'
 import { DashboardPage } from '@/pages/DashboardPage'
@@ -57,11 +58,16 @@ import { useChartsStore } from '@/stores/charts'
 import { useFundamentalsStore } from '@/stores/fundamentals'
 import { useOptionsPage } from '@/stores/options'
 import { useStocksPage } from '@/stores/stocks'
+import { useValuationPage } from '@/stores/valuation'
+import { useNavigation } from '@/stores/navigation'
 
 const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
 
 export function App() {
   const [activeTab, setActiveTab] = useState('dashboard')
+  const recent = useNavigation((state) => state.recent)
+  const visit = useNavigation((state) => state.visit)
+  useEffect(() => visit(activeTab), [activeTab, visit])
   const [panels, setPanels] = useState<PanelStatus[]>([])
   const [sourcePath, setSourcePath] = useState('')
   const [reloading, setReloading] = useState(false)
@@ -102,9 +108,8 @@ export function App() {
     }
   }
   const record = useDataHealth((state) => state.record)
-  // Every page's data is warmed at startup, one call at a time, so switching tabs lands
-  // on a loaded page rather than a spinner.
-  const warm = useWarmPages(settings)
+  // Prefetch a bounded selection of favorites and recent pages after foreground work.
+  const warm = useWarmPages(settings, activeTab, recent)
   const setFundamentalsSymbol = useFundamentalsStore((state) => state.setSymbol)
   const setOptionsSymbol = useOptionsPage((state) => state.setSymbol)
 
@@ -139,9 +144,8 @@ export function App() {
    * pages hold it in an effect's dependency list.
    *
    * The tab id is bound rather than read off `activeTabRef`, because a kept-alive page
-   * goes on reporting while it is hidden. Its report is dropped: the status bar and Data
-   * Health describe the page you are looking at, and a background repaint from a hidden
-   * treemap must not overwrite that.
+   * reports are recorded under their own page. Only the active page can update the
+   * footer; a hidden page must not overwrite the current page's status.
    */
   const statusHandlers = useRef(new Map<string, (next: PanelStatus[], path: string) => void>())
   // Read through a ref rather than closed over: the handlers are cached for the life of
@@ -153,10 +157,10 @@ export function App() {
     const cached = statusHandlers.current.get(tabId)
     if (cached) return cached
     const handler = (next: PanelStatus[], path: string) => {
+      recordRef.current(tabId, next)
       if (activeTabRef.current !== tabId) return
       setPanels(next)
       setSourcePath(path)
-      recordRef.current(tabId, next)
     }
     statusHandlers.current.set(tabId, handler)
     return handler
@@ -172,12 +176,22 @@ export function App() {
    * the right ticker.
    */
   const handleStocksNavigate = useCallback((tabId: string, symbol?: string) => {
+    if (!visibleTabs.some((tab) => tab.id === tabId)) {
+      setNotice('This page is hidden. Show it in Settings to open it.')
+      return
+    }
+    if (symbol) useNavigation.getState().setSymbol(symbol)
     if (tabId === 'stocks' && symbol) setStocksSymbol(symbol)
     if (tabId === 'fundamentals' && symbol) setFundamentalsSymbol(symbol)
-    if (tabId === 'options' && symbol) setOptionsSymbol(symbol)
+    if (tabId === 'options' && symbol) {
+      setOptionsSymbol(symbol)
+      useOptionsPage.getState().setTab('chain')
+      useOptionsPage.getState().setLoaded(true)
+    }
     if (tabId === 'charts' && symbol) setChartsSymbol(symbol)
+    if (tabId === 'valuation' && symbol) useValuationPage.getState().setTicker(symbol)
     setActiveTab(tabId)
-  }, [setStocksSymbol, setFundamentalsSymbol, setOptionsSymbol, setChartsSymbol])
+  }, [setStocksSymbol, setFundamentalsSymbol, setOptionsSymbol, setChartsSymbol, visibleTabs])
 
   const reload = useCallback(async () => {
     setReloading(true)
@@ -304,7 +318,7 @@ export function App() {
 
       <div className="flex min-h-0 flex-1">
         <WorkspaceSidebar
-          tabs={visibleTabs} activeTab={activeTab} onSelectTab={setActiveTab} favorites={favorites}
+          tabs={visibleTabs} activeTab={activeTab} onSelectTab={setActiveTab} favorites={favorites} recent={recent}
           collapsed={settings?.sidebarCollapsed ?? false} onToggleCollapsed={() => void toggleSidebar()}
           saving={savingSidebar || !settings}
         />
@@ -312,6 +326,7 @@ export function App() {
           <WorkspaceHeader tabs={visibleTabs} activeTab={activeTab} onSelectTab={setActiveTab}
             favorite={favorites.includes(activeTab)} onToggleFavorite={() => void toggleFavorite()}
             saving={savingFavorite || !settings} />
+          {!hideCurrent ? <ResearchTicker activeTab={activeTab} visibleIds={visibleIds} onNavigate={handleStocksNavigate} /> : null}
           <div className="relative flex min-h-0 flex-1 flex-col">
             {/* Blurred and inert, matching the reference's blur effect plus `setEnabled(False)`. */}
             <div
@@ -349,6 +364,7 @@ export function App() {
       {pickerOpen ? (
         <TabPicker
           tabs={visibleTabs.map((tab) => ({ ...tab }))}
+          recent={recent}
           onSelect={(id) => {
             setPickerOpen(false)
             if (TAB_BY_ID.get(id)?.implemented) setActiveTab(id)
@@ -360,12 +376,12 @@ export function App() {
   )
 }
 
-/** Every other page is still in the PySide6 app; this says so rather than showing blank. */
+/** Defensive fallback for an unknown page id. */
 function PlaceholderPage({ tabId }: { tabId: string }) {
   const label = TABS.find((tab) => tab.id === tabId)?.label ?? tabId
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center">
-      <p className="text-2xs text-text-dim">{label} has not been migrated yet.</p>
+      <p className="text-2xs text-text-dim">{label} is unavailable.</p>
     </div>
   )
 }
@@ -391,7 +407,7 @@ function renderPage({
     ) : tabId === 'global' ? (
       <GlobalPage onStatusChange={onStatusChange} />
     ) : tabId === 'portfolio' ? (
-      <PortfolioPage onStatusChange={onStatusChange} />
+      <PortfolioPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'cards' ? (
       <CardsPage onStatusChange={onStatusChange} onNavigate={onSelectTab} />
     ) : tabId === 'personal-finance' ? (

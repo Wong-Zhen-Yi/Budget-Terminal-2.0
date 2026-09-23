@@ -4,6 +4,7 @@ import type { MetricsLookback, PositionInput, RiskMetricsPayload } from '@shared
 import { METRICS_LOOKBACKS } from '@shared/contract'
 import { useAnalytics } from '@/api/portfolioQueries'
 import { Button } from '@/components/ui/Button'
+import { DataFreshness } from '@/components/ui/DataFreshness'
 import { currency, decimals, integer, percent, plainPercent } from '@/lib/format'
 
 interface MetricsTabProps {
@@ -134,6 +135,8 @@ export function MetricsTab({ positions, cashAmount, currentValues, visible }: Me
         {data?.note ? <p className="text-2xs text-down">{data.note}</p> : null}
       </section>
 
+      <DataFreshness envelope={query.data} loading={query.isFetching}
+        coverage={data ? `${data.includedTickers.length}/${data.includedTickers.length + data.excludedTickers.length} holdings in history` : undefined} />
       <div className="grid shrink-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))]">
         {CARDS.map((card) => {
           const value = metrics?.[card.key] ?? null

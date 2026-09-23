@@ -21,6 +21,7 @@ export default defineConfig({
     build: {
       outDir: 'out/preload',
       lib: { entry: resolve(root, 'electron/preload.ts') },
+      rollupOptions: { output: { format: 'cjs', entryFileNames: 'preload.cjs' } },
     },
     resolve: {
       alias: { '@shared': resolve(root, 'electron/shared') },

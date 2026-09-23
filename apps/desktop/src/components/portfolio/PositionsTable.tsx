@@ -13,6 +13,7 @@ interface PositionsTableProps {
   onSetAvgPrice: (ticker: string, avgPrice: number) => void
   onToggleWeight: (ticker: string, include: boolean) => void
   onRemove: (ticker: string) => void
+  onResearch?: (ticker: string) => void
 }
 
 /** `Mega $3.42T`, or `AUM $88.10B` for a fund — the reference app's wording. */
@@ -39,6 +40,7 @@ export function PositionsTable({
   onSetAvgPrice,
   onToggleWeight,
   onRemove,
+  onResearch,
 }: PositionsTableProps) {
   const readOnly = portfolio.readOnly
 
@@ -48,7 +50,7 @@ export function PositionsTable({
       header: 'Symbol',
       sortValue: (row) => row.ticker,
       cell: (row) => (
-        <label className="flex items-center gap-2" title="Include this position in Weight">
+        <div className="flex items-center gap-2">
           <input
             type="checkbox"
             checked={row.includeInWeight}
@@ -57,8 +59,10 @@ export function PositionsTable({
             onChange={(event) => onToggleWeight(row.ticker, event.target.checked)}
             className="accent-accent"
           />
-          <span className={row.includeInWeight ? 'text-text' : 'text-text-dim'}>{row.ticker}</span>
-        </label>
+          {onResearch ? <button type="button" onClick={() => onResearch(row.ticker)} title={`Research ${row.ticker}`}
+            className="text-text underline decoration-border-strong underline-offset-4 hover:text-accent-hover">{row.ticker}</button>
+            : <span className={row.includeInWeight ? 'text-text' : 'text-text-dim'}>{row.ticker}</span>}
+        </div>
       ),
     },
     {

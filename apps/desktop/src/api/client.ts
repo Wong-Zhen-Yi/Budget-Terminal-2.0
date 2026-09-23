@@ -11,7 +11,7 @@ declare global {
  * Use the Electron preload when available, otherwise the local HTTP bridge.
  * Provider requests stay in the backend in both environments.
  */
-export const isDesktop = !import.meta.env.BROWSER_MODE && Boolean(window.api)
+export const isDesktop = !import.meta.env?.BROWSER_MODE && Boolean(window.api)
 export const api: DesktopApi = window.api ?? createBrowserApi()
 if (!isDesktop) window.api = api
 

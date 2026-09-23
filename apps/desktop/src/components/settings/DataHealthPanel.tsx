@@ -23,7 +23,7 @@ function buildReport(records: HealthRecord[]): string {
   for (const record of records) {
     const page = PAGE_LABELS.get(record.page) ?? record.page
     lines.push(
-      `[${record.freshness.toUpperCase()}] ${page} / ${record.label} | source ${record.source} | ${timestampLabel(record.fetchedAt)}`,
+      `${record.previousSession ? '[PREVIOUS SESSION] ' : ''}[${record.freshness.toUpperCase()}] ${page} / ${record.label} | source ${record.source} | ${timestampLabel(record.fetchedAt)}`,
     )
     if (record.failureReason) lines.push(`    reason: ${record.failureReason}`)
     for (const error of record.errors) lines.push(`    - ${error}`)
@@ -36,10 +36,11 @@ function currentReport(): string {
   return buildReport(sortRecords(useDataHealth.getState().records))
 }
 
-/** `_build_settings_data_health_box`: a session-only view of stale feeds and API issues. */
+/** Current observations plus explicitly labeled records retained from prior sessions. */
 export function DataHealthPanel({ onStatus }: { onStatus: (message: string) => void }) {
   const records = useDataHealth((state) => state.records)
   const clear = useDataHealth((state) => state.clear)
+  const startup = useDataHealth((state) => state.startup)
 
   // The body is a snapshot taken on demand, so it does not shift under the reader every
   // time the quote timer ticks. The summary line above it stays live.
@@ -47,21 +48,22 @@ export function DataHealthPanel({ onStatus }: { onStatus: (message: string) => v
   const refresh = useCallback(() => setReport(currentReport()), [])
 
   const sorted = useMemo(() => sortRecords(records), [records])
-  const degraded = sorted.filter(
-    (record) => record.freshness === 'failed' || record.freshness === 'partial',
+  const current = sorted.filter((record) => !record.previousSession)
+  const degraded = current.filter(
+    (record) => record.freshness === 'failed' || record.freshness === 'partial' || record.freshness === 'stale',
   )
-  const summary = sorted.length
+  const summary = current.length
     ? degraded.length
-      ? `Data health: ${degraded.length} of ${sorted.length} panel(s) degraded`
-      : `Data health: OK across ${sorted.length} panel(s)`
-    : 'Data health: nothing loaded yet'
+      ? `Data health: ${degraded.length} of ${current.length} panel(s) degraded`
+      : `Data health: OK across ${current.length} panel(s)`
+    : 'Data health: no panels observed this session'
 
   return (
     <Panel title="Data Health">
       <div className="flex min-h-0 flex-col gap-2 p-2">
         <SectionHeader
           title="Market Data Status"
-          hint="Session-only view of stale data, cache fallback, missing prices and API issues."
+          hint="Latest observed feed results. Previous-session records are labeled and do not count as current health."
         />
         <div className="flex items-center gap-2">
           <span className={`text-2xs ${degraded.length ? 'text-down' : 'text-up'}`}>{summary}</span>
@@ -95,6 +97,11 @@ export function DataHealthPanel({ onStatus }: { onStatus: (message: string) => v
             Clear
           </Button>
         </div>
+        {startup ? <details className="text-2xs text-text-muted">
+          <summary className="cursor-pointer">Startup prefetch: {startup.timings.length}/{startup.planned} tasks · {(startup.durationMs / 1000).toFixed(1)}s elapsed</summary>
+          <ul className="pl-4 pt-1">{startup.timings.map((entry, index) =>
+            <li key={index}>{entry.label}: {(entry.durationMs / 1000).toFixed(1)}s{entry.failed ? ' · failed; retries when opened' : ''}</li>)}</ul>
+        </details> : null}
         <pre className="num max-h-72 overflow-auto border border-border-strong bg-bg p-2 text-2xs whitespace-pre text-text-muted select-text">
           {report}
         </pre>

@@ -38,6 +38,7 @@ import {
  */
 
 const settingsSchema = z.object({
+  lastBackupAt: z.number().finite().nonnegative().optional(),
   version: z.number().catch(1),
   clockCountry: z.string().catch(DEFAULT_CLOCK_COUNTRY),
   time12h: z.boolean().catch(true),
@@ -167,6 +168,7 @@ export function resetSettingsCache(): void {
 
 function toPayload(settings: StoredSettings): AppSettings {
   return {
+    lastBackupAt: settings.lastBackupAt,
     clockCountry: settings.clockCountry,
     time12h: settings.time12h,
     tabOrder: [...settings.tabOrder],
@@ -294,7 +296,7 @@ export async function replaceSettings(source: unknown): Promise<AppSettings> {
   let failure: unknown = null
   const run = writeChain.then(async () => {
     try {
-      cached = normalize(parsed.data)
+      cached = normalize({ ...parsed.data, lastBackupAt: (await loadSettings()).lastBackupAt })
       await persist(cached)
     } catch (error) {
       failure = error
@@ -326,4 +328,15 @@ export async function exportSettings(): Promise<StoredSettings> {
   await run
   if (failure) throw failure
   return snapshot as StoredSettings
+}
+
+/** Export timestamps belong to this installation and are not restored from backups. */
+export async function recordBackupExport(): Promise<void> {
+  const run = writeChain.then(async () => {
+    const next = { ...(await loadSettings()), lastBackupAt: Date.now() }
+    await persist(next)
+    cached = next
+  })
+  writeChain = run.catch(() => {})
+  await run
 }

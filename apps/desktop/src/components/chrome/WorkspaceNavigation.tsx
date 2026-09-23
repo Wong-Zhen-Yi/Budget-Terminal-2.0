@@ -19,8 +19,9 @@ const pageButton = 'rounded px-3 py-2 text-left text-2xs transition-colors disab
 const selectedStyle = 'bg-accent-dim text-text'
 const idleStyle = 'text-text-muted hover:bg-surface-hover hover:text-text'
 
-export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, collapsed, onToggleCollapsed, saving }: NavigationProps & {
+export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, recent, collapsed, onToggleCollapsed, saving }: NavigationProps & {
   favorites: string[]
+  recent: string[]
   collapsed: boolean
   onToggleCollapsed: () => void
   saving: boolean
@@ -78,6 +79,16 @@ export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, coll
           <p className="px-3 text-2xs text-text-dim">Star a page to pin it here.</p>
         ) : null}
       </div>
+      {!collapsed ? <div>
+        <p className="px-3 pb-2 text-2xs text-text-dim">Recently viewed</p>
+        <nav aria-label="Recent pages" className="flex flex-col gap-1">
+          {recent.filter((id) => id !== activeTab).slice(0, 4).flatMap((id) => {
+            const tab = tabs.find((entry) => entry.id === id && entry.implemented)
+            return tab ? [<button key={id} type="button" onClick={() => onSelectTab(id)}
+              className={pageButton + idleStyle}>{tab.label}</button>] : []
+          })}
+        </nav>
+      </div> : null}
       <button type="button" onClick={() => onSelectTab(SETTINGS_TAB_ID)}
         aria-label="Settings" title={collapsed ? 'Settings' : undefined}
         aria-current={activeTab === SETTINGS_TAB_ID ? 'page' : undefined}

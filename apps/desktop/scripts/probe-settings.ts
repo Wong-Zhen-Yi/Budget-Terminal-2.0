@@ -216,6 +216,10 @@ async function main(): Promise<void> {
   await Promise.all([inFlight, pendingCard])
   console.log(`   ${exported.data.message}`)
   check('export reports success', exported.data.performed)
+  const lastBackupAt = (await readSettings()).lastBackupAt
+  check('successful export records a shared reminder timestamp', Boolean(lastBackupAt && Date.now() - lastBackupAt < 10_000))
+  await replaceSettings({ ...(await readSettings()), lastBackupAt: 1 })
+  check('imported settings cannot replace local backup timestamp', (await readSettings()).lastBackupAt === lastBackupAt)
 
   const bundle = JSON.parse(await readFile(backup, 'utf8')) as {
     userData: { portfolios: Record<string, { holdings: Record<string, { shares: number }> }> }

@@ -220,6 +220,7 @@ import {
 } from './portfolioStore.js'
 import {
   exportSettings,
+  recordBackupExport,
   mutateSettings,
   readSettings,
   replaceSettings,
@@ -1853,6 +1854,8 @@ export const yahooProvider: MarketDataProvider = {
         cards: await exportCards(),
       }
       await writeFile(targetPath, JSON.stringify(bundle, null, 2), 'utf8')
+      // The export is already usable even if recording its reminder timestamp fails.
+      await recordBackupExport().catch((error) => console.warn('Could not record backup time:', error))
       return ok(
         {
           action: 'exportUserData' as const,

@@ -14,3 +14,15 @@ export const DEFAULT_FAVORITE_TABS = ['dashboard', 'portfolio', 'charts']
 export function workspaceFor(tabId: string) {
   return WORKSPACES.find((workspace) => workspace.pages.includes(tabId))
 }
+
+export function recentPages(previous: readonly string[], id: string): string[] {
+  return [id, ...previous.filter((page) => page !== id)].slice(0, 6)
+}
+
+/** A bounded startup plan. Expensive screens run only when explicitly favorited. */
+export function startupPages(active: string, favorites: readonly string[], recent: readonly string[], hidden: readonly string[]): string[] {
+  const expensive = new Set(['trading-volumes', 'heatmap', 'economic', 'bonds', 'etf'])
+  return [...new Set([active, ...favorites, ...recent])]
+    .filter((id) => !hidden.includes(id) && (id === active || favorites.includes(id) || !expensive.has(id)))
+    .slice(0, 5)
+}

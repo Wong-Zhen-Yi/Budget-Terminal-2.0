@@ -873,16 +873,20 @@ export function watchPortfolios(onChange: () => void): () => void {
   const path = storePath()
   let watcher: FSWatcher | null = null
   let timer: NodeJS.Timeout | null = null
+  let stopped = false
 
   const schedule = () => {
+    if (stopped) return
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => {
+      if (stopped) return
       cached = null
       onChange()
     }, 300)
   }
 
   const start = () => {
+    if (stopped) return
     try {
       watcher = watch(dirname(path), (_event, filename) => {
         // Ignore our own `.tmp` writes; only the finished rename matters.
@@ -897,6 +901,7 @@ export function watchPortfolios(onChange: () => void): () => void {
   void mkdir(dirname(path), { recursive: true }).then(start, () => undefined)
 
   return () => {
+    stopped = true
     if (timer) clearTimeout(timer)
     watcher?.close()
   }

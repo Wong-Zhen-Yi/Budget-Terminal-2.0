@@ -35,15 +35,7 @@ const fallbackSettings: AppSettings = {
 
 type StatusTone = 'muted' | 'positive' | 'negative'
 
-/**
- * The Settings page, ported from the PySide6 `mixins/settings.py`.
- *
- * The reference splits its panels across General / Workspace / Data / Diagnostics
- * subtabs; this is one scrolling page grouped Data, General, Workspace. The Diagnostics
- * panels are not ported: the live Python logger, the startup profiler and the crash
- * report folder have no counterpart here, and the one part of that subtab that does —
- * the data-health view — belongs with the other Data controls anyway.
- */
+/** Data maintenance and diagnostics, followed by clock and workspace preferences. */
 export function SettingsPage({
   onStatusChange,
 }: {
@@ -136,8 +128,8 @@ export function SettingsPage({
           </p>
         </header>
 
-        <SettingsSection title="Data" hint="Backups, maintenance and this session's feed health.">
-          <UserDataPanel onRun={onRunMaintenance} busy={busy} sourcePath={holdingsPath} />
+        <SettingsSection title="Data" hint="Backups, maintenance and observed feed health.">
+          <UserDataPanel onRun={onRunMaintenance} busy={busy} sourcePath={holdingsPath} lastBackupAt={settings.lastBackupAt} />
           <DataHealthPanel onStatus={(text) => setStatus({ text, tone: 'positive' })} />
         </SettingsSection>
 

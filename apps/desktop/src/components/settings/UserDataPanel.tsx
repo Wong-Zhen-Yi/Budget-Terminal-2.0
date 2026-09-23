@@ -5,6 +5,7 @@ import { SectionHeader } from '@/components/settings/SettingsSection'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Panel } from '@/components/ui/Panel'
+import { timestampLabel } from '@/lib/format'
 
 /** The two destructive actions confirm first, the way the reference's QMessageBox does. */
 const CONFIRMATIONS: Partial<Record<MaintenanceAction, { title: string; body: string; verb: string }>> =
@@ -34,14 +35,17 @@ export function UserDataPanel({
   onRun,
   busy,
   sourcePath,
+  lastBackupAt,
 }: {
   onRun: (action: MaintenanceAction) => void
   busy: MaintenanceAction | null
   /** The holdings store the actions read and write. */
   sourcePath: string
+  lastBackupAt?: number
 }) {
   const [pending, setPending] = useState<MaintenanceAction | null>(null)
   const confirmation = pending ? CONFIRMATIONS[pending] : undefined
+  const backupDue = !lastBackupAt || Date.now() - lastBackupAt >= 7 * 24 * 60 * 60 * 1000
 
   const start = (action: MaintenanceAction) => {
     if (CONFIRMATIONS[action]) setPending(action)
@@ -55,6 +59,11 @@ export function UserDataPanel({
           title="Backups and Maintenance"
           hint="Export or restore one JSON file holding portfolios, personal finance, Cards and these settings."
         />
+        <p className={`text-2xs ${backupDue ? 'text-warn' : 'text-text-muted'}`}>
+          {backupDue ? 'Backup recommended. ' : ''}
+          {lastBackupAt ? `Last export prepared: ${timestampLabel(lastBackupAt)}.` : 'No backup export recorded yet.'}
+          {' Keep a copy outside this computer; in browser mode, check that the download completed.'}
+        </p>
         <div className="grid grid-cols-2 gap-2">
           <Button
             variant="accent"

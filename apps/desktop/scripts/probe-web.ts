@@ -22,6 +22,7 @@ const call = async (channel: string, ...args: unknown[]) => {
 const api = createApi(call, () => () => {})
 
 try {
+  await assert.rejects(startWebServer({ port: 0, production }), /already using this data folder/)
   const html = await fetch(server.url).then((response) => response.text())
   assert.match(html, /Budget Terminal/)
   const script = html.match(/src="([^"]+\.(?:js|tsx))"/)?.[1]
@@ -59,6 +60,7 @@ try {
   assert.equal((await api.portfolio()).data.portfolios[0].cashBalance, 1234)
   const backup = await call(CHANNELS.maintenance, { action: 'exportUserData' })
   assert.equal(backup.result.data.performed, true)
+  assert.ok((await api.settings()).data.lastBackupAt)
   assert.equal(JSON.parse(backup.contents).app, 'budget-terminal-electron')
   await api.mutateSettings({ type: 'setTime12h', value: true })
   const imported = await call(CHANNELS.maintenance, { action: 'importUserData', contents: backup.contents })
@@ -70,5 +72,9 @@ try {
   console.log('PASS: browser assets, API restrictions, persistence, backup round trip, invalid import and change events')
 } finally {
   await server.close()
+  await assert.rejects(startWebServer({ port: -1, production }), /port|PORT/i)
+  const { acquireDataSession } = await import('../electron/services/dataSession.js')
+  const release = acquireDataSession()
+  release()
   await rm(scratch, { recursive: true, force: true })
 }

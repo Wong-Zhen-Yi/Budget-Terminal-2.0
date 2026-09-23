@@ -6,6 +6,14 @@ import { computeExposure, emptyRiskMetrics } from '../electron/shared/analytics.
 import { ok } from '../electron/shared/envelope.js'
 import type { AnalyticsPayload } from '../electron/shared/contract.js'
 import { waitForWarmSlot, warmQuery } from '../src/api/warmQueue.js'
+import { recentPages, startupPages } from '../electron/shared/navigation.js'
+
+assert.deepEqual(recentPages(['stocks', 'charts', 'portfolio'], 'charts'), ['charts', 'stocks', 'portfolio'])
+assert.equal(recentPages(['a', 'b', 'c', 'd', 'e', 'f'], 'g').length, 6)
+assert.deepEqual(startupPages('dashboard', ['portfolio', 'charts'], ['heatmap', 'trading-volumes', 'stocks', 'fundamentals'], []),
+  ['dashboard', 'portfolio', 'charts', 'stocks', 'fundamentals'])
+assert.deepEqual(startupPages('dashboard', ['heatmap', 'portfolio'], ['stocks'], ['portfolio']), ['dashboard', 'heatmap', 'stocks'])
+assert.deepEqual(startupPages('heatmap', [], ['economic', 'bonds', 'etf'], []), ['heatmap'])
 
 import { cache, TtlCache } from '../electron/services/cache.js'
 import { yahoo } from '../electron/services/yahoo/client.js'

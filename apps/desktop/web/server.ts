@@ -1,22 +1,30 @@
 import { createServer } from 'node:http'
 import { execFile } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
-import { homedir } from 'node:os'
 import { extname, join, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { acquireDataSession } from '../electron/services/dataSession.js'
 
 const appRoot = fileURLToPath(new URL('../', import.meta.url))
 
 export async function startWebServer(options: { port?: number; production?: boolean } = {}) {
-  // Preserve the existing Windows stores; give other platforms an absolute home.
-  process.env.APPDATA ??= join(homedir(), '.budget-terminal', 'data')
-  process.env.LOCALAPPDATA ??= join(homedir(), '.budget-terminal', 'cache')
+  const release = acquireDataSession()
+  try {
+    return await startLockedWebServer(options, release)
+  } catch (error) {
+    release()
+    throw error
+  }
+}
+
+async function startLockedWebServer(options: { port?: number; production?: boolean }, release: () => void) {
   const { createWebApi } = await import('./api.js')
   const { cache } = await import('../electron/services/cache.js')
-  const api = createWebApi()
   const production = options.production ?? false
   const staticRoot = join(appRoot, 'out', 'web')
   if (production) await readFile(join(staticRoot, 'index.html'))
+  const api = createWebApi()
+  const pending = new Set<Promise<void>>()
   const server = createServer((request, response) => {
     // This is a local, single-user server. Reject cross-site and DNS rebinding requests.
     const host = request.headers.host
@@ -31,20 +39,20 @@ export async function startWebServer(options: { port?: number; production?: bool
       return
     }
     if (request.url?.startsWith('/__budget_api/')) {
-      void api.handle(request, response).catch(() => {
+      const operation = api.handle(request, response).catch(() => {
         if (!response.headersSent) response.writeHead(400)
         response.end()
-      })
+      }).finally(() => pending.delete(operation))
+      pending.add(operation)
     } else if (vite) {
       vite.middlewares(request, response)
     } else {
       void serveStatic(request.url ?? '/', response)
     }
   })
-  const vite = production ? null : await (await import('vite')).createServer({
-    configFile: join(appRoot, 'vite.web.config.ts'),
-    server: { middlewareMode: true, hmr: { server } },
-  })
+  // Keep ownership alive with the server, even if its caller discards the close handle.
+  server.once('close', () => { void Promise.allSettled([...pending]).then(release) })
+  let vite: Awaited<ReturnType<typeof import('vite')['createServer']>> | null = null
 
   async function serveStatic(url: string, response: import('node:http').ServerResponse) {
     try {
@@ -65,20 +73,38 @@ export async function startWebServer(options: { port?: number; production?: bool
     }
   }
 
-  await new Promise<void>((done, reject) => {
-    server.once('error', reject)
-    server.listen(options.port ?? 3000, '127.0.0.1', done)
-  })
+  try {
+    vite = production ? null : await (await import('vite')).createServer({
+      configFile: join(appRoot, 'vite.web.config.ts'),
+      server: { middlewareMode: true, hmr: { server } },
+    })
+    await new Promise<void>((done, reject) => {
+      server.once('error', reject)
+      server.listen(options.port ?? 3000, '127.0.0.1', done)
+    })
+  } catch (error) {
+    api.close()
+    await vite?.close()
+    throw error
+  }
   const address = server.address()
   const port = typeof address === 'object' && address ? address.port : 3000
   return {
     url: `http://127.0.0.1:${port}`,
     async close() {
       api.close()
-      await vite?.close()
       server.closeAllConnections()
-      await new Promise<void>((done) => server.close(() => done()))
-      cache.close()
+      try {
+        await Promise.all([
+          vite?.close(),
+          new Promise<void>((done) => server.close(() => done())),
+        ])
+      } finally {
+        // A disconnected client may still have a JSON-store mutation in flight.
+        await Promise.allSettled([...pending])
+        cache.close()
+        release()
+      }
     },
   }
 }

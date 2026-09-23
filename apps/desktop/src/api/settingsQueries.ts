@@ -50,6 +50,9 @@ export function useMaintenance(): (
   return useCallback(
     async (action: MaintenanceAction) => {
       const result = await api.maintenance(action)
+      if (result.data.performed && action === 'exportUserData') {
+        await queryClient.invalidateQueries({ queryKey: queryKeys.settings })
+      }
       if (result.data.performed && action !== 'exportUserData') {
         await removeRendererCache()
         queryClient.removeQueries({

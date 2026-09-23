@@ -1,4 +1,4 @@
-import { BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron'
+import { BrowserWindow, clipboard, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
 import { writeFile } from 'node:fs/promises'
 import type { Envelope, MaintenanceAction, MaintenanceResult, WindowAction } from '../shared/contract.js'
 import { CHANNELS } from '../shared/contract.js'
@@ -8,10 +8,16 @@ import { watchPortfolios } from '../services/portfolioStore.js'
 import { isSafeExternalUrl } from '../services/urls.js'
 import { registerServiceHandlers } from './serviceHandlers.js'
 
-export function registerIpcHandlers(): () => void {
+export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent) => boolean): () => void {
+  const handle: typeof ipcMain.handle = (channel, listener) => {
+    ipcMain.handle(channel, (event, ...args: unknown[]) => {
+      if (!isTrustedSender(event)) throw new Error('Untrusted IPC sender')
+      return listener(event, ...args)
+    })
+  }
   const provider = yahooProvider
   registerServiceHandlers((channel, run) => {
-    ipcMain.handle(channel, (_event, request) => run(request))
+    handle(channel, (_event, request) => run(request))
   })
 
   /**
@@ -19,7 +25,7 @@ export function registerIpcHandlers(): () => void {
    * all that is left here is resolving a path — dismissing the dialog is a normal
    * outcome and comes back as `performed: false`, not an error.
    */
-  ipcMain.handle(
+  handle(
     CHANNELS.maintenance,
     async (event, action: MaintenanceAction): Promise<Envelope<MaintenanceResult>> => {
       const window = BrowserWindow.fromWebContents(event.sender)
@@ -54,16 +60,17 @@ export function registerIpcHandlers(): () => void {
       }
 
       if (action === 'clearUserData') return provider.clearUserData()
-      return provider.resetCache()
+      if (action === 'resetCache') return provider.resetCache()
+      throw new Error('Unknown maintenance action')
     },
   )
 
-  ipcMain.handle(CHANNELS.openExternal, async (_event, url: string) => {
+  handle(CHANNELS.openExternal, async (_event, url: string) => {
     if (!isSafeExternalUrl(url)) return
     await shell.openExternal(url)
   })
 
-  ipcMain.handle(
+  handle(
     CHANNELS.saveText,
     async (event, suggestedName: string, contents: string): Promise<string | null> => {
       const window = BrowserWindow.fromWebContents(event.sender)
@@ -76,11 +83,11 @@ export function registerIpcHandlers(): () => void {
     },
   )
 
-  ipcMain.handle(CHANNELS.writeClipboard, (_event, contents: string) => {
+  handle(CHANNELS.writeClipboard, (_event, contents: string) => {
     clipboard.writeText(contents)
   })
 
-  ipcMain.handle(CHANNELS.windowControl, (event, action: WindowAction) => {
+  handle(CHANNELS.windowControl, (event, action: WindowAction) => {
     const window = BrowserWindow.fromWebContents(event.sender)
     if (!window) return
     if (action === 'minimize') window.minimize()

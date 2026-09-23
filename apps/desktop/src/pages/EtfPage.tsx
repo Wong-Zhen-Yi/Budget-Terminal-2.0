@@ -20,6 +20,7 @@ import { AumRail } from '@/components/etf/AumRail'
 import { HoldingsTab } from '@/components/etf/HoldingsTab'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { Button } from '@/components/ui/Button'
+import { DataFreshness } from '@/components/ui/DataFreshness'
 import { useEtfPage } from '@/stores/etf'
 
 /**
@@ -331,6 +332,11 @@ export function EtfPage({
           </Button>
         </div>
 
+        <DataFreshness envelope={subtab === 'holdings' ? (fund ? holdingsQuery.data : undefined) : (arbitrage ? arbitrageQuery.data : undefined)}
+          loading={subtab === 'holdings' ? holdingsBusy : arbitrageQuery.isFetching || refreshingArbitrage}
+          coverage={subtab === 'holdings'
+            ? fund ? fund.coverageNote || `${holdings.length} holdings${fund.isPartial ? ' · partial list' : ''}` : undefined
+            : arbitrage ? `${arbitrage.quoteCoverage}/${arbitrage.totalHoldings} holdings quoted` : undefined} />
         {subtab === 'holdings' ? (
           <HoldingsTab
             holdings={holdings}

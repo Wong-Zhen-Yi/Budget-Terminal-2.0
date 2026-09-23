@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 
 import type { AppSettings, PortfolioPayload } from '@shared/contract'
+import { startupPages } from '@shared/navigation'
+import { useDataHealth, type StartupTiming } from '@/stores/dataHealth'
 import { calendarToday, earningsDateRange } from '@shared/calendar'
 import { useCalendarPage } from '@/stores/calendar'
 import { useIpoPage } from '@/stores/ipo'
@@ -13,8 +15,7 @@ import { usePortfolio } from './queries'
 import { waitForWarmSlot, warmQuery } from './warmQueue'
 
 /**
- * Warm every page's data at startup, so switching tabs lands on a loaded page instead of
- * a spinner.
+ * Prefetch at most five eligible current/favorite/recent pages, reducing unused work.
  *
  * The pages themselves are untouched: this only fills the React Query cache under the
  * exact keys and `staleTime`s their own hooks use, so a warmed page mounts straight onto
@@ -23,7 +24,7 @@ import { waitForWarmSlot, warmQuery } from './warmQueue'
  *
  * Two rules keep this from being a burst of hundreds of Yahoo calls:
  *
- * - the tasks run strictly one after another in the configured page priority order,
+ * - the tasks run strictly one after another in current/favorite/recent order,
  *   yielding to foreground requests between tasks, and
  * - hidden tabs are skipped — a page taken out of the strip in Settings has no reason to
  *   spend the rate budget.
@@ -509,7 +510,7 @@ function buildTasks(
   return tasks.sort((a, b) => rank(a.tab) - rank(b.tab))
 }
 
-export function useWarmPages(settings: AppSettings | undefined): WarmProgress {
+export function useWarmPages(settings: AppSettings | undefined, activeTab: string, recent: string[]): WarmProgress {
   const queryClient = useQueryClient()
   const portfolioQuery = usePortfolio()
 
@@ -544,6 +545,7 @@ export function useWarmPages(settings: AppSettings | undefined): WarmProgress {
    * `ready` gates the effect now, and it flips false to true exactly once.
    */
   const inputs = useRef({
+    activeTab, recent, favorites: settings?.favoriteTabs ?? [],
     payload,
     hidden,
     stocksSymbol,
@@ -554,6 +556,7 @@ export function useWarmPages(settings: AppSettings | undefined): WarmProgress {
     ipoYear,
   })
   inputs.current = {
+    activeTab, recent, favorites: settings?.favoriteTabs ?? [],
     payload,
     hidden,
     stocksSymbol,
@@ -573,6 +576,7 @@ export function useWarmPages(settings: AppSettings | undefined): WarmProgress {
   useEffect(() => {
     if (started.current || !ready) return
     const current = inputs.current
+    const priority = startupPages(current.activeTab, current.favorites, current.recent, [...current.hidden])
     const tasks = buildTasks(
       current.payload,
       { stocks: current.stocksSymbol, fundamentals: current.fundamentalsSymbol },
@@ -582,21 +586,33 @@ export function useWarmPages(settings: AppSettings | undefined): WarmProgress {
         earningsYear: current.earningsYear,
         ipoYear: current.ipoYear,
       },
-    ).filter((task) =>
+    ).filter((task) => (priority.includes(task.tab) || (task.tab === 'economic' && priority.includes('bonds'))) && (
       task.tab === 'economic'
         // Bonds and Economic share the same rates payload. Warm it whenever either page
         // is visible, but still skip the long provider load when both are hidden.
         ? !(current.hidden.has('economic') && current.hidden.has('bonds'))
-        : !current.hidden.has(task.tab),
-    )
+        : !current.hidden.has(task.tab)
+    )).sort((a, b) => {
+      const rank = (tab: string) => priority.indexOf(tab === 'economic' && !priority.includes(tab) ? 'bonds' : tab)
+      return rank(a.tab) - rank(b.tab)
+    })
 
-    if (!tasks.length) return
+    if (!tasks.length) {
+      useDataHealth.getState().setStartup({ durationMs: 0, planned: 0, timings: [] })
+      return
+    }
 
     let cancelled = false
     // Defer startup so StrictMode's trial effect can clean up before marking this run
     // started. Otherwise the real effect skips a warm-up that was already cancelled.
     const run = async () => {
       started.current = true
+      const startedAt = performance.now()
+      const timings: StartupTiming[] = []
+      const report = () => useDataHealth.getState().setStartup({
+        durationMs: performance.now() - startedAt, planned: tasks.length, timings: [...timings],
+      })
+      report()
       for (const [index, task] of tasks.entries()) {
         // Give mounted queries a head start, bounded so polling or a stuck foreground
         // request cannot starve warm-up. Main's rate gate still prioritizes foreground.
@@ -613,11 +629,16 @@ export function useWarmPages(settings: AppSettings | undefined): WarmProgress {
         setProgress({ active: true, done: index, total: tasks.length, label: task.label })
         // A page that cannot be warmed is not an error here: it falls back to fetching
         // when the user opens it, exactly as it did before.
+        const taskStarted = performance.now()
+        let failed = false
         try {
           await task.run(queryClient)
         } catch (error) {
+          failed = true
           console.warn(`[warm-up] ${task.label}:`, error)
         }
+        timings.push({ label: task.label, durationMs: performance.now() - taskStarted, failed })
+        report()
         // Yield between pages so navigation and its foreground queries can start.
         await new Promise((resolve) => setTimeout(resolve, 250))
       }

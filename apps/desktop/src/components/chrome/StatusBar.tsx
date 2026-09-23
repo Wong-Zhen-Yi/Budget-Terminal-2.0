@@ -20,7 +20,7 @@ const severity: Record<Freshness, number> = {
 const toneFor: Record<Freshness, string> = {
   failed: 'text-down',
   partial: 'text-down',
-  stale: 'text-text-muted',
+  stale: 'text-warn',
   cached: 'text-text-muted',
   fresh: 'text-up',
 }
@@ -131,13 +131,13 @@ export function StatusBar({
   } else if (loading.length) {
     health = `Loading ${loading.map((panel) => panel.label).join(', ')}...`
     tone = 'text-text-muted'
-  } else if (warming) {
-    health = warming
-    tone = 'text-text-muted'
   } else if (worst) {
     const meta = worst.envelope!.meta
     health = `${worst.label}: ${meta.failureReason || meta.freshness}`
     tone = toneFor[meta.freshness]
+  } else if (warming) {
+    health = warming
+    tone = 'text-text-muted'
   }
 
   return (

@@ -1,16 +1,11 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+import { profileStorage } from './profileStorage'
 
 import type { Envelope, Freshness } from '@shared/contract'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 
-/**
- * A session-only log of what every panel's feed did.
- *
- * The reference's Data Health view is built the same way — it never touches disk, and a
- * restart starts it empty. Every page already reports its envelopes to the status bar,
- * so recording them there costs nothing and gives the Settings page something to show
- * for pages that are not currently mounted.
- */
+/** Bounded observed feed history; restored records are explicitly historical. */
 export interface HealthRecord {
   page: string
   label: string
@@ -20,12 +15,21 @@ export interface HealthRecord {
   /** Non-fatal errors that came with the payload, already flattened to one line each. */
   errors: string[]
   fetchedAt: number
+  previousSession?: boolean
+}
+
+export interface StartupTiming {
+  label: string
+  durationMs: number
+  failed: boolean
 }
 
 interface DataHealthState {
   records: Record<string, HealthRecord>
   record: (page: string, panels: PanelStatus[]) => void
   clear: () => void
+  startup: { durationMs: number; planned: number; timings: StartupTiming[] } | null
+  setStartup: (startup: DataHealthState['startup']) => void
 }
 
 function toRecord(page: string, label: string, envelope: Envelope<unknown>): HealthRecord {
@@ -35,15 +39,17 @@ function toRecord(page: string, label: string, envelope: Envelope<unknown>): Hea
     source: envelope.meta.source,
     freshness: envelope.meta.freshness,
     failureReason: envelope.meta.failureReason ?? '',
-    errors: envelope.errors.map((entry) =>
-      [entry.operation, entry.symbol, entry.reason].filter(Boolean).join(' '),
+    errors: envelope.errors.slice(0, 20).map((entry) =>
+      [entry.operation, entry.symbol, entry.reason].filter(Boolean).join(' ').slice(0, 1000),
     ),
     fetchedAt: envelope.meta.fetchedAt,
   }
 }
 
-export const useDataHealth = create<DataHealthState>((set) => ({
+export const useDataHealth = create<DataHealthState>()(persist((set) => ({
   records: {},
+  startup: null,
+  setStartup: (startup) => set({ startup }),
 
   record: (page, panels) =>
     set((state) => {
@@ -56,14 +62,30 @@ export const useDataHealth = create<DataHealthState>((set) => ({
         // Quotes re-fetch on a timer; rewriting an identical record every minute would
         // re-render the report for no reason.
         const previous = next[key]
-        if (previous && previous.fetchedAt === record.fetchedAt) continue
+        if (previous && JSON.stringify(previous) === JSON.stringify(record)) continue
         next[key] = record
         changed = true
       }
-      return changed ? { records: next } : state
+      return changed ? { records: Object.fromEntries(Object.entries(next)
+        .sort((a, b) => b[1].fetchedAt - a[1].fetchedAt).slice(0, 200)) } : state
     }),
 
   clear: () => set({ records: {} }),
+}), {
+  name: 'budget-terminal:data-health',
+  storage: profileStorage,
+  partialize: (state) => ({ records: state.records }),
+  merge: (saved, current) => {
+    const records = (saved as Partial<DataHealthState> | null)?.records
+    const restored = Object.entries(records ?? {}).filter(([, record]) =>
+      record && typeof record.page === 'string' && typeof record.label === 'string' &&
+      typeof record.source === 'string' && typeof record.failureReason === 'string' &&
+      Number.isFinite(record.fetchedAt) && Array.isArray(record.errors) &&
+      record.errors.every((error) => typeof error === 'string') &&
+      ['failed', 'partial', 'stale', 'cached', 'fresh'].includes(record.freshness),
+    ).slice(0, 200).map(([key, record]) => [key, { ...record, previousSession: true }])
+    return { ...current, records: Object.fromEntries(restored) }
+  },
 }))
 
 const ORDER: Record<Freshness, number> = {
