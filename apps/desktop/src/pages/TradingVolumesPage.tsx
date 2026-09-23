@@ -3,10 +3,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { TRADING_VOLUME_INTERVALS } from '@shared/contract'
 import {
   TRADING_VOLUME_METRICS,
-  filterStatusText,
+  LOWER_OUTLIER_FACTOR,
   rankRows,
-  visibleRows,
-  type TradingVolumeFilter,
+  removeLowerOutliers,
 } from '@shared/tradingVolumes'
 import { api } from '@/api/client'
 import { useRefreshTradingVolumes, useTradingVolumes } from '@/api/tradingVolumeQueries'
@@ -16,7 +15,6 @@ import { buildTradingVolumesLlmExport } from '@/components/tradingvolumes/llmExp
 import { useMarketCapReplay } from '@/components/tradingvolumes/useMarketCapReplay'
 import { VolumeTable } from '@/components/tradingvolumes/VolumeTable'
 import { Button } from '@/components/ui/Button'
-import { NumberInput } from '@/components/ui/NumberInput'
 import { Splitter } from '@/components/ui/Splitter'
 import { useTradingVolumesPage } from '@/stores/tradingVolumes'
 
@@ -41,12 +39,6 @@ const toneClass: Record<Tone, string> = {
 /** Keeps either pane usable however far the divider is dragged. */
 const MIN_PANE = 320
 
-/**
- * `NumberInput` is built for table cells, where it stays invisible until hover. On a
- * toolbar it needs the frame the reference's `QSpinBox` has, so the wrapper supplies one.
- */
-const SPIN_BOX = 'h-8 w-14 border border-border-strong bg-surface-raised px-1'
-
 export function TradingVolumesPage({
   onStatusChange,
 }: {
@@ -56,32 +48,30 @@ export function TradingVolumesPage({
   const refresh = useRefreshTradingVolumes()
 
   const interval = useTradingVolumesPage((state) => state.interval)
-  const mode = useTradingVolumesPage((state) => state.mode)
-  const excludeTop = useTradingVolumesPage((state) => state.excludeTop)
-  const rowRangeStart = useTradingVolumesPage((state) => state.rowRangeStart)
-  const rowRangeEnd = useTradingVolumesPage((state) => state.rowRangeEnd)
   const tableWidth = useTradingVolumesPage((state) => state.tableWidth)
   const setInterval = useTradingVolumesPage((state) => state.setInterval)
-  const setExcludeTop = useTradingVolumesPage((state) => state.setExcludeTop)
-  const setRowRangeStart = useTradingVolumesPage((state) => state.setRowRangeStart)
-  const setRowRangeEnd = useTradingVolumesPage((state) => state.setRowRangeEnd)
-  const applyRowRange = useTradingVolumesPage((state) => state.applyRowRange)
-  const reset = useTradingVolumesPage((state) => state.reset)
   const setTableWidth = useTradingVolumesPage((state) => state.setTableWidth)
 
   const [refreshing, setRefreshing] = useState(false)
+  const [outliersToRemove, setOutliersToRemove] = useState(0)
+  const [outliersHovered, setOutliersHovered] = useState(false)
+  const [outliersFocused, setOutliersFocused] = useState(false)
   const [notice, setNotice] = useState<{ text: string; tone: Tone } | null>(null)
 
   const payload = query.data?.data
-  const filter = useMemo<TradingVolumeFilter>(
-    () => ({ mode, excludeTop, rowRangeStart, rowRangeEnd }),
-    [mode, excludeTop, rowRangeStart, rowRangeEnd],
-  )
-
-  // Rank every row by the active metric, then slice. The rank is stamped before the
-  // slice, which is what lets the `#` column keep reading 6..100 under an exclude.
+  // Detect against all ranked rows so moving the slider never changes the candidates.
   const ranked = useMemo(() => rankRows(payload?.rows ?? [], interval), [payload, interval])
-  const rows = useMemo(() => visibleRows(ranked, filter), [ranked, filter])
+  const cleanedRows = useMemo(() => removeLowerOutliers(ranked, interval), [ranked, interval])
+  const outlierCount = ranked.length - cleanedRows.length
+  const removedCount = Math.min(outliersToRemove, outlierCount)
+  const outlierTickers = useMemo(() => {
+    const retained = new Set(cleanedRows)
+    return new Set(ranked.filter((row) => !retained.has(row)).map((row) => row.ticker))
+  }, [ranked, cleanedRows])
+  const rows = useMemo(
+    () => removeLowerOutliers(ranked, interval, removedCount),
+    [ranked, interval, removedCount],
+  )
 
   // Replay animates the visible rows over the active interval, so it re-plans whenever
   // either changes — and stops itself when it does.
@@ -112,12 +102,14 @@ export function TradingVolumesPage({
     }
     if (!payload || !ranked.length) return { text: 'Ready', tone: 'muted' }
 
-    const base = filterStatusText(filter, rows.length, ranked.length)
+    const base = removedCount > 0
+      ? `${rows.length} rows shown, ${removedCount} lower outlier${removedCount === 1 ? '' : 's'} hidden`
+      : `${rows.length} rows shown`
     const text = `${base} from ${payload.source} at ${payload.asOf}`
     return payload.missing.length
       ? { text: `${text} (${payload.missing.length} without history)`, tone: 'warning' }
       : { text, tone: 'positive' }
-  }, [notice, query.data, query.isFetching, payload, ranked, rows, filter])
+  }, [notice, query.data, query.isFetching, payload, ranked, rows, removedCount])
 
   const onRefresh = useCallback(async () => {
     setNotice(null)
@@ -163,32 +155,37 @@ export function TradingVolumesPage({
       <div className="flex shrink-0 flex-wrap items-center gap-1">
         <h1 className="pr-2 text-sm font-semibold text-text">Trading Volumes</h1>
 
-        <span className="px-1 text-2xs text-text-muted">Exclude top</span>
-        <NumberInput
-          value={excludeTop}
-          onCommit={setExcludeTop}
-          min={0}
-          className={SPIN_BOX}
-          aria-label="Exclude the highest-ranked rows"
-        />
-        <span className="pl-2 text-2xs text-text-muted">From row</span>
-        <NumberInput
-          value={rowRangeStart}
-          onCommit={setRowRangeStart}
-          min={1}
-          className={SPIN_BOX}
-          aria-label="First row to show"
-        />
-        <span className="text-2xs text-text-muted">To row</span>
-        <NumberInput
-          value={rowRangeEnd}
-          onCommit={setRowRangeEnd}
-          min={1}
-          className={SPIN_BOX}
-          aria-label="Last row to show"
-        />
-        <Button onClick={applyRowRange}>Search Rows</Button>
-        <Button onClick={reset}>Reset</Button>
+        <label
+          className="flex flex-wrap items-center gap-2 px-1 text-2xs text-text-muted"
+          title={`Remove detected outliers from lowest market cap upward. Outliers have market caps less than 1/${LOWER_OUTLIER_FACTOR} of the trend line estimate. Hover to preview remaining outliers.`}
+          onMouseEnter={() => setOutliersHovered(true)}
+          onMouseLeave={() => setOutliersHovered(false)}
+          onFocus={() => setOutliersFocused(true)}
+          onBlur={() => setOutliersFocused(false)}
+        >
+          <span>Remove Outliers</span>
+          <input
+            type="range"
+            min={0}
+            max={outlierCount}
+            step={1}
+            value={removedCount}
+            disabled={outlierCount === 0}
+            aria-label="Remove outliers, lowest market cap first"
+            aria-valuetext={`${removedCount} of ${outlierCount} outliers removed, lowest market cap first`}
+            className="w-32 accent-accent"
+            onChange={(event) => {
+              setNotice(null)
+              setOutliersToRemove(Number(event.target.value))
+            }}
+          />
+          <span className="num">{removedCount} / {outlierCount}</span>
+          <span>Lowest market cap first</span>
+        </label>
+        <Button onClick={() => {
+          setOutliersToRemove(0)
+          setNotice(null)
+        }}>Reset</Button>
 
         <Button className="ml-2" onClick={() => void onRefresh()} disabled={busy}>
           {busy ? 'Refreshing...' : 'Refresh'}
@@ -252,7 +249,10 @@ export function TradingVolumesPage({
                 key={key}
                 variant="toggle"
                 active={key === interval}
-                onClick={() => setInterval(key)}
+                onClick={() => {
+                  setInterval(key)
+                  setOutliersToRemove(0)
+                }}
               >
                 {TRADING_VOLUME_METRICS[key].label}
               </Button>
@@ -265,6 +265,7 @@ export function TradingVolumesPage({
             loaded={Boolean(ranked.length)}
             frame={replay.frame}
             plan={replay.plan}
+            highlightedTickers={(outliersHovered || outliersFocused) ? outlierTickers : undefined}
           />
         </div>
       </div>

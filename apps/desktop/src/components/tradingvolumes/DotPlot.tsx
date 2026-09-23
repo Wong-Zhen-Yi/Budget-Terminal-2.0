@@ -37,6 +37,8 @@ interface DotPlotProps {
   frame?: ReplayFrame | null
   /** Supplies the pinned y range and the tooltip's interval-start baselines. */
   plan?: ReplayPlan | null
+  /** Preview the same tickers the Remove Outliers button will hide. */
+  highlightedTickers?: ReadonlySet<string>
 }
 
 const PAD = { top: 14, right: 18, bottom: 42, left: 62 }
@@ -109,7 +111,7 @@ function dotColor(returnPct: number | null): string {
   return returnPct > 0 ? 'var(--color-up)' : 'var(--color-down)'
 }
 
-export function DotPlot({ rows, interval, loaded, frame = null, plan = null }: DotPlotProps) {
+export function DotPlot({ rows, interval, loaded, frame = null, plan = null, highlightedTickers }: DotPlotProps) {
   const metric = TRADING_VOLUME_METRICS[interval]
   const containerRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
@@ -243,7 +245,7 @@ export function DotPlot({ rows, interval, loaded, frame = null, plan = null }: D
       : null
 
     const labels = placed
-      .filter((entry) => base.labelled.has(entry.point.ticker))
+      .filter((entry) => base.labelled.has(entry.point.ticker) || highlightedTickers?.has(entry.point.ticker))
       .map((entry) => ({ ticker: entry.point.ticker, x: entry.cx, y: entry.cy - LABEL_OFFSET }))
       // A pinned range can push a dot above the frame mid-playback; drop the text rather
       // than paint it over the axis.
@@ -263,7 +265,7 @@ export function DotPlot({ rows, interval, loaded, frame = null, plan = null }: D
         position: toY(value),
       })),
     }
-  }, [base, points, frame, plan])
+  }, [base, points, frame, plan, highlightedTickers])
 
   const hovered = useMemo(
     () => scene?.placed.find((entry) => entry.point.ticker === hoveredTicker) ?? null,
@@ -356,6 +358,20 @@ export function DotPlot({ rows, interval, loaded, frame = null, plan = null }: D
               stroke="var(--color-border-strong)"
               strokeWidth={0.6}
               onMouseEnter={() => setHoveredTicker(entry.point.ticker)}
+            />
+          ))}
+
+          {scene.placed.filter((entry) => highlightedTickers?.has(entry.point.ticker)).map((entry) => (
+            <circle
+              key={`outlier-${entry.point.ticker}`}
+              aria-label={`Remove outlier ${entry.point.ticker}`}
+              cx={entry.cx}
+              cy={entry.cy}
+              r={DOT_RADIUS + 5}
+              fill="none"
+              stroke="var(--color-warn)"
+              strokeWidth={2}
+              className="pointer-events-none"
             />
           ))}
 

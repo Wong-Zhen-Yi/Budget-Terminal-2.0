@@ -372,6 +372,36 @@ export function leastSquares(points: Array<{ x: number; y: number }>): Fit | nul
   return { alpha: meanY - beta * meanX, beta }
 }
 
+export const LOWER_OUTLIER_FACTOR = 5
+
+/** Hide caps more than 5x below the current dot-plot line.
+ * Remove up to count candidates, lowest market cap first, preserving volume ranks.
+ * Fit once on the input selection so filtering never cascades as the line moves.
+ * Missing/unplottable rows are retained; they are not evidence of an outlier.
+ */
+export function removeLowerOutliers<T extends TradingVolumeRow>(
+  rows: T[],
+  interval: TradingVolumeInterval,
+  count = Infinity,
+): T[] {
+  const field = TRADING_VOLUME_METRICS[interval].volumeField
+  const points = rows.flatMap((row) => {
+    const volume = metricValue(row, field)
+    return isLoggable(volume) && isLoggable(row.marketCap)
+      ? [{ row, x: Math.log10(volume), y: Math.log10(row.marketCap) }]
+      : []
+  })
+  if (points.length < 3) return rows
+  const fit = leastSquares(points)
+  if (!fit) return rows
+  const outliers = new Set(points
+    .filter(({ x, y }) => y < fit.alpha + fit.beta * x - Math.log10(LOWER_OUTLIER_FACTOR) - 1e-10)
+    .map(({ row }) => row)
+    .sort((left, right) => left.marketCap! - right.marketCap! || left.ticker.localeCompare(right.ticker))
+    .slice(0, Number.isNaN(count) ? 0 : Math.max(0, Math.trunc(count))))
+  return rows.filter((row) => !outliers.has(row))
+}
+
 /* -------------------------------------------------- market-cap replay (Replay) */
 
 /**

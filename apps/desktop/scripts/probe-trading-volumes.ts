@@ -11,6 +11,7 @@
  * This is the most expensive probe in the repo — a twelve-page screen plus one hundred
  * three-year daily charts, all behind the rate gate. Half a minute is normal.
  */
+import assert from 'node:assert/strict'
 import type { TradingVolumeInterval, TradingVolumeRow } from '../electron/shared/contract.js'
 import { TRADING_VOLUME_INTERVALS } from '../electron/shared/contract.js'
 import {
@@ -21,6 +22,7 @@ import {
   leastSquares,
   metricValue,
   rankRows,
+  removeLowerOutliers,
   replayFrame,
 } from '../electron/shared/tradingVolumes.js'
 import { yahooProvider } from '../electron/services/provider.js'
@@ -177,6 +179,49 @@ function replayInputs(rows: TradingVolumeRow[], interval: TradingVolumeInterval)
 }
 
 async function main(): Promise<void> {
+  if (process.argv.includes('--offline')) {
+    const makeRow = (ticker: string, volume: number | null, cap: number | null): TradingVolumeRow => ({
+      ticker, name: ticker, sector: '', marketCap: cap,
+      oneDayDollarVolume: volume, fiveDayAvgDollarVolume: cap,
+      thirtyDayAvgDollarVolume: null, ytdAvgDollarVolume: null,
+      oneYearAvgDollarVolume: null, threeYearAvgDollarVolume: null,
+      oneDayPriceReturnPct: null, fiveDayPriceReturnPct: null,
+      thirtyDayPriceReturnPct: null, ytdPriceReturnPct: null,
+      oneYearPriceReturnPct: null, threeYearPriceReturnPct: null,
+      marketCapHistory: [],
+    })
+    const normal = Array.from({ length: 21 }, (_, i) => makeRow(`N${i}`, 10 ** (6 + i / 10), 10 ** (8 + i / 10)))
+    const sample = rankRows([
+      ...normal, makeRow('LOW', 1e7, 1e6), makeRow('HIGH', 1e7, 1e12),
+      makeRow('NEAR', 1e7, 5e8), makeRow('MISSING', null, null),
+      makeRow('ZERO', 0, 0),
+    ], '1d')
+    const cleaned = removeLowerOutliers(sample, '1d')
+    assert.deepEqual(cleaned, sample.filter((row) => row.ticker !== 'LOW'))
+    assert.equal(sample.length, 26, 'Input rows remain intact for Restore')
+    assert.deepEqual(removeLowerOutliers(sample, '5d'), sample, 'Uses selected interval')
+    assert.deepEqual(removeLowerOutliers([], '1d'), [])
+    assert.deepEqual(removeLowerOutliers(sample.slice(0, 2), '1d'), sample.slice(0, 2))
+    const flat = [makeRow('A', 1e7, 1e9), makeRow('B', 1e7, 1e6), makeRow('C', 1e7, 1e9)]
+    assert.deepEqual(removeLowerOutliers(flat, '1d'), flat, 'No removals without a fitted line')
+    const nearCutoff = rankRows([
+      ...normal, makeRow('GRML', 1e7, 1.35e8), makeRow('KEEP', 1e7, 3e8),
+    ], '1d')
+    assert.deepEqual(removeLowerOutliers(nearCutoff, '1d'), nearCutoff.filter((row) => row.ticker !== 'GRML'),
+      'Catches caps around 13.5% of the line estimate while retaining closer points')
+    const multiple = rankRows([
+      ...normal, makeRow('SMALL', 2e7, 1e5), makeRow('LARGER', 4e7, 1e6),
+      makeRow('MISSING', null, null),
+    ], '1d')
+    assert.deepEqual(removeLowerOutliers(multiple, '1d', 0), multiple)
+    assert.deepEqual(removeLowerOutliers(multiple, '1d', 1), multiple.filter(row => row.ticker !== 'SMALL'),
+      'Slider removes the lowest market cap first, regardless of volume rank')
+    assert.deepEqual(removeLowerOutliers(multiple, '1d', 2), multiple.filter(row => !['SMALL', 'LARGER'].includes(row.ticker)))
+    assert.deepEqual(removeLowerOutliers(multiple, '1d', 999), removeLowerOutliers(multiple, '1d'))
+    assert.deepEqual(removeLowerOutliers(multiple, '1d', -1), multiple)
+    console.log('Trading Volumes offline outlier checks passed')
+    return
+  }
   const requested = process.argv[2] as TradingVolumeInterval | undefined
   const interval: TradingVolumeInterval =
     requested && TRADING_VOLUME_INTERVALS.includes(requested) ? requested : '1d'
