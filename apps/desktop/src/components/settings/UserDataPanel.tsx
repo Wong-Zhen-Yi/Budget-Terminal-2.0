@@ -62,7 +62,7 @@ export function UserDataPanel({
         <p className={`text-2xs ${backupDue ? 'text-warn' : 'text-text-muted'}`}>
           {backupDue ? 'Backup recommended. ' : ''}
           {lastBackupAt ? `Last export prepared: ${timestampLabel(lastBackupAt)}.` : 'No backup export recorded yet.'}
-          {' Keep a copy outside this computer; in browser mode, check that the download completed.'}
+          {' Keep a copy outside this computer.'}
         </p>
         <div className="grid grid-cols-2 gap-2">
           <Button

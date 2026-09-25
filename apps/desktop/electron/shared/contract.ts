@@ -474,7 +474,7 @@ export const DEFAULT_OBSCURED_TABS: ReadonlyArray<string> = ['personal-finance']
  * store, the way the reference keeps `app_config.json` apart from `user_data.json`.
  */
 export interface AppSettings {
-  /** Last successfully prepared user-data export, shared by desktop and browser. */
+  /** Last successfully prepared user-data export. */
   lastBackupAt?: number
   /** Market country whose zone the top-bar clock prints. */
   clockCountry: string

@@ -3,7 +3,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-/** Both hosts must resolve the same data directory before opening any stores. */
+/** Resolve the data directory before opening any stores. */
 export function configureDataPaths(): void {
   process.env.APPDATA ??= process.platform === 'win32'
     ? join(homedir(), 'AppData', 'Roaming') : join(homedir(), '.budget-terminal', 'data')
@@ -26,7 +26,7 @@ export function acquireDataSession(): () => void {
   } catch (error) {
     database.close()
     if (/locked|busy/i.test(error instanceof Error ? error.message : String(error))) {
-      throw new Error('Budget Terminal is already using this data folder. Close the other desktop app or stop its browser server, then launch again.')
+      throw new Error('Budget Terminal is already using this data folder. Close the other desktop app, then launch again.')
     }
     throw error
   }

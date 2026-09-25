@@ -53,10 +53,6 @@
     "probe:etf": "npm run --workspace budget-terminal-desktop probe:etf --",
     "probe:projections": "npm run --workspace budget-terminal-desktop probe:projections --",
     "probe:economic": "npm run --workspace budget-terminal-desktop probe:economic --",
-    "probe:bonds": "npm run --workspace budget-terminal-desktop probe:bonds --",
-    "dev:web": "npm run dev:web --workspace budget-terminal-desktop",
-    "build:web": "npm run build:web --workspace budget-terminal-desktop",
-    "start:web": "npm run start:web --workspace budget-terminal-desktop",
-    "probe:web": "npm run probe:web --workspace budget-terminal-desktop"
+    "probe:bonds": "npm run --workspace budget-terminal-desktop probe:bonds --"
   }
 }

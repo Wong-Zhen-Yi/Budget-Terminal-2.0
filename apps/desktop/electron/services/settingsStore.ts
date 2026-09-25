@@ -62,7 +62,7 @@ const CLOCK_CODES = new Set(CLOCK_COUNTRIES.map((entry) => entry.code))
 
 export function settingsPath(): string {
   // Resolved from the environment rather than Electron's `app`, so the probe scripts
-  // reach the same file without booting a browser process.
+  // reach the same file without booting an Electron process.
   const appData = process.env.APPDATA ?? join(process.env.USERPROFILE ?? '', 'AppData', 'Roaming')
   return join(appData, 'BudgetTerminalElectron', 'settings.json')
 }

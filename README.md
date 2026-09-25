@@ -1,8 +1,7 @@
 # Budget Terminal 2.0
 
 A local market-research and portfolio application built with Electron, React and
-TypeScript. This repository is the application source of truth. The same services
-also support a browser interface served from your computer.
+TypeScript. This repository is the application source of truth.
 
 ## Setup and launch
 
@@ -13,9 +12,10 @@ npm install
 npm run dev
 ```
 
-On Windows, **Budget Terminal Windows Electron.cmd** starts the desktop app;
-**Budget Terminal Windows Browser.cmd** starts browser mode. On macOS, use
-**Launch Budget Terminal Macos.command** or **Launch Budget Terminal Macos Browser.command**.
+To launch from a checkout, use **Launch Budget Terminal.cmd** on Windows,
+**Launch Budget Terminal.command** on macOS, or **Launch Budget Terminal.sh**
+on Linux. Each launcher installs dependencies, checks the Electron runtime,
+and opens the desktop app. Keep its terminal open while using the app.
 
 Installation and the launchers verify the Electron runtime automatically. To repair
 an interrupted Electron download, run:
@@ -24,27 +24,9 @@ an interrupted Electron download, run:
 npm run ensure:electron
 ```
 
-For browser development:
-
-```bash
-npm run dev:web
-```
-
-Open **http://127.0.0.1:3000**. Set `PORT` to select another port. Keep the server
-terminal open while using browser mode; Ctrl+C stops it. The server binds only to
-loopback and rejects cross-site requests. It is a local, single-user application.
-
-For a built browser version:
-
-```bash
-npm run build:web
-npm run start:web
-```
-
 For desktop bundles, run `npm run build`, then
 `npm run preview --workspace budget-terminal-desktop`. The build does not produce
-an installer. Browser assets under `apps/desktop/out/web` require the Node server;
-they are not a standalone static website.
+an installer.
 
 ## Workspaces
 
@@ -94,17 +76,16 @@ footer's API bars show app-side request pressure, not a provider-reported quota.
 
 ## Saved data and backups
 
-On Windows, browser and desktop mode share data under
+On Windows, the app saves data under
 `%APPDATA%\BudgetTerminalElectron` and market caches under
 `%LOCALAPPDATA%\BudgetTerminalElectron`. Other platforms default to
 `~/.budget-terminal/data/BudgetTerminalElectron` and
 `~/.budget-terminal/cache/BudgetTerminalElectron`. `APPDATA` and `LOCALAPPDATA`
 can override these locations.
 
-Only one desktop process or browser server can own a data folder at a time. Stop
-that host before switching modes. A second host reports that the folder is in use.
-The operating system releases ownership after a crash; no manual lock-file cleanup
-is needed. Multiple browser tabs can use the same running server.
+Only one desktop process can own a data folder at a time. A second process
+reports that the folder is in use. The operating system releases ownership after
+a crash; no manual lock-file cleanup is needed.
 
 Stores start empty and writes are serialized and atomic. Settings > User Data
 exports portfolios, the options tracker, personal finance, Cards and settings in
@@ -112,17 +93,16 @@ one JSON backup. Imports replace the corresponding saved data; the confirmation
 describes rollback behavior. Clear User Data preserves settings.
 
 A backup reminder appears in Settings when no export has been recorded or the last
-export was at least seven days ago. Export time is shared between modes. In browser
-mode, verify that the download completed. Keep a copy outside this computer.
-Renderer preferences such as recent pages, chart drawings and data-health history
-are local to that browser/desktop profile and are not included in the JSON backup.
+export was at least seven days ago. Keep a copy outside this computer. Renderer
+preferences such as recent pages, chart drawings and data-health history are local
+to the Electron profile and are not included in the JSON backup.
 
 ## Architecture
 
 ```
-React renderer -> window.api -> Electron IPC or local HTTP -> shared services
-                                                        -> public data providers
-                                                        -> JSON stores / cache
+React renderer -> window.api -> Electron IPC -> shared services
+                                               -> public data providers
+                                               -> JSON stores / cache
 ```
 
 - `apps/desktop/src/pages`: page components.
@@ -130,7 +110,6 @@ React renderer -> window.api -> Electron IPC or local HTTP -> shared services
 - `electron/services`: provider access, rate limiting, caching and persistence.
 - `electron/shared`: typed contracts and pure calculations.
 - `electron/ipc` and `electron/preload.ts`: restricted desktop bridge.
-- `web`: local HTTP host for the same service handlers.
 - `scripts/probe-*.ts`: standalone verification scripts.
 - `out`: generated bundles and probe artifacts, excluded from Git.
 
@@ -147,8 +126,6 @@ Run from the repository root:
 ```bash
 npm run typecheck
 npm run build
-npm run build:web
-npm run probe:web
 npm run probe:settings
 npm run probe:charts -- --offline
 npm run probe:stocks -- --offline

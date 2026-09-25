@@ -72,7 +72,7 @@ import { getApiUsageSnapshot } from '../services/apiUsage.js'
 
 export type RegisterService = <Request>(channel: string, run: (request: Request) => unknown) => void
 
-/** Shared service routes for Electron IPC and the local browser server. */
+/** Register provider routes for Electron IPC. */
 export function registerServiceHandlers(register: RegisterService): void {
   const provider = yahooProvider
 

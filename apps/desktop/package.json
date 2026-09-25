@@ -60,11 +60,7 @@
     "probe:youtube": "tsx scripts/probe-youtube.ts",
     "probe:institutions": "tsx scripts/probe-institutions.ts",
     "patterns:png": "tsx scripts/render-pattern-images.ts",
-    "probe:sp500": "tsx scripts/probe-sp500.ts",
-    "dev:web": "tsx web/server.ts",
-    "build:web": "vite build --config vite.web.config.ts",
-    "start:web": "tsx web/server.ts --production",
-    "probe:web": "tsx scripts/probe-web.ts"
+    "probe:sp500": "tsx scripts/probe-sp500.ts"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

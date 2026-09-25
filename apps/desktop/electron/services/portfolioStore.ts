@@ -200,7 +200,7 @@ function emptyDocument(): StoredDocument {
 
 export function storePath(): string {
   // Resolved from the environment rather than Electron's `app`, so the probe scripts
-  // read the same file without booting a browser process.
+  // read the same file without booting an Electron process.
   const appData = process.env.APPDATA ?? join(process.env.USERPROFILE ?? '', 'AppData', 'Roaming')
   return join(appData, 'BudgetTerminalElectron', 'portfolio.json')
 }

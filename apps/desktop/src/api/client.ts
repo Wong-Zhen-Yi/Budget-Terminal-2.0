@@ -1,5 +1,4 @@
 import type { DesktopApi, MarketCapTier } from '@shared/contract'
-import { createBrowserApi } from './browser'
 
 declare global {
   interface Window {
@@ -7,13 +6,9 @@ declare global {
   }
 }
 
-/**
- * Use the Electron preload when available, otherwise the local HTTP bridge.
- * Provider requests stay in the backend in both environments.
- */
-export const isDesktop = !import.meta.env?.BROWSER_MODE && Boolean(window.api)
-export const api: DesktopApi = window.api ?? createBrowserApi()
-if (!isDesktop) window.api = api
+/** The Electron preload is the renderer's only service bridge. */
+if (!window.api) throw new Error('Electron preload API is unavailable. Start Budget Terminal in Electron.')
+export const api: DesktopApi = window.api
 
 export const queryKeys = {
   marketCap: (tier: MarketCapTier) => ['marketCap', tier] as const,

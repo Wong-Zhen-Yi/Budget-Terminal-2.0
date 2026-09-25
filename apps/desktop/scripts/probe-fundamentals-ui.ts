@@ -59,7 +59,7 @@ try {
     },
     bundle: true, jsx: 'automatic', write: false, format: 'iife',
     alias: { '@': join(root, 'src'), '@shared': join(root, 'electron/shared') },
-    define: { 'process.env.NODE_ENV': '"production"', 'import.meta.env.BROWSER_MODE': 'false' },
+    define: { 'process.env.NODE_ENV': '"production"' },
   })
   await writeFile(join(directory, 'index.html'), '<html><head><link rel="stylesheet" href="theme.css"></head><body><div id="root" style="height:100vh;display:flex"></div><script>window.api = { fundamentalsPage: request => window.fixtureApi(request) }</script><script src="renderer.js"></script></body></html>')
   // client.ts captures the preload API at import time; forward it to the fixture installed by the bundle.

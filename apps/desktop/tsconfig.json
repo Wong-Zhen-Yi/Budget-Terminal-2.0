@@ -37,8 +37,6 @@
     "src/**/*.ts",
     "src/**/*.tsx",
     "scripts/**/*.ts",
-    "electron.vite.config.ts",
-    "web/**/*.ts",
-    "vite.web.config.ts"
+    "electron.vite.config.ts"
   ]
 }

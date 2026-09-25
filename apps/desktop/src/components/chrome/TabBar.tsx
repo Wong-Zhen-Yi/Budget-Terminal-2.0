@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { CLOCK_COUNTRIES, DEFAULT_CLOCK_COUNTRY } from '@shared/contract'
-import { api, isDesktop } from '@/api/client'
+import { api } from '@/api/client'
 import { clockTime } from '@/lib/format'
 
 interface TabBarProps {
@@ -72,7 +72,7 @@ export function TabBar({
         {reloading ? 'Reloading...' : 'Reload (F5)'}
       </button>
 
-      {isDesktop && <WindowControls />}
+      <WindowControls />
     </div>
   )
 }

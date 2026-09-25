@@ -65,7 +65,7 @@ for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
   }
   if (attempt === ATTEMPTS) {
     console.error(`Electron binary at ${bin} cannot be started (${run.reason}).`)
-    console.error('If an antivirus is scanning it, wait a moment and relaunch; otherwise delete node_modules\electron and run npm install.')
+    console.error('If a security scanner is inspecting it, wait a moment and relaunch; otherwise reinstall dependencies with npm install.')
     process.exit(1)
   }
   console.log(`Electron not spawnable yet (${run.reason}); retrying in ${DELAY_MS / 1000}s (${attempt}/${ATTEMPTS})...`)
