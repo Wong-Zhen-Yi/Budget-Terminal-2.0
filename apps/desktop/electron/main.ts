@@ -10,6 +10,8 @@ const dirname = fileURLToPath(new URL('.', import.meta.url))
 const isDev = !app.isPackaged
 
 if (process.platform === 'darwin') app.setName('Budget Terminal')
+const ownsInstance = process.platform !== 'darwin' || app.requestSingleInstanceLock()
+if (!ownsInstance) app.quit()
 
 let disposeIpc: (() => void) | null = null
 let releaseDataSession: (() => void) | null = null
@@ -65,7 +67,22 @@ function createWindow(): BrowserWindow {
   return window
 }
 
-app.whenReady().then(async () => {
+if (ownsInstance && process.platform === 'darwin') {
+  app.on('second-instance', () => {
+    const window = BrowserWindow.getAllWindows()[0]
+    if (!window) {
+      // A closed macOS window leaves the process (and its data session) running.
+      // Reuse that process when the checkout launcher is opened again.
+      if (disposeIpc) createWindow()
+      return
+    }
+    if (window.isMinimized()) window.restore()
+    window.show()
+    window.focus()
+  })
+}
+
+if (ownsInstance) app.whenReady().then(async () => {
   try {
     if (process.platform === 'darwin') {
       Menu.setApplicationMenu(Menu.buildFromTemplate([
