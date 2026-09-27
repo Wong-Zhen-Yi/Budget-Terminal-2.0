@@ -75,6 +75,7 @@ export function queryFreshness(queryKey: QueryKey): number {
   if (root === 'returns' || root === 'momentum' || root === 'analytics' || root === 'cardsPerformance') return FRESHNESS.chartDaily
   if (root === 'signals') return FRESHNESS.institutions
   if (root === 'quant') return 12 * 60 * 60_000
+  if (root === 'technicalScreen') return 12 * 60 * 60_000
   if (root === 'youtube') return FRESHNESS.youtube
   return 15 * 60_000
 }

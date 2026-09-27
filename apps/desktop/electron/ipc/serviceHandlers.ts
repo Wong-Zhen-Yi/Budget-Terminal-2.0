@@ -169,6 +169,7 @@ export function registerServiceHandlers(register: RegisterService): void {
   handle(CHANNELS.signals, (request: SignalsRequest) =>
     provider.signals(request),
   )
+  handle(CHANNELS.technicalScan, () => provider.technicalScan())
   handle(CHANNELS.marketCapSales, (request: { symbols: string[]; force?: boolean }) => provider.marketCapSales(request))
   handle(CHANNELS.marketCap, (request: MarketCapRequest) => provider.marketCap(request)),
   handle(CHANNELS.priceScreen, (request: PriceScreenRequest) =>

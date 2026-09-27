@@ -1,4 +1,5 @@
 import type { BitcoinPayload, BitcoinRequest } from './bitcoin.js'
+import type { TechnicalMetrics } from './technicalScreen.js'
 import type { MoneyPayload, MoneyRequest } from './money.js'
 export type { MoneyPayload, MoneyRequest } from './money.js'
 import type { Sp500Request, Sp500Data, Sp500BreadthRequest, Sp500Breadth } from './sp500.js'
@@ -1248,6 +1249,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'valuation', label: 'Valuation', implemented: true },
   { id: 'options', label: 'Options', implemented: true },
   { id: 'signals', label: 'Day Trading', implemented: true },
+  { id: 'technical-screen', label: 'Technical Indicators', implemented: true },
   { id: 'quant', label: 'Quant', implemented: true },
   { id: 'projections', label: 'Projections', implemented: true },
   { id: 'etf', label: 'ETF', implemented: true },
@@ -3063,6 +3065,23 @@ export interface BacktestRequest {
 
 /* --------------------------------------------------------------- quant page */
 
+export interface TechnicalScanRow extends TechnicalMetrics {
+  ticker: string
+  name: string
+  exchange: string
+  marketCap: number
+  medianDollarVolume: number
+}
+
+export interface TechnicalScanPayload {
+  rows: TechnicalScanRow[]
+  universeCount: number
+  scannedCount: number
+  errors: Record<string, string>
+  sourcedAt: string
+  completedAt: string
+}
+
 export type QuantActiveTab = 'screener' | 'pairs'
 export type QuantScreenFilter =
   | 'all'
@@ -3331,6 +3350,7 @@ export const CHANNELS = {
   preMarket: 'pre-market:read',
   tradingVolumes: 'trading-volumes:read',
   signals: 'signals:scan',
+  technicalScan: 'technical:scan',
   marketCapSales: 'market-cap:sales',
   marketCap: 'market-cap:screen',
   priceScreen: 'price:screen',
@@ -3490,6 +3510,7 @@ export interface DesktopApi {
   preMarket(request: PreMarketRequest): Promise<Envelope<PreMarketPayload>>
   tradingVolumes(request: TradingVolumesRequest): Promise<Envelope<TradingVolumesPayload>>
   signals(request: SignalsRequest): Promise<Envelope<SignalsPayload | null>>
+  technicalScan(): Promise<Envelope<TechnicalScanPayload | null>>
   marketCapSales(request: { symbols: string[]; force?: boolean }): Promise<Envelope<Record<string, number | null>>>
   marketCap(request: MarketCapRequest): Promise<Envelope<MarketCapPayload>>
   priceScreen(request: PriceScreenRequest): Promise<Envelope<PriceScreenPayload>>

@@ -58,6 +58,8 @@
     "probe:politics": "tsx scripts/probe-politics.ts",
     "probe:backtest": "tsx scripts/probe-backtest.ts",
     "probe:quant": "tsx scripts/probe-quant.ts",
+    "probe:technical-screen": "tsx scripts/probe-technical-screen.ts",
+    "probe:technical-screen-ui": "tsx scripts/probe-technical-screen-ui.ts",
     "probe:youtube": "tsx scripts/probe-youtube.ts",
     "probe:institutions": "tsx scripts/probe-institutions.ts",
     "patterns:png": "tsx scripts/render-pattern-images.ts",

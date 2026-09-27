@@ -33,7 +33,7 @@ const SOURCE_LIMIT = 250
 const SHORTLIST_LIMIT = 100
 const PAIR_UNIVERSE_LIMIT = 40
 
-interface QuantUniverse {
+export interface QuantUniverse {
   candidates: QuantCandidate[]
   sourcedAt: string
   fromCache: boolean
@@ -118,7 +118,7 @@ function completedMedianDollarVolume(bars: QuantBar[], sessionDate: string): num
   return values.length % 2 ? values[middle] : (values[middle - 1] + values[middle]) / 2
 }
 
-async function sourceUniverse(force: boolean): Promise<QuantUniverse> {
+export async function sourceLiquidUniverse(force: boolean): Promise<QuantUniverse> {
   const sessionDate = localSessionDate()
   const result = await cache.resolve(
     `quant:universe:${sessionDate}`,
@@ -204,7 +204,7 @@ export async function clearLatestQuant(): Promise<void> {
 export async function runQuantScan(
   forceUniverseRefresh = false,
   dependencies: QuantScanDependencies = {
-    sourceUniverse,
+    sourceUniverse: sourceLiquidUniverse,
     fetchHistory: (symbol, force = false) => fetchDaily(symbol, 740, 'history', force),
   },
 ): Promise<QuantScanPayload> {

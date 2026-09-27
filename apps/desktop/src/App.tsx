@@ -10,7 +10,6 @@ import { PageCache } from '@/components/chrome/PageCache'
 import { StatusBar, type PanelStatus } from '@/components/chrome/StatusBar'
 import { TabBar } from '@/components/chrome/TabBar'
 import { TabPicker } from '@/components/chrome/TabPicker'
-import { ResearchTicker } from '@/components/chrome/ResearchTicker'
 import { WorkspaceHeader, WorkspaceSidebar } from '@/components/chrome/WorkspaceNavigation'
 import { isTextEntry } from '@/lib/shortcuts'
 import { DashboardPage } from '@/pages/DashboardPage'
@@ -41,6 +40,7 @@ import { PreMarketPage } from '@/pages/PreMarketPage'
 import { MarketCapPage } from '@/pages/MarketCapPage'
 import { PricePage } from '@/pages/PricePage'
 import { QuantPage } from '@/pages/QuantPage'
+import { TechnicalScreenPage } from '@/pages/TechnicalScreenPage'
 import { IpoPage } from '@/pages/IpoPage'
 import { PoliticsPage } from '@/pages/PoliticsPage'
 import { SignalsPage } from '@/pages/SignalsPage'
@@ -330,7 +330,6 @@ export function App() {
             isMac={isMac}
             favorite={favorites.includes(activeTab)} onToggleFavorite={() => void toggleFavorite()}
             saving={savingFavorite || !settings} />
-          {!hideCurrent ? <ResearchTicker activeTab={activeTab} visibleIds={visibleIds} onNavigate={handleStocksNavigate} /> : null}
           <div className="relative flex min-h-0 flex-1 flex-col">
             {/* Blurred and inert, matching the reference's blur effect plus `setEnabled(False)`. */}
             <div
@@ -484,6 +483,8 @@ function renderPage({
       <BacktestPage onStatusChange={onStatusChange} />
     ) : tabId === 'quant' ? (
       <QuantPage onStatusChange={onStatusChange} />
+    ) : tabId === 'technical-screen' ? (
+      <TechnicalScreenPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'youtube' ? (
       <YouTubePage onStatusChange={onStatusChange} />
     ) : tabId === 'institutions' ? (

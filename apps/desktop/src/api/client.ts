@@ -22,6 +22,7 @@ export const queryKeys = {
   preMarket: ['preMarket'] as const,
   tradingVolumes: ['tradingVolumes'] as const,
   signals: ['signals'] as const,
+  technicalScreen: ['technicalScreen'] as const,
   quant: ['quant'] as const,
   calendarMonth: (tickers: string[], year: number, month: number) =>
     ['calendarMonth', year, month, [...tickers].sort().join(',')] as const,

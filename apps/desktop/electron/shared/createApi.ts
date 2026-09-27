@@ -33,6 +33,7 @@ export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS
     preMarket: (request) => invoke(CHANNELS.preMarket, request),
     tradingVolumes: (request) => invoke(CHANNELS.tradingVolumes, request),
     signals: (request) => invoke(CHANNELS.signals, request),
+    technicalScan: () => invoke(CHANNELS.technicalScan),
     marketCapSales: (request) => invoke(CHANNELS.marketCapSales, request),
     marketCap: (request) => invoke(CHANNELS.marketCap, request),
     priceScreen: (request) => invoke(CHANNELS.priceScreen, request),

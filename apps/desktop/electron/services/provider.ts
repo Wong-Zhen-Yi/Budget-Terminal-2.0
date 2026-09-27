@@ -61,6 +61,7 @@ import type {
   QuantPairRequest,
   QuantScanPayload,
   QuantScanRequest,
+  TechnicalScanPayload,
   SignalsPayload,
   SignalsRequest,
   TradingVolumesPayload,
@@ -306,6 +307,7 @@ import {
   QUANT_SOURCE,
   runQuantScan,
 } from './yahoo/quant.js'
+import { runTechnicalScan, TECHNICAL_SOURCE } from './yahoo/technicalScreen.js'
 import { clearYouTubeCache, getYouTube, YOUTUBE_SOURCE } from './youtube.js'
 import { getYouTubeThumbnail } from './youtubeImages.js'
 
@@ -319,6 +321,7 @@ import { getYouTubeThumbnail } from './youtubeImages.js'
 export interface MarketDataProvider {
   backtest(request: BacktestRequest): Promise<Envelope<BacktestPayload>>
   quantScan(request: QuantScanRequest): Promise<Envelope<QuantScanPayload | null>>
+  technicalScan(): Promise<Envelope<TechnicalScanPayload | null>>
   quantPair(request: QuantPairRequest): Promise<Envelope<QuantPairDetail | null>>
   youtube(request: YouTubeRequest): Promise<Envelope<YouTubePayload>>
   youtubeThumbnail(
@@ -1776,6 +1779,19 @@ export const yahooProvider: MarketDataProvider = {
       )
     } catch (error) {
       return failed(await getLatestQuant(), describeError(error), QUANT_SOURCE)
+    }
+  },
+
+  async technicalScan() {
+    try {
+      const payload = await runTechnicalScan()
+      const failures = Object.entries(payload.errors)
+      return failures.length
+        ? partial(payload, failures.map(([symbol, reason]) => err(TECHNICAL_SOURCE, reason, 'technicalScan', symbol)), TECHNICAL_SOURCE,
+          `${failures.length} ticker(s) returned incomplete daily history.`)
+        : ok(payload, TECHNICAL_SOURCE)
+    } catch (error) {
+      return failed(null, describeError(error), TECHNICAL_SOURCE)
     }
   },
 
