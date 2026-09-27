@@ -422,7 +422,7 @@ export function mergeEconomicCategories(
 const EXCLUDED_SECURITY = /\b(etf|etn|exchange[- ]traded|fund|closed[- ]end|warrant|right|unit|preferred|preference|senior note|subordinated note|baby bond|notes due|depositary share)s?\b/i
 const INCLUDED_COMPANY = /\b(common stock|ordinary share|ordinary shares|american depositary|ads|class [a-z] ordinary|shares)\b/i
 
-export function parseNasdaqCompanySymbols(text: string): Set<string> {
+export function parseNasdaqCompanySymbols(text: string, listingExchanges?: ReadonlySet<string>): Set<string> {
   const lines = text.replace(/\r/g, '').split('\n').filter(Boolean)
   const headers = (lines.shift() ?? '').split('|')
   const index = (name: string) => headers.indexOf(name)
@@ -435,6 +435,7 @@ export function parseNasdaqCompanySymbols(text: string): Set<string> {
     if ((values[index('Nasdaq Traded')] ?? '').trim().toUpperCase() !== 'Y') continue
     if ((values[index('Test Issue')] ?? '').trim().toUpperCase() === 'Y') continue
     if ((values[index('ETF')] ?? '').trim().toUpperCase() === 'Y') continue
+    if (listingExchanges && !listingExchanges.has((values[index('Listing Exchange')] ?? '').trim().toUpperCase())) continue
     if (symbol.includes('$') || symbol.includes('^')) continue
     const exclusionName = name.replace(/\bAmerican Depositary Shares?\b/gi, 'American Depositary')
     if (EXCLUDED_SECURITY.test(exclusionName) || !INCLUDED_COMPANY.test(name)) continue

@@ -33,6 +33,7 @@ import type {
   SignalsRequest,
   TradingVolumesRequest,
   StocksRequest,
+  DiscoveryRequest,
   MomentumRequest,
   OptionQuotesRequest,
   PersonalFinanceMutation,
@@ -230,6 +231,8 @@ export function registerServiceHandlers(register: RegisterService): void {
     provider.politicsExport(request),
   )
   handle(CHANNELS.stocks, (request: StocksRequest) => provider.stocks(request))
+  handle(CHANNELS.discoveryUniverse, () => provider.discoveryUniverse())
+  handle(CHANNELS.discovery, (request: DiscoveryRequest) => provider.discovery(request))
   handle(CHANNELS.optionsChain, (request: OptionsChainRequest) =>
     provider.optionsChain(request),
   )

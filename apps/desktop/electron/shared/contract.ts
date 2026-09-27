@@ -929,6 +929,43 @@ export interface StocksRequest extends BackgroundRequest {
   force?: boolean
 }
 
+export interface DiscoveryRequest extends BackgroundRequest {
+  symbol: string
+}
+
+export interface DiscoveryUniverse {
+  symbols: string[]
+  stale: boolean
+}
+
+export interface DiscoverySnapshot {
+  symbol: string
+  name: string
+  exchange: string | null
+  sector: string | null
+  industry: string | null
+  country: string | null
+  employees: number | null
+  ceo: string | null
+  ipoDate: number | null
+  website: string | null
+  description: string | null
+  price: number | null
+  previousClose: number | null
+  quoteTime: number | null
+  quoteStatus: 'real-time' | 'delayed' | 'previous close' | 'unavailable'
+  quoteDelayedMinutes: number | null
+  market: Record<string, number | null>
+  valuation: Record<string, number | null>
+  financials: Record<string, number | null>
+  analyst: Record<string, number | null>
+  nextEarnings: number | null
+  lastEarnings: number | null
+  candles: Candle[]
+  stale: boolean
+  generatedAt: number
+}
+
 export interface NewsPayload {
   items: NewsItem[]
 }
@@ -1205,6 +1242,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'cards', label: 'Cards', implemented: true },
   { id: 'up-down', label: 'Up/Down', implemented: true },
   { id: 'stocks', label: 'Stocks', implemented: true },
+  { id: 'stock-discovery', label: 'Discovery', implemented: true },
   { id: 'fundamentals', label: 'Fundamentals', implemented: true },
   { id: 'charts', label: 'Charts', implemented: true },
   { id: 'valuation', label: 'Valuation', implemented: true },
@@ -3482,6 +3520,8 @@ export const CHANNELS = {
   upDown: 'up-down:read',
   upDownTargets: 'up-down:targets',
   stocks: 'stocks:read',
+  discoveryUniverse: 'discovery:universe',
+  discovery: 'discovery:read',
   optionsChain: 'options:chain',
   optionsExpirations: 'options:expirations',
   projections: 'projections:read',
@@ -3641,6 +3681,8 @@ export interface DesktopApi {
   upDown(request: UpDownRequest): Promise<Envelope<UpDownPayload>>
   upDownTargets(request: UpDownTargetsRequest): Promise<Envelope<UpDownTargetsPayload>>
   stocks(request: StocksRequest): Promise<Envelope<StocksPayload>>
+  discoveryUniverse(): Promise<Envelope<DiscoveryUniverse>>
+  discovery(request: DiscoveryRequest): Promise<Envelope<DiscoverySnapshot | null>>
   optionsChain(request: OptionsChainRequest): Promise<Envelope<OptionsChainPayload>>
   optionsExpirations(
     request: OptionsExpirationsRequest,

@@ -30,6 +30,7 @@
     "probe:signals": "tsx scripts/probe-signals.ts",
     "probe:news": "tsx scripts/probe-news.ts",
     "probe:stocks": "tsx scripts/probe-stocks.ts",
+    "probe:discovery": "tsx scripts/probe-discovery.ts",
     "probe:fundamentals": "tsx scripts/probe-fundamentals.ts",
     "probe:calendar": "tsx scripts/probe-calendar.ts",
     "probe:charts": "tsx scripts/probe-charts.ts",

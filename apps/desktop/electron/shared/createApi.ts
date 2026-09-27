@@ -54,6 +54,8 @@ export function createApi(invoke: Invoke, subscribe: Subscribe): DesktopApi {
     upDown: (request) => invoke(CHANNELS.upDown, request),
     upDownTargets: (request) => invoke(CHANNELS.upDownTargets, request),
     stocks: (request) => invoke(CHANNELS.stocks, request),
+    discoveryUniverse: () => invoke(CHANNELS.discoveryUniverse),
+    discovery: (request) => invoke(CHANNELS.discovery, request),
     optionsChain: (request) => invoke(CHANNELS.optionsChain, request),
     optionsExpirations: (request) => invoke(CHANNELS.optionsExpirations, request),
     projections: (request) => invoke(CHANNELS.projections, request),

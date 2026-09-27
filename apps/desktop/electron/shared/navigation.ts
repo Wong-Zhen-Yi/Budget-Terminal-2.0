@@ -2,7 +2,7 @@
 export const WORKSPACES = [
   { id: 'overview', label: 'Overview', pages: ['dashboard', 'news', 'calendar', 'youtube', 'dictionary'] },
   { id: 'markets', label: 'Markets', pages: ['pre-market', 'heatmap', 'up-down', 'trading-volumes', 'beta', 'market-cap', 'price', 'etf', 'sp500', 'forex', 'crypto', 'gold', 'oil'] },
-  { id: 'research', label: 'Research', pages: ['stocks', 'fundamentals', 'valuation', 'institutions'] },
+  { id: 'research', label: 'Research', pages: ['stocks', 'stock-discovery', 'fundamentals', 'valuation', 'institutions'] },
   { id: 'focus', label: 'Focus', pages: ['bmnr', 'bitcoin'] },
   { id: 'trading', label: 'Trading', pages: ['charts', 'options', 'signals', 'quant', 'backtest', 'roll'] },
   { id: 'macro', label: 'Macro & events', pages: ['global', 'economic', 'bonds', 'money', 'ipo', 'politics'] },

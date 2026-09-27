@@ -269,17 +269,21 @@ export async function getCalendarMonth(
 
 interface SymbolCacheValue {
   symbols: string[]
+  discoverySymbols?: string[]
   fetchedAt: string
 }
 
-async function companySymbolUniverse(force: boolean): Promise<CacheHit<SymbolCacheValue>> {
+export async function companySymbolUniverse(force: boolean): Promise<CacheHit<SymbolCacheValue>> {
   const path = join(cacheRoot(), 'earnings', 'nasdaq-company-symbols.json')
   const cached = await readCache<SymbolCacheValue>(path, SYMBOL_TTL_MS)
-  if (!force && cached?.fresh) return cached
+  if (!force && cached?.fresh && cached.value.discoverySymbols) return cached
   try {
-    const symbols = [...parseNasdaqCompanySymbols(await fetchText(SYMBOL_URL))].sort()
+    const directory = await fetchText(SYMBOL_URL)
+    const symbols = [...parseNasdaqCompanySymbols(directory)].sort()
+    const discoverySymbols = [...parseNasdaqCompanySymbols(directory, new Set(['Q', 'N', 'A']))].sort()
     if (!symbols.length) throw new Error('NASDAQ Trader returned no company symbols.')
-    const value = { symbols, fetchedAt: new Date().toISOString() }
+    if (!discoverySymbols.length) throw new Error('NASDAQ Trader returned no U.S. exchange company symbols.')
+    const value = { symbols, discoverySymbols, fetchedAt: new Date().toISOString() }
     await writeCache(path, value)
     return { value, ageSeconds: 0, fresh: true }
   } catch (error) {

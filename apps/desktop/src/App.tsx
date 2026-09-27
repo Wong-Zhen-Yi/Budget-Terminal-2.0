@@ -52,6 +52,7 @@ import { ValuationPage } from '@/pages/ValuationPage'
 import { EconomicPage } from '@/pages/EconomicPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { StocksPage } from '@/pages/StocksPage'
+import { StockDiscoveryPage } from '@/pages/StockDiscoveryPage'
 import { YouTubePage } from '@/pages/YouTubePage'
 import { useDataHealth } from '@/stores/dataHealth'
 import { useChartsStore } from '@/stores/charts'
@@ -299,10 +300,11 @@ export function App() {
   const visibleIds = useMemo(() => visibleTabs.map((tab) => tab.id), [visibleTabs])
   const renderCachedPage = useCallback((tabId: string) => renderPage({
     tabId,
+    active: tabId === activeTab && !hideCurrent,
     onStatusChange: statusFor(tabId),
     onNavigate: handleStocksNavigate,
     onSelectTab: setActiveTab,
-  }), [statusFor, handleStocksNavigate])
+  }), [statusFor, handleStocksNavigate, activeTab, hideCurrent])
 
   return (
     <div className="flex h-full flex-col bg-bg">
@@ -392,11 +394,13 @@ function PlaceholderPage({ tabId }: { tabId: string }) {
  */
 function renderPage({
   tabId,
+  active,
   onStatusChange,
   onNavigate,
   onSelectTab,
 }: {
   tabId: string
+  active: boolean
   onStatusChange: (panels: PanelStatus[], sourcePath: string) => void
   onNavigate: (tabId: string, symbol?: string) => void
   onSelectTab: (tabId: string) => void
@@ -458,6 +462,8 @@ function renderPage({
       <ChartsPage onStatusChange={onStatusChange} />
     ) : tabId === 'stocks' ? (
       <StocksPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
+    ) : tabId === 'stock-discovery' ? (
+      <StockDiscoveryPage active={active} />
     ) : tabId === 'fundamentals' ? (
       <FundamentalsPage onStatusChange={onStatusChange} />
     ) : tabId === 'valuation' ? (

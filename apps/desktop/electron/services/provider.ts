@@ -67,6 +67,9 @@ import type {
   TradingVolumesRequest,
   StocksPayload,
   StocksRequest,
+  DiscoveryRequest,
+  DiscoverySnapshot,
+  DiscoveryUniverse,
   MomentumPayload,
   MomentumRequest,
   OptionQuotesPayload,
@@ -252,6 +255,7 @@ import {
 } from './yahoo/signals.js'
 import { getTradingVolumes, TRADING_VOLUMES_SOURCE } from './yahoo/tradingVolumes.js'
 import { getStocks, STOCKS_SOURCE } from './yahoo/stocks.js'
+import { getDiscoverySnapshot, getDiscoveryUniverse } from './yahoo/discovery.js'
 import { getCloses, getClosesBatch, periodReturn } from './yahoo/history.js'
 import { getOptionQuotes } from './yahoo/optionQuotes.js'
 import { getNews } from './yahoo/news.js'
@@ -387,6 +391,8 @@ export interface MarketDataProvider {
   politicsPage(request: PoliticsPageRequest): Promise<Envelope<PoliticsPagePayload>>
   politicsExport(request: PoliticsExportRequest): Promise<Envelope<PoliticsExportPayload>>
   stocks(request: StocksRequest): Promise<Envelope<StocksPayload>>
+  discoveryUniverse(): Promise<Envelope<DiscoveryUniverse>>
+  discovery(request: DiscoveryRequest): Promise<Envelope<DiscoverySnapshot | null>>
   optionsChain(request: OptionsChainRequest): Promise<Envelope<OptionsChainPayload>>
   optionsExpirations(
     request: OptionsExpirationsRequest,
@@ -1642,6 +1648,25 @@ export const yahooProvider: MarketDataProvider = {
         news: [], institutional: [], insiders: [], missing: ['Chart'], generatedAt: 0,
       }
       return failed(empty, reason, STOCKS_SOURCE)
+    }
+  },
+
+  async discoveryUniverse() {
+    try {
+      return ok(await getDiscoveryUniverse(), 'NASDAQ Trader directory')
+    } catch (error) {
+      return failed({ symbols: [], stale: true }, describeError(error), 'NASDAQ Trader directory')
+    }
+  },
+
+  async discovery({ symbol }) {
+    try {
+      const snapshot = await getDiscoverySnapshot(symbol)
+      return snapshot.stale
+        ? partial(snapshot, [err('Yahoo Finance', 'Some quote or company fields could not refresh.', 'discovery', symbol)], 'Yahoo Finance')
+        : ok(snapshot, 'Yahoo Finance')
+    } catch (error) {
+      return failed(null, describeError(error), 'Yahoo Finance')
     }
   },
 
