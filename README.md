@@ -83,6 +83,13 @@ On Windows, the app saves data under
 `~/.budget-terminal/cache/BudgetTerminalElectron`. `APPDATA` and `LOCALAPPDATA`
 can override these locations.
 
+These data folders are outside the source checkout and are excluded from Git.
+On the first launch after upgrading from a version that saved `portfolio.json`
+under `apps/desktop/AppData/Roaming/BudgetTerminalElectron`, the desktop app
+recovers that older portfolio if the current book is absent or still the empty
+default. It keeps a copy of an empty current book before replacement and never
+replaces a portfolio with holdings, cash, options, or custom organization.
+
 Only one desktop process can own a data folder at a time. A second process
 reports that the folder is in use. The operating system releases ownership after
 a crash; no manual lock-file cleanup is needed.

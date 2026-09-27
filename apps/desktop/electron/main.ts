@@ -78,7 +78,7 @@ app.whenReady().then(async () => {
         { role: 'windowMenu' },
       ]))
     }
-    releaseDataSession = acquireDataSession()
+    releaseDataSession = acquireDataSession(app.getAppPath())
     // Resolve paths and take ownership before a service opens its persistent cache.
     const { registerIpcHandlers } = await import('./ipc/handlers.js')
     const { cache } = await import('./services/cache.js')
