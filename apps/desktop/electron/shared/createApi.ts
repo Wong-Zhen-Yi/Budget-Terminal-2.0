@@ -4,8 +4,9 @@ import { CHANNELS } from './contract.js'
 export type Invoke = <T>(channel: string, ...args: unknown[]) => Promise<T>
 export type Subscribe = (channel: string, listener: () => void) => () => void
 
-export function createApi(invoke: Invoke, subscribe: Subscribe): DesktopApi {
+export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS.Platform): DesktopApi {
   return {
+    platform,
     apiUsage: () => invoke(CHANNELS.apiUsage),
     quotes: (request) => invoke(CHANNELS.quotes, request),
     chart: (request) => invoke(CHANNELS.chart, request),

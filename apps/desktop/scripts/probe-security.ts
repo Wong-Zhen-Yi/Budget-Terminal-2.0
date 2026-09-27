@@ -46,6 +46,7 @@ try {
           assert.equal(trusted.webContents.getLastWebPreferences().sandbox, true)
           assert.equal(await trusted.webContents.executeJavaScript('typeof require'), 'undefined')
           assert.equal(await trusted.webContents.executeJavaScript('typeof process'), 'undefined')
+          assert.equal(await trusted.webContents.executeJavaScript('window.api.platform'), process.platform)
           const result = await trusted.webContents.executeJavaScript('window.api.settings()')
           assert.ok(result.data.tabOrder.includes('settings'))
           const other = new BrowserWindow(options)

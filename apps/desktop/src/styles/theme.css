@@ -60,6 +60,14 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+.platform-mac {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+}
+
+.platform-mac .num {
+  font-family: 'SF Mono', ui-monospace, monospace;
+}
+
 /* Thin scrollbars everywhere; the panels are dense and 16px bars eat a whole column. */
 * {
   scrollbar-width: thin;

@@ -8,6 +8,7 @@ const api = createApi(
     ipcRenderer.on(channel, handler)
     return () => ipcRenderer.removeListener(channel, handler)
   },
+  process.platform,
 )
 
 contextBridge.exposeInMainWorld('api', api)

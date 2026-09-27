@@ -13,13 +13,14 @@ interface NavigationProps {
   tabs: NavigationTab[]
   activeTab: string
   onSelectTab: (id: string) => void
+  isMac: boolean
 }
 
 const pageButton = 'rounded px-3 py-2 text-left text-2xs transition-colors disabled:opacity-40 '
 const selectedStyle = 'bg-accent-dim text-text'
 const idleStyle = 'text-text-muted hover:bg-surface-hover hover:text-text'
 
-export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, recent, collapsed, onToggleCollapsed, saving }: NavigationProps & {
+export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, recent, collapsed, onToggleCollapsed, saving, isMac }: NavigationProps & {
   favorites: string[]
   recent: string[]
   collapsed: boolean
@@ -27,14 +28,14 @@ export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, rece
   saving: boolean
 }) {
   const remembered = useRef(new Map<string, string>())
-  const navigationButton = collapsed ? pageButton.replace('px-3', 'px-1') + 'text-center ' : pageButton
+  const navigationButton = (collapsed ? pageButton.replace('px-3', 'px-1') + 'text-center ' : pageButton) + (isMac ? 'rounded-lg ' : '')
   const activeWorkspace = workspaceFor(activeTab)
   useEffect(() => {
     if (activeWorkspace) remembered.current.set(activeWorkspace.id, activeTab)
   }, [activeTab, activeWorkspace])
 
   return (
-    <aside aria-label="Workspace sidebar" className={`flex shrink-0 flex-col gap-6 overflow-y-auto border-r border-border bg-surface px-2 py-4 ${collapsed ? 'w-16' : 'w-48'}`}>
+    <aside aria-label="Workspace sidebar" className={`flex shrink-0 flex-col gap-6 overflow-y-auto border-r border-border ${isMac ? 'bg-[#101722] px-3 py-5' : 'bg-surface px-2 py-4'} ${collapsed ? 'w-16' : isMac ? 'w-52' : 'w-48'}`}>
       <div>
         <div className="mb-2 flex items-center justify-between">
           {!collapsed ? <p className="px-3 text-2xs text-text-dim">Workspaces</p> : null}
@@ -97,7 +98,7 @@ export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, rece
   )
 }
 
-export function WorkspaceHeader({ tabs, activeTab, onSelectTab, favorite, onToggleFavorite, saving }: NavigationProps & {
+export function WorkspaceHeader({ tabs, activeTab, onSelectTab, favorite, onToggleFavorite, saving, isMac }: NavigationProps & {
   favorite: boolean
   onToggleFavorite: () => void
   saving: boolean
@@ -106,7 +107,7 @@ export function WorkspaceHeader({ tabs, activeTab, onSelectTab, favorite, onTogg
   const page = tabs.find((tab) => tab.id === activeTab)
   const pages = tabs.filter((tab) => workspace?.pages.includes(tab.id))
   return (
-    <header className="shrink-0 border-b border-border bg-surface px-4 pt-3 pb-2">
+    <header className={`shrink-0 border-b border-border bg-surface px-4 pt-3 pb-2 ${isMac ? 'px-5 pt-4 pb-3' : ''}`}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-baseline gap-3">
           <span className="text-2xs text-text-muted">{workspace?.label ?? 'Preferences'} /</span>
@@ -114,14 +115,14 @@ export function WorkspaceHeader({ tabs, activeTab, onSelectTab, favorite, onTogg
         </div>
         {workspace ? <button type="button" onClick={onToggleFavorite} disabled={saving}
           aria-pressed={favorite} aria-label={favorite ? 'Remove page from favorites' : 'Add page to favorites'}
-          className="shrink-0 rounded border border-border-strong px-2 py-1 text-2xs text-text-muted hover:bg-surface-hover disabled:opacity-50">
+          className={`shrink-0 border border-border-strong px-2 py-1 text-2xs text-text-muted hover:bg-surface-hover disabled:opacity-50 ${isMac ? 'rounded-lg bg-surface-raised' : 'rounded'}`}>
           {favorite ? '★ Favorited' : '☆ Favorite'}
         </button> : null}
       </div>
       {pages.length ? <nav aria-label="Workspace pages" className="mt-2 flex flex-wrap gap-1">
         {pages.map((tab) => <button key={tab.id} type="button" disabled={!tab.implemented}
           aria-current={tab.id === activeTab ? 'page' : undefined} onClick={() => onSelectTab(tab.id)}
-          className={pageButton + (tab.id === activeTab ? selectedStyle : idleStyle)}>{tab.label}</button>)}
+          className={pageButton + (isMac ? 'rounded-lg ' : '') + (tab.id === activeTab ? selectedStyle : idleStyle)}>{tab.label}</button>)}
       </nav> : null}
     </header>
   )

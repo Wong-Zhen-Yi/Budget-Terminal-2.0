@@ -1,9 +1,10 @@
 import { SectionHeader } from '@/components/settings/SettingsSection'
 import { Panel } from '@/components/ui/Panel'
-import { SHORTCUTS } from '@/lib/shortcuts'
+import { shortcutsForPlatform } from '@/lib/shortcuts'
 
 /** `_build_settings_shortcuts_box`, reading off the same table the app binds. */
 export function ShortcutsPanel() {
+  const shortcuts = shortcutsForPlatform(window.api.platform === 'darwin')
   return (
     <Panel title="Keyboard Shortcuts">
       <div className="flex flex-col gap-2 p-2">
@@ -19,7 +20,7 @@ export function ShortcutsPanel() {
             </tr>
           </thead>
           <tbody>
-            {SHORTCUTS.map((row) => (
+            {shortcuts.map((row) => (
               <tr key={row.keys} className="align-top">
                 <td className="py-1 pr-3">
                   <kbd className="num inline-block border border-border-strong bg-surface-raised px-1.5 py-0.5 text-2xs text-accent-hover">

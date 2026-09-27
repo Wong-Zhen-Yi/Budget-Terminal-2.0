@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, shell } from 'electron'
+import { app, BrowserWindow, dialog, Menu, shell } from 'electron'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -9,6 +9,8 @@ import { isSafeExternalUrl } from './services/urls.js'
 const dirname = fileURLToPath(new URL('.', import.meta.url))
 const isDev = !app.isPackaged
 
+if (process.platform === 'darwin') app.setName('Budget Terminal')
+
 let disposeIpc: (() => void) | null = null
 let releaseDataSession: (() => void) | null = null
 let closeCache: (() => void) | null = null
@@ -17,6 +19,7 @@ const rendererUrl = isDev && process.env.ELECTRON_RENDERER_URL
   : pathToFileURL(join(dirname, '../renderer/index.html')).href
 
 function createWindow(): BrowserWindow {
+  const isMac = process.platform === 'darwin'
   const window = new BrowserWindow({
     width: 1600,
     height: 1000,
@@ -25,8 +28,10 @@ function createWindow(): BrowserWindow {
     show: false,
     backgroundColor: '#080b12',
     title: 'Budget Terminal',
-    // Frameless: the tab strip is the title bar, with its own drag region and controls.
-    frame: false,
+    // macOS owns the traffic lights and native fullscreen; other platforms keep the
+    // existing custom title bar and window controls.
+    frame: isMac,
+    ...(isMac ? { titleBarStyle: 'hiddenInset' as const, fullscreenable: true } : {}),
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(dirname, '../preload/preload.cjs'),
@@ -62,6 +67,17 @@ function createWindow(): BrowserWindow {
 
 app.whenReady().then(async () => {
   try {
+    if (process.platform === 'darwin') {
+      Menu.setApplicationMenu(Menu.buildFromTemplate([
+        { role: 'appMenu' },
+        { role: 'editMenu' },
+        {
+          label: 'View',
+          submenu: [{ role: 'togglefullscreen', accelerator: 'Control+Command+F' }],
+        },
+        { role: 'windowMenu' },
+      ]))
+    }
     releaseDataSession = acquireDataSession()
     // Resolve paths and take ownership before a service opens its persistent cache.
     const { registerIpcHandlers } = await import('./ipc/handlers.js')

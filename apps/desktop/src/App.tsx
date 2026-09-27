@@ -65,6 +65,7 @@ import { useNavigation } from '@/stores/navigation'
 const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
 
 export function App() {
+  const isMac = window.api.platform === 'darwin'
   const [activeTab, setActiveTab] = useState('dashboard')
   const recent = useNavigation((state) => state.recent)
   const visit = useNavigation((state) => state.visit)
@@ -248,14 +249,14 @@ export function App() {
         return
       }
 
-      if (event.key === 'F5') {
+      if (event.key === 'F5' || (isMac && event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'r')) {
         event.preventDefault()
         void reload()
         return
       }
 
       if (event.key === 'H' || event.key === 'h') {
-        if (event.ctrlKey && event.shiftKey) {
+        if ((event.ctrlKey || (isMac && event.metaKey)) && event.shiftKey) {
           event.preventDefault()
           toggleObscure()
         }
@@ -293,7 +294,7 @@ export function App() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [pickerOpen, reload, stepTab, toggleObscure, workspaceTabs])
+  }, [isMac, pickerOpen, reload, stepTab, toggleObscure, workspaceTabs])
 
   const hideCurrent = obscured && (settings?.obscuredTabs ?? []).includes(activeTab)
 
@@ -307,7 +308,7 @@ export function App() {
   }), [statusFor, handleStocksNavigate, activeTab, hideCurrent])
 
   return (
-    <div className="flex h-full flex-col bg-bg">
+    <div className={`flex h-full flex-col bg-bg ${isMac ? 'platform-mac' : ''}`}>
       <TabBar
         onOpenPicker={() => setPickerOpen(true)}
         onReload={() => void reload()}
@@ -322,10 +323,12 @@ export function App() {
         <WorkspaceSidebar
           tabs={visibleTabs} activeTab={activeTab} onSelectTab={setActiveTab} favorites={favorites} recent={recent}
           collapsed={settings?.sidebarCollapsed ?? false} onToggleCollapsed={() => void toggleSidebar()}
+          isMac={isMac}
           saving={savingSidebar || !settings}
         />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <WorkspaceHeader tabs={visibleTabs} activeTab={activeTab} onSelectTab={setActiveTab}
+            isMac={isMac}
             favorite={favorites.includes(activeTab)} onToggleFavorite={() => void toggleFavorite()}
             saving={savingFavorite || !settings} />
           {!hideCurrent ? <ResearchTicker activeTab={activeTab} visibleIds={visibleIds} onNavigate={handleStocksNavigate} /> : null}
@@ -343,7 +346,7 @@ export function App() {
             {hideCurrent ? (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <p className="border border-border-strong bg-surface px-3 py-2 text-2xs text-text-muted">
-                  This page is obscured. Press Ctrl+Shift+H to reveal it.
+                  This page is obscured. Press {isMac ? '⌘⇧H' : 'Ctrl+Shift+H'} to reveal it.
                 </p>
               </div>
             ) : null}
