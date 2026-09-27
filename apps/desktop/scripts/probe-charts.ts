@@ -257,6 +257,29 @@ async function runOffline(): Promise<void> {
     assert.equal(injectedPartial.meta.freshness, 'partial')
     assert.deepEqual(injectedPartial.data.missing, ['FAIL'])
     assert.ok(injectedPartial.data.series.OK.length > 0)
+
+    const sessionStart = Date.UTC(2026, 8, 25, 13, 30)
+    chartClient.chart = async () => ({
+      quotes: [
+        { date: new Date(sessionStart - 3_600_000), open: 99, high: 150, low: 50, close: 100, volume: 0 },
+        ...Array.from({ length: 7 }, (_, index) => ({
+          date: new Date(sessionStart + index * 3_600_000),
+          open: 100 + index, high: 102 + index, low: 99 + index, close: 101 + index, volume: 1_000,
+        })),
+        { date: new Date(sessionStart + 7 * 3_600_000), open: 107, high: 180, low: 40, close: 108, volume: 0 },
+      ],
+      meta: { currency: 'USD', longName: 'Session Fixture', instrumentType: 'EQUITY' },
+    })
+    const hourly = await yahooProvider.chartsHistory({ symbol: 'SESSION', interval: '1 Hour', range: '1Y', force: true })
+    assert.equal(hourly.data.candles.length, 7)
+    assert.ok(hourly.data.candles.every((row) => row.volume > 0 && row.high < 110 && row.low > 90))
+    const aggregated = await yahooProvider.chartsHistory({ symbol: 'SESSION', interval: '4 Hours', range: '1Y' })
+    assert.equal(aggregated.data.candles.length, 2)
+    assert.equal(aggregated.data.candles[0].volume, 4_000)
+    assert.equal(aggregated.data.candles[1].volume, 3_000)
+    assert.ok(aggregated.data.candles.every((row) => row.high < 110 && row.low > 90))
+    assert.equal(aggregated.data.stats?.price, 107)
+    assert.equal(aggregated.data.stats?.volume, 3_000)
   } finally {
     chartClient.chart = originalChart
     sharedCache.clear()

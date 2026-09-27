@@ -114,7 +114,14 @@ function fetchCandlesFromSeries(
   adjusted: boolean,
   interval: YahooInterval,
 ): RawCandles {
+  // Yahoo includes pre/post-market equity rows in intraday responses. These rows
+  // have no traded volume and can carry extreme high/low quotes; aggregating them
+  // into four-hour bars makes the regular-session chart appear wildly volatile.
+  const instrumentType = (result.meta as { instrumentType?: unknown } | undefined)?.instrumentType
+  const regularSessionOnly = ['1m', '5m', '15m', '1h'].includes(interval)
+    && (instrumentType === 'EQUITY' || instrumentType === 'ETF')
   const received: Candle[] = result.rows.flatMap((row) => {
+    if (regularSessionOnly && !(row.volume !== null && row.volume > 0)) return []
     const close = adjusted && row.adjclose !== null ? row.adjclose : row.close
     const open = adjusted && row.adjclose !== null ? row.adjclose : row.open
     const high = adjusted && row.adjclose !== null ? row.adjclose : row.high
