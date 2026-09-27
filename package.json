@@ -35,7 +35,6 @@
     "probe:backtest": "npm run --workspace budget-terminal-desktop probe:backtest --",
     "probe:quant": "npm run --workspace budget-terminal-desktop probe:quant --",
     "probe:youtube": "npm run --workspace budget-terminal-desktop probe:youtube --",
-    "probe:roll": "npm run --workspace budget-terminal-desktop probe:roll --",
     "probe:ipo": "npm run --workspace budget-terminal-desktop probe:ipo --",
     "probe:politics": "npm run --workspace budget-terminal-desktop probe:politics --",
     "probe:institutions": "npm run --workspace budget-terminal-desktop probe:institutions --",

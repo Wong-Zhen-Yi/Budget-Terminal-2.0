@@ -61,7 +61,6 @@ import type {
   PoliticsPageRequest,
   QuantPairRequest,
   QuantScanRequest,
-  RollRequest,
   YouTubeRequest,
   YouTubeThumbnailRequest,
 } from '../shared/contract.js'
@@ -217,7 +216,6 @@ export function registerServiceHandlers(register: RegisterService): void {
   handle(CHANNELS.institutionTickerActivity, (request: InstitutionTickerActivityRequest) =>
     provider.institutionTickerActivity(request),
   )
-  handle(CHANNELS.roll, (request: RollRequest) => provider.roll(request))
   handle(CHANNELS.ipoUpcoming, (request: IpoUpcomingRequest) =>
     provider.ipoUpcoming(request),
   )

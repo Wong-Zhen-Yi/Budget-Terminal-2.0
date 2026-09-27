@@ -54,7 +54,6 @@
     "probe:money-ui": "tsx scripts/probe-money-ui.ts",
     "probe:economic": "tsx scripts/probe-economic.ts",
     "probe:bonds": "tsx scripts/probe-bonds.ts",
-    "probe:roll": "tsx scripts/probe-roll.ts",
     "probe:ipo": "tsx scripts/probe-ipo.ts",
     "probe:politics": "tsx scripts/probe-politics.ts",
     "probe:backtest": "tsx scripts/probe-backtest.ts",

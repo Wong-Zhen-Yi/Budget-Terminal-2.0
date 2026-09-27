@@ -43,7 +43,6 @@ import { PricePage } from '@/pages/PricePage'
 import { QuantPage } from '@/pages/QuantPage'
 import { IpoPage } from '@/pages/IpoPage'
 import { PoliticsPage } from '@/pages/PoliticsPage'
-import { RollPage } from '@/pages/RollPage'
 import { SignalsPage } from '@/pages/SignalsPage'
 import { BetaPage } from '@/pages/BetaPage'
 import { TradingVolumesPage } from '@/pages/TradingVolumesPage'
@@ -477,8 +476,6 @@ function renderPage({
       <OptionsPage onStatusChange={onStatusChange} />
     ) : tabId === 'projections' ? (
       <ProjectionsPage onStatusChange={onStatusChange} />
-    ) : tabId === 'roll' ? (
-      <RollPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'ipo' ? (
       <IpoPage onStatusChange={onStatusChange} />
     ) : tabId === 'politics' ? (

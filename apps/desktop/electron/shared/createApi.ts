@@ -66,7 +66,6 @@ export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS
     institutionActivity: (request) => invoke(CHANNELS.institutionActivity, request),
     institutionTickerActivity: (request) =>
       invoke(CHANNELS.institutionTickerActivity, request),
-    roll: (request) => invoke(CHANNELS.roll, request),
     ipoUpcoming: (request) => invoke(CHANNELS.ipoUpcoming, request),
     ipoCompleted: (request) => invoke(CHANNELS.ipoCompleted, request),
     politicsPage: (request) => invoke(CHANNELS.politicsPage, request),

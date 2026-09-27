@@ -711,7 +711,7 @@ export function calculateIndicators(
  * between a page worth reading and one that reports nothing but STALE_DATA to anyone whose
  * afternoon is the middle of the US night.
  *
- * No holiday calendar, matching the Roll page's weekday fallback: on the nine or so market
+ * No holiday calendar: on the nine or so market
  * holidays a year this says OPEN and every result reports STALE_DATA, which is conservative
  * in the right direction — it never claims a closed market when one is trading.
  */

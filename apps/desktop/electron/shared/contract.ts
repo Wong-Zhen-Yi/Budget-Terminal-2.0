@@ -1259,7 +1259,6 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'gold', label: 'Gold', implemented: true },
   { id: 'oil', label: 'Oil', implemented: true },
   { id: 'backtest', label: 'Backtest', implemented: true },
-  { id: 'roll', label: 'Roll', implemented: true },
   { id: 'ipo', label: 'IPO', implemented: true },
   { id: 'institutions', label: 'Institutions', implemented: true },
   { id: 'politics', label: 'Politics', implemented: true },
@@ -3166,172 +3165,6 @@ export interface QuantPairRequest {
   force?: boolean
 }
 
-/* ---------------------------------------------------------------- roll page */
-
-/**
- * The Roll page, ported from `mixins/random_recommender.py` and
- * `workers/random_recommender.py` (page18). The scoring, the six pattern evaluators and
- * the candidate draw all live in `shared/roll.ts`; these are only the shapes that cross
- * IPC.
- */
-
-/** The screener/quote fields the scorer reads. Yahoo returns far more; none of it is used. */
-export interface RollQuote {
-  symbol?: string
-  quoteType?: string
-  longName?: string
-  shortName?: string
-  displayName?: string
-  sector?: string
-  sectorDisp?: string
-  exchange?: string
-  fullExchangeName?: string
-  currency?: string
-  regularMarketPrice?: number
-  regularMarketPreviousClose?: number
-  regularMarketChange?: number
-  regularMarketChangePercent?: number
-  fiftyTwoWeekChangePercent?: number
-  fiftyTwoWeekLow?: number
-  fiftyTwoWeekHigh?: number
-  marketCap?: number
-  trailingPE?: number
-  forwardPE?: number
-  epsForward?: number
-  beta?: number
-  dividendYield?: number
-  targetMeanPrice?: number
-  averageAnalystRating?: string
-  averageDailyVolume3Month?: number
-  averageDailyVolume10Day?: number
-}
-
-/** `match_tier`: how the candidate earned its place in the pool. */
-export type RollMatchTier = 'strict' | 'near' | 'fallback' | 'unavailable'
-
-/** `_compact_candidate`: one row of the Scored Candidates table. */
-export interface RollCandidate {
-  rank: number
-  symbol: string
-  name: string
-  sector: string
-  score: number
-  reasons: string[]
-  dayChangePct: number | null
-  fiftyTwoWeekChangePct: number | null
-  averageVolume: number | null
-  marketCap: number | null
-  matchTier: RollMatchTier
-  matchedModes: string[]
-  primaryPatternMode: string
-  patternMatch: boolean
-  patternType: string
-  patternScore: number
-  patternReasons: string[]
-  patternFallbackReason: string
-  /** Per-mode `technical_snapshot`, keyed by pattern mode. Drives the Why panel. */
-  technicalSnapshot: Record<string, Record<string, number | string | boolean | null>>
-}
-
-/** The company facts the left rail prints, merged from `quoteSummary` over the screener quote. */
-export interface RollCompanyInfo {
-  name: string
-  exchange: string
-  sector: string
-  industry: string
-  currency: string
-  price: number | null
-  previousClose: number | null
-  change: number | null
-  changePercent: number | null
-  marketCap: number | null
-  revenue: number | null
-  profitMargin: number | null
-  trailingPe: number | null
-  forwardPe: number | null
-  priceToSales: number | null
-  beta: number | null
-  dividendYield: number | null
-  fiftyTwoWeekLow: number | null
-  fiftyTwoWeekHigh: number | null
-  averageVolume: number | null
-  meanTarget: number | null
-  website: string
-  irUrl: string
-}
-
-/** `_chart_payload_from_frame`, as the 1Y snapshot draws it. */
-export interface RollChartBar {
-  date: string
-  open: number
-  high: number
-  low: number
-  close: number
-  volume: number
-}
-
-/** One row of Top Options By Expiration: the highest-volume contract on that expiry. */
-export interface RollTopOption {
-  ticker: string
-  type: string
-  expiration: string
-  strike: number | null
-  lastPrice: number | null
-  volume: number | null
-  openInterest: number | null
-  impliedVolatility: number | null
-}
-
-export interface RollNewsRow {
-  ticker: string
-  title: string
-  source: string
-  url: string
-  publishedAt: number
-}
-
-/** One completed roll. */
-export interface RollPayload {
-  symbol: string
-  info: RollCompanyInfo
-  candidatePool: RollCandidate[]
-  candidateRank: number
-  candidateScore: number
-  candidateReasons: string[]
-  universeTotal: number
-  screeningSummary: string
-  patternModes: string[]
-  matchTier: RollMatchTier
-  matchedModes: string[]
-  primaryPatternMode: string
-  patternMatch: boolean
-  patternType: string
-  patternScore: number
-  patternReasons: string[]
-  patternFallbackReason: string
-  technicalSnapshot: Record<string, Record<string, number | string | boolean | null>>
-  chart: RollChartBar[]
-  chartStatus: string
-  topOptions: RollTopOption[]
-  topOptionsStatus: string
-  news: RollNewsRow[]
-  newsStatus: string
-  warnings: string[]
-  rolledAt: number
-}
-
-export interface RollRequest {
-  /** Selected pattern checkboxes. Empty means the balanced roll. */
-  patternModes?: string[]
-  /** Symbols already held, pushed down the ranking so a roll surfaces something new. */
-  excludeSymbols?: string[]
-  /** Symbols already rolled this session, pushed down less hard. */
-  historySymbols?: string[]
-  /** Set when re-opening a row of Roll History: skips the screen and loads this name. */
-  targetSymbol?: string
-  force?: boolean
-}
-
 /* --------------------------------------------------------------------- ipo */
 
 /**
@@ -3530,7 +3363,6 @@ export const CHANNELS = {
   economic: 'economic:read',
   institutionActivity: 'institutions:activity',
   institutionTickerActivity: 'institutions:ticker-activity',
-  roll: 'roll:read',
   ipoUpcoming: 'ipo:upcoming',
   ipoCompleted: 'ipo:completed',
   politicsPage: 'politics:page',
@@ -3698,7 +3530,6 @@ export interface DesktopApi {
   institutionTickerActivity(
     request: InstitutionTickerActivityRequest,
   ): Promise<Envelope<InstitutionTickerActivityPayload>>
-  roll(request: RollRequest): Promise<Envelope<RollPayload | null>>
   ipoUpcoming(request: IpoUpcomingRequest): Promise<Envelope<IpoUpcomingPayload>>
   ipoCompleted(request: IpoCompletedRequest): Promise<Envelope<IpoCompletedPayload>>
   politicsPage(request: PoliticsPageRequest): Promise<Envelope<PoliticsPagePayload>>

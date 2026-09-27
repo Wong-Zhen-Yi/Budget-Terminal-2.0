@@ -126,8 +126,6 @@ import type {
   PoliticsExportRequest,
   PoliticsPagePayload,
   PoliticsPageRequest,
-  RollPayload,
-  RollRequest,
   YouTubePayload,
   YouTubeRequest,
   YouTubeThumbnailPayload,
@@ -291,7 +289,6 @@ import {
   INSTITUTIONS_SOURCE,
   type InstitutionFetchResult,
 } from './institutions.js'
-import { getRoll, ROLL_SOURCE } from './yahoo/roll.js'
 import { clearRiskFreeCache } from './riskFree.js'
 import {
   emptyValuation,
@@ -385,7 +382,6 @@ export interface MarketDataProvider {
   institutionTickerActivity(
     request: InstitutionTickerActivityRequest,
   ): Promise<Envelope<InstitutionTickerActivityPayload>>
-  roll(request: RollRequest): Promise<Envelope<RollPayload | null>>
   ipoUpcoming(request: IpoUpcomingRequest): Promise<Envelope<IpoUpcomingPayload>>
   ipoCompleted(request: IpoCompletedRequest): Promise<Envelope<IpoCompletedPayload>>
   politicsPage(request: PoliticsPageRequest): Promise<Envelope<PoliticsPagePayload>>
@@ -1531,28 +1527,6 @@ export const yahooProvider: MarketDataProvider = {
       return institutionEnvelope(await getInstitutionTickerActivity(request))
     } catch (error) {
       return failed(empty, describeError(error), INSTITUTIONS_SOURCE)
-    }
-  },
-
-  /**
-   * One dice throw over the liquid US screen.
-   *
-   * A failed roll answers with `null` rather than an empty payload: there is no partial
-   * Roll to render — either a candidate was drawn and enriched or the page keeps whatever
-   * was on screen, which is what `_p18_handle_error` leaves alone.
-   */
-  async roll(request) {
-    try {
-      const payload = await getRoll(request)
-      if (!payload.warnings.length) return ok(payload, ROLL_SOURCE)
-      return partial(
-        payload,
-        payload.warnings.map((reason) => err(ROLL_SOURCE, reason, 'roll', payload.symbol)),
-        ROLL_SOURCE,
-        payload.warnings[0],
-      )
-    } catch (error) {
-      return failed(null, describeError(error), ROLL_SOURCE)
     }
   },
 

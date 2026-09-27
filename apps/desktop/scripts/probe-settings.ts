@@ -59,6 +59,14 @@ async function main(): Promise<void> {
   const grouped = WORKSPACES.flatMap((workspace) => workspace.pages)
   check('each page belongs to exactly one workspace', new Set(grouped).size === grouped.length)
   check('all non-settings pages have a workspace', TABS.filter((tab) => tab.id !== 'settings').every((tab) => grouped.includes(tab.id)))
+  check('removed Roll page is absent from tabs and workspaces', !TABS.some((tab) => tab.id === 'roll') && !grouped.includes('roll'))
+  const withoutRoll = await replaceSettings({
+    ...defaults,
+    tabOrder: [...defaults.tabOrder, 'roll'],
+    hiddenTabs: ['roll'],
+    favoriteTabs: ['roll'],
+  })
+  check('saved Roll navigation is discarded', !withoutRoll.tabOrder.includes('roll') && !withoutRoll.hiddenTabs.includes('roll') && !withoutRoll.favoriteTabs.includes('roll'))
   const { favoriteTabs: omittedFavorites, ...legacy } = defaults
   void omittedFavorites
   check('legacy settings receive default favorites', (await replaceSettings(legacy)).favoriteTabs.join(',') === 'dashboard,portfolio,charts')
