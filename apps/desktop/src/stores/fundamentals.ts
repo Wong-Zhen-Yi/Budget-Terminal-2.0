@@ -36,6 +36,10 @@ const defaults = {
   snapshot: null,
 }
 
+export function migrateFundamentalsState(persisted: unknown): Partial<FundamentalsState> {
+  return { ...(persisted as Partial<FundamentalsState>), indexed: false }
+}
+
 export const useFundamentalsStore = create<FundamentalsState>()(
   persist(
     (set) => ({
@@ -50,7 +54,8 @@ export const useFundamentalsStore = create<FundamentalsState>()(
     }),
     {
       name: 'budget-terminal:fundamentals',
-      version: 1,
+      version: 2,
+      migrate: migrateFundamentalsState,
       merge: (persisted, current) => {
         const saved = (persisted ?? {}) as Partial<FundamentalsState>
         return {
