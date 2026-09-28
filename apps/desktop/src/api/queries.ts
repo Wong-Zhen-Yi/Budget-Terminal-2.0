@@ -55,6 +55,7 @@ export function useQuotes(holdings: string[]): UseQueryResult<Envelope<QuotesPay
   return useQuery({
     queryKey: queryKeys.quotes(holdings),
     queryFn: () => api.quotes({ holdings }),
+    enabled: holdings.length > 0,
     refetchInterval: QUOTE_REFRESH_MS,
     refetchIntervalInBackground: false,
     staleTime: QUOTE_REFRESH_MS / 2,

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import {
   BACKTEST_INTERVALS,
@@ -13,7 +14,8 @@ import {
   DEFAULT_BACKTEST_PAGE_SETTINGS,
   normalizeBacktestPageSettings,
 } from '@shared/backtest'
-import { useBacktest } from '@/api/backtestQueries'
+import { backtestKey, useBacktest } from '@/api/backtestQueries'
+import { api } from '@/api/client'
 import { usePortfolio, useQuotes } from '@/api/queries'
 import { useSettings, useSettingsMutation } from '@/api/settingsQueries'
 import { LineChart, type LineSeries } from '@/components/charts/LineChart'
@@ -51,7 +53,14 @@ export function BacktestPage({
   onStatusChange: (panels: PanelStatus[], sourcePath: string) => void
 }) {
   const backtest = useBacktest()
+  const queryClient = useQueryClient()
   const settingsQuery = useSettings()
+  const savedBacktest = normalizeBacktestPageSettings(settingsQuery.data?.data.backtestPage)
+  const startupBacktest = useQuery({
+    queryKey: backtestKey(savedBacktest),
+    queryFn: () => api.backtest(savedBacktest),
+    enabled: false,
+  })
   const saveSettings = useSettingsMutation()
   const portfolioQuery = usePortfolio()
   const mainPortfolio = useMemo(() => {
@@ -76,7 +85,8 @@ export function BacktestPage({
   const [splitterSizes, setSplitterSizes] = useState([...DEFAULT_BACKTEST_PAGE_SETTINGS.splitterSizes])
   const [leftWidth, setLeftWidth] = useState(390)
   const [selectedId, setSelectedId] = useState<number | null>(null)
-  const [payload, setPayload] = useState<BacktestPayload | null>(null)
+  const [manualPayload, setPayload] = useState<BacktestPayload | null>(null)
+  const payload = manualPayload ?? startupBacktest.data?.data ?? null
   const [notice, setNotice] = useState<{ text: string; tone: Tone } | null>(null)
   const hydrated = useRef(false)
   const pageRef = useRef<HTMLDivElement>(null)
@@ -119,7 +129,7 @@ export function BacktestPage({
   useEffect(() => {
     onStatusChange(
       [
-        { label: 'Backtest', envelope: backtest.data, loading: backtest.isPending },
+        { label: 'Backtest', envelope: backtest.data ?? startupBacktest.data, loading: backtest.isPending || startupBacktest.isFetching },
         { label: 'Holdings', envelope: portfolioQuery.data, loading: portfolioQuery.isFetching },
         { label: 'Quotes', envelope: quotesQuery.data, loading: quotesQuery.isFetching },
       ],
@@ -128,6 +138,8 @@ export function BacktestPage({
   }, [
     backtest.data,
     backtest.isPending,
+    startupBacktest.data,
+    startupBacktest.isFetching,
     onStatusChange,
     portfolioQuery.data,
     portfolioQuery.isFetching,
@@ -143,7 +155,7 @@ export function BacktestPage({
 
   const status = useMemo<{ text: string; tone: Tone }>(() => {
     if (notice) return notice
-    if (backtest.isPending) {
+    if (backtest.isPending || startupBacktest.isFetching) {
       return {
         text: `Loading ${rows.filter((row) => row.symbol.trim()).length} ticker(s) for ${range} ${interval} backtest...`,
         tone: 'muted',
@@ -163,7 +175,7 @@ export function BacktestPage({
       }
     }
     return { text: 'Ready', tone: 'muted' }
-  }, [backtest.data, backtest.isPending, interval, notice, payload, range, rows])
+  }, [backtest.data, backtest.isPending, startupBacktest.isFetching, interval, notice, payload, range, rows])
 
   const replaceRows = useCallback(
     (next: EditableRow[], message?: string) => {
@@ -226,14 +238,16 @@ export function BacktestPage({
       return
     }
     persist({ rows: requestRows, compareSymbol: cleanedCompare })
-    const result = await backtest.mutateAsync({
+    const request = {
       rows: requestRows,
       compareSymbol: cleanedCompare,
       interval,
       range,
-    })
+    }
+    const result = await backtest.mutateAsync(request)
+    queryClient.setQueryData(backtestKey(request), result)
     if (result.meta.freshness !== 'failed') setPayload(result.data)
-  }, [backtest, compareSymbol, interval, persist, range, storedRows])
+  }, [backtest, compareSymbol, interval, persist, queryClient, range, storedRows])
 
   const chartSeries = useMemo<LineSeries[]>(() => {
     if (!payload?.points.length) return []

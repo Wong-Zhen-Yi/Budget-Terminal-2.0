@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import type { PriceScreenPayload, PriceScreenRow } from '@shared/contract'
+import type { PriceScreenRequest, PriceScreenRow } from '@shared/contract'
 import { formatPriceScreenMarketCap } from '@shared/priceScreen'
 import { usePriceScreen } from '@/api/priceQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
@@ -38,10 +38,11 @@ export function PricePage({
 }: {
   onStatusChange: (panels: PanelStatus[], sourcePath: string) => void
 }) {
-  const screen = usePriceScreen()
   const [minimumPrice, setMinimumPrice] = useState(100)
   const [maximumPrice, setMaximumPrice] = useState(200)
-  const [payload, setPayload] = useState<PriceScreenPayload | null>(null)
+  const [request, setRequest] = useState<PriceScreenRequest>({ minimumPrice: 100, maximumPrice: 200 })
+  const screen = usePriceScreen(request)
+  const payload = screen.data?.meta.freshness === 'failed' ? null : screen.data?.data ?? null
   const [notice, setNotice] = useState<{ text: string; tone: Tone } | null>(null)
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null)
   const [tableWidth, setTableWidth] = useState(780)
@@ -54,10 +55,10 @@ export function PricePage({
 
   useEffect(() => {
     onStatusChange(
-      [{ label: 'Price', envelope: screen.data, loading: screen.isPending }],
+      [{ label: 'Price', envelope: screen.data, loading: screen.isFetching }],
       '',
     )
-  }, [onStatusChange, screen.data, screen.isPending])
+  }, [onStatusChange, screen.data, screen.isFetching])
 
   useEffect(() => {
     if (selectedTicker && !rankedRows.some((row) => row.ticker === selectedTicker)) {
@@ -72,7 +73,7 @@ export function PricePage({
 
   const status = useMemo<{ text: string; tone: Tone }>(() => {
     if (notice) return notice
-    if (screen.isPending) {
+    if (screen.isFetching) {
       return {
         text: `Loading ${preciseCurrency(minimumPrice)} to ${preciseCurrency(maximumPrice)}...`,
         tone: 'muted',
@@ -96,7 +97,7 @@ export function PricePage({
       text: `Showing ${payload.rows.length} largest matching companies${candidate}${suffix}`,
       tone: 'positive',
     }
-  }, [notice, screen.isPending, screen.data, minimumPrice, maximumPrice, payload])
+  }, [notice, screen.isFetching, screen.data, minimumPrice, maximumPrice, payload])
 
   const fetchRange = useCallback(async () => {
     setNotice(null)
@@ -104,9 +105,12 @@ export function PricePage({
       setNotice({ text: 'Minimum price cannot exceed maximum price.', tone: 'negative' })
       return
     }
-    const result = await screen.mutateAsync({ minimumPrice, maximumPrice })
-    if (result.meta.freshness !== 'failed') setPayload(result.data)
-  }, [minimumPrice, maximumPrice, screen])
+    if (request.minimumPrice === minimumPrice && request.maximumPrice === maximumPrice) {
+      await screen.refetch()
+    } else {
+      setRequest({ minimumPrice, maximumPrice })
+    }
+  }, [minimumPrice, maximumPrice, request, screen])
 
   const columns = useMemo<Array<Column<RankedPriceRow>>>(
     () => [
@@ -201,7 +205,7 @@ export function PricePage({
             prefix="$"
             min={MINIMUM_PRICE}
             max={MAXIMUM_PRICE}
-            disabled={screen.isPending}
+            disabled={screen.isFetching}
             className={PRICE_INPUT}
             aria-label="Minimum stock price"
           />
@@ -216,12 +220,12 @@ export function PricePage({
             prefix="$"
             min={MINIMUM_PRICE}
             max={MAXIMUM_PRICE}
-            disabled={screen.isPending}
+            disabled={screen.isFetching}
             className={PRICE_INPUT}
             aria-label="Maximum stock price"
           />
-          <Button variant="accent" onClick={() => void fetchRange()} disabled={screen.isPending}>
-            {screen.isPending ? 'Fetching...' : 'Fetch'}
+          <Button variant="accent" onClick={() => void fetchRange()} disabled={screen.isFetching}>
+            {screen.isFetching ? 'Fetching...' : 'Fetch'}
           </Button>
           <span className={`ml-auto px-1 text-right text-2xs ${toneClass[status.tone]}`}>
             {status.text}

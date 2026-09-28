@@ -14,7 +14,7 @@ export function useSp500() {
   })) })
   const breadth = useQuery({ queryKey: ['sp500Breadth'], queryFn: () => api.sp500Breadth({ action: 'status' }),
     refetchInterval: (query) => query.state.data?.data.state === 'running' ? 1000 : false,
-    refetchOnMount: 'always', staleTime: 0 })
+    refetchOnMount: false, staleTime: 30_000 })
   const refresh = useCallback(() => Promise.allSettled(SP500_PARTS.map((part) => client.fetchQuery({
     queryKey: ['sp500', part], queryFn: () => api.sp500({ part, force: true }), staleTime: 0,
   }))), [client])

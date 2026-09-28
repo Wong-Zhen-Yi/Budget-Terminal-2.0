@@ -1,3 +1,5 @@
+import { TABS } from './contract.js'
+
 /** Stable workspace membership; user ordering still applies within each workspace. */
 export const WORKSPACES = [
   { id: 'overview', label: 'Overview', pages: ['dashboard', 'news', 'calendar', 'youtube', 'dictionary'] },
@@ -19,10 +21,8 @@ export function recentPages(previous: readonly string[], id: string): string[] {
   return [id, ...previous.filter((page) => page !== id)].slice(0, 6)
 }
 
-/** A bounded startup plan. Expensive screens run only when explicitly favorited. */
-export function startupPages(active: string, favorites: readonly string[], recent: readonly string[], hidden: readonly string[]): string[] {
-  const expensive = new Set(['trading-volumes', 'heatmap', 'economic', 'bonds', 'etf'])
-  return [...new Set([active, ...favorites, ...recent])]
-    .filter((id) => !hidden.includes(id) && (id === active || favorites.includes(id) || !expensive.has(id)))
-    .slice(0, 5)
+/** Load every implemented page at startup; visit history only changes the order. */
+export function startupPages(active: string, favorites: readonly string[], recent: readonly string[]): string[] {
+  const implemented = new Set(TABS.filter((tab) => tab.implemented).map((tab) => tab.id))
+  return [...new Set([active, ...favorites, ...recent, ...implemented])].filter((id) => implemented.has(id))
 }

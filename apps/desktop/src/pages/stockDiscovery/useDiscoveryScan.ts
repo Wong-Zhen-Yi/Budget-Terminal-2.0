@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 
-import type { DiscoverySnapshot } from '@shared/contract'
+import type { DiscoverySnapshot, DiscoveryUniverse, Envelope } from '@shared/contract'
 import { pickDiscoverySymbol } from '@shared/discovery'
 import { api } from '@/api/client'
 
@@ -12,18 +13,22 @@ export interface DiscoveryEntry {
 }
 
 export function useDiscoveryScan(active: boolean, intervalSeconds: number) {
-  const [universeCount, setUniverseCount] = useState(0)
-  const [snapshot, setSnapshot] = useState<DiscoverySnapshot | null>(null)
-  const [history, setHistory] = useState<DiscoveryEntry[]>([])
+  const queryClient = useQueryClient()
+  const startupUniverse = queryClient.getQueryData<Envelope<DiscoveryUniverse>>(['discoveryUniverse'])?.data.symbols ?? []
+  const startupSnapshot = queryClient.getQueryData<Envelope<DiscoverySnapshot | null>>(['discoveryStartup'])?.data ?? null
+  const startupHistory: DiscoveryEntry[] = startupSnapshot ? [{ snapshot: startupSnapshot, seenAt: Date.now() }] : []
+  const [universeCount, setUniverseCount] = useState(startupUniverse.length)
+  const [snapshot, setSnapshot] = useState<DiscoverySnapshot | null>(startupSnapshot)
+  const [history, setHistory] = useState<DiscoveryEntry[]>(startupHistory)
   const [paused, setPaused] = useState(false)
   const [loading, setLoading] = useState(false)
   const [remaining, setRemaining] = useState(intervalSeconds * 1000)
   const [error, setError] = useState('')
-  const symbolsRef = useRef<string[]>([])
-  const historyRef = useRef<DiscoveryEntry[]>([])
+  const symbolsRef = useRef<string[]>(startupUniverse)
+  const historyRef = useRef<DiscoveryEntry[]>(startupHistory)
   const failedRef = useRef<string[]>([])
   const failuresRef = useRef(0)
-  const snapshotRef = useRef<DiscoverySnapshot | null>(null)
+  const snapshotRef = useRef<DiscoverySnapshot | null>(startupSnapshot)
   const activeRef = useRef(false)
   const pausedRef = useRef(false)
   const loadingRef = useRef(false)

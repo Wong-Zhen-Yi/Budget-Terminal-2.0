@@ -19,6 +19,9 @@ const queryClient = new QueryClient({
       // here makes each mounted panel repeat the same failed provider work.
       retry: false,
       refetchOnWindowFocus: false,
+      // Startup refreshes stale page entries. A later first visit should paint that
+      // prepared snapshot without immediately starting another request.
+      refetchOnMount: false,
       // Hidden Activity trees suspend their query observers. Keep their data, together
       // with startup-warmed pages, available until the renderer session ends.
       gcTime: Infinity,
