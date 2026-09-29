@@ -4,16 +4,36 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { computeExposure, emptyRiskMetrics } from '../electron/shared/analytics.js'
 import { ok } from '../electron/shared/envelope.js'
-import type { AnalyticsPayload } from '../electron/shared/contract.js'
+import { TABS, type AnalyticsPayload } from '../electron/shared/contract.js'
 import { waitForWarmSlot, warmQuery } from '../src/api/warmQueue.js'
 import { recentPages, startupPages } from '../electron/shared/navigation.js'
 
 assert.deepEqual(recentPages(['stocks', 'charts', 'portfolio'], 'charts'), ['charts', 'stocks', 'portfolio'])
 assert.equal(recentPages(['a', 'b', 'c', 'd', 'e', 'f'], 'g').length, 6)
-assert.deepEqual(startupPages('dashboard', ['portfolio', 'charts'], ['heatmap', 'trading-volumes', 'stocks', 'fundamentals'], []),
-  ['dashboard', 'portfolio', 'charts', 'stocks', 'fundamentals'])
-assert.deepEqual(startupPages('dashboard', ['heatmap', 'portfolio'], ['stocks'], ['portfolio']), ['dashboard', 'heatmap', 'stocks'])
-assert.deepEqual(startupPages('heatmap', [], ['economic', 'bonds', 'etf'], []), ['heatmap'])
+const allPages = TABS.filter((tab) => tab.implemented).map((tab) => tab.id)
+const startup = startupPages('dashboard', ['portfolio', 'charts'], ['heatmap', 'trading-volumes', 'stocks', 'fundamentals'])
+assert.deepEqual(startup.slice(0, 7), ['dashboard', 'portfolio', 'charts', 'heatmap', 'trading-volumes', 'stocks', 'fundamentals'])
+assert.deepEqual([...startup].sort(), [...allPages].sort())
+assert.deepEqual(startupPages('heatmap', [], []).slice(0, 1), ['heatmap'])
+assert.equal(startupPages('dashboard', [], []).includes('economic'), true)
+assert.equal(startupPages('dashboard', [], []).includes('settings'), true)
+
+// Build the actual startup task list with a representative portfolio. An added page
+// must receive a task or be explicitly accounted for as local/shared initial state.
+Object.assign(globalThis, { window: { api: {} } })
+const { buildTasks } = await import('../src/api/prefetch.js')
+const portfolio = {
+  activeId: 'main', mainId: 'main', portfolios: [{
+    id: 'main', readOnly: false, tickers: ['AAPL'],
+    holdings: { AAPL: { shares: 1, includeInWeight: true } },
+  }],
+} as unknown as import('../electron/shared/contract.js').PortfolioPayload
+const scheduled = new Set(buildTasks(portfolio, undefined, { stocks: 'AAPL', fundamentals: 'AAPL' },
+  { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 }).map((task) => task.tab))
+const sharedOrLocal = new Set(['beta', 'bonds', 'dictionary', 'options', 'settings'])
+for (const page of allPages) {
+  assert(scheduled.has(page) || sharedOrLocal.has(page), `${page} is absent from startup loading`)
+}
 
 import { cache, TtlCache } from '../electron/services/cache.js'
 import { yahoo } from '../electron/services/yahoo/client.js'

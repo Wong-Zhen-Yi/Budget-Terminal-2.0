@@ -1,36 +1,48 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 
-import type { AppSettings, PortfolioPayload } from '@shared/contract'
+import { CARD_INTERVALS, type AppSettings, type PortfolioPayload } from '@shared/contract'
 import { startupPages } from '@shared/navigation'
+import { SP500_PARTS } from '@shared/sp500'
+import { marketCapInTier } from '@shared/marketCap'
+import { pickDiscoverySymbol } from '@shared/discovery'
+import { normalizeBacktestPageSettings } from '@shared/backtest'
+import { buildCardModels } from '@shared/cards'
 import { useDataHealth, type StartupTiming } from '@/stores/dataHealth'
 import { calendarToday, earningsDateRange } from '@shared/calendar'
 import { useCalendarPage } from '@/stores/calendar'
 import { useIpoPage } from '@/stores/ipo'
 import { useFundamentalsStore } from '@/stores/fundamentals'
 import { useStocksPage } from '@/stores/stocks'
+import { useChartsStore } from '@/stores/charts'
+import { useOptionsPage } from '@/stores/options'
+import { useProjectionsPage } from '@/stores/projections'
+import { useValuationPage } from '@/stores/valuation'
+import { useDashboard } from '@/stores/dashboard'
+import { useEtfPage } from '@/stores/etf'
+import { useUpDownPage } from '@/stores/upDown'
 import { api, queryKeys } from './client'
+import { priceScreenKey } from './priceQueries'
+import { backtestKey } from './backtestQueries'
+import { cardsPerformanceKey } from './cardsQueries'
 import { queryFreshness } from './queryPersistence'
 import { usePortfolio } from './queries'
 import { waitForWarmSlot, warmQuery } from './warmQueue'
 
 /**
- * Prefetch at most five eligible current/favorite/recent pages, reducing unused work.
+ * Load every implemented page's automatic initial data when the app opens.
  *
- * The pages themselves are untouched: this only fills the React Query cache under the
- * exact keys and `staleTime`s their own hooks use, so a warmed page mounts straight onto
- * cached data without going back to the network. A page whose warm-up failed simply
- * fetches on mount, as it always did.
+ * Most tasks fill the React Query cache under the exact keys their page hooks use,
+ * so a warmed page mounts onto prepared data. Pages with manual local state also
+ * read the startup snapshot when first opened.
  *
  * Two rules keep this from being a burst of hundreds of Yahoo calls:
  *
- * - the tasks run strictly one after another in current/favorite/recent order,
- *   yielding to foreground requests between tasks, and
- * - hidden tabs are skipped — a page taken out of the strip in Settings has no reason to
- *   spend the rate budget.
+ * - a small worker pool prioritizes current/favorite/recent pages and yields to
+ *   foreground requests between tasks, and
+ * - provider requests still pass through the shared rate gate.
  *
- * It runs once per session. Reload (F5) still refetches what is mounted; it does not
- * re-run the warm-up.
+ * It runs once per renderer session.
  */
 
 interface WarmTask {
@@ -44,6 +56,7 @@ export interface WarmProgress {
   done: number
   total: number
   label: string
+  failed: number
 }
 
 /** Heatmap is the slowest page; always warm it after every other background task. */
@@ -106,16 +119,62 @@ function holdingsOf(payload: PortfolioPayload | undefined): {
   return { active: active?.tickers ?? [], every, editable, main: main?.tickers ?? [], upDown }
 }
 
-function buildTasks(
+export function buildTasks(
   payload: PortfolioPayload | undefined,
+  settings: AppSettings | undefined,
   symbols: { stocks: string; fundamentals: string },
   calendar: { year: number; month: number; earningsYear: number; ipoYear: number },
 ): WarmTask[] {
   const { active, every, editable, main, upDown } = holdingsOf(payload)
   const tasks: WarmTask[] = []
 
-  // Dashboard and Portfolio share the quote call for the active book. The Dashboard's
-  // chart and option buckets are keyed by its own stored symbol and are left to it.
+  const dashboard = useDashboard.getState()
+  if (dashboard.symbol) {
+    tasks.push({
+      tab: 'dashboard', label: 'Dashboard chart',
+      run: (client) => warmQuery(client, {
+        queryKey: queryKeys.chart(dashboard.symbol, dashboard.timeframe),
+        queryFn: () => api.chart({ symbol: dashboard.symbol, timeframe: dashboard.timeframe }),
+        staleTime: queryFreshness(queryKeys.chart(dashboard.symbol, dashboard.timeframe)),
+      }),
+    })
+    tasks.push({
+      tab: 'dashboard', label: 'Dashboard options',
+      run: (client) => warmQuery(client, {
+        queryKey: queryKeys.options(dashboard.symbol),
+        queryFn: () => api.options({ symbol: dashboard.symbol }),
+        staleTime: queryFreshness(queryKeys.options(dashboard.symbol)),
+      }),
+    })
+  }
+
+  const dashboardBook = payload?.portfolios.find((entry) => entry.id === (dashboard.portfolioId ?? payload.activeId))
+    ?? payload?.portfolios[0]
+  const dashboardTickers = dashboardBook?.tickers ?? []
+  if (dashboardTickers.length && dashboardTickers.join(',') !== active.join(',')) {
+    tasks.push({
+      tab: 'dashboard', label: 'Dashboard holdings',
+      run: async (client) => {
+        await warmQuery(client, {
+          queryKey: queryKeys.quotes(dashboardTickers),
+          queryFn: () => api.quotes({ holdings: dashboardTickers, background: true }),
+          staleTime: queryFreshness(queryKeys.quotes(dashboardTickers)),
+        })
+        await warmQuery(client, {
+          queryKey: queryKeys.targets(dashboardTickers),
+          queryFn: () => api.targets({ tickers: dashboardTickers, background: true }),
+          staleTime: queryFreshness(queryKeys.targets(dashboardTickers)),
+        })
+        await warmQuery(client, {
+          queryKey: queryKeys.news(dashboardTickers),
+          queryFn: () => api.news({ tickers: dashboardTickers, background: true }),
+          staleTime: queryFreshness(queryKeys.news(dashboardTickers)),
+        })
+      },
+    })
+  }
+
+  // Dashboard and Portfolio share the quote call for the active book.
   if (active.length) {
     tasks.push({
       tab: 'dashboard',
@@ -159,9 +218,38 @@ function buildTasks(
     })
   }
 
-  // The card definitions are a local store read, so this only removes the mount spinner.
-  // The performance sweep is left to the page: its key is a signature over the models it
-  // builds from the definitions and the holdings, which cannot be reproduced here.
+  if (main.length && main.join(',') !== active.join(',')) {
+    tasks.push({
+      tab: 'backtest', label: 'Backtest quotes',
+      run: (client) => warmQuery(client, {
+        queryKey: queryKeys.quotes(main),
+        queryFn: () => api.quotes({ holdings: main, background: true }),
+        staleTime: queryFreshness(queryKeys.quotes(main)),
+      }),
+    })
+  }
+
+  const selectedBook = payload?.portfolios.find((entry) => entry.id === payload.activeId)
+    ?? payload?.portfolios[0]
+  const optionPositions = (selectedBook?.options ?? []).filter((option) => option.ticker).map((option) => ({
+    rowId: option.rowId, ticker: option.ticker, expiry: option.expiry,
+    strike: option.strike, strategy: option.strategy,
+  }))
+  if (optionPositions.length) {
+    const signature = optionPositions
+      .map((position) => `${position.rowId}:${position.ticker}:${position.expiry}:${position.strike}:${position.strategy}`)
+      .join('|')
+    tasks.push({
+      tab: 'portfolio', label: 'Portfolio options',
+      run: (client) => warmQuery(client, {
+        queryKey: queryKeys.optionQuotes(signature),
+        queryFn: () => api.optionQuotes({ positions: optionPositions }),
+        staleTime: queryFreshness(queryKeys.optionQuotes(signature)),
+      }),
+    })
+  }
+
+  // Card performance uses the same model signature as the page's interval queries.
   tasks.push({
     tab: 'cards',
     label: 'Cards',
@@ -171,6 +259,31 @@ function buildTasks(
         queryFn: () => api.cards(),
         staleTime: Infinity,
       }),
+  })
+  tasks.push({
+    tab: 'cards', label: 'Card performance',
+    run: async (client) => {
+      const cards = await warmQuery(client, {
+        queryKey: queryKeys.cards,
+        queryFn: () => api.cards(),
+        staleTime: Infinity,
+      })
+      const models = buildCardModels(cards.data, payload?.portfolios ?? [])
+      if (!models.length) return
+      for (const interval of CARD_INTERVALS) {
+        const request = {
+          interval,
+          cards: models.map(({ id, symbols, weighting, weights, shares, cashBalance }) => ({
+            id, symbols, weighting, weights, shares, cashBalance,
+          })),
+        }
+        await warmQuery(client, {
+          queryKey: cardsPerformanceKey(request),
+          queryFn: () => api.cardsPerformance(request),
+          staleTime: queryFreshness(cardsPerformanceKey(request)),
+        })
+      }
+    },
   })
 
   tasks.push({
@@ -228,18 +341,20 @@ function buildTasks(
       }),
   })
 
-  if (upDown.length) {
-    tasks.push({
-      tab: 'up-down',
-      label: 'Up/Down',
-      run: (client) =>
-        warmQuery(client, {
-          queryKey: queryKeys.upDown('portfolio', '1d', upDown),
-          queryFn: () => api.upDown({ source: 'portfolio', interval: '1d', symbols: upDown, background: true }),
-          staleTime: queryFreshness(queryKeys.upDown('portfolio', '1d', upDown)),
-        }),
-    })
-  }
+  const upDownPage = useUpDownPage.getState()
+  const upDownSymbols = upDownPage.activeSource === 'portfolio' ? upDown
+    : upDownPage.activeSource === 'custom' ? upDownPage.customSymbols : []
+  tasks.push({
+    tab: 'up-down', label: 'Up/Down',
+    run: (client) => warmQuery(client, {
+      queryKey: queryKeys.upDown(upDownPage.activeSource, upDownPage.interval, upDownSymbols),
+      queryFn: () => api.upDown({
+        source: upDownPage.activeSource, interval: upDownPage.interval,
+        symbols: upDownSymbols, background: true,
+      }),
+      staleTime: queryFreshness(queryKeys.upDown(upDownPage.activeSource, upDownPage.interval, upDownSymbols)),
+    }),
+  })
 
   tasks.push({
     tab: 'calendar',
@@ -268,7 +383,8 @@ function buildTasks(
         staleTime: queryFreshness(queryKeys.politicsPage(1)),
       }),
   })
-  // The Earnings sub-tab opens on the whole current year, `earningsDateRange('year', ...)`.
+  // The Earnings sub-tab opens on the whole current year. Its provider can remain
+  // queued behind other startup requests longer than the usual background deadline.
   const earnings = earningsDateRange('year', calendar.earningsYear, calendarToday('local'))
   tasks.push({
     tab: 'calendar',
@@ -284,7 +400,7 @@ function buildTasks(
             background: true,
           }),
         staleTime: queryFreshness(queryKeys.earningsCalendar(earnings.rangeKey)),
-      }),
+      }, 180_000),
   })
 
   // The slowest load in the app cold — five government hosts, about 45s — and the one
@@ -436,6 +552,17 @@ function buildTasks(
         staleTime: queryFreshness(queryKeys.etfAum),
       }),
   })
+  const etfTicker = useEtfPage.getState().ticker
+  if (etfTicker) {
+    tasks.push({
+      tab: 'etf', label: `ETF ${etfTicker} holdings`,
+      run: (client) => warmQuery(client, {
+        queryKey: queryKeys.etfHoldings(etfTicker),
+        queryFn: () => api.etfHoldings({ ticker: etfTicker }),
+        staleTime: queryFreshness(queryKeys.etfHoldings(etfTicker)),
+      }),
+    })
+  }
 
   // One CoinGecko call, two SEC calls behind their own disk cache and three Yahoo quotes.
   tasks.push({
@@ -502,6 +629,182 @@ function buildTasks(
       }),
   })
 
+  const charts = useChartsStore.getState()
+  tasks.push({
+    tab: 'charts', label: 'Charts',
+    run: (client) => warmQuery(client, {
+      queryKey: queryKeys.chartsHistory(charts.symbol, charts.interval, charts.range),
+      queryFn: () => api.chartsHistory({ symbol: charts.symbol, interval: charts.interval, range: charts.range }),
+      staleTime: queryFreshness(queryKeys.chartsHistory(charts.symbol, charts.interval, charts.range)),
+    }),
+  })
+
+  const valuation = useValuationPage.getState()
+  if (valuation.ticker) {
+    const peers = valuation.customPeersByTicker[valuation.ticker] ?? []
+    tasks.push({
+      tab: 'valuation', label: 'Valuation',
+      run: (client) => warmQuery(client, {
+        queryKey: queryKeys.valuation(valuation.ticker, peers),
+        queryFn: () => api.valuation({ symbol: valuation.ticker, customPeers: peers }),
+        staleTime: queryFreshness(queryKeys.valuation(valuation.ticker, peers)),
+      }),
+    })
+  }
+
+  const projections = useProjectionsPage.getState()
+  if (projections.symbol) {
+    tasks.push({
+      tab: 'projections', label: 'Projections',
+      run: (client) => warmQuery(client, {
+        queryKey: queryKeys.projections(projections.symbol, projections.timeframe),
+        queryFn: () => api.projections({ symbol: projections.symbol, timeframe: projections.timeframe }),
+        staleTime: queryFreshness(queryKeys.projections(projections.symbol, projections.timeframe)),
+      }),
+    })
+  }
+
+  const options = useOptionsPage.getState()
+  if (options.loaded && options.symbol) {
+    tasks.push({
+      tab: 'options', label: 'Options expirations',
+      run: (client) => warmQuery(client, {
+        queryKey: queryKeys.optionsExpirations(options.symbol),
+        queryFn: () => api.optionsExpirations({ symbol: options.symbol }),
+        staleTime: queryFreshness(queryKeys.optionsExpirations(options.symbol)),
+      }),
+    })
+    tasks.push({
+      tab: 'options', label: 'Options chain',
+      run: (client) => warmQuery(client, {
+        queryKey: queryKeys.optionsChain(options.symbol, options.expiry),
+        queryFn: () => api.optionsChain({ symbol: options.symbol, expiry: options.expiry }),
+        staleTime: queryFreshness(queryKeys.optionsChain(options.symbol, options.expiry)),
+      }),
+    })
+  }
+
+  tasks.push({
+    tab: 'bitcoin', label: 'Bitcoin',
+    run: (client) => warmQuery(client, {
+      queryKey: queryKeys.bitcoin,
+      queryFn: () => api.bitcoin({ background: true }),
+      staleTime: queryFreshness(queryKeys.bitcoin),
+    }),
+  })
+  tasks.push({
+    tab: 'signals', label: 'Day Trading',
+    run: (client) => warmQuery(client, {
+      queryKey: queryKeys.signals,
+      queryFn: () => api.signals({ latestOnly: true }),
+      staleTime: queryFreshness(queryKeys.signals),
+    }),
+  })
+  tasks.push({
+    tab: 'quant', label: 'Quant',
+    run: (client) => warmQuery(client, {
+      queryKey: queryKeys.quant,
+      queryFn: () => api.quantScan({ latestOnly: true }),
+      staleTime: queryFreshness(queryKeys.quant),
+    }),
+  })
+  tasks.push({
+    tab: 'technical-screen', label: 'Technical Indicators',
+    run: (client) => warmQuery(client, {
+      queryKey: queryKeys.technicalScreen,
+      queryFn: () => api.technicalScan(),
+      staleTime: queryFreshness(queryKeys.technicalScreen),
+    }),
+  })
+
+  for (const part of SP500_PARTS) {
+    tasks.push({
+      tab: 'sp500', label: `S&P500 ${part}`,
+      run: (client) => warmQuery(client, {
+        queryKey: ['sp500', part],
+        queryFn: () => api.sp500({ part, background: true }),
+        staleTime: queryFreshness(['sp500', part]),
+      }),
+    })
+  }
+  tasks.push({
+    tab: 'sp500', label: 'S&P500 breadth status',
+    run: (client) => warmQuery(client, {
+      queryKey: ['sp500Breadth'],
+      queryFn: () => api.sp500Breadth({ action: 'status' }),
+      staleTime: 30_000,
+    }),
+  })
+
+  tasks.push({
+    tab: 'market-cap', label: 'Market Cap',
+    run: async (client) => {
+      const result = await warmQuery(client, {
+        queryKey: queryKeys.marketCap('all'),
+        queryFn: async () => {
+          const page = await api.marketCap({ tier: 'all' })
+          if (page.data.rows.some((row) => !marketCapInTier(row.marketCap, 'all'))) {
+            throw new Error('Market Cap returned rows outside the selected range.')
+          }
+          return page
+        },
+        staleTime: queryFreshness(queryKeys.marketCap('all')),
+      })
+      const symbols = result.data.rows.map((row) => row.ticker)
+      if (symbols.length) await warmQuery(client, {
+        queryKey: ['marketCapSales', [...symbols].sort().join(',')],
+        queryFn: () => api.marketCapSales({ symbols }),
+        staleTime: queryFreshness(['marketCapSales', [...symbols].sort().join(',')]),
+      })
+    },
+  })
+
+  const priceRequest = { minimumPrice: 100, maximumPrice: 200 }
+  tasks.push({
+    tab: 'price', label: 'Price',
+    run: (client) => warmQuery(client, {
+      queryKey: priceScreenKey(priceRequest),
+      queryFn: () => api.priceScreen(priceRequest),
+      staleTime: queryFreshness(priceScreenKey(priceRequest)),
+    }),
+  })
+
+  tasks.push({
+    tab: 'stock-discovery', label: 'Discovery',
+    run: async (client) => {
+      const universe = await warmQuery(client, {
+        queryKey: ['discoveryUniverse'],
+        queryFn: () => api.discoveryUniverse(),
+        staleTime: queryFreshness(['discoveryUniverse']),
+      })
+      const symbol = pickDiscoverySymbol(universe.data.symbols, [])
+      if (!symbol) throw new Error('The stock directory is empty.')
+      await warmQuery(client, {
+        queryKey: ['discoveryStartup'],
+        queryFn: () => api.discovery({ symbol, background: true }),
+        staleTime: queryFreshness(['discoveryStartup']),
+      })
+    },
+  })
+
+  const backtest = normalizeBacktestPageSettings(settings?.backtestPage)
+  if (backtest.rows.some((row) => row.symbol && row.weight > 0)) {
+    const request = {
+      rows: backtest.rows,
+      compareSymbol: backtest.compareSymbol,
+      interval: backtest.interval,
+      range: backtest.range,
+    }
+    tasks.push({
+      tab: 'backtest', label: 'Backtest',
+      run: (client) => warmQuery(client, {
+        queryKey: backtestKey(request),
+        queryFn: () => api.backtest(request),
+        staleTime: queryFreshness(backtestKey(request)),
+      }),
+    })
+  }
+
   const rank = (tab: string) => {
     if (tab === LAST_BACKGROUND_PAGE) return Infinity
     const index = TAB_ORDER.indexOf(tab)
@@ -510,7 +813,7 @@ function buildTasks(
   return tasks.sort((a, b) => rank(a.tab) - rank(b.tab))
 }
 
-export function useWarmPages(settings: AppSettings | undefined, activeTab: string, recent: string[]): WarmProgress {
+export function useWarmPages(settings: AppSettings | undefined, settingsSettled: boolean, activeTab: string, recent: string[]): WarmProgress {
   const queryClient = useQueryClient()
   const portfolioQuery = usePortfolio()
 
@@ -526,9 +829,9 @@ export function useWarmPages(settings: AppSettings | undefined, activeTab: strin
     done: 0,
     total: 0,
     label: '',
+    failed: 0,
   })
 
-  const hidden = useMemo(() => new Set(settings?.hiddenTabs ?? []), [settings])
   // One warm-up per session, and it must survive StrictMode's double effect.
   const started = useRef(false)
   const payload = portfolioQuery.data?.data
@@ -547,7 +850,7 @@ export function useWarmPages(settings: AppSettings | undefined, activeTab: strin
   const inputs = useRef({
     activeTab, recent, favorites: settings?.favoriteTabs ?? [],
     payload,
-    hidden,
+    settings,
     stocksSymbol,
     fundamentalsSymbol,
     calendarYear,
@@ -558,7 +861,7 @@ export function useWarmPages(settings: AppSettings | undefined, activeTab: strin
   inputs.current = {
     activeTab, recent, favorites: settings?.favoriteTabs ?? [],
     payload,
-    hidden,
+    settings,
     stocksSymbol,
     fundamentalsSymbol,
     calendarYear,
@@ -567,18 +870,18 @@ export function useWarmPages(settings: AppSettings | undefined, activeTab: strin
     ipoYear,
   }
 
-  // Wait for the holdings document — nearly every task keys off it — and for Settings,
-  // which says which pages are worth warming at all.
+  // A failed local read must not prevent unrelated pages from starting their loads.
   const readyRef = useRef(false)
-  readyRef.current ||= Boolean(payload && settings)
+  readyRef.current ||= settingsSettled && !portfolioQuery.isPending
   const ready = readyRef.current
 
   useEffect(() => {
     if (started.current || !ready) return
     const current = inputs.current
-    const priority = startupPages(current.activeTab, current.favorites, current.recent, [...current.hidden])
+    const priority = startupPages(current.activeTab, current.favorites, current.recent)
     const tasks = buildTasks(
       current.payload,
+      current.settings,
       { stocks: current.stocksSymbol, fundamentals: current.fundamentalsSymbol },
       {
         year: current.calendarYear,
@@ -586,14 +889,8 @@ export function useWarmPages(settings: AppSettings | undefined, activeTab: strin
         earningsYear: current.earningsYear,
         ipoYear: current.ipoYear,
       },
-    ).filter((task) => (priority.includes(task.tab) || (task.tab === 'economic' && priority.includes('bonds'))) && (
-      task.tab === 'economic'
-        // Bonds and Economic share the same rates payload. Warm it whenever either page
-        // is visible, but still skip the long provider load when both are hidden.
-        ? !(current.hidden.has('economic') && current.hidden.has('bonds'))
-        : !current.hidden.has(task.tab)
-    )).sort((a, b) => {
-      const rank = (tab: string) => priority.indexOf(tab === 'economic' && !priority.includes(tab) ? 'bonds' : tab)
+    ).sort((a, b) => {
+      const rank = (tab: string) => priority.indexOf(tab)
       return rank(a.tab) - rank(b.tab)
     })
 
@@ -609,42 +906,53 @@ export function useWarmPages(settings: AppSettings | undefined, activeTab: strin
       started.current = true
       const startedAt = performance.now()
       const timings: StartupTiming[] = []
+      let failedCount = 0
+      let completed = 0
+      let nextIndex = 0
+      const activeLabels = new Set<string>()
       const report = () => useDataHealth.getState().setStartup({
         durationMs: performance.now() - startedAt, planned: tasks.length, timings: [...timings],
       })
+      const reportProgress = () => setProgress({
+        active: completed < tasks.length,
+        done: completed,
+        total: tasks.length,
+        label: activeLabels.values().next().value ?? '',
+        failed: failedCount,
+      })
       report()
-      for (const [index, task] of tasks.entries()) {
-        // Give mounted queries a head start, bounded so polling or a stuck foreground
-        // request cannot starve warm-up. Main's rate gate still prioritizes foreground.
-        await waitForWarmSlot({
-          isHidden: () => document.hidden,
-          isForegroundFetching: () => queryClient.isFetching({ type: 'active' }) > 0,
-          isCancelled: () => cancelled,
-        })
-        if (cancelled) return
-        const hiddenNow = inputs.current.hidden
-        if (task.tab === 'economic'
-          ? hiddenNow.has('economic') && hiddenNow.has('bonds')
-          : hiddenNow.has(task.tab)) continue
-        setProgress({ active: true, done: index, total: tasks.length, label: task.label })
-        // A page that cannot be warmed is not an error here: it falls back to fetching
-        // when the user opens it, exactly as it did before.
-        const taskStarted = performance.now()
-        let failed = false
-        try {
-          await task.run(queryClient)
-        } catch (error) {
-          failed = true
-          console.warn(`[warm-up] ${task.label}:`, error)
+      const worker = async () => {
+        while (!cancelled) {
+          // Mounted queries get a head start, but polling cannot starve startup.
+          await waitForWarmSlot({
+            isHidden: () => false,
+            isForegroundFetching: () => queryClient.isFetching({ type: 'active' }) > 0,
+            isCancelled: () => cancelled,
+          })
+          if (cancelled) return
+          const index = nextIndex++
+          if (index >= tasks.length) return
+          const task = tasks[index]
+          activeLabels.add(task.label)
+          reportProgress()
+          const taskStarted = performance.now()
+          let failed = false
+          try {
+            await task.run(queryClient)
+          } catch (error) {
+            failed = true
+            failedCount += 1
+            console.warn(`[warm-up] ${task.label}:`, error)
+          }
+          activeLabels.delete(task.label)
+          completed += 1
+          timings.push({ label: task.label, durationMs: performance.now() - taskStarted, failed })
+          report()
+          reportProgress()
+          await new Promise((resolve) => setTimeout(resolve, 100))
         }
-        timings.push({ label: task.label, durationMs: performance.now() - taskStarted, failed })
-        report()
-        // Yield between pages so navigation and its foreground queries can start.
-        await new Promise((resolve) => setTimeout(resolve, 250))
       }
-      if (!cancelled) {
-        setProgress({ active: false, done: tasks.length, total: tasks.length, label: '' })
-      }
+      await Promise.all(Array.from({ length: Math.min(3, tasks.length) }, () => worker()))
     }
     const timer = setTimeout(() => void run(), 250)
 

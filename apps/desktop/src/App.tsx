@@ -109,8 +109,8 @@ export function App() {
     }
   }
   const record = useDataHealth((state) => state.record)
-  // Prefetch a bounded selection of favorites and recent pages after foreground work.
-  const warm = useWarmPages(settings, activeTab, recent)
+  // Start every page's automatic initial load after local settings and holdings settle.
+  const warm = useWarmPages(settings, !settingsQuery.isPending, activeTab, recent)
   const setFundamentalsSymbol = useFundamentalsStore((state) => state.setSymbol)
   const setOptionsSymbol = useOptionsPage((state) => state.setSymbol)
 
@@ -359,8 +359,8 @@ export function App() {
         notice={notice}
         warming={
           warm.active
-            ? `Loading pages in the background (${warm.done + 1}/${warm.total}): ${warm.label}...`
-            : ''
+            ? `Loading pages (${warm.done + 1}/${warm.total}): ${warm.label}...${warm.failed ? ` · ${warm.failed} failed` : ''}`
+            : warm.failed ? `${warm.failed} startup load(s) failed. Open Settings for details.` : ''
         }
       />
 

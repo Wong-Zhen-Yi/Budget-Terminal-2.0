@@ -27,6 +27,7 @@ import {
   getFundamentalsPage,
 } from '../electron/services/yahoo/fundamentalsPage.js'
 import { yahooProvider } from '../electron/services/provider.js'
+import { migrateFundamentalsState } from '../src/stores/fundamentals.js'
 
 function point(endDate: string, label: string, value: number, source: FundamentalSeriesPoint['source'] = 'yahoo'): FundamentalSeriesPoint {
   return { endDate, label, value, source }
@@ -192,7 +193,9 @@ async function runOffline(): Promise<void> {
   assert.equal(charts[0].series.length, 2)
   assert.equal(charts[0].series[0].filled, true)
   assert.equal(charts[0].series[1].filled, false)
+  assert.deepEqual(charts[0].series[0].points.map((item) => item.value), [100, 120, 150])
   assert.deepEqual(seriesBarGeometry(2).map((item) => item.offset), [-0.225, 0.225])
+  assert.deepEqual(migrateFundamentalsState({ symbol: 'TTWO', indexed: true }), { symbol: 'TTWO', indexed: false })
   const indexedCharts = buildFundamentalsCharts(primary, null, {
     period: 'annual',
     periodCount: 3,

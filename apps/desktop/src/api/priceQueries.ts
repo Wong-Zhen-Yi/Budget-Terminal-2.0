@@ -1,14 +1,18 @@
-import { useMutation, type UseMutationResult } from '@tanstack/react-query'
+import { useQuery, type UseQueryResult } from '@tanstack/react-query'
 
 import type { Envelope, PriceScreenPayload, PriceScreenRequest } from '@shared/contract'
 import { api } from './client'
+import { queryFreshness } from './queryPersistence'
 
-/** Price only loads when Fetch is selected; the PySide6 page has no on-show refresh. */
-export function usePriceScreen(): UseMutationResult<
-  Envelope<PriceScreenPayload>,
-  Error,
-  PriceScreenRequest
-> {
-  return useMutation({ mutationFn: (request) => api.priceScreen(request) })
+export const priceScreenKey = (request: PriceScreenRequest) =>
+  ['priceScreen', request.minimumPrice, request.maximumPrice] as const
+
+export function usePriceScreen(request: PriceScreenRequest): UseQueryResult<Envelope<PriceScreenPayload>> {
+  return useQuery({
+    queryKey: priceScreenKey(request),
+    queryFn: () => api.priceScreen(request),
+    staleTime: queryFreshness(priceScreenKey(request)),
+    refetchInterval: false,
+  })
 }
 

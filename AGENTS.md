@@ -27,6 +27,9 @@ Follow existing TypeScript style: two-space indentation, single quotes, and no s
 
 Keep renderer access behind `window.api`, shared calculations free of React/Electron imports, service responses within `Envelope<T>`, and Yahoo requests behind the shared rate gate.
 
+## Startup Page Readiness
+When Budget Terminal opens, start loading every implemented page, including pages the user has not visited. Once startup loading completes, switching to any page must show its ready content without a first-visit load. Do not limit startup loading to the active page, favorites, or recent pages, and do not defer a page's initial data load until its tab is selected. Keep startup progress and failures visible so a page that could not load is not silently treated as ready. Preserve this behavior when changing navigation, caching, query hooks, or data services.
+
 ## Testing Guidelines
 Tests are standalone `tsx` probes using Node assertions or explicit checks; no coverage threshold is configured. Extend the matching `probe-<area>.ts`. Run typecheck and relevant offline probes for code changes, live probes for provider changes, and a UI smoke test for visible changes. Persistence probes must redirect `APPDATA` and `LOCALAPPDATA` to temporary directories.
 

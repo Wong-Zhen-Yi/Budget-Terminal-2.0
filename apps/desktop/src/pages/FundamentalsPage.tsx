@@ -406,7 +406,8 @@ function PresentationControls({
           className="num h-7 w-14 border border-border-strong bg-surface-raised px-1 text-center text-text outline-none focus:border-accent"
         />
       </label>
-      <Button variant="toggle" active={indexed} className="ml-2 h-7" onClick={onIndexed}>Indexed</Button>
+      <Button variant="toggle" active={!indexed} className="ml-2 h-7" onClick={() => { if (indexed) onIndexed() }}>Raw</Button>
+      <Button variant="toggle" active={indexed} className="h-7" onClick={() => { if (!indexed) onIndexed() }}>Indexed</Button>
       <span className="ml-auto truncate text-2xs text-text-dim">
         {indexed ? 'Oldest visible non-zero value = ±100' : 'Statement values in USD · shares in units'} · {period === 'annual' ? 'prior-year growth' : growthBasis === 'year_ago' ? 'year-over-year growth' : 'quarter-over-quarter growth'}
       </span>
