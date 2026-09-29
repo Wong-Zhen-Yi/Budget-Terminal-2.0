@@ -115,20 +115,54 @@ function jsonBytes(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value)).byteLength
 }
 
-/** Keep the newest successful page snapshots within the explicit renderer budget. */
-export function trimPersistedClient(client: PersistedClient): PersistedClient {
+// React Query retains immutable state objects between updates. Reuse their sizes so
+// each startup result does not serialize all previously loaded histories again.
+const querySizes = new WeakMap<object, number>()
+
+function* trimClient(client: PersistedClient): Generator<void, PersistedClient> {
   const candidates = [...client.clientState.queries]
     .sort((left, right) => right.state.dataUpdatedAt - left.state.dataUpdatedAt)
   const empty = { ...client, clientState: { ...client.clientState, queries: [] } }
   const queries: PersistedClient['clientState']['queries'] = []
   let used = jsonBytes(empty)
   for (const query of candidates) {
-    const size = jsonBytes(query)
+    let size = querySizes.get(query.state)
+    if (size === undefined) {
+      size = jsonBytes(query)
+      querySizes.set(query.state, size)
+    }
+    yield
     if (used + size > RENDERER_CACHE_MAX_BYTES) continue
     queries.push(query)
     used += size
   }
   return { ...client, clientState: { ...client.clientState, queries } }
+}
+
+/** Keep the newest successful page snapshots within the explicit renderer budget. */
+export function trimPersistedClient(client: PersistedClient): PersistedClient {
+  const steps = trimClient(client)
+  let step = steps.next()
+  while (!step.done) step = steps.next()
+  return step.value
+}
+
+/** Yield between page snapshots so cache maintenance cannot monopolize input/paint. */
+export async function trimPersistedClientInBackground(
+  client: PersistedClient,
+  cancelled: () => boolean = () => false,
+): Promise<PersistedClient | undefined> {
+  const steps = trimClient(client)
+  let sliceStarted = performance.now()
+  while (!cancelled()) {
+    const step = steps.next()
+    if (step.done) return step.value
+    if (performance.now() - sliceStarted >= 4) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      sliceStarted = performance.now()
+    }
+  }
+  return undefined
 }
 
 function markRestored(client: PersistedClient): PersistedClient {
@@ -156,16 +190,31 @@ function markRestored(client: PersistedClient): PersistedClient {
 
 let pendingWrite: ReturnType<typeof setTimeout> | undefined
 let latestClient: PersistedClient | undefined
+let writing = false
+let generation = 0
 
 async function writeLatestClient(): Promise<void> {
+  pendingWrite = undefined
+  if (writing) return
   const client = latestClient
   latestClient = undefined
-  pendingWrite = undefined
   if (!client) return
+  writing = true
+  const currentGeneration = generation
   try {
-    await transact('readwrite', (store) => store.put(trimPersistedClient(client), CLIENT_KEY))
+    const trimmed = await trimPersistedClientInBackground(client, () => currentGeneration !== generation)
+    if (trimmed && currentGeneration === generation) {
+      await transact('readwrite', (store) => {
+        // Cache clearing can also happen while IndexedDB is opening.
+        if (currentGeneration !== generation) throw new Error('Cache write cancelled')
+        return store.put(trimmed, CLIENT_KEY)
+      })
+    }
   } catch (error) {
-    console.warn('[query-cache] Could not persist renderer data.', error)
+    if (currentGeneration === generation) console.warn('[query-cache] Could not persist renderer data.', error)
+  } finally {
+    writing = false
+    if (latestClient && !pendingWrite) pendingWrite = setTimeout(() => void writeLatestClient(), 1_000)
   }
 }
 
@@ -187,6 +236,7 @@ export const rendererQueryPersister: Persister = {
     }
   },
   removeClient: async () => {
+    generation += 1
     clearTimeout(pendingWrite)
     pendingWrite = undefined
     latestClient = undefined

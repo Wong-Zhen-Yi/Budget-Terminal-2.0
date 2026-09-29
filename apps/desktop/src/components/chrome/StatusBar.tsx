@@ -135,14 +135,12 @@ export function StatusBar({
     const meta = worst.envelope!.meta
     health = `${worst.label}: ${meta.failureReason || meta.freshness}`
     tone = toneFor[meta.freshness]
-  } else if (warming) {
-    health = warming
-    tone = 'text-text-muted'
   }
 
   return (
-    <footer className="flex h-8 shrink-0 items-center gap-3 border-t border-border bg-surface px-2 text-2xs whitespace-nowrap">
-      <span className={`min-w-0 truncate ${tone}`}>{health}</span>
+    <footer className="flex min-h-8 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-border bg-surface px-2 py-1 text-2xs">
+      <span className={`min-w-0 truncate ${tone}`} title={health}>{health}</span>
+      {warming ? <span role="status" className="min-w-0 truncate text-text-muted" title={warming}>{warming}</span> : null}
       <span className="ml-auto min-w-0 truncate text-text-dim" title={sourcePath}>
         {sourcePath || 'no holdings file'}
       </span>

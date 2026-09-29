@@ -15,6 +15,7 @@ import {
   queryFreshness,
   shouldPersistRemoteQuery,
   trimPersistedClient,
+  trimPersistedClientInBackground,
 } from '../src/api/queryPersistence.js'
 
 const scratch = mkdtempSync(join(tmpdir(), 'bt-cache-'))
@@ -140,7 +141,25 @@ try {
   await persistentCacheChecks()
   await incrementalSeriesChecks()
   rendererPolicyChecks()
-  console.log('Cache checks passed: restart persistence, serialization, corruption, pruning, single-flight, stale fallback and incremental ranges.')
+  const rendererClient = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } })
+  try {
+    for (let index = 0; index < 100; index += 1) {
+      rendererClient.setQueryData(['history', index], Array.from({ length: 2000 }, (_, day) => ({ day, close: day * 1.234 })))
+    }
+    const snapshot = { timestamp: Date.now(), buster: 'fixture', clientState: dehydrate(rendererClient) }
+    let inputHandled = false
+    setTimeout(() => { inputHandled = true }, 0)
+    const trimmed = await trimPersistedClientInBackground(snapshot)
+    assert.equal(inputHandled, true, 'trimming large histories must yield to queued input')
+    assert.deepEqual(trimmed, trimPersistedClient(snapshot))
+    assert.equal(await trimPersistedClientInBackground(snapshot, () => true), undefined)
+    // Cancellation after trimming starts must abandon the old snapshot as well.
+    let cancellationChecks = 0
+    assert.equal(await trimPersistedClientInBackground(snapshot, () => ++cancellationChecks > 2), undefined)
+  } finally {
+    rendererClient.clear()
+  }
+  console.log('Cache checks passed: restart persistence, serialization, corruption, pruning, single-flight, stale fallback, incremental ranges, cooperative renderer trimming and cancellation.')
 } finally {
   rmSync(scratch, { recursive: true, force: true })
 }

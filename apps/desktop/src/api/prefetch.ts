@@ -921,6 +921,7 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
         failed: failedCount,
       })
       report()
+      reportProgress()
       const worker = async () => {
         while (!cancelled) {
           // Mounted queries get a head start, but polling cannot starve startup.

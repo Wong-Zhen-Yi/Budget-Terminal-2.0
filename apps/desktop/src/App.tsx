@@ -359,7 +359,7 @@ export function App() {
         notice={notice}
         warming={
           warm.active
-            ? `Loading pages (${warm.done + 1}/${warm.total}): ${warm.label}...${warm.failed ? ` · ${warm.failed} failed` : ''}`
+            ? `Loading pages (${warm.done}/${warm.total} complete): ${warm.label}...${warm.failed ? ` · ${warm.failed} failed` : ''}`
             : warm.failed ? `${warm.failed} startup load(s) failed. Open Settings for details.` : ''
         }
       />
