@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 
-import type { OptionPosition, PortfolioMutation, PositionInput } from '@shared/contract'
+import type { Envelope, OptionPosition, PortfolioMutation, PortfolioPayload, PositionInput } from '@shared/contract'
 import { buildPositionRows, summarizePortfolio } from '@shared/portfolioMath'
-import { api } from '@/api/client'
+import { api, queryKeys } from '@/api/client'
 import { useFundamentals, usePortfolio, usePortfolioMutation, useQuotes } from '@/api/queries'
 import { useOptionQuotes } from '@/api/portfolioQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
@@ -45,6 +46,9 @@ export function PortfolioPage({
 }) {
   const portfolioQuery = usePortfolio()
   const mutate = usePortfolioMutation()
+  const queryClient = useQueryClient()
+  const pendingWrites = useRef(new Set<Promise<Envelope<PortfolioPayload>>>())
+  const lastWriteError = useRef('')
 
   const payload = portfolioQuery.data?.data
   const portfolios = useMemo(() => payload?.portfolios ?? [], [payload])
@@ -62,6 +66,8 @@ export function PortfolioPage({
   const [addingPositions, setAddingPositions] = useState(false)
   const [removingPositions, setRemovingPositions] = useState(false)
   const [error, setError] = useState('')
+  const [saveStatus, setSaveStatus] = useState('')
+  const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [analyticsWidth, setAnalyticsWidth] = useState(416)
   const [positionsSplit, setPositionsSplit] = useState(0.6)
@@ -185,12 +191,45 @@ export function PortfolioPage({
   /** Every edit goes through here so a refused write surfaces in one place. */
   const send = useCallback(
     async (mutation: PortfolioMutation) => {
-      const result = await mutate(mutation)
-      setError(result.meta.failureReason ?? '')
-      return result
+      setSaveStatus('')
+      lastWriteError.current = ''
+      const write = mutate(mutation)
+      pendingWrites.current.add(write)
+      try {
+        const result = await write
+        if (result.meta.failureReason) lastWriteError.current = result.meta.failureReason
+        setError(result.meta.failureReason ?? '')
+        return result
+      } finally {
+        pendingWrites.current.delete(write)
+      }
     },
     [mutate],
   )
+
+  const save = useCallback(async () => {
+    if (saving) return
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+    setSaving(true)
+    setSaveStatus('')
+    try {
+      await Promise.all([...pendingWrites.current])
+      if (lastWriteError.current) throw new Error(lastWriteError.current)
+      const current = await api.portfolio()
+      if (current.meta.freshness === 'failed') {
+        throw new Error(current.meta.failureReason ?? 'Could not read the portfolio.')
+      }
+      queryClient.setQueryData(queryKeys.portfolio, current)
+      const check = await api.verifyStoredData({ kind: 'portfolio', expected: current.data })
+      if (!check.data) throw new Error('Portfolio does not match the AppData file. Please retry Save.')
+      setError('')
+      setSaveStatus('Saved and verified in AppData.')
+    } catch (cause) {
+      setSaveStatus(cause instanceof Error ? cause.message : 'Could not verify the AppData file.')
+    } finally {
+      setSaving(false)
+    }
+  }, [queryClient, saving])
 
   /**
    * Writes one ticker at a time so a refusal — a duplicate, say — costs only that ticker
@@ -316,6 +355,10 @@ export function PortfolioPage({
         <Button variant="accent" onClick={() => setManaging(true)}>
           Manage Portfolios
         </Button>
+        <Button onClick={() => void save()} disabled={saving}>
+          {saving ? 'Checking...' : 'Save'}
+        </Button>
+        {saveStatus ? <span role="status" className={`text-2xs ${saveStatus.startsWith('Saved') ? 'text-up' : 'text-down'}`}>{saveStatus}</span> : null}
         <span className="text-2xs text-text-dim">
           Main: {portfolios.find((entry) => entry.id === payload?.mainId)?.name ?? '--'}
         </span>

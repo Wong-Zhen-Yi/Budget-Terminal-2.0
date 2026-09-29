@@ -22,6 +22,7 @@ export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS
     newsThumbnail: (request) => invoke(CHANNELS.newsThumbnail, request),
     portfolio: () => invoke(CHANNELS.portfolio),
     mutatePortfolio: (mutation) => invoke(CHANNELS.portfolioMutate, mutation),
+    verifyStoredData: (request) => invoke(CHANNELS.verifyStoredData, request),
     cards: () => invoke(CHANNELS.cards),
     mutateCards: (mutation) => invoke(CHANNELS.cardsMutate, mutation),
     cardsPerformance: (request) => invoke(CHANNELS.cardsPerformance, request),

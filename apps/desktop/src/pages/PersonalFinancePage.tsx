@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 
 import type {
+  Envelope,
   OptionPosition,
   PersonalFinanceMutation,
   PersonalFinancePayload,
   Portfolio,
 } from '@shared/contract'
+import { api, queryKeys } from '@/api/client'
 import {
   billTotals,
   categoryTotal,
@@ -27,6 +30,7 @@ import { EntriesPanel } from '@/components/finance/EntriesPanel'
 import { GoalPanel } from '@/components/finance/GoalPanel'
 import { SilosPanel } from '@/components/finance/SilosPanel'
 import { TotalsPanel } from '@/components/finance/TotalsPanel'
+import { Button } from '@/components/ui/Button'
 import { money, moneyExplicit } from '@/lib/format'
 import { easeOutCubic, useAnimatedProgress } from '@/lib/useAnimatedProgress'
 
@@ -61,6 +65,9 @@ export function PersonalFinancePage({
   const portfolioQuery = usePortfolio()
   const fxQuery = useFxRate()
   const mutate = useFinanceMutation()
+  const queryClient = useQueryClient()
+  const pendingWrites = useRef(new Set<Promise<Envelope<PersonalFinancePayload>>>())
+  const lastWriteError = useRef('')
 
   const finance = financeQuery.data?.data ?? emptyBook
   const portfolios = useMemo<Portfolio[]>(
@@ -158,6 +165,8 @@ export function PersonalFinancePage({
   }, [replayDonut, replayRing])
 
   const [error, setError] = useState('')
+  const [saveStatus, setSaveStatus] = useState('')
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     onStatusChange(
@@ -185,15 +194,55 @@ export function PersonalFinancePage({
   /** Every edit goes through here so a refused write surfaces in one place. */
   const send = useCallback(
     async (mutation: PersonalFinanceMutation) => {
-      const result = await mutate(mutation)
-      setError(result.meta.failureReason ?? '')
-      return result
+      setSaveStatus('')
+      lastWriteError.current = ''
+      const write = mutate(mutation)
+      pendingWrites.current.add(write)
+      try {
+        const result = await write
+        if (result.meta.failureReason) lastWriteError.current = result.meta.failureReason
+        setError(result.meta.failureReason ?? '')
+        return result
+      } finally {
+        pendingWrites.current.delete(write)
+      }
     },
     [mutate],
   )
 
+  const save = useCallback(async () => {
+    if (saving) return
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+    setSaving(true)
+    setSaveStatus('')
+    try {
+      await Promise.all([...pendingWrites.current])
+      if (lastWriteError.current) throw new Error(lastWriteError.current)
+      const current = await api.personalFinance()
+      if (current.meta.freshness === 'failed') {
+        throw new Error(current.meta.failureReason ?? 'Could not read personal finance.')
+      }
+      queryClient.setQueryData(queryKeys.personalFinance, current)
+      const check = await api.verifyStoredData({ kind: 'personalFinance', expected: current.data })
+      if (!check.data) throw new Error('Personal finance does not match the AppData file. Please retry Save.')
+      setError('')
+      setSaveStatus('Saved and verified in AppData.')
+    } catch (cause) {
+      setSaveStatus(cause instanceof Error ? cause.message : 'Could not verify the AppData file.')
+    } finally {
+      setSaving(false)
+    }
+  }, [queryClient, saving])
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
+      <div className="flex shrink-0 items-center gap-2">
+        <h1 className="text-sm font-semibold text-text">Personal Finance</h1>
+        <Button className="ml-auto" onClick={() => void save()} disabled={saving}>
+          {saving ? 'Checking...' : 'Save'}
+        </Button>
+        {saveStatus ? <span role="status" className={`text-2xs ${saveStatus.startsWith('Saved') ? 'text-up' : 'text-down'}`}>{saveStatus}</span> : null}
+      </div>
       {error ? (
         <p className="shrink-0 border border-down bg-down-bg px-2 py-1 text-2xs text-down">
           {error}

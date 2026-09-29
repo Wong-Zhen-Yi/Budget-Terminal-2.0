@@ -94,6 +94,10 @@ export interface PortfolioPayload {
   sourcePath: string
 }
 
+export type StoredDataVerification =
+  | { kind: 'portfolio'; expected: PortfolioPayload }
+  | { kind: 'personalFinance'; expected: PersonalFinancePayload }
+
 /** The id of the virtual aggregate across every portfolio. */
 export const COMBINED_PORTFOLIO_ID = 'combined'
 export const MAX_PORTFOLIOS = 5
@@ -3340,6 +3344,7 @@ export const CHANNELS = {
   newsThumbnail: 'news:thumbnail',
   portfolio: 'dashboard:portfolio',
   portfolioMutate: 'portfolio:mutate',
+  verifyStoredData: 'user-data:verify',
   cards: 'cards:read',
   cardsMutate: 'cards:mutate',
   cardsPerformance: 'cards:performance',
@@ -3496,6 +3501,7 @@ export interface DesktopApi {
   newsThumbnail(request: NewsThumbnailRequest): Promise<Envelope<NewsThumbnailPayload>>
   portfolio(): Promise<Envelope<PortfolioPayload>>
   mutatePortfolio(mutation: PortfolioMutation): Promise<Envelope<PortfolioPayload>>
+  verifyStoredData(request: StoredDataVerification): Promise<Envelope<boolean>>
   cards(): Promise<Envelope<CardsPayload>>
   mutateCards(mutation: CardsMutation): Promise<Envelope<CardsPayload>>
   cardsPerformance(

@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { watch, type FSWatcher } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
 import { z } from 'zod'
 
 import { randomUUID } from 'node:crypto'
@@ -14,6 +15,7 @@ import type {
   Portfolio,
   PortfolioMutation,
   PortfolioPayload,
+  StoredDataVerification,
 } from '../shared/contract.js'
 import {
   COMBINED_PORTFOLIO_ID,
@@ -475,6 +477,26 @@ export async function readPortfolios(): Promise<PortfolioPayload> {
     mainId: document.mainId,
     sourcePath: storePath(),
   }
+}
+
+/** Compare the renderer's current stored fields against the actual AppData file. */
+export async function verifyStoredData(request: StoredDataVerification): Promise<boolean> {
+  await writeChain
+  const raw = await readFile(storePath(), 'utf8')
+  const document = importDocumentSchema.parse(JSON.parse(raw))
+  if (request.kind === 'personalFinance') {
+    return isDeepStrictEqual(
+      personalFinanceSchema.parse(request.expected),
+      document.personalFinance ?? emptyFinance(),
+    )
+  }
+  const expected = request.expected
+  const portfolios = expected.portfolios
+    .filter((portfolio) => !portfolio.readOnly)
+    .map((portfolio) => portfolioSchema.parse(portfolio))
+  return isDeepStrictEqual(portfolios, document.order.map((id) => document.portfolios[id]))
+    && expected.activeId === document.activeId
+    && expected.mainId === document.mainId
 }
 
 /* ------------------------------------------------------------------ writing */

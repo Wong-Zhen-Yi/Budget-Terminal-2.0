@@ -1,10 +1,10 @@
 import { BrowserWindow, clipboard, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
 import { writeFile } from 'node:fs/promises'
-import type { Envelope, MaintenanceAction, MaintenanceResult, WindowAction } from '../shared/contract.js'
+import type { Envelope, MaintenanceAction, MaintenanceResult, StoredDataVerification, WindowAction } from '../shared/contract.js'
 import { CHANNELS } from '../shared/contract.js'
 import { ok } from '../shared/envelope.js'
 import { yahooProvider } from '../services/provider.js'
-import { watchPortfolios } from '../services/portfolioStore.js'
+import { verifyStoredData, watchPortfolios } from '../services/portfolioStore.js'
 import { isSafeExternalUrl } from '../services/urls.js'
 import { registerServiceHandlers } from './serviceHandlers.js'
 
@@ -19,6 +19,10 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
   registerServiceHandlers((channel, run) => {
     handle(channel, (_event, request) => run(request))
   })
+
+  handle(CHANNELS.verifyStoredData, async (_event, request: StoredDataVerification): Promise<Envelope<boolean>> =>
+    ok(await verifyStoredData(request), 'portfolio store'),
+  )
 
   /**
    * The User Data buttons. The renderer has already confirmed the destructive ones, so

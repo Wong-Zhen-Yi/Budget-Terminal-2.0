@@ -21,6 +21,7 @@ const {
   mutatePortfolios, readPortfolios, storePath,
   readPersonalFinance, mutatePersonalFinance, importUserData, exportUserData,
   clearUserData, resetStoreCache,
+  verifyStoredData,
 } = await import(
   '../electron/services/portfolioStore.js'
 )
@@ -54,6 +55,24 @@ async function regressionChecks(): Promise<void> {
   await mutatePersonalFinance({ type: 'addEntry', category: 'cash' })
   const baseline = await exportUserData()
   const disk = await readFile(storePath(), 'utf8')
+  const portfolioView = await readPortfolios()
+  const financeView = await readPersonalFinance()
+  assert.equal(await verifyStoredData({ kind: 'portfolio', expected: portfolioView }), true)
+  assert.equal(await verifyStoredData({ kind: 'personalFinance', expected: financeView }), true)
+  assert.equal(await verifyStoredData({
+    kind: 'portfolio',
+    expected: {
+      ...portfolioView,
+      portfolios: [{ ...portfolioView.portfolios[0], cashBalance: 999 }],
+    },
+  }), false)
+  assert.equal(await verifyStoredData({
+    kind: 'personalFinance',
+    expected: { ...financeView, cash: [] },
+  }), false)
+  await writeFile(storePath(), JSON.stringify({ ...JSON.parse(disk), mainId: 'elsewhere' }), 'utf8')
+  assert.equal(await verifyStoredData({ kind: 'portfolio', expected: portfolioView }), false)
+  await writeFile(storePath(), disk, 'utf8')
   const damaged = JSON.parse(disk)
   damaged.portfolios.portfolio_1.holdings = { AAPL: { shares: 'broken' } }
   for (const invalid of [{}, { unrelated: true }, damaged]) {
