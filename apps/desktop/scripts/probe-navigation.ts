@@ -69,16 +69,18 @@ try {
           check(original.querySelector('button').textContent === '1', 'Return lost page state')
           check(effects.a === 1 && effects.b === 0, 'Effects did not resume correctly')
           await go('c'); await go('d'); await go('e')
-          check(document.querySelectorAll('[data-page-id]').length === 5, 'Visited page was not retained')
-          check(document.querySelector('[data-page-id="b"]') === retainedB, 'Earlier page rebuilt its DOM')
+          check(document.querySelectorAll('[data-page-id]').length === 3, 'Page cache exceeded its resident limit')
+          check(!document.querySelector('[data-page-id="a"]'), 'Oldest page was not evicted')
+          check(!document.querySelector('[data-page-id="b"]'), 'Earlier page was not evicted')
+          check(document.querySelector('[data-page-id="c"]'), 'Recent page was evicted')
           flushSync(() => hide('c'))
           await settle()
           check(!document.querySelector('[data-page-id="c"]'), 'Settings-hidden page was retained')
           await go('b')
-          check(document.querySelector('[data-page-id="b"]') === retainedB, 'Retained page rebuilt on return')
-          check(retainedB.querySelector('button').textContent === '1', 'Retained page lost local state')
+          check(document.querySelector('[data-page-id="b"]') !== retainedB, 'Evicted page reused stale DOM')
+          check(document.querySelector('[data-page-id="b"] button').textContent === '0', 'Evicted page kept local state')
           check(Object.values(effects).reduce((a, b) => a + b, 0) === 1, 'More than one page has active effects')
-          return 'PASS: session-retained DOM/state, shell render isolation, suspended polling, effect resume, hidden-page removal'
+          return 'PASS: recent-page retention, resident limit, eviction, shell render isolation, suspended polling, effect resume, hidden-page removal'
         }
       `,
     },

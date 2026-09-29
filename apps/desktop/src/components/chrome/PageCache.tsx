@@ -57,8 +57,8 @@ export const PageCache = memo(function PageCache({ activeTab, visibleIds, render
     ...retained.filter((id) => id !== activeTab && visibleIds.includes(id)),
   ].slice(0, MAX_RESIDENT_PAGES)
 
-  // Adjust before committing so a newly selected page mounts only once. Pages stay
-  // retained for the session unless the user explicitly hides them in Settings.
+  // Adjust before committing so a newly selected page mounts only once. Keep the
+  // active page and the two most recently visited visible pages resident.
   if (residents.length !== retained.length || residents.some((id, index) => id !== retained[index])) {
     setRetained(residents)
   }
