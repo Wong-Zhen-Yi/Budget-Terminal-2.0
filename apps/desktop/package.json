@@ -44,6 +44,7 @@
     "probe:oil": "tsx scripts/probe-oil.ts",
     "probe:forex": "tsx scripts/probe-forex.ts",
     "probe:crypto": "tsx scripts/probe-crypto.ts",
+    "probe:crypto-ui": "tsx scripts/probe-crypto-ui.ts",
     "probe:cards": "tsx scripts/probe-cards.ts",
     "probe:options": "tsx scripts/probe-options.ts",
     "probe:heatmap": "tsx scripts/probe-heatmap.ts",

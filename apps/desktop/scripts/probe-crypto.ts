@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { mock } from 'node:test'
 
 import type { CryptoQuote } from '../electron/shared/contract.js'
 import {
@@ -24,7 +25,36 @@ import {
   localIsoSeconds,
   rankSortValue,
 } from '../electron/shared/crypto.js'
-import { getCrypto, sortTilesByRank } from '../electron/services/crypto.js'
+import { fetchTopTiles, getCrypto, sortTilesByRank } from '../electron/services/crypto.js'
+import { yahoo } from '../electron/services/yahoo/client.js'
+
+async function checkHeatmapFallback(): Promise<void> {
+  const request = mock.method(globalThis, 'fetch', async () => new Response('', { status: 403 }))
+  const fallback = mock.method(yahoo, '_fetch', async () => ({ finance: { result: [{ quotes:
+    Array.from({ length: 30 }, (_, index) => ({
+      symbol: `COIN${index}-USD`, shortName: `Coin ${index} USD`,
+      regularMarketPrice: 100 + index, regularMarketChangePercent: -1,
+      marketCap: 1_000 + index, volume24Hr: 500,
+    })),
+  }] } }))
+  try {
+    const tiles = await fetchTopTiles()
+    assert.equal(tiles.length, 30, 'HTTP 403 must recover the full heatmap')
+    assert.equal(tiles[0].symbol, 'COIN29')
+    assert.equal(tiles[0].source, 'Yahoo Finance')
+    assert.equal(tiles[0].volume, 500)
+    assert.equal(tiles[0].changePct, -1)
+    assert.deepEqual(tiles.map(tile => tile.rank), Array.from({ length: 30 }, (_, i) => i + 1))
+    request.mock.mockImplementation(async () => new Response('[]'))
+    assert.equal((await fetchTopTiles()).length, 30, 'Empty successful responses also need fallback')
+    fallback.mock.mockImplementation(async () => { throw new Error('offline') })
+    await assert.rejects(fetchTopTiles(), /Yahoo fallback: offline/)
+    console.log('Crypto fallback checks passed: HTTP 403, empty response, full ranking, and dual-provider failure.')
+  } finally {
+    request.mock.restore()
+    fallback.mock.restore()
+  }
+}
 
 /**
  * The Crypto page probe, run against `mixins/crypto.py` side by side.
@@ -98,11 +128,11 @@ function runOffline(): void {
   assert.equal(clockTail(''), '--')
   assert.equal(fearGreedStamp(''), '')
 
-  // `_p19_loaded_stage_count` counts a failed stage as settled; only `unavailable` warns.
+  // Failed stages must not count as ready.
   const allLoaded = { heatmap: 'loaded', quotes: 'loaded', market: 'loaded', news: 'loaded' } as const
   const mixed = { ...allLoaded, news: 'unavailable' } as const
   assert.equal(loadedStageCount(allLoaded), 4)
-  assert.equal(loadedStageCount(mixed), 4)
+  assert.equal(loadedStageCount(mixed), 3)
   assert.equal(hasUnavailableStage(allLoaded), false)
   assert.equal(hasUnavailableStage(mixed), true)
 
@@ -166,7 +196,7 @@ async function runLive(): Promise<void> {
       {
         fetchedAt: payload.fetchedAt,
         progress: payload.progress,
-        stagesSettled: `${loadedStageCount(payload.progress)}/${CRYPTO_STAGES.length}`,
+        stagesReady: `${loadedStageCount(payload.progress)}/${CRYPTO_STAGES.length}`,
         coverage: payload.heatmap.coverage,
         global: payload.global,
         fearGreed: payload.fearGreed,
@@ -197,4 +227,5 @@ async function runLive(): Promise<void> {
 
 const args = process.argv.slice(2)
 runOffline()
+await checkHeatmapFallback()
 if (!args.includes('--offline')) await runLive()

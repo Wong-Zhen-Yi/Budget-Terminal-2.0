@@ -78,6 +78,17 @@ interface CoinGeckoRow {
   total_volume?: unknown
 }
 
+interface YahooCryptoRow {
+  symbol?: string
+  shortName?: string
+  longName?: string
+  regularMarketPrice?: number
+  regularMarketChangePercent?: number
+  marketCap?: number
+  regularMarketVolume?: number
+  volume24Hr?: number
+}
+
 async function getJson(url: string): Promise<unknown> {
   const providerId = url.startsWith('https://api.coingecko.com/')
     ? 'coingecko'
@@ -104,7 +115,7 @@ function marketsUrl(params: Record<string, string>): string {
 }
 
 /** `_fetch_top_crypto_heatmap`: the 30 largest coins by market cap. */
-async function fetchTopTiles(): Promise<CryptoHeatmapTile[]> {
+async function fetchCoinGeckoTiles(): Promise<CryptoHeatmapTile[]> {
   const body = await getJson(marketsUrl({ per_page: String(CRYPTO_HEATMAP_LIMIT) }))
   const rows = Array.isArray(body) ? (body as CoinGeckoRow[]) : []
 
@@ -112,7 +123,7 @@ async function fetchTopTiles(): Promise<CryptoHeatmapTile[]> {
   rows.slice(0, CRYPTO_HEATMAP_LIMIT).forEach((row, index) => {
     if (!row || typeof row !== 'object') return
     const symbol = String(row.symbol ?? '').trim().toUpperCase()
-    if (!symbol) return
+    if (!symbol || firstNumber(row.current_price) === null) return
     const name = String(row.name ?? '').trim()
     const rank = firstNumber(row.market_cap_rank, index + 1)
     tiles.push({
@@ -130,6 +141,45 @@ async function fetchTopTiles(): Promise<CryptoHeatmapTile[]> {
     })
   })
   return tiles
+}
+
+/** Yahoo's market-cap-ranked USD screen keeps the full heatmap available if CoinGecko fails. */
+export async function fetchTopTiles(): Promise<CryptoHeatmapTile[]> {
+  let primary: CryptoHeatmapTile[] = []
+  let primaryError = 'Incomplete CoinGecko heatmap'
+  try {
+    primary = await fetchCoinGeckoTiles()
+    if (primary.length === CRYPTO_HEATMAP_LIMIT) return primary
+  } catch (error) {
+    primaryError = describeError(error)
+  }
+  try {
+    // This saved crypto screen is not in yahoo-finance2's predefined screen enum.
+    const body = await paced(() => yahoo._fetch(
+      'https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved',
+      { scrIds: 'all_cryptocurrencies_us', count: String(CRYPTO_HEATMAP_LIMIT), formatted: 'false' },
+      {}, 'json', false,
+    )) as { finance?: { result?: Array<{ quotes?: YahooCryptoRow[] }> } }
+    const rows = body.finance?.result?.[0]?.quotes ?? []
+    const tiles = rows.filter(row => row.symbol?.endsWith('-USD') && firstNumber(row.regularMarketPrice) !== null)
+      .sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0))
+      .slice(0, CRYPTO_HEATMAP_LIMIT)
+      .map((row, index): CryptoHeatmapTile => ({
+        rank: index + 1,
+        symbol: row.symbol!.replace(/-USD$/, ''),
+        name: (row.longName || row.shortName || row.symbol!).replace(/ USD$/, ''),
+        price: firstNumber(row.regularMarketPrice),
+        changePct: firstNumber(row.regularMarketChangePercent),
+        marketCap: firstNumber(row.marketCap),
+        volume: firstNumber(row.volume24Hr, row.regularMarketVolume),
+        source: YAHOO_SOURCE,
+      }))
+    if (tiles.length > primary.length) return tiles
+    if (!primary.length) throw new Error('Yahoo returned no usable crypto rows')
+  } catch (error) {
+    if (!primary.length) throw new Error(`${primaryError}; Yahoo fallback: ${describeError(error)}`)
+  }
+  return primary
 }
 
 /** `_build_heatmap_payload`: normalise, cap at 30 and attach coverage. */
@@ -159,7 +209,7 @@ function buildHeatmapFromQuotes(quotes: Record<string, CryptoQuote>): CryptoHeat
   const tiles: CryptoHeatmapTile[] = []
   CRYPTO_TICKERS.forEach((entry, index) => {
     const quote = quotes[entry.label]
-    if (!quote) return
+    if (!quote || quote.price === null) return
     tiles.push({
       rank: index + 1,
       symbol: entry.label,
@@ -278,7 +328,12 @@ async function fetchQuotes(): Promise<Record<string, CryptoQuote>> {
   const live = await fetchCoinGeckoQuotes().catch(() => ({}) as Record<string, RawQuote>)
 
   const symbols = [...CRYPTO_TICKERS, ...PROXY_TICKERS]
-  const fallbacks = await Promise.all(symbols.map((entry) => fetchYahooQuote(entry.symbol)))
+  const fallbacks = await Promise.all(symbols.map((entry) => {
+    const preferred = live[entry.label]
+    return preferred && [preferred.price, preferred.changePct, preferred.volume, preferred.marketCap].every(value => value !== null)
+      ? Promise.resolve(preferred)
+      : fetchYahooQuote(entry.symbol)
+  }))
 
   const rows: Record<string, CryptoQuote> = {}
   symbols.forEach((entry, index) => {
@@ -402,11 +457,16 @@ async function fetchCrypto(force: boolean): Promise<CryptoFetchResult> {
       stageError('quotes', describeError(error))
       return {} as Record<string, CryptoQuote>
     }),
-    // `market` is one stage across two calls, as `run()` has it: either one answering is
-    // enough to call the stage loaded.
+    // Keep independent failures visible while preserving the healthy metric.
     Promise.all([
-      fetchGlobalMarket().catch(() => null),
-      fetchCryptoFearGreed().catch(() => null),
+      fetchGlobalMarket().catch((error) => {
+        stageError('market', `CoinGecko global: ${describeError(error)}`)
+        return null
+      }),
+      fetchCryptoFearGreed().catch((error) => {
+        stageError('market', `Fear & Greed: ${describeError(error)}`)
+        return null
+      }),
     ]),
     fetchCryptoNews(force).catch((error) => {
       stageError('news', describeError(error))
@@ -415,21 +475,23 @@ async function fetchCrypto(force: boolean): Promise<CryptoFetchResult> {
   ])
 
   let heatmap = buildHeatmapPayload(tiles, fetchedAt)
-  if (heatmap.tiles.length) progress.heatmap = 'loaded'
-  if (Object.keys(quotes).length) progress.quotes = 'loaded'
+  const missingQuotes = [...CRYPTO_TICKERS, ...PROXY_TICKERS].filter(entry => quotes[entry.label]?.price == null)
+  if (!missingQuotes.length) progress.quotes = 'loaded'
+  else stageError('quotes', `Quotes unavailable: ${missingQuotes.map(entry => entry.label).join(', ')}`)
 
-  // `run()`'s quote stage: a live quote set rescues a failed heatmap with five tiles.
-  if (progress.heatmap !== 'loaded' && progress.quotes === 'loaded') {
+  // Last resort: display available watchlist coins, but retain incomplete coverage.
+  if (!heatmap.tiles.length) {
     const fallback = buildHeatmapPayload(buildHeatmapFromQuotes(quotes), fetchedAt)
     if (fallback.tiles.length) {
       heatmap = fallback
-      progress.heatmap = 'loaded'
     }
   }
+  if (heatmap.tiles.length === CRYPTO_HEATMAP_LIMIT) progress.heatmap = 'loaded'
+  else stageError('heatmap', `Only ${heatmap.tiles.length}/${CRYPTO_HEATMAP_LIMIT} cryptocurrencies available.`)
 
   const [globalMarket, fearGreed] = market
-  if (globalMarket || fearGreed) progress.market = 'loaded'
-  else stageError('market', 'CoinGecko global and Fear & Greed both failed.')
+  if (globalMarket?.marketCap != null && globalMarket.volume24h != null && fearGreed?.value != null) progress.market = 'loaded'
+  else stageError('market', 'Global market or Fear & Greed data is incomplete.')
 
   if (news.articles.length) progress.news = 'loaded'
   else if (!errors.some((entry) => entry.symbol === STAGE_LABELS.news)) {

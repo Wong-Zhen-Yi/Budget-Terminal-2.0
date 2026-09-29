@@ -35,8 +35,8 @@ import { Panel } from '@/components/ui/Panel'
  * One structural departure. The reference's worker emits a `partial` signal after each of
  * its four stages and the Qt page fills in as they land; an IPC request/response cannot,
  * so all four stages run concurrently in the main process and the payload carries the
- * same `progress` map. The "N/4 stages ready" line therefore only appears in the failure
- * case, where it says which stages settled unavailable.
+ * same `progress` map. The "N/4 stages ready" line reports incomplete data alongside
+ * the provider errors, while healthy panels remain available.
  */
 
 const toneClass: Record<CryptoTone, string> = {
@@ -72,7 +72,7 @@ export function CryptoPage({
   const [notice, setNotice] = useState('')
 
   const payload = query.data?.data
-  const loading = query.isFetching
+  const loading = query.isFetching || refreshing
 
   useEffect(() => {
     // No file behind this page, so the status bar's path slot stays empty.
@@ -90,17 +90,18 @@ export function CryptoPage({
   const status = useMemo(() => {
     if (notice) return notice
     if (loading) return 'Fetching live crypto market data...'
+    if (query.isError) return `Crypto data refresh failed: ${query.error.message}`
     if (!payload) return 'Loading crypto market data...'
     const meta = query.data?.meta
     if (meta?.freshness === 'failed') {
       return `Crypto data refresh failed: ${meta.failureReason ?? 'unknown error'}`
     }
     const stamp = clockTail(payload.fetchedAt)
-    if (hasUnavailableStage(payload.progress)) {
-      return `Live partial data at ${stamp} — ${loadedStageCount(payload.progress)}/${CRYPTO_STAGES.length} stages settled.`
+    if (hasUnavailableStage(payload.progress) || query.data?.errors.length) {
+      return `Partial data at ${stamp} — ${loadedStageCount(payload.progress)}/${CRYPTO_STAGES.length} stages ready. ${query.data?.errors.map(error => error.reason).join(' ') ?? ''}`
     }
     return `Live data refreshed at ${stamp}`
-  }, [notice, loading, payload, query.data])
+  }, [notice, loading, payload, query.data, query.isError, query.error])
 
   const coverage = payload?.heatmap.coverage
   const heatmapStatus = loading
@@ -114,6 +115,8 @@ export function CryptoPage({
     setRefreshing(true)
     try {
       await refresh()
+    } catch (error) {
+      setNotice(`Crypto refresh failed: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       setRefreshing(false)
     }

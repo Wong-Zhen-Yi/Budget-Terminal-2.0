@@ -183,10 +183,10 @@ export function cryptoNewsTone(title: string): CryptoNewsTone {
 
 /* ------------------------------------------------------------------ status */
 
-/** `_p19_loaded_stage_count`: a stage that failed still counts as settled. */
+/** Count ready stages, excluding unavailable data. */
 export function loadedStageCount(progress: Record<CryptoStage, CryptoStageStatus>): number {
   return CRYPTO_STAGES.filter(
-    (stage) => progress[stage] === 'loaded' || progress[stage] === 'unavailable',
+    (stage) => progress[stage] === 'loaded',
   ).length
 }
 
