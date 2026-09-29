@@ -8,8 +8,10 @@ import type {
 import {
   assumptionsFromSuggestions,
   calculateValuationScenarios,
+  DEFAULT_VALUATION_ASSUMPTIONS,
   derivationSummary,
   normalizeValuationAssumptions,
+  peerExitMultiple,
   valuationCurrencyWarnings,
 } from '@shared/valuation'
 import { useRefreshValuation, useValuation } from '@/api/valuationQueries'
@@ -453,7 +455,28 @@ export function ValuationPage({
     },
   ]
 
-  const scenarioRows = scenarios.scenarios
+  const scenarioRows = useMemo(() => {
+    const methods: Array<Pick<ValuationAssumptions, 'basisType' | 'terminalMethod'>> = [
+      { basisType: 'FCF', terminalMethod: 'gordon_growth' },
+      { basisType: 'FCF', terminalMethod: 'exit_multiple' },
+      { basisType: 'EPS', terminalMethod: 'exit_multiple' },
+    ]
+    return methods.flatMap(({ basisType, terminalMethod }) => {
+      const sameBasis = basisType === assumptions.basisType
+      const basisValue = sameBasis
+        ? assumptions.basisValue
+        : (basisType === 'EPS' ? metrics?.eps : metrics?.fcfPerShare) ?? 0
+      const exitMultiple = sameBasis
+        ? assumptions.exitMultiple
+        : peerExitMultiple(payload?.peerRows, basisType, ticker)?.value ??
+          DEFAULT_VALUATION_ASSUMPTIONS.exitMultiple
+      return calculateValuationScenarios(
+        metrics?.price ?? null,
+        { ...assumptions, basisType, basisValue, terminalMethod, exitMultiple },
+        { blockingWarnings: valuationCurrencyWarnings(metrics) },
+      ).scenarios
+    })
+  }, [assumptions, metrics, payload?.peerRows, ticker])
   const riskRows = useMemo(() => {
     // Cash, debt and net debt are reported figures rendered with a `$` prefix. Naming the
     // reporting currency keeps that prefix from reading as a claim when it is not the
@@ -702,7 +725,7 @@ export function ValuationPage({
           <Panel title="Scenarios">
             <DataTable
               rows={scenarioRows}
-              rowKey={(row) => row.name}
+              rowKey={(row) => `${row.components.method}:${row.name}`}
               layout="fixed"
               empty="Load a ticker to solve the scenario ladder"
               columns={[
@@ -722,7 +745,9 @@ export function ValuationPage({
                   align: 'right',
                   numeric: true,
                   width: '12%',
-                  cell: (row) => money(row.fairValue),
+                  cell: (row) => (
+                    <span title={row.warnings.join(' ')}>{money(row.fairValue)}</span>
+                  ),
                 },
                 {
                   key: 'upside',
@@ -764,6 +789,7 @@ export function ValuationPage({
                   header: 'Assumptions',
                   wrap: true,
                   cell: (row) =>
+                    `${row.assumptions.basisType} ${money(row.assumptions.basisValue)} per share, ` +
                     `${row.assumptions.growth1to5.toFixed(1)}% / ${row.assumptions.growth6to10.toFixed(1)}% growth, ` +
                     `${row.assumptions.discountRate.toFixed(1)}% required` +
                     (row.components.method === 'gordon_growth'
