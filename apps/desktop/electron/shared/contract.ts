@@ -1810,7 +1810,7 @@ export interface SignalsRequest extends BackgroundRequest {
 }
 
 export type DayTradingSetup = 'opening_range' | 'vwap_pullback'
-export type DayTradingStatus = 'ready' | 'watching' | 'expired' | 'invalidated' | 'market_closed' | 'stale' | 'error'
+export type DayTradingStatus = 'ready' | 'watching' | 'expired' | 'invalidated' | 'market_closed' | 'awaiting_data' | 'stale' | 'error'
 
 export interface DayTradingResult {
   id: string

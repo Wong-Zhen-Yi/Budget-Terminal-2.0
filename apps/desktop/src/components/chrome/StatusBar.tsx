@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 
 import type { ApiProviderUsage, ApiUsageSnapshot, Envelope, Freshness } from '@shared/contract'
-import { timestampLabel } from '@/lib/format'
 
 export interface PanelStatus {
   label: string
@@ -118,11 +117,6 @@ export function StatusBar({
     .filter((panel) => severity[panel.envelope!.meta.freshness] > 0)
     .sort((a, b) => severity[b.envelope!.meta.freshness] - severity[a.envelope!.meta.freshness])[0]
 
-  const latest = settled.reduce(
-    (newest, panel) => Math.max(newest, panel.envelope!.meta.fetchedAt),
-    0,
-  )
-
   let health = 'Data health: OK'
   let tone = 'text-up'
   if (notice) {
@@ -146,8 +140,6 @@ export function StatusBar({
       </span>
       <span className="text-text-dim">|</span>
       <ApiLimitBars />
-      <span className="text-text-dim">|</span>
-      <span className="num shrink-0 text-text-muted">{timestampLabel(latest)}</span>
     </footer>
   )
 }

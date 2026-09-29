@@ -35,6 +35,15 @@ for (const page of allPages) {
   assert(scheduled.has(page) || sharedOrLocal.has(page), `${page} is absent from startup loading`)
 }
 
+let signalsRequest: unknown
+Object.assign(window.api, { signals: async (request: unknown) => { signalsRequest = request; return ok(null, 'fixture') } })
+const signalsStartup = buildTasks(portfolio, undefined, { stocks: 'AAPL', fundamentals: 'AAPL' },
+  { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 }).find((task) => task.tab === 'signals')!
+const signalsClient = new QueryClient()
+await signalsStartup.run(signalsClient)
+assert.deepEqual(signalsRequest, {}, 'startup must scan day trading before its first visit, not just restore a snapshot')
+signalsClient.clear()
+
 import { cache, TtlCache } from '../electron/services/cache.js'
 import { yahoo } from '../electron/services/yahoo/client.js'
 import { fetchSparkCloses } from '../electron/services/yahoo/spark.js'

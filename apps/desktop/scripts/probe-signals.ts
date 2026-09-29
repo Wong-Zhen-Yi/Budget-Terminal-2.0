@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { DayTradingCandidate, SignalsPayload } from '../electron/shared/contract.js'
 import {
-  dayTradingSession, dayTradingStatus, dayTradingVisible, evaluateDayTrading,
+  dayTradingDataMessage, dayTradingSession, dayTradingStatus, dayTradingVisible, evaluateDayTrading,
   normalizeDayTradingSettings, shouldRefreshDayTrading, validDayTradingPayload,
 } from '../electron/shared/dayTrading.js'
 import { completedMedianDollarVolume, signalCandidateFromQuote, type SignalBar } from '../electron/shared/signals.js'
@@ -33,7 +33,14 @@ function engineChecks(): void {
   assert.equal(dayTradingStatus(orb, confirmed + 120_000), 'expired')
   assert.equal(dayTradingStatus(orb, confirmed + 120_001), 'stale')
   assert.equal(dayTradingStatus(orb, Date.parse('2026-08-12T20:00:00Z')), 'market_closed')
-  assert.equal(dayTradingStatus(orb, Date.parse('2026-08-13T13:36:00Z')), 'market_closed')
+  assert.equal(dayTradingStatus(orb, Date.parse('2026-08-13T13:36:00Z')), 'stale')
+  const awaiting = evaluateDayTrading('TEST', [], OPEN)[0]
+  assert.equal(awaiting.status, 'awaiting_data')
+  assert.match(dayTradingDataMessage(awaiting, OPEN), /09:31/)
+  assert.match(dayTradingDataMessage(awaiting, confirmed), /not returned a completed candle/)
+  assert.equal(dayTradingStatus(awaiting, confirmed), 'awaiting_data')
+  assert.equal(dayTradingStatus({ ...awaiting, error: 'Offline' }, confirmed), 'error')
+  assert.match(dayTradingDataMessage(orb, confirmed + 120_001), /more than 2 minutes/)
   assert.equal(dayTradingStatus({ ...orb, error: 'Provider failed' }, confirmed), 'error')
   assert.equal(evaluateDayTrading('TEST', breakout, confirmed - 1)[0].confirmedAt, null, 'forming candle ignored')
   assert.equal(evaluateDayTrading('TEST', opening, OPEN + 5 * MINUTE)[0].status, 'watching')
@@ -111,7 +118,15 @@ async function serviceChecks(): Promise<void> {
   const chartClient: { chart: typeof yahoo.chart } = yahoo
   const originalChart = chartClient.chart
   let failures = 0
-  chartClient.chart = (async () => { failures++; throw new Error('Fixture provider failure') }) as typeof yahoo.chart
+  let successes = 0
+  chartClient.chart = (async (symbol: string) => {
+    if (symbol === 'GOOD') {
+      successes++
+      return { quotes: breakout.map((row, index) => ({ ...row, date: new Date(Date.now() - 86_400_000 + index * MINUTE) })), meta: { currency: 'USD' } }
+    }
+    failures++
+    throw new Error('Fixture provider failure')
+  }) as unknown as typeof yahoo.chart
   try {
     const first = getSignals()
     assert.equal(getSignals(), first, 'concurrent scans share the exact promise')
@@ -119,6 +134,7 @@ async function serviceChecks(): Promise<void> {
     assert.equal(result.version, 5)
     assert.equal(result.results.length, 4)
     assert.equal(failures, 1)
+    assert.equal(successes, 1, 'a scan bypasses the still-fresh outer intraday cache')
     assert.match(result.errors.FAIL, /Fixture provider failure/)
     const preserved = result.results.find((row) => row.ticker === 'FAIL' && row.setup === 'opening_range')!
     assert.equal(preserved.entry, 102, 'failed refresh retains cached reference levels')
@@ -129,6 +145,12 @@ async function serviceChecks(): Promise<void> {
     assert.equal(validDayTradingPayload({ ...result, results: [{ ...result.results[0], entry: 'bad' }] }), false)
     assert.deepEqual(JSON.parse(await readFile(join(folder, 'signals-latest-v5.json'), 'utf8')), result)
     assert.deepEqual(await getLatestSignals(), result)
+    await getSignals()
+    assert.equal(successes, 2, 'the next scan bypasses the fresh canonical chart cache too')
+    chartClient.chart = (async () => { throw new Error('Fixture offline after success') }) as typeof yahoo.chart
+    const fallback = await getSignals()
+    assert.match(fallback.errors.GOOD, /cached history was returned/, 'stale series fallback must remain an error')
+    assert.equal(fallback.results.find((row) => row.ticker === 'GOOD')!.barTime, result.results.find((row) => row.ticker === 'GOOD')!.barTime)
     await clearLatestSignals()
     assert.equal(await getLatestSignals(), null)
   } finally { chartClient.chart = originalChart; cache.clear() }
@@ -148,6 +170,8 @@ async function liveCheck(): Promise<void> {
   assert.ok(payload.candidates.every((row, index, all) => index === 0 || all[index - 1].estimatedDollarVolume >= row.estimatedDollarVolume))
   assert.ok(payload.results.every((row) => row.status !== 'ready' || (row.entry !== null && row.stop !== null && row.entry > row.stop)))
   console.log(`PASS: live Yahoo scan ${(Date.now() - started) / 1000}s; ${payload.candidates.length} stocks; ${payload.results.length} setups; ${Object.keys(payload.errors).length} errors; session open=${payload.marketOpen}`)
+  const stocks = payload.results.filter((row) => row.setup === 'opening_range')
+  console.log(`Feed coverage: ${stocks.filter((row) => row.barTime).length}/${stocks.length} stocks with candles; ${stocks.filter((row) => row.status === 'stale').length} delayed; ${stocks.filter((row) => row.status === 'awaiting_data').length} awaiting candles`)
   console.log(payload.results.slice(0, 4).map((row) => `${row.ticker} ${row.setup}: ${row.status}`).join('\n'))
 }
 

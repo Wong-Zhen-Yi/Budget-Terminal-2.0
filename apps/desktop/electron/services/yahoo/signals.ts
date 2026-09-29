@@ -125,7 +125,10 @@ async function fetchBars(
         start: period1,
         interval: request.interval,
         force,
+        // Every scan refreshes the tail without re-downloading all seven days.
+        refresh: request.interval === '1m',
       })
+      if (chart.stale) throw new Error(`Yahoo ${request.interval} refresh failed; cached history was returned. Retrying on the next scan.`)
       const bars = chartBars({ quotes: chart.rows.map((row) => ({
         ...row,
         date: new Date(row.time * 1000),
@@ -133,7 +136,8 @@ async function fetchBars(
       if (!bars.length) throw new Error(`No ${request.interval} history returned`)
       return bars
     },
-    { force },
+    // Every scan must check the feed. Only daily liquidity history is reusable here.
+    { force: force || request.interval === '1m' },
   )
   return result.value
 }

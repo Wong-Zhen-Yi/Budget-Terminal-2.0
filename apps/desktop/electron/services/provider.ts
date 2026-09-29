@@ -1224,14 +1224,24 @@ export const yahooProvider: MarketDataProvider = {
     if (request.latestOnly) return ok(await getLatestSignals(), SIGNALS_SOURCE)
     try {
       const payload = await getSignals(request)
-      if (!Object.keys(payload.errors).length) return ok(payload, SIGNALS_SOURCE)
+      const issues = { ...payload.errors }
+      if (payload.marketOpen) {
+        for (const row of payload.results) {
+          if (row.status === 'stale' || row.status === 'awaiting_data') {
+            issues[row.ticker] ??= row.status === 'stale'
+              ? 'Completed candles are delayed; no fresh signal is available.'
+              : 'Waiting for completed regular-session candles from Yahoo.'
+          }
+        }
+      }
+      if (!Object.keys(issues).length) return ok(payload, SIGNALS_SOURCE)
       return partial(
         payload,
-        Object.entries(payload.errors).map(([symbol, message]) =>
+        Object.entries(issues).map(([symbol, message]) =>
           err(SIGNALS_SOURCE, message, 'signals', symbol),
         ),
         SIGNALS_SOURCE,
-        `${Object.keys(payload.errors).length} ticker(s) returned incomplete market data.`,
+        `${Object.keys(issues).length} ticker(s) returned delayed or incomplete market data.`,
       )
     } catch (error) {
       return failed(await getLatestSignals(), describeError(error), SIGNALS_SOURCE)

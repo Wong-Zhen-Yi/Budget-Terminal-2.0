@@ -39,6 +39,8 @@ interface IncrementalOptions {
   start: Date
   interval: YahooSeriesInterval
   force?: boolean
+  /** Refresh the overlapping tail even when the shared chart cache is still fresh. */
+  refresh?: boolean
   /** Distinguishes provider representations that cannot safely share rows. */
   variant?: string
 }
@@ -193,7 +195,7 @@ export async function getYahooSeries(
         meta,
       }
     },
-    { force: Boolean(options.force) || needsEarlierCoverage || needsReconcile },
+    { force: Boolean(options.force) || Boolean(options.refresh) || needsEarlierCoverage || needsReconcile },
   )
 
   const document = resolved.value

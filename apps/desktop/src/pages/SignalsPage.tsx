@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DayTradingResult, SignalsPageSettings } from '@shared/contract'
 import {
   DAY_TRADING_SETUPS, DAY_TRADING_STATUSES, DEFAULT_DAY_TRADING_SETTINGS,
-  dayTradingSession, dayTradingStatus, dayTradingVisible, normalizeDayTradingSettings, shouldRefreshDayTrading,
+  dayTradingDataMessage, dayTradingSession, dayTradingStatus, dayTradingVisible, normalizeDayTradingSettings, shouldRefreshDayTrading,
 } from '@shared/dayTrading'
 import { useSignalsLatest, useSignalsScan } from '@/api/signalsQueries'
 import { useSettings, useSettingsMutation } from '@/api/settingsQueries'
@@ -22,7 +22,7 @@ const age = (value: string | null, now: number) => {
   return seconds < 60 ? `${seconds}s` : seconds < 3600 ? `${Math.floor(seconds / 60)}m` : `${Math.floor(seconds / 3600)}h`
 }
 const statusColor = (status: DayTradingResult['status']) => status === 'ready' ? 'text-up'
-  : status === 'error' || status === 'invalidated' ? 'text-down' : status === 'stale' ? 'text-warn' : 'text-text-muted'
+  : status === 'error' || status === 'invalidated' ? 'text-down' : status === 'stale' || status === 'awaiting_data' ? 'text-warn' : 'text-text-muted'
 const statusOptions = [{ value: 'all' as const, label: 'All statuses' },
   ...Object.entries(DAY_TRADING_STATUSES).map(([value, label]) => ({ value: value as DayTradingResult['status'], label }))]
 const setupOptions = [{ value: 'all' as const, label: 'All setups' },
@@ -54,8 +54,11 @@ export function SignalsPage({ onStatusChange }: { onStatusChange: (panels: Panel
   }, [scan.mutateAsync])
 
   useEffect(() => {
-    onStatusChange([{ label: 'Day Trading', envelope, loading: latest.isPending || scan.isPending }], '')
-  }, [onStatusChange, envelope, latest.isPending, scan.isPending])
+    const unhealthy = session.open && payload?.results.some((row) => ['stale', 'error', 'awaiting_data'].includes(dayTradingStatus(row, now)))
+    const health = envelope && unhealthy && envelope.meta.freshness !== 'failed'
+      ? { ...envelope, meta: { ...envelope.meta, freshness: 'partial' as const } } : envelope
+    onStatusChange([{ label: 'Day Trading', envelope: health, loading: latest.isPending || scan.isPending }], '')
+  }, [onStatusChange, envelope, payload, session.open, now, latest.isPending, scan.isPending])
   useEffect(() => {
     if (!settings.data?.data || hydrated.current) return
     hydrated.current = true
@@ -92,22 +95,28 @@ export function SignalsPage({ onStatusChange }: { onStatusChange: (panels: Panel
     return { ...row, status: (scan.isError || envelope?.meta.freshness === 'failed') && status === 'ready' ? 'stale' as const : status }
   }), [payload, now, envelope?.meta.freshness, scan.isError])
   const filtered = rows.filter((row) => dayTradingVisible(row, controls))
-  const detail = filtered.find((row) => row.id === selected) ?? filtered[0]
+  const selectionKey = (row: DayTradingResult) => `${row.ticker}:${row.setup}`
+  const detail = filtered.find((row) => selectionKey(row) === selected) ?? filtered[0]
+  const stocks = rows.filter((row) => row.setup === 'opening_range')
+  const missing = stocks.filter((row) => row.status === 'awaiting_data').length
+  const delayed = stocks.filter((row) => row.status === 'stale').length
+  const errors = stocks.filter((row) => row.error).length
+  const current = stocks.filter((row) => ['ready', 'watching', 'expired', 'invalidated'].includes(row.status)).length
   const columns: Column<DayTradingResult>[] = [
     { key: 'ticker', header: 'Ticker', cell: (row) => row.ticker, width: '75px', sortValue: (row) => row.ticker },
     { key: 'setup', header: 'Setup', cell: (row) => DAY_TRADING_SETUPS[row.setup], width: '155px', wrap: true },
     { key: 'status', header: 'Status', cell: (row) => <span className={statusColor(row.status)}>{DAY_TRADING_STATUSES[row.status]}</span>, width: '110px', wrap: true,
       sortValue: (row) => Object.keys(DAY_TRADING_STATUSES).indexOf(row.status) },
     { key: 'time', header: 'Signal time (ET)', cell: (row) => timestamp(row.confirmedAt), width: '155px', wrap: true, sortValue: (row) => row.confirmedAt },
-    ...(['latestPrice', 'entry', 'stop', 'target1', 'target2'] as const).map((key, index) => ({
-      key, header: ['Latest', 'Entry', 'Stop', '1R target', '2R target'][index], cell: (row: DayTradingResult) => money(row[key]),
+    ...(['latestPrice', 'vwap', 'entry', 'stop', 'target1', 'target2'] as const).map((key, index) => ({
+      key, header: ['Latest close', 'VWAP', 'Entry', 'Stop', '1R target', '2R target'][index], cell: (row: DayTradingResult) => money(row[key]),
       width: '80px', numeric: true, align: 'right' as const, sortValue: (row: DayTradingResult) => row[key],
     })),
     { key: 'age', header: 'Data age', cell: (row) => age(row.barTime, now), width: '90px', align: 'right', sortValue: (row) => row.barTime },
   ]
   const failure = scan.error?.message ?? (envelope?.meta.freshness === 'failed' ? envelope.meta.failureReason : null)
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-2">
       <header className="flex shrink-0 flex-wrap items-baseline gap-x-3 gap-y-1">
         <h1 className="text-sm font-semibold text-text">Day Trading</h1>
         <p className="text-2xs text-text-muted">Long US stocks · 5-minute opening range breakouts · VWAP pullbacks</p>
@@ -119,10 +128,13 @@ export function SignalsPage({ onStatusChange }: { onStatusChange: (panels: Panel
         <Select value={controls.setup} options={setupOptions} onChange={(setup) => setControls((old) => ({ ...old, setup }))} className="!w-48" aria-label="Setup filter" />
         <Select value={controls.filter} options={statusOptions} onChange={(filter) => setControls((old) => ({ ...old, filter }))} className="!w-36" aria-label="Status filter" />
         <SearchInput value={controls.search} onChange={(search) => setControls((old) => ({ ...old, search }))} placeholder="Search ticker" className="w-32" aria-label="Search ticker" />
-        <span className="text-2xs text-text-muted">{scan.isPending ? 'Scan in progress' : visible && session.open ? 'Auto-refresh: 60s' : 'Auto-refresh paused'}</span>
+        <span className="text-2xs text-text-muted">{scan.isPending ? `Checking Yahoo · ${Math.max(0, Math.floor((now - lastStarted.current) / 1000))}s` : visible && session.open ? `Next scan in ${Math.max(0, Math.ceil((60_000 - now + lastStarted.current) / 1000))}s` : 'Auto-refresh paused'}</span>
       </section>
       <div className="shrink-0 space-y-1 border border-border bg-surface px-3 py-2 text-2xs text-text-muted">
         <p><span className="text-up">{rows.filter((row) => row.status === 'ready').length} Ready</span> · {payload?.candidates.length ?? 0} stocks · {filtered.length} setups shown · Yahoo Finance polling · Last scan: {timestamp(payload?.completedAt ?? null)}</p>
+        {session.open && payload ? <p aria-label="Feed health"><span className="text-up">{current}/{stocks.length} stocks current</span> · <span className="text-warn">{missing} awaiting candles · {delayed} delayed</span> · <span className={errors ? 'text-down' : ''}>{errors} data errors</span></p> : null}
+        {session.open && session.minute < 575 ? <p className="text-warn">Opening range forming until 09:35 ET. Setups require a completed confirmation candle after the range.</p> : null}
+        {session.open && (missing > 0 || delayed > 0) ? <p className="text-warn">A completed scan does not guarantee fresh prices. Yahoo candle publication may lag; missing or delayed data cannot produce Ready signals. Refresh now checks the feed again.</p> : null}
         <p>Regular session only. Completed 1-minute candles; data age is measured from candle close. Ready expires after 2 minutes. Entry, stop and 1R/2R targets are signal references, not executed trades.</p>
         <p>Universe: price ≥ $5 · market cap ≥ $2B · 20-session median dollar volume ≥ $20M · up to 30 names by screener dollar volume.</p>
         {failure ? <p role="alert" className="text-down">Refresh failed: {failure}. Showing previous results where available.</p> : null}
@@ -131,13 +143,14 @@ export function SignalsPage({ onStatusChange }: { onStatusChange: (panels: Panel
       <div className="flex min-h-0 flex-1 flex-col gap-2 xl:flex-row">
         <section className="flex min-h-48 min-w-0 flex-1 flex-col overflow-hidden border border-border">
           <DataTable columns={columns} rows={filtered} rowKey={(row) => row.id} layout="fixed" minWidth="1050px" defaultSort={{ key: 'status', direction: 'asc' }}
-            onRowClick={(row) => setSelected(row.id)} rowClassName={(row) => row.id === detail?.id ? 'bg-accent-dim/60' : ''}
+            onRowClick={(row) => setSelected(selectionKey(row))} rowClassName={(row) => row.id === detail?.id ? 'bg-accent-dim/60' : ''}
             empty={payload ? 'No setups match these filters.' : scan.isPending ? 'Loading liquid US stocks…' : 'No scan yet. Click Refresh now; automatic scans run during the regular session.'} />
         </section>
         <aside className="max-h-64 shrink-0 overflow-y-auto border border-border bg-surface p-3 text-2xs xl:max-h-none xl:w-72" aria-label="Setup details">
           {detail ? <>
             <h2 className="mb-2 text-sm font-semibold text-text">{detail.ticker} · {DAY_TRADING_SETUPS[detail.setup]}</h2>
             <p className={`mb-2 ${statusColor(detail.status)}`}>{DAY_TRADING_STATUSES[detail.status]}</p>
+            <p className="mb-3 leading-5 text-text-muted">{dayTradingDataMessage(detail, now)}</p>
             <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
               {([['Entry reference', money(detail.entry)], ['Stop', money(detail.stop)], ['1R target', money(detail.target1)], ['2R target', money(detail.target2)],
                 ['Opening high', money(detail.openingHigh)], ['Opening low', money(detail.openingLow)], ['Session VWAP', money(detail.vwap)],

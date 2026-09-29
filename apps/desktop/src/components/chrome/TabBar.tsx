@@ -46,8 +46,9 @@ export function TabBar({
         Find a page <kbd className="num">{isMac ? '⌘ K' : 'Ctrl K'}</kbd>
       </button>
 
-      <span className="num no-drag px-2 text-2xs text-text-muted">
-        {clockTime(now, zone, time12h)}
+      <span className="num no-drag shrink-0 whitespace-nowrap px-2 text-2xs text-text-muted">
+        {now.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric', timeZone: zone })}
+        {'  '}{clockTime(now, zone, time12h)}
       </span>
 
       <button

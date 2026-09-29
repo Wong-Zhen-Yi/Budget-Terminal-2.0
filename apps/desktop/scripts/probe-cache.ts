@@ -112,6 +112,16 @@ async function incrementalSeriesChecks(): Promise<void> {
     const stale = await getYahooSeries({ symbol: 'FIX', start: earlier, interval: '1d' }, store, loader)
     assert.equal(stale.stale, true)
     assert.ok(stale.rows.length > 0)
+
+    fail = false
+    const minuteStart = new Date(now - 7 * 86_400_000)
+    await getYahooSeries({ symbol: 'MINUTE', start: minuteStart, interval: '1m' }, store, loader)
+    const beforeRefresh = calls.length
+    await getYahooSeries({ symbol: 'MINUTE', start: minuteStart, interval: '1m', refresh: true }, store, loader)
+    assert.equal(calls.length, beforeRefresh + 1, 'explicit refresh bypasses the fresh shared chart cache')
+    assert.ok(calls.at(-1)!.start > minuteStart.getTime(), 'refresh retains history and only downloads overlapping tail')
+    await getYahooSeries({ symbol: 'MINUTE', start: minuteStart, interval: '1m', force: true }, store, loader)
+    assert.equal(calls.at(-1)!.start, minuteStart.getTime(), 'force still replaces the full range')
   } finally {
     Date.now = originalNow
   }

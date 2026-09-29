@@ -11,7 +11,7 @@ export const DAY_TRADING_SETUPS: Record<DayTradingSetup, string> = {
 }
 export const DAY_TRADING_STATUSES: Record<DayTradingStatus, string> = {
   ready: 'Ready', watching: 'Watching', expired: 'Expired', invalidated: 'Invalidated',
-  market_closed: 'Market closed', stale: 'Stale', error: 'Data error',
+  market_closed: 'Market closed', awaiting_data: 'Awaiting candles', stale: 'Delayed', error: 'Data error',
 }
 export const DEFAULT_DAY_TRADING_SETTINGS: SignalsPageSettings = { filter: 'all', setup: 'all', search: '' }
 
@@ -47,13 +47,30 @@ export function dayTradingSession(now = Date.now()): { date: string; minute: num
 /** Recompute time-dependent status even when no request is running or a request failed. */
 export function dayTradingStatus(row: DayTradingResult, now = Date.now()): DayTradingStatus {
   const session = dayTradingSession(now)
-  if (!session.open || row.session !== session.date) return 'market_closed'
+  if (!session.open) return 'market_closed'
   if (row.error) return 'error'
+  if (row.session !== session.date) return 'stale'
+  if (!row.barTime) return 'awaiting_data'
   const barEnd = row.barTime ? Date.parse(row.barTime) + MINUTE : NaN
   if (!Number.isFinite(barEnd) || now - barEnd > DAY_TRADING_MAX_AGE_MS || barEnd > now) return 'stale'
   if (row.invalidatedAt) return 'invalidated'
   if (!row.confirmedAt) return 'watching'
   return now - Date.parse(row.confirmedAt) < DAY_TRADING_MAX_AGE_MS ? 'ready' : 'expired'
+}
+
+/** Explain feed health separately from the strategy's confirmation conditions. */
+export function dayTradingDataMessage(row: DayTradingResult, now = Date.now()): string {
+  if (row.error) return row.error
+  const session = dayTradingSession(now)
+  if (row.session !== session.date) return `Saved session ${row.session}. Waiting for a scan of today's session.`
+  if (!row.barTime) return session.open
+    ? session.minute < 571
+      ? 'The first regular-session candle closes at 09:31 ET. Waiting for Yahoo to publish it.'
+      : 'Yahoo has not returned a completed candle for this session. Automatic scans will retry; no setup can be confirmed yet.'
+    : 'No completed regular-session candles for this date. Automatic scans resume when the market opens.'
+  if (!session.open) return 'Market closed. These are saved regular-session candles, not live prices.'
+  if (dayTradingStatus(row, now) === 'stale') return 'The latest completed candle is more than 2 minutes old. Signals are withheld until fresh candles arrive.'
+  return 'Current completed candle received. Setup conditions are evaluated below.'
 }
 
 export function dayTradingVisible(row: DayTradingResult, settings: SignalsPageSettings): boolean {

@@ -696,8 +696,8 @@ export function buildTasks(
     tab: 'signals', label: 'Day Trading',
     run: (client) => warmQuery(client, {
       queryKey: queryKeys.signals,
-      queryFn: () => api.signals({ latestOnly: true }),
-      staleTime: queryFreshness(queryKeys.signals),
+      queryFn: () => api.signals({}),
+      staleTime: 0,
     }),
   })
   tasks.push({
