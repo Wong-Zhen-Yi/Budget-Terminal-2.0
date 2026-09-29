@@ -99,6 +99,7 @@ export function DataHealthPanel({ onStatus }: { onStatus: (message: string) => v
         </div>
         {startup ? <details className="text-2xs text-text-muted">
           <summary className="cursor-pointer">Startup prefetch: {startup.timings.length}/{startup.planned} tasks · {(startup.durationMs / 1000).toFixed(1)}s elapsed</summary>
+          {startup.pageOrder?.length ? <p className="pt-1">Page request order: {startup.pageOrder.map((page) => PAGE_LABELS.get(page) ?? page).join(' → ')}</p> : null}
           <ul className="pl-4 pt-1">{startup.timings.map((entry, index) =>
             <li key={index}>{entry.label}: {(entry.durationMs / 1000).toFixed(1)}s{entry.failed ? ' · failed; retries when opened' : ''}</li>)}</ul>
         </details> : null}

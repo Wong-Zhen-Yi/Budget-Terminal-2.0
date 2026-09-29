@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import { profileStorage } from './profileStorage'
 
 import type { Envelope, Freshness } from '@shared/contract'
+import { recordStartupLoad, restoreStartupLoads, type StartupLoads } from '@shared/startupLoading'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 
 /** Bounded observed feed history; restored records are explicitly historical. */
@@ -19,6 +20,7 @@ export interface HealthRecord {
 }
 
 export interface StartupTiming {
+  tab: string
   label: string
   durationMs: number
   failed: boolean
@@ -28,8 +30,10 @@ interface DataHealthState {
   records: Record<string, HealthRecord>
   record: (page: string, panels: PanelStatus[]) => void
   clear: () => void
-  startup: { durationMs: number; planned: number; timings: StartupTiming[] } | null
+  startup: { durationMs: number; planned: number; timings: StartupTiming[]; pageOrder?: string[] } | null
   setStartup: (startup: DataHealthState['startup']) => void
+  startupLoads: StartupLoads
+  recordStartupLoad: (page: string, durationMs: number, failed: boolean) => void
 }
 
 function toRecord(page: string, label: string, envelope: Envelope<unknown>): HealthRecord {
@@ -50,6 +54,10 @@ export const useDataHealth = create<DataHealthState>()(persist((set) => ({
   records: {},
   startup: null,
   setStartup: (startup) => set({ startup }),
+  startupLoads: {},
+  recordStartupLoad: (page, durationMs, failed) => set((state) => ({
+    startupLoads: recordStartupLoad(state.startupLoads, page, durationMs, failed),
+  })),
 
   record: (page, panels) =>
     set((state) => {
@@ -74,7 +82,7 @@ export const useDataHealth = create<DataHealthState>()(persist((set) => ({
 }), {
   name: 'budget-terminal:data-health',
   storage: profileStorage,
-  partialize: (state) => ({ records: state.records }),
+  partialize: (state) => ({ records: state.records, startupLoads: state.startupLoads }),
   merge: (saved, current) => {
     const records = (saved as Partial<DataHealthState> | null)?.records
     const restored = Object.entries(records ?? {}).filter(([, record]) =>
@@ -84,7 +92,9 @@ export const useDataHealth = create<DataHealthState>()(persist((set) => ({
       record.errors.every((error) => typeof error === 'string') &&
       ['failed', 'partial', 'stale', 'cached', 'fresh'].includes(record.freshness),
     ).slice(0, 200).map(([key, record]) => [key, { ...record, previousSession: true }])
-    return { ...current, records: Object.fromEntries(restored) }
+    return { ...current, records: Object.fromEntries(restored),
+      startupLoads: restoreStartupLoads((saved as Partial<DataHealthState> | null)?.startupLoads),
+    }
   },
 }))
 

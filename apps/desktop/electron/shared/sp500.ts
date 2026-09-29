@@ -1,7 +1,9 @@
+import type { BackgroundRequest } from './contract.js'
+
 export const SP500_PARTS = ['constituents', 'market', 'history', 'holdings', 'valuation'] as const
 export type Sp500Part = typeof SP500_PARTS[number]
 export type Sp500Window = '1M' | '3M' | 'YTD' | '1Y' | '5Y'
-export interface Sp500Request { part: Sp500Part; force?: boolean; background?: boolean }
+export interface Sp500Request extends BackgroundRequest { part: Sp500Part; force?: boolean }
 export interface Sp500Constituent {
   symbol: string
   security: string

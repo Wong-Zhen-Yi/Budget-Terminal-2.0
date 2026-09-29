@@ -5,8 +5,9 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { computeExposure, emptyRiskMetrics } from '../electron/shared/analytics.js'
 import { ok } from '../electron/shared/envelope.js'
 import { TABS, type AnalyticsPayload } from '../electron/shared/contract.js'
-import { waitForWarmSlot, warmQuery } from '../src/api/warmQueue.js'
+import { runWarmTasks, waitForWarmSlot, warmQuery } from '../src/api/warmQueue.js'
 import { recentPages, startupPages } from '../electron/shared/navigation.js'
+import { recordStartupLoad, restoreStartupLoads, startupPageOrder } from '../electron/shared/startupLoading.js'
 
 assert.deepEqual(recentPages(['stocks', 'charts', 'portfolio'], 'charts'), ['charts', 'stocks', 'portfolio'])
 assert.equal(recentPages(['a', 'b', 'c', 'd', 'e', 'f'], 'g').length, 6)
@@ -17,6 +18,28 @@ assert.deepEqual([...startup].sort(), [...allPages].sort())
 assert.deepEqual(startupPages('heatmap', [], []).slice(0, 1), ['heatmap'])
 assert.equal(startupPages('dashboard', [], []).includes('economic'), true)
 assert.equal(startupPages('dashboard', [], []).includes('settings'), true)
+
+const firstOrder = startupPages('dashboard', ['heatmap'], ['trading-volumes'])
+assert.deepEqual(startupPageOrder(firstOrder, {}), firstOrder)
+let learnedLoads = recordStartupLoad({}, 'heatmap', 90_000, false)
+learnedLoads = recordStartupLoad(learnedLoads, 'trading-volumes', 60_000, false)
+learnedLoads = recordStartupLoad(learnedLoads, 'global', 3_000, false)
+const learnedOrder = startupPageOrder(firstOrder, learnedLoads)
+assert.deepEqual(learnedOrder.slice(-3), ['global', 'trading-volumes', 'heatmap'])
+assert.deepEqual([...learnedOrder].sort(), [...allPages].sort())
+assert.deepEqual(firstOrder, startupPages('dashboard', ['heatmap'], ['trading-volumes']))
+assert.equal(recordStartupLoad(learnedLoads, 'heatmap', 5, false), learnedLoads, 'Instant cache reads must retain the learned load cost')
+assert.equal(recordStartupLoad(learnedLoads, 'heatmap', 600_000, true), learnedLoads, 'Provider outages must not replace successful durations')
+assert.equal(recordStartupLoad(learnedLoads, 'heatmap', NaN, false), learnedLoads)
+learnedLoads = recordStartupLoad(learnedLoads, 'heatmap', 10_000, false)
+assert.equal(learnedLoads.heatmap.durationMs, 66_000)
+assert.equal(learnedLoads.heatmap.samples, 2)
+assert.deepEqual(restoreStartupLoads({ ...learnedLoads,
+  stocks: { durationMs: -1, samples: 1 }, calendar: { durationMs: 1, samples: 0 },
+  removedPage: { durationMs: 1, samples: 1 },
+}), learnedLoads)
+assert.deepEqual(restoreStartupLoads(null), {})
+console.log('Adaptive loading checks passed: first launch order, learned slow pages last, all pages retained, cache/failure isolation and smoothing.')
 
 // Build the actual startup task list with a representative portfolio. An added page
 // must receive a task or be explicitly accounted for as local/shared initial state.
@@ -40,9 +63,52 @@ Object.assign(window.api, { signals: async (request: unknown) => { signalsReques
 const signalsStartup = buildTasks(portfolio, undefined, { stocks: 'AAPL', fundamentals: 'AAPL' },
   { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 }).find((task) => task.tab === 'signals')!
 const signalsClient = new QueryClient()
-await signalsStartup.run(signalsClient)
-assert.deepEqual(signalsRequest, {}, 'startup must scan day trading before its first visit, not just restore a snapshot')
+await signalsStartup.run(signalsClient, 7)
+assert.deepEqual(signalsRequest, { background: true, backgroundOrder: 7 }, 'startup must pass the learned page order to the provider')
 signalsClient.clear()
+
+// Every task must start while the slow first task is still pending. A failure
+// must remain visible and must not stop other pages from finishing.
+const parallelTasks = Array.from({ length: 12 }, (_, index) => index)
+const started: number[] = []
+const settled: Array<{ task: number; status: string }> = []
+let releaseSlow!: () => void
+let cancelledRun = false
+const parallelRun = runWarmTasks(parallelTasks, {
+  isCancelled: () => cancelledRun,
+  onStart: (task) => { started.push(task) },
+  onSettled: (task, result) => { settled.push({ task, status: result.status }) },
+  run: async (task) => {
+    if (task === 0) await new Promise<void>((resolve) => { releaseSlow = resolve })
+    if (task === 1) throw new Error('Page unavailable')
+  },
+})
+assert.deepEqual(started, parallelTasks)
+await new Promise((resolve) => setTimeout(resolve, 0))
+assert.equal(settled.length, 11)
+assert.deepEqual(settled.find((entry) => entry.task === 1), { task: 1, status: 'rejected' })
+releaseSlow()
+await parallelRun
+assert.equal(settled.length, 12)
+cancelledRun = true
+await runWarmTasks(parallelTasks, {
+  isCancelled: () => cancelledRun,
+  onStart: () => { throw new Error('Cancelled task started') },
+  onSettled: () => { throw new Error('Cancelled task reported') },
+  run: async () => { throw new Error('Cancelled task ran') },
+})
+let releaseCancelled!: () => void
+cancelledRun = false
+const cancellation = runWarmTasks([0], {
+  isCancelled: () => cancelledRun,
+  onStart: () => {},
+  onSettled: () => { throw new Error('Unmounted startup reported progress') },
+  run: () => new Promise<void>((resolve) => { releaseCancelled = resolve }),
+})
+cancelledRun = true
+releaseCancelled()
+await cancellation
+console.log('Parallel startup checks passed: all pages start, failures stay visible, slow pages do not block and cancellation suppresses progress.')
 
 import { cache, TtlCache } from '../electron/services/cache.js'
 import { yahoo } from '../electron/services/yahoo/client.js'

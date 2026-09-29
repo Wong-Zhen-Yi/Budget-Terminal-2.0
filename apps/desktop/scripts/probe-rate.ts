@@ -9,6 +9,7 @@ import assert from 'node:assert/strict'
 import { ApiUsageTracker } from '../electron/services/apiUsage.js'
 import { getQuote, quoteFromChart } from '../electron/services/yahoo/quotes.js'
 import { RateGate, isRateLimitError, rateGate } from '../electron/services/yahoo/rateGate.js'
+import { paced, runWithPriority } from '../electron/services/yahoo/client.js'
 
 const SYMBOLS = [
   'AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'META', 'TSLA', 'AVGO', 'JPM', 'V',
@@ -102,6 +103,8 @@ async function probeApiUsage(): Promise<void> {
 async function main(): Promise<void> {
   probeQuoteSelection()
   await probeApiUsage()
+  await probeParallelPacing()
+  await probeStartupOrdering()
   if (process.argv.includes('--offline')) {
     assert.ok(await probeLanes())
     return
@@ -136,6 +139,87 @@ async function main(): Promise<void> {
   const lanes = await probeLanes()
 
   process.exit(rateLimited.length || !lanes ? 1 : 0)
+}
+
+async function probeStartupOrdering(): Promise<void> {
+  const gate = new RateGate({ requestsPerSecond: 1_000, burst: 30, maxConcurrency: 2 })
+  let release!: () => void
+  // Occupy the background slot while later requests from multiple pages arrive.
+  const blocker = gate.run(() => new Promise<void>((resolve) => { release = resolve }), 'background')
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  const order: string[] = []
+  const queue = (label: string, rank: number) => gate.run(async () => { order.push(label) }, 'background', rank)
+  const requests = [queue('slow1', 20), queue('fast1', 2), queue('slow2', 20), queue('fast2', 2), queue('unknown', NaN)]
+  await gate.run(async () => { order.push('foreground') }, 'foreground', 99)
+  assert.deepEqual(order, ['foreground'], 'Foreground must keep its reserved slot')
+  release()
+  await Promise.all([blocker, ...requests])
+  assert.deepEqual(order, ['foreground', 'unknown', 'fast1', 'fast2', 'slow1', 'slow2'])
+
+  // Concurrent IPC fan-outs must keep separate ranks through awaits, including
+  // later requests in the same page task. Outside a context, requests stay foreground.
+  const originalRun = rateGate.run
+  const contexts: Array<{ label: string; priority: string | undefined; rank: number | undefined }> = []
+  rateGate.run = async (task, priority, rank) => {
+    const value = await task()
+    contexts.push({ label: String(value), priority, rank })
+    return value
+  }
+  const call = (label: string) => paced(async () => label)
+  try {
+    await Promise.all([
+      runWithPriority('background', async () => { await call('slow'); await call('slow-follow-up') }, 20),
+      runWithPriority('background', async () => { await new Promise((resolve) => setTimeout(resolve, 0)); await call('fast') }, 2),
+    ])
+    await call('outside')
+    assert.deepEqual(contexts, [
+      { label: 'slow', priority: 'background', rank: 20 },
+      { label: 'slow-follow-up', priority: 'background', rank: 20 },
+      { label: 'fast', priority: 'background', rank: 2 },
+      { label: 'outside', priority: 'foreground', rank: undefined },
+    ])
+  } finally {
+    rateGate.run = originalRun
+  }
+  console.log('Adaptive provider checks passed: faster pages before queued heavy fan-outs, stable ordering, foreground priority and isolated async page ranks.')
+}
+
+/** Concurrent page fan-outs share one gate, including across priority lanes. */
+async function probeParallelPacing(): Promise<void> {
+  const gate = new RateGate({ requestsPerSecond: 20, burst: 2, maxConcurrency: 4 })
+  const starts: number[] = []
+  const started = Date.now()
+  let inFlight = 0
+  let peak = 0
+  await Promise.all(Array.from({ length: 6 }, (_, page) => Promise.all(
+    Array.from({ length: 3 }, (_, request) => gate.run(async () => {
+      starts.push(Date.now() - started)
+      inFlight += 1
+      peak = Math.max(peak, inFlight)
+      await new Promise((resolve) => setTimeout(resolve, 120))
+      inFlight -= 1
+    }, request === 0 && page === 0 ? 'foreground' : 'background')),
+  )))
+  assert.equal(starts.length, 18)
+  assert(peak <= 4, `Parallel pages exceeded concurrency: ${peak}`)
+  assert(peak > 1, 'Provider requests did not overlap')
+  for (const [index, elapsed] of starts.entries()) {
+    assert(index + 1 <= 2 + Math.floor((elapsed + 2) * 20 / 1000), 'Parallel pages exceeded the shared token budget')
+  }
+  assert.equal(gate.stats().inFlight, 0)
+  assert.deepEqual(gate.stats().waiting, { foreground: 0, background: 0 })
+
+  const adaptive = new RateGate({ requestsPerSecond: 20, burst: 1, cooldownSeconds: 0.15, recoveryStreak: 2 })
+  await assert.rejects(adaptive.run(async () => { throw Object.assign(new Error('Too many requests'), { status: 429 }) }))
+  assert.equal(adaptive.stats().rate, 10)
+  assert(adaptive.stats().cooldownMs > 0)
+  const failedAt = Date.now()
+  await Promise.all(Array.from({ length: 2 }, () => adaptive.run(async () => {
+    assert(Date.now() - failedAt >= 140, 'A queued request bypassed the 429 cooldown')
+  }, 'background')))
+  assert.equal(adaptive.stats().rate, 20)
+  assert.equal(adaptive.stats().inFlight, 0)
+  console.log('Parallel provider checks passed: shared pacing, concurrency ceiling, 429 cooldown and rate recovery.')
 }
 
 /**

@@ -40,10 +40,20 @@ try {
         window.runProbe = async () => {
           createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><App /></QueryClientProvider>)
           await settle()
-          // Leave every remote request pending while exercising the real shell and pages.
+          // Complete one measured page; leave the others pending to exercise navigation.
           await new Promise(resolve => setTimeout(resolve, 5600))
           check(useDataHealth.getState().startup?.planned > 0, 'Startup queue did not begin')
+          const pageOrder = useDataHealth.getState().startup.pageOrder
+          check(pageOrder.at(-1) === 'heatmap', 'Learned slowest page did not go last')
+          const heatmapRequest = window.fixtureRequests.find(entry => entry.method === 'heatmap' && entry.request?.background)
+          check(heatmapRequest?.request.backgroundOrder === pageOrder.indexOf('heatmap'), 'Learned page rank was not sent through the API')
+          check(useDataHealth.getState().startupLoads.signals?.durationMs >= 100, 'Completed page duration was not learned')
+          check(JSON.parse(localStorage.getItem('budget-terminal:data-health')).state.startupLoads.signals?.samples === 1, 'Completed page duration was not persisted')
           check(document.querySelector('footer [role=status]')?.textContent.includes('Loading pages'), 'Startup progress hidden by foreground loading')
+          for (const key of ['globalMarkets', 'heatmap', 'tradingVolumes', 'money', 'economic', 'sp500', 'technicalScreen']) {
+            check(client.getQueryCache().findAll({ queryKey: [key] }).some(query => query.state.fetchStatus === 'fetching'),
+              'Startup did not start page in parallel: ' + key)
+          }
           for (const tab of TABS.filter(tab => tab.implemented)) {
             console.log('Checking loading page: ' + tab.id)
             window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))
@@ -57,6 +67,10 @@ try {
             check(!document.querySelector('[role=dialog]'), 'Picker did not close')
           }
           check(client.isFetching() > 0, 'Fixture unexpectedly finished loading')
+          const startupDetails = [...document.querySelectorAll('details')].find(element => element.querySelector('summary')?.textContent.startsWith('Startup prefetch:'))
+          check(startupDetails, 'Startup diagnostics are missing')
+          startupDetails.open = true
+          check(document.body.innerText.includes('Page request order:'), 'Startup order is not inspectable in Settings')
           window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))
           await settle()
           check(document.activeElement?.getAttribute('aria-label') === 'Search pages', 'Picker input cannot receive focus')
@@ -94,13 +108,28 @@ try {
     <html><head><link rel="stylesheet" href="theme.css"></head><body><div id="root" style="height:100vh"></div>
     <script>
       const ok = data => ({ data, errors: [], meta: { freshness: 'fresh', source: 'fixture', fetchedAt: Date.now() } });
+      localStorage.setItem('budget-terminal:data-health', JSON.stringify({ state: {
+        records: {}, startupLoads: {
+          heatmap: { durationMs: 90000, samples: 1 },
+          'trading-volumes': { durationMs: 60000, samples: 1 },
+        },
+      }, version: 0 }));
+      window.fixtureRequests = [];
       window.api = new Proxy({
         platform: 'win32',
         onPortfolioChanged: () => () => {},
         settings: async () => ok(window.fixtureSettings),
         portfolio: async () => ok({ portfolios: [], activeId: 'main', mainId: 'main', sourcePath: '' }),
+        signals: async request => {
+          window.fixtureRequests.push({ method: 'signals', request });
+          await new Promise(resolve => setTimeout(resolve, 300));
+          return ok(null);
+        },
         apiUsage: async () => ({ providers: [], sampledAt: Date.now() }),
-      }, { get: (target, key) => key in target ? target[key] : () => new Promise(() => {}) });
+      }, { get: (target, key) => key in target ? target[key] : request => {
+        window.fixtureRequests.push({ method: key, request });
+        return new Promise(() => {});
+      } });
     </script><script src="renderer.js"></script></body></html>
   `)
   await writeFile(join(directory, 'main.cjs'), `

@@ -1,8 +1,7 @@
-import type { EconomicPoint } from './contract.js'
+import type { BackgroundRequest, EconomicPoint } from './contract.js'
 
-export interface MoneyRequest {
+export interface MoneyRequest extends BackgroundRequest {
   force?: boolean
-  background?: boolean
 }
 export interface MoneyDefinition {
   seriesId: string

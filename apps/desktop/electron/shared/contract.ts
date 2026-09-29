@@ -208,6 +208,8 @@ export interface CardPerformance {
  */
 export interface BackgroundRequest {
   background?: boolean
+  /** Learned startup page order. Lower values receive background tokens first. */
+  backgroundOrder?: number
 }
 
 export interface CardsPerformanceRequest extends BackgroundRequest {
@@ -714,7 +716,7 @@ export type ChartsCompareRange = '5Y' | '3Y' | '1Y' | 'YTD' | '3M' | '1M'
 export type ChartsRelationshipRange = '1M' | '3M' | '6M' | '1Y' | '5Y' | 'Max'
 export type ChartsRollingWindow = 30 | 60 | 120 | 252
 
-export interface ChartsHistoryRequest {
+export interface ChartsHistoryRequest extends BackgroundRequest {
   symbol: string
   interval: ChartsInterval
   range: ChartsRange
@@ -1876,7 +1878,7 @@ export interface MarketCapPayload {
 
 export type MarketCapTier = 'all' | 'mega' | 'large' | 'mid' | 'small' | 'micro' | 'nano'
 
-export interface MarketCapRequest { force?: boolean; tier?: MarketCapTier }
+export interface MarketCapRequest extends BackgroundRequest { force?: boolean; tier?: MarketCapTier }
 
 export interface PriceScreenRow {
   ticker: string
@@ -1898,7 +1900,7 @@ export interface PriceScreenPayload {
   maximumPrice: number
 }
 
-export interface PriceScreenRequest {
+export interface PriceScreenRequest extends BackgroundRequest {
   minimumPrice: number
   maximumPrice: number
 }
@@ -2749,7 +2751,7 @@ export interface EtfAumPayload {
   fetchedAt: number
 }
 
-export interface EtfHoldingsRequest {
+export interface EtfHoldingsRequest extends BackgroundRequest {
   ticker: string
   force?: boolean
 }
@@ -2840,7 +2842,7 @@ export interface OptionsPageFailure {
   reason: string
 }
 
-export interface OptionsChainRequest {
+export interface OptionsChainRequest extends BackgroundRequest {
   symbol: string
   /** Empty, or an expiry no longer listed, falls back to the nearest live one. */
   expiry?: string
@@ -2863,7 +2865,7 @@ export interface OptionsChainPayload {
   generatedAt: number
 }
 
-export interface OptionsExpirationsRequest {
+export interface OptionsExpirationsRequest extends BackgroundRequest {
   symbol: string
   force?: boolean
 }
@@ -2908,7 +2910,7 @@ export interface ProjectionsFailure {
   reason: string
 }
 
-export interface ProjectionsRequest {
+export interface ProjectionsRequest extends BackgroundRequest {
   symbol: string
   timeframe: ChartsInterval
   force?: boolean
@@ -2999,7 +3001,7 @@ export interface ValuationPayload {
   generatedAt: number
 }
 
-export interface ValuationRequest {
+export interface ValuationRequest extends BackgroundRequest {
   symbol: string
   /** Saved per-ticker in the renderer; a change to it re-ranks the peer table. */
   customPeers?: string[]
@@ -3059,7 +3061,7 @@ export interface BacktestPayload {
   stats: BacktestStats | null
 }
 
-export interface BacktestRequest {
+export interface BacktestRequest extends BackgroundRequest {
   rows: BacktestRow[]
   compareSymbol: string
   interval: BacktestInterval
@@ -3177,7 +3179,7 @@ export interface QuantPairDetail {
   points: QuantPairPoint[]
 }
 
-export interface QuantScanRequest {
+export interface QuantScanRequest extends BackgroundRequest {
   forceUniverseRefresh?: boolean
   latestOnly?: boolean
 }
@@ -3420,12 +3422,12 @@ export interface QuotesRequest extends BackgroundRequest {
   holdings: string[]
   force?: boolean
 }
-export interface ChartRequest {
+export interface ChartRequest extends BackgroundRequest {
   symbol: string
   timeframe: TimeframeLabel
   force?: boolean
 }
-export interface OptionsRequest {
+export interface OptionsRequest extends BackgroundRequest {
   symbol: string
   force?: boolean
 }
@@ -3464,7 +3466,7 @@ export interface AnalyticsRequest {
   lookback: MetricsLookback
   force?: boolean
 }
-export interface OptionQuotesRequest {
+export interface OptionQuotesRequest extends BackgroundRequest {
   positions: Array<{ rowId: string; ticker: string; expiry: string; strike: number; strategy: string }>
   force?: boolean
 }
@@ -3516,8 +3518,8 @@ export interface DesktopApi {
   preMarket(request: PreMarketRequest): Promise<Envelope<PreMarketPayload>>
   tradingVolumes(request: TradingVolumesRequest): Promise<Envelope<TradingVolumesPayload>>
   signals(request: SignalsRequest): Promise<Envelope<SignalsPayload | null>>
-  technicalScan(): Promise<Envelope<TechnicalScanPayload | null>>
-  marketCapSales(request: { symbols: string[]; force?: boolean }): Promise<Envelope<Record<string, number | null>>>
+  technicalScan(request?: BackgroundRequest): Promise<Envelope<TechnicalScanPayload | null>>
+  marketCapSales(request: { symbols: string[]; force?: boolean } & BackgroundRequest): Promise<Envelope<Record<string, number | null>>>
   marketCap(request: MarketCapRequest): Promise<Envelope<MarketCapPayload>>
   priceScreen(request: PriceScreenRequest): Promise<Envelope<PriceScreenPayload>>
   calendarMonth(request: CalendarMonthRequest): Promise<Envelope<CalendarMonthPayload>>

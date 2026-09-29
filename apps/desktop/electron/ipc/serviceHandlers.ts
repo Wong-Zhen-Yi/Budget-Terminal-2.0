@@ -94,6 +94,7 @@ export function registerServiceHandlers(register: RegisterService): void {
           ? 'background'
           : 'foreground',
         async () => run(request),
+        (request as { backgroundOrder?: number } | undefined)?.backgroundOrder,
       ),
     )
   }

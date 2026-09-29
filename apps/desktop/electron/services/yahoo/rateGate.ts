@@ -14,7 +14,9 @@
  * A `background` waiter therefore only takes a token or a slot when no `foreground`
  * waiter is queued, and one concurrency slot is reserved for the foreground lane so
  * background work can never hold every slot. The priority comes from `paced()` in
- * `client.ts`, which reads it off the request that started the fan-out.
+ * `client.ts`, which reads it off the request that started the fan-out. Background
+ * requests use the learned startup page order, so even a later request from a fast
+ * page goes ahead of a heavy page's queued batch.
  */
 
 export type Priority = 'foreground' | 'background'
@@ -61,6 +63,7 @@ export function isRateLimitError(error: unknown): boolean {
 
 interface Waiter {
   priority: Priority
+  order: number
   wake: () => void
 }
 
@@ -74,7 +77,7 @@ export class RateGate {
   private backgroundInFlight = 0
   private cooldownUntil = 0
   private cleanStreak = 0
-  /** One FIFO queue per lane; the foreground queue is always drained first. */
+  /** Foreground first; background uses learned page order, FIFO within each page. */
   private readonly queues: Record<Priority, Waiter[]> = { foreground: [], background: [] }
   /** Set while waiters are being admitted, so `pump` cannot re-enter itself. */
   private pumping = false
@@ -111,8 +114,8 @@ export class RateGate {
   }
 
   /** Run `task` once the gate allows it, accounting for the result either way. */
-  async run<T>(task: () => Promise<T>, priority: Priority = 'foreground'): Promise<T> {
-    await this.acquire(priority)
+  async run<T>(task: () => Promise<T>, priority: Priority = 'foreground', backgroundOrder = 0): Promise<T> {
+    await this.acquire(priority, backgroundOrder)
     try {
       const result = await task()
       this.onSuccess()
@@ -134,9 +137,24 @@ export class RateGate {
   }
 
   /** Join the lane's queue and wait to be admitted by `pump`. */
-  private acquire(priority: Priority): Promise<void> {
+  private acquire(priority: Priority, backgroundOrder: number): Promise<void> {
     return new Promise<void>((resolve) => {
-      this.queues[priority].push({ priority, wake: resolve })
+      const queue = this.queues[priority]
+      const order = Number.isSafeInteger(backgroundOrder) && backgroundOrder >= 0 ? backgroundOrder : 0
+      const waiter = { priority, order, wake: resolve }
+      if (priority === 'background') {
+        // Insert after peers with the same rank, keeping each page's fan-out FIFO.
+        let low = 0
+        let high = queue.length
+        while (low < high) {
+          const mid = (low + high) >>> 1
+          if (queue[mid].order <= order) low = mid + 1
+          else high = mid
+        }
+        queue.splice(low, 0, waiter)
+      } else {
+        queue.push(waiter)
+      }
       this.pump()
     })
   }
