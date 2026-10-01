@@ -67,10 +67,12 @@ try {
             check(!document.querySelector('[role=dialog]'), 'Picker did not close')
           }
           check(client.isFetching() > 0, 'Fixture unexpectedly finished loading')
-          const startupDetails = [...document.querySelectorAll('details')].find(element => element.querySelector('summary')?.textContent.startsWith('Startup prefetch:'))
-          check(startupDetails, 'Startup diagnostics are missing')
-          startupDetails.open = true
-          check(document.body.innerText.includes('Page request order:'), 'Startup order is not inspectable in Settings')
+          const orderTable = document.querySelector('table[aria-label="Startup page load order"]')
+          check(orderTable && orderTable.getBoundingClientRect().height > 0, 'Page load order is not visible in Settings')
+          const orderRows = [...orderTable.querySelectorAll('[data-startup-page]')]
+          check(JSON.stringify(orderRows.map(row => row.dataset.startupPage)) === JSON.stringify(pageOrder), 'Settings does not show the actual startup order')
+          check(orderRows.at(-1).innerText.includes('90.0s'), 'Saved heavy-page load time is missing')
+          check(orderRows.some(row => row.innerText.includes('Not measured')), 'Unmeasured page is presented as timed')
           window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))
           await settle()
           check(document.activeElement?.getAttribute('aria-label') === 'Search pages', 'Picker input cannot receive focus')
@@ -90,11 +92,9 @@ try {
           await settle()
           check(!document.querySelector('[role=dialog]'), 'Escape was not handled during cache serialization')
           snapshots.clear()
-          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))
+          document.querySelector('[data-startup-order-scroll]').scrollTop = orderTable.scrollHeight
           await settle()
-          ;[...document.querySelectorAll('[data-result-index]')].find(button => button.textContent.includes('Dashboard')).click()
-          await settle()
-          return 'PASS: all implemented pages navigate and render while startup requests remain pending; picker stays interactive'
+          return 'PASS: all implemented pages navigate during startup; Settings shows the actual load order and saved timings; picker stays interactive'
         }
       `,
     },
@@ -137,7 +137,7 @@ try {
     const fs = require('fs');
     app.setPath('userData', ${JSON.stringify(join(directory, 'userData'))});
     app.whenReady().then(async () => {
-      const window = new BrowserWindow({ show: false, width: 1400, height: 950, webPreferences: { backgroundThrottling: false } });
+      const window = new BrowserWindow({ show: false, width: 1400, height: 950, webPreferences: { backgroundThrottling: false, offscreen: true } });
       window.webContents.on('console-message', event => console.log(event.message));
       try {
         await window.loadFile(${JSON.stringify(join(directory, 'index.html'))});

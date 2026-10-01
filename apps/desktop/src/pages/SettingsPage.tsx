@@ -11,6 +11,7 @@ import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { ClockPanel } from '@/components/settings/ClockPanel'
 import { DataHealthPanel } from '@/components/settings/DataHealthPanel'
 import { NavigationPanel, type NavigationTab } from '@/components/settings/NavigationPanel'
+import { PageLoadOrderPanel } from '@/components/settings/PageLoadOrderPanel'
 import { PrivacyPanel } from '@/components/settings/PrivacyPanel'
 import { SettingsSection } from '@/components/settings/SettingsSection'
 import { ShortcutsPanel } from '@/components/settings/ShortcutsPanel'
@@ -129,6 +130,7 @@ export function SettingsPage({
         </header>
 
         <SettingsSection title="Data" hint="Backups, maintenance and observed feed health.">
+          <PageLoadOrderPanel />
           <UserDataPanel onRun={onRunMaintenance} busy={busy} sourcePath={holdingsPath} lastBackupAt={settings.lastBackupAt} />
           <DataHealthPanel onStatus={(text) => setStatus({ text, tone: 'positive' })} />
         </SettingsSection>

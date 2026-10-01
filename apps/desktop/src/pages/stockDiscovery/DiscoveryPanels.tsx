@@ -49,7 +49,6 @@ export function DiscoveryMetrics({ snapshot, analysis }: { snapshot: DiscoverySn
   const valuation = snapshot.valuation
   const financial = snapshot.financials
   const tech = analysis.technicals
-  const analyst = snapshot.analyst
   return <>
     <div className="sd-top-grid">
       <TerminalPanel title="PRICE // 6M DAILY" aside={`${snapshot.candles.length} bars`} className="sd-price-panel">
@@ -78,36 +77,42 @@ export function DiscoveryMetrics({ snapshot, analysis }: { snapshot: DiscoverySn
       </TerminalPanel>
     </div>
     <div className="sd-middle-grid">
-      <TerminalPanel title="VALUATION" aside="LATEST AVAILABLE"><MetricRows rows={[
-        ['P/E', ratio(valuation.pe)], ['FORWARD P/E', ratio(valuation.forwardPe)], ['PEG', ratio(valuation.peg)],
-        ['PRICE / SALES', ratio(valuation.priceSales)], ['PRICE / BOOK', ratio(valuation.priceBook)],
-        ['EV / REVENUE', ratio(valuation.evRevenue)], ['EV / EBITDA', ratio(valuation.evEbitda)],
-        ['ENTERPRISE VALUE', money(valuation.enterpriseValue)], ['FCF YIELD', fractionPercent(valuation.fcfYield)],
-        ['EARNINGS YIELD', fractionPercent(valuation.earningsYield)],
-      ]} /></TerminalPanel>
-      <TerminalPanel title="FINANCIALS" aside="TTM / LATEST REPORTED"><MetricRows rows={[
-        ['REVENUE', money(financial.revenue)], ['REVENUE GROWTH', fractionPercent(financial.revenueGrowth)],
-        ['GROSS PROFIT', money(financial.grossProfit)], ['GROSS MARGIN', fractionPercent(financial.grossMargin)],
-        ['OPERATING INCOME', money(financial.operatingIncome)], ['OPERATING MARGIN', fractionPercent(financial.operatingMargin)],
-        ['EBITDA', money(financial.ebitda)], ['EBITDA MARGIN', fractionPercent(financial.ebitdaMargin)],
-        ['NET INCOME', money(financial.netIncome)], ['EPS', money(financial.eps)], ['EPS GROWTH', fractionPercent(financial.epsGrowth)],
-        ['FREE CASH FLOW', money(financial.freeCashFlow)], ['CASH', money(financial.cash)], ['TOTAL DEBT', money(financial.debt)],
-        ['NET CASH / DEBT', money(financial.netCash)], ['DEBT / EQUITY', ratio(financial.debtEquity === null ? null : financial.debtEquity / 100)],
-        ['ROE', fractionPercent(financial.roe)], ['ROA', fractionPercent(financial.roa)], ['ROIC', fractionPercent(financial.roic)],
-      ]} /></TerminalPanel>
+      <div className="sd-metric-pair">
+        <TerminalPanel title="VALUATION" aside="LATEST AVAILABLE"><MetricRows rows={[
+          ['P/E', ratio(valuation.pe)], ['FORWARD P/E', ratio(valuation.forwardPe)], ['PEG', ratio(valuation.peg)],
+          ['PRICE / SALES', ratio(valuation.priceSales)], ['PRICE / BOOK', ratio(valuation.priceBook)],
+          ['EV / REVENUE', ratio(valuation.evRevenue)], ['EV / EBITDA', ratio(valuation.evEbitda)],
+          ['ENTERPRISE VALUE', money(valuation.enterpriseValue)], ['FCF YIELD', fractionPercent(valuation.fcfYield)],
+          ['EARNINGS YIELD', fractionPercent(valuation.earningsYield)],
+        ]} /></TerminalPanel>
+        <TerminalPanel title="FINANCIALS" aside="TTM / LATEST REPORTED" className="sd-financial-panel"><MetricRows rows={[
+          ['REVENUE', money(financial.revenue)], ['REVENUE GROWTH', fractionPercent(financial.revenueGrowth)],
+          ['GROSS PROFIT', money(financial.grossProfit)], ['GROSS MARGIN', fractionPercent(financial.grossMargin)],
+          ['OPERATING INCOME', money(financial.operatingIncome)], ['OPERATING MARGIN', fractionPercent(financial.operatingMargin)],
+          ['EBITDA', money(financial.ebitda)], ['EBITDA MARGIN', fractionPercent(financial.ebitdaMargin)],
+          ['NET INCOME', money(financial.netIncome)], ['EPS', money(financial.eps)], ['EPS GROWTH', fractionPercent(financial.epsGrowth)],
+          ['FREE CASH FLOW', money(financial.freeCashFlow)], ['CASH', money(financial.cash)], ['TOTAL DEBT', money(financial.debt)],
+          ['NET CASH / DEBT', money(financial.netCash)], ['DEBT / EQUITY', ratio(financial.debtEquity === null ? null : financial.debtEquity / 100)],
+          ['ROE', fractionPercent(financial.roe)], ['ROA', fractionPercent(financial.roa)], ['ROIC', fractionPercent(financial.roic)],
+        ]} /></TerminalPanel>
+      </div>
       <div className="sd-stack">
         <TerminalPanel title="PERFORMANCE" aside="PRICE RETURN"><div className="sd-performance">{Object.entries(analysis.performance).map(([period, value]) => <div key={period}><span>{period}</span><strong className={tone(value)}>{signedPercent(value)}</strong></div>)}</div></TerminalPanel>
         <TerminalPanel title="SIGNALS" aside="OBJECTIVE CONDITIONS"><div className="sd-signals">{analysis.signals.length ? analysis.signals.map((signal) => <span key={signal}>{signal}</span>) : <span>N/A</span>}</div></TerminalPanel>
-        <TerminalPanel title="ANALYST / EARNINGS" aside="WHEN AVAILABLE"><MetricRows rows={[
-          ['ANALYSTS', compact(analyst.count)], ['MEAN TARGET', money(analyst.target)],
-          ['TARGET UPSIDE', signedPercent(analyst.target && snapshot.price ? (analyst.target / snapshot.price - 1) * 100 : null)],
-          ['RECOMMENDATION MEAN', decimal(analyst.recommendation)], ['NEXT EARNINGS', date(snapshot.nextEarnings)],
-          ['LAST EARNINGS', date(snapshot.lastEarnings)], ['EPS ESTIMATE', money(analyst.epsEstimate)],
-          ['REVENUE ESTIMATE', money(analyst.revenueEstimate)],
-        ]} /></TerminalPanel>
       </div>
     </div>
   </>
+}
+
+export function AnalystPanel({ snapshot }: { snapshot: DiscoverySnapshot }) {
+  const analyst = snapshot.analyst
+  return <TerminalPanel title="ANALYST / EARNINGS" aside="WHEN AVAILABLE"><MetricRows rows={[
+    ['ANALYSTS', compact(analyst.count)], ['MEAN TARGET', money(analyst.target)],
+    ['TARGET UPSIDE', signedPercent(analyst.target && snapshot.price ? (analyst.target / snapshot.price - 1) * 100 : null)],
+    ['RECOMMENDATION MEAN', decimal(analyst.recommendation)], ['NEXT EARNINGS', date(snapshot.nextEarnings)],
+    ['LAST EARNINGS', date(snapshot.lastEarnings)], ['EPS ESTIMATE', money(analyst.epsEstimate)],
+    ['REVENUE ESTIMATE', money(analyst.revenueEstimate)],
+  ]} /></TerminalPanel>
 }
 
 export function CompanyPanel({ snapshot }: { snapshot: DiscoverySnapshot }) {

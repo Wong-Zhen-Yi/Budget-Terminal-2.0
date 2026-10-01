@@ -4,7 +4,7 @@ import { analyzeDiscovery, DISCOVERY_MAX_SECONDS, DISCOVERY_MIN_SECONDS, parseDi
 import { isTextEntry } from '@/lib/shortcuts'
 import { useChartsStore } from '@/stores/charts'
 import { useDiscoverySettings } from '@/stores/discovery'
-import { CompanyPanel, DiscoveryMetrics, TerminalPanel } from './stockDiscovery/DiscoveryPanels'
+import { AnalystPanel, CompanyPanel, DiscoveryMetrics, TerminalPanel } from './stockDiscovery/DiscoveryPanels'
 import { compact, money, signedPercent } from './stockDiscovery/format'
 import { useDiscoveryScan } from './stockDiscovery/useDiscoveryScan'
 import './stockDiscovery/discovery.css'
@@ -94,19 +94,20 @@ export function StockDiscoveryPage({ active }: { active: boolean }) {
 
       <div className="sd-status"><span>{intervalError || (scan.loading ? 'SCANNING MARKET... CURRENT STOCK REMAINS VISIBLE' : scan.error || `${scan.universeCount.toLocaleString()} U.S. COMPANY SYMBOLS IN DIRECTORY`)}</span><span>{scan.snapshot?.quoteTime ? `QUOTE ${new Date(scan.snapshot.quoteTime).toLocaleString()}` : 'QUOTE TIME N/A'}</span></div>
 
-      {scan.snapshot && analysis ? <>
-        <DiscoveryMetrics snapshot={scan.snapshot} analysis={analysis} />
-        <CompanyPanel snapshot={scan.snapshot} />
-      </> : <div className="sd-first-load">{scan.error || 'LOADING U.S. STOCK DIRECTORY AND FIRST TARGET...'}</div>}
+      {scan.snapshot && analysis ? <DiscoveryMetrics snapshot={scan.snapshot} analysis={analysis} /> : <div className="sd-first-load">{scan.error || 'LOADING U.S. STOCK DIRECTORY AND FIRST TARGET...'}</div>}
 
-      <TerminalPanel title="RECENT DISCOVERIES" aside="SESSION HISTORY · CLICK TO INSPECT">
-        {scan.history.length ? <div className="sd-history">{scan.history.map((entry, index) => {
-          const base = entry.snapshot.previousClose
-          const value = entry.snapshot.price
-          const pct = value !== null && base ? (value / base - 1) * 100 : null
-          return <button type="button" key={`${entry.seenAt}:${index}`} onClick={() => scan.inspect(entry)} disabled={scan.loading} className={entry.snapshot === scan.snapshot ? 'sd-history-active' : ''}><span>{new Date(entry.seenAt).toLocaleTimeString('en-GB')}</span><strong>{entry.snapshot.symbol}</strong><span>{money(value)}</span><span className={pct === null ? '' : pct >= 0 ? 'sd-positive' : 'sd-negative'}>{signedPercent(pct)}</span></button>
-        })}</div> : <div className="sd-empty">DISCOVERIES WILL APPEAR HERE</div>}
-      </TerminalPanel>
+      <div className="sd-bottom-grid">
+        {scan.snapshot ? <CompanyPanel snapshot={scan.snapshot} /> : null}
+        <TerminalPanel title="RECENT DISCOVERIES" aside="SESSION HISTORY · CLICK TO INSPECT">
+          {scan.history.length ? <div className="sd-history">{scan.history.map((entry, index) => {
+            const base = entry.snapshot.previousClose
+            const value = entry.snapshot.price
+            const pct = value !== null && base ? (value / base - 1) * 100 : null
+            return <button type="button" key={`${entry.seenAt}:${index}`} onClick={() => scan.inspect(entry)} disabled={scan.loading} className={entry.snapshot === scan.snapshot ? 'sd-history-active' : ''}><span>{new Date(entry.seenAt).toLocaleTimeString('en-GB')}</span><strong>{entry.snapshot.symbol}</strong><span>{money(value)}</span><span className={pct === null ? '' : pct >= 0 ? 'sd-positive' : 'sd-negative'}>{signedPercent(pct)}</span></button>
+          })}</div> : <div className="sd-empty">DISCOVERIES WILL APPEAR HERE</div>}
+        </TerminalPanel>
+        {scan.snapshot ? <AnalystPanel snapshot={scan.snapshot} /> : null}
+      </div>
       <div className="sd-footer">SPACE PAUSE / RESUME · N NEXT · P PREVIOUS · / SEARCH <span>20D VOL {compact(analysis?.technicals.avgVolume20)}</span></div>
     </div>
   </div>
