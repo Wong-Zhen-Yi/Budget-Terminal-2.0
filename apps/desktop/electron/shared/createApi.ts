@@ -1,11 +1,15 @@
-import type { DesktopApi } from './contract.js'
+import type { DesktopApi, SavedDataChanged } from './contract.js'
 import { CHANNELS } from './contract.js'
 
 export type Invoke = <T>(channel: string, ...args: unknown[]) => Promise<T>
-export type Subscribe = (channel: string, listener: () => void) => () => void
+export type Subscribe = (channel: string, listener: (payload?: SavedDataChanged) => void) => () => void
 
 export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS.Platform): DesktopApi {
   return {
+    mcpStatus: () => invoke(CHANNELS.mcpStatus),
+    onSavedDataChanged: (listener) => subscribe(CHANNELS.savedDataChanged, (payload) => {
+      if (payload) listener(payload)
+    }),
     platform,
     apiUsage: () => invoke(CHANNELS.apiUsage),
     quotes: (request) => invoke(CHANNELS.quotes, request),

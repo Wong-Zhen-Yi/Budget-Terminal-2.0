@@ -54,6 +54,9 @@
     "probe:etf": "npm run --workspace budget-terminal-desktop probe:etf --",
     "probe:projections": "npm run --workspace budget-terminal-desktop probe:projections --",
     "probe:economic": "npm run --workspace budget-terminal-desktop probe:economic --",
-    "probe:bonds": "npm run --workspace budget-terminal-desktop probe:bonds --"
+    "probe:bonds": "npm run --workspace budget-terminal-desktop probe:bonds --",
+    "build:mcp": "npm run build:mcp --workspace budget-terminal-desktop",
+    "mcp": "node apps/desktop/out/mcp/server.mjs",
+    "probe:mcp": "npm run probe:mcp --workspace budget-terminal-desktop"
   }
 }

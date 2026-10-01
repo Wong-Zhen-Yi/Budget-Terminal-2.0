@@ -43,6 +43,7 @@ export function useFinanceMutation(): (
     async (mutation: PersonalFinanceMutation) => {
       const result = await api.mutatePersonalFinance(mutation)
       queryClient.setQueryData(queryKeys.personalFinance, result)
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settings })
       return result
     },
     [queryClient],

@@ -2,8 +2,9 @@ import { getMoney, clearMoneyCache } from './money.js'
 import type { MoneyPayload, MoneyRequest } from '../shared/money.js'
 import type { Sp500Request, Sp500Data, Sp500BreadthRequest, Sp500Breadth } from '../shared/sp500.js'
 import { getSp500, getSp500Breadth } from './sp500.js'
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { z } from 'zod'
+import { automaticBackupStatus, withAutomaticBackup, writeUserDataBackup } from './automaticBackup.js'
 
 import type {
   BacktestPayload,
@@ -158,7 +159,6 @@ import { cache } from './cache.js'
 import {
   cardsPath,
   clearCards,
-  exportCards,
   mutateCards,
   readCards,
   replaceCards,
@@ -213,7 +213,6 @@ import {
 import { FX_SOURCE, getFxRate } from './fx.js'
 import {
   clearUserData,
-  exportUserData,
   importUserData,
   mutatePersonalFinance,
   mutatePortfolios,
@@ -221,7 +220,6 @@ import {
   readPortfolios,
 } from './portfolioStore.js'
 import {
-  exportSettings,
   recordBackupExport,
   mutateSettings,
   readSettings,
@@ -452,7 +450,6 @@ const SETTINGS_SOURCE = 'settings store'
  * half-applied.
  */
 const BACKUP_APP_ID = 'budget-terminal-electron'
-const BACKUP_VERSION = 1
 
 const backupSchema = z.object({
   app: z.string().catch(''),
@@ -1058,21 +1055,23 @@ export const yahooProvider: MarketDataProvider = {
   },
 
   async mutatePortfolio(mutation) {
-    try {
-      return ok(await mutatePortfolios(mutation), 'portfolio store')
-    } catch (error) {
-      // A rejected edit (duplicate ticker, last portfolio, portfolio cap) is a normal
-      // outcome, so return the unchanged document with the reason attached rather than
-      // throwing across the IPC boundary.
-      const reason = describeError(error)
-      const current = await readPortfolios().catch(() => emptyPortfolio)
-      return partial(
-        current,
-        [err('portfolio store', reason, mutation.type)],
-        'portfolio store',
-        reason,
-      )
-    }
+    return withAutomaticBackup(async () => {
+      try {
+        return ok(await mutatePortfolios(mutation), 'portfolio store')
+      } catch (error) {
+        // A rejected edit (duplicate ticker, last portfolio, portfolio cap) is a normal
+        // outcome, so return the unchanged document with the reason attached rather than
+        // throwing across the IPC boundary.
+        const reason = describeError(error)
+        const current = await readPortfolios().catch(() => emptyPortfolio)
+        return partial(
+          current,
+          [err('portfolio store', reason, mutation.type)],
+          'portfolio store',
+          reason,
+        )
+      }
+    })
   },
 
   async cards() {
@@ -1084,13 +1083,15 @@ export const yahooProvider: MarketDataProvider = {
   },
 
   async mutateCards(mutation) {
-    try {
-      return ok(await mutateCards(mutation), 'cards store')
-    } catch (error) {
-      const reason = describeError(error)
-      const current = await readCards().catch(() => emptyCards)
-      return partial(current, [err('cards store', reason, mutation.type)], 'cards store', reason)
-    }
+    return withAutomaticBackup(async () => {
+      try {
+        return ok(await mutateCards(mutation), 'cards store')
+      } catch (error) {
+        const reason = describeError(error)
+        const current = await readCards().catch(() => emptyCards)
+        return partial(current, [err('cards store', reason, mutation.type)], 'cards store', reason)
+      }
+    })
   },
 
   async cardsPerformance(request) {
@@ -1117,21 +1118,23 @@ export const yahooProvider: MarketDataProvider = {
   },
 
   async mutatePersonalFinance(mutation) {
-    try {
-      return ok(await mutatePersonalFinance(mutation), 'portfolio store')
-    } catch (error) {
-      // Same contract as the portfolio writes: a refused edit (blank description, row
-      // cap, a row someone else already deleted) is a normal outcome, so the unchanged
-      // section comes back with the reason attached.
-      const reason = describeError(error)
-      const current = await readPersonalFinance().catch(() => emptyFinance)
-      return partial(
-        current,
-        [err('portfolio store', reason, mutation.type)],
-        'portfolio store',
-        reason,
-      )
-    }
+    return withAutomaticBackup(async () => {
+      try {
+        return ok(await mutatePersonalFinance(mutation), 'portfolio store')
+      } catch (error) {
+        // Same contract as the portfolio writes: a refused edit (blank description, row
+        // cap, a row someone else already deleted) is a normal outcome, so the unchanged
+        // section comes back with the reason attached.
+        const reason = describeError(error)
+        const current = await readPersonalFinance().catch(() => emptyFinance)
+        return partial(
+          current,
+          [err('portfolio store', reason, mutation.type)],
+          'portfolio store',
+          reason,
+        )
+      }
+    })
   },
 
   async fx({ force }) {
@@ -1850,35 +1853,30 @@ export const yahooProvider: MarketDataProvider = {
 
   async settings() {
     try {
-      return ok(await readSettings(), SETTINGS_SOURCE)
+      return ok({ ...(await readSettings()), automaticBackup: automaticBackupStatus() }, SETTINGS_SOURCE)
     } catch (error) {
       return failed(emptySettings, describeError(error), SETTINGS_SOURCE)
     }
   },
 
   async mutateSettings(mutation) {
-    try {
-      return ok(await mutateSettings(mutation), SETTINGS_SOURCE)
-    } catch (error) {
-      // Same contract as the portfolio writes: hiding Settings, or moving a tab past
-      // the end of the list, comes back as the unchanged document plus a reason.
-      const reason = describeError(error)
-      const current = await readSettings().catch(() => emptySettings)
-      return partial(current, [err(SETTINGS_SOURCE, reason, mutation.type)], SETTINGS_SOURCE, reason)
-    }
+    const result = await withAutomaticBackup(async () => {
+      try {
+        return ok(await mutateSettings(mutation), SETTINGS_SOURCE)
+      } catch (error) {
+        // Same contract as the portfolio writes: hiding Settings, or moving a tab past
+        // the end of the list, comes back as the unchanged document plus a reason.
+        const reason = describeError(error)
+        const current = await readSettings().catch(() => emptySettings)
+        return partial(current, [err(SETTINGS_SOURCE, reason, mutation.type)], SETTINGS_SOURCE, reason)
+      }
+    })
+    return { ...result, data: { ...result.data, automaticBackup: automaticBackupStatus() } }
   },
 
   async exportUserData(targetPath) {
     try {
-      const bundle = {
-        app: BACKUP_APP_ID,
-        version: BACKUP_VERSION,
-        exportedAt: new Date().toISOString(),
-        userData: await exportUserData(),
-        settings: await exportSettings(),
-        cards: await exportCards(),
-      }
-      await writeFile(targetPath, JSON.stringify(bundle, null, 2), 'utf8')
+      await writeUserDataBackup(targetPath)
       // The export is already usable even if recording its reminder timestamp fails.
       await recordBackupExport().catch((error) => console.warn('Could not record backup time:', error))
       return ok(
@@ -1896,64 +1894,68 @@ export const yahooProvider: MarketDataProvider = {
   },
 
   async importUserData(sourcePath) {
-    try {
-      const parsed = backupSchema.safeParse(JSON.parse(await readFile(sourcePath, 'utf8')))
-      if (!parsed.success || parsed.data.app !== BACKUP_APP_ID) {
-        throw new Error('That file is not a Budget Terminal backup.')
+    return withAutomaticBackup(async () => {
+      try {
+        const parsed = backupSchema.safeParse(JSON.parse(await readFile(sourcePath, 'utf8')))
+        if (!parsed.success || parsed.data.app !== BACKUP_APP_ID) {
+          throw new Error('That file is not a Budget Terminal backup.')
+        }
+        const rollback = await importUserData(parsed.data.userData)
+        // Settings are optional: a backup taken before this section existed still restores
+        // its holdings rather than being refused outright.
+        if (parsed.data.settings) await replaceSettings(parsed.data.settings)
+        if (parsed.data.cards) await replaceCards(parsed.data.cards)
+        return ok(
+          {
+            action: 'importUserData' as const,
+            performed: true,
+            message: rollback
+              ? `Imported from ${sourcePath}. Rollback copy: ${rollback}`
+              : `Imported from ${sourcePath}.`,
+            path: sourcePath,
+          },
+          SETTINGS_SOURCE,
+        )
+      } catch (error) {
+        return maintenanceFailure('importUserData', error)
       }
-      const rollback = await importUserData(parsed.data.userData)
-      // Settings are optional: a backup taken before this section existed still restores
-      // its holdings rather than being refused outright.
-      if (parsed.data.settings) await replaceSettings(parsed.data.settings)
-      if (parsed.data.cards) await replaceCards(parsed.data.cards)
-      return ok(
-        {
-          action: 'importUserData' as const,
-          performed: true,
-          message: rollback
-            ? `Imported from ${sourcePath}. Rollback copy: ${rollback}`
-            : `Imported from ${sourcePath}.`,
-          path: sourcePath,
-        },
-        SETTINGS_SOURCE,
-      )
-    } catch (error) {
-      return maintenanceFailure('importUserData', error)
-    }
+    })
   },
 
   async clearUserData() {
-    try {
-      const rollback = await clearUserData()
-      await clearCards()
-      // Cached market data outlives the book it was fetched for, so drop it too.
-      cache.clear()
-      await clearLatestSignals()
-      await clearLatestQuant()
-      await clearCalendarCaches()
-      await clearSecCaches()
-      await clearUpDownCaches()
-      await clearRiskFreeCache()
-      await clearEconomicCache()
-      await clearMoneyCache()
-      await clearInstitutionCaches()
-      await clearYouTubeCache()
-      await clearIpoCache()
-      await clearPoliticsCache()
-      return ok(
-        {
-          action: 'clearUserData' as const,
-          performed: true,
-          message: rollback
-            ? `Cleared all holdings, personal finance and cards. Rollback copy: ${rollback}`
-            : 'Cleared all holdings, personal finance and cards.',
-          path: rollback,
-        },
-        SETTINGS_SOURCE,
-      )
-    } catch (error) {
-      return maintenanceFailure('clearUserData', error)
-    }
+    return withAutomaticBackup(async () => {
+      try {
+        const rollback = await clearUserData()
+        await clearCards()
+        // Cached market data outlives the book it was fetched for, so drop it too.
+        cache.clear()
+        await clearLatestSignals()
+        await clearLatestQuant()
+        await clearCalendarCaches()
+        await clearSecCaches()
+        await clearUpDownCaches()
+        await clearRiskFreeCache()
+        await clearEconomicCache()
+        await clearMoneyCache()
+        await clearInstitutionCaches()
+        await clearYouTubeCache()
+        await clearIpoCache()
+        await clearPoliticsCache()
+        return ok(
+          {
+            action: 'clearUserData' as const,
+            performed: true,
+            message: rollback
+              ? `Cleared all holdings, personal finance and cards. Rollback copy: ${rollback}`
+              : 'Cleared all holdings, personal finance and cards.',
+            path: rollback,
+          },
+          SETTINGS_SOURCE,
+        )
+      } catch (error) {
+        return maintenanceFailure('clearUserData', error)
+      }
+    })
   },
 
   async resetCache() {

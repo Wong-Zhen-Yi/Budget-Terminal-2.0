@@ -6,7 +6,7 @@
   "main": "./out/main/main.js",
   "scripts": {
     "dev": "electron-vite dev --watch",
-    "build": "electron-vite build",
+    "build": "npm run build:mcp && electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "probe": "tsx scripts/probe.ts",
@@ -25,6 +25,7 @@
     "probe:analytics": "tsx scripts/probe-analytics.ts",
     "probe:finance": "tsx scripts/probe-finance.ts",
     "probe:settings": "tsx scripts/probe-settings.ts",
+    "probe:backup": "tsx scripts/probe-backup.ts",
     "probe:global": "tsx scripts/probe-global.ts",
     "probe:pre-market": "tsx scripts/probe-pre-market.ts",
     "probe:trading-volumes": "tsx scripts/probe-trading-volumes.ts",
@@ -67,7 +68,10 @@
     "probe:youtube": "tsx scripts/probe-youtube.ts",
     "probe:institutions": "tsx scripts/probe-institutions.ts",
     "patterns:png": "tsx scripts/render-pattern-images.ts",
-    "probe:sp500": "tsx scripts/probe-sp500.ts"
+    "probe:sp500": "tsx scripts/probe-sp500.ts",
+    "generate:mcp": "tsx mcp/generate-schemas.ts",
+    "build:mcp": "npm run generate:mcp && tsx mcp/build.ts",
+    "probe:mcp": "tsx mcp/generate-schemas.ts --check && tsx scripts/probe-mcp.ts"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -77,14 +81,18 @@
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^43.7.7",
     "electron-vite": "^5.0.0",
+    "esbuild": "^0.25.12",
     "tailwindcss": "^4.3.3",
+    "ts-json-schema-generator": "^2.9.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^7.3.6"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "@tanstack/react-query": "^5.104.0",
     "@tanstack/react-query-persist-client": "^5.104.0",
+    "ajv": "^8.20.0",
     "lightweight-charts": "^5.2.1",
     "pdfjs-dist": "^6.3.289",
     "react": "^19.3.0",

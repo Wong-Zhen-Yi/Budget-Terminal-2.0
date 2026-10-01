@@ -16,6 +16,7 @@ import { PrivacyPanel } from '@/components/settings/PrivacyPanel'
 import { SettingsSection } from '@/components/settings/SettingsSection'
 import { ShortcutsPanel } from '@/components/settings/ShortcutsPanel'
 import { UserDataPanel } from '@/components/settings/UserDataPanel'
+import { McpPanel } from '@/components/settings/McpPanel'
 
 const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
 
@@ -101,8 +102,8 @@ export function SettingsPage({
       try {
         const result = await runMaintenance(action)
         setStatus({
-          text: result.data.message,
-          tone: result.data.performed ? 'positive' : result.meta.failureReason ? 'negative' : 'muted',
+          text: result.meta.failureReason ?? result.data.message,
+          tone: result.meta.failureReason ? 'negative' : result.data.performed ? 'positive' : 'muted',
         })
       } finally {
         setBusy(null)
@@ -130,8 +131,9 @@ export function SettingsPage({
         </header>
 
         <SettingsSection title="Data" hint="Backups, maintenance and observed feed health.">
+          <McpPanel />
           <PageLoadOrderPanel />
-          <UserDataPanel onRun={onRunMaintenance} busy={busy} sourcePath={holdingsPath} lastBackupAt={settings.lastBackupAt} />
+          <UserDataPanel onRun={onRunMaintenance} busy={busy} sourcePath={holdingsPath} lastBackupAt={settings.lastBackupAt} automaticBackup={settings.automaticBackup} />
           <DataHealthPanel onStatus={(text) => setStatus({ text, tone: 'positive' })} />
         </SettingsSection>
 

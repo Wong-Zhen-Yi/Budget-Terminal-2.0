@@ -1,0 +1,19 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "budget-terminal",
+  "version": "0.1.0",
+  "description": "Research markets and edit saved financial records through the running local Budget Terminal app.",
+  "author": { "name": "Budget Terminal" },
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Budget Terminal",
+        "shortDescription": "Local research and portfolios",
+        "longDescription": "Access all Budget Terminal service areas and edit saved records while the desktop app is running. Uses the app's stores, caches, rate limits, and backups.",
+        "developerName": "Budget Terminal",
+        "category": "Productivity",
+        "defaultPrompt": "Use Budget Terminal to review my portfolio and research markets."
+      }
+    }
+  }
+}

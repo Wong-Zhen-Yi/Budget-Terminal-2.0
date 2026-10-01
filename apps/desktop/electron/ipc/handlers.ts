@@ -1,5 +1,7 @@
-import { BrowserWindow, clipboard, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
 import { writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { AUTOMATIC_BACKUP_FILENAME } from '../services/automaticBackup.js'
 import type { Envelope, MaintenanceAction, MaintenanceResult, StoredDataVerification, WindowAction } from '../shared/contract.js'
 import { CHANNELS } from '../shared/contract.js'
 import { ok } from '../shared/envelope.js'
@@ -7,6 +9,7 @@ import { yahooProvider } from '../services/provider.js'
 import { verifyStoredData, watchPortfolios } from '../services/portfolioStore.js'
 import { isSafeExternalUrl } from '../services/urls.js'
 import { registerServiceHandlers } from './serviceHandlers.js'
+import { getMcpStatus } from '../mcp/host.js'
 
 export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent) => boolean): () => void {
   const handle: typeof ipcMain.handle = (channel, listener) => {
@@ -16,6 +19,7 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
     })
   }
   const provider = yahooProvider
+  handle(CHANNELS.mcpStatus, () => getMcpStatus())
   registerServiceHandlers((channel, run) => {
     handle(channel, (_event, request) => run(request))
   })
@@ -39,7 +43,7 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
       if (action === 'exportUserData') {
         const options = {
           title: 'Export User Data',
-          defaultPath: `budget-terminal-backup-${new Date().toISOString().slice(0, 10)}.json`,
+          defaultPath: join(app.getPath('downloads'), AUTOMATIC_BACKUP_FILENAME),
           filters: [{ name: 'JSON files', extensions: ['json'] }],
         }
         const result = window

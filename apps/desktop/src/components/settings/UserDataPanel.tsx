@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import type { MaintenanceAction } from '@shared/contract'
+import type { AutomaticBackupStatus, MaintenanceAction } from '@shared/contract'
 import { SectionHeader } from '@/components/settings/SettingsSection'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -36,16 +36,19 @@ export function UserDataPanel({
   busy,
   sourcePath,
   lastBackupAt,
+  automaticBackup,
 }: {
   onRun: (action: MaintenanceAction) => void
   busy: MaintenanceAction | null
   /** The holdings store the actions read and write. */
   sourcePath: string
   lastBackupAt?: number
+  automaticBackup?: AutomaticBackupStatus
 }) {
   const [pending, setPending] = useState<MaintenanceAction | null>(null)
   const confirmation = pending ? CONFIRMATIONS[pending] : undefined
-  const backupDue = !lastBackupAt || Date.now() - lastBackupAt >= 7 * 24 * 60 * 60 * 1000
+  const latestBackupAt = Math.max(lastBackupAt ?? 0, automaticBackup?.savedAt ?? 0)
+  const backupDue = !latestBackupAt || Date.now() - latestBackupAt >= 7 * 24 * 60 * 60 * 1000
 
   const start = (action: MaintenanceAction) => {
     if (CONFIRMATIONS[action]) setPending(action)
@@ -59,9 +62,18 @@ export function UserDataPanel({
           title="Backups and Maintenance"
           hint="Export or restore one JSON file holding portfolios, personal finance, Cards and these settings."
         />
+        {automaticBackup ? (
+          <div className="text-2xs text-text-muted">
+            <p>Automatic backup updates the same file after every saved change.</p>
+            <p className="break-all">{automaticBackup.path}</p>
+            {automaticBackup.error ? (
+              <p role="alert" className="text-warn">Automatic backup failed: {automaticBackup.error}</p>
+            ) : null}
+          </div>
+        ) : null}
         <p className={`text-2xs ${backupDue ? 'text-warn' : 'text-text-muted'}`}>
           {backupDue ? 'Backup recommended. ' : ''}
-          {lastBackupAt ? `Last export prepared: ${timestampLabel(lastBackupAt)}.` : 'No backup export recorded yet.'}
+          {latestBackupAt ? `Last backup prepared: ${timestampLabel(latestBackupAt)}.` : 'No backup export recorded yet.'}
           {' Keep a copy outside this computer.'}
         </p>
         <div className="grid grid-cols-2 gap-2">

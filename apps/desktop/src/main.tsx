@@ -4,6 +4,8 @@ import { QueryClient } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 
 import { App } from './App'
+import { api } from './api/client'
+import { refreshSavedData } from './api/mcpChanges'
 import { RENDERER_CACHE_MAX_AGE_MS } from '@shared/freshness'
 import {
   RENDERER_CACHE_BUSTER,
@@ -28,6 +30,11 @@ const queryClient = new QueryClient({
     },
   },
 })
+
+const stopMcpChanges = api.onSavedDataChanged((event) => {
+  void refreshSavedData(queryClient, event)
+})
+if (import.meta.hot) import.meta.hot.dispose(stopMcpChanges)
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -480,7 +480,15 @@ export const DEFAULT_OBSCURED_TABS: ReadonlyArray<string> = ['personal-finance']
  * Everything the Settings page owns. Kept in its own file rather than the holdings
  * store, the way the reference keeps `app_config.json` apart from `user_data.json`.
  */
+export interface AutomaticBackupStatus {
+  path: string
+  savedAt?: number
+  error?: string
+}
+
 export interface AppSettings {
+  /** Current automatic backup status; not a stored preference. */
+  automaticBackup?: AutomaticBackupStatus
   /** Last successfully prepared user-data export. */
   lastBackupAt?: number
   /** Market country whose zone the top-bar clock prints. */
@@ -3334,6 +3342,8 @@ export interface PoliticsExportRequest {
 }
 
 export const CHANNELS = {
+  mcpStatus: 'system:mcp-status',
+  savedDataChanged: 'user-data:changed',
   apiUsage: 'system:api-usage',
   quotes: 'dashboard:quotes',
   chart: 'dashboard:chart',
@@ -3485,6 +3495,8 @@ export interface FxRequest extends BackgroundRequest {
 export type WindowAction = 'minimize' | 'maximize' | 'close'
 
 export interface DesktopApi {
+  mcpStatus(): Promise<McpStatus>
+  onSavedDataChanged(listener: (event: SavedDataChanged) => void): () => void
   readonly platform: NodeJS.Platform
   apiUsage(): Promise<ApiUsageSnapshot>
   quotes(request: QuotesRequest): Promise<Envelope<QuotesPayload>>
@@ -3585,3 +3597,7 @@ export interface DesktopApi {
   windowControl(action: WindowAction): Promise<void>
   onPortfolioChanged(listener: () => void): () => void
 }
+
+export type SavedDataDomain = 'portfolio' | 'cards' | 'personalFinance' | 'settings'
+export interface SavedDataChanged { domains: SavedDataDomain[] }
+export interface McpStatus { available: boolean; connected?: boolean; active?: boolean; tools?: number; error?: string }

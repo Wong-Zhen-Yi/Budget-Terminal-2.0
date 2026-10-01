@@ -56,6 +56,7 @@ export function useCardsMutation(): (
   return useCallback(async (mutation) => {
     const result = await api.mutateCards(mutation)
     queryClient.setQueryData(queryKeys.cards, result)
+    void queryClient.invalidateQueries({ queryKey: queryKeys.settings })
     return result
   }, [queryClient])
 }

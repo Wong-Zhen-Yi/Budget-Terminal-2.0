@@ -28,6 +28,8 @@ try {
       import { registerIpcHandlers } from './electron/ipc/handlers'
       import { isTrustedRendererUrl } from './electron/shared/ipcSecurity'
       import { acquireDataSession } from './electron/services/dataSession'
+      import { startMcpHost } from './electron/mcp/host'
+      import { invokeBridge } from './mcp/runtime'
       app.setPath('userData', ${JSON.stringify(join(directory, 'userData'))})
       const expected = pathToFileURL(${JSON.stringify(trustedPath)}).href
       app.whenReady().then(async () => {
@@ -54,6 +56,20 @@ try {
           await assert.rejects(other.webContents.executeJavaScript('window.api.settings()'), /Untrusted IPC sender/)
           await assert.rejects(other.webContents.executeJavaScript("window.api.maintenance('clearUserData')"), /Untrusted IPC sender/)
           await assert.rejects(trusted.webContents.executeJavaScript("window.api.maintenance('unknown')"), /Unknown maintenance action/)
+          const stopMcp = await startMcpHost()
+          assert.equal((await trusted.webContents.executeJavaScript('window.api.mcpStatus()')).available, true)
+          await assert.rejects(other.webContents.executeJavaScript('window.api.mcpStatus()'), /Untrusted IPC sender/)
+          await trusted.webContents.executeJavaScript('window.savedChanges = []; window.stopSavedChanges = window.api.onSavedDataChanged(event => window.savedChanges.push(event)); true')
+          await invokeBridge('budget_terminal_mutate_settings', { request: { type: 'setTime12h', value: false } })
+          await new Promise(resolve => setTimeout(resolve, 100))
+          assert.deepEqual(await trusted.webContents.executeJavaScript('window.savedChanges'), [{ domains: ['settings'] }])
+          assert.equal((await trusted.webContents.executeJavaScript('window.api.settings()')).data.time12h, false)
+          await trusted.webContents.executeJavaScript('window.stopSavedChanges()')
+          await invokeBridge('budget_terminal_mutate_settings', { request: { type: 'setTime12h', value: true } })
+          await new Promise(resolve => setTimeout(resolve, 100))
+          assert.equal(await trusted.webContents.executeJavaScript('window.savedChanges.length'), 1)
+          await stopMcp()
+          console.log('PASS: Electron MCP host, status IPC, real mutation notification and unsubscribe through sandboxed preload')
           console.log('PASS: real sandboxed preload, isolated renderer, trusted IPC, rejected foreign document and maintenance action')
           dispose(); release(); app.exit(0)
         } catch (error) { console.error(error); dispose?.(); release?.(); app.exit(1) }

@@ -127,6 +127,7 @@ export function usePortfolioMutation(): (
     async (mutation) => {
       const result = await api.mutatePortfolio(mutation)
       queryClient.setQueryData(queryKeys.portfolio, result)
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settings })
       return result
     },
     [queryClient],

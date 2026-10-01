@@ -5,6 +5,9 @@ import { app, BrowserWindow } from 'electron'
 const userData = join(process.env.APPDATA, 'userData')
 mkdirSync(userData, { recursive: true })
 app.setPath('userData', userData)
+const downloads = join(process.env.APPDATA, 'Downloads')
+mkdirSync(downloads, { recursive: true })
+app.setPath('downloads', downloads)
 await import('../../out/main/main.js')
 
 if (process.env.BUDGET_PROBE_PRIMARY === '1') {

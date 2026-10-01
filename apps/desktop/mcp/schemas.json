@@ -1,0 +1,3238 @@
+{
+  "apiUsage": {
+    "$ref": "#/definitions/Input_apiUsage",
+    "definitions": {
+      "Input_apiUsage": {
+        "$ref": "#/definitions/Record%3Cstring%2Cnever%3E"
+      },
+      "Record<string,never>": {
+        "type": "object",
+        "additionalProperties": {
+          "not": {}
+        }
+      }
+    }
+  },
+  "quotes": {
+    "$ref": "#/definitions/Input_quotes",
+    "definitions": {
+      "Input_quotes": {
+        "$ref": "#/definitions/QuotesRequest"
+      },
+      "QuotesRequest": {
+        "type": "object",
+        "properties": {
+          "holdings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "holdings"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "chart": {
+    "$ref": "#/definitions/Input_chart",
+    "definitions": {
+      "Input_chart": {
+        "$ref": "#/definitions/ChartRequest"
+      },
+      "ChartRequest": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "timeframe": {
+            "$ref": "#/definitions/TimeframeLabel"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "symbol",
+          "timeframe"
+        ],
+        "additionalProperties": false
+      },
+      "TimeframeLabel": {
+        "type": "string",
+        "enum": [
+          "1 Minute",
+          "5 Minutes",
+          "15 Minutes",
+          "1 Hour",
+          "1 Day",
+          "1 Week",
+          "1 Month"
+        ]
+      }
+    }
+  },
+  "chartsHistory": {
+    "$ref": "#/definitions/Input_chartsHistory",
+    "definitions": {
+      "Input_chartsHistory": {
+        "$ref": "#/definitions/ChartsHistoryRequest"
+      },
+      "ChartsHistoryRequest": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "interval": {
+            "$ref": "#/definitions/ChartsInterval"
+          },
+          "range": {
+            "$ref": "#/definitions/ChartsRange"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "symbol",
+          "interval",
+          "range"
+        ],
+        "additionalProperties": false
+      },
+      "ChartsInterval": {
+        "type": "string",
+        "enum": [
+          "1 Minute",
+          "5 Minutes",
+          "15 Minutes",
+          "1 Hour",
+          "4 Hours",
+          "1 Day",
+          "1 Week",
+          "1 Month"
+        ]
+      },
+      "ChartsRange": {
+        "type": "string",
+        "enum": [
+          "1D",
+          "5D",
+          "1M",
+          "3M",
+          "6M",
+          "YTD",
+          "1Y",
+          "5Y",
+          "Max"
+        ]
+      }
+    }
+  },
+  "chartsCompare": {
+    "$ref": "#/definitions/Input_chartsCompare",
+    "definitions": {
+      "Input_chartsCompare": {
+        "$ref": "#/definitions/ChartsCompareRequest"
+      },
+      "ChartsCompareRequest": {
+        "type": "object",
+        "properties": {
+          "symbols": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "interval": {
+            "$ref": "#/definitions/ChartsCompareInterval"
+          },
+          "range": {
+            "$ref": "#/definitions/ChartsCompareRange"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "symbols",
+          "interval",
+          "range"
+        ],
+        "additionalProperties": false
+      },
+      "ChartsCompareInterval": {
+        "type": "string",
+        "enum": [
+          "1 Day",
+          "1 Week"
+        ]
+      },
+      "ChartsCompareRange": {
+        "type": "string",
+        "enum": [
+          "5Y",
+          "3Y",
+          "1Y",
+          "YTD",
+          "3M",
+          "1M"
+        ]
+      }
+    }
+  },
+  "chartsRelationship": {
+    "$ref": "#/definitions/Input_chartsRelationship",
+    "definitions": {
+      "Input_chartsRelationship": {
+        "$ref": "#/definitions/ChartsRelationshipRequest"
+      },
+      "ChartsRelationshipRequest": {
+        "type": "object",
+        "properties": {
+          "symbols": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "range": {
+            "$ref": "#/definitions/ChartsRelationshipRange"
+          },
+          "rollingWindow": {
+            "$ref": "#/definitions/ChartsRollingWindow"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "symbols",
+          "range",
+          "rollingWindow"
+        ],
+        "additionalProperties": false
+      },
+      "ChartsRelationshipRange": {
+        "type": "string",
+        "enum": [
+          "1M",
+          "3M",
+          "6M",
+          "1Y",
+          "5Y",
+          "Max"
+        ]
+      },
+      "ChartsRollingWindow": {
+        "type": "number",
+        "enum": [
+          30,
+          60,
+          120,
+          252
+        ]
+      }
+    }
+  },
+  "options": {
+    "$ref": "#/definitions/Input_options",
+    "definitions": {
+      "Input_options": {
+        "$ref": "#/definitions/OptionsRequest"
+      },
+      "OptionsRequest": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "symbol"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "targets": {
+    "$ref": "#/definitions/Input_targets",
+    "definitions": {
+      "Input_targets": {
+        "$ref": "#/definitions/TargetsRequest"
+      },
+      "TargetsRequest": {
+        "type": "object",
+        "properties": {
+          "tickers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tickers"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "news": {
+    "$ref": "#/definitions/Input_news",
+    "definitions": {
+      "Input_news": {
+        "$ref": "#/definitions/NewsRequest"
+      },
+      "NewsRequest": {
+        "type": "object",
+        "properties": {
+          "tickers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tickers"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "newsPage": {
+    "$ref": "#/definitions/Input_newsPage",
+    "definitions": {
+      "Input_newsPage": {
+        "$ref": "#/definitions/NewsPageRequest"
+      },
+      "NewsPageRequest": {
+        "type": "object",
+        "properties": {
+          "tickers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tickers"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "newsTickerSearch": {
+    "$ref": "#/definitions/Input_newsTickerSearch",
+    "definitions": {
+      "Input_newsTickerSearch": {
+        "$ref": "#/definitions/NewsTickerSearchRequest"
+      },
+      "NewsTickerSearchRequest": {
+        "type": "object",
+        "properties": {
+          "tickers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tickers"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "newsArticle": {
+    "$ref": "#/definitions/Input_newsArticle",
+    "definitions": {
+      "Input_newsArticle": {
+        "$ref": "#/definitions/NewsPreviewRequest"
+      },
+      "NewsPreviewRequest": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string",
+            "description": "The RSS description, used as the fallback body without a second round trip."
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "url",
+          "title",
+          "summary"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "newsThumbnail": {
+    "$ref": "#/definitions/Input_newsThumbnail",
+    "definitions": {
+      "Input_newsThumbnail": {
+        "$ref": "#/definitions/NewsThumbnailRequest"
+      },
+      "NewsThumbnailRequest": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "fundamentals": {
+    "$ref": "#/definitions/Input_fundamentals",
+    "definitions": {
+      "Input_fundamentals": {
+        "$ref": "#/definitions/FundamentalsRequest"
+      },
+      "FundamentalsRequest": {
+        "type": "object",
+        "properties": {
+          "tickers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tickers"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "fundamentalsPage": {
+    "$ref": "#/definitions/Input_fundamentalsPage",
+    "definitions": {
+      "Input_fundamentalsPage": {
+        "$ref": "#/definitions/FundamentalsPageRequest"
+      },
+      "FundamentalsPageRequest": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "symbol"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "returns": {
+    "$ref": "#/definitions/Input_returns",
+    "definitions": {
+      "Input_returns": {
+        "$ref": "#/definitions/ReturnsRequest"
+      },
+      "ReturnsRequest": {
+        "type": "object",
+        "properties": {
+          "tickers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "window": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ReturnTimeframe"
+              },
+              {
+                "$ref": "#/definitions/HeatmapInterval"
+              }
+            ]
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tickers",
+          "window"
+        ],
+        "additionalProperties": false
+      },
+      "ReturnTimeframe": {
+        "type": "string",
+        "enum": [
+          "1mo",
+          "ytd",
+          "1y"
+        ],
+        "description": "Timeframes shared by Dip Finder and Momentum Tracker."
+      },
+      "HeatmapInterval": {
+        "type": "string",
+        "enum": [
+          "live",
+          "1d",
+          "1w",
+          "1m",
+          "3m",
+          "ytd",
+          "1y"
+        ],
+        "description": "Portfolio Heatmap intervals, from `_P4_HEATMAP_INTERVALS`."
+      }
+    }
+  },
+  "momentum": {
+    "$ref": "#/definitions/Input_momentum",
+    "definitions": {
+      "Input_momentum": {
+        "$ref": "#/definitions/MomentumRequest"
+      },
+      "MomentumRequest": {
+        "type": "object",
+        "properties": {
+          "positions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/PositionInput"
+            }
+          },
+          "cashAmount": {
+            "type": "number"
+          },
+          "timeframe": {
+            "$ref": "#/definitions/ReturnTimeframe"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "positions",
+          "cashAmount",
+          "timeframe"
+        ],
+        "additionalProperties": false
+      },
+      "PositionInput": {
+        "type": "object",
+        "properties": {
+          "ticker": {
+            "type": "string"
+          },
+          "shares": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "ticker",
+          "shares"
+        ],
+        "additionalProperties": false
+      },
+      "ReturnTimeframe": {
+        "type": "string",
+        "enum": [
+          "1mo",
+          "ytd",
+          "1y"
+        ],
+        "description": "Timeframes shared by Dip Finder and Momentum Tracker."
+      }
+    }
+  },
+  "analytics": {
+    "$ref": "#/definitions/Input_analytics",
+    "definitions": {
+      "Input_analytics": {
+        "$ref": "#/definitions/AnalyticsRequest"
+      },
+      "AnalyticsRequest": {
+        "type": "object",
+        "properties": {
+          "positions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/PositionInput"
+            }
+          },
+          "cashAmount": {
+            "type": "number"
+          },
+          "currentValues": {
+            "$ref": "#/definitions/Record%3Cstring%2Cnumber%3E"
+          },
+          "benchmarkSymbol": {
+            "type": "string"
+          },
+          "lookback": {
+            "$ref": "#/definitions/MetricsLookback"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "positions",
+          "cashAmount",
+          "currentValues",
+          "benchmarkSymbol",
+          "lookback"
+        ],
+        "additionalProperties": false
+      },
+      "PositionInput": {
+        "type": "object",
+        "properties": {
+          "ticker": {
+            "type": "string"
+          },
+          "shares": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "ticker",
+          "shares"
+        ],
+        "additionalProperties": false
+      },
+      "Record<string,number>": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "number"
+        }
+      },
+      "MetricsLookback": {
+        "type": "string",
+        "enum": [
+          "1y",
+          "3y",
+          "5y",
+          "max"
+        ]
+      }
+    }
+  },
+  "optionQuotes": {
+    "$ref": "#/definitions/Input_optionQuotes",
+    "definitions": {
+      "Input_optionQuotes": {
+        "$ref": "#/definitions/OptionQuotesRequest"
+      },
+      "OptionQuotesRequest": {
+        "type": "object",
+        "properties": {
+          "positions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "rowId": {
+                  "type": "string"
+                },
+                "ticker": {
+                  "type": "string"
+                },
+                "expiry": {
+                  "type": "string"
+                },
+                "strike": {
+                  "type": "number"
+                },
+                "strategy": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "rowId",
+                "ticker",
+                "expiry",
+                "strike",
+                "strategy"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "positions"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "portfolio": {
+    "$ref": "#/definitions/Input_portfolio",
+    "definitions": {
+      "Input_portfolio": {
+        "$ref": "#/definitions/Record%3Cstring%2Cnever%3E"
+      },
+      "Record<string,never>": {
+        "type": "object",
+        "additionalProperties": {
+          "not": {}
+        }
+      }
+    }
+  },
+  "mutatePortfolio": {
+    "$ref": "#/definitions/Input_mutatePortfolio",
+    "definitions": {
+      "Input_mutatePortfolio": {
+        "$ref": "#/definitions/PortfolioMutation"
+      },
+      "PortfolioMutation": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "setActive"
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "setMain"
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "create"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "rename"
+              },
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "id",
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "delete"
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "reorder"
+              },
+              "order": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "type",
+              "order"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "addPosition"
+              },
+              "portfolioId": {
+                "type": "string"
+              },
+              "ticker": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "portfolioId",
+              "ticker"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "removePosition"
+              },
+              "portfolioId": {
+                "type": "string"
+              },
+              "ticker": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "portfolioId",
+              "ticker"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "setPosition"
+              },
+              "portfolioId": {
+                "type": "string"
+              },
+              "ticker": {
+                "type": "string"
+              },
+              "shares": {
+                "type": "number"
+              },
+              "avgPrice": {
+                "type": "number"
+              },
+              "includeInWeight": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "type",
+              "portfolioId",
+              "ticker"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "setCash"
+              },
+              "portfolioId": {
+                "type": "string"
+              },
+              "cashBalance": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "type",
+              "portfolioId",
+              "cashBalance"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "setMargin"
+              },
+              "portfolioId": {
+                "type": "string"
+              },
+              "marginDebt": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "type",
+              "portfolioId",
+              "marginDebt"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "setIncludeCash"
+              },
+              "portfolioId": {
+                "type": "string"
+              },
+              "includeCashInWeight": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "type",
+              "portfolioId",
+              "includeCashInWeight"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "$ref": "#/definitions/OptionMutation"
+          }
+        ],
+        "description": "Every write the Portfolio page can make. One channel takes the union and answers with the whole re-read document, so the renderer never guesses at post-write state."
+      },
+      "OptionMutation": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "addOption"
+              },
+              "portfolioId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "portfolioId"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "removeOption"
+              },
+              "portfolioId": {
+                "type": "string"
+              },
+              "rowId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "portfolioId",
+              "rowId"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "setOption"
+              },
+              "portfolioId": {
+                "type": "string"
+              },
+              "rowId": {
+                "type": "string"
+              },
+              "patch": {
+                "$ref": "#/definitions/Partial%3COptionPosition%3E"
+              }
+            },
+            "required": [
+              "type",
+              "portfolioId",
+              "rowId",
+              "patch"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "Partial<OptionPosition>": {
+        "type": "object",
+        "properties": {
+          "rowId": {
+            "type": "string"
+          },
+          "ticker": {
+            "type": "string"
+          },
+          "strategy": {
+            "type": "string"
+          },
+          "expiry": {
+            "type": "string"
+          },
+          "strike": {
+            "type": "number"
+          },
+          "contracts": {
+            "type": "number"
+          },
+          "premium": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string"
+          },
+          "openDate": {
+            "type": "string"
+          },
+          "currentPrice": {
+            "type": "number",
+            "description": "Live values, refreshed from Yahoo rather than stored."
+          },
+          "volume": {
+            "type": "number"
+          },
+          "openInterest": {
+            "type": "number"
+          },
+          "impliedVolatility": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "cards": {
+    "$ref": "#/definitions/Input_cards",
+    "definitions": {
+      "Input_cards": {
+        "$ref": "#/definitions/Record%3Cstring%2Cnever%3E"
+      },
+      "Record<string,never>": {
+        "type": "object",
+        "additionalProperties": {
+          "not": {}
+        }
+      }
+    }
+  },
+  "mutateCards": {
+    "$ref": "#/definitions/Input_mutateCards",
+    "definitions": {
+      "Input_mutateCards": {
+        "$ref": "#/definitions/CardsMutation"
+      },
+      "CardsMutation": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "add"
+              },
+              "name": {
+                "type": "string"
+              },
+              "symbols": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "weighting": {
+                "$ref": "#/definitions/CardWeighting"
+              },
+              "weights": {
+                "$ref": "#/definitions/Record%3Cstring%2Cnumber%3E"
+              }
+            },
+            "required": [
+              "type",
+              "name",
+              "symbols",
+              "weighting",
+              "weights"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "update"
+              },
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "symbols": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "weighting": {
+                "$ref": "#/definitions/CardWeighting"
+              },
+              "weights": {
+                "$ref": "#/definitions/Record%3Cstring%2Cnumber%3E"
+              }
+            },
+            "required": [
+              "type",
+              "id",
+              "name",
+              "symbols",
+              "weighting",
+              "weights"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "remove"
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "reorder"
+              },
+              "order": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "type",
+              "order"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "setPortfolioVisible"
+              },
+              "portfolioId": {
+                "type": "string"
+              },
+              "visible": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "type",
+              "portfolioId",
+              "visible"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "setInterval"
+              },
+              "id": {
+                "type": "string"
+              },
+              "interval": {
+                "$ref": "#/definitions/CardInterval"
+              }
+            },
+            "required": [
+              "type",
+              "id",
+              "interval"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "CardWeighting": {
+        "type": "string",
+        "enum": [
+          "equal",
+          "custom"
+        ]
+      },
+      "Record<string,number>": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "number"
+        }
+      },
+      "CardInterval": {
+        "type": "string",
+        "enum": [
+          "1d",
+          "30d",
+          "1y"
+        ]
+      }
+    }
+  },
+  "cardsPerformance": {
+    "$ref": "#/definitions/Input_cardsPerformance",
+    "definitions": {
+      "Input_cardsPerformance": {
+        "$ref": "#/definitions/CardsPerformanceRequest"
+      },
+      "CardsPerformanceRequest": {
+        "type": "object",
+        "properties": {
+          "interval": {
+            "$ref": "#/definitions/CardInterval"
+          },
+          "cards": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/CardPerformanceInput"
+            }
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "interval",
+          "cards"
+        ],
+        "additionalProperties": false
+      },
+      "CardInterval": {
+        "type": "string",
+        "enum": [
+          "1d",
+          "30d",
+          "1y"
+        ]
+      },
+      "CardPerformanceInput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "symbols": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "weighting": {
+            "$ref": "#/definitions/CardResolvedWeighting"
+          },
+          "weights": {
+            "$ref": "#/definitions/Record%3Cstring%2Cnumber%3E"
+          },
+          "shares": {
+            "$ref": "#/definitions/Record%3Cstring%2Cnumber%3E"
+          },
+          "cashBalance": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "symbols",
+          "weighting",
+          "weights",
+          "shares",
+          "cashBalance"
+        ],
+        "additionalProperties": false
+      },
+      "CardResolvedWeighting": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/CardWeighting"
+          },
+          {
+            "type": "string",
+            "const": "portfolio"
+          },
+          {
+            "type": "string",
+            "const": "equal_fallback"
+          }
+        ]
+      },
+      "CardWeighting": {
+        "type": "string",
+        "enum": [
+          "equal",
+          "custom"
+        ]
+      },
+      "Record<string,number>": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "number"
+        }
+      }
+    }
+  },
+  "personalFinance": {
+    "$ref": "#/definitions/Input_personalFinance",
+    "definitions": {
+      "Input_personalFinance": {
+        "$ref": "#/definitions/Record%3Cstring%2Cnever%3E"
+      },
+      "Record<string,never>": {
+        "type": "object",
+        "additionalProperties": {
+          "not": {}
+        }
+      }
+    }
+  },
+  "mutatePersonalFinance": {
+    "$ref": "#/definitions/Input_mutatePersonalFinance",
+    "definitions": {
+      "Input_mutatePersonalFinance": {
+        "$ref": "#/definitions/PersonalFinanceMutation"
+      },
+      "PersonalFinanceMutation": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "addEntry"
+              },
+              "category": {
+                "$ref": "#/definitions/FinanceCategory"
+              }
+            },
+            "required": [
+              "type",
+              "category"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "setEntry"
+              },
+              "category": {
+                "$ref": "#/definitions/FinanceCategory"
+              },
+              "id": {
+                "type": "string"
+              },
+              "desc": {
+                "type": "string"
+              },
+              "amount": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "type",
+              "category",
+              "id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "removeEntry"
+              },
+              "category": {
+                "$ref": "#/definitions/FinanceCategory"
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "category",
+              "id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "addBill"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "setBill"
+              },
+              "id": {
+                "type": "string"
+              },
+              "desc": {
+                "type": "string"
+              },
+              "amount": {
+                "type": "number"
+              },
+              "frequency": {
+                "$ref": "#/definitions/BillFrequency"
+              },
+              "currency": {
+                "$ref": "#/definitions/FinanceCurrency"
+              }
+            },
+            "required": [
+              "type",
+              "id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "removeBill"
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "setTotalsCurrency"
+              },
+              "currency": {
+                "$ref": "#/definitions/FinanceCurrency"
+              }
+            },
+            "required": [
+              "type",
+              "currency"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "setGoal"
+              },
+              "title": {
+                "type": "string"
+              },
+              "targetAmount": {
+                "type": "number"
+              },
+              "currency": {
+                "$ref": "#/definitions/FinanceCurrency"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          }
+        ],
+        "description": "Every write the Personal Finance page can make, answered with the whole section."
+      },
+      "FinanceCategory": {
+        "type": "string",
+        "enum": [
+          "cash",
+          "debt"
+        ]
+      },
+      "BillFrequency": {
+        "type": "string",
+        "enum": [
+          "monthly",
+          "yearly"
+        ]
+      },
+      "FinanceCurrency": {
+        "type": "string",
+        "enum": [
+          "SGD",
+          "USD"
+        ],
+        "description": "The Personal Finance page's own book, ported from the PySide6 `net_worth` payload.\n\nCash and debt rows are natively SGD; portfolios and brokerage accounts are natively USD. `totalsCurrency` picks the display currency for the aggregate views only — the cash and debt tables always print SGD, exactly as the reference does."
+      }
+    }
+  },
+  "fx": {
+    "$ref": "#/definitions/Input_fx",
+    "definitions": {
+      "Input_fx": {
+        "$ref": "#/definitions/FxRequest"
+      },
+      "FxRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "globalMarkets": {
+    "$ref": "#/definitions/Input_globalMarkets",
+    "definitions": {
+      "Input_globalMarkets": {
+        "$ref": "#/definitions/GlobalMarketsRequest"
+      },
+      "GlobalMarketsRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "preMarket": {
+    "$ref": "#/definitions/Input_preMarket",
+    "definitions": {
+      "Input_preMarket": {
+        "$ref": "#/definitions/PreMarketRequest"
+      },
+      "PreMarketRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "tradingVolumes": {
+    "$ref": "#/definitions/Input_tradingVolumes",
+    "definitions": {
+      "Input_tradingVolumes": {
+        "$ref": "#/definitions/TradingVolumesRequest"
+      },
+      "TradingVolumesRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "signals": {
+    "$ref": "#/definitions/Input_signals",
+    "definitions": {
+      "Input_signals": {
+        "$ref": "#/definitions/SignalsRequest"
+      },
+      "SignalsRequest": {
+        "type": "object",
+        "properties": {
+          "latestOnly": {
+            "type": "boolean"
+          },
+          "forceMarketRefresh": {
+            "type": "boolean"
+          },
+          "forceUniverseRefresh": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "technicalScan": {
+    "$ref": "#/definitions/Input_technicalScan",
+    "definitions": {
+      "Input_technicalScan": {
+        "$ref": "#/definitions/BackgroundRequest"
+      },
+      "BackgroundRequest": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false,
+        "description": "Every request the startup warm-up in `src/api/prefetch.ts` can issue carries this.\n\nA request marked `background` runs in the rate gate's background lane (`electron/services/yahoo/rateGate.ts`), so a page the user opens while the warm-up is still fanning out is served first instead of queueing behind a hundred of its requests. It describes *scheduling*, never the answer, so it must stay out of every main-process cache key — a warmed payload and a user-requested one are the same entry."
+      }
+    }
+  },
+  "marketCapSales": {
+    "$ref": "#/definitions/Input_marketCapSales",
+    "definitions": {
+      "Input_marketCapSales": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "symbols": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "symbols"
+        ]
+      }
+    }
+  },
+  "marketCap": {
+    "$ref": "#/definitions/Input_marketCap",
+    "definitions": {
+      "Input_marketCap": {
+        "$ref": "#/definitions/MarketCapRequest"
+      },
+      "MarketCapRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          },
+          "tier": {
+            "$ref": "#/definitions/MarketCapTier"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MarketCapTier": {
+        "type": "string",
+        "enum": [
+          "all",
+          "mega",
+          "large",
+          "mid",
+          "small",
+          "micro",
+          "nano"
+        ]
+      }
+    }
+  },
+  "priceScreen": {
+    "$ref": "#/definitions/Input_priceScreen",
+    "definitions": {
+      "Input_priceScreen": {
+        "$ref": "#/definitions/PriceScreenRequest"
+      },
+      "PriceScreenRequest": {
+        "type": "object",
+        "properties": {
+          "minimumPrice": {
+            "type": "number"
+          },
+          "maximumPrice": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "minimumPrice",
+          "maximumPrice"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "calendarMonth": {
+    "$ref": "#/definitions/Input_calendarMonth",
+    "definitions": {
+      "Input_calendarMonth": {
+        "$ref": "#/definitions/CalendarMonthRequest"
+      },
+      "CalendarMonthRequest": {
+        "type": "object",
+        "properties": {
+          "tickers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "year": {
+            "type": "number"
+          },
+          "month": {
+            "type": "number"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tickers",
+          "year",
+          "month"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "earningsCalendar": {
+    "$ref": "#/definitions/Input_earningsCalendar",
+    "definitions": {
+      "Input_earningsCalendar": {
+        "$ref": "#/definitions/EarningsCalendarRequest"
+      },
+      "EarningsCalendarRequest": {
+        "type": "object",
+        "properties": {
+          "startDate": {
+            "type": "string"
+          },
+          "endDate": {
+            "type": "string"
+          },
+          "rangeKey": {
+            "type": "string"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "startDate",
+          "endDate",
+          "rangeKey"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "crypto": {
+    "$ref": "#/definitions/Input_crypto",
+    "definitions": {
+      "Input_crypto": {
+        "$ref": "#/definitions/CryptoRequest"
+      },
+      "CryptoRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "bitcoin": {
+    "$ref": "#/definitions/Input_bitcoin",
+    "definitions": {
+      "Input_bitcoin": {
+        "$ref": "#/definitions/BitcoinRequest"
+      },
+      "BitcoinRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "bmnr": {
+    "$ref": "#/definitions/Input_bmnr",
+    "definitions": {
+      "Input_bmnr": {
+        "$ref": "#/definitions/BmnrRequest"
+      },
+      "BmnrRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "forexQuotes": {
+    "$ref": "#/definitions/Input_forexQuotes",
+    "definitions": {
+      "Input_forexQuotes": {
+        "$ref": "#/definitions/ForexRequest"
+      },
+      "ForexRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "forexHistory": {
+    "$ref": "#/definitions/Input_forexHistory",
+    "definitions": {
+      "Input_forexHistory": {
+        "$ref": "#/definitions/ForexHistoryRequest"
+      },
+      "ForexHistoryRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          },
+          "pair": {
+            "$ref": "#/definitions/ForexPair"
+          },
+          "range": {
+            "$ref": "#/definitions/ForexRange"
+          }
+        },
+        "required": [
+          "pair",
+          "range"
+        ],
+        "additionalProperties": false
+      },
+      "ForexPair": {
+        "type": "string",
+        "enum": [
+          "EUR/USD",
+          "GBP/USD",
+          "USD/JPY",
+          "USD/CHF",
+          "AUD/USD",
+          "USD/CAD",
+          "NZD/USD",
+          "USD/SGD",
+          "EUR/SGD",
+          "SGD/JPY"
+        ]
+      },
+      "ForexRange": {
+        "type": "string",
+        "enum": [
+          "1W",
+          "1M",
+          "3M",
+          "6M",
+          "1Y"
+        ]
+      }
+    }
+  },
+  "forexNews": {
+    "$ref": "#/definitions/Input_forexNews",
+    "definitions": {
+      "Input_forexNews": {
+        "$ref": "#/definitions/ForexPairRequest"
+      },
+      "ForexPairRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          },
+          "pair": {
+            "$ref": "#/definitions/ForexPair"
+          }
+        },
+        "required": [
+          "pair"
+        ],
+        "additionalProperties": false
+      },
+      "ForexPair": {
+        "type": "string",
+        "enum": [
+          "EUR/USD",
+          "GBP/USD",
+          "USD/JPY",
+          "USD/CHF",
+          "AUD/USD",
+          "USD/CAD",
+          "NZD/USD",
+          "USD/SGD",
+          "EUR/SGD",
+          "SGD/JPY"
+        ]
+      }
+    }
+  },
+  "sp500": {
+    "$ref": "#/definitions/Input_sp500",
+    "definitions": {
+      "Input_sp500": {
+        "$ref": "#/definitions/Sp500Request"
+      },
+      "Sp500Request": {
+        "type": "object",
+        "properties": {
+          "part": {
+            "$ref": "#/definitions/Sp500Part"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "part"
+        ],
+        "additionalProperties": false
+      },
+      "Sp500Part": {
+        "type": "string",
+        "enum": [
+          "constituents",
+          "market",
+          "history",
+          "holdings",
+          "valuation"
+        ]
+      }
+    }
+  },
+  "sp500Breadth": {
+    "$ref": "#/definitions/Input_sp500Breadth",
+    "definitions": {
+      "Input_sp500Breadth": {
+        "$ref": "#/definitions/Sp500BreadthRequest"
+      },
+      "Sp500BreadthRequest": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "status",
+              "start",
+              "cancel"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "gold": {
+    "$ref": "#/definitions/Input_gold",
+    "definitions": {
+      "Input_gold": {
+        "$ref": "#/definitions/GoldRequest"
+      },
+      "GoldRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "oil": {
+    "$ref": "#/definitions/Input_oil",
+    "definitions": {
+      "Input_oil": {
+        "$ref": "#/definitions/OilRequest"
+      },
+      "OilRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "heatmap": {
+    "$ref": "#/definitions/Input_heatmap",
+    "definitions": {
+      "Input_heatmap": {
+        "$ref": "#/definitions/HeatmapRequest"
+      },
+      "HeatmapRequest": {
+        "type": "object",
+        "properties": {
+          "etf": {
+            "$ref": "#/definitions/HeatmapEtfKey"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "etf"
+        ],
+        "additionalProperties": false
+      },
+      "HeatmapEtfKey": {
+        "type": "string",
+        "enum": [
+          "SPY",
+          "NDX",
+          "DJI"
+        ],
+        "description": "The Heatmap page (`mixins/spy_heatmap.py`, page17) — one index ETF's full holdings list, quote-enriched, grouped into sector tiles.\n\nThe presenters, the interval-return arithmetic and the tile colour ramp live in `shared/heatmap.ts` beside each other, so the page, the main process and the probe cannot disagree about what a tile is worth. The intervals are `HeatmapInterval` — `_P17_INTERVALS` and the Portfolio Heatmap's `_P4_HEATMAP_INTERVALS` are the same seven windows, and the reference shares them too."
+      }
+    }
+  },
+  "etfHoldings": {
+    "$ref": "#/definitions/Input_etfHoldings",
+    "definitions": {
+      "Input_etfHoldings": {
+        "$ref": "#/definitions/EtfHoldingsRequest"
+      },
+      "EtfHoldingsRequest": {
+        "type": "object",
+        "properties": {
+          "ticker": {
+            "type": "string"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ticker"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "etfArbitrage": {
+    "$ref": "#/definitions/Input_etfArbitrage",
+    "definitions": {
+      "Input_etfArbitrage": {
+        "$ref": "#/definitions/EtfArbitrageRequest"
+      },
+      "EtfArbitrageRequest": {
+        "type": "object",
+        "properties": {
+          "ticker": {
+            "type": "string"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ticker"
+        ],
+        "additionalProperties": false,
+        "description": "Arbitrage takes only the ticker: the holdings it compares against are the cached ones the main process already loaded, so a five-hundred-row basket does not cross IPC twice just to be quoted."
+      }
+    }
+  },
+  "etfAum": {
+    "$ref": "#/definitions/Input_etfAum",
+    "definitions": {
+      "Input_etfAum": {
+        "$ref": "#/definitions/EtfAumRequest"
+      },
+      "EtfAumRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "upDown": {
+    "$ref": "#/definitions/Input_upDown",
+    "definitions": {
+      "Input_upDown": {
+        "$ref": "#/definitions/UpDownRequest"
+      },
+      "UpDownRequest": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "$ref": "#/definitions/UpDownSource"
+          },
+          "interval": {
+            "$ref": "#/definitions/UpDownInterval"
+          },
+          "symbols": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Used by Portfolio and Custom. ETF sources resolve their official holdings in main."
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "source",
+          "interval"
+        ],
+        "additionalProperties": false
+      },
+      "UpDownSource": {
+        "type": "string",
+        "enum": [
+          "portfolio",
+          "spy",
+          "qqq",
+          "custom"
+        ]
+      },
+      "UpDownInterval": {
+        "type": "string",
+        "enum": [
+          "1d",
+          "5d",
+          "30d",
+          "ytd",
+          "1y"
+        ]
+      }
+    }
+  },
+  "upDownTargets": {
+    "$ref": "#/definitions/Input_upDownTargets",
+    "definitions": {
+      "Input_upDownTargets": {
+        "$ref": "#/definitions/UpDownTargetsRequest"
+      },
+      "UpDownTargetsRequest": {
+        "type": "object",
+        "properties": {
+          "tickers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tickers"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "valuation": {
+    "$ref": "#/definitions/Input_valuation",
+    "definitions": {
+      "Input_valuation": {
+        "$ref": "#/definitions/ValuationRequest"
+      },
+      "ValuationRequest": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "customPeers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Saved per-ticker in the renderer; a change to it re-ranks the peer table."
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "symbol"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "money": {
+    "$ref": "#/definitions/Input_money",
+    "definitions": {
+      "Input_money": {
+        "$ref": "#/definitions/MoneyRequest"
+      },
+      "MoneyRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "economic": {
+    "$ref": "#/definitions/Input_economic",
+    "definitions": {
+      "Input_economic": {
+        "$ref": "#/definitions/EconomicRequest"
+      },
+      "EconomicRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean",
+            "description": "Ignore the cached payload and re-download every provider."
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "institutionActivity": {
+    "$ref": "#/definitions/Input_institutionActivity",
+    "definitions": {
+      "Input_institutionActivity": {
+        "$ref": "#/definitions/InstitutionActivityRequest"
+      },
+      "InstitutionActivityRequest": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "number"
+          },
+          "quarter": {
+            "type": "string"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "institutionTickerActivity": {
+    "$ref": "#/definitions/Input_institutionTickerActivity",
+    "definitions": {
+      "Input_institutionTickerActivity": {
+        "$ref": "#/definitions/InstitutionTickerActivityRequest"
+      },
+      "InstitutionTickerActivityRequest": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "symbol"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "ipoUpcoming": {
+    "$ref": "#/definitions/Input_ipoUpcoming",
+    "definitions": {
+      "Input_ipoUpcoming": {
+        "$ref": "#/definitions/IpoUpcomingRequest"
+      },
+      "IpoUpcomingRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "ipoCompleted": {
+    "$ref": "#/definitions/Input_ipoCompleted",
+    "definitions": {
+      "Input_ipoCompleted": {
+        "$ref": "#/definitions/IpoCompletedRequest"
+      },
+      "IpoCompletedRequest": {
+        "type": "object",
+        "properties": {
+          "year": {
+            "type": "number",
+            "description": "Defaults to the current year, which is the only one the reference ever asks for."
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "politicsPage": {
+    "$ref": "#/definitions/Input_politicsPage",
+    "definitions": {
+      "Input_politicsPage": {
+        "$ref": "#/definitions/PoliticsPageRequest"
+      },
+      "PoliticsPageRequest": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "number"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "politicsExport": {
+    "$ref": "#/definitions/Input_politicsExport",
+    "definitions": {
+      "Input_politicsExport": {
+        "$ref": "#/definitions/PoliticsExportRequest"
+      },
+      "PoliticsExportRequest": {
+        "type": "object",
+        "properties": {
+          "pages": {
+            "type": "number",
+            "description": "The reference export reads pages 1 through 5; the page offers deeper pulls."
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "stocks": {
+    "$ref": "#/definitions/Input_stocks",
+    "definitions": {
+      "Input_stocks": {
+        "$ref": "#/definitions/StocksRequest"
+      },
+      "StocksRequest": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "symbol"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "discoveryUniverse": {
+    "$ref": "#/definitions/Input_discoveryUniverse",
+    "definitions": {
+      "Input_discoveryUniverse": {
+        "$ref": "#/definitions/Record%3Cstring%2Cnever%3E"
+      },
+      "Record<string,never>": {
+        "type": "object",
+        "additionalProperties": {
+          "not": {}
+        }
+      }
+    }
+  },
+  "discovery": {
+    "$ref": "#/definitions/Input_discovery",
+    "definitions": {
+      "Input_discovery": {
+        "$ref": "#/definitions/DiscoveryRequest"
+      },
+      "DiscoveryRequest": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "optionsChain": {
+    "$ref": "#/definitions/Input_optionsChain",
+    "definitions": {
+      "Input_optionsChain": {
+        "$ref": "#/definitions/OptionsChainRequest"
+      },
+      "OptionsChainRequest": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "expiry": {
+            "type": "string",
+            "description": "Empty, or an expiry no longer listed, falls back to the nearest live one."
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "symbol"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "optionsExpirations": {
+    "$ref": "#/definitions/Input_optionsExpirations",
+    "definitions": {
+      "Input_optionsExpirations": {
+        "$ref": "#/definitions/OptionsExpirationsRequest"
+      },
+      "OptionsExpirationsRequest": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "symbol"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "projections": {
+    "$ref": "#/definitions/Input_projections",
+    "definitions": {
+      "Input_projections": {
+        "$ref": "#/definitions/ProjectionsRequest"
+      },
+      "ProjectionsRequest": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "timeframe": {
+            "$ref": "#/definitions/ChartsInterval"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "symbol",
+          "timeframe"
+        ],
+        "additionalProperties": false
+      },
+      "ChartsInterval": {
+        "type": "string",
+        "enum": [
+          "1 Minute",
+          "5 Minutes",
+          "15 Minutes",
+          "1 Hour",
+          "4 Hours",
+          "1 Day",
+          "1 Week",
+          "1 Month"
+        ]
+      }
+    }
+  },
+  "backtest": {
+    "$ref": "#/definitions/Input_backtest",
+    "definitions": {
+      "Input_backtest": {
+        "$ref": "#/definitions/BacktestRequest"
+      },
+      "BacktestRequest": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/BacktestRow"
+            }
+          },
+          "compareSymbol": {
+            "type": "string"
+          },
+          "interval": {
+            "$ref": "#/definitions/BacktestInterval"
+          },
+          "range": {
+            "$ref": "#/definitions/BacktestRange"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "rows",
+          "compareSymbol",
+          "interval",
+          "range"
+        ],
+        "additionalProperties": false
+      },
+      "BacktestRow": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "weight": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "symbol",
+          "weight"
+        ],
+        "additionalProperties": false
+      },
+      "BacktestInterval": {
+        "type": "string",
+        "enum": [
+          "1D",
+          "1W"
+        ]
+      },
+      "BacktestRange": {
+        "type": "string",
+        "enum": [
+          "Max",
+          "5Y",
+          "3Y",
+          "1Y",
+          "YTD"
+        ]
+      }
+    }
+  },
+  "quantScan": {
+    "$ref": "#/definitions/Input_quantScan",
+    "definitions": {
+      "Input_quantScan": {
+        "$ref": "#/definitions/QuantScanRequest"
+      },
+      "QuantScanRequest": {
+        "type": "object",
+        "properties": {
+          "forceUniverseRefresh": {
+            "type": "boolean"
+          },
+          "latestOnly": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "quantPair": {
+    "$ref": "#/definitions/Input_quantPair",
+    "definitions": {
+      "Input_quantPair": {
+        "$ref": "#/definitions/QuantPairRequest"
+      },
+      "QuantPairRequest": {
+        "type": "object",
+        "properties": {
+          "left": {
+            "type": "string"
+          },
+          "right": {
+            "type": "string"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "left",
+          "right"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "youtube": {
+    "$ref": "#/definitions/Input_youtube",
+    "definitions": {
+      "Input_youtube": {
+        "$ref": "#/definitions/YouTubeRequest"
+      },
+      "YouTubeRequest": {
+        "type": "object",
+        "properties": {
+          "tickers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tickers"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "youtubeThumbnail": {
+    "$ref": "#/definitions/Input_youtubeThumbnail",
+    "definitions": {
+      "Input_youtubeThumbnail": {
+        "$ref": "#/definitions/YouTubeThumbnailRequest"
+      },
+      "YouTubeThumbnailRequest": {
+        "type": "object",
+        "properties": {
+          "videoId": {
+            "type": "string"
+          },
+          "thumbnailUrl": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "videoId",
+          "thumbnailUrl"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "settings": {
+    "$ref": "#/definitions/Input_settings",
+    "definitions": {
+      "Input_settings": {
+        "$ref": "#/definitions/Record%3Cstring%2Cnever%3E"
+      },
+      "Record<string,never>": {
+        "type": "object",
+        "additionalProperties": {
+          "not": {}
+        }
+      }
+    }
+  },
+  "mutateSettings": {
+    "$ref": "#/definitions/Input_mutateSettings",
+    "definitions": {
+      "Input_mutateSettings": {
+        "$ref": "#/definitions/AppSettingsMutation"
+      },
+      "AppSettingsMutation": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "setClockCountry"
+              },
+              "code": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "code"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "setTime12h"
+              },
+              "value": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "type",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "setTabHidden"
+              },
+              "id": {
+                "type": "string"
+              },
+              "hidden": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "type",
+              "id",
+              "hidden"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "setTabFavorite"
+              },
+              "id": {
+                "type": "string"
+              },
+              "favorite": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "type",
+              "id",
+              "favorite"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "setSidebarCollapsed"
+              },
+              "value": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "type",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "moveTab"
+              },
+              "id": {
+                "type": "string"
+              },
+              "direction": {
+                "type": "number",
+                "enum": [
+                  -1,
+                  1
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "id",
+              "direction"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "resetNavigation"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "setTabObscured"
+              },
+              "id": {
+                "type": "string"
+              },
+              "obscured": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "type",
+              "id",
+              "obscured"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "setBacktestPage"
+              },
+              "value": {
+                "$ref": "#/definitions/BacktestPageSettings"
+              }
+            },
+            "required": [
+              "type",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "setSignalsPage"
+              },
+              "value": {
+                "$ref": "#/definitions/SignalsPageSettings"
+              }
+            },
+            "required": [
+              "type",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "setQuantPage"
+              },
+              "value": {
+                "$ref": "#/definitions/QuantPageSettings"
+              }
+            },
+            "required": [
+              "type",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "setYouTubePage"
+              },
+              "value": {
+                "$ref": "#/definitions/YouTubePageSettings"
+              }
+            },
+            "required": [
+              "type",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        ],
+        "description": "Every write the Settings page can make, answered with the whole re-read document."
+      },
+      "BacktestPageSettings": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/BacktestRow"
+            }
+          },
+          "compareSymbol": {
+            "type": "string"
+          },
+          "interval": {
+            "$ref": "#/definitions/BacktestInterval"
+          },
+          "range": {
+            "$ref": "#/definitions/BacktestRange"
+          },
+          "splitterSizes": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        "required": [
+          "rows",
+          "compareSymbol",
+          "interval",
+          "range",
+          "splitterSizes"
+        ],
+        "additionalProperties": false
+      },
+      "BacktestRow": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "weight": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "symbol",
+          "weight"
+        ],
+        "additionalProperties": false
+      },
+      "BacktestInterval": {
+        "type": "string",
+        "enum": [
+          "1D",
+          "1W"
+        ]
+      },
+      "BacktestRange": {
+        "type": "string",
+        "enum": [
+          "Max",
+          "5Y",
+          "3Y",
+          "1Y",
+          "YTD"
+        ]
+      },
+      "SignalsPageSettings": {
+        "type": "object",
+        "properties": {
+          "filter": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "all"
+              },
+              {
+                "$ref": "#/definitions/DayTradingStatus"
+              }
+            ]
+          },
+          "setup": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "all"
+              },
+              {
+                "$ref": "#/definitions/DayTradingSetup"
+              }
+            ]
+          },
+          "search": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "filter",
+          "setup",
+          "search"
+        ],
+        "additionalProperties": false
+      },
+      "DayTradingStatus": {
+        "type": "string",
+        "enum": [
+          "ready",
+          "watching",
+          "expired",
+          "invalidated",
+          "market_closed",
+          "awaiting_data",
+          "stale",
+          "error"
+        ]
+      },
+      "DayTradingSetup": {
+        "type": "string",
+        "enum": [
+          "opening_range",
+          "vwap_pullback"
+        ]
+      },
+      "QuantPageSettings": {
+        "type": "object",
+        "properties": {
+          "activeTab": {
+            "$ref": "#/definitions/QuantActiveTab"
+          },
+          "screenFilter": {
+            "$ref": "#/definitions/QuantScreenFilter"
+          },
+          "pairFilter": {
+            "$ref": "#/definitions/QuantPairFilter"
+          },
+          "search": {
+            "type": "string"
+          },
+          "pairLeft": {
+            "type": "string"
+          },
+          "pairRight": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "activeTab",
+          "screenFilter",
+          "pairFilter",
+          "search",
+          "pairLeft",
+          "pairRight"
+        ],
+        "additionalProperties": false
+      },
+      "QuantActiveTab": {
+        "type": "string",
+        "enum": [
+          "screener",
+          "pairs"
+        ]
+      },
+      "QuantScreenFilter": {
+        "type": "string",
+        "enum": [
+          "all",
+          "top_quartile",
+          "momentum",
+          "oversold",
+          "overbought",
+          "low_volatility"
+        ]
+      },
+      "QuantPairFilter": {
+        "type": "string",
+        "enum": [
+          "all",
+          "stationary",
+          "stretched",
+          "fast"
+        ]
+      },
+      "YouTubePageSettings": {
+        "type": "object",
+        "properties": {
+          "sortColumn": {
+            "type": "number",
+            "description": "-1 follows the reference's newest-first default; 0-6 address the table columns."
+          },
+          "sortDescending": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sortColumn",
+          "sortDescending"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

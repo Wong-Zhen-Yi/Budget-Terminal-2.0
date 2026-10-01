@@ -33,6 +33,7 @@ try {
           hiddenTabs: [], favoriteTabs: [], obscuredTabs: [], sidebarCollapsed: false, sourcePath: '',
           backtestPage: DEFAULT_BACKTEST_PAGE_SETTINGS, quantPage: DEFAULT_QUANT_PAGE_SETTINGS,
           youtubePage: DEFAULT_YOUTUBE_PAGE_SETTINGS, signalsPage: { filter: 'all', setup: 'all', search: '' },
+          automaticBackup: { path: '/fixture/Downloads/budget-terminal-backup.json', savedAt: Date.now() },
         }
         const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, refetchOnMount: false } } })
         const check = (ok, message) => { if (!ok) throw Error(message) }
@@ -40,6 +41,18 @@ try {
         window.runProbe = async () => {
           createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><App /></QueryClientProvider>)
           await settle()
+          const light = name => document.querySelector('[data-mcp-light="' + name + '"]')
+          check(light('active')?.dataset.state === 'off', 'Idle MCP activity light should be off')
+          check(light('connected')?.dataset.state === 'off', 'MCP readiness alone must not imply a connected client')
+          client.setQueryData(['mcpStatus'], { available: true, connected: true, active: true, tools: 76 })
+          await settle()
+          check(light('active')?.dataset.state === 'on', 'MCP activity light did not turn on')
+          check(light('connected')?.dataset.state === 'on', 'MCP connection light did not turn on')
+          check(light('active').getBoundingClientRect().width === 8, 'MCP light has no visible size')
+          client.setQueryData(['mcpStatus'], { available: false, error: 'Fixture MCP startup failure' })
+          await settle()
+          check(light('active')?.dataset.state === 'error' && light('connected')?.dataset.state === 'error', 'MCP failure lights are missing')
+          client.setQueryData(['mcpStatus'], { available: true, tools: 76 })
           // Complete one measured page; leave the others pending to exercise navigation.
           await new Promise(resolve => setTimeout(resolve, 5600))
           check(useDataHealth.getState().startup?.planned > 0, 'Startup queue did not begin')
@@ -73,6 +86,18 @@ try {
           check(JSON.stringify(orderRows.map(row => row.dataset.startupPage)) === JSON.stringify(pageOrder), 'Settings does not show the actual startup order')
           check(orderRows.at(-1).innerText.includes('90.0s'), 'Saved heavy-page load time is missing')
           check(orderRows.some(row => row.innerText.includes('Not measured')), 'Unmeasured page is presented as timed')
+          check(document.body.innerText.includes('/fixture/Downloads/budget-terminal-backup.json'), 'Automatic backup file is not shown in Settings')
+          check(document.body.innerText.includes('Ready · 76 tools for ChatGPT / Codex'), 'MCP status is not visible in Settings')
+          client.setQueryData(['mcpStatus'], { available: false, error: 'Fixture MCP startup failure' })
+          await settle()
+          check(document.body.innerText.includes('Fixture MCP startup failure'), 'MCP startup failure is not visible')
+          client.setQueryData(['mcpStatus'], { available: true, tools: 76 })
+          client.setQueryData(['settings'], result => ({ ...result, data: { ...result.data,
+            automaticBackup: { ...result.data.automaticBackup, error: 'Fixture backup failure' } } }))
+          await settle()
+          check([...document.querySelectorAll('[role=alert]')].some(alert => alert.textContent.includes('Automatic backup failed: Fixture backup failure')), 'Backup failure is not visible')
+          client.setQueryData(['settings'], result => ({ ...result, data: { ...result.data, automaticBackup: window.fixtureSettings.automaticBackup } }))
+          await settle()
           window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))
           await settle()
           check(document.activeElement?.getAttribute('aria-label') === 'Search pages', 'Picker input cannot receive focus')
@@ -118,6 +143,7 @@ try {
       window.api = new Proxy({
         platform: 'win32',
         onPortfolioChanged: () => () => {},
+        mcpStatus: async () => ({ available: true, tools: 76 }),
         settings: async () => ok(window.fixtureSettings),
         portfolio: async () => ok({ portfolios: [], activeId: 'main', mainId: 'main', sourcePath: '' }),
         signals: async request => {

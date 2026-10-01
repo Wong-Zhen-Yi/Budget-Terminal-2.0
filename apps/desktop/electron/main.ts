@@ -16,6 +16,9 @@ if (!ownsInstance) app.quit()
 let disposeIpc: (() => void) | null = null
 let releaseDataSession: (() => void) | null = null
 let closeCache: (() => void) | null = null
+let backupPending: (() => boolean) | null = null
+let flushBackup: (() => Promise<void>) | null = null
+let stopMcp: (() => Promise<void>) | null = null
 const rendererUrl = isDev && process.env.ELECTRON_RENDERER_URL
   ? process.env.ELECTRON_RENDERER_URL
   : pathToFileURL(join(dirname, '../renderer/index.html')).href
@@ -96,6 +99,12 @@ if (ownsInstance) app.whenReady().then(async () => {
       ]))
     }
     releaseDataSession = acquireDataSession(app.getAppPath())
+    const backup = await import('./services/automaticBackup.js')
+    backup.configureAutomaticBackup(app.getPath('downloads'))
+    backupPending = backup.automaticBackupPending
+    flushBackup = backup.flushAutomaticBackup
+    // Create a baseline only when absent; keep the last backup if local data has gone missing.
+    await backup.initializeAutomaticBackup().catch((error) => console.warn('Automatic backup failed:', error))
     // Resolve paths and take ownership before a service opens its persistent cache.
     const { registerIpcHandlers } = await import('./ipc/handlers.js')
     const { cache } = await import('./services/cache.js')
@@ -105,6 +114,8 @@ if (ownsInstance) app.whenReady().then(async () => {
       return Boolean(frame && frame === event.sender.mainFrame &&
         BrowserWindow.fromWebContents(event.sender) && isTrustedRendererUrl(frame.url, rendererUrl))
     })
+    const { startMcpHost } = await import('./mcp/host.js')
+    stopMcp = await startMcpHost()
     createWindow()
   } catch (error) {
     dialog.showErrorBox('Budget Terminal could not start', error instanceof Error ? error.message : String(error))
@@ -119,6 +130,22 @@ if (ownsInstance) app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+let finishingQuit = false
+let drainedQuit = false
+app.on('before-quit', (event) => {
+  if (drainedQuit || (!stopMcp && !backupPending?.())) return
+  event.preventDefault()
+  if (finishingQuit) return
+  finishingQuit = true
+  void (async () => {
+    await stopMcp?.()
+    await flushBackup?.()
+  })().catch((error) => console.warn('Shutdown flush failed:', error)).finally(() => {
+    drainedQuit = true
+    app.quit()
+  })
 })
 
 app.on('will-quit', () => {

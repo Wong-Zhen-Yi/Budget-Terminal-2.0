@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { CLOCK_COUNTRIES, DEFAULT_CLOCK_COUNTRY } from '@shared/contract'
 import { api } from '@/api/client'
 import { clockTime } from '@/lib/format'
+import { McpActivity } from './McpActivity'
 
 interface TabBarProps {
   onOpenPicker: () => void
@@ -40,7 +41,9 @@ export function TabBar({
         BT
       </span>
 
-      <span className={`min-w-0 flex-1 truncate text-2xs tracking-wide text-text-muted ${isMac ? 'px-1' : 'px-2'}`}>BUDGET TERMINAL</span>
+      <span className={`min-w-0 truncate text-2xs tracking-wide text-text-muted ${isMac ? 'px-1' : 'px-2'}`}>BUDGET TERMINAL</span>
+      <McpActivity />
+      <div className="min-w-0 flex-1" />
       <button type="button" onClick={onOpenPicker}
         className={`no-drag flex items-center gap-4 border border-border-strong px-3 py-2 text-2xs text-text-muted hover:bg-surface-hover ${isMac ? 'rounded-lg bg-surface-raised' : 'rounded'}`}>
         Find a page <kbd className="num">{isMac ? '⌘ K' : 'Ctrl K'}</kbd>
