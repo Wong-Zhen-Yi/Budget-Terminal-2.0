@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 
 import type { Envelope, OptionBucket } from '@shared/contract'
 import { api } from '@/api/client'
+import { useMacroCharts } from '@/api/dashboardQueries'
+import { MACRO_SYMBOLS } from '@shared/contract'
 import { useChart, useNews, useOptions, usePortfolio, useQuotes, useTargets } from '@/api/queries'
 import { ChartPanel } from '@/components/dashboard/ChartPanel'
 import { ChartToolbar } from '@/components/dashboard/ChartToolbar'
@@ -60,6 +62,12 @@ export function DashboardPage({
   const optionsQuery = useOptions(symbol)
   const targetsQuery = useTargets(holdings)
   const newsQuery = useNews(holdings)
+  const macroCharts = useMacroCharts()
+  const macroChartStatus = useMemo(() => macroCharts.map((query, index) => ({
+    label: `${MACRO_SYMBOLS[index].label} history`,
+    envelope: query.data,
+    loading: query.isFetching,
+  })), [macroCharts])
 
   const buckets: OptionBucket[] = optionsQuery.data?.data.buckets ?? []
 
@@ -73,6 +81,7 @@ export function DashboardPage({
         { label: 'Options', envelope: optionsQuery.data, loading: optionsQuery.isFetching },
         { label: 'Targets', envelope: targetsQuery.data, loading: targetsQuery.isFetching },
         { label: 'News', envelope: newsQuery.data, loading: newsQuery.isFetching },
+        ...macroChartStatus,
       ],
       portfolioQuery.data?.data.sourcePath ?? '',
     )
@@ -90,6 +99,7 @@ export function DashboardPage({
     targetsQuery.isFetching,
     newsQuery.data,
     newsQuery.isFetching,
+    macroChartStatus,
   ])
 
   const selectTicker = useCallback(
@@ -175,7 +185,7 @@ export function DashboardPage({
 
       {/* Centre and right share the macro bar across their combined width. */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1">
-        <MacroBar macro={quotesQuery.data?.data.macro ?? {}} loading={quotesQuery.isLoading} />
+        <MacroBar macro={quotesQuery.data?.data.macro ?? {}} loading={quotesQuery.isLoading} charts={macroCharts} />
 
         <div className="flex min-h-0 min-w-0 flex-1 gap-1">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1">

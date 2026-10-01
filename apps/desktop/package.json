@@ -14,6 +14,7 @@
     "probe:rate": "tsx scripts/probe-rate.ts",
     "probe:loading": "tsx scripts/probe-loading.ts",
     "probe:loading-ui": "tsx scripts/probe-loading-ui.ts",
+    "probe:dashboard-ui": "tsx scripts/probe-dashboard-ui.ts",
     "probe:mac-relaunch": "tsx scripts/probe-mac-relaunch.ts",
     "probe:relaunch": "tsx scripts/probe-mac-relaunch.ts",
     "probe:navigation": "tsx scripts/probe-navigation.ts",

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 
-import { CARD_INTERVALS, type AppSettings, type PortfolioPayload } from '@shared/contract'
+import { CARD_INTERVALS, MACRO_SYMBOLS, type AppSettings, type PortfolioPayload } from '@shared/contract'
 import { startupPages } from '@shared/navigation'
 import { startupPageOrder } from '@shared/startupLoading'
 import { SP500_PARTS } from '@shared/sp500'
@@ -98,6 +98,16 @@ export function buildTasks(
   const tasks: WarmTask[] = []
 
   const dashboard = useDashboard.getState()
+  for (const { symbol, label } of MACRO_SYMBOLS) {
+    tasks.push({
+      tab: 'dashboard', label: `${label} sparkline`,
+      run: (client, backgroundOrder) => warmStartupQuery(client, {
+        queryKey: queryKeys.chart(symbol, '1 Day'),
+        queryFn: () => api.chart({ symbol, timeframe: '1 Day', background: true, backgroundOrder }),
+        staleTime: queryFreshness(queryKeys.chart(symbol, '1 Day')),
+      }),
+    })
+  }
   if (dashboard.symbol) {
     tasks.push({
       tab: 'dashboard', label: 'Dashboard chart',

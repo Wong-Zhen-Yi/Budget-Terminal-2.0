@@ -4,7 +4,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { computeExposure, emptyRiskMetrics } from '../electron/shared/analytics.js'
 import { ok } from '../electron/shared/envelope.js'
-import { TABS, type AnalyticsPayload } from '../electron/shared/contract.js'
+import { MACRO_SYMBOLS, TABS, type AnalyticsPayload } from '../electron/shared/contract.js'
 import { runWarmTasks, waitForWarmSlot, warmQuery } from '../src/api/warmQueue.js'
 import { recentPages, startupPages } from '../electron/shared/navigation.js'
 import { recordStartupLoad, restoreStartupLoads, startupPageOrder } from '../electron/shared/startupLoading.js'
@@ -54,6 +54,12 @@ const portfolio = {
 const scheduled = new Set(buildTasks(portfolio, undefined, { stocks: 'AAPL', fundamentals: 'AAPL' },
   { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 }).map((task) => task.tab))
 const sharedOrLocal = new Set(['beta', 'bonds', 'dictionary', 'options', 'settings'])
+const macroTasks = buildTasks(undefined, undefined, { stocks: 'AAPL', fundamentals: 'AAPL' },
+  { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 })
+for (const { label } of MACRO_SYMBOLS) {
+  assert(macroTasks.some(task => task.tab === 'dashboard' && task.label === `${label} sparkline`),
+    `${label} history must warm even without holdings`)
+}
 for (const page of allPages) {
   assert(scheduled.has(page) || sharedOrLocal.has(page), `${page} is absent from startup loading`)
 }
