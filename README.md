@@ -90,9 +90,11 @@ recovers that older portfolio if the current book is absent or still the empty
 default. It keeps a copy of an empty current book before replacement and never
 replaces a portfolio with holdings, cash, options, or custom organization.
 
-Only one desktop process can own a data folder at a time. A second process
-reports that the folder is in use. The operating system releases ownership after
-a crash; no manual lock-file cleanup is needed.
+Only one desktop process can own a data folder at a time. Launching the app again
+brings the existing window forward, including when it is hidden or minimized.
+A separate process using the same data folder still reports that the folder is
+in use. The operating system releases ownership after a crash; no manual
+lock-file cleanup is needed.
 
 Stores start empty and writes are serialized and atomic. Settings > User Data
 exports portfolios, the options tracker, personal finance, Cards and settings in
@@ -138,6 +140,7 @@ npm run probe:charts -- --offline
 npm run probe:stocks -- --offline
 npm run probe:loading --workspace budget-terminal-desktop
 npm run probe:session --workspace budget-terminal-desktop
+npm run probe:relaunch --workspace budget-terminal-desktop
 npm run probe:security --workspace budget-terminal-desktop
 npm run probe:data-health --workspace budget-terminal-desktop
 ```

@@ -5,20 +5,16 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createRequire } from 'node:module'
 
-if (process.platform !== 'darwin') {
-  console.log('macOS relaunch probe skipped on this platform')
-  process.exit(0)
-}
-
-const directory = await mkdtemp(join(tmpdir(), 'budget-mac-relaunch-'))
+const directory = await mkdtemp(join(tmpdir(), 'budget-relaunch-'))
 const electron = createRequire(import.meta.url)('electron') as string
 const entry = join(import.meta.dirname, 'fixtures', 'mac-relaunch.mjs')
 const environment: NodeJS.ProcessEnv = { ...process.env, APPDATA: directory, LOCALAPPDATA: directory }
 delete environment.ELECTRON_RUN_AS_NODE
 
-function launch(primary: boolean) {
+function launch(primary: boolean, mode: string) {
   const child = spawn(electron, [entry], {
-    env: { ...environment, BUDGET_PROBE_PRIMARY: primary ? '1' : '0' },
+    env: { ...environment, BUDGET_PROBE_PRIMARY: primary ? '1' : '0', BUDGET_PROBE_MODE: mode },
+    windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   let output = ''
@@ -33,19 +29,27 @@ async function waitFor(check: () => boolean, label: string): Promise<void> {
   assert.ok(check(), `Timed out waiting for ${label}`)
 }
 
-const first = launch(true)
-let second: ReturnType<typeof launch> | undefined
 try {
-  await waitFor(() => first.output().includes('CLOSED'), 'first window to close')
-  assert.equal(first.child.exitCode, null, first.output())
-  second = launch(false)
-  await waitFor(() => first.output().includes('REOPENED'), 'second launch to reopen the first process')
-  await waitFor(() => second!.child.exitCode !== null, 'second process to exit')
-  assert.equal(second.child.exitCode, 0, second.output())
-  assert.doesNotMatch(second.output(), /already using this data folder/)
-  console.log('PASS: macOS second launch reopened the existing process and rendered its window')
+  const modes = process.platform === 'darwin' ? ['closed', 'hidden', 'minimized'] : ['hidden', 'minimized']
+  for (const mode of modes) {
+    const first = launch(true, mode)
+    let second: ReturnType<typeof launch> | undefined
+    try {
+      await waitFor(() => first.output().includes(mode.toUpperCase()) || first.child.exitCode !== null, `first window to become ${mode}`)
+      assert.equal(first.child.exitCode, null, first.output())
+      assert.ok(first.output().includes(mode.toUpperCase()), first.output())
+      second = launch(false, mode)
+      await waitFor(() => first.output().includes('REOPENED'), 'second launch to reopen the first process')
+      await waitFor(() => second!.child.exitCode !== null && first.child.exitCode !== null, 'both probe processes to exit')
+      assert.equal(first.child.exitCode, 0, first.output())
+      assert.equal(second.child.exitCode, 0, second.output())
+      assert.doesNotMatch(second.output(), /already using this data folder/)
+      console.log(`PASS: second launch restored the ${mode} window in the existing process and rendered its content`)
+    } finally {
+      first.child.kill()
+      second?.child.kill()
+    }
+  }
 } finally {
-  first.child.kill()
-  second?.child.kill()
   await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
 }
