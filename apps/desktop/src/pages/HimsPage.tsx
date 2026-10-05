@@ -58,6 +58,8 @@ export function HimsPage({ onStatusChange, onNavigate }: {
   const [selectedPeriod, setSelectedPeriod] = useState('')
   const data = query.data?.data
   const busy = refreshing || query.isFetching
+  const hasContent = Boolean(data?.market || data?.financials || data?.earnings)
+  const loading = busy && !hasContent
   const reports = data?.earnings?.reports ?? []
   const report = reports.find(entry => entry.period === selectedPeriod) ?? reports[0]
   const warning = (block: HimsBlock) => query.data?.errors.filter(error => error.symbol === block).map(error => error.reason).join(' · ') || undefined
@@ -98,11 +100,11 @@ export function HimsPage({ onStatusChange, onNavigate }: {
       <span className="num text-sm font-bold">{amount(stats?.price, true)}</span>
       <span className={`num text-xs ${stats && stats.change >= 0 ? 'text-up' : 'text-down'}`}>{percent(stats?.change, true)}</span>
       <span className="text-2xs text-text-muted">NYSE · USD · Consumer health platform</span>
-      <Button className="ml-auto" variant="accent" disabled={busy} onClick={onRefresh}>{busy ? 'Loading HIMS…' : 'Refresh'}</Button>
+      <Button className="ml-auto" variant="accent" disabled={busy} onClick={onRefresh}>{busy ? loading ? 'Loading HIMS…' : 'Updating HIMS…' : 'Refresh'}</Button>
       {['charts', 'fundamentals', 'options', 'valuation'].map(id => <Button key={id} className="capitalize" onClick={() => onNavigate(id, 'HIMS')}>{id}</Button>)}
     </div>
     <div className="flex shrink-0 flex-wrap items-center gap-2 text-2xs text-text-muted">
-      <span>{busy ? 'Loading Hims & Hers dashboard…' : `${query.data?.meta.freshness ?? 'Unavailable'} · fetched ${data?.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : 'unavailable'}`} · price from daily bars{data?.market?.chart.candles.at(-1) ? ` as of ${new Date(data.market.chart.candles.at(-1)!.time * 1000).toISOString().slice(0, 10)}` : ''}</span>
+      <span>{loading ? 'Loading Hims & Hers dashboard…' : `${busy ? 'Updating cached dashboard · ' : ''}${query.data?.meta.freshness ?? 'Unavailable'} · fetched ${data?.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : 'unavailable'}`} · price from daily bars{data?.market?.chart.candles.at(-1) ? ` as of ${new Date(data.market.chart.candles.at(-1)!.time * 1000).toISOString().slice(0, 10)}` : ''}</span>
       <label className="ml-auto flex items-center gap-2">Reporting quarter<select aria-label="Reporting quarter" className="no-drag border border-border-strong bg-surface-raised p-1 text-text" value={report?.period ?? ''} onChange={event => setSelectedPeriod(event.target.value)} disabled={!reports.length}>
         {!reports.length ? <option value="">Unavailable</option> : reports.map(entry => <option key={entry.period}>{entry.period}</option>)}
       </select></label>

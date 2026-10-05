@@ -50,10 +50,12 @@ try {
     stdin: { resolveDir: root, loader: 'tsx', contents: `
       import { createRoot } from 'react-dom/client'
       import { useEffect } from 'react'
-      import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+      import { QueryClient, QueryClientProvider, dehydrate, hydrate } from '@tanstack/react-query'
       import { HimsPage } from './src/pages/HimsPage'
       import { useReloadAll } from './src/api/queries'
-      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      import { buildTasks } from './src/api/prefetch'
+      import { rendererQueryPersister, shouldPersistRemoteQuery, RENDERER_CACHE_BUSTER } from './src/api/queryPersistence'
+      let client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
       const check = (ok, message) => { if (!ok) throw Error(message) }
       const settle = () => new Promise(resolve => setTimeout(resolve, 150))
       const text = () => document.body.innerText
@@ -96,7 +98,10 @@ try {
         check(text().includes('Monthly online revenue per average subscriber'), 'Historical KPI definition did not change')
         check(window.calls === calls, 'Quarter selection repeated provider load')
         select.value = '2026 Q2'; select.dispatchEvent(new Event('change', { bubbles: true })); await settle()
-        click('Refresh'); await settle(); check(window.forced, 'Refresh did not force data reload')
+        window.ready = false; click('Refresh'); await settle()
+        check(text().includes('Updating cached dashboard') && text().includes('2.9M'), 'Refresh hid cached content or presented another initial load')
+        check(!text().includes('Loading Hims & Hers dashboard'), 'Cached refresh is labelled as initial loading')
+        window.ready = true; await settle(); check(window.forced, 'Refresh did not force data reload')
         window.forced = false; await window.reloadAll(); await settle(); check(window.forced, 'F5 reload path did not force HIMS')
         window.mode = 'partial'; click('Refresh'); await settle()
         check(text().includes('earnings: Fixture report unavailable'), 'Partial failure is hidden')
@@ -109,17 +114,41 @@ try {
         check(text().includes('Price history unavailable'), 'Empty market state missing')
         window.mode = 'good'; click('Refresh'); await settle()
         check(!document.querySelector('[role=status]'), 'Recovery left a stale error')
-        // Reopening after startup uses the exact warmed query and makes no new request.
+        // Age the snapshot past its TTL. A revisit still reuses it until refresh/startup.
+        const saved = client.getQueryData(['hims'])
+        client.setQueryData(['hims'], saved, { updatedAt: Date.now() - 10 * 60_000 })
         root.render(<QueryClientProvider client={client}><div /></QueryClientProvider>); await settle()
         const warmCalls = window.calls
         root.render(<QueryClientProvider client={client}><Page /></QueryClientProvider>); await settle()
         check(window.calls === warmCalls && text().includes('2.9M'), 'Warmed page repeated its first load')
+        // Persist through the real IndexedDB adapter and restore into a new client.
+        const snapshot = { timestamp: Date.now(), buster: RENDERER_CACHE_BUSTER, clientState: dehydrate(client, { shouldDehydrateQuery: shouldPersistRemoteQuery }) }
+        check(snapshot.clientState.queries.some(query => query.queryKey[0] === 'hims'), 'HIMS is excluded from persistence')
+        await rendererQueryPersister.persistClient(snapshot)
+        let restored
+        for (let attempt = 0; attempt < 30 && !restored; attempt++) {
+          await settle(); restored = await rendererQueryPersister.restoreClient()
+        }
+        check(restored, 'HIMS snapshot was not written to IndexedDB')
+        root.render(null); await settle(); client.clear()
+        client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        hydrate(client, restored.clientState)
+        const restoreCalls = window.calls
+        root.render(<QueryClientProvider client={client}><Page /></QueryClientProvider>); await settle()
+        check(window.calls === restoreCalls && text().includes('2.9M') && text().includes('cached'), 'Restored HIMS content triggered another initial load')
+        // Startup must still update expired data, including HIMS before its first visit.
+        root.render(null); await settle()
+        const task = buildTasks(undefined, undefined, { stocks: 'AAPL', fundamentals: 'AAPL' }, { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 }).find(task => task.tab === 'hims')
+        check(task, 'HIMS startup task is missing'); await task.run(client, 7)
+        check(window.calls === restoreCalls + 1 && window.lastRequest.background && window.lastRequest.backgroundOrder === 7, 'Expired HIMS data was not refreshed at startup')
+        root.render(<QueryClientProvider client={client}><Page /></QueryClientProvider>); await settle()
+        check(window.calls === restoreCalls + 1 && text().includes('2.9M'), 'First visit repeated the startup load')
         click('1Y'); await settle()
         const priceBox = document.querySelector('[data-hims-price-range]')
         check(priceBox.querySelector('svg').getBoundingClientRect().bottom <= priceBox.getBoundingClientRect().bottom + 1, 'Price chart overlaps volume: ' + JSON.stringify({ box: priceBox.getBoundingClientRect().toJSON(), svg: priceBox.querySelector('svg').getBoundingClientRect().toJSON() }))
         check(priceBox.querySelector('svg').getBoundingClientRect().width <= priceBox.getBoundingClientRect().width, 'Price chart width exceeds its panel: ' + JSON.stringify({ box: priceBox.getBoundingClientRect().toJSON(), svg: priceBox.querySelector('svg').getBoundingClientRect().toJSON() }))
         check(![...document.querySelectorAll('svg path')].some(path => /NaN|Infinity/.test(path.getAttribute('d') || '')), 'Chart produced invalid paths')
-        return 'PASS: loading, warmed mount, metrics, ranges, sources, ticker shortcuts, refresh/F5, partial/offline/failed states and recovery'
+        return 'PASS: loading, cached refresh, expired revisit, IndexedDB restoration, startup warming, metrics, ranges, sources, ticker shortcuts, refresh/F5, partial/offline/failed states and recovery'
       }
     ` }, bundle: true, jsx: 'automatic', write: false, format: 'iife', minify: true,
     alias: { '@': join(root, 'src'), '@shared': join(root, 'electron/shared') }, define: { 'process.env.NODE_ENV': '"production"' },
@@ -131,7 +160,7 @@ try {
       const good = ${JSON.stringify(good)};
       const empty = ${JSON.stringify(emptyHimsPayload())};
       window.api = { openExternal: async url => { window.opened = url }, hims: async request => {
-        window.calls++; while (!window.ready) await new Promise(resolve => setTimeout(resolve, 50));
+        window.calls++; window.lastRequest = request; while (!window.ready) await new Promise(resolve => setTimeout(resolve, 50));
         window.forced = request.force;
         if (window.mode === 'reject') throw Error('Fixture network offline');
         const errors = window.mode === 'partial' ? [{ source: 'fixture', operation: 'hims', symbol: 'earnings', reason: 'Fixture report unavailable' }]
