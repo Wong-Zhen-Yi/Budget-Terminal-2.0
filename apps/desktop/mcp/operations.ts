@@ -45,6 +45,7 @@ export const operations = {
   mu: 'Get Micron (MU) market data, financials, earnings and DRAM/NAND/HBM disclosures.',
   amzn: 'Get Amazon (AMZN) market data, eight-quarter financial trends, AWS and retail segments, revenue categories, cash flow and guidance.',
   avgo: 'Get Broadcom (AVGO) market data, financials, semiconductor/software segments, AI revenue and earnings guidance.',
+  hims: 'Get Hims & Hers (HIMS) market data, subscriber metrics, quarterly earnings, margins, cash flow and guidance.',
   hood: 'Get Robinhood (HOOD) market data, financials, operating metrics and quarterly results.',
   forexQuotes: 'Get foreign-exchange quotes.',
   forexHistory: 'Get historical foreign-exchange prices.',

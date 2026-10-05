@@ -163,6 +163,33 @@ for (const freshness of ['partial', 'stale', 'failed'] as const) {
   amznClient.clear()
 }
 
+let himsRequests = 0
+let himsRequest: unknown
+const { emptyHimsPayload } = await import('../electron/shared/hims.js')
+Object.assign(window.api, { hims: async (request: unknown) => {
+  himsRequests++
+  himsRequest = request
+  return ok(emptyHimsPayload(), 'HIMS fixture')
+} })
+const himsSettings = { hiddenTabs: ['hims'], favoriteTabs: [] } as unknown as import('../electron/shared/contract.js').AppSettings
+const himsTask = buildTasks(undefined, himsSettings, { stocks: 'AAPL', fundamentals: 'AAPL' },
+  { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 }).find(task => task.tab === 'hims')!
+assert(himsTask, 'Unvisited HIMS must load even when hidden and without holdings')
+const himsClient = new QueryClient()
+await himsTask.run(himsClient, 10)
+assert.deepEqual(himsRequest, { background: true, backgroundOrder: 10 })
+assert(himsClient.getQueryData(['hims']), 'Startup must populate the HIMS page query')
+await warmQuery(himsClient, { queryKey: ['hims'], queryFn: () => window.api.hims({}), staleTime: 300_000 })
+assert.equal(himsRequests, 1, 'Opening warmed HIMS must not repeat its initial load')
+himsClient.clear()
+for (const freshness of ['partial', 'stale', 'failed'] as const) {
+  Object.assign(window.api, { hims: async () => ({ data: emptyHimsPayload(), errors: [],
+    meta: { source: 'HIMS fixture', freshness, fetchedAt: Date.now(), failureReason: 'HIMS reports unavailable' } }) })
+  await assert.rejects(himsTask.run(himsClient), /HIMS reports unavailable/)
+  if (freshness !== 'failed') assert(himsClient.getQueryData(['hims']), 'Usable incomplete HIMS panels must remain cached')
+  himsClient.clear()
+}
+
 // Every task must start while the slow first task is still pending. A failure
 // must remain visible and must not stop other pages from finishing.
 const parallelTasks = Array.from({ length: 12 }, (_, index) => index)

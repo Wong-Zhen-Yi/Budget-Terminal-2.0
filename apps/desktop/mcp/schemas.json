@@ -61,6 +61,7 @@
               "amzn",
               "avgo",
               "hood",
+              "hims",
               "gold",
               "oil",
               "backtest",
@@ -2034,6 +2035,23 @@
         "$ref": "#/definitions/AvgoRequest"
       },
       "AvgoRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "hims": {
+    "$ref": "#/definitions/Input_hims",
+    "definitions": {
+      "Input_hims": {
+        "$ref": "#/definitions/HimsRequest"
+      },
+      "HimsRequest": {
         "type": "object",
         "properties": {
           "force": {

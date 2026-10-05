@@ -62,6 +62,7 @@ export function queryFreshness(queryKey: QueryKey): number {
   if (root === 'amzn') return FRESHNESS.amzn
   if (root === 'avgo') return FRESHNESS.avgo
   if (root === 'hood') return FRESHNESS.hood
+  if (root === 'hims') return FRESHNESS.hims
   if (root === 'gold') return FRESHNESS.goldMarket
   if (root === 'oil') return FRESHNESS.oilMarket
   if (root === 'calendarMonth' || root === 'earningsCalendar') return FRESHNESS.calendar

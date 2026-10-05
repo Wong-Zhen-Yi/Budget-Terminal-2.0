@@ -7,6 +7,8 @@ import type { AmznPayload, AmznRequest } from './amzn.js'
 export type { AmznPayload, AmznRequest } from './amzn.js'
 import type { MuPayload, MuRequest } from './mu.js'
 export type { MuPayload, MuRequest } from './mu.js'
+import type { HimsPayload, HimsRequest } from './hims.js'
+export type { HimsPayload, HimsRequest } from './hims.js'
 import type { HoodPayload, HoodRequest } from './hood.js'
 export type { HoodPayload, HoodRequest } from './hood.js'
 import type { TechnicalMetrics } from './technicalScreen.js'
@@ -1288,6 +1290,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'amzn', label: 'AMZN', implemented: true },
   { id: 'avgo', label: 'AVGO', implemented: true },
   { id: 'hood', label: 'HOOD', implemented: true },
+  { id: 'hims', label: 'HIMS', implemented: true },
   { id: 'gold', label: 'Gold', implemented: true },
   { id: 'oil', label: 'Oil', implemented: true },
   { id: 'backtest', label: 'Backtest', implemented: true },
@@ -3402,6 +3405,7 @@ export const CHANNELS = {
   amzn: 'amzn:read',
   avgo: 'avgo:read',
   hood: 'hood:read',
+  hims: 'hims:read',
   sp500: 'sp500:read',
   sp500Breadth: 'sp500:breadth',
   gold: 'gold:read',
@@ -3574,6 +3578,7 @@ export interface DesktopApi {
   amzn(request: AmznRequest): Promise<Envelope<AmznPayload>>
   avgo(request: AvgoRequest): Promise<Envelope<AvgoPayload>>
   hood(request: HoodRequest): Promise<Envelope<HoodPayload>>
+  hims(request: HimsRequest): Promise<Envelope<HimsPayload>>
   sp500(request: Sp500Request): Promise<Envelope<Sp500Data>>
   sp500Breadth(request: Sp500BreadthRequest): Promise<Envelope<Sp500Breadth>>
   gold(request: GoldRequest): Promise<Envelope<GoldPayload>>

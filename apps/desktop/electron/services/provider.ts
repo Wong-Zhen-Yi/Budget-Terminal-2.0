@@ -1,4 +1,6 @@
 import { getMoney, clearMoneyCache } from './money.js'
+import { getHims } from './hims.js'
+import type { HimsPayload, HimsRequest } from '../shared/hims.js'
 import { getHood } from './hood.js'
 import { getSofi } from './sofi.js'
 import type { SofiPayload, SofiRequest } from '../shared/sofi.js'
@@ -375,6 +377,7 @@ export interface MarketDataProvider {
   crypto(request: CryptoRequest): Promise<Envelope<CryptoPayload>>
   bmnr(request: BmnrRequest): Promise<Envelope<BmnrPayload>>
   hood(request: HoodRequest): Promise<Envelope<HoodPayload>>
+  hims(request: HimsRequest): Promise<Envelope<HimsPayload>>
   sofi(request: SofiRequest): Promise<Envelope<SofiPayload>>
   mu(request: MuRequest): Promise<Envelope<MuPayload>>
   amzn(request: AmznRequest): Promise<Envelope<AmznPayload>>
@@ -1357,6 +1360,7 @@ export const yahooProvider: MarketDataProvider = {
   },
 
   hood: getHood,
+  hims: getHims,
   sofi: getSofi,
   mu: getMu,
   amzn: getAmzn,

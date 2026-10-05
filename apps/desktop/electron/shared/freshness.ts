@@ -30,6 +30,8 @@ export const FRESHNESS = {
   avgo: 5 * 60_000,
   avgoReports: 6 * 60 * 60_000,
   muReports: 6 * 60 * 60_000,
+  hims: 5 * 60_000,
+  himsReports: 6 * 60 * 60_000,
   hood: 5 * 60_000,
   hoodReports: 6 * 60 * 60_000,
   goldMarket: 60_000,

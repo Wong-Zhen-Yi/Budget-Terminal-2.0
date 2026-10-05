@@ -602,6 +602,20 @@ export function buildTasks(
     },
   })
   tasks.push({
+    tab: 'hims', label: 'HIMS company dashboard',
+    run: async (client, backgroundOrder) => {
+      const result = await warmStartupQuery(client, {
+        queryKey: queryKeys.hims,
+        queryFn: () => api.hims({ background: true, backgroundOrder }),
+        staleTime: queryFreshness(queryKeys.hims),
+      })
+      if (result.meta.freshness === 'partial' || result.meta.freshness === 'stale') {
+        throw new Error(result.meta.failureReason || 'HIMS startup data is incomplete')
+      }
+      return result
+    },
+  })
+  tasks.push({
     tab: 'hood', label: 'HOOD company dashboard',
     run: (client, backgroundOrder) => warmStartupQuery(client, {
       queryKey: queryKeys.hood,

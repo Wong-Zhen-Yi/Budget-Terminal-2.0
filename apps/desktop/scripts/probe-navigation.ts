@@ -8,6 +8,8 @@ import { build } from 'esbuild'
 import { workspaceFor } from '../electron/shared/navigation.js'
 import { TABS } from '../electron/shared/contract.js'
 
+assert.equal(workspaceFor('hims')?.id, 'focus')
+assert(TABS.some(tab => tab.id === 'hims' && tab.label === 'HIMS' && tab.implemented))
 assert.equal(workspaceFor('sofi')?.id, 'focus')
 assert(TABS.some(tab => tab.id === 'sofi' && tab.label === 'SOFI' && tab.implemented))
 

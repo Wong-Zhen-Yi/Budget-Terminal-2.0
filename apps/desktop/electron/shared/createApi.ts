@@ -60,6 +60,7 @@ export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS
     amzn: (request) => invoke(CHANNELS.amzn, request),
     avgo: (request) => invoke(CHANNELS.avgo, request),
     hood: (request) => invoke(CHANNELS.hood, request),
+    hims: (request) => invoke(CHANNELS.hims, request),
     sp500: (request) => invoke(CHANNELS.sp500, request),
     sp500Breadth: (request) => invoke(CHANNELS.sp500Breadth, request),
     gold: (request) => invoke(CHANNELS.gold, request),

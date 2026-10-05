@@ -38,6 +38,7 @@ export const queryKeys = {
   amzn: ['amzn'] as const,
   avgo: ['avgo'] as const,
   hood: ['hood'] as const,
+  hims: ['hims'] as const,
   gold: ['gold'] as const,
   oil: ['oil'] as const,
   heatmap: (etf: string) => ['heatmap', etf] as const,
