@@ -2,7 +2,11 @@ import { getMoney, clearMoneyCache } from './money.js'
 import { getHood } from './hood.js'
 import { getSofi } from './sofi.js'
 import type { SofiPayload, SofiRequest } from '../shared/sofi.js'
+import { getAmzn } from './amzn.js'
+import type { AmznPayload, AmznRequest } from '../shared/amzn.js'
 import { getMu } from './mu.js'
+import { getAvgo } from './avgo.js'
+import type { AvgoPayload, AvgoRequest } from '../shared/avgo.js'
 import type { MuPayload, MuRequest } from '../shared/mu.js'
 import type { HoodPayload, HoodRequest } from '../shared/hood.js'
 import type { MoneyPayload, MoneyRequest } from '../shared/money.js'
@@ -373,6 +377,8 @@ export interface MarketDataProvider {
   hood(request: HoodRequest): Promise<Envelope<HoodPayload>>
   sofi(request: SofiRequest): Promise<Envelope<SofiPayload>>
   mu(request: MuRequest): Promise<Envelope<MuPayload>>
+  amzn(request: AmznRequest): Promise<Envelope<AmznPayload>>
+  avgo(request: AvgoRequest): Promise<Envelope<AvgoPayload>>
   sp500(request: Sp500Request): Promise<Envelope<Sp500Data>>
   sp500Breadth(request: Sp500BreadthRequest): Promise<Envelope<Sp500Breadth>>
   gold(request: GoldRequest): Promise<Envelope<GoldPayload>>
@@ -1353,6 +1359,8 @@ export const yahooProvider: MarketDataProvider = {
   hood: getHood,
   sofi: getSofi,
   mu: getMu,
+  amzn: getAmzn,
+  avgo: getAvgo,
 
   sp500: getSp500,
   sp500Breadth: getSp500Breadth,

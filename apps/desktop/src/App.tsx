@@ -23,6 +23,8 @@ import { BmnrPage } from '@/pages/BmnrPage'
 import { SofiPage } from '@/pages/SofiPage'
 import { HoodPage } from '@/pages/HoodPage'
 import { MuPage } from '@/pages/MuPage'
+import { AmznPage } from '@/pages/AmznPage'
+import { AvgoPage } from '@/pages/AvgoPage'
 import { MoneyPage } from '@/pages/MoneyPage'
 import { BondsPage } from '@/pages/BondsPage'
 import { ForexPage } from '@/pages/ForexPage'
@@ -456,8 +458,12 @@ function renderPage({
       <BmnrPage onStatusChange={onStatusChange} />
     ) : tabId === 'sofi' ? (
       <SofiPage onStatusChange={onStatusChange} />
+    ) : tabId === 'avgo' ? (
+      <AvgoPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'mu' ? (
       <MuPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
+    ) : tabId === 'amzn' ? (
+      <AmznPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'hood' ? (
       <HoodPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'sp500' ? (

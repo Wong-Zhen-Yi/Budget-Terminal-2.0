@@ -55,6 +55,13 @@ async function main(): Promise<void> {
   console.log(`settings path : ${settingsPath()}`)
 
   const defaults = await readSettings()
+  check('AMZN follows MU by default', defaults.tabOrder.indexOf('amzn') === defaults.tabOrder.indexOf('mu') + 1)
+  const beforeAmzn = defaults.tabOrder.filter(id => id !== 'amzn').reverse()
+  const amznMigration = await replaceSettings({ ...defaults, tabOrder: beforeAmzn, hiddenTabs: ['stocks'], favoriteTabs: ['charts'], obscuredTabs: ['personal-finance'] })
+  check('AMZN migration preserves existing page order', amznMigration.tabOrder.filter(id => id !== 'amzn').join(',') === beforeAmzn.join(','))
+  check('AMZN migration adds the new page', amznMigration.tabOrder.includes('amzn'))
+  check('AMZN migration preserves navigation and privacy preferences', amznMigration.hiddenTabs.join(',') === 'stocks' && amznMigration.favoriteTabs.join(',') === 'charts' && amznMigration.obscuredTabs.join(',') === 'personal-finance')
+  await replaceSettings(defaults)
   const { WORKSPACES } = await import('../electron/shared/navigation.js')
   const grouped = WORKSPACES.flatMap((workspace) => workspace.pages)
   check('each page belongs to exactly one workspace', new Set(grouped).size === grouped.length)

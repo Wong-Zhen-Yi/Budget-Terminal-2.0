@@ -2,6 +2,8 @@ import { getBitcoin } from '../services/bitcoin.js'
 import type { SofiRequest } from '../shared/sofi.js'
 import type { HoodRequest } from '../shared/hood.js'
 import type { MuRequest } from '../shared/mu.js'
+import type { AmznRequest } from '../shared/amzn.js'
+import type { AvgoRequest } from '../shared/avgo.js'
 import type { Sp500Request, Sp500BreadthRequest } from '../shared/sp500.js'
 
 import type {
@@ -192,6 +194,8 @@ export function registerServiceHandlers(register: RegisterService): void {
   handle(CHANNELS.sofi, (request: SofiRequest) => provider.sofi(request))
   handle(CHANNELS.hood, (request: HoodRequest) => provider.hood(request))
   handle(CHANNELS.mu, (request: MuRequest) => provider.mu(request))
+  handle(CHANNELS.amzn, (request: AmznRequest) => provider.amzn(request))
+  handle(CHANNELS.avgo, (request: AvgoRequest) => provider.avgo(request))
   handle(CHANNELS.forexQuotes, getForexQuotes)
   handle(CHANNELS.forexHistory, getForexHistory)
   handle(CHANNELS.forexNews, getForexNews)

@@ -58,6 +58,8 @@
               "bmnr",
               "sofi",
               "mu",
+              "amzn",
+              "avgo",
               "hood",
               "gold",
               "oil",
@@ -1998,6 +2000,40 @@
         "$ref": "#/definitions/MuRequest"
       },
       "MuRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "amzn": {
+    "$ref": "#/definitions/Input_amzn",
+    "definitions": {
+      "Input_amzn": {
+        "$ref": "#/definitions/AmznRequest"
+      },
+      "AmznRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "avgo": {
+    "$ref": "#/definitions/Input_avgo",
+    "definitions": {
+      "Input_avgo": {
+        "$ref": "#/definitions/AvgoRequest"
+      },
+      "AvgoRequest": {
         "type": "object",
         "properties": {
           "force": {

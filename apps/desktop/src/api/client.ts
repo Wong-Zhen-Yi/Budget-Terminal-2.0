@@ -35,6 +35,8 @@ export const queryKeys = {
   bmnr: ['bmnr'] as const,
   sofi: ['sofi'] as const,
   mu: ['mu'] as const,
+  amzn: ['amzn'] as const,
+  avgo: ['avgo'] as const,
   hood: ['hood'] as const,
   gold: ['gold'] as const,
   oil: ['oil'] as const,

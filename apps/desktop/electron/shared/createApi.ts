@@ -57,6 +57,8 @@ export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS
     bmnr: (request) => invoke(CHANNELS.bmnr, request),
     sofi: (request) => invoke(CHANNELS.sofi, request),
     mu: (request) => invoke(CHANNELS.mu, request),
+    amzn: (request) => invoke(CHANNELS.amzn, request),
+    avgo: (request) => invoke(CHANNELS.avgo, request),
     hood: (request) => invoke(CHANNELS.hood, request),
     sp500: (request) => invoke(CHANNELS.sp500, request),
     sp500Breadth: (request) => invoke(CHANNELS.sp500Breadth, request),

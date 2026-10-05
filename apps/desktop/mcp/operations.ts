@@ -43,6 +43,8 @@ export const operations = {
   bmnr: 'Get BMNR company and asset research.',
   sofi: 'Get SOFI market data, book valuation, operating metrics and eight quarters of earnings results.',
   mu: 'Get Micron (MU) market data, financials, earnings and DRAM/NAND/HBM disclosures.',
+  amzn: 'Get Amazon (AMZN) market data, eight-quarter financial trends, AWS and retail segments, revenue categories, cash flow and guidance.',
+  avgo: 'Get Broadcom (AVGO) market data, financials, semiconductor/software segments, AI revenue and earnings guidance.',
   hood: 'Get Robinhood (HOOD) market data, financials, operating metrics and quarterly results.',
   forexQuotes: 'Get foreign-exchange quotes.',
   forexHistory: 'Get historical foreign-exchange prices.',

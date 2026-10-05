@@ -543,6 +543,20 @@ export function buildTasks(
   }
 
   tasks.push({
+    tab: 'amzn', label: 'AMZN company dashboard',
+    run: async (client, backgroundOrder) => {
+      const result = await warmStartupQuery(client, {
+        queryKey: queryKeys.amzn,
+        queryFn: () => api.amzn({ background: true, backgroundOrder }),
+        staleTime: queryFreshness(queryKeys.amzn),
+      })
+      if (result.meta.freshness === 'partial' || result.meta.freshness === 'stale') {
+        throw new Error(result.meta.failureReason || 'AMZN startup data is incomplete')
+      }
+      return result
+    },
+  })
+  tasks.push({
     tab: 'mu', label: 'MU company dashboard',
     run: async (client, backgroundOrder) => {
       const result = await warmStartupQuery(client, {
@@ -553,6 +567,21 @@ export function buildTasks(
       // Retain usable panels, while keeping incomplete startup visible in progress.
       if (result.meta.freshness === 'partial' || result.meta.freshness === 'stale') {
         throw new Error(result.meta.failureReason || 'MU startup data is incomplete')
+      }
+      return result
+    },
+  })
+  tasks.push({
+    tab: 'avgo', label: 'AVGO company dashboard',
+    run: async (client, backgroundOrder) => {
+      const result = await warmStartupQuery(client, {
+        queryKey: queryKeys.avgo,
+        queryFn: () => api.avgo({ background: true, backgroundOrder }),
+        staleTime: queryFreshness(queryKeys.avgo),
+      })
+      // Retain usable panels, while keeping incomplete startup visible in progress.
+      if (result.meta.freshness === 'partial' || result.meta.freshness === 'stale') {
+        throw new Error(result.meta.failureReason || 'AVGO startup data is incomplete')
       }
       return result
     },

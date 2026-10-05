@@ -136,6 +136,33 @@ await warmQuery(hoodClient, { queryKey: ['hood'], queryFn: () => window.api.hood
 assert.equal(hoodRequests, 1, 'Opening warmed HOOD must not repeat the initial load')
 hoodClient.clear()
 
+let amznRequests = 0
+let amznRequest: unknown
+const { emptyAmznPayload } = await import('../electron/shared/amzn.js')
+Object.assign(window.api, { amzn: async (request: unknown) => {
+  amznRequests++
+  amznRequest = request
+  return ok(emptyAmznPayload(), 'AMZN fixture')
+} })
+const amznSettings = { hiddenTabs: ['amzn'], favoriteTabs: [] } as unknown as import('../electron/shared/contract.js').AppSettings
+const amznTask = buildTasks(undefined, amznSettings, { stocks: 'AAPL', fundamentals: 'AAPL' },
+  { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 }).find(task => task.tab === 'amzn')!
+assert(amznTask, 'Unvisited AMZN must load even when hidden and without holdings')
+const amznClient = new QueryClient()
+await amznTask.run(amznClient, 10)
+assert.deepEqual(amznRequest, { background: true, backgroundOrder: 10 })
+assert(amznClient.getQueryData(['amzn']), 'Startup must populate the AMZN page query')
+await warmQuery(amznClient, { queryKey: ['amzn'], queryFn: () => window.api.amzn({}), staleTime: 300_000 })
+assert.equal(amznRequests, 1, 'Opening warmed AMZN must not repeat its initial load')
+amznClient.clear()
+for (const freshness of ['partial', 'stale', 'failed'] as const) {
+  Object.assign(window.api, { amzn: async () => ({ data: emptyAmznPayload(), errors: [],
+    meta: { source: 'AMZN fixture', freshness, fetchedAt: Date.now(), failureReason: 'Amazon reports unavailable' } }) })
+  await assert.rejects(amznTask.run(amznClient), /Amazon reports unavailable/)
+  if (freshness !== 'failed') assert(amznClient.getQueryData(['amzn']), 'Usable incomplete AMZN panels must remain cached')
+  amznClient.clear()
+}
+
 // Every task must start while the slow first task is still pending. A failure
 // must remain visible and must not stop other pages from finishing.
 const parallelTasks = Array.from({ length: 12 }, (_, index) => index)

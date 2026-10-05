@@ -1,6 +1,10 @@
 import type { BitcoinPayload, BitcoinRequest } from './bitcoin.js'
 import type { SofiPayload, SofiRequest } from './sofi.js'
 export type { SofiPayload, SofiRequest } from './sofi.js'
+import type { AvgoPayload, AvgoRequest } from './avgo.js'
+export type { AvgoPayload, AvgoRequest } from './avgo.js'
+import type { AmznPayload, AmznRequest } from './amzn.js'
+export type { AmznPayload, AmznRequest } from './amzn.js'
 import type { MuPayload, MuRequest } from './mu.js'
 export type { MuPayload, MuRequest } from './mu.js'
 import type { HoodPayload, HoodRequest } from './hood.js'
@@ -1281,6 +1285,8 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'bmnr', label: 'BMNR', implemented: true },
   { id: 'sofi', label: 'SOFI', implemented: true },
   { id: 'mu', label: 'MU', implemented: true },
+  { id: 'amzn', label: 'AMZN', implemented: true },
+  { id: 'avgo', label: 'AVGO', implemented: true },
   { id: 'hood', label: 'HOOD', implemented: true },
   { id: 'gold', label: 'Gold', implemented: true },
   { id: 'oil', label: 'Oil', implemented: true },
@@ -3393,6 +3399,8 @@ export const CHANNELS = {
   bmnr: 'bmnr:read',
   sofi: 'sofi:read',
   mu: 'mu:read',
+  amzn: 'amzn:read',
+  avgo: 'avgo:read',
   hood: 'hood:read',
   sp500: 'sp500:read',
   sp500Breadth: 'sp500:breadth',
@@ -3563,6 +3571,8 @@ export interface DesktopApi {
   bmnr(request: BmnrRequest): Promise<Envelope<BmnrPayload>>
   sofi(request: SofiRequest): Promise<Envelope<SofiPayload>>
   mu(request: MuRequest): Promise<Envelope<MuPayload>>
+  amzn(request: AmznRequest): Promise<Envelope<AmznPayload>>
+  avgo(request: AvgoRequest): Promise<Envelope<AvgoPayload>>
   hood(request: HoodRequest): Promise<Envelope<HoodPayload>>
   sp500(request: Sp500Request): Promise<Envelope<Sp500Data>>
   sp500Breadth(request: Sp500BreadthRequest): Promise<Envelope<Sp500Breadth>>

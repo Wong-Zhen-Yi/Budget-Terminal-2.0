@@ -1,0 +1,714 @@
+[
+  {
+    "period": "2026 Q2",
+    "publishedAt": "2026-07-30",
+    "sourceUrl": "https://www.sec.gov/Archives/edgar/data/1018724/000101872426000024/amzn-20260630xex991.htm",
+    "revenue": 200606000000,
+    "operatingIncome": 27461000000,
+    "operatingMargin": 13.689022262544489,
+    "netIncome": 62647000000,
+    "dilutedEps": 5.75,
+    "operatingCashFlow": 45387000000,
+    "capex": 54208000000,
+    "capexProceeds": 1132000000,
+    "freeCashFlow": -7689000000,
+    "ttmOperatingCashFlow": 161403000000,
+    "ttmNetCapex": 169007000000,
+    "ttmFreeCashFlow": -7604000000,
+    "segments": [
+      {
+        "name": "North America",
+        "revenue": 116177000000,
+        "yearAgoRevenue": 100068000000,
+        "revenueGrowth": 16.098053323739858,
+        "operatingIncome": 9123000000,
+        "operatingMargin": 7.852673076426488
+      },
+      {
+        "name": "International",
+        "revenue": 42197000000,
+        "yearAgoRevenue": 36761000000,
+        "revenueGrowth": 14.78741057098556,
+        "operatingIncome": 1717000000,
+        "operatingMargin": 4.069009645235443
+      },
+      {
+        "name": "AWS",
+        "revenue": 42232000000,
+        "yearAgoRevenue": 30873000000,
+        "revenueGrowth": 36.792666731448186,
+        "operatingIncome": 16621000000,
+        "operatingMargin": 39.356412199280165
+      }
+    ],
+    "revenueCategories": [
+      {
+        "name": "Online stores",
+        "revenue": 70432000000,
+        "revenueGrowth": 14.55151663007237
+      },
+      {
+        "name": "Physical stores",
+        "revenue": 5794000000,
+        "revenueGrowth": 3.5567470956210823
+      },
+      {
+        "name": "Third-party seller services",
+        "revenue": 46780000000,
+        "revenueGrowth": 15.941310597799152
+      },
+      {
+        "name": "Advertising services",
+        "revenue": 19809000000,
+        "revenueGrowth": 26.220211545813687
+      },
+      {
+        "name": "Subscription services",
+        "revenue": 13730000000,
+        "revenueGrowth": 12.467234600262135
+      },
+      {
+        "name": "AWS",
+        "revenue": 42232000000,
+        "revenueGrowth": 36.792666731448186
+      },
+      {
+        "name": "Other",
+        "revenue": 1829000000,
+        "revenueGrowth": 22.014676450967308
+      }
+    ],
+    "guidance": {
+      "period": "Third Quarter 2026",
+      "revenueLow": 197000000000,
+      "revenueHigh": 202000000000,
+      "operatingIncomeLow": 22500000000,
+      "operatingIncomeHigh": 26500000000,
+      "notes": "• Net sales are expected to be between $197.0 billion and $202.0 billion, or to grow between 9% and 12% compared with third quarter 2025. Excluding the impact of Prime Day in both 2025 and 2026, third quarter 2026 year-over-year growth would be nearly 400 basis points higher. This guidance anticipates an unfavorable impact of approximately 80 basis points from foreign exchange rates. • Operating income is expected to be between $22.5 billion and $26.5 billion, compared with $17.4 billion in third quarter 2025. • This guidance assumes, among other things, no impact from energy derivative contract remeasurements, and that no additional business acquisitions, restructurings, or legal settlements are concluded."
+    },
+    "warnings": []
+  },
+  {
+    "period": "2026 Q1",
+    "publishedAt": "2026-04-29",
+    "sourceUrl": "https://www.sec.gov/Archives/edgar/data/1018724/000101872426000012/amzn-20260331xex991.htm",
+    "revenue": 181519000000,
+    "operatingIncome": 23852000000,
+    "operatingMargin": 13.140222235688825,
+    "netIncome": 30255000000,
+    "dilutedEps": 2.78,
+    "operatingCashFlow": 26032000000,
+    "capex": 44203000000,
+    "capexProceeds": 969000000,
+    "freeCashFlow": -17202000000,
+    "ttmOperatingCashFlow": 148531000000,
+    "ttmNetCapex": 147299000000,
+    "ttmFreeCashFlow": 1232000000,
+    "segments": [
+      {
+        "name": "North America",
+        "revenue": 104143000000,
+        "yearAgoRevenue": 92887000000,
+        "revenueGrowth": 12.117949766921088,
+        "operatingIncome": 8267000000,
+        "operatingMargin": 7.938123541668666
+      },
+      {
+        "name": "International",
+        "revenue": 39789000000,
+        "yearAgoRevenue": 33513000000,
+        "revenueGrowth": 18.72706114045295,
+        "operatingIncome": 1424000000,
+        "operatingMargin": 3.578878584533414
+      },
+      {
+        "name": "AWS",
+        "revenue": 37587000000,
+        "yearAgoRevenue": 29267000000,
+        "revenueGrowth": 28.42792223323196,
+        "operatingIncome": 14161000000,
+        "operatingMargin": 37.67526006331977
+      }
+    ],
+    "revenueCategories": [
+      {
+        "name": "Online stores",
+        "revenue": 64254000000,
+        "revenueGrowth": 11.92711690211996
+      },
+      {
+        "name": "Physical stores",
+        "revenue": 5785000000,
+        "revenueGrowth": 4.554491234411717
+      },
+      {
+        "name": "Third-party seller services",
+        "revenue": 41578000000,
+        "revenueGrowth": 13.874890446976341
+      },
+      {
+        "name": "Advertising services",
+        "revenue": 17243000000,
+        "revenueGrowth": 23.863228216363773
+      },
+      {
+        "name": "Subscription services",
+        "revenue": 13427000000,
+        "revenueGrowth": 14.613743064447293
+      },
+      {
+        "name": "AWS",
+        "revenue": 37587000000,
+        "revenueGrowth": 28.42792223323196
+      },
+      {
+        "name": "Other",
+        "revenue": 1645000000,
+        "revenueGrowth": 25.38109756097562
+      }
+    ],
+    "guidance": {
+      "period": "Second Quarter 2026",
+      "revenueLow": 194000000000,
+      "revenueHigh": 199000000000,
+      "operatingIncomeLow": 20000000000,
+      "operatingIncomeHigh": 24000000000,
+      "notes": "• Net sales are expected to be between $194.0 billion and $199.0 billion, or to grow between 16% and 19% compared with second quarter 2025. This guidance anticipates an unfavorable impact of approximately 10 basis points from foreign exchange rates. • Operating income is expected to be between $20.0 billion and $24.0 billion, compared with $19.2 billion in second quarter 2025. • This guidance assumes that Prime Day occurs in second quarter 2026. • This guidance assumes, among other things, that no additional business acquisitions, restructurings, or legal settlements are concluded."
+    },
+    "warnings": []
+  },
+  {
+    "period": "2025 Q4",
+    "publishedAt": "2026-02-05",
+    "sourceUrl": "https://www.sec.gov/Archives/edgar/data/1018724/000101872426000002/amzn-20251231xex991.htm",
+    "revenue": 213386000000,
+    "operatingIncome": 24977000000,
+    "operatingMargin": 11.705079058607406,
+    "netIncome": 21192000000,
+    "dilutedEps": 1.95,
+    "operatingCashFlow": 54459000000,
+    "capex": 39522000000,
+    "capexProceeds": 1053000000,
+    "freeCashFlow": 15990000000,
+    "ttmOperatingCashFlow": 139514000000,
+    "ttmNetCapex": 128320000000,
+    "ttmFreeCashFlow": 11194000000,
+    "segments": [
+      {
+        "name": "North America",
+        "revenue": 127083000000,
+        "yearAgoRevenue": 115586000000,
+        "revenueGrowth": 9.946706348519708,
+        "operatingIncome": 11472000000,
+        "operatingMargin": 9.027171218809753
+      },
+      {
+        "name": "International",
+        "revenue": 50724000000,
+        "yearAgoRevenue": 43420000000,
+        "revenueGrowth": 16.821741133118383,
+        "operatingIncome": 1040000000,
+        "operatingMargin": 2.0503114896301553
+      },
+      {
+        "name": "AWS",
+        "revenue": 35579000000,
+        "yearAgoRevenue": 28786000000,
+        "revenueGrowth": 23.598276940179264,
+        "operatingIncome": 12465000000,
+        "operatingMargin": 35.034711487113185
+      }
+    ],
+    "revenueCategories": [
+      {
+        "name": "Online stores",
+        "revenue": 82988000000,
+        "revenueGrowth": 9.836412726983967
+      },
+      {
+        "name": "Physical stores",
+        "revenue": 5855000000,
+        "revenueGrowth": 4.947123140347731
+      },
+      {
+        "name": "Third-party seller services",
+        "revenue": 52816000000,
+        "revenueGrowth": 11.226703169421913
+      },
+      {
+        "name": "Advertising services",
+        "revenue": 21317000000,
+        "revenueGrowth": 23.305182785747334
+      },
+      {
+        "name": "Subscription services",
+        "revenue": 13122000000,
+        "revenueGrowth": 14.025026068821699
+      },
+      {
+        "name": "AWS",
+        "revenue": 35579000000,
+        "revenueGrowth": 23.598276940179264
+      },
+      {
+        "name": "Other",
+        "revenue": 1709000000,
+        "revenueGrowth": 7.484276729559758
+      }
+    ],
+    "guidance": {
+      "period": "First Quarter 2026",
+      "revenueLow": 173500000000,
+      "revenueHigh": 178500000000,
+      "operatingIncomeLow": 16500000000,
+      "operatingIncomeHigh": 21500000000,
+      "notes": "• Net sales are expected to be between $173.5 billion and $178.5 billion, or to grow between 11% and 15% compared with first quarter 2025. This guidance anticipates a favorable impact of approximately 180 basis points from foreign exchange rates. • Operating income is expected to be between $16.5 billion and $21.5 billion, compared with $18.4 billion in first quarter 2025. This guidance includes approximately $1 billion of higher year-over-year Amazon Leo costs as we scale in 2026, as well as investment in quick commerce and even sharper prices in our international stores business. • This guidance assumes, among other things, that no additional business acquisitions, restructurings, or legal settlements are concluded."
+    },
+    "warnings": []
+  },
+  {
+    "period": "2025 Q3",
+    "publishedAt": "2025-10-30",
+    "sourceUrl": "https://www.sec.gov/Archives/edgar/data/1018724/000101872425000121/amzn-20250930xex991.htm",
+    "revenue": 180169000000,
+    "operatingIncome": 17422000000,
+    "operatingMargin": 9.669810011711228,
+    "netIncome": 21187000000,
+    "dilutedEps": 1.95,
+    "operatingCashFlow": 35525000000,
+    "capex": 35095000000,
+    "capexProceeds": 867000000,
+    "freeCashFlow": 1297000000,
+    "ttmOperatingCashFlow": 130691000000,
+    "ttmNetCapex": 115903000000,
+    "ttmFreeCashFlow": 14788000000,
+    "segments": [
+      {
+        "name": "North America",
+        "revenue": 106267000000,
+        "yearAgoRevenue": 95537000000,
+        "revenueGrowth": 11.231250719616481,
+        "operatingIncome": 4789000000,
+        "operatingMargin": 4.506573065956506
+      },
+      {
+        "name": "International",
+        "revenue": 40896000000,
+        "yearAgoRevenue": 35888000000,
+        "revenueGrowth": 13.954525189478373,
+        "operatingIncome": 1199000000,
+        "operatingMargin": 2.9318270735524257
+      },
+      {
+        "name": "AWS",
+        "revenue": 33006000000,
+        "yearAgoRevenue": 27452000000,
+        "revenueGrowth": 20.231677109135937,
+        "operatingIncome": 11434000000,
+        "operatingMargin": 34.64218626916318
+      }
+    ],
+    "revenueCategories": [
+      {
+        "name": "Online stores",
+        "revenue": 67407000000,
+        "revenueGrowth": 9.763723111494693
+      },
+      {
+        "name": "Physical stores",
+        "revenue": 5578000000,
+        "revenueGrowth": 6.6947207345064985
+      },
+      {
+        "name": "Third-party seller services",
+        "revenue": 42486000000,
+        "revenueGrowth": 12.206845552503687
+      },
+      {
+        "name": "Advertising services",
+        "revenue": 17703000000,
+        "revenueGrowth": 23.529411764705888
+      },
+      {
+        "name": "Subscription services",
+        "revenue": 12574000000,
+        "revenueGrowth": 11.491399184252526
+      },
+      {
+        "name": "AWS",
+        "revenue": 33006000000,
+        "revenueGrowth": 20.231677109135937
+      },
+      {
+        "name": "Other",
+        "revenue": 1415000000,
+        "revenueGrowth": 7.76846915460776
+      }
+    ],
+    "guidance": {
+      "period": "Fourth Quarter 2025",
+      "revenueLow": 206000000000,
+      "revenueHigh": 213000000000,
+      "operatingIncomeLow": 21000000000,
+      "operatingIncomeHigh": 26000000000,
+      "notes": "• Net sales are expected to be between $206.0 billion and $213.0 billion, or to grow between 10% and 13% compared with fourth quarter 2024. This guidance anticipates a favorable impact of approximately 190 basis points from foreign exchange rates. • Operating income is expected to be between $21.0 billion and $26.0 billion, compared with $21.2 billion in fourth quarter 2024. • This guidance assumes, among other things, that no additional business acquisitions, restructurings, or legal settlements are concluded."
+    },
+    "warnings": []
+  },
+  {
+    "period": "2025 Q2",
+    "publishedAt": "2025-07-31",
+    "sourceUrl": "https://www.sec.gov/Archives/edgar/data/1018724/000101872425000084/amzn-20250630xex991.htm",
+    "revenue": 167702000000,
+    "operatingIncome": 19171000000,
+    "operatingMargin": 11.431586981669867,
+    "netIncome": 18164000000,
+    "dilutedEps": 1.68,
+    "operatingCashFlow": 32515000000,
+    "capex": 32183000000,
+    "capexProceeds": 815000000,
+    "freeCashFlow": 1147000000,
+    "ttmOperatingCashFlow": 121137000000,
+    "ttmNetCapex": 102953000000,
+    "ttmFreeCashFlow": 18184000000,
+    "segments": [
+      {
+        "name": "North America",
+        "revenue": 100068000000,
+        "yearAgoRevenue": 90033000000,
+        "revenueGrowth": 11.145913165172772,
+        "operatingIncome": 7517000000,
+        "operatingMargin": 7.511891913498821
+      },
+      {
+        "name": "International",
+        "revenue": 36761000000,
+        "yearAgoRevenue": 31663000000,
+        "revenueGrowth": 16.10081167293056,
+        "operatingIncome": 1494000000,
+        "operatingMargin": 4.064089660237752
+      },
+      {
+        "name": "AWS",
+        "revenue": 30873000000,
+        "yearAgoRevenue": 26281000000,
+        "revenueGrowth": 17.472698907956307,
+        "operatingIncome": 10160000000,
+        "operatingMargin": 32.909014349107636
+      }
+    ],
+    "revenueCategories": [
+      {
+        "name": "Online stores",
+        "revenue": 61485000000,
+        "revenueGrowth": 10.999783362218363
+      },
+      {
+        "name": "Physical stores",
+        "revenue": 5595000000,
+        "revenueGrowth": 7.472147522089889
+      },
+      {
+        "name": "Third-party seller services",
+        "revenue": 40348000000,
+        "revenueGrowth": 11.45548465512003
+      },
+      {
+        "name": "Advertising services",
+        "revenue": 15694000000,
+        "revenueGrowth": 22.887792655234506
+      },
+      {
+        "name": "Subscription services",
+        "revenue": 12208000000,
+        "revenueGrowth": 12.350450947910918
+      },
+      {
+        "name": "AWS",
+        "revenue": 30873000000,
+        "revenueGrowth": 17.472698907956307
+      },
+      {
+        "name": "Other",
+        "revenue": 1499000000,
+        "revenueGrowth": 18.96825396825397
+      }
+    ],
+    "guidance": {
+      "period": "Third Quarter 2025",
+      "revenueLow": 174000000000,
+      "revenueHigh": 179500000000,
+      "operatingIncomeLow": 15500000000,
+      "operatingIncomeHigh": 20500000000,
+      "notes": "• Net sales are expected to be between $174.0 billion and $179.5 billion, or to grow between 10% and 13% compared with third quarter 2024. This guidance anticipates a favorable impact of approximately 130 basis points from foreign exchange rates. • Operating income is expected to be between $15.5 billion and $20.5 billion, compared with $17.4 billion in third quarter 2024. • This guidance assumes, among other things, that no additional business acquisitions, restructurings, or legal settlements are concluded."
+    },
+    "warnings": []
+  },
+  {
+    "period": "2025 Q1",
+    "publishedAt": "2025-05-01",
+    "sourceUrl": "https://www.sec.gov/Archives/edgar/data/1018724/000101872425000034/amzn-20250331xex991.htm",
+    "revenue": 155667000000,
+    "operatingIncome": 18405000000,
+    "operatingMargin": 11.823315153500742,
+    "netIncome": 17127000000,
+    "dilutedEps": 1.59,
+    "operatingCashFlow": 17015000000,
+    "capex": 25019000000,
+    "capexProceeds": 764000000,
+    "freeCashFlow": -7240000000,
+    "ttmOperatingCashFlow": 113903000000,
+    "ttmNetCapex": 87978000000,
+    "ttmFreeCashFlow": 25925000000,
+    "segments": [
+      {
+        "name": "North America",
+        "revenue": 92887000000,
+        "yearAgoRevenue": 86341000000,
+        "revenueGrowth": 7.581566115750338,
+        "operatingIncome": 5841000000,
+        "operatingMargin": 6.2882857665765926
+      },
+      {
+        "name": "International",
+        "revenue": 33513000000,
+        "yearAgoRevenue": 31935000000,
+        "revenueGrowth": 4.9412869891968025,
+        "operatingIncome": 1017000000,
+        "operatingMargin": 3.0346432727598245
+      },
+      {
+        "name": "AWS",
+        "revenue": 29267000000,
+        "yearAgoRevenue": 25037000000,
+        "revenueGrowth": 16.894995406797932,
+        "operatingIncome": 11547000000,
+        "operatingMargin": 39.453992551337684
+      }
+    ],
+    "revenueCategories": [
+      {
+        "name": "Online stores",
+        "revenue": 57407000000,
+        "revenueGrowth": 5.006402048655567
+      },
+      {
+        "name": "Physical stores",
+        "revenue": 5533000000,
+        "revenueGrowth": 6.362937331795471
+      },
+      {
+        "name": "Third-party seller services",
+        "revenue": 36512000000,
+        "revenueGrowth": 5.538212510116769
+      },
+      {
+        "name": "Advertising services",
+        "revenue": 13921000000,
+        "revenueGrowth": 17.735115020297698
+      },
+      {
+        "name": "Subscription services",
+        "revenue": 11715000000,
+        "revenueGrowth": 9.261331841074426
+      },
+      {
+        "name": "AWS",
+        "revenue": 29267000000,
+        "revenueGrowth": 16.894995406797932
+      },
+      {
+        "name": "Other",
+        "revenue": 1312000000,
+        "revenueGrowth": 3.961965134706813
+      }
+    ],
+    "guidance": {
+      "period": "Second Quarter 2025",
+      "revenueLow": 159000000000,
+      "revenueHigh": 164000000000,
+      "operatingIncomeLow": 13000000000,
+      "operatingIncomeHigh": 17500000000,
+      "notes": "• Net sales are expected to be between $159.0 billion and $164.0 billion, or to grow between 7% and 11% compared with second quarter 2024. This guidance anticipates an unfavorable impact of approximately 10 basis points from foreign exchange rates. • Operating income is expected to be between $13.0 billion and $17.5 billion, compared with $14.7 billion in second quarter 2024. • This guidance assumes, among other things, that no additional business acquisitions, restructurings, or legal settlements are concluded."
+    },
+    "warnings": []
+  },
+  {
+    "period": "2024 Q4",
+    "publishedAt": "2025-02-06",
+    "sourceUrl": "https://www.sec.gov/Archives/edgar/data/1018724/000101872425000002/amzn-20241231xex991.htm",
+    "revenue": 187792000000,
+    "operatingIncome": 21203000000,
+    "operatingMargin": 11.29068330919315,
+    "netIncome": 20004000000,
+    "dilutedEps": 1.86,
+    "operatingCashFlow": 45636000000,
+    "capex": 27834000000,
+    "capexProceeds": 1782000000,
+    "freeCashFlow": 19584000000,
+    "ttmOperatingCashFlow": 115877000000,
+    "ttmNetCapex": 77658000000,
+    "ttmFreeCashFlow": 38219000000,
+    "segments": [
+      {
+        "name": "North America",
+        "revenue": 115586000000,
+        "yearAgoRevenue": 105514000000,
+        "revenueGrowth": 9.545652709593044,
+        "operatingIncome": 9256000000,
+        "operatingMargin": 8.007890228920457
+      },
+      {
+        "name": "International",
+        "revenue": 43420000000,
+        "yearAgoRevenue": 40243000000,
+        "revenueGrowth": 7.894540665457339,
+        "operatingIncome": 1315000000,
+        "operatingMargin": 3.0285582680792262
+      },
+      {
+        "name": "AWS",
+        "revenue": 28786000000,
+        "yearAgoRevenue": 24204000000,
+        "revenueGrowth": 18.9307552470666,
+        "operatingIncome": 10632000000,
+        "operatingMargin": 36.934620996317655
+      }
+    ],
+    "revenueCategories": [
+      {
+        "name": "Online stores",
+        "revenue": 75556000000,
+        "revenueGrowth": 7.106303956452087
+      },
+      {
+        "name": "Physical stores",
+        "revenue": 5579000000,
+        "revenueGrowth": 8.288043478260864
+      },
+      {
+        "name": "Third-party seller services",
+        "revenue": 47485000000,
+        "revenueGrowth": 9.013062742487211
+      },
+      {
+        "name": "Advertising services",
+        "revenue": 17288000000,
+        "revenueGrowth": 17.97461443974342
+      },
+      {
+        "name": "Subscription services",
+        "revenue": 11508000000,
+        "revenueGrowth": 9.7254004576659
+      },
+      {
+        "name": "AWS",
+        "revenue": 28786000000,
+        "revenueGrowth": 18.9307552470666
+      },
+      {
+        "name": "Other",
+        "revenue": 1590000000,
+        "revenueGrowth": 16.825863335782508
+      }
+    ],
+    "guidance": {
+      "period": "First Quarter 2025",
+      "revenueLow": 151000000000,
+      "revenueHigh": 155500000000,
+      "operatingIncomeLow": 14000000000,
+      "operatingIncomeHigh": 18000000000,
+      "notes": "• Net sales are expected to be between $151.0 billion and $155.5 billion, or to grow between 5% and 9% compared with first quarter 2024. This guidance anticipates an unusually large, unfavorable impact of approximately $2.1 billion, or 150 basis points, from foreign exchange rates. Also, as a reminder, in first quarter 2024 the impact from Leap Year added approximately $1.5 billion in net sales. • Operating income is expected to be between $14.0 billion and $18.0 billion, compared with $15.3 billion in first quarter 2024. • This guidance assumes, among other things, that no additional business acquisitions, restructurings, or legal settlements are concluded."
+    },
+    "warnings": []
+  },
+  {
+    "period": "2024 Q3",
+    "publishedAt": "2024-10-31",
+    "sourceUrl": "https://www.sec.gov/Archives/edgar/data/1018724/000101872424000158/amzn-20240930xex991.htm",
+    "revenue": 158877000000,
+    "operatingIncome": 17411000000,
+    "operatingMargin": 10.95879202150091,
+    "netIncome": 15328000000,
+    "dilutedEps": 1.43,
+    "operatingCashFlow": 25971000000,
+    "capex": 22620000000,
+    "capexProceeds": 1342000000,
+    "freeCashFlow": 4693000000,
+    "ttmOperatingCashFlow": 112706000000,
+    "ttmNetCapex": 64959000000,
+    "ttmFreeCashFlow": 47747000000,
+    "segments": [
+      {
+        "name": "North America",
+        "revenue": 95537000000,
+        "yearAgoRevenue": 87887000000,
+        "revenueGrowth": 8.704359006451456,
+        "operatingIncome": 5663000000,
+        "operatingMargin": 5.927546395637292
+      },
+      {
+        "name": "International",
+        "revenue": 35888000000,
+        "yearAgoRevenue": 32137000000,
+        "revenueGrowth": 11.671904658182154,
+        "operatingIncome": 1301000000,
+        "operatingMargin": 3.625167186803388
+      },
+      {
+        "name": "AWS",
+        "revenue": 27452000000,
+        "yearAgoRevenue": 23059000000,
+        "revenueGrowth": 19.05112971074201,
+        "operatingIncome": 10447000000,
+        "operatingMargin": 38.055515080868425
+      }
+    ],
+    "revenueCategories": [
+      {
+        "name": "Online stores",
+        "revenue": 61411000000,
+        "revenueGrowth": 7.236279183473893
+      },
+      {
+        "name": "Physical stores",
+        "revenue": 5228000000,
+        "revenueGrowth": 5.424480742085103
+      },
+      {
+        "name": "Third-party seller services",
+        "revenue": 37864000000,
+        "revenueGrowth": 10.255663618892319
+      },
+      {
+        "name": "Advertising services",
+        "revenue": 14331000000,
+        "revenueGrowth": 18.83084577114429
+      },
+      {
+        "name": "Subscription services",
+        "revenue": 11278000000,
+        "revenueGrowth": 10.894788593903648
+      },
+      {
+        "name": "AWS",
+        "revenue": 27452000000,
+        "revenueGrowth": 19.05112971074201
+      },
+      {
+        "name": "Other",
+        "revenue": 1313000000,
+        "revenueGrowth": 7.09624796084829
+      }
+    ],
+    "guidance": {
+      "period": "Fourth Quarter 2024",
+      "revenueLow": 181500000000,
+      "revenueHigh": 188500000000,
+      "operatingIncomeLow": 16000000000,
+      "operatingIncomeHigh": 20000000000,
+      "notes": "• Net sales are expected to be between $181.5 billion and $188.5 billion, or to grow between 7% and 11% compared with fourth quarter 2023. This guidance anticipates an unfavorable impact of approximately 10 basis points from foreign exchange rates. • Operating income is expected to be between $16.0 billion and $20.0 billion, compared with $13.2 billion in fourth quarter 2023. • This guidance assumes, among other things, that no additional business acquisitions, restructurings, or legal settlements are concluded."
+    },
+    "warnings": []
+  }
+]

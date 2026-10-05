@@ -21,6 +21,8 @@
     "probe:charts": "npm run --workspace budget-terminal-desktop probe:charts --",
     "probe:dictionary": "npm run --workspace budget-terminal-desktop probe:dictionary --",
     "probe:bmnr": "npm run --workspace budget-terminal-desktop probe:bmnr --",
+    "probe:avgo": "npm run --workspace budget-terminal-desktop probe:avgo --",
+    "probe:avgo-ui": "npm run --workspace budget-terminal-desktop probe:avgo-ui --",
     "probe:mu": "npm run --workspace budget-terminal-desktop probe:mu --",
     "probe:mu-ui": "npm run --workspace budget-terminal-desktop probe:mu-ui --",
     "probe:sofi": "npm run --workspace budget-terminal-desktop probe:sofi --",
@@ -60,6 +62,8 @@
     "probe:bonds": "npm run --workspace budget-terminal-desktop probe:bonds --",
     "build:mcp": "npm run build:mcp --workspace budget-terminal-desktop",
     "mcp": "node apps/desktop/out/mcp/server.mjs",
-    "probe:mcp": "npm run probe:mcp --workspace budget-terminal-desktop"
+    "probe:mcp": "npm run probe:mcp --workspace budget-terminal-desktop",
+    "probe:amzn": "npm run --workspace budget-terminal-desktop probe:amzn --",
+    "probe:amzn-ui": "npm run --workspace budget-terminal-desktop probe:amzn-ui --"
   }
 }

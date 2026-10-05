@@ -44,6 +44,8 @@
     "probe:bitcoin": "tsx scripts/probe-bitcoin.ts",
     "probe:bitcoin-ui": "tsx scripts/probe-bitcoin-ui.ts",
     "probe:bmnr": "tsx scripts/probe-bmnr.ts",
+    "probe:avgo": "tsx scripts/probe-avgo.ts",
+    "probe:avgo-ui": "tsx scripts/probe-avgo-ui.ts",
     "probe:mu": "tsx scripts/probe-mu.ts",
     "probe:mu-ui": "tsx scripts/probe-mu-ui.ts",
     "probe:sofi": "tsx scripts/probe-sofi.ts",
@@ -78,7 +80,9 @@
     "probe:sp500": "tsx scripts/probe-sp500.ts",
     "generate:mcp": "tsx mcp/generate-schemas.ts",
     "build:mcp": "npm run generate:mcp && tsx mcp/build.ts",
-    "probe:mcp": "tsx mcp/generate-schemas.ts --check && tsx scripts/probe-mcp.ts"
+    "probe:mcp": "tsx mcp/generate-schemas.ts --check && tsx scripts/probe-mcp.ts",
+    "probe:amzn": "tsx scripts/probe-amzn.ts",
+    "probe:amzn-ui": "tsx scripts/probe-amzn-ui.ts"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
