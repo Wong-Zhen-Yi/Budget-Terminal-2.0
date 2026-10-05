@@ -1,4 +1,10 @@
 import type { BitcoinPayload, BitcoinRequest } from './bitcoin.js'
+import type { SofiPayload, SofiRequest } from './sofi.js'
+export type { SofiPayload, SofiRequest } from './sofi.js'
+import type { MuPayload, MuRequest } from './mu.js'
+export type { MuPayload, MuRequest } from './mu.js'
+import type { HoodPayload, HoodRequest } from './hood.js'
+export type { HoodPayload, HoodRequest } from './hood.js'
 import type { TechnicalMetrics } from './technicalScreen.js'
 import type { ScreenshotCommand, ScreenshotReady } from './screenshot.js'
 import type { MoneyPayload, MoneyRequest } from './money.js'
@@ -1273,6 +1279,9 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'crypto', label: 'Crypto', implemented: true },
   { id: 'bitcoin', label: 'Bitcoin', implemented: true },
   { id: 'bmnr', label: 'BMNR', implemented: true },
+  { id: 'sofi', label: 'SOFI', implemented: true },
+  { id: 'mu', label: 'MU', implemented: true },
+  { id: 'hood', label: 'HOOD', implemented: true },
   { id: 'gold', label: 'Gold', implemented: true },
   { id: 'oil', label: 'Oil', implemented: true },
   { id: 'backtest', label: 'Backtest', implemented: true },
@@ -3382,6 +3391,9 @@ export const CHANNELS = {
   crypto: 'crypto:read',
   bitcoin: 'bitcoin:read',
   bmnr: 'bmnr:read',
+  sofi: 'sofi:read',
+  mu: 'mu:read',
+  hood: 'hood:read',
   sp500: 'sp500:read',
   sp500Breadth: 'sp500:breadth',
   gold: 'gold:read',
@@ -3549,6 +3561,9 @@ export interface DesktopApi {
   crypto(request: CryptoRequest): Promise<Envelope<CryptoPayload>>
   bitcoin(request: BitcoinRequest): Promise<Envelope<BitcoinPayload>>
   bmnr(request: BmnrRequest): Promise<Envelope<BmnrPayload>>
+  sofi(request: SofiRequest): Promise<Envelope<SofiPayload>>
+  mu(request: MuRequest): Promise<Envelope<MuPayload>>
+  hood(request: HoodRequest): Promise<Envelope<HoodPayload>>
   sp500(request: Sp500Request): Promise<Envelope<Sp500Data>>
   sp500Breadth(request: Sp500BreadthRequest): Promise<Envelope<Sp500Breadth>>
   gold(request: GoldRequest): Promise<Envelope<GoldPayload>>

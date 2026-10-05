@@ -1,4 +1,10 @@
 import { getMoney, clearMoneyCache } from './money.js'
+import { getHood } from './hood.js'
+import { getSofi } from './sofi.js'
+import type { SofiPayload, SofiRequest } from '../shared/sofi.js'
+import { getMu } from './mu.js'
+import type { MuPayload, MuRequest } from '../shared/mu.js'
+import type { HoodPayload, HoodRequest } from '../shared/hood.js'
 import type { MoneyPayload, MoneyRequest } from '../shared/money.js'
 import type { Sp500Request, Sp500Data, Sp500BreadthRequest, Sp500Breadth } from '../shared/sp500.js'
 import { getSp500, getSp500Breadth } from './sp500.js'
@@ -364,6 +370,9 @@ export interface MarketDataProvider {
   earningsCalendar(request: EarningsCalendarRequest): Promise<Envelope<EarningsCalendarPayload>>
   crypto(request: CryptoRequest): Promise<Envelope<CryptoPayload>>
   bmnr(request: BmnrRequest): Promise<Envelope<BmnrPayload>>
+  hood(request: HoodRequest): Promise<Envelope<HoodPayload>>
+  sofi(request: SofiRequest): Promise<Envelope<SofiPayload>>
+  mu(request: MuRequest): Promise<Envelope<MuPayload>>
   sp500(request: Sp500Request): Promise<Envelope<Sp500Data>>
   sp500Breadth(request: Sp500BreadthRequest): Promise<Envelope<Sp500Breadth>>
   gold(request: GoldRequest): Promise<Envelope<GoldPayload>>
@@ -1340,6 +1349,10 @@ export const yahooProvider: MarketDataProvider = {
       return failed(emptyBmnrPayload(), describeError(error), BMNR_SOURCE)
     }
   },
+
+  hood: getHood,
+  sofi: getSofi,
+  mu: getMu,
 
   sp500: getSp500,
   sp500Breadth: getSp500Breadth,

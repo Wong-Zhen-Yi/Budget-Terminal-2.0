@@ -57,6 +57,9 @@ export function queryFreshness(queryKey: QueryKey): number {
   if (root === 'crypto') return FRESHNESS.crypto
   if (root === 'bitcoin') return FRESHNESS.bitcoin
   if (root === 'bmnr') return FRESHNESS.bmnr
+  if (root === 'sofi') return FRESHNESS.sofi
+  if (root === 'mu') return FRESHNESS.mu
+  if (root === 'hood') return FRESHNESS.hood
   if (root === 'gold') return FRESHNESS.goldMarket
   if (root === 'oil') return FRESHNESS.oilMarket
   if (root === 'calendarMonth' || root === 'earningsCalendar') return FRESHNESS.calendar

@@ -73,6 +73,69 @@ await signalsStartup.run(signalsClient, 7)
 assert.deepEqual(signalsRequest, { background: true, backgroundOrder: 7 }, 'startup must pass the learned page order to the provider')
 signalsClient.clear()
 
+let muRequest: unknown
+Object.assign(window.api, { mu: async (request: unknown) => { muRequest = request; return ok({ symbol: 'MU' }, 'fixture') } })
+const muStartup = buildTasks(undefined, undefined, { stocks: 'AAPL', fundamentals: 'AAPL' },
+  { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 }).find(task => task.tab === 'mu')!
+const muClient = new QueryClient()
+await muStartup.run(muClient, 8)
+assert.deepEqual(muRequest, { background: true, backgroundOrder: 8 })
+assert.equal(muClient.getQueryData<{ data: { symbol: string } }>(['mu'])?.data.symbol, 'MU', 'MU must warm the page hook cache key')
+muClient.clear()
+Object.assign(window.api, { mu: async () => ({ ...ok({ symbol: 'MU' }, 'fixture'),
+  meta: { source: 'fixture', freshness: 'partial', fetchedAt: Date.now(), failureReason: 'Memory data unavailable' } }) })
+const partialMuClient = new QueryClient()
+await assert.rejects(muStartup.run(partialMuClient), /Memory data unavailable/)
+assert.equal(partialMuClient.getQueryData<{ data: { symbol: string } }>(['mu'])?.data.symbol, 'MU', 'Partial MU startup must retain usable panels')
+partialMuClient.clear()
+
+let sofiRequests = 0
+let sofiRequest: unknown
+const { emptySofiPayload } = await import('../electron/shared/sofi.js')
+Object.assign(window.api, { sofi: async (request: unknown) => {
+  sofiRequests += 1
+  sofiRequest = request
+  return ok(emptySofiPayload(), 'SOFI fixture')
+} })
+const sofiSettings = { hiddenTabs: ['sofi'], favoriteTabs: [] } as unknown as import('../electron/shared/contract.js').AppSettings
+const sofiTask = buildTasks(undefined, sofiSettings, { stocks: 'AAPL', fundamentals: 'AAPL' },
+  { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 }).find(task => task.tab === 'sofi')!
+assert(sofiTask, 'Unvisited SOFI must load even when hidden and without holdings')
+const sofiClient = new QueryClient()
+await sofiTask.run(sofiClient, 8)
+assert.deepEqual(sofiRequest, { background: true, backgroundOrder: 8 })
+assert(sofiClient.getQueryData(['sofi']), 'Startup must populate the SOFI page query')
+await warmQuery(sofiClient, { queryKey: ['sofi'], queryFn: () => window.api.sofi({}), staleTime: 300_000 })
+assert.equal(sofiRequests, 1, 'Opening warmed SOFI must not repeat its initial load')
+sofiClient.clear()
+for (const freshness of ['partial', 'stale', 'failed'] as const) {
+  Object.assign(window.api, { sofi: async () => ({ data: emptySofiPayload(), errors: [],
+    meta: { source: 'SOFI fixture', freshness, fetchedAt: Date.now(), failureReason: 'SOFI reports unavailable' } }) })
+  await assert.rejects(sofiTask.run(sofiClient), /SOFI reports unavailable/, 'Incomplete SOFI startup must remain visible')
+  if (freshness !== 'failed') assert(sofiClient.getQueryData(['sofi']), 'Usable partial SOFI must remain cached')
+  sofiClient.clear()
+}
+
+let hoodRequests = 0
+let hoodRequest: unknown
+const { emptyHoodPayload } = await import('../electron/shared/hood.js')
+Object.assign(window.api, { hood: async (request: unknown) => {
+  hoodRequests += 1
+  hoodRequest = request
+  return ok(emptyHoodPayload(), 'HOOD fixture')
+} })
+const hoodSettings = { hiddenTabs: ['hood'], favoriteTabs: [] } as unknown as import('../electron/shared/contract.js').AppSettings
+const hoodTask = buildTasks(undefined, hoodSettings, { stocks: 'AAPL', fundamentals: 'AAPL' },
+  { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 }).find(task => task.tab === 'hood')!
+assert(hoodTask, 'An unvisited, hidden HOOD page must load at startup even without holdings')
+const hoodClient = new QueryClient()
+await hoodTask.run(hoodClient, 9)
+assert.deepEqual(hoodRequest, { background: true, backgroundOrder: 9 })
+assert(hoodClient.getQueryData(['hood']), 'Startup must populate the page query')
+await warmQuery(hoodClient, { queryKey: ['hood'], queryFn: () => window.api.hood({}), staleTime: 300_000 })
+assert.equal(hoodRequests, 1, 'Opening warmed HOOD must not repeat the initial load')
+hoodClient.clear()
+
 // Every task must start while the slow first task is still pending. A failure
 // must remain visible and must not stop other pages from finishing.
 const parallelTasks = Array.from({ length: 12 }, (_, index) => index)

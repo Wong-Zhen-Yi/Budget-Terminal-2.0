@@ -56,6 +56,9 @@
               "crypto",
               "bitcoin",
               "bmnr",
+              "sofi",
+              "mu",
+              "hood",
               "gold",
               "oil",
               "backtest",
@@ -1961,6 +1964,57 @@
         "$ref": "#/definitions/BmnrRequest"
       },
       "BmnrRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "sofi": {
+    "$ref": "#/definitions/Input_sofi",
+    "definitions": {
+      "Input_sofi": {
+        "$ref": "#/definitions/SofiRequest"
+      },
+      "SofiRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "mu": {
+    "$ref": "#/definitions/Input_mu",
+    "definitions": {
+      "Input_mu": {
+        "$ref": "#/definitions/MuRequest"
+      },
+      "MuRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "hood": {
+    "$ref": "#/definitions/Input_hood",
+    "definitions": {
+      "Input_hood": {
+        "$ref": "#/definitions/HoodRequest"
+      },
+      "HoodRequest": {
         "type": "object",
         "properties": {
           "force": {

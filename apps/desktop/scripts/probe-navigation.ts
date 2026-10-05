@@ -5,6 +5,11 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createRequire } from 'node:module'
 import { build } from 'esbuild'
+import { workspaceFor } from '../electron/shared/navigation.js'
+import { TABS } from '../electron/shared/contract.js'
+
+assert.equal(workspaceFor('sofi')?.id, 'focus')
+assert(TABS.some(tab => tab.id === 'sofi' && tab.label === 'SOFI' && tab.implemented))
 
 // Exercise the actual page host in Chromium with synthetic data and isolated storage.
 const require = createRequire(import.meta.url)

@@ -542,6 +542,45 @@ export function buildTasks(
     })
   }
 
+  tasks.push({
+    tab: 'mu', label: 'MU company dashboard',
+    run: async (client, backgroundOrder) => {
+      const result = await warmStartupQuery(client, {
+        queryKey: queryKeys.mu,
+        queryFn: () => api.mu({ background: true, backgroundOrder }),
+        staleTime: queryFreshness(queryKeys.mu),
+      })
+      // Retain usable panels, while keeping incomplete startup visible in progress.
+      if (result.meta.freshness === 'partial' || result.meta.freshness === 'stale') {
+        throw new Error(result.meta.failureReason || 'MU startup data is incomplete')
+      }
+      return result
+    },
+  })
+  tasks.push({
+    tab: 'sofi', label: 'SOFI company dashboard',
+    run: async (client, backgroundOrder) => {
+      const result = await warmStartupQuery(client, {
+        queryKey: queryKeys.sofi,
+        queryFn: () => api.sofi({ background: true, backgroundOrder }),
+        staleTime: queryFreshness(queryKeys.sofi),
+      })
+      // Keep usable panels cached, but report incomplete startup as a visible failure.
+      if (result.meta.freshness === 'partial' || result.meta.freshness === 'stale') {
+        throw new Error(result.meta.failureReason || 'SOFI startup data is incomplete')
+      }
+      return result
+    },
+  })
+  tasks.push({
+    tab: 'hood', label: 'HOOD company dashboard',
+    run: (client, backgroundOrder) => warmStartupQuery(client, {
+      queryKey: queryKeys.hood,
+      queryFn: () => api.hood({ background: true, backgroundOrder }),
+      staleTime: queryFreshness(queryKeys.hood),
+    }),
+  })
+
   // One CoinGecko call, two SEC calls behind their own disk cache and three Yahoo quotes.
   tasks.push({
     tab: 'bmnr',

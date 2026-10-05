@@ -5,9 +5,13 @@ import { tmpdir } from 'node:os'
 import { join, resolve, relative } from 'node:path'
 import { createRequire } from 'node:module'
 import { build } from 'esbuild'
+import { operations } from '../mcp/operations'
+import { TABS } from '../electron/shared/contract'
 
 const require = createRequire(import.meta.url)
 const root = resolve(import.meta.dirname, '..')
+const toolCount = Object.keys(operations).length + 1
+const implementedPages = TABS.filter(tab => tab.implemented).map(tab => tab.id)
 const directory = await mkdtemp(join(tmpdir(), 'budget-loading-ui-'))
 const screenshot = join(root, 'out', 'loading-smoke.png')
 try {
@@ -28,6 +32,7 @@ try {
         import { DEFAULT_BACKTEST_PAGE_SETTINGS } from './electron/shared/backtest'
         import { DEFAULT_QUANT_PAGE_SETTINGS } from './electron/shared/quant'
         import { DEFAULT_YOUTUBE_PAGE_SETTINGS } from './electron/shared/youtube'
+        const toolCount = ${toolCount}
         window.fixtureSettings = {
           clockCountry: 'US', time12h: true, tabOrder: TABS.map(tab => tab.id),
           hiddenTabs: [], favoriteTabs: [], obscuredTabs: [], sidebarCollapsed: false, sourcePath: '',
@@ -46,7 +51,7 @@ try {
           const light = name => document.querySelector('[data-mcp-light="' + name + '"]')
           check(light('active')?.dataset.state === 'off', 'Idle MCP activity light should be off')
           check(light('connected')?.dataset.state === 'off', 'MCP readiness alone must not imply a connected client')
-          client.setQueryData(['mcpStatus'], { available: true, connected: true, active: true, tools: 77 })
+          client.setQueryData(['mcpStatus'], { available: true, connected: true, active: true, tools: toolCount })
           await settle()
           check(light('active')?.dataset.state === 'on', 'MCP activity light did not turn on')
           check(light('connected')?.dataset.state === 'on', 'MCP connection light did not turn on')
@@ -54,7 +59,7 @@ try {
           client.setQueryData(['mcpStatus'], { available: false, error: 'Fixture MCP startup failure' })
           await settle()
           check(light('active')?.dataset.state === 'error' && light('connected')?.dataset.state === 'error', 'MCP failure lights are missing')
-          client.setQueryData(['mcpStatus'], { available: true, tools: 77 })
+          client.setQueryData(['mcpStatus'], { available: true, tools: toolCount })
           // Complete one measured page; leave the others pending to exercise navigation.
           await new Promise(resolve => setTimeout(resolve, 5600))
           check(useDataHealth.getState().startup?.planned > 0, 'Startup queue did not begin')
@@ -89,9 +94,10 @@ try {
           check(orderRows.at(-1).innerText.includes('90.0s'), 'Saved heavy-page load time is missing')
           check(orderRows.some(row => row.innerText.includes('Not measured')), 'Unmeasured page is presented as timed')
           check(document.body.innerText.includes('/fixture/Downloads/budget-terminal-backup.json'), 'Automatic backup file is not shown in Settings')
-          check(document.body.innerText.includes('Ready · 77 tools for ChatGPT / Codex'), 'MCP status is not visible in Settings')
+          check(document.body.innerText.includes('Ready · ' + toolCount + ' tools for ChatGPT / Codex'), 'MCP status is not visible in Settings')
           const capabilities = document.querySelector('[aria-label="MCP capabilities"]')
-          check(capabilities?.querySelectorAll('[data-mcp-capability]').length === 77, 'Settings does not list every MCP capability')
+          check(capabilities?.querySelectorAll('[data-mcp-capability]').length === toolCount, 'Settings does not list every MCP capability')
+          check(capabilities?.querySelector('[data-mcp-capability="budget_terminal_hood"]'), 'HOOD capability is missing')
           check(capabilities?.querySelector('[data-mcp-capability="budget_terminal_screenshot"]'), 'Screenshot capability is missing')
           const edits = [...capabilities.querySelectorAll('details')].find(group => group.querySelector('summary').textContent.includes('Saved-record edits'))
           check(edits, 'Saved-record edit capabilities are missing')
@@ -102,7 +108,7 @@ try {
           client.setQueryData(['mcpStatus'], { available: false, error: 'Fixture MCP startup failure' })
           await settle()
           check(document.body.innerText.includes('Fixture MCP startup failure'), 'MCP startup failure is not visible')
-          client.setQueryData(['mcpStatus'], { available: true, tools: 77 })
+          client.setQueryData(['mcpStatus'], { available: true, tools: toolCount })
           client.setQueryData(['settings'], result => ({ ...result, data: { ...result.data,
             automaticBackup: { ...result.data.automaticBackup, error: 'Fixture backup failure' } } }))
           await settle()
@@ -156,7 +162,7 @@ try {
         onScreenshotRequested: listener => window.captureApi.onScreenshotRequested(listener),
         screenshotReady: result => window.captureApi.screenshotReady(result),
         onPortfolioChanged: () => () => {},
-        mcpStatus: async () => ({ available: true, tools: 77 }),
+        mcpStatus: async () => ({ available: true, tools: ${toolCount} }),
         settings: async () => ok(window.fixtureSettings),
         portfolio: async () => ok({ portfolios: [], activeId: 'main', mainId: 'main', sourcePath: '' }),
         signals: async request => {
@@ -209,8 +215,8 @@ try {
         window.webContents.setBackgroundThrottling(true);
         const all = await capture({ page: 'all' });
         assert.equal(all.meta.freshness, 'fresh', JSON.stringify(all.errors));
-        assert.equal(all.data.screenshots.length, 42);
-        assert.equal(new Set(all.data.screenshots.map(page => page.pageId)).size, 42);
+        assert.deepEqual(all.data.screenshots.map(page => page.pageId).sort(), ${JSON.stringify(implementedPages.sort())});
+        assert.equal(new Set(all.data.screenshots.map(page => page.pageId)).size, ${implementedPages.length});
         assert.equal(window.isVisible(), false, 'Hidden window was shown during capture');
         assert.equal(window.webContents.getBackgroundThrottling(), true);
         assert.equal(await snapshot(), original, 'Selected page or recent history changed');
@@ -266,7 +272,7 @@ try {
         window.hide();
         window.webContents.setBackgroundThrottling(false);
         assert.equal(await snapshot(), original);
-        console.log('PASS: all 42 page screenshots, hidden/obscured pages, background throttle restoration, concurrent captures, timeout recovery, hidden/minimized/covered windows, native PNG pixels and navigation/scroll restoration');
+        console.log('PASS: all ${implementedPages.length} page screenshots, hidden/obscured pages, background throttle restoration, concurrent captures, timeout recovery, hidden/minimized/covered windows, native PNG pixels and navigation/scroll restoration');
         await new Promise(resolve => setTimeout(resolve, 350));
         fs.writeFileSync(${JSON.stringify(screenshot)}, (await window.webContents.capturePage()).toPNG());
         window.setSize(1000, 800);

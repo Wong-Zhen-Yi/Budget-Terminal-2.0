@@ -212,7 +212,7 @@ async function paceSec(): Promise<void> {
   await next
 }
 
-async function requestJson(url: string): Promise<Record<string, unknown>> {
+async function requestSec<T>(url: string, read: (response: Response) => Promise<T>): Promise<T> {
   let lastError: unknown = new Error('SEC request failed.')
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
     await paceSec()
@@ -230,11 +230,7 @@ async function requestJson(url: string): Promise<Record<string, unknown>> {
       })
       retryable = response.status === 429 || response.status >= 500
       if (!response.ok) throw new Error(`SEC returned HTTP ${response.status}`)
-      const payload = await response.json()
-      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-        throw new Error('SEC response was not a JSON object.')
-      }
-      return payload as Record<string, unknown>
+      return await read(response)
     } catch (error) {
       lastError = error
       if (!retryable || attempt === MAX_ATTEMPTS - 1) break
@@ -244,6 +240,23 @@ async function requestJson(url: string): Promise<Record<string, unknown>> {
     }
   }
   throw lastError
+}
+
+async function requestJson(url: string): Promise<Record<string, unknown>> {
+  return requestSec(url, async response => {
+    const payload: unknown = await response.json()
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('SEC response was not a JSON object.')
+    return payload as Record<string, unknown>
+  })
+}
+
+/** Earnings exhibits share the SEC limiter, agent, timeout and retry policy. */
+export function fetchSecText(url: string): Promise<string> {
+  const target = new URL(url)
+  if (target.protocol !== 'https:' || target.hostname !== 'www.sec.gov' || !target.pathname.startsWith('/Archives/edgar/data/')) {
+    throw new Error('Unexpected SEC exhibit URL.')
+  }
+  return requestSec(url, response => response.text())
 }
 
 async function cachedJson(
@@ -450,7 +463,7 @@ function normalizeStatements(companyFacts: Record<string, unknown>): {
   return { annual: build(annualRaw), quarterly: build(quarterlyRaw) }
 }
 
-function normalizeFilings(submissions: Record<string, unknown>, cik: string): SecFiling[] {
+function normalizeFilings(submissions: Record<string, unknown>, cik: string, limit = 50): SecFiling[] {
   const recent = record(record(submissions.filings).recent)
   const forms = Array.isArray(recent.form) ? recent.form : []
   const field = (name: string, index: number): string => {
@@ -458,7 +471,7 @@ function normalizeFilings(submissions: Record<string, unknown>, cik: string): Se
     return Array.isArray(values) ? String(values[index] ?? '') : ''
   }
   const filings: SecFiling[] = []
-  for (let index = 0; index < forms.length && filings.length < 50; index += 1) {
+  for (let index = 0; index < forms.length && filings.length < limit; index += 1) {
     const form = String(forms[index] ?? '')
     if (!['10-K', '10-Q', '8-K'].some((prefix) => form.startsWith(prefix))) continue
     const accessionNumber = field('accessionNumber', index)
@@ -481,6 +494,15 @@ function normalizeFilings(submissions: Record<string, unknown>, cik: string): Se
     })
   }
   return filings
+}
+
+/** Fixed-company dashboards can discover earnings filings without downloading companyfacts. */
+export async function fetchSecFilingSnapshot(cikInput: string, force = false) {
+  if (!/^\d{1,10}$/.test(cikInput) || Number(cikInput) <= 0) throw new Error('Invalid SEC CIK.')
+  const cik = String(Number(cikInput)).padStart(10, '0')
+  const result = await cachedJson('submissions', cik, SEC_SUBMISSIONS_URL.replace('{cik}', cik), SUBMISSIONS_TTL, force)
+  return { filings: normalizeFilings(result.payload, cik, 500), freshness: result.metadata.freshness,
+    warnings: result.metadata.warning ? [`SEC submissions refresh failed; using cached data: ${result.metadata.warning}`] : [] }
 }
 
 function emptyMetadata(warning: string): FundamentalsSecMetadata {

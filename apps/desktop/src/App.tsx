@@ -20,6 +20,9 @@ import { CalendarPage } from '@/pages/CalendarPage'
 import { ChartsPage } from '@/pages/ChartsPage'
 import { BitcoinPage } from '@/pages/BitcoinPage'
 import { BmnrPage } from '@/pages/BmnrPage'
+import { SofiPage } from '@/pages/SofiPage'
+import { HoodPage } from '@/pages/HoodPage'
+import { MuPage } from '@/pages/MuPage'
 import { MoneyPage } from '@/pages/MoneyPage'
 import { BondsPage } from '@/pages/BondsPage'
 import { ForexPage } from '@/pages/ForexPage'
@@ -451,6 +454,12 @@ function renderPage({
       <BitcoinPage onStatusChange={onStatusChange} />
     ) : tabId === 'bmnr' ? (
       <BmnrPage onStatusChange={onStatusChange} />
+    ) : tabId === 'sofi' ? (
+      <SofiPage onStatusChange={onStatusChange} />
+    ) : tabId === 'mu' ? (
+      <MuPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
+    ) : tabId === 'hood' ? (
+      <HoodPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'sp500' ? (
       <Sp500Page onStatusChange={onStatusChange} />
     ) : tabId === 'gold' ? (

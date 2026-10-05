@@ -14,7 +14,7 @@ const groups = [
   { title: 'Connection & diagnostics', hint: 'Capture app pages, check MCP availability and provider request pressure.' },
 ] as const
 
-const company = new Set<Operation>(['stocks', 'fundamentals', 'fundamentalsPage', 'targets', 'valuation', 'discoveryUniverse', 'discovery', 'bmnr'])
+const company = new Set<Operation>(['stocks', 'fundamentals', 'fundamentalsPage', 'targets', 'valuation', 'discoveryUniverse', 'discovery', 'bmnr', 'hood'])
 const trading = new Set<Operation>(['chart', 'chartsHistory', 'chartsCompare', 'chartsRelationship', 'options', 'optionsChain', 'optionsExpirations', 'signals', 'technicalScan', 'backtest', 'quantScan', 'quantPair'])
 const events = new Set<Operation>(['news', 'newsPage', 'newsTickerSearch', 'newsArticle', 'newsThumbnail', 'calendarMonth', 'earningsCalendar', 'institutionActivity', 'institutionTickerActivity', 'ipoUpcoming', 'ipoCompleted', 'politicsPage', 'politicsExport', 'youtube', 'youtubeThumbnail'])
 const finance = new Set<Operation>(['portfolio', 'cards', 'cardsPerformance', 'personalFinance', 'settings', 'returns', 'momentum', 'analytics', 'optionQuotes', 'projections', 'fx'])
