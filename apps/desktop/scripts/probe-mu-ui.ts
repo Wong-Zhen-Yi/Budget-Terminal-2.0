@@ -47,6 +47,23 @@ try {
       }
       const host = createRoot(document.getElementById('root'))
       const render = () => host.render(<QueryClientProvider client={client}><Page /></QueryClientProvider>)
+      window.checkFinancialChart = async () => {
+        const panel = [...document.querySelectorAll('section')].find(section => section.querySelector('h2')?.textContent === 'Quarterly financial trends · USD')
+        check(panel, 'Financial trends panel missing')
+        panel.scrollIntoView({ block: 'start' })
+        await settle()
+        const svg = panel.querySelector('svg')
+        check(svg && svg.querySelectorAll('path').length === 4, 'Financial series missing')
+        const frame = svg.parentElement.parentElement.getBoundingClientRect()
+        const chart = svg.getBoundingClientRect()
+        check(chart.height > 100 && chart.top >= frame.top && chart.bottom <= frame.bottom + 1, 'Financial chart exceeds its allocated height: ' + JSON.stringify({ chart: chart.toJSON(), frame: frame.toJSON() }))
+        check(chart.left >= frame.left && chart.right <= frame.right + 1, 'Financial chart exceeds its allocated width')
+        const footer = panel.querySelector('section > div').lastElementChild.getBoundingClientRect()
+        check(chart.bottom <= footer.top + 1, 'Financial chart overlaps the source footer')
+        const ticks = [...svg.querySelectorAll('[data-axis=x]')]
+        check(ticks.length > 1, 'Fiscal date labels missing')
+        check(ticks.every(tick => tick.getBoundingClientRect().bottom <= frame.bottom + 1), 'Fiscal date labels are clipped')
+      }
       window.runProbe = async () => {
         const task = buildTasks(undefined, undefined, { stocks: 'AAPL', fundamentals: 'AAPL' }, { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 }).find(task => task.tab === 'mu')
         await task.run(client, 9)
@@ -56,6 +73,7 @@ try {
         check(text().includes('MU — Micron Technology') && text().includes('mid-single-digit'), 'MU headline or memory metrics missing')
         check(text().includes('Not disclosed') && text().includes('FY2027 Q1'), 'HBM or guidance period missing')
         check(document.querySelectorAll('canvas').length > 0, 'Stock chart did not render')
+        await window.checkFinancialChart()
         const range = button('3M'); range.click(); await settle()
         check(calls === 1, 'Chart range triggered a provider fetch')
         button('Charts').click(); check(navigation.join(':') === 'charts:MU', 'Charts navigation lost ticker')
@@ -89,15 +107,21 @@ try {
     const { app, BrowserWindow } = require('electron'); const fs = require('fs');
     app.setPath('userData', ${JSON.stringify(join(scratch, 'userData'))});
     app.whenReady().then(async () => {
-      const window = new BrowserWindow({ show: false, width: 1500, height: 1050, webPreferences: { backgroundThrottling: false } });
+      const window = new BrowserWindow({ show: false, width: 1500, height: 1050, webPreferences: { backgroundThrottling: false, offscreen: true } });
+      const checkFinancialChart = async () => {
+        const error = await window.webContents.executeJavaScript('(async () => { try { await window.checkFinancialChart(); return null } catch (error) { return error.message } })()');
+        if (error) throw Error(error);
+      };
       try {
         await window.loadFile(${JSON.stringify(join(scratch, 'index.html'))});
         console.log(await window.webContents.executeJavaScript('window.runProbe()'));
         await new Promise(resolve => setTimeout(resolve, 300));
-        fs.writeFileSync(${JSON.stringify(screenshot)}, (await window.webContents.capturePage()).toPNG());
+        await checkFinancialChart();
+        fs.writeFileSync(${JSON.stringify(screenshot)}, (await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG());
         window.setSize(720, 850); await new Promise(resolve => setTimeout(resolve, 300));
         if (await window.webContents.executeJavaScript('document.documentElement.scrollWidth > window.innerWidth')) throw Error('MU layout overflows at narrow width');
-        fs.writeFileSync(${JSON.stringify(join(root, 'out/mu-smoke-narrow.png'))}, (await window.webContents.capturePage()).toPNG());
+        await checkFinancialChart();
+        fs.writeFileSync(${JSON.stringify(join(root, 'out/mu-smoke-narrow.png'))}, (await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG());
         console.log('PASS: normal and narrow viewport smoke tests'); app.exit(0);
       } catch (error) { console.error(error); app.exit(1); }
     });
