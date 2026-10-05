@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { SETTINGS_TAB_ID, TABS } from '@shared/contract'
 import { WORKSPACES } from '@shared/navigation'
 import { useWarmPages } from '@/api/prefetch'
+import { useMcpScreenshot, useScreenshotReady } from '@/api/mcpScreenshot'
 import { useReloadAll } from '@/api/queries'
 import { useSettings, useSettingsMutation } from '@/api/settingsQueries'
 import { PageCache } from '@/components/chrome/PageCache'
@@ -65,10 +66,13 @@ const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
 
 export function App() {
   const isMac = window.api.platform === 'darwin'
-  const [activeTab, setActiveTab] = useState('dashboard')
+  const [selectedTab, setActiveTab] = useState('dashboard')
+  const { command: screenshot, complete: completeScreenshot } = useMcpScreenshot()
+  const screenshotPage = screenshot?.page ?? null
+  const activeTab = screenshotPage ?? selectedTab
   const recent = useNavigation((state) => state.recent)
   const visit = useNavigation((state) => state.visit)
-  useEffect(() => visit(activeTab), [activeTab, visit])
+  useEffect(() => visit(selectedTab), [selectedTab, visit])
   const [panels, setPanels] = useState<PanelStatus[]>([])
   const [sourcePath, setSourcePath] = useState('')
   const [reloading, setReloading] = useState(false)
@@ -110,7 +114,9 @@ export function App() {
   }
   const record = useDataHealth((state) => state.record)
   // Start every page's automatic initial load after local settings and holdings settle.
-  const warm = useWarmPages(settings, !settingsQuery.isPending, activeTab, recent)
+  const warm = useWarmPages(settings, !settingsQuery.isPending, selectedTab, recent)
+  const hideCurrent = obscured && (settings?.obscuredTabs ?? []).includes(activeTab)
+  useScreenshotReady(screenshot, activeTab, hideCurrent, warm.active, completeScreenshot)
   const setFundamentalsSymbol = useFundamentalsStore((state) => state.setSymbol)
   const setOptionsSymbol = useOptionsPage((state) => state.setSymbol)
 
@@ -120,16 +126,16 @@ export function App() {
     const hidden = new Set(settings?.hiddenTabs ?? [])
     return order.flatMap((id) => {
       const tab = TAB_BY_ID.get(id)
-      return tab && !hidden.has(id) ? [tab] : []
+      return tab && (!hidden.has(id) || screenshotPage === id) ? [tab] : []
     })
-  }, [settings])
+  }, [settings, screenshotPage])
 
   // Hiding the page you are standing on has to move you somewhere that still exists.
   useEffect(() => {
-    if (visibleTabs.some((tab) => tab.id === activeTab)) return
+    if (screenshotPage || visibleTabs.some((tab) => tab.id === activeTab)) return
     const fallback = visibleTabs.find((tab) => tab.implemented) ?? visibleTabs[0]
     if (fallback) setActiveTab(fallback.id)
-  }, [visibleTabs, activeTab])
+  }, [visibleTabs, activeTab, screenshotPage])
 
   // A shell notice describes what just happened on the page it happened on; leaving it
   // up after a tab switch would mask that page's own health line.
@@ -295,8 +301,6 @@ export function App() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [isMac, pickerOpen, reload, stepTab, toggleObscure, workspaceTabs])
 
-  const hideCurrent = obscured && (settings?.obscuredTabs ?? []).includes(activeTab)
-
   const visibleIds = useMemo(() => visibleTabs.map((tab) => tab.id), [visibleTabs])
   const renderCachedPage = useCallback((tabId: string) => renderPage({
     tabId,
@@ -338,7 +342,7 @@ export function App() {
                 hideCurrent ? 'pointer-events-none blur-md select-none' : ''
               }`}
             >
-              <PageCache activeTab={activeTab} visibleIds={visibleIds} renderPage={renderCachedPage} />
+              <PageCache activeTab={activeTab} retainedTab={screenshotPage ? selectedTab : undefined} visibleIds={visibleIds} renderPage={renderCachedPage} />
             </div>
 
             {hideCurrent ? (
@@ -364,7 +368,7 @@ export function App() {
         }
       />
 
-      {pickerOpen ? (
+      {pickerOpen && !screenshotPage ? (
         <TabPicker
           tabs={visibleTabs.map((tab) => ({ ...tab }))}
           recent={recent}

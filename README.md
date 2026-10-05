@@ -176,8 +176,8 @@ Installer packaging and automatic application updates are not configured.
 
 ## Local MCP for ChatGPT and Codex
 
-Budget Terminal exposes 76 MCP tools: all 75 service operations plus connection
-status. Research tools use the same caches and provider rate gate as the app.
+Budget Terminal exposes 77 MCP tools: all 75 service operations, page screenshots,
+and connection status. Research tools use the same caches and provider rate gate as the app.
 Write tools edit saved portfolios, options records, Cards, personal finance and
 settings through the existing stores and automatic backup. These are local record
 edits, not broker orders. Bulk import/export, clear-all, cache reset and shell
@@ -237,6 +237,16 @@ Tools accept a `request` object; reads with no parameters use
 Use that input with `budget_terminal_stocks`; sources, timestamps, freshness and
 partial-data errors are preserved in structured output and JSON text.
 
+Use `budget_terminal_screenshot` with `{ "request": {} }` to capture the current
+page, `{ "request": { "page": "charts" } }` for a specific tab id, or
+`{ "request": { "page": "all" } }` for every implemented page, including hidden
+tabs. Results contain PNG image blocks with page ids, dimensions, capture times,
+privacy and startup-loading status, and the visible footer status. Captures show
+the current viewport, including any loading or error state; they do not wait for
+provider fetches. Electron captures its rendered content even when the window is
+covered, hidden or minimized, without bringing it forward. The selected tab and
+background throttling are restored afterward. Screenshots preserve privacy blur.
+
 `npm run build:mcp` also prepares a self-contained local plugin under
 `plugins/budget-terminal`, including its generated `server/server.mjs` bundle.
 Generated bundles are excluded from Git; rebuild before copying or packaging that
@@ -252,6 +262,7 @@ Browser-origin requests, invalid schemas, unknown routes and bodies larger than
 
 Additional verification: `npm run probe:security --workspace budget-terminal-desktop`
 checks real Electron IPC and mutation events; `npm run probe:loading-ui --workspace budget-terminal-desktop`
-checks the status panel and all-page startup navigation. The MCP probe uses only
+checks the status panel, all-page startup navigation, and PNG capture of all pages
+with hidden, minimized and covered windows. The MCP probe uses only
 temporary data/cache/backup folders and deterministic provider substitutes for
 research routing. Live feed availability is not asserted by those offline probes.

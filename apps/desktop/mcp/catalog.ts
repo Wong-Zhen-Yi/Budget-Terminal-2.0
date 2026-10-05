@@ -11,7 +11,7 @@ export const catalog = Object.entries(operations).map(([operation, description])
     name: toolName(operation), description,
     // A wrapper keeps every MCP tool's root schema an object, including mutation unions.
     inputSchema: { type: 'object', properties: { request: { $ref: inputSchema.$ref } }, definitions: inputSchema.definitions, required: ['request'], additionalProperties: false },
-    annotations: { readOnlyHint: !mutation, destructiveHint: mutation, idempotentHint: !mutation, openWorldHint: !['portfolio', 'cards', 'personalFinance', 'settings', ...Object.keys(mutationDomains)].includes(operation) },
+    annotations: { readOnlyHint: !mutation, destructiveHint: mutation, idempotentHint: !mutation, openWorldHint: !['screenshot', 'portfolio', 'cards', 'personalFinance', 'settings', ...Object.keys(mutationDomains)].includes(operation) },
   }
   return { operation: operation as Operation, tool, validate: validator.compile(tool.inputSchema) }
 })

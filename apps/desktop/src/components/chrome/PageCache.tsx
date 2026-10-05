@@ -9,6 +9,8 @@ import {
 
 interface PageCacheProps {
   activeTab: string
+  /** Preserve the user's page (including scroll/form state) during MCP captures. */
+  retainedTab?: string
   visibleIds: readonly string[]
   renderPage: (tabId: string) => ReactNode
 }
@@ -50,11 +52,12 @@ class PageErrorBoundary extends Component<{
   }
 }
 
-export const PageCache = memo(function PageCache({ activeTab, visibleIds, renderPage }: PageCacheProps) {
+export const PageCache = memo(function PageCache({ activeTab, retainedTab, visibleIds, renderPage }: PageCacheProps) {
   const [retained, setRetained] = useState([activeTab])
   const residents = [
     activeTab,
-    ...retained.filter((id) => id !== activeTab && visibleIds.includes(id)),
+    ...(retainedTab && retainedTab !== activeTab ? [retainedTab] : []),
+    ...retained.filter((id) => id !== activeTab && id !== retainedTab && visibleIds.includes(id)),
   ].slice(0, MAX_RESIDENT_PAGES)
 
   // Adjust before committing so a newly selected page mounts only once. Keep the

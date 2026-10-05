@@ -38,13 +38,15 @@ try {
         const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, refetchOnMount: false } } })
         const check = (ok, message) => { if (!ok) throw Error(message) }
         const settle = () => new Promise(resolve => setTimeout(resolve, 150))
+        window.capturePrivacyFixture = () => client.setQueryData(['settings'], result => ({ ...result,
+          data: { ...result.data, hiddenTabs: ['dictionary'], obscuredTabs: ['dictionary'] } }))
         window.runProbe = async () => {
           createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><App /></QueryClientProvider>)
           await settle()
           const light = name => document.querySelector('[data-mcp-light="' + name + '"]')
           check(light('active')?.dataset.state === 'off', 'Idle MCP activity light should be off')
           check(light('connected')?.dataset.state === 'off', 'MCP readiness alone must not imply a connected client')
-          client.setQueryData(['mcpStatus'], { available: true, connected: true, active: true, tools: 76 })
+          client.setQueryData(['mcpStatus'], { available: true, connected: true, active: true, tools: 77 })
           await settle()
           check(light('active')?.dataset.state === 'on', 'MCP activity light did not turn on')
           check(light('connected')?.dataset.state === 'on', 'MCP connection light did not turn on')
@@ -52,7 +54,7 @@ try {
           client.setQueryData(['mcpStatus'], { available: false, error: 'Fixture MCP startup failure' })
           await settle()
           check(light('active')?.dataset.state === 'error' && light('connected')?.dataset.state === 'error', 'MCP failure lights are missing')
-          client.setQueryData(['mcpStatus'], { available: true, tools: 76 })
+          client.setQueryData(['mcpStatus'], { available: true, tools: 77 })
           // Complete one measured page; leave the others pending to exercise navigation.
           await new Promise(resolve => setTimeout(resolve, 5600))
           check(useDataHealth.getState().startup?.planned > 0, 'Startup queue did not begin')
@@ -87,9 +89,10 @@ try {
           check(orderRows.at(-1).innerText.includes('90.0s'), 'Saved heavy-page load time is missing')
           check(orderRows.some(row => row.innerText.includes('Not measured')), 'Unmeasured page is presented as timed')
           check(document.body.innerText.includes('/fixture/Downloads/budget-terminal-backup.json'), 'Automatic backup file is not shown in Settings')
-          check(document.body.innerText.includes('Ready · 76 tools for ChatGPT / Codex'), 'MCP status is not visible in Settings')
+          check(document.body.innerText.includes('Ready · 77 tools for ChatGPT / Codex'), 'MCP status is not visible in Settings')
           const capabilities = document.querySelector('[aria-label="MCP capabilities"]')
-          check(capabilities?.querySelectorAll('[data-mcp-capability]').length === 76, 'Settings does not list every MCP capability')
+          check(capabilities?.querySelectorAll('[data-mcp-capability]').length === 77, 'Settings does not list every MCP capability')
+          check(capabilities?.querySelector('[data-mcp-capability="budget_terminal_screenshot"]'), 'Screenshot capability is missing')
           const edits = [...capabilities.querySelectorAll('details')].find(group => group.querySelector('summary').textContent.includes('Saved-record edits'))
           check(edits, 'Saved-record edit capabilities are missing')
           edits.open = true
@@ -99,7 +102,7 @@ try {
           client.setQueryData(['mcpStatus'], { available: false, error: 'Fixture MCP startup failure' })
           await settle()
           check(document.body.innerText.includes('Fixture MCP startup failure'), 'MCP startup failure is not visible')
-          client.setQueryData(['mcpStatus'], { available: true, tools: 76 })
+          client.setQueryData(['mcpStatus'], { available: true, tools: 77 })
           client.setQueryData(['settings'], result => ({ ...result, data: { ...result.data,
             automaticBackup: { ...result.data.automaticBackup, error: 'Fixture backup failure' } } }))
           await settle()
@@ -150,8 +153,10 @@ try {
       window.fixtureRequests = [];
       window.api = new Proxy({
         platform: 'win32',
+        onScreenshotRequested: listener => window.captureApi.onScreenshotRequested(listener),
+        screenshotReady: result => window.captureApi.screenshotReady(result),
         onPortfolioChanged: () => () => {},
-        mcpStatus: async () => ({ available: true, tools: 76 }),
+        mcpStatus: async () => ({ available: true, tools: 77 }),
         settings: async () => ok(window.fixtureSettings),
         portfolio: async () => ok({ portfolios: [], activeId: 'main', mainId: 'main', sourcePath: '' }),
         signals: async request => {
@@ -166,16 +171,102 @@ try {
       } });
     </script><script src="renderer.js"></script></body></html>
   `)
+  await build({
+    entryPoints: [join(root, 'electron/mcp/screenshot.ts')], outfile: join(directory, 'capture.cjs'),
+    bundle: true, platform: 'node', format: 'cjs', external: ['electron'],
+  })
+  await build({
+    stdin: { resolveDir: root, contents: `
+      import { contextBridge, ipcRenderer } from 'electron'
+      import { createApi } from './electron/shared/createApi'
+      contextBridge.exposeInMainWorld('captureApi', createApi(
+        (channel, ...args) => ipcRenderer.invoke(channel, ...args),
+        (channel, listener) => {
+          const handler = (_event, payload) => listener(payload)
+          ipcRenderer.on(channel, handler)
+          return () => ipcRenderer.removeListener(channel, handler)
+        }, process.platform))
+    ` }, outfile: join(directory, 'preload.cjs'),
+    bundle: true, platform: 'node', format: 'cjs', external: ['electron'],
+  })
   await writeFile(join(directory, 'main.cjs'), `
-    const { app, BrowserWindow } = require('electron');
+    const { app, BrowserWindow, nativeImage } = require('electron');
+    const assert = require('node:assert/strict');
+    const { createScreenshotService } = require('./capture.cjs');
     const fs = require('fs');
     app.setPath('userData', ${JSON.stringify(join(directory, 'userData'))});
     app.whenReady().then(async () => {
-      const window = new BrowserWindow({ show: false, width: 1400, height: 950, webPreferences: { backgroundThrottling: false, offscreen: true } });
+      const window = new BrowserWindow({ show: false, width: 1400, height: 950, webPreferences: { backgroundThrottling: false, preload: ${JSON.stringify(join(directory, 'preload.cjs'))} } });
       window.webContents.on('console-message', event => console.log(event.message));
       try {
         await window.loadFile(${JSON.stringify(join(directory, 'index.html'))});
         console.log(await window.webContents.executeJavaScript('window.runProbe()'));
+        const capture = createScreenshotService(() => window);
+        const snapshot = () => window.webContents.executeJavaScript('JSON.stringify({ page: document.querySelector("h1")?.textContent, navigation: localStorage.getItem("budget-terminal:navigation"), scroll: document.querySelector("[data-startup-order-scroll]")?.scrollTop })');
+        const original = await snapshot();
+        await window.webContents.executeJavaScript('window.capturePrivacyFixture(); true');
+        await new Promise(resolve => setTimeout(resolve, 200));
+        window.webContents.setBackgroundThrottling(true);
+        const all = await capture({ page: 'all' });
+        assert.equal(all.meta.freshness, 'fresh', JSON.stringify(all.errors));
+        assert.equal(all.data.screenshots.length, 42);
+        assert.equal(new Set(all.data.screenshots.map(page => page.pageId)).size, 42);
+        assert.equal(window.isVisible(), false, 'Hidden window was shown during capture');
+        assert.equal(window.webContents.getBackgroundThrottling(), true);
+        assert.equal(await snapshot(), original, 'Selected page or recent history changed');
+        for (const page of all.data.screenshots) {
+          assert.equal(page.startupLoading, true, page.pageId + ' lost startup state');
+          const image = nativeImage.createFromBuffer(Buffer.from(page.base64, 'base64'));
+          assert.equal(image.isEmpty(), false, page.pageId + ' has an empty image');
+          assert.deepEqual(image.getSize(), { width: page.width, height: page.height });
+          const bitmap = image.toBitmap();
+          const colors = new Set();
+          for (let offset = 0; offset < bitmap.length; offset += 400) colors.add(bitmap.readUInt32LE(offset));
+          assert.ok(colors.size > 10, page.pageId + ' captured a blank frame');
+        }
+        assert.equal(all.data.screenshots.find(page => page.pageId === 'dictionary').obscured, true);
+        assert.notEqual(all.data.screenshots.find(page => page.pageId === 'dictionary').base64,
+          all.data.screenshots.find(page => page.pageId === 'settings').base64, 'Page captures reused a stale frame');
+        // Overlap requests to model two MCP clients; each gets its own named page.
+        const concurrent = await Promise.all([capture({ page: 'charts' }), capture({ page: 'dictionary' })]);
+        assert.deepEqual(concurrent.map(result => result.data.screenshots[0]?.pageId), ['charts', 'dictionary']);
+        assert.equal(await snapshot(), original);
+        const invalid = await capture({ page: 'unknown' });
+        assert.equal(invalid.meta.freshness, 'failed');
+        assert.equal((await createScreenshotService(() => undefined)({})).meta.freshness, 'failed');
+        const unresponsive = new BrowserWindow({ show: false });
+        await unresponsive.loadURL('data:text/html,<body>No screenshot listener</body>');
+        const started = Date.now();
+        const timeout = await createScreenshotService(() => unresponsive)({ page: 'all' });
+        assert.equal(timeout.meta.freshness, 'failed');
+        assert.equal(timeout.data.screenshots.length, 0);
+        assert.ok(Date.now() - started < 15000, 'An unresponsive renderer waited separately for every page');
+        assert.equal(unresponsive.webContents.getBackgroundThrottling(), true, 'Timeout did not restore throttling');
+        unresponsive.destroy();
+        window.showInactive();
+        window.minimize();
+        await new Promise(resolve => setTimeout(resolve, 350));
+        const minimized = await capture({ page: 'dictionary' });
+        assert.equal(minimized.meta.freshness, 'fresh', JSON.stringify(minimized.errors));
+        assert.equal(window.isMinimized(), true, 'Capture restored a minimized window');
+        window.restore();
+        const cover = new BrowserWindow({ width: 1500, height: 1000, alwaysOnTop: true });
+        cover.setBounds(window.getBounds());
+        await cover.loadURL('data:text/html,<body style="background:%23ff00ff">Covering window</body>');
+        cover.focus();
+        await new Promise(resolve => setTimeout(resolve, 300));
+        const covered = await capture({});
+        assert.equal(covered.meta.freshness, 'fresh', JSON.stringify(covered.errors));
+        assert.equal(covered.data.screenshots[0].pageId, 'settings');
+        assert.equal(BrowserWindow.getFocusedWindow(), cover, 'Capture stole focus');
+        const coveredImage = nativeImage.createFromBuffer(Buffer.from(covered.data.screenshots[0].base64, 'base64'));
+        const corner = coveredImage.toBitmap();
+        assert.notDeepEqual([...corner.subarray(0, 3)], [255, 0, 255], 'Capture included the covering app');
+        cover.destroy();
+        window.hide();
+        window.webContents.setBackgroundThrottling(false);
+        assert.equal(await snapshot(), original);
+        console.log('PASS: all 42 page screenshots, hidden/obscured pages, background throttle restoration, concurrent captures, timeout recovery, hidden/minimized/covered windows, native PNG pixels and navigation/scroll restoration');
         await new Promise(resolve => setTimeout(resolve, 350));
         fs.writeFileSync(${JSON.stringify(screenshot)}, (await window.webContents.capturePage()).toPNG());
         window.setSize(1000, 800);
@@ -192,7 +283,7 @@ try {
     let output = ''
     child.stdout.on('data', data => { output += data })
     child.stderr.on('data', data => { output += data })
-    const timer = setTimeout(() => { child.kill(); reject(new Error('Loading UI probe timed out: ' + output)) }, 45_000)
+    const timer = setTimeout(() => { child.kill(); reject(new Error('Loading UI probe timed out: ' + output)) }, 100_000)
     child.on('error', error => { clearTimeout(timer); reject(error) })
     child.on('exit', code => { clearTimeout(timer); resolveRun({ code, output }) })
   })

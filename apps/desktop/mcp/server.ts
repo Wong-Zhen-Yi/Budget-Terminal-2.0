@@ -1,8 +1,9 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import { catalog, connectionTool, failed, validateCall } from './catalog.js'
+import { catalog, connectionTool, validateCall } from './catalog.js'
 import { invokeBridge } from './runtime.js'
+import { toolResult } from './toolResult.js'
 
 const server = new Server({ name: 'budget-terminal', version: '0.1.0' }, {
   capabilities: { tools: {} },
@@ -16,9 +17,7 @@ server.setRequestHandler(CallToolRequestSchema, async ({ params }) => {
       if (Object.keys(args).length) throw new Error('Connection status takes no arguments.')
     } else validateCall(params.name, args)
     const result = await invokeBridge(params.name, args)
-    const structuredContent = result && typeof result === 'object' && !Array.isArray(result)
-      ? result as Record<string, unknown> : { data: result }
-    return { content: [{ type: 'text' as const, text: JSON.stringify(result) }], structuredContent, isError: failed(result) }
+    return toolResult(params.name, result)
   } catch (error) {
     return { content: [{ type: 'text' as const, text: error instanceof Error ? error.message : 'Budget Terminal call failed.' }], isError: true }
   }

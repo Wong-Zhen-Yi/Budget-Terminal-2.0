@@ -1,5 +1,6 @@
 import type { BitcoinPayload, BitcoinRequest } from './bitcoin.js'
 import type { TechnicalMetrics } from './technicalScreen.js'
+import type { ScreenshotCommand, ScreenshotReady } from './screenshot.js'
 import type { MoneyPayload, MoneyRequest } from './money.js'
 export type { MoneyPayload, MoneyRequest } from './money.js'
 import type { Sp500Request, Sp500Data, Sp500BreadthRequest, Sp500Breadth } from './sp500.js'
@@ -3343,6 +3344,8 @@ export interface PoliticsExportRequest {
 
 export const CHANNELS = {
   mcpStatus: 'system:mcp-status',
+  screenshotRequested: 'mcp:screenshot-requested',
+  screenshotReady: 'mcp:screenshot-ready',
   savedDataChanged: 'user-data:changed',
   apiUsage: 'system:api-usage',
   quotes: 'dashboard:quotes',
@@ -3496,6 +3499,8 @@ export type WindowAction = 'minimize' | 'maximize' | 'close'
 
 export interface DesktopApi {
   mcpStatus(): Promise<McpStatus>
+  onScreenshotRequested(listener: (command: ScreenshotCommand) => void): () => void
+  screenshotReady(result: ScreenshotReady): Promise<void>
   onSavedDataChanged(listener: (event: SavedDataChanged) => void): () => void
   readonly platform: NodeJS.Platform
   apiUsage(): Promise<ApiUsageSnapshot>

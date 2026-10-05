@@ -1,6 +1,7 @@
 /** Explicit allowlist: shell and bulk maintenance never cross the MCP bridge. */
 export const operations = {
   apiUsage: 'Inspect app-side provider request pressure.',
+  screenshot: 'Capture PNG screenshots of the running app without bringing it to the foreground. Use request.page: "current" (default), an implemented tab id (including hidden tabs), or "all" for every implemented page. Returns image content and page/status metadata. Captures the current viewport and loading/error state, preserves privacy blur, and restores the selected page.',
   quotes: 'Get current quotes for holdings symbols.',
   chart: 'Get price history for a symbol and timeframe.',
   chartsHistory: 'Get chart candles and indicators.',

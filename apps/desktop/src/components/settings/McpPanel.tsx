@@ -11,7 +11,7 @@ const groups = [
   { title: 'Portfolio & personal finance', hint: 'Read saved records and calculate performance, risk, exchange rates and projections.' },
   { title: 'Macro & bonds', hint: 'Economic indicators, bond research, money and liquidity.' },
   { title: 'Saved-record edits', hint: 'Create, update, reorder and delete records; change app settings.' },
-  { title: 'Connection & diagnostics', hint: 'Check MCP availability and provider request pressure.' },
+  { title: 'Connection & diagnostics', hint: 'Capture app pages, check MCP availability and provider request pressure.' },
 ] as const
 
 const company = new Set<Operation>(['stocks', 'fundamentals', 'fundamentalsPage', 'targets', 'valuation', 'discoveryUniverse', 'discovery', 'bmnr'])
@@ -21,7 +21,7 @@ const finance = new Set<Operation>(['portfolio', 'cards', 'cardsPerformance', 'p
 
 function groupIndex(operation: Operation): number {
   if (operation in mutationDomains) return 6
-  if (operation === 'apiUsage') return 7
+  if (operation === 'apiUsage' || operation === 'screenshot') return 7
   if (operation === 'money' || operation === 'economic') return 5
   if (finance.has(operation)) return 4
   if (events.has(operation)) return 3

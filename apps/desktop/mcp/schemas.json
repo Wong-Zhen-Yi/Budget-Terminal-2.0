@@ -13,6 +13,70 @@
       }
     }
   },
+  "screenshot": {
+    "$ref": "#/definitions/Input_screenshot",
+    "definitions": {
+      "Input_screenshot": {
+        "$ref": "#/definitions/ScreenshotRequest"
+      },
+      "ScreenshotRequest": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "string",
+            "description": "An implemented tab id, \"current\" (default), or \"all\" for every implemented page.",
+            "enum": [
+              "current",
+              "all",
+              "dashboard",
+              "portfolio",
+              "personal-finance",
+              "global",
+              "news",
+              "calendar",
+              "pre-market",
+              "trading-volumes",
+              "beta",
+              "heatmap",
+              "cards",
+              "up-down",
+              "stocks",
+              "stock-discovery",
+              "fundamentals",
+              "charts",
+              "valuation",
+              "options",
+              "signals",
+              "technical-screen",
+              "quant",
+              "projections",
+              "etf",
+              "sp500",
+              "forex",
+              "crypto",
+              "bitcoin",
+              "bmnr",
+              "gold",
+              "oil",
+              "backtest",
+              "ipo",
+              "institutions",
+              "politics",
+              "youtube",
+              "dictionary",
+              "bonds",
+              "money",
+              "economic",
+              "price",
+              "market-cap",
+              "settings"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
   "quotes": {
     "$ref": "#/definitions/Input_quotes",
     "definitions": {

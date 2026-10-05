@@ -11,6 +11,7 @@ import { APP_CLOSED, invokeBridge, runtimePath } from '../mcp/runtime.js'
 import { startBridge } from '../electron/mcp/bridge.js'
 import { refreshSavedData } from '../src/api/mcpChanges.js'
 import type { DesktopApi, SavedDataDomain } from '../electron/shared/contract.js'
+import { TABS } from '../electron/shared/contract.js'
 
 const directory = await mkdtemp(join(tmpdir(), 'budget-terminal-mcp-'))
 process.env.APPDATA = directory
@@ -126,6 +127,29 @@ try {
   }
   assert.equal(mutationVariants, 41)
   assert.equal(events.length, 4)
+  const screenshotTool = tools.find((tool) => tool.name === toolName('screenshot'))!
+  assert.equal(screenshotTool.annotations?.readOnlyHint, true)
+  assert.equal(screenshotTool.annotations?.openWorldHint, false)
+  for (const page of ['current', 'all', ...TABS.filter((tab) => tab.implemented).map((tab) => tab.id)]) {
+    validateCall(toolName('screenshot'), { request: { page } })
+  }
+  assert.throws(() => validateCall(toolName('screenshot'), { request: { page: 'unknown' } }), /Invalid/)
+  assert.throws(() => validateCall(toolName('screenshot'), { request: { path: 'private.png' } }), /Invalid/)
+  // Native images must reach both direct and plugin clients without duplicate pixel JSON.
+  const pixels = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg=='
+  routes.set('screenshot', () => ({ data: { screenshots: [
+    { pageId: 'dictionary', label: 'Dictionary', capturedAt: 123, width: 1, height: 1, mimeType: 'image/png', base64: pixels, obscured: false, startupLoading: true, status: 'Loading pages' },
+  ] }, meta: { freshness: 'fresh', source: 'probe', fetchedAt: 123 }, errors: [] }))
+  for (const screenshotClient of [client, pluginClient]) {
+    const result = await screenshotClient.callTool({ name: toolName('screenshot'), arguments: { request: { page: 'dictionary' } } })
+    assert.equal(result.isError, false)
+    const images = (result.content as Array<{ type: string; data?: string; mimeType?: string }>).filter((block) => block.type === 'image')
+    assert.deepEqual(images, [{ type: 'image', data: pixels, mimeType: 'image/png' }])
+    assert.ok(!JSON.stringify(result.structuredContent).includes(pixels))
+    assert.ok(!(result.content as Array<{ type: string; text?: string }>).filter((block) => block.type === 'text').some((block) => block.text?.includes(pixels)))
+  }
+  routes.set('screenshot', () => ({ data: { screenshots: [] }, meta: { freshness: 'failed', source: 'probe', fetchedAt: 123 }, errors: [{ reason: 'Window closed' }] }))
+  assert.equal((await client.callTool({ name: toolName('screenshot'), arguments: { request: {} } })).isError, true)
   assert.throws(() => validateCall('budget_terminal_clear_user_data', { request: {} }), /Unknown/)
   assert.throws(() => validateCall(toolName('mutatePortfolio'), { request: { type: 'setCash', portfolioId: 'p', cashBalance: 'bad' } }), /Invalid/)
   assert.throws(() => validateCall(toolName('mutateSettings'), { request: { type: 'setQuantPage', value: {} } }), /Invalid/)
@@ -164,7 +188,7 @@ try {
   const { cache } = await import('../electron/services/cache.js')
   closeCache = () => cache.close()
   bridge = await startBridge({ routes: createServiceRoutes(), onChanged: (domains) => events.push(domains) })
-  async function call<Key extends Operation>(operation: Key, request: unknown = {}): Promise<Awaited<ReturnType<DesktopApi[Key]>>> {
+  async function call<Key extends Exclude<Operation, 'screenshot'>>(operation: Key, request: unknown = {}): Promise<Awaited<ReturnType<DesktopApi[Key]>>> {
     const result = await invokeBridge(toolName(operation), { request })
     assert.equal(failed(result), false, JSON.stringify(result))
     return result as Awaited<ReturnType<DesktopApi[Key]>>
@@ -183,6 +207,9 @@ try {
   await call('mutateCards', { type: 'add', name: 'MCP Card', symbols: ['TEST'], weighting: 'equal', weights: {} })
   await call('mutateSettings', { type: 'setClockCountry', code: 'SG' })
   await Promise.all(Array.from({ length: 5 }, (_, index) => call('mutatePortfolio', { type: 'setCash', portfolioId, cashBalance: index })))
+  // HTTP arrival order is not guaranteed for concurrent clients. Set the final
+  // expected balance after the contention exercise has drained.
+  await call('mutatePortfolio', { type: 'setCash', portfolioId, cashBalance: 4 })
   const snapshot = JSON.parse(await readFile(join(downloads, 'budget-terminal-backup.json'), 'utf8'))
   assert.equal(snapshot.userData.portfolios[portfolioId].holdings.TEST.shares, 9)
   assert.equal(snapshot.userData.portfolios[portfolioId].options[0].contracts, 2)
