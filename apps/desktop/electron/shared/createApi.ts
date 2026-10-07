@@ -7,6 +7,8 @@ export type Subscribe = <Payload>(channel: string, listener: (payload?: Payload)
 
 export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS.Platform): DesktopApi {
   return {
+    localSendStatus: () => invoke(CHANNELS.localSendStatus),
+    localSendAction: (action) => invoke(CHANNELS.localSendAction, action),
     mcpStatus: () => invoke(CHANNELS.mcpStatus),
     onScreenshotRequested: (listener) => subscribe<ScreenshotCommand>(CHANNELS.screenshotRequested, (payload) => {
       if (payload) listener(payload)

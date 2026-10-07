@@ -11,7 +11,7 @@ const DATABASE = `budget-terminal-renderer-cache-v${CACHE_SCHEMA_VERSION}`
 const STORE = 'clients'
 const CLIENT_KEY = 'remote-query-client'
 
-const LOCAL_ROOTS = new Set(['portfolio', 'cards', 'settings', 'personalFinance'])
+const LOCAL_ROOTS = new Set(['portfolio', 'cards', 'settings', 'personalFinance', 'localSendStatus'])
 const LARGE_ROOTS = new Set(['newsThumbnail', 'youtubeThumbnail', 'newsPreview'])
 
 export const RENDERER_CACHE_BUSTER = `budget-terminal-renderer-v${CACHE_SCHEMA_VERSION}`

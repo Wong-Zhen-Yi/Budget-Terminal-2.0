@@ -7,6 +7,7 @@ import { useWarmPages } from '@/api/prefetch'
 import { useMcpScreenshot, useScreenshotReady } from '@/api/mcpScreenshot'
 import { useReloadAll } from '@/api/queries'
 import { useSettings, useSettingsMutation } from '@/api/settingsQueries'
+import { useLocalSend } from '@/api/localSendQueries'
 import { PageCache } from '@/components/chrome/PageCache'
 import { StatusBar, type PanelStatus } from '@/components/chrome/StatusBar'
 import { TabBar } from '@/components/chrome/TabBar'
@@ -90,6 +91,7 @@ export function App() {
   const reloadAll = useReloadAll()
 
   const settingsQuery = useSettings()
+  const localSend = useLocalSend()
   const settings = settingsQuery.data?.data
   const mutateSettings = useSettingsMutation()
   const [savingFavorite, setSavingFavorite] = useState(false)
@@ -365,6 +367,8 @@ export function App() {
       </div>
 
       <StatusBar
+        sync={localSend.query.data}
+        onOpenSync={() => setActiveTab(SETTINGS_TAB_ID)}
         panels={panels}
         sourcePath={sourcePath}
         notice={notice}

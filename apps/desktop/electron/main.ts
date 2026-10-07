@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { acquireDataSession } from './services/dataSession.js'
 import { isTrustedRendererUrl } from './shared/ipcSecurity.js'
 import { isSafeExternalUrl } from './services/urls.js'
+import { CHANNELS } from './shared/contract.js'
 
 const dirname = fileURLToPath(new URL('.', import.meta.url))
 const isDev = !app.isPackaged
@@ -19,6 +20,7 @@ let closeCache: (() => void) | null = null
 let backupPending: (() => boolean) | null = null
 let flushBackup: (() => Promise<void>) | null = null
 let stopMcp: (() => Promise<void>) | null = null
+let stopSync: (() => Promise<void>) | null = null
 const rendererUrl = isDev && process.env.ELECTRON_RENDERER_URL
   ? process.env.ELECTRON_RENDERER_URL
   : pathToFileURL(join(dirname, '../renderer/index.html')).href
@@ -116,6 +118,12 @@ if (ownsInstance) app.whenReady().then(async () => {
     })
     const { startMcpHost } = await import('./mcp/host.js')
     stopMcp = await startMcpHost()
+    const { startLocalSendSync } = await import('./services/localSendHost.js')
+    stopSync = await startLocalSendSync(() => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.webContents.send(CHANNELS.savedDataChanged, { domains: ['portfolio', 'personalFinance', 'settings', 'cards'] })
+      }
+    })
     createWindow()
   } catch (error) {
     dialog.showErrorBox('Budget Terminal could not start', error instanceof Error ? error.message : String(error))
@@ -135,12 +143,13 @@ app.on('window-all-closed', () => {
 let finishingQuit = false
 let drainedQuit = false
 app.on('before-quit', (event) => {
-  if (drainedQuit || (!stopMcp && !backupPending?.())) return
+  if (drainedQuit || (!stopMcp && !stopSync && !backupPending?.())) return
   event.preventDefault()
   if (finishingQuit) return
   finishingQuit = true
   void (async () => {
     await stopMcp?.()
+    await stopSync?.()
     await flushBackup?.()
   })().catch((error) => console.warn('Shutdown flush failed:', error)).finally(() => {
     drainedQuit = true

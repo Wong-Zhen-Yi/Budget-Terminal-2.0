@@ -28,6 +28,45 @@ For desktop bundles, run `npm run build`, then
 `npm run preview --workspace budget-terminal-desktop`. The build does not produce
 an installer.
 
+## Automatic LocalSend sync
+
+Open **Settings → Data → LocalSend sync** on each Budget Terminal device and enable
+sync. On the receiving device, click **Open pairing on this device**. On the device
+whose data you want to use, select the receiver, enter its six-digit code, then click
+**Pair & send this data**. Pairing replaces the receiver's initial saved data with the
+source's complete snapshot. A recovery backup preserves the previous data.
+
+Paired devices automatically sync portfolios, holdings, options, personal finance,
+settings and cards after saved edits, and retry every 30 seconds while both apps are
+running on the same local network. Pairings and the enabled state survive restarts.
+If both sides have edited their data since the last shared snapshot, replacement is
+paused and Settings offers **Apply incoming data** or **Keep local data**. Applying
+replaces the entire snapshot; this version does not merge individual records. To
+keep local data, dismiss the incoming snapshot, then accept this device's snapshot
+on the other device. Recovery backups are complete JSON files that can be restored
+with **Import User Data and Cards**.
+
+The transport implements [LocalSend v2 discovery and uploads](https://github.com/localsend/protocol)
+over HTTPS with certificate identities, plus Budget Terminal pairing and conflict
+checks. Automatic sync requires Budget Terminal on both devices; the ordinary
+LocalSend app can send a Budget Terminal backup for manual review using the pairing
+code as its receiver PIN. Discovery uses UDP multicast `224.0.0.167:53317`; the HTTPS
+listener defaults to TCP `53317`. If the LocalSend app already occupies that TCP
+port, choose a different listen port in Settings. Connect by a private IPv4 address
+and the receiver's port when multicast discovery is unavailable. Allow these ports
+through the firewall on your private network.
+
+Device certificates and pairings are kept in `BudgetTerminalElectron/sync` beside
+the settings file and excluded from synced snapshots. Full backups before each
+incoming replacement are kept in `sync/recovery`. To stop sharing with a device,
+unpair it on both sides or disable sync.
+
+The footer shows sync failures and conflicts even when Settings is closed. Click
+the sync indicator to open Settings.
+
+Verify with `npm run probe:local-send` and, after building,
+`npm run probe:local-send-ui --workspace budget-terminal-desktop`.
+
 ## Workspaces
 
 All 41 pages, including Settings, are implemented:

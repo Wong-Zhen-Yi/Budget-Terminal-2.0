@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import type { ApiProviderUsage, ApiUsageSnapshot, Envelope, Freshness } from '@shared/contract'
+import type { LocalSendStatus } from '@shared/localSend'
 
 export interface PanelStatus {
   label: string
@@ -96,6 +97,8 @@ export function StatusBar({
   sourcePath,
   notice = '',
   warming = '',
+  sync,
+  onOpenSync,
 }: {
   panels: PanelStatus[]
   sourcePath: string
@@ -109,6 +112,8 @@ export function StatusBar({
    * what is on screen matters more than what is being loaded for later.
    */
   warming?: string
+  sync?: Envelope<LocalSendStatus>
+  onOpenSync?: () => void
 }) {
   const loading = panels.filter((panel) => panel.loading)
   const settled = panels.filter((panel) => panel.envelope)
@@ -130,11 +135,14 @@ export function StatusBar({
     health = `${worst.label}: ${meta.failureReason || meta.freshness}`
     tone = toneFor[meta.freshness]
   }
+  const syncIssue = sync?.data.error ?? sync?.meta.failureReason ?? sync?.data.devices.find(device => device.error)?.error
+  const syncLabel = sync?.data.pending ? 'Sync needs review' : syncIssue ? 'Sync error' : sync?.data.running ? 'Sync on' : 'Sync off'
 
   return (
     <footer className="flex min-h-8 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-border bg-surface px-2 py-1 text-2xs">
       <span className={`min-w-0 truncate ${tone}`} title={health}>{health}</span>
       {warming ? <span role="status" className="min-w-0 truncate text-text-muted" title={warming}>{warming}</span> : null}
+      {sync && <button aria-label="LocalSend sync status" className={`shrink-0 ${syncIssue || sync.data.pending ? 'text-warn' : 'text-text-muted'}`} title={syncIssue ?? 'Open LocalSend sync in Settings'} onClick={onOpenSync}>{syncLabel}</button>}
       <span className="ml-auto min-w-0 truncate text-text-dim" title={sourcePath}>
         {sourcePath || 'no holdings file'}
       </span>

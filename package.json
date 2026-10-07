@@ -51,6 +51,7 @@
     "probe:analytics": "npm run --workspace budget-terminal-desktop probe:analytics --",
     "probe:finance": "npm run --workspace budget-terminal-desktop probe:finance --",
     "probe:settings": "npm run --workspace budget-terminal-desktop probe:settings --",
+    "probe:local-send": "npm run --workspace budget-terminal-desktop probe:local-send --",
     "probe:global": "npm run --workspace budget-terminal-desktop probe:global --",
     "probe:pre-market": "npm run --workspace budget-terminal-desktop probe:pre-market --",
     "probe:trading-volumes": "npm run --workspace budget-terminal-desktop probe:trading-volumes --",

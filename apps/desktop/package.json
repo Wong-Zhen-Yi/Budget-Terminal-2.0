@@ -27,6 +27,8 @@
     "probe:finance": "tsx scripts/probe-finance.ts",
     "probe:settings": "tsx scripts/probe-settings.ts",
     "probe:backup": "tsx scripts/probe-backup.ts",
+    "probe:local-send": "tsx scripts/probe-local-send.ts",
+    "probe:local-send-ui": "tsx scripts/probe-local-send-ui.ts",
     "probe:global": "tsx scripts/probe-global.ts",
     "probe:pre-market": "tsx scripts/probe-pre-market.ts",
     "probe:trading-volumes": "tsx scripts/probe-trading-volumes.ts",
@@ -112,6 +114,7 @@
     "pdfjs-dist": "^6.3.289",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "selfsigned": "^5.5.0",
     "yahoo-finance2": "^4.0.2",
     "zod": "^4.6.5",
     "zustand": "^5.0.15"

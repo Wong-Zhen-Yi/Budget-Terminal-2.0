@@ -17,6 +17,7 @@ import { SettingsSection } from '@/components/settings/SettingsSection'
 import { ShortcutsPanel } from '@/components/settings/ShortcutsPanel'
 import { UserDataPanel } from '@/components/settings/UserDataPanel'
 import { McpPanel } from '@/components/settings/McpPanel'
+import { LocalSendPanel } from '@/components/settings/LocalSendPanel'
 
 const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
 
@@ -131,6 +132,7 @@ export function SettingsPage({
         </header>
 
         <SettingsSection title="Data" hint="Backups, maintenance and observed feed health.">
+          <LocalSendPanel />
           <McpPanel />
           <PageLoadOrderPanel />
           <UserDataPanel onRun={onRunMaintenance} busy={busy} sourcePath={holdingsPath} lastBackupAt={settings.lastBackupAt} automaticBackup={settings.automaticBackup} />

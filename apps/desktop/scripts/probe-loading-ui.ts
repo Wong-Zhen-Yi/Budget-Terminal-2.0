@@ -48,6 +48,7 @@ try {
         window.runProbe = async () => {
           createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><App /></QueryClientProvider>)
           await settle()
+          check(document.querySelector('[aria-label="LocalSend sync status"]')?.textContent === 'Sync off', 'Sync status is not loaded before opening Settings')
           const light = name => document.querySelector('[data-mcp-light="' + name + '"]')
           check(light('active')?.dataset.state === 'off', 'Idle MCP activity light should be off')
           check(light('connected')?.dataset.state === 'off', 'MCP readiness alone must not imply a connected client')
@@ -163,6 +164,7 @@ try {
         screenshotReady: result => window.captureApi.screenshotReady(result),
         onPortfolioChanged: () => () => {},
         mcpStatus: async () => ({ available: true, tools: ${toolCount} }),
+        localSendStatus: async () => ok({ enabled: false, running: false, alias: 'Fixture', port: 53317, addresses: [], devices: [] }),
         settings: async () => ok(window.fixtureSettings),
         portfolio: async () => ok({ portfolios: [], activeId: 'main', mainId: 'main', sourcePath: '' }),
         signals: async request => {

@@ -3453,6 +3453,8 @@ export const CHANNELS = {
   settings: 'settings:read',
   settingsMutate: 'settings:mutate',
   maintenance: 'settings:maintenance',
+  localSendStatus: 'sync:localsend:status',
+  localSendAction: 'sync:localsend:action',
   openExternal: 'shell:openExternal',
   saveText: 'shell:saveText',
   writeClipboard: 'shell:writeClipboard',
@@ -3526,6 +3528,8 @@ export interface FxRequest extends BackgroundRequest {
 export type WindowAction = 'minimize' | 'maximize' | 'close'
 
 export interface DesktopApi {
+  localSendStatus(): Promise<Envelope<import('./localSend.js').LocalSendStatus>>
+  localSendAction(action: import('./localSend.js').LocalSendAction): Promise<Envelope<import('./localSend.js').LocalSendStatus>>
   mcpStatus(): Promise<McpStatus>
   onScreenshotRequested(listener: (command: ScreenshotCommand) => void): () => void
   screenshotReady(result: ScreenshotReady): Promise<void>

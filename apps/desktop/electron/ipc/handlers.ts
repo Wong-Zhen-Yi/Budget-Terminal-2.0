@@ -10,6 +10,7 @@ import { verifyStoredData, watchPortfolios } from '../services/portfolioStore.js
 import { isSafeExternalUrl } from '../services/urls.js'
 import { registerServiceHandlers } from './serviceHandlers.js'
 import { getMcpStatus } from '../mcp/host.js'
+import { localSendStatus, localSendAction } from '../services/localSendHost.js'
 
 export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent) => boolean): () => void {
   const handle: typeof ipcMain.handle = (channel, listener) => {
@@ -20,6 +21,8 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
   }
   const provider = yahooProvider
   handle(CHANNELS.mcpStatus, () => getMcpStatus())
+  handle(CHANNELS.localSendStatus, () => localSendStatus())
+  handle(CHANNELS.localSendAction, (_event, action) => localSendAction(action))
   registerServiceHandlers((channel, run) => {
     handle(channel, (_event, request) => run(request))
   })

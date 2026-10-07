@@ -835,6 +835,10 @@ async function writeRollback(reason: string): Promise<string> {
 }
 
 /** Validate an exported document and make it the live store. Returns the rollback path. */
+export function validateUserData(source: unknown): void {
+  if (!importDocumentSchema.safeParse(source).success) throw new Error('The sync snapshot does not contain a valid holdings store.')
+}
+
 export async function importUserData(source: unknown): Promise<string> {
   const parsed = importDocumentSchema.safeParse(source)
   if (!parsed.success) throw new Error('The backup does not contain a valid holdings store.')
