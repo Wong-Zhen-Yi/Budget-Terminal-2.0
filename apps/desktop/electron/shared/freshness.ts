@@ -28,6 +28,8 @@ export const FRESHNESS = {
   amznReports: 6 * 60 * 60_000,
   mu: 5 * 60_000,
   avgo: 5 * 60_000,
+  vst: 5 * 60_000,
+  vstReports: 6 * 60 * 60_000,
   avgoReports: 6 * 60 * 60_000,
   muReports: 6 * 60 * 60_000,
   hims: 5 * 60_000,

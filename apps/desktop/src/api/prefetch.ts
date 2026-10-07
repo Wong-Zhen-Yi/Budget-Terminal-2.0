@@ -587,6 +587,21 @@ export function buildTasks(
     },
   })
   tasks.push({
+    tab: 'vst', label: 'VST company dashboard',
+    run: async (client, backgroundOrder) => {
+      const result = await warmStartupQuery(client, {
+        queryKey: queryKeys.vst,
+        queryFn: () => api.vst({ background: true, backgroundOrder }),
+        staleTime: queryFreshness(queryKeys.vst),
+      })
+      // Retain usable panels, while keeping incomplete startup visible in progress.
+      if (result.meta.freshness === 'partial' || result.meta.freshness === 'stale') {
+        throw new Error(result.meta.failureReason || 'VST startup data is incomplete')
+      }
+      return result
+    },
+  })
+  tasks.push({
     tab: 'sofi', label: 'SOFI company dashboard',
     run: async (client, backgroundOrder) => {
       const result = await warmStartupQuery(client, {

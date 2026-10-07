@@ -60,6 +60,7 @@
               "mu",
               "amzn",
               "avgo",
+              "vst",
               "hood",
               "hims",
               "gold",
@@ -2018,6 +2019,23 @@
         "$ref": "#/definitions/AmznRequest"
       },
       "AmznRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "vst": {
+    "$ref": "#/definitions/Input_vst",
+    "definitions": {
+      "Input_vst": {
+        "$ref": "#/definitions/VstRequest"
+      },
+      "VstRequest": {
         "type": "object",
         "properties": {
           "force": {

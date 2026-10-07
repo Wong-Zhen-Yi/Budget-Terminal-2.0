@@ -84,7 +84,9 @@
     "build:mcp": "npm run generate:mcp && tsx mcp/build.ts",
     "probe:mcp": "tsx mcp/generate-schemas.ts --check && tsx scripts/probe-mcp.ts",
     "probe:amzn": "tsx scripts/probe-amzn.ts",
-    "probe:amzn-ui": "tsx scripts/probe-amzn-ui.ts"
+    "probe:amzn-ui": "tsx scripts/probe-amzn-ui.ts",
+    "probe:vst": "tsx scripts/probe-vst.ts",
+    "probe:vst-ui": "tsx scripts/probe-vst-ui.ts"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

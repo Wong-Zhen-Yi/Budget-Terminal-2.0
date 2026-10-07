@@ -26,6 +26,7 @@ import { HimsPage } from '@/pages/HimsPage'
 import { MuPage } from '@/pages/MuPage'
 import { AmznPage } from '@/pages/AmznPage'
 import { AvgoPage } from '@/pages/AvgoPage'
+import { VstPage } from '@/pages/VstPage'
 import { MoneyPage } from '@/pages/MoneyPage'
 import { BondsPage } from '@/pages/BondsPage'
 import { ForexPage } from '@/pages/ForexPage'
@@ -459,6 +460,8 @@ function renderPage({
       <BmnrPage onStatusChange={onStatusChange} />
     ) : tabId === 'sofi' ? (
       <SofiPage onStatusChange={onStatusChange} />
+    ) : tabId === 'vst' ? (
+      <VstPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'avgo' ? (
       <AvgoPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'mu' ? (

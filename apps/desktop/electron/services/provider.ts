@@ -7,6 +7,8 @@ import type { SofiPayload, SofiRequest } from '../shared/sofi.js'
 import { getAmzn } from './amzn.js'
 import type { AmznPayload, AmznRequest } from '../shared/amzn.js'
 import { getMu } from './mu.js'
+import { getVst } from './vst.js'
+import type { VstPayload, VstRequest } from '../shared/vst.js'
 import { getAvgo } from './avgo.js'
 import type { AvgoPayload, AvgoRequest } from '../shared/avgo.js'
 import type { MuPayload, MuRequest } from '../shared/mu.js'
@@ -382,6 +384,7 @@ export interface MarketDataProvider {
   mu(request: MuRequest): Promise<Envelope<MuPayload>>
   amzn(request: AmznRequest): Promise<Envelope<AmznPayload>>
   avgo(request: AvgoRequest): Promise<Envelope<AvgoPayload>>
+  vst(request: VstRequest): Promise<Envelope<VstPayload>>
   sp500(request: Sp500Request): Promise<Envelope<Sp500Data>>
   sp500Breadth(request: Sp500BreadthRequest): Promise<Envelope<Sp500Breadth>>
   gold(request: GoldRequest): Promise<Envelope<GoldPayload>>
@@ -1365,6 +1368,7 @@ export const yahooProvider: MarketDataProvider = {
   mu: getMu,
   amzn: getAmzn,
   avgo: getAvgo,
+  vst: getVst,
 
   sp500: getSp500,
   sp500Breadth: getSp500Breadth,

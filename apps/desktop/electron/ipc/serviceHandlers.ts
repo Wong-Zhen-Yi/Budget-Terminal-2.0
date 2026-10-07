@@ -4,6 +4,7 @@ import type { HimsRequest } from '../shared/hims.js'
 import type { HoodRequest } from '../shared/hood.js'
 import type { MuRequest } from '../shared/mu.js'
 import type { AmznRequest } from '../shared/amzn.js'
+import type { VstRequest } from '../shared/vst.js'
 import type { AvgoRequest } from '../shared/avgo.js'
 import type { Sp500Request, Sp500BreadthRequest } from '../shared/sp500.js'
 
@@ -198,6 +199,7 @@ export function registerServiceHandlers(register: RegisterService): void {
   handle(CHANNELS.mu, (request: MuRequest) => provider.mu(request))
   handle(CHANNELS.amzn, (request: AmznRequest) => provider.amzn(request))
   handle(CHANNELS.avgo, (request: AvgoRequest) => provider.avgo(request))
+  handle(CHANNELS.vst, (request: VstRequest) => provider.vst(request))
   handle(CHANNELS.forexQuotes, getForexQuotes)
   handle(CHANNELS.forexHistory, getForexHistory)
   handle(CHANNELS.forexNews, getForexNews)
