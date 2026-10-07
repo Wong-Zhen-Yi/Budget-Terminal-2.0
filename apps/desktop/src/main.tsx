@@ -34,7 +34,12 @@ const queryClient = new QueryClient({
 const stopMcpChanges = api.onSavedDataChanged((event) => {
   void refreshSavedData(queryClient, event)
 })
-if (import.meta.hot) import.meta.hot.dispose(stopMcpChanges)
+const retrySyncOnline = () => { void api.syncAction({ type: 'sync' }).catch(() => {}) }
+window.addEventListener('online', retrySyncOnline)
+if (import.meta.hot) import.meta.hot.dispose(() => {
+  stopMcpChanges()
+  window.removeEventListener('online', retrySyncOnline)
+})
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -1,12 +1,18 @@
 import type { DesktopApi, SavedDataChanged } from './contract.js'
 import { CHANNELS } from './contract.js'
 import type { ScreenshotCommand } from './screenshot.js'
+import type { SyncStatus } from './sync.js'
 
 export type Invoke = <T>(channel: string, ...args: unknown[]) => Promise<T>
 export type Subscribe = <Payload>(channel: string, listener: (payload?: Payload) => void) => () => void
 
 export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS.Platform): DesktopApi {
   return {
+    syncStatus: () => invoke(CHANNELS.syncStatus),
+    syncAction: (action) => invoke(CHANNELS.syncAction, action),
+    onSyncChanged: (listener) => subscribe<SyncStatus>(CHANNELS.syncChanged, (payload) => {
+      if (payload) listener(payload)
+    }),
     mcpStatus: () => invoke(CHANNELS.mcpStatus),
     onScreenshotRequested: (listener) => subscribe<ScreenshotCommand>(CHANNELS.screenshotRequested, (payload) => {
       if (payload) listener(payload)

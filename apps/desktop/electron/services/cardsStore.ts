@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
+import { z } from 'zod'
 
 import type { CardsMutation, CardsPayload } from '../shared/contract.js'
 import {
@@ -11,6 +13,29 @@ import {
   normalizeCardsPayload,
   normalizeCustomCard,
 } from '../shared/cards.js'
+
+export const syncCardsSchema = z.object({
+  version: z.literal(CARDS_VERSION),
+  starterCardsVersion: z.number().int().nonnegative(),
+  customCards: z.array(z.object({
+    id: z.string().min(1), name: z.string(), symbols: z.array(z.string()).min(1),
+    weighting: z.enum(['equal', 'custom']), weights: z.record(z.string(), z.number().finite()),
+  }).strict()),
+  cardOrder: z.array(z.string()), hiddenPortfolioIds: z.array(z.string()),
+  intervals: z.record(z.string(), z.enum(['1d', '30d', '1y'])),
+}).strict()
+
+export async function applySyncCards(payload: unknown, expected: unknown): Promise<void> {
+  const parsed = syncCardsSchema.parse(payload)
+  const run = writeChain.then(async () => {
+    const current = storedDocument(await readCards())
+    if (!isDeepStrictEqual(current, expected)) throw new Error('Local cards changed during sync. Retry to review the latest copies.')
+    await writeFile(`${cardsPath()}.before-sync.${Date.now()}.bak`, JSON.stringify(current, null, 2), 'utf8')
+    await persistCards(normalizeCardsPayload(parsed, cardsPath()), cardsPath())
+  })
+  writeChain = run.catch(() => {})
+  await run
+}
 
 export function cardsPath(): string {
   const appData = process.env.APPDATA ?? join(process.env.USERPROFILE ?? '', 'AppData', 'Roaming')
@@ -170,7 +195,9 @@ export async function exportCards(targetPath = cardsPath()): Promise<unknown> {
 
 export async function replaceCards(value: unknown, targetPath = cardsPath()): Promise<CardsPayload> {
   const normalized = normalizeCardsPayload(value, targetPath)
-  await persistCards(normalized, targetPath)
+  const run = writeChain.then(() => persistCards(normalized, targetPath))
+  writeChain = run.catch(() => {})
+  await run
   return normalized
 }
 
@@ -183,6 +210,8 @@ export async function clearCards(targetPath = cardsPath()): Promise<CardsPayload
     hiddenPortfolioIds: [],
     intervals: {},
   }, targetPath)
-  await persistCards(cleared, targetPath)
+  const run = writeChain.then(() => persistCards(cleared, targetPath))
+  writeChain = run.catch(() => {})
+  await run
   return cleared
 }

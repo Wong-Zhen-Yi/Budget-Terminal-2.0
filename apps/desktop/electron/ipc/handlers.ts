@@ -10,6 +10,8 @@ import { verifyStoredData, watchPortfolios } from '../services/portfolioStore.js
 import { isSafeExternalUrl } from '../services/urls.js'
 import { registerServiceHandlers } from './serviceHandlers.js'
 import { getMcpStatus } from '../mcp/host.js'
+import { syncAction, syncStatus } from '../services/supabaseSync.js'
+import type { SyncAction } from '../shared/sync.js'
 
 export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent) => boolean): () => void {
   const handle: typeof ipcMain.handle = (channel, listener) => {
@@ -19,6 +21,8 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
     })
   }
   const provider = yahooProvider
+  handle(CHANNELS.syncStatus, () => syncStatus())
+  handle(CHANNELS.syncAction, (_event, request: SyncAction) => syncAction(request))
   handle(CHANNELS.mcpStatus, () => getMcpStatus())
   registerServiceHandlers((channel, run) => {
     handle(channel, (_event, request) => run(request))

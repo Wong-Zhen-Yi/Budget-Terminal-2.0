@@ -19,6 +19,7 @@ let closeCache: (() => void) | null = null
 let backupPending: (() => boolean) | null = null
 let flushBackup: (() => Promise<void>) | null = null
 let stopMcp: (() => Promise<void>) | null = null
+let stopSync: (() => void) | null = null
 const rendererUrl = isDev && process.env.ELECTRON_RENDERER_URL
   ? process.env.ELECTRON_RENDERER_URL
   : pathToFileURL(join(dirname, '../renderer/index.html')).href
@@ -116,6 +117,8 @@ if (ownsInstance) app.whenReady().then(async () => {
     })
     const { startMcpHost } = await import('./mcp/host.js')
     stopMcp = await startMcpHost()
+    const { startPersonalSync } = await import('./services/supabaseSync.js')
+    stopSync = await startPersonalSync()
     createWindow()
   } catch (error) {
     dialog.showErrorBox('Budget Terminal could not start', error instanceof Error ? error.message : String(error))
@@ -149,6 +152,7 @@ app.on('before-quit', (event) => {
 })
 
 app.on('will-quit', () => {
+  stopSync?.()
   disposeIpc?.()
   disposeIpc = null
   closeCache?.()

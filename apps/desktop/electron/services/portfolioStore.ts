@@ -3,6 +3,7 @@ import { watch, type FSWatcher } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 import { z } from 'zod'
+import type { SyncDataset } from '../shared/sync.js'
 
 import { randomUUID } from 'node:crypto'
 
@@ -176,6 +177,14 @@ const importDocumentSchema = z.object({
 }).refine((document) => document.version === 1 || document.personalFinance !== undefined, {
   message: 'The backup is missing its personal finance book.',
 })
+
+export const syncPortfolioSchema = z.object({
+  version: importDocumentSchema.shape.version,
+  mainId: importDocumentSchema.shape.mainId,
+  order: importDocumentSchema.shape.order,
+  portfolios: importDocumentSchema.shape.portfolios,
+}).strict()
+export const syncFinanceSchema = importDocumentSchema.shape.personalFinance.unwrap().strict()
 
 function emptyFinance(): StoredFinance {
   return {
@@ -812,6 +821,33 @@ export async function mutatePersonalFinance(
  */
 export async function exportUserData(): Promise<unknown> {
   return queued(async () => structuredClone(await loadDocument()))
+}
+
+export async function readSyncBook(dataset: Exclude<SyncDataset, 'cards'>): Promise<unknown> {
+  return queued(async () => {
+    const document = await loadDocument()
+    return dataset === 'portfolio' ? syncPortfolioSchema.parse(documentForSync(document))
+      : syncFinanceSchema.parse(document.personalFinance ?? emptyFinance())
+  })
+}
+
+function documentForSync(document: StoredDocument) {
+  return { version: document.version, mainId: document.mainId, order: document.order, portfolios: document.portfolios }
+}
+
+/** Compare inside the write queue: downloading must never clobber a cell edit. */
+export async function applySyncBook(dataset: Exclude<SyncDataset, 'cards'>, payload: unknown, expected: unknown): Promise<void> {
+  await queued(async () => {
+    const document = structuredClone(await loadDocument())
+    const current = dataset === 'portfolio' ? documentForSync(document) : document.personalFinance
+    if (!isDeepStrictEqual(current, expected)) throw new Error('Local data changed during sync. Retry to review the latest copies.')
+    if (dataset === 'portfolio') Object.assign(document, syncPortfolioSchema.parse(payload))
+    else document.personalFinance = syncFinanceSchema.parse(payload)
+    normalize(document)
+    await writeRollback('before-sync')
+    await persist(document)
+    cached = document
+  })
 }
 
 /**

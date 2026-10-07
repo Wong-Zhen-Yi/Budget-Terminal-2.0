@@ -7,6 +7,9 @@
     "apps/desktop"
   ],
   "scripts": {
+    "probe:sync": "npm run probe:sync --workspace budget-terminal-desktop",
+    "probe:sync-ui": "npm run probe:sync-ui --workspace budget-terminal-desktop",
+    "probe:sync-service": "npm run probe:sync-service --workspace budget-terminal-desktop",
     "prepare": "git config core.hooksPath .githooks || exit 0",
     "postinstall": "npm run ensure:electron",
     "ensure:electron": "node scripts/ensure-electron.cjs",

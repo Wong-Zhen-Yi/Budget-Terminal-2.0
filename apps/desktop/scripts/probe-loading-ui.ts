@@ -162,6 +162,8 @@ try {
         onScreenshotRequested: listener => window.captureApi.onScreenshotRequested(listener),
         screenshotReady: result => window.captureApi.screenshotReady(result),
         onPortfolioChanged: () => () => {},
+        onSyncChanged: () => () => {},
+        syncStatus: async () => ok({ email: null, state: 'signedOut', pending: [], conflicts: [] }),
         mcpStatus: async () => ({ available: true, tools: ${toolCount} }),
         settings: async () => ok(window.fixtureSettings),
         portfolio: async () => ok({ portfolios: [], activeId: 'main', mainId: 'main', sourcePath: '' }),

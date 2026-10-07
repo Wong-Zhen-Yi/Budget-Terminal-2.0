@@ -1,4 +1,5 @@
 import type { BitcoinPayload, BitcoinRequest } from './bitcoin.js'
+import type { SyncAction, SyncStatus } from './sync.js'
 import type { SofiPayload, SofiRequest } from './sofi.js'
 export type { SofiPayload, SofiRequest } from './sofi.js'
 import type { AvgoPayload, AvgoRequest } from './avgo.js'
@@ -3361,6 +3362,9 @@ export interface PoliticsExportRequest {
 }
 
 export const CHANNELS = {
+  syncStatus: 'personal-sync:status',
+  syncAction: 'personal-sync:action',
+  syncChanged: 'personal-sync:changed',
   mcpStatus: 'system:mcp-status',
   screenshotRequested: 'mcp:screenshot-requested',
   screenshotReady: 'mcp:screenshot-ready',
@@ -3522,6 +3526,9 @@ export interface FxRequest extends BackgroundRequest {
 export type WindowAction = 'minimize' | 'maximize' | 'close'
 
 export interface DesktopApi {
+  syncStatus(): Promise<Envelope<SyncStatus>>
+  syncAction(action: SyncAction): Promise<Envelope<SyncStatus>>
+  onSyncChanged(listener: (status: SyncStatus) => void): () => void
   mcpStatus(): Promise<McpStatus>
   onScreenshotRequested(listener: (command: ScreenshotCommand) => void): () => void
   screenshotReady(result: ScreenshotReady): Promise<void>
