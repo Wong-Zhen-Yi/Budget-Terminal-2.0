@@ -15,7 +15,10 @@ npm run dev
 To launch from a checkout, use **Launch Budget Terminal.cmd** on Windows,
 **Launch Budget Terminal.command** on macOS, or **Launch Budget Terminal.sh**
 on Linux. Each launcher installs dependencies, checks the Electron runtime,
-and opens the desktop app. Keep its terminal open while using the app.
+builds matching backend, preload and UI bundles, and opens the desktop app.
+Keep its terminal open while using the app. Use `npm run dev` for development.
+When a changed backend build is launched again, an existing instance of that checkout
+restarts after finishing its pending writes so the new backend loads too.
 
 Installation and the launchers verify the Electron runtime automatically. To repair
 an interrupted Electron download, run:
@@ -63,6 +66,11 @@ unpair it on both sides or disable sync.
 
 The footer shows sync failures and conflicts even when Settings is closed. Click
 the sync indicator to open Settings.
+
+If an older running version reports `No handler registered for 'sync:localsend:status'`
+or `sync:localsend:action`, close Budget Terminal completely once and open it with
+the launcher from this branch. This is a backend version mismatch, before any
+network connection is attempted.
 
 Verify with `npm run probe:local-send` and, after building,
 `npm run probe:local-send-ui --workspace budget-terminal-desktop`.

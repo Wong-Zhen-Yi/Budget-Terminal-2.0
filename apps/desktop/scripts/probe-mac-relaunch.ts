@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createRequire } from 'node:module'
@@ -30,7 +31,7 @@ async function waitFor(check: () => boolean, label: string): Promise<void> {
 }
 
 try {
-  const modes = process.platform === 'darwin' ? ['closed', 'hidden', 'minimized'] : ['hidden', 'minimized']
+  const modes = process.platform === 'darwin' ? ['closed', 'hidden', 'minimized', 'updated'] : ['hidden', 'minimized', 'updated']
   for (const mode of modes) {
     const first = launch(true, mode)
     let second: ReturnType<typeof launch> | undefined
@@ -39,12 +40,19 @@ try {
       assert.equal(first.child.exitCode, null, first.output())
       assert.ok(first.output().includes(mode.toUpperCase()), first.output())
       second = launch(false, mode)
-      await waitFor(() => first.output().includes('REOPENED'), 'second launch to reopen the first process')
+      await waitFor(() => first.output().includes(mode === 'updated' ? 'RESTART_REQUESTED' : 'REOPENED'), 'second launch to restore or update the first process')
       await waitFor(() => second!.child.exitCode !== null && first.child.exitCode !== null, 'both probe processes to exit')
       assert.equal(first.child.exitCode, 0, first.output())
       assert.equal(second.child.exitCode, 0, second.output())
       assert.doesNotMatch(second.output(), /already using this data folder/)
-      console.log(`PASS: second launch restored the ${mode} window in the existing process and rendered its content`)
+      if (mode === 'updated') {
+        const marker = join(directory, 'restarted.json')
+        await waitFor(() => existsSync(marker), 'updated desktop to restart, load LocalSend and exit')
+        assert.deepEqual(JSON.parse(await readFile(marker, 'utf8')), { ok: true })
+      }
+      console.log(mode === 'updated'
+        ? 'PASS: a changed backend build restarts, loads LocalSend handlers and preserves saved settings'
+        : `PASS: second launch restored the ${mode} window in the existing process and rendered its content`)
     } finally {
       first.child.kill()
       second?.child.kill()

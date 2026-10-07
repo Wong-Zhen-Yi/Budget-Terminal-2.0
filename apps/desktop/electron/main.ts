@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { acquireDataSession } from './services/dataSession.js'
+import { desktopBuildFingerprint } from './services/desktopBuild.js'
 import { isTrustedRendererUrl } from './shared/ipcSecurity.js'
 import { isSafeExternalUrl } from './services/urls.js'
 import { CHANNELS } from './shared/contract.js'
@@ -11,7 +12,8 @@ const dirname = fileURLToPath(new URL('.', import.meta.url))
 const isDev = !app.isPackaged
 
 if (process.platform === 'darwin') app.setName('Budget Terminal')
-const ownsInstance = app.requestSingleInstanceLock()
+const buildFingerprint = desktopBuildFingerprint(dirname)
+const ownsInstance = app.requestSingleInstanceLock({ buildFingerprint, appPath: app.getAppPath(), rendererUrl: process.env.ELECTRON_RENDERER_URL ?? null })
 if (!ownsInstance) app.quit()
 
 let disposeIpc: (() => void) | null = null
@@ -73,7 +75,20 @@ function createWindow(): BrowserWindow {
 }
 
 if (ownsInstance) {
-  app.on('second-instance', () => {
+  let relaunchPending = false
+  app.on('second-instance', (_event, _argv, _directory, additionalData: unknown) => {
+    const incoming = additionalData as { buildFingerprint?: string; appPath?: string; rendererUrl?: string | null } | null
+    if (incoming?.appPath === app.getAppPath() && typeof incoming.buildFingerprint === 'string' &&
+      incoming.buildFingerprint !== buildFingerprint) {
+      if (!relaunchPending) {
+        relaunchPending = true
+        if (typeof incoming.rendererUrl === 'string') process.env.ELECTRON_RENDERER_URL = incoming.rendererUrl
+        else delete process.env.ELECTRON_RENDERER_URL
+        app.relaunch()
+        app.quit()
+      }
+      return
+    }
     const window = BrowserWindow.getAllWindows()[0]
     if (!window) {
       // macOS keeps the process alive after its window closes. Reuse that process;

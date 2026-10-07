@@ -44,8 +44,15 @@ function launch({ platform = process.platform, spawn = spawnSync, log = console 
     return 1
   }
 
+  log.log('Building Budget Terminal for this checkout...')
+  const build = npm(['run', 'build'])
+  if (build.error || build.status !== 0) {
+    log.error('Budget Terminal could not build. See the error above.')
+    return 1
+  }
+
   log.log('Opening Budget Terminal in Electron. Keep this terminal open while using the app.')
-  const app = npm(['run', 'dev'])
+  const app = npm(['run', 'preview', '--workspace', 'budget-terminal-desktop'])
   if (app.error || app.status !== 0) {
     log.error('Budget Terminal stopped with an error. See the output above.')
     return app.status || 1

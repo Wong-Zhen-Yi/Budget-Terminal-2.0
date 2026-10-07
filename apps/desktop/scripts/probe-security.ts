@@ -29,6 +29,8 @@ try {
       import { isTrustedRendererUrl } from './electron/shared/ipcSecurity'
       import { acquireDataSession } from './electron/services/dataSession'
       import { startMcpHost } from './electron/mcp/host'
+      import { startLocalSendSync } from './electron/services/localSendHost'
+      import { createServer } from 'node:net'
       import { invokeBridge } from './mcp/runtime'
       app.setPath('userData', ${JSON.stringify(join(directory, 'userData'))})
       const expected = pathToFileURL(${JSON.stringify(trustedPath)}).href
@@ -51,9 +53,28 @@ try {
           assert.equal(await trusted.webContents.executeJavaScript('window.api.platform'), process.platform)
           const result = await trusted.webContents.executeJavaScript('window.api.settings()')
           assert.ok(result.data.tabOrder.includes('settings'))
+          const startingSync = await trusted.webContents.executeJavaScript('window.api.localSendStatus()')
+          assert.match(startingSync.meta.failureReason, /starting/)
+          const stopSync = await startLocalSendSync(() => {})
+          const syncStatus = await trusted.webContents.executeJavaScript('window.api.localSendStatus()')
+          assert.deepEqual(syncStatus.errors, [])
+          assert.equal(syncStatus.data.enabled, false)
+          const listener = createServer()
+          await new Promise(resolve => listener.listen(0, '127.0.0.1', resolve))
+          const port = listener.address().port
+          await new Promise(resolve => listener.close(resolve))
+          const enabled = await trusted.webContents.executeJavaScript('window.api.localSendAction({ type: "enable", enabled: true, port: ' + port + ' })')
+          assert.deepEqual(enabled.errors, [])
+          assert.equal(enabled.data.running, true)
+          const pairing = await trusted.webContents.executeJavaScript('window.api.localSendAction({ type: "openPairing" })')
+          assert.match(pairing.data.pairingCode, /^[0-9]{6}$/)
+          await trusted.webContents.executeJavaScript('window.api.localSendAction({ type: "enable", enabled: false })')
+          await stopSync()
           const other = new BrowserWindow(options)
           await other.loadFile(${JSON.stringify(otherPath)})
           await assert.rejects(other.webContents.executeJavaScript('window.api.settings()'), /Untrusted IPC sender/)
+          await assert.rejects(other.webContents.executeJavaScript('window.api.localSendStatus()'), /Untrusted IPC sender/)
+          await assert.rejects(other.webContents.executeJavaScript('window.api.localSendAction({ type: "enable", enabled: true })'), /Untrusted IPC sender/)
           await assert.rejects(other.webContents.executeJavaScript("window.api.maintenance('clearUserData')"), /Untrusted IPC sender/)
           await assert.rejects(trusted.webContents.executeJavaScript("window.api.maintenance('unknown')"), /Unknown maintenance action/)
           const stopMcp = await startMcpHost()
@@ -70,6 +91,7 @@ try {
           assert.equal(await trusted.webContents.executeJavaScript('window.savedChanges.length'), 1)
           await stopMcp()
           console.log('PASS: Electron MCP host, status IPC, real mutation notification and unsubscribe through sandboxed preload')
+          console.log('PASS: LocalSend status, enable, pairing and disable through real sandboxed preload, with foreign documents rejected')
           console.log('PASS: real sandboxed preload, isolated renderer, trusted IPC, rejected foreign document and maintenance action')
           dispose(); release(); app.exit(0)
         } catch (error) { console.error(error); dispose?.(); release?.(); app.exit(1) }

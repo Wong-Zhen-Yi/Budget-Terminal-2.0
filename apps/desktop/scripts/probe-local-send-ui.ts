@@ -72,6 +72,12 @@ try {
           window.state.pending = { id: 'preview', alias: 'Other computer', exportedAt: new Date().toISOString(), receivedAt: Date.now() }
           client.setQueryData(['localSendStatus'], window.ok(window.state)); await settle()
           check([...document.querySelectorAll('button,input,select')].every(el => el.getBoundingClientRect().right <= innerWidth), 'Controls overflow the window')
+          window.api.localSendStatus = async () => { throw Error("Error invoking remote method 'sync:localsend:status': Error: No handler registered for 'sync:localsend:status'") }
+          await client.refetchQueries({ queryKey: ['localSendStatus'] }); await settle()
+          check(document.body.innerText.includes('Close Budget Terminal completely'), 'An older backend needs a clear recovery message')
+          window.api.localSendAction = async () => { throw Error("Error invoking remote method 'sync:localsend:action': Error: No handler registered for 'sync:localsend:action'") }
+          button('Sync now').click(); await settle()
+          check(!document.body.innerText.includes('No handler registered'), 'Raw missing-handler errors should be explained')
           return 'PASS: LocalSend enable/discovery, pairing controls, paired/error states, both conflict choices, recovery path, cache exclusion and layout'
         }
       `,
