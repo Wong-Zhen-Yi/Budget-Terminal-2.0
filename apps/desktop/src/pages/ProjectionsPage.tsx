@@ -80,7 +80,7 @@ export function ProjectionsPage({
 
   useEffect(() => {
     onStatusChange(
-      [{ label: 'Projections', envelope: query.data, loading: query.isFetching }],
+      [{ label: 'Projections', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching }],
       '',
     )
   }, [onStatusChange, query.data, query.isFetching])

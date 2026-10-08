@@ -124,7 +124,7 @@ const STALE_TTL_MS = 7 * 24 * 60 * 60_000
  * payload shape changes, so an entry written by an older shape is dropped rather than
  * rendered.
  */
-const CACHE_VERSION = 1
+const CACHE_VERSION = 2
 
 export const ECONOMIC_SOURCE = 'US Treasury, BLS, NY Fed, UMich and FRED'
 
@@ -356,8 +356,8 @@ export function parseNyfedRates(text: string): EconomicPoint[] {
   const points: EconomicPoint[] = []
   for (const row of document?.refRates ?? []) {
     const stamp = isoStamp(String(row?.effectiveDate ?? ''))
-    const value = Number(row?.percentRate)
-    if (!stamp || !Number.isFinite(value)) continue
+    const value = cell(row?.percentRate === null ? '' : String(row?.percentRate ?? ''))
+    if (!stamp || value === null) continue
     points.push([stamp, value])
   }
   return sortPoints(points)
@@ -685,7 +685,8 @@ async function buildPayload(groups: EconomicGroup[]): Promise<EconomicPayload> {
   for (const series of catalog) {
     const points = resolved.get(series.seriesId) ?? []
     if (!points.length) missing.push(series.seriesId)
-    rows.push(buildRow(series, points))
+    const fromFallback = points.length > 0 && fallback.some(entry => entry.seriesId === series.seriesId)
+    rows.push(buildRow(fromFallback ? { ...series, provider: 'fred', providerKey: series.seriesId } : series, points))
   }
   const order = new Map(ECONOMIC_SERIES.map((series, index) => [series.seriesId, index]))
   rows.sort((left, right) => (order.get(left.seriesId) ?? 10_000) - (order.get(right.seriesId) ?? 10_000))

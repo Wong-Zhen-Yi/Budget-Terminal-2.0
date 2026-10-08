@@ -29,7 +29,11 @@ try {
   const initial = await loadMoney({}, download, now)
   assert.equal(calls, 7)
   assert(initial.data.rows.every((row) => row.status === 'fresh'))
-  await loadMoney({}, download, now + 1000)
+  const cached = await loadMoney({}, download, now + 1000)
+  assert.equal(cached.meta.fetchedAt, now, 'Cached money series retain original collection time')
+  assert.equal(cached.meta.cacheAgeSeconds, 1)
+  assert.equal(cached.meta.asOf, now)
+  assert.equal(cached.meta.expiresAt, now + 6 * 60 * 60_000)
   assert.equal(calls, 7, 'Fresh cache must avoid downloads')
   const mixed = await loadMoney({ force: true }, async (id) => {
     if (id === 'M2SL') throw Error('fixture outage')

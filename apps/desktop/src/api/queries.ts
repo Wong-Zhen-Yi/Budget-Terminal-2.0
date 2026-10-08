@@ -25,11 +25,10 @@ import { queryFreshness } from './queryPersistence'
  * Exported because the pages that keep their queries in their own module — the Global
  * page — still have to answer a Reload the same way.
  */
-const FORCE_WINDOW_MS = 5_000
-let forceUntil = 0
+let forcedReloads = 0
 
 export function forcing(): boolean {
-  return Date.now() < forceUntil
+  return forcedReloads > 0
 }
 
 export function usePortfolio(): UseQueryResult<Envelope<PortfolioPayload>> {
@@ -51,11 +50,11 @@ export function usePortfolio(): UseQueryResult<Envelope<PortfolioPayload>> {
   })
 }
 
-export function useQuotes(holdings: string[]): UseQueryResult<Envelope<QuotesPayload>> {
+export function useQuotes(holdings: string[], includeMacro = false): UseQueryResult<Envelope<QuotesPayload>> {
   return useQuery({
     queryKey: queryKeys.quotes(holdings),
-    queryFn: () => api.quotes({ holdings }),
-    enabled: holdings.length > 0,
+    queryFn: () => api.quotes({ holdings, force: forcing() }),
+    enabled: includeMacro || holdings.length > 0,
     refetchInterval: QUOTE_REFRESH_MS,
     refetchIntervalInBackground: false,
     staleTime: QUOTE_REFRESH_MS / 2,
@@ -137,14 +136,14 @@ export function usePortfolioMutation(): (
 export function useReloadAll(): () => Promise<void> {
   const queryClient = useQueryClient()
   return async () => {
-    forceUntil = Date.now() + FORCE_WINDOW_MS
+    forcedReloads += 1
     try {
       // `type: 'active'` is not optional. `refetchQueries()` defaults to `type: 'all'`,
       // and inactive queries now survive an hour rather than five minutes — without the
       // filter a Reload would fan out over every page visited this session.
       await queryClient.refetchQueries({ type: 'active' })
     } finally {
-      forceUntil = 0
+      forcedReloads -= 1
     }
   }
 }

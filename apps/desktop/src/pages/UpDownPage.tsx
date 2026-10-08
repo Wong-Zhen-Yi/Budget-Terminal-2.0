@@ -152,8 +152,8 @@ export function UpDownPage({
   useEffect(() => {
     onStatusChange(
       [
-        { label: 'Up/Down', envelope: query.data, loading: query.isFetching },
-        { label: 'Portfolio', envelope: portfolio.data, loading: portfolio.isFetching },
+        { label: 'Up/Down', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching },
+        { label: 'Portfolio', envelope: portfolio.data, error: portfolio.error, enabled: portfolio.isEnabled, loading: portfolio.isFetching },
       ],
       activeSource === 'portfolio' ? portfolioPayload?.sourcePath ?? '' : '',
     )

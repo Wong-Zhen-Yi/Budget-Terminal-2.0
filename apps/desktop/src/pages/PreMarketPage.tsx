@@ -48,12 +48,12 @@ export function PreMarketPage({
   useEffect(() => {
     onStatusChange(
       [
-        { label: 'Futures', envelope: query.data, loading },
-        { label: 'DXY', envelope: query.data, loading },
-        { label: '10Y', envelope: query.data, loading },
-        { label: 'VIX', envelope: query.data, loading },
-        { label: 'Fear & Greed', envelope: query.data, loading },
-        { label: 'Momentum', envelope: query.data, loading },
+        { label: 'Futures', envelope: query.data, error: query.error, enabled: query.isEnabled, loading },
+        { label: 'DXY', envelope: query.data, error: query.error, enabled: query.isEnabled, loading },
+        { label: '10Y', envelope: query.data, error: query.error, enabled: query.isEnabled, loading },
+        { label: 'VIX', envelope: query.data, error: query.error, enabled: query.isEnabled, loading },
+        { label: 'Fear & Greed', envelope: query.data, error: query.error, enabled: query.isEnabled, loading },
+        { label: 'Momentum', envelope: query.data, error: query.error, enabled: query.isEnabled, loading },
       ],
       '',
     )

@@ -12,6 +12,8 @@ import { buildBmnrSnapshot } from '@shared/bmnr'
 import { clockTail } from '@shared/crypto'
 import { api } from '@/api/client'
 import { useBmnr, useRefreshBmnr } from '@/api/bmnrQueries'
+import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
+import { FRESHNESS } from '@shared/freshness'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { Donut, colorForIndex } from '@/components/charts/Donut'
 import { LineChart, type LineSeries } from '@/components/charts/LineChart'
@@ -44,12 +46,14 @@ const SERIES_SHARES = colorForIndex(0)
 const SERIES_ETH = colorForIndex(1)
 
 /** The dot on a panel whose lane is degraded, matching every other multi-panel page. */
-function warningOf(envelope: Envelope<unknown> | undefined, block: string): string | undefined {
+function warningOf(envelope: Envelope<unknown> | undefined, block: string, now: number): string | undefined {
   if (!envelope) return undefined
   const failed = envelope.errors.find((entry) => entry.symbol === block)
   if (failed) return failed.reason
-  const { freshness, failureReason } = envelope.meta
+  const freshness = effectiveFreshness(envelope, now, FRESHNESS.bmnr)
+  const { failureReason } = envelope.meta
   if (freshness === 'failed') return failureReason || freshness
+  if (freshness === 'stale' && block !== 'SEC Filed Balance Sheet') return failureReason || 'Market snapshot expired; refresh to update'
   return undefined
 }
 
@@ -92,7 +96,7 @@ function MetricTile({
 /** A `BmnrValue`'s own tooltip: what it was computed from and when. */
 function cellTitle(cell: BmnrValue | undefined): string | undefined {
   if (!cell) return undefined
-  const parts = [`Basis: ${cell.basis}`]
+  const parts = [`Basis: ${cell.basis === 'live' ? 'market snapshot' : cell.basis === 'cross' ? 'market snapshot + SEC filed' : 'SEC filed'}`]
   if (cell.source) parts.push(`Source: ${cell.source}`)
   if (cell.asOf) parts.push(`As of: ${cell.asOf}`)
   if (cell.note) parts.push(cell.note)
@@ -106,6 +110,7 @@ export function BmnrPage({
 }) {
   const query = useBmnr()
   const refresh = useRefreshBmnr()
+  const now = useSnapshotClock()
   const [refreshing, setRefreshing] = useState(false)
   const [notice, setNotice] = useState('')
   const [historyView, setHistoryView] = useState<'table' | 'chart'>('table')
@@ -113,10 +118,11 @@ export function BmnrPage({
   const payload = query.data?.data
   const loading = query.isFetching
   const busy = loading || refreshing
+  const freshness = query.data ? effectiveFreshness(query.data, now, FRESHNESS.bmnr) : 'unavailable'
 
   useEffect(() => {
     // No user file behind this page, so the status bar's path slot stays empty.
-    onStatusChange([{ label: 'BMNR', envelope: query.data, loading }], '')
+    onStatusChange([{ label: 'BMNR', envelope: query.data, error: query.error, enabled: query.isEnabled, loading }], '')
   }, [onStatusChange, query.data, loading])
 
   useEffect(() => {
@@ -132,8 +138,8 @@ export function BmnrPage({
     const parts: string[] = []
     parts.push(
       payload.progress.treasury === 'loaded'
-        ? `Live ETH from CoinGecko ${clockTail(payload.fetchedAt)}`
-        : 'Live ETH count unavailable; SEC filed basis shown below',
+        ? `CoinGecko ETH snapshot ${clockTail(payload.fetchedAt)} · ${freshness}`
+        : 'Market ETH count unavailable; SEC filed basis shown below',
     )
     const quarter = payload.filed?.latest
     parts.push(
@@ -143,7 +149,7 @@ export function BmnrPage({
     )
     if (payload.progress.market === 'unavailable') parts.push('market data unavailable')
     return parts.join(' · ')
-  }, [notice, busy, payload, query.data])
+  }, [notice, busy, payload, query.data, freshness])
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -196,7 +202,7 @@ export function BmnrPage({
         <MetricTile
           label="ETH Held"
           value={live?.ethHeld.value === null || live === null ? EM_DASH : integer(live.ethHeld.value)}
-          sub="CoinGecko · live"
+          sub={`CoinGecko · ${freshness} snapshot`}
           tone="muted"
           title={cellTitle(live?.ethHeld)}
         />
@@ -205,8 +211,8 @@ export function BmnrPage({
           value={plainPercent(live?.supplyPct.value, 2)}
           sub={
             live?.impliedEthSupply.value
-              ? `of ~${compactNumber(live.impliedEthSupply.value)} ETH · live`
-              : 'live'
+              ? `of ~${compactNumber(live.impliedEthSupply.value)} ETH · ${freshness}`
+              : 'market snapshot'
           }
           tone="muted"
           title={cellTitle(live?.impliedEthSupply)}
@@ -216,7 +222,7 @@ export function BmnrPage({
           value={compactCurrency(derived?.cryptoValue.value)}
           sub={
             payload?.market.ethPrice.value
-              ? `@ ${currency(payload.market.ethPrice.value, 0)}/ETH · live`
+              ? `@ ${currency(payload.market.ethPrice.value, 0)}/ETH · ${freshness}`
               : 'ETH price unavailable'
           }
           tone="muted"
@@ -225,7 +231,7 @@ export function BmnrPage({
         <MetricTile
           label="NAV"
           value={compactCurrency(derived?.nav.value)}
-          sub={quarter ? `equity ${quarter.endDate} marked live` : 'no filed equity'}
+          sub={quarter ? `equity ${quarter.endDate}, snapshot mark` : 'no filed equity'}
           tone="muted"
           title={cellTitle(derived?.nav)}
         />
@@ -252,19 +258,19 @@ export function BmnrPage({
       <div className="grid min-h-[280px] grid-cols-1 gap-2 xl:min-h-[300px] xl:flex-[31_1_0%] xl:grid-cols-12">
         <Panel
           className="min-h-[280px] xl:col-span-4 xl:h-full xl:min-h-0"
-          title="Treasury Basis — Live vs SEC Filed"
-          warning={warningOf(query.data, 'ETH Treasury (CoinGecko)')}
+          title="Treasury Basis — Market Snapshot vs SEC Filed"
+          warning={warningOf(query.data, 'ETH Treasury (CoinGecko)', now)}
         >
           <BasisTable payload={payload} />
           <div className="shrink-0 border-t border-border px-2 py-1 text-2xs text-text-muted">
-            * Cross-basis: computed from one live and one filed input. The two counts are never blended.
+            * Cross-basis: computed from one market snapshot and one filed input. The two counts are never blended.
           </div>
         </Panel>
 
         <Panel
           className="min-h-[280px] xl:col-span-4 xl:h-full xl:min-h-0"
           title={`Asset Composition${payload?.composition.asOf ? ` — SEC filed ${payload.composition.asOf}` : ''}`}
-          warning={warningOf(query.data, 'SEC Filed Balance Sheet')}
+          warning={warningOf(query.data, 'SEC Filed Balance Sheet', now)}
         >
           {payload?.composition.overAllocated ? (
             <PanelMessage>
@@ -291,7 +297,7 @@ export function BmnrPage({
           </div>
         </Panel>
 
-        <Panel className="min-h-[280px] xl:col-span-4 xl:h-full xl:min-h-0" title="NAV Bridge" warning={warningOf(query.data, 'SEC Filed Balance Sheet')}>
+        <Panel className="min-h-[280px] xl:col-span-4 xl:h-full xl:min-h-0" title="NAV Bridge" warning={warningOf(query.data, 'SEC Filed Balance Sheet', now)}>
           <NavBridge payload={payload} />
         </Panel>
       </div>
@@ -300,7 +306,7 @@ export function BmnrPage({
         <Panel
           className="min-h-[180px] xl:col-span-5 xl:h-full xl:min-h-0"
           title="Quarterly Treasury & Dilution"
-          warning={warningOf(query.data, 'SEC Filed Balance Sheet')}
+          warning={warningOf(query.data, 'SEC Filed Balance Sheet', now)}
           actions={
             <>
               <Button variant="toggle" active={historyView === 'table'} onClick={() => setHistoryView('table')}>
@@ -325,7 +331,7 @@ export function BmnrPage({
           <SensitivityTable rows={payload?.sensitivity ?? []} />
         </Panel>
 
-        <Panel className="min-h-[180px] xl:col-span-3 xl:h-full xl:min-h-0" title="SEC Filings" warning={warningOf(query.data, 'SEC Filed Balance Sheet')}>
+        <Panel className="min-h-[180px] xl:col-span-3 xl:h-full xl:min-h-0" title="SEC Filings" warning={warningOf(query.data, 'SEC Filed Balance Sheet', now)}>
           <FilingsTable filings={payload?.filings ?? []} compact />
         </Panel>
       </div>
@@ -447,7 +453,7 @@ function BasisTable({ payload }: { payload: BmnrPayload | undefined }) {
     },
     {
       key: 'live',
-      header: datedHeader('Live', liveAsOf),
+      header: datedHeader('Market snapshot', liveAsOf),
       cell: (row) => <span className="text-[11px]" title={row.live}>{row.live}</span>,
       align: 'right',
       numeric: true,
@@ -575,7 +581,7 @@ function NavBridge({ payload }: { payload: BmnrPayload | undefined }) {
         title: cellTitle(derived.shares),
       },
       { label: '= NAV / share', value: currency(derived.navPerShare.value), emphasis: true },
-      { label: 'Market cap (live)', value: compactCurrency(payload.market.marketCap.value) },
+      { label: 'Market cap (snapshot)', value: compactCurrency(payload.market.marketCap.value) },
       {
         label: '= mNAV',
         value: derived.mnav.value === null ? EM_DASH : `${decimals(derived.mnav.value, 3)}x`,
@@ -616,7 +622,7 @@ function NavBridge({ payload }: { payload: BmnrPayload | undefined }) {
         layout="fixed"
       />
       <div className="shrink-0 border-t border-border px-2 py-1 text-2xs text-text-muted">
-        NAV marks the crypto book to the live ETH price but takes cash, other assets and liabilities from the last
+        NAV marks the crypto book to the snapshot ETH price but takes cash, other assets and liabilities from the last
         filed balance sheet, so it does not see capital raised since that date.
       </div>
     </>

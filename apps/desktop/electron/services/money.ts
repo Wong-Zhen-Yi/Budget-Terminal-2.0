@@ -64,7 +64,15 @@ export async function loadMoney(
   const errors = rows.filter((row) => row.error).map((row) => ({ source: 'FRED', operation: 'money', symbol: row.seriesId, reason: row.error! }))
   const available = rows.some((row) => row.history.length)
   const freshness = !available ? 'failed' : errors.length ? 'partial' : rows.every((row) => row.status === 'cached') ? 'cached' : 'fresh'
-  return { data: { generatedAt: new Date(now).toISOString(), rows }, meta: meta('FRED · Federal Reserve', freshness, errors.length ? { failureReason: errors.map((error) => `${error.symbol}: ${error.reason}`).join('; ') } : {}), errors }
+  const collected = rows.flatMap(row => row.history.length && row.fetchedAt !== null ? [row.fetchedAt] : [])
+  const observations = rows.flatMap(row => row.history.length ? [Date.parse(row.history.at(-1)![0])] : [])
+  const fetchedAt = collected.length ? Math.min(...collected) : now
+  return { data: { generatedAt: new Date(now).toISOString(), rows }, meta: meta('FRED · Federal Reserve', freshness, {
+    fetchedAt, cacheAgeSeconds: Math.max(0, now - fetchedAt) / 1000,
+    ...(collected.length ? { expiresAt: fetchedAt + FRESH_MS } : {}),
+    ...(observations.length ? { asOf: Math.min(...observations) } : {}),
+    ...(errors.length ? { failureReason: errors.map((error) => `${error.symbol}: ${error.reason}`).join('; ') } : {}),
+  }), errors }
 }
 
 let pending: Promise<Envelope<MoneyPayload>> | null = null

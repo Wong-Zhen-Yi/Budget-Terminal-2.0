@@ -104,7 +104,7 @@ export function CardsPage({
 
   useEffect(() => {
     const panels: PanelStatus[] = [
-      { label: 'Cards', envelope: cardsQuery.data, loading: cardsQuery.isFetching },
+      { label: 'Cards', envelope: cardsQuery.data, error: cardsQuery.error, enabled: cardsQuery.isEnabled, loading: cardsQuery.isFetching },
       ...requests.map((request, index) => ({
         label: `Cards ${request.interval}`,
         envelope: performanceQueries[index]?.data,

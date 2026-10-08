@@ -155,8 +155,8 @@ export function OptionsPage({
   useEffect(() => {
     onStatusChange(
       [
-        { label: 'Options chain', envelope: chainQuery.data, loading: chainQuery.isFetching },
-        { label: 'Options expirations', envelope: sweepQuery.data, loading: sweepQuery.isFetching },
+        { label: 'Options chain', envelope: chainQuery.data, error: chainQuery.error, enabled: chainQuery.isEnabled, loading: chainQuery.isFetching },
+        { label: 'Options expirations', envelope: sweepQuery.data, error: sweepQuery.error, enabled: sweepQuery.isEnabled, loading: sweepQuery.isFetching },
       ],
       '',
     )

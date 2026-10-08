@@ -22,7 +22,10 @@ import {
   shiftIsoYears,
   summarizeOilSeries,
 } from '../electron/shared/oil.js'
-import { getOil } from '../electron/services/oil.js'
+import { getOil, oilTesting } from '../electron/services/oil.js'
+import { captureSources, withSourceEnvelope } from '../electron/services/sourceHealth.js'
+import { TtlCache } from '../electron/services/cache.js'
+import { ok } from '../electron/shared/envelope.js'
 
 /* ------------------------------------------------------------------ fixtures */
 
@@ -316,5 +319,36 @@ async function live(): Promise<void> {
   console.log('live: Oil probe completed')
 }
 
+async function serviceChecks(): Promise<void> {
+  const originalFetch = globalThis.fetch
+  try {
+    let requests = 0
+    globalThis.fetch = async () => new Response(++requests === 1 ? 'Unavailable' : eiaFixture, { status: requests === 1 ? 503 : 200 })
+    assert.equal(await oilTesting.fetchText('https://example.test/eia'), eiaFixture)
+    assert.equal(requests, 2, 'Transient upstream errors retry once')
+    requests = 0
+    globalThis.fetch = async () => { requests += 1; return new Response('Blocked', { status: 403 }) }
+    await assert.rejects(oilTesting.fetchText('https://example.test/eia'), /HTTP 403/)
+    assert.equal(requests, 1, 'Access denials must not be retried')
+    globalThis.fetch = async url => new Response(String(url).includes('s=RWTC&') ? eiaFixture : 'Unavailable', {
+      status: String(url).includes('s=RWTC&') ? 200 : 503,
+    })
+    const { value, snapshot } = await captureSources(() => oilTesting.fetchEiaBlock(OIL_BENCHMARK_SPECS.slice(0, 2)))
+    assert.equal(value.series.length, 1, 'Retain the available source during a partial outage')
+    assert(snapshot?.failures.some(reason => reason.includes('RBRTE') && reason.includes('503')),
+      'Missing EIA series must be recorded even when the block still has usable data')
+    const scratchCache = new TtlCache()
+    const load = () => withSourceEnvelope(async () => ok((await scratchCache.resolve('oil:fixture', 60_000,
+      () => oilTesting.fetchEiaBlock(OIL_BENCHMARK_SPECS.slice(0, 2)))).value, 'EIA'))
+    assert.equal((await load()).meta.freshness, 'partial')
+    const cached = await load()
+    assert.equal(cached.meta.freshness, 'partial', 'Cached partial sources cannot become complete')
+    assert(cached.meta.failureReason?.includes('RBRTE'))
+    scratchCache.close()
+    console.log('Oil service checks passed: bounded transient retries, access denials, partial series and cached warnings.')
+  } finally { globalThis.fetch = originalFetch }
+}
+
 offline()
+await serviceChecks()
 if (!process.argv.includes('--offline')) await live()

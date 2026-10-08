@@ -41,6 +41,8 @@ export function queryFreshness(queryKey: QueryKey): number {
   if (root === 'options' || root.startsWith('options') || root === 'optionQuotes' || root === 'projections') return FRESHNESS.options
   if (root === 'targets') return FRESHNESS.targets
   if (root === 'news') return FRESHNESS.news
+  if (root === 'newsPreview') return FRESHNESS.newsPreview
+  if (root === 'newsThumbnail') return FRESHNESS.newsImage
   if (root.startsWith('news')) return FRESHNESS.newsPage
   if (root === 'stocks') return FRESHNESS.chartDaily
   if (root === 'backtest') return FRESHNESS.chartDaily

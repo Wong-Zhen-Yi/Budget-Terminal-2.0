@@ -57,7 +57,7 @@ export function DashboardPage({
 
   const holdings = useMemo(() => selected?.tickers ?? [], [selected])
 
-  const quotesQuery = useQuotes(holdings)
+  const quotesQuery = useQuotes(holdings, true)
   const chartQuery = useChart(symbol, timeframe)
   const optionsQuery = useOptions(symbol)
   const targetsQuery = useTargets(holdings)
@@ -65,7 +65,7 @@ export function DashboardPage({
   const macroCharts = useMacroCharts()
   const macroChartStatus = useMemo(() => macroCharts.map((query, index) => ({
     label: `${MACRO_SYMBOLS[index].label} history`,
-    envelope: query.data,
+    envelope: query.data, error: query.error, enabled: query.isEnabled,
     loading: query.isFetching,
   })), [macroCharts])
 
@@ -75,12 +75,12 @@ export function DashboardPage({
   useEffect(() => {
     onStatusChange(
       [
-        { label: 'Holdings', envelope: portfolioQuery.data, loading: portfolioQuery.isFetching },
-        { label: 'Quotes', envelope: quotesQuery.data, loading: quotesQuery.isFetching },
-        { label: 'Chart', envelope: chartQuery.data, loading: chartQuery.isFetching },
-        { label: 'Options', envelope: optionsQuery.data, loading: optionsQuery.isFetching },
-        { label: 'Targets', envelope: targetsQuery.data, loading: targetsQuery.isFetching },
-        { label: 'News', envelope: newsQuery.data, loading: newsQuery.isFetching },
+        { label: 'Holdings', envelope: portfolioQuery.data, error: portfolioQuery.error, enabled: portfolioQuery.isEnabled, loading: portfolioQuery.isFetching },
+        { label: 'Quotes', envelope: quotesQuery.data, error: quotesQuery.error, enabled: quotesQuery.isEnabled, loading: quotesQuery.isFetching },
+        { label: 'Chart', envelope: chartQuery.data, error: chartQuery.error, enabled: chartQuery.isEnabled, loading: chartQuery.isFetching },
+        { label: 'Options', envelope: optionsQuery.data, error: optionsQuery.error, enabled: optionsQuery.isEnabled, loading: optionsQuery.isFetching },
+        { label: 'Targets', envelope: targetsQuery.data, error: targetsQuery.error, enabled: targetsQuery.isEnabled, loading: targetsQuery.isFetching },
+        { label: 'News', envelope: newsQuery.data, error: newsQuery.error, enabled: newsQuery.isEnabled, loading: newsQuery.isFetching },
         ...macroChartStatus,
       ],
       portfolioQuery.data?.data.sourcePath ?? '',

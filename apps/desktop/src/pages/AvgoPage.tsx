@@ -1,3 +1,5 @@
+import { effectiveFreshness, feedErrorText, useSnapshotClock } from '@/api/snapshotHealth'
+import { FRESHNESS } from '@shared/freshness'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { LogicalRange } from 'lightweight-charts'
 import { STOCKS_RANGE_PRESETS } from '@shared/contract'
@@ -38,6 +40,8 @@ export function AvgoPage({ onStatusChange, onNavigate }: {
   onNavigate: (tabId: string, symbol?: string) => void
 }) {
   const query = useAvgo()
+  const now = useSnapshotClock()
+  const freshness = query.data ? effectiveFreshness(query.data, now, FRESHNESS.avgo) : 'unavailable'
   const refresh = useRefreshAvgo()
   const [notice, setNotice] = useState('')
   const [refreshing, setRefreshing] = useState(false)
@@ -48,7 +52,7 @@ export function AvgoPage({ onStatusChange, onNavigate }: {
   const earnings = payload?.earnings
   const busy = query.isFetching || refreshing
   const history = useMemo(() => avgoHistory(payload?.financials ?? null), [payload?.financials])
-  useEffect(() => onStatusChange([{ label: 'AVGO', envelope: query.data, loading: busy }], ''), [onStatusChange, query.data, busy])
+  useEffect(() => onStatusChange([{ label: 'AVGO', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: busy }], ''), [onStatusChange, query.data, busy])
   const warning = (block: AvgoBlock) => query.data?.errors.filter(error => error.symbol === block).map(error => error.reason).join(' · ') || undefined
   const empty = (block: AvgoBlock) => busy ? 'Loading Broadcom data...' : warning(block) || query.error?.message || `${block} data unavailable`
   const metric = (id: string) => earnings?.metrics.find(row => row.id === id)
@@ -73,7 +77,7 @@ export function AvgoPage({ onStatusChange, onNavigate }: {
     <button className="text-accent hover:underline" onClick={() => void api.openExternal(earnings.sourceUrl)}>Earnings release</button>
     <span>{earnings.period} · ended {earnings.periodEnd || '--'} · published {earnings.publishedAt || '--'}</span>
   </div> : null
-  const status = notice || (busy ? 'Loading AVGO...' : query.error ? `AVGO load failed: ${query.error.message}` : query.data ? `${query.data.meta.freshness} · ${earnings?.period ?? 'earnings unavailable'}` : 'AVGO data unavailable')
+  const status = notice || (busy ? 'Loading AVGO...' : query.error ? `AVGO load failed: ${query.error.message}` : query.data ? `${freshness} · ${earnings?.period ?? 'earnings unavailable'}` : 'AVGO data unavailable')
   const mix = earnings?.segments.map((segment, index) => ({ label: segment.name, value: segment.revenue, color: colorForIndex(index) })) ?? []
 
   return <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-auto p-2" data-avgo-page>
@@ -85,7 +89,7 @@ export function AvgoPage({ onStatusChange, onNavigate }: {
       <Button onClick={() => onNavigate('charts', 'AVGO')}>Charts</Button><Button onClick={() => onNavigate('fundamentals', 'AVGO')}>Fundamentals</Button>
       <Button onClick={() => void api.openExternal('https://investors.broadcom.com/')}>Investor relations</Button>
     </div>
-    {query.data?.errors.length ? <div role="alert" className="shrink-0 border border-warn/40 bg-surface px-2 py-1 text-2xs text-warn">{query.data.errors.map(error => `${error.symbol}: ${error.reason}`).join(' · ')}</div> : null}
+    {query.data?.errors.length ? <div role="alert" className="shrink-0 border border-warn/40 bg-surface px-2 py-1 text-2xs text-warn">{query.data.errors.map(feedErrorText).join(' · ')}</div> : null}
     <div className="grid shrink-0 grid-cols-2 gap-2 md:grid-cols-3 2xl:grid-cols-6">
       <Tile label="Share price" value={currency(market?.chart.stats.price)} sub={`USD · ${percent(market?.chart.stats.change)} daily`} />
       <Tile label="Market cap" value={market?.metrics.marketCap ?? '--'} sub="Yahoo Finance · market" />

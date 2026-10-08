@@ -55,7 +55,7 @@ export function PricePage({
 
   useEffect(() => {
     onStatusChange(
-      [{ label: 'Price', envelope: screen.data, loading: screen.isFetching }],
+      [{ label: 'Price', envelope: screen.data, error: screen.error, enabled: screen.isEnabled, loading: screen.isFetching }],
       '',
     )
   }, [onStatusChange, screen.data, screen.isFetching])

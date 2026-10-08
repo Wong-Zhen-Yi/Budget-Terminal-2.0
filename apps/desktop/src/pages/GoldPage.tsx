@@ -90,7 +90,7 @@ export function GoldPage({
   const latest = latestOf(payload)
 
   useEffect(() => {
-    onStatusChange([{ label: 'Gold', envelope: query.data, loading: query.isFetching }], '')
+    onStatusChange([{ label: 'Gold', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching }], '')
   }, [onStatusChange, query.data, query.isFetching])
 
   const status = useMemo(() => {

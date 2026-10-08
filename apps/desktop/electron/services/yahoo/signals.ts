@@ -9,7 +9,7 @@ import {
   type SignalBar, type SignalQuoteCandidate,
 } from '../../shared/signals.js'
 import { dayTradingSession, evaluateDayTrading, validDayTradingPayload } from '../../shared/dayTrading.js'
-import { cache } from '../cache.js'
+import { cache, repairedSeriesCacheFailure } from '../cache.js'
 import { equitySignalsScreen } from './screener.js'
 import { getYahooSeries } from './series.js'
 
@@ -206,10 +206,13 @@ async function sourceUniverse(force: boolean): Promise<UniversePayload & { fromC
 }
 
 export async function getLatestSignals(): Promise<SignalsPayload | null> {
-  if (latestPayload && validDayTradingPayload(latestPayload)) return latestPayload
+  const usable = (value: unknown): value is SignalsPayload => validDayTradingPayload(value)
+    && !Object.values(value.errors).some(reason => typeof reason === 'string' && repairedSeriesCacheFailure(reason))
+    && !value.results.some(row => row.error && repairedSeriesCacheFailure(row.error))
+  if (latestPayload && usable(latestPayload)) return latestPayload
   try {
     const value: unknown = JSON.parse(await readFile(latestSignalsPath(), 'utf8'))
-    latestPayload = validDayTradingPayload(value) ? value : null
+    latestPayload = usable(value) ? value : null
   } catch {
     latestPayload = null
   }

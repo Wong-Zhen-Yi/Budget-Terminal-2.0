@@ -12,7 +12,7 @@ export async function getTargets(tickers: string[], force = false): Promise<Targ
 
   return Promise.all(
     unique.map(async (ticker): Promise<TargetRow> => {
-      const current = await getQuote(ticker)
+      const current = await getQuote(ticker, force)
         .then((quote) => quote.price)
         .catch(() => null)
       const entry = facts[ticker]

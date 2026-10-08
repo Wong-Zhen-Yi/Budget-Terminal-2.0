@@ -25,6 +25,7 @@ import {
 } from '../electron/shared/heatmap.js'
 import { excelColumnToIndex } from '../electron/services/etf/xlsx.js'
 import { getEtfHoldings } from '../electron/services/etf/holdings.js'
+import { resolveSector } from '../electron/services/etf/sectorMap.js'
 import { getHeatmap } from '../electron/services/heatmap.js'
 
 /**
@@ -70,6 +71,16 @@ function runOffline(): void {
   assert.equal(normalizeSector('-'), '')
   assert.equal(normalizeSector('N/A'), '')
   assert.equal(normalizeSector(' Information Technology '), 'Information Technology')
+
+  // Current State Street workbooks contain the Sector column but publish literal
+  // dashes. Missing issuer classification must use the constituent map, including
+  // Yahoo's hyphen spelling for a share class; genuine unknowns remain unknown.
+  const sectorMap = { NVDA: 'Information Technology', 'BRK.B': 'Financials' }
+  assert.equal(resolveSector('NVDA', normalizeSector('-'), sectorMap), 'Information Technology')
+  assert.equal(resolveSector('NVDA', normalizeSector('N/A'), sectorMap), 'Information Technology')
+  assert.equal(resolveSector('BRK-B', '', sectorMap), 'Financials')
+  assert.equal(resolveSector('NVDA', 'Issuer-provided sector', sectorMap), 'Issuer-provided sector')
+  assert.equal(resolveSector('UNKNOWN', '', sectorMap), '', 'Unavailable sectors must not be fabricated')
 
   // `excel_col_to_index`.
   assert.equal(excelColumnToIndex('A'), 0)

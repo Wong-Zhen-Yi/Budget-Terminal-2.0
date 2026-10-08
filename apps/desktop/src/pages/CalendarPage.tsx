@@ -1,3 +1,5 @@
+import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
+import { FRESHNESS } from '@shared/freshness'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import type {
@@ -14,6 +16,7 @@ import {
   calendarToday,
   daysBetween,
   earningsDateRange,
+  earningsStatus,
   earningsWeekRows,
   filterEarningsRows,
   monthCells,
@@ -389,12 +392,12 @@ function MonthlyCalendar({
   )
 }
 
-function cacheText(envelope: Envelope<unknown> | undefined, universeCount: number): string {
-  const age = envelope?.meta.cacheAgeSeconds
+function cacheText(envelope: Envelope<unknown> | undefined, universeCount: number, now: number): string {
+  const age = envelope ? Math.max(envelope.meta.cacheAgeSeconds ?? 0, (now - envelope.meta.fetchedAt) / 1000, 0) : undefined
   const universe = universeCount ? `; ${universeCount.toLocaleString()} US company symbols` : ''
   if (age === undefined) return `Cache status unavailable${universe}`
   const ageText = age < 3600 ? `${Math.round(age / 60)}m` : age < 172800 ? `${(age / 3600).toFixed(1)}h` : `${(age / 86400).toFixed(1)}d`
-  return `Cache ${envelope?.meta.freshness === 'stale' ? 'stale' : 'fresh'}: ${ageText} old${universe}`
+  return `Cache ${envelope ? effectiveFreshness(envelope, now, FRESHNESS.calendar) : 'unavailable'}: ${ageText} old${universe}`
 }
 
 function EarningsCard({ row }: { row: EarningsCalendarRow }) {
@@ -426,14 +429,16 @@ function EarningsCalendar({
   sourcePath: string
 }) {
   const state = useCalendarPage()
-  const today = calendarToday('local')
+  const now = useSnapshotClock()
+  const today = calendarToday(state.timezone, new Date(now))
   const range = useMemo(() => earningsDateRange(state.earningsMode, state.earningsYear, today), [state.earningsMode, state.earningsYear, today])
   const request = useMemo(() => ({ startDate: range.startDate, endDate: range.endDate, rangeKey: range.rangeKey }), [range])
   const query = useEarningsCalendar(request, true)
   const refresh = useRefreshEarningsCalendar(request)
   const rows = useMemo(
-    () => filterEarningsRows(query.data?.data.rows ?? [], state.earningsSearch, state.earningsTiming, state.earningsChangedOnly),
-    [query.data, state.earningsChangedOnly, state.earningsSearch, state.earningsTiming],
+    () => filterEarningsRows(query.data?.data.rows ?? [], state.earningsSearch, state.earningsTiming, state.earningsChangedOnly)
+      .map(row => ({ ...row, status: earningsStatus(row, today) })),
+    [query.data, state.earningsChangedOnly, state.earningsSearch, state.earningsTiming, today],
   )
   const minWeek = startOfWeek(range.startDate)
   const maxWeek = startOfWeek(range.endDate)
@@ -444,7 +449,7 @@ function EarningsCalendar({
   }, [setEarningsWeekStart, state.earningsWeekStart, weekStart])
   useEffect(() => {
     onStatusChange(
-      [{ label: 'Earnings Calendar', envelope: query.data, loading: query.isFetching }],
+      [{ label: 'Earnings Calendar', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching }],
       sourcePath,
     )
   }, [onStatusChange, query.data, query.isFetching, sourcePath])
@@ -525,8 +530,8 @@ function EarningsCalendar({
           className="w-36"
         />
         <Checkbox checked={state.earningsChangedOnly} onChange={state.setEarningsChangedOnly} label="Changed dates only" />
-        <span className={`ml-auto text-2xs ${query.data?.meta.freshness === 'stale' ? 'text-warn' : 'text-text-muted'}`}>
-          {cacheText(query.data, query.data?.data.symbolUniverseCount ?? 0)}
+        <span className={`ml-auto text-2xs ${query.data && effectiveFreshness(query.data, now, FRESHNESS.calendar) === 'stale' ? 'text-warn' : 'text-text-muted'}`}>
+          {cacheText(query.data, query.data?.data.symbolUniverseCount ?? 0, now)}
         </span>
       </div>
 
@@ -585,10 +590,10 @@ export function CalendarPage({ onStatusChange }: { onStatusChange: (panels: Pane
     if (state.subTab !== 'calendar') return
     onStatusChange(
       [
-        { label: 'Company Events', envelope: monthQuery.data, loading: monthQuery.isFetching },
-        { label: 'Economic Events', envelope: monthQuery.data, loading: monthQuery.isFetching },
-        { label: 'Market Holidays', envelope: monthQuery.data, loading: monthQuery.isFetching },
-        { label: 'Options Expirations', envelope: portfolio.data, loading: portfolio.isFetching },
+        { label: 'Company Events', envelope: monthQuery.data, error: monthQuery.error, enabled: monthQuery.isEnabled, loading: monthQuery.isFetching },
+        { label: 'Economic Events', envelope: monthQuery.data, error: monthQuery.error, enabled: monthQuery.isEnabled, loading: monthQuery.isFetching },
+        { label: 'Market Holidays', envelope: monthQuery.data, error: monthQuery.error, enabled: monthQuery.isEnabled, loading: monthQuery.isFetching },
+        { label: 'Options Expirations', envelope: portfolio.data, error: portfolio.error, enabled: portfolio.isEnabled, loading: portfolio.isFetching },
       ],
       portfolio.data?.data.sourcePath ?? '',
     )

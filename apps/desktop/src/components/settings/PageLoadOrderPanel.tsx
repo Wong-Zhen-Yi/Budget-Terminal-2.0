@@ -23,12 +23,16 @@ export function PageLoadOrderPanel() {
                 <tr>
                   <th scope="col" className="w-14 px-2 py-1 text-left font-medium">Order</th>
                   <th scope="col" className="px-2 py-1 text-left font-medium">Page</th>
+                  <th scope="col" className="px-2 py-1 text-left font-medium">Startup status</th>
                   <th scope="col" className="px-2 py-1 text-right font-medium">Saved load time</th>
                 </tr>
               </thead>
               <tbody>{order.map((page, index) => <tr key={page} data-startup-page={page} className="border-t border-border">
                 <td className="num px-2 py-1 text-text-dim">{index + 1}</td>
                 <th scope="row" className="px-2 py-1 text-left font-normal text-text">{PAGE_LABELS.get(page) ?? page}</th>
+                <td className={`px-2 py-1 ${['failed', 'degraded'].includes(startup?.pages?.[page]?.state ?? '') ? 'text-warn' : 'text-text-muted'}`} title={startup?.pages?.[page]?.reason}>
+                  {startup?.pages?.[page]?.state ?? 'loading'}{startup?.pages?.[page]?.reason ? ` · ${startup.pages[page].reason}` : ''}
+                </td>
                 <td className="num px-2 py-1 text-right text-text-muted">
                   {loads[page] ? `${(loads[page].durationMs / 1000).toFixed(1)}s` : 'Not measured'}
                 </td>

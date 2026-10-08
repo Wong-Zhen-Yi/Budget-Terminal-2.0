@@ -5,7 +5,7 @@ import { useChartsRelationship } from '@/api/chartsQueries'
 import { Button } from '@/components/ui/Button'
 import { useChartsStore } from '@/stores/charts'
 
-export function RelationshipLab({ onStatus }: { onStatus: (meta: EnvelopeMeta | undefined, loading: boolean) => void }) {
+export function RelationshipLab({ onStatus }: { onStatus: (meta: EnvelopeMeta | undefined, loading: boolean, error?: unknown) => void }) {
   const symbols = useChartsStore((state) => state.relationshipSymbols)
   const range = useChartsStore((state) => state.relationshipRange)
   const rollingWindow = useChartsStore((state) => state.relationshipWindow)
@@ -19,7 +19,7 @@ export function RelationshipLab({ onStatus }: { onStatus: (meta: EnvelopeMeta | 
   const payload = envelope?.data
   const displaySymbols = payload?.symbols ?? symbols
   const [selected, setSelected] = useState(-1)
-  useEffect(() => onStatus(query.data?.meta, query.isFetching), [query.data?.meta, query.isFetching, onStatus])
+  useEffect(() => onStatus(query.data?.meta, query.isFetching, query.error), [query.data?.meta, query.isFetching, query.error, onStatus])
   useEffect(() => { if (payload?.points.length) setSelected(payload.points.length - 1) }, [payload])
   const analyze = () => {
     const nextLeft = left.trim().toUpperCase()

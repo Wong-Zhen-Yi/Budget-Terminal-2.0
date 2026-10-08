@@ -63,7 +63,7 @@ export function SettingsPage({
       [
         {
           label: 'Settings',
-          envelope: settingsQuery.data,
+          envelope: settingsQuery.data, error: settingsQuery.error, enabled: settingsQuery.isEnabled,
           loading: settingsQuery.isLoading,
         },
       ],

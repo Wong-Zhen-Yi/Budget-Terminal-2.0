@@ -381,7 +381,7 @@ export function BondsPage({
   )
 
   useEffect(() => {
-    onStatusChange([{ label: 'Bonds', envelope: query.data, loading: query.isFetching }], '')
+    onStatusChange([{ label: 'Bonds', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching }], '')
   }, [onStatusChange, query.data, query.isFetching])
 
   const status = useMemo(() => {

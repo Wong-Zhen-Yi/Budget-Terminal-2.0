@@ -11,7 +11,9 @@ import {
   RENDERER_CACHE_BUSTER,
   rendererQueryPersister,
   shouldPersistRemoteQuery,
+  queryFreshness,
 } from './api/queryPersistence'
+import { registerSnapshot } from './api/snapshotHealth'
 import './styles/theme.css'
 
 const queryClient = new QueryClient({
@@ -29,6 +31,10 @@ const queryClient = new QueryClient({
       gcTime: Infinity,
     },
   },
+})
+
+queryClient.getQueryCache().subscribe(({ query }) => {
+  registerSnapshot(query.state.data, queryFreshness(query.queryKey))
 })
 
 const stopMcpChanges = api.onSavedDataChanged((event) => {

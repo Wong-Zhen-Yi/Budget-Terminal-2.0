@@ -33,7 +33,7 @@ export function TechnicalScreenPage({
     : scan.error?.message
 
   useEffect(() => {
-    onStatusChange([{ label: 'Technical Indicators', envelope, loading: scan.isPending }], '')
+    onStatusChange([{ label: 'Technical Indicators', envelope, error: scan.error ?? snapshot.error, enabled: true, loading: scan.isPending || snapshot.isFetching }], '')
   }, [onStatusChange, envelope, scan.isPending])
   useEffect(() => {
     const timer = window.setInterval(() => setClock(Date.now()), 60_000)

@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react'
 
 import type { ApiProviderUsage, ApiUsageSnapshot, Envelope, Freshness } from '@shared/contract'
+import { effectiveFreshness, errorMessage, useSnapshotClock } from '@/api/snapshotHealth'
 
 export interface PanelStatus {
   label: string
   envelope: Envelope<unknown> | undefined
   loading: boolean
+  error?: unknown
+  /** False denotes an optional view awaiting user input, rather than missing data. */
+  enabled?: boolean
+  freshnessMs?: number
 }
 
 const severity: Record<Freshness, number> = {
@@ -110,25 +115,38 @@ export function StatusBar({
    */
   warming?: string
 }) {
-  const loading = panels.filter((panel) => panel.loading)
-  const settled = panels.filter((panel) => panel.envelope)
+  const now = useSnapshotClock()
+  const expected = panels.filter((panel) => panel.enabled !== false)
+  const loading = expected.filter((panel) => panel.loading)
+  const failed = expected.find((panel) => errorMessage(panel.error))
+  const settled = expected.filter((panel) => panel.envelope)
+  const freshness = (panel: PanelStatus) => effectiveFreshness(panel.envelope!, now, panel.freshnessMs)
 
   const worst = settled
-    .filter((panel) => severity[panel.envelope!.meta.freshness] > 0)
-    .sort((a, b) => severity[b.envelope!.meta.freshness] - severity[a.envelope!.meta.freshness])[0]
+    .filter((panel) => severity[freshness(panel)] > 0)
+    .sort((a, b) => severity[freshness(b)] - severity[freshness(a)])[0]
 
-  let health = 'Data health: OK'
+  let health = 'Current page data: OK'
   let tone = 'text-up'
   if (notice) {
     health = notice
     tone = 'text-text-muted'
+  } else if (failed) {
+    health = `${failed.label}: ${errorMessage(failed.error)}`
+    tone = 'text-down'
   } else if (loading.length) {
     health = `Loading ${loading.map((panel) => panel.label).join(', ')}...`
     tone = 'text-text-muted'
   } else if (worst) {
     const meta = worst.envelope!.meta
-    health = `${worst.label}: ${meta.failureReason || meta.freshness}`
-    tone = toneFor[meta.freshness]
+    health = `${worst.label}: ${meta.failureReason || (freshness(worst) === 'stale' ? 'Snapshot expired; refresh to update' : freshness(worst))}`
+    tone = toneFor[freshness(worst)]
+  } else if (expected.some((panel) => panel.enabled === true && !panel.envelope)) {
+    health = 'Data health: awaiting required data'
+    tone = 'text-warn'
+  } else if (!settled.length) {
+    health = expected.length ? 'Data health: no data loaded' : 'No remote data required'
+    tone = 'text-text-muted'
   }
 
   return (

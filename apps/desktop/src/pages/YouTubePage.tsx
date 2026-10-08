@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { YouTubeVideo } from '@shared/contract'
 import {
-  DEFAULT_YOUTUBE_PAGE_SETTINGS,
   filterYouTubeVideos,
   normalizeYouTubePageSettings,
   sortYouTubeVideos,
@@ -76,8 +75,8 @@ export function YouTubePage({
   const query = useYouTube(tickers)
   const refresh = useRefreshYouTube(tickers)
   const [filter, setFilter] = useState('')
-  const [sortColumn, setSortColumn] = useState<number>(DEFAULT_YOUTUBE_PAGE_SETTINGS.sortColumn)
-  const [sortDescending, setSortDescending] = useState<boolean>(DEFAULT_YOUTUBE_PAGE_SETTINGS.sortDescending)
+  const [sortColumn, setSortColumn] = useState<number>(() => normalizeYouTubePageSettings(settingsQuery.data?.data.youtubePage).sortColumn)
+  const [sortDescending, setSortDescending] = useState<boolean>(() => normalizeYouTubePageSettings(settingsQuery.data?.data.youtubePage).sortDescending)
   const [manualSelectedKey, setManualSelectedKey] = useState('')
   const [refreshing, setRefreshing] = useState(false)
   const [detailWidth, setDetailWidth] = useState(360)
@@ -95,8 +94,8 @@ export function YouTubePage({
   useEffect(() => {
     onStatusChange(
       [
-        { label: 'YouTube', envelope: query.data, loading: query.isFetching },
-        { label: 'Holdings', envelope: portfolioQuery.data, loading: portfolioQuery.isFetching },
+        { label: 'YouTube', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching },
+        { label: 'Holdings', envelope: portfolioQuery.data, error: portfolioQuery.error, enabled: portfolioQuery.isEnabled, loading: portfolioQuery.isFetching },
       ],
       settingsQuery.data?.data.sourcePath ?? '',
     )

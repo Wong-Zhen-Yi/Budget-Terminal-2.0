@@ -221,8 +221,8 @@ export function InstitutionsPage({
   useEffect(() => {
     onStatusChange(
       [
-        { label: 'Institutions', envelope: activityQuery.data, loading: activityQuery.isFetching || refreshingActivity },
-        { label: 'Ticker Activity', envelope: tickerMutation.data, loading: tickerMutation.isPending },
+        { label: 'Institutions', envelope: activityQuery.data, error: activityQuery.error, enabled: activityQuery.isEnabled, loading: activityQuery.isFetching || refreshingActivity },
+        { label: 'Ticker Activity', envelope: tickerMutation.data, error: tickerMutation.error, enabled: !tickerMutation.isIdle, loading: tickerMutation.isPending },
       ],
       '',
     )

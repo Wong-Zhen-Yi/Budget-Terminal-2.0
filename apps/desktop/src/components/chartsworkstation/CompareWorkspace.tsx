@@ -7,7 +7,7 @@ import { CompareChart, COMPARE_COLORS } from '@/components/chartsworkstation/Com
 import { Button } from '@/components/ui/Button'
 import { useChartsStore } from '@/stores/charts'
 
-export function CompareWorkspace({ onStatus }: { onStatus: (meta: EnvelopeMeta | undefined, loading: boolean) => void }) {
+export function CompareWorkspace({ onStatus }: { onStatus: (meta: EnvelopeMeta | undefined, loading: boolean, error?: unknown) => void }) {
   const symbols = useChartsStore((state) => state.compareSymbols)
   const interval = useChartsStore((state) => state.compareInterval)
   const range = useChartsStore((state) => state.compareRange)
@@ -25,7 +25,7 @@ export function CompareWorkspace({ onStatus }: { onStatus: (meta: EnvelopeMeta |
   const query = useChartsCompare({ symbols, interval, range })
   const [snapshot, setSnapshot] = useState<Envelope<ChartsComparePayload> | null>(null)
   useEffect(() => { if (query.data && Object.keys(query.data.data.series).length) setSnapshot(query.data) }, [query.data])
-  useEffect(() => onStatus(query.data?.meta, query.isFetching), [onStatus, query.data?.meta, query.isFetching])
+  useEffect(() => onStatus(query.data?.meta, query.isFetching, query.error), [onStatus, query.data?.meta, query.isFetching, query.error])
   const envelope = query.data && Object.keys(query.data.data.series).length ? query.data : snapshot
   const model = useMemo(() => envelope ? buildCompareModel(envelope.data) : null, [envelope])
   const add = () => {

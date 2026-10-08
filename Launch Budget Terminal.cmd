@@ -4,7 +4,7 @@ cd /d "%~dp0" || exit /b 1
 
 where node >nul 2>nul
 if errorlevel 1 (
-  echo Node.js is required. Install Node.js 24 or newer, then run this launcher again.
+  echo Node.js is required. Install the latest Node.js 24 LTS, then run this launcher again.
   goto :failed
 )
 

@@ -22,6 +22,7 @@ import type {
   Quote,
   RecurringBill,
 } from './contract.js'
+import { usablePortfolioQuote, unavailablePortfolioQuoteReason } from './portfolioMath.js'
 
 /* ------------------------------------------------------------------ colours */
 
@@ -114,6 +115,9 @@ export function billTotals(
 
 /** One portfolio valued in USD. Mirrors `_p6_portfolio_breakdown`. */
 export interface PortfolioSilo {
+  /** False when some holdings have no current market mark. */
+  complete?: boolean
+  missingMarks?: string[]
   id: string
   name: string
   /** Shares times the live mark, summed. */
@@ -130,6 +134,7 @@ const SELLER_STRATEGIES = new Set(['Covered Call', 'Cash Secured Put'])
 export function optionsEquity(options: readonly OptionPosition[]): number {
   let total = 0
   for (const position of options) {
+    if (position.hasMarketMark === false || !Number.isFinite(position.currentPrice)) continue
     const contracts = Number.isFinite(position.contracts) ? position.contracts : 0
     const premium = Number.isFinite(position.premium) ? position.premium : 0
     const current = Number.isFinite(position.currentPrice) ? position.currentPrice : 0
@@ -152,12 +157,17 @@ export function portfolioBreakdown(
     .filter((portfolio) => !portfolio.readOnly)
     .map((portfolio) => {
       let stocks = 0
+      const missingMarks: string[] = []
       for (const ticker of portfolio.tickers) {
         const shares = portfolio.holdings[ticker]?.shares ?? 0
-        const price = quotes[ticker]?.price ?? 0
-        if (Number.isFinite(shares) && Number.isFinite(price)) stocks += shares * price
+        const quote = quotes[ticker]
+        const price = usablePortfolioQuote(quote) ? quote.price : undefined
+        if (shares !== 0 && price === undefined) { missingMarks.push(unavailablePortfolioQuoteReason(ticker, quote)); continue }
+        if (Number.isFinite(shares) && price !== undefined && Number.isFinite(price)) stocks += shares * price
       }
       return {
+        complete: missingMarks.length === 0 && portfolio.options.every(option => !option.contracts || !option.ticker || (option.hasMarketMark !== false && Number.isFinite(option.currentPrice))),
+        missingMarks: [...missingMarks, ...portfolio.options.filter(option => option.contracts && option.ticker && (option.hasMarketMark === false || !Number.isFinite(option.currentPrice))).map(option => `${option.ticker} option`)],
         id: portfolio.id,
         name: portfolio.name,
         stocks,
@@ -225,11 +235,11 @@ export function totalsSeries(
     const gross = silo.stocks + silo.cash + silo.options
     const margin = Math.max(silo.marginDebt, 0)
     const net = gross - margin
-    if (net > 0) {
+    if (net !== 0) {
       slices.push({
         label: silo.name,
-        value: convertAmount(net, 'USD', display, rate),
-        kind: 'asset',
+        value: convertAmount(Math.abs(net), 'USD', display, rate),
+        kind: net < 0 ? 'debt' : 'asset',
         color: PORTFOLIO_LINE_COLORS[index % PORTFOLIO_LINE_COLORS.length],
       })
     }
@@ -278,6 +288,7 @@ export interface GoalStatus {
   value: number
   /** False when the mix of currencies cannot be valued without a rate. */
   available: boolean
+  reason?: string
 }
 
 /** `_p6_goal_net_worth`, computed in the goal's own currency. */
@@ -287,6 +298,8 @@ export function goalNetWorth(
   display: FinanceCurrency,
   rate: number | null,
 ): GoalStatus {
+  if (breakdown.some(silo => silo.complete === false)) return { value: 0, available: false,
+    reason: `Net worth is incomplete. ${breakdown.flatMap(silo => silo.missingMarks ?? []).join(' ')}`.trim() }
   const cashTotal = categoryTotal(book.cash)
   const debtTotal = categoryTotal(book.debt)
   const portfolioTotal = breakdown.reduce(
@@ -299,7 +312,7 @@ export function goalNetWorth(
     display === 'SGD'
       ? Math.abs(portfolioTotal) > 0.0001 || margin > 0.0001
       : cashTotal > 0.0001 || debtTotal > 0.0001
-  if (requiresFx && !validRate(rate)) return { value: 0, available: false }
+  if (requiresFx && !validRate(rate)) return { value: 0, available: false, reason: 'FX required to value mixed currencies.' }
 
   const value =
     convertAmount(cashTotal, 'SGD', display, rate) +

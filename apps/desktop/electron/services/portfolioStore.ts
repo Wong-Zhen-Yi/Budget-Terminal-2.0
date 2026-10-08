@@ -452,7 +452,7 @@ function buildCombined(document: StoredDocument): Portfolio {
 
 /** Stored rows carry the contract only; live marks start at zero each session. */
 function withLiveDefaults(option: z.infer<typeof optionSchema>): OptionPosition {
-  return { ...option, currentPrice: 0, volume: 0, openInterest: 0, impliedVolatility: 0 }
+  return { ...option, currentPrice: 0, hasMarketMark: false, volume: 0, openInterest: 0, impliedVolatility: 0 }
 }
 
 function toPortfolio(entry: StoredPortfolio): Portfolio {

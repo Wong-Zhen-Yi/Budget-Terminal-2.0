@@ -5,6 +5,7 @@ import { profileStorage } from './profileStorage'
 import type { Envelope, Freshness } from '@shared/contract'
 import { recordStartupLoad, restoreStartupLoads, type StartupLoads } from '@shared/startupLoading'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
+import { effectiveFreshness, errorMessage, snapshotLifetime } from '@/api/snapshotHealth'
 
 /** Bounded observed feed history; restored records are explicitly historical. */
 export interface HealthRecord {
@@ -17,6 +18,8 @@ export interface HealthRecord {
   errors: string[]
   fetchedAt: number
   previousSession?: boolean
+  freshnessMs?: number
+  expiresAt?: number
 }
 
 export interface StartupTiming {
@@ -24,13 +27,16 @@ export interface StartupTiming {
   label: string
   durationMs: number
   failed: boolean
+  state?: 'ready' | 'degraded' | 'failed'
+  reason?: string
 }
 
 interface DataHealthState {
   records: Record<string, HealthRecord>
   record: (page: string, panels: PanelStatus[]) => void
   clear: () => void
-  startup: { durationMs: number; planned: number; timings: StartupTiming[]; pageOrder?: string[] } | null
+  startup: { durationMs: number; planned: number; timings: StartupTiming[]; pageOrder?: string[];
+    pages?: Record<string, { state: 'loading' | 'ready' | 'degraded' | 'failed' | 'idle'; reason?: string }> } | null
   setStartup: (startup: DataHealthState['startup']) => void
   startupLoads: StartupLoads
   recordStartupLoad: (page: string, durationMs: number, failed: boolean) => void
@@ -47,6 +53,8 @@ function toRecord(page: string, label: string, envelope: Envelope<unknown>): Hea
       [entry.operation, entry.symbol, entry.reason].filter(Boolean).join(' ').slice(0, 1000),
     ),
     fetchedAt: envelope.meta.fetchedAt,
+    freshnessMs: snapshotLifetime(envelope),
+    expiresAt: envelope.meta.expiresAt,
   }
 }
 
@@ -64,9 +72,18 @@ export const useDataHealth = create<DataHealthState>()(persist((set) => ({
       const next = { ...state.records }
       let changed = false
       for (const panel of panels) {
-        if (!panel.envelope) continue
+        if (panel.enabled === false) continue
+        const failure = errorMessage(panel.error)
+        if (!panel.envelope && !failure) continue
         const key = `${page}:${panel.label}`
-        const record = toRecord(page, panel.label, panel.envelope)
+        const record = panel.envelope ? toRecord(page, panel.label, panel.envelope) : {
+          page, label: panel.label, source: 'Renderer IPC', freshness: 'failed' as const,
+          failureReason: failure, errors: [], fetchedAt: Date.now(),
+        }
+        if (failure) {
+          record.freshness = panel.envelope ? 'stale' : 'failed'
+          record.failureReason = failure
+        }
         // Quotes re-fetch on a timer; rewriting an identical record every minute would
         // re-render the report for no reason.
         const previous = next[key]
@@ -108,7 +125,9 @@ const ORDER: Record<Freshness, number> = {
 
 /** Worst state first, so the line that matters is the one at the top of the report. */
 export function sortRecords(records: Record<string, HealthRecord>): HealthRecord[] {
-  return Object.values(records).sort(
+  return Object.values(records).map((record) => ({ ...record, freshness: effectiveFreshness({
+    data: null, errors: [], meta: { source: record.source, freshness: record.freshness, fetchedAt: record.fetchedAt, expiresAt: record.expiresAt },
+  }, Date.now(), record.freshnessMs) })).sort(
     (a, b) => ORDER[a.freshness] - ORDER[b.freshness] || a.page.localeCompare(b.page),
   )
 }

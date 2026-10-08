@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { serialize } from 'node:v8'
 import { dehydrate, QueryClient } from '@tanstack/react-query'
 
 import { TtlCache } from '../electron/services/cache.js'
@@ -56,8 +57,26 @@ async function persistentCacheChecks(): Promise<void> {
   reopened.close()
 
   const database = new DatabaseSync(databasePath)
-  database.prepare('UPDATE cache_entries SET value = ? WHERE key = ?').run(Buffer.from([0, 1, 2]), 'snapshot:fixture')
+  database.prepare('UPDATE cache_entries SET value = ? WHERE key = ?').run(serialize({ rows: [], coveredFrom: 1 }), 'snapshot:fixture')
   database.close()
+  const legacy = new TtlCache({ path: databasePath, maxBytes: 4_096 })
+  const barePayload = legacy.get('snapshot:fixture', { allowStale: true })
+  const validWrapped = legacy.get<number>('single-flight')?.value
+  legacy.set('snapshot:fixture', saved, 60_000)
+  legacy.set('malformed-wrapper', 1, 60_000)
+  legacy.close()
+  assert.equal(barePayload, null, 'A bare legacy payload is not a usable wrapped cache entry')
+  assert.equal(validWrapped, 1, 'Valid wrapped entries remain available')
+  const malformed = new DatabaseSync(databasePath)
+  malformed.prepare('UPDATE cache_entries SET value = ? WHERE key = ?').run(serialize({ value: undefined, snapshot: undefined }), 'malformed-wrapper')
+  malformed.close()
+  const invalid = new TtlCache({ path: databasePath, maxBytes: 4_096 })
+  const undefinedPayload = invalid.get('malformed-wrapper')
+  invalid.close()
+  assert.equal(undefinedPayload, null, 'An undefined decoded payload must trigger reload, not a truthy cache hit')
+  const broken = new DatabaseSync(databasePath)
+  broken.prepare('UPDATE cache_entries SET value = ? WHERE key = ?').run(Buffer.from([0, 1, 2]), 'snapshot:fixture')
+  broken.close()
   const corrupt = new TtlCache({ path: databasePath, maxBytes: 4_096 })
   assert.equal(corrupt.get('snapshot:fixture', { allowStale: true }), null)
   for (let index = 0; index < 8; index += 1) corrupt.set(`snapshot:${index}`, 'x'.repeat(900), 60_000)
@@ -87,6 +106,10 @@ async function incrementalSeriesChecks(): Promise<void> {
 
   try {
     const start = new Date(now - 30 * 86_400_000)
+    store.set('series:yahoo:ohlcv:BAD:1d', { rows: [] }, 60_000)
+    const recovered = await getYahooSeries({ symbol: 'BAD', start, interval: '1d' }, store, loader)
+    assert.ok(recovered.rows.length >= 30, 'Malformed canonical history is discarded and reloaded')
+    calls.length = 0
     const cold = await getYahooSeries({ symbol: 'FIX', start, interval: '1d' }, store, loader)
     assert.ok(cold.rows.length >= 30)
     assert.equal(calls.length, 1)

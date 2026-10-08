@@ -8,6 +8,8 @@ import type { PositionRow } from '@shared/portfolioMath'
 import { useReturns } from '@/api/portfolioQueries'
 import { Treemap, type TreemapTile } from '@/components/charts/Treemap'
 import { Button } from '@/components/ui/Button'
+import { DataFreshness } from '@/components/ui/DataFreshness'
+import { FRESHNESS } from '@shared/freshness'
 import { currency, percent, plainPercent } from '@/lib/format'
 
 interface HeatmapTabProps {
@@ -23,11 +25,13 @@ export function HeatmapTab({ portfolio, rows, visible }: HeatmapTabProps) {
   // Only weight-included positions with real shares appear on the map, matching
   // `_p4_heatmap_stock_symbols`.
   const included = useMemo(
-    () => rows.filter((row) => row.includeInWeight && row.shares > 0 && row.marketValue > 0),
+    () => rows.filter((row) => row.includeInWeight && row.shares > 0 && row.marketValue !== null && row.marketValue > 0),
     [rows],
   )
   const cash = portfolio.includeCashInWeight ? Math.max(portfolio.cashBalance, 0) : 0
-  const totalValue = included.reduce((sum, row) => sum + row.marketValue, 0) + cash
+  const holdings = rows.filter(row => row.includeInWeight && row.shares > 0)
+  const complete = holdings.every(row => row.marketValue !== null)
+  const totalValue = included.reduce((sum, row) => sum + (row.marketValue ?? 0), 0) + cash
 
   // 'live' is today's quote change, which is already on the row; every other interval
   // needs its own history fetch.
@@ -40,11 +44,11 @@ export function HeatmapTab({ portfolio, rows, visible }: HeatmapTabProps) {
 
   const tiles: TreemapTile[] = useMemo(
     () =>
-      included.map((row) => {
+      rows.some(row => row.includeInWeight && row.marketValue === null) ? [] : included.map((row) => {
         const change = historical
           ? (returnsQuery.data?.data.returns[row.ticker] ?? null)
           : row.changePercent
-        const weight = totalValue > 0 ? (row.marketValue / totalValue) * 100 : 0
+        const weight = totalValue > 0 ? ((row.marketValue ?? 0) / totalValue) * 100 : 0
         return {
           key: row.ticker,
           label: row.ticker,
@@ -54,7 +58,7 @@ export function HeatmapTab({ portfolio, rows, visible }: HeatmapTabProps) {
           subtitle: `${HEATMAP_INTERVALS.find((entry) => entry.key === interval)?.label ?? ''} ${percent(change)}`,
         }
       }),
-    [included, historical, returnsQuery.data, totalValue, interval],
+    [rows, included, historical, returnsQuery.data, totalValue, interval],
   )
 
   const move = weightedMove(tiles)
@@ -62,18 +66,23 @@ export function HeatmapTab({ portfolio, rows, visible }: HeatmapTabProps) {
     .filter((tile) => tile.changePct !== null)
     .sort((a, b) => (b.changePct ?? 0) - (a.changePct ?? 0))
   const largest = [...tiles].sort((a, b) => b.weight - a.weight)[0]
-  const detail = hovered ?? largest ?? null
+  const detail = complete ? hovered ?? largest ?? null : null
   const detailRow = detail ? included.find((row) => row.ticker === detail.key) : null
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
+      {rows.some(row => row.includeInWeight && row.marketValue === null) && <p className="px-2 text-2xs text-warn">Market marks missing; allocation unavailable.</p>}
+      {historical && included.length > 0 && <DataFreshness envelope={returnsQuery.data} loading={returnsQuery.isFetching}
+        error={returnsQuery.error} freshnessMs={FRESHNESS.chartDaily}
+        coverage={`${Object.keys(returnsQuery.data?.data.returns ?? {}).length}/${included.length} holdings`} />}
       <div className="flex shrink-0 flex-wrap border border-border bg-surface">
-        <Stat label="Holdings" value={String(included.length)} />
+        <Stat label="Holdings" value={String(holdings.length)} />
+        <Stat label="Priced holdings" value={`${included.length}/${holdings.length}`} />
         <Stat
           label="Cash"
-          value={`${currency(cash, 0)} / ${totalValue > 0 ? plainPercent((cash / totalValue) * 100) : '--'}`}
+          value={`${currency(cash, 0)} / ${!complete ? 'N/A' : totalValue > 0 ? plainPercent((cash / totalValue) * 100) : '--'}`}
         />
-        <Stat label="Coverage" value={`${tiles.filter((t) => t.changePct !== null).length}/${tiles.length}`} />
+        <Stat label="Return coverage" value={`${tiles.filter((t) => t.changePct !== null).length}/${holdings.length}`} />
         <Stat label="Weighted Move" value={percent(move)} tone={(move ?? 0) >= 0 ? 'text-up' : 'text-down'} />
         <Stat label="Largest" value={largest ? `${largest.label} ${plainPercent(largest.weight)}` : '--'} />
         <Stat

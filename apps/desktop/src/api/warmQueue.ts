@@ -1,13 +1,36 @@
 import type { QueryClient, QueryKey } from '@tanstack/react-query'
 import { queryFreshness } from './queryPersistence'
+import type { Envelope } from '@shared/contract'
+import { effectiveFreshness, registerSnapshot } from './snapshotHealth'
 
 const REQUEST_TIMEOUT_MS = 90_000
 // All pages join the provider queue together. A cold startup can take several
 // minutes at Yahoo's shared pacing rate, especially when it enters a cooldown.
 const STARTUP_TIMEOUT_MS = 600_000
 
-export function warmStartupQuery<T>(client: QueryClient, options: Parameters<typeof warmQuery<T>>[1]): Promise<T> {
+export class StartupLoadError extends Error {
+  constructor(message: string, readonly state: 'degraded' | 'failed') {
+    super(message)
+  }
+}
+
+export function assertStartupReady(result: unknown): void {
+  const meta = (result as { meta?: { freshness?: string; failureReason?: string } } | null)?.meta
+  if (meta?.freshness === 'partial' || meta?.freshness === 'stale') {
+    throw new StartupLoadError(meta.failureReason || `Startup data is ${meta.freshness}`, 'degraded')
+  }
+  if (meta?.freshness === 'failed') throw new StartupLoadError(meta.failureReason || 'Startup data failed', 'failed')
+}
+
+/** Fetch dependent snapshots before classifying the complete initial page. */
+export function warmStartupSnapshot<T>(client: QueryClient, options: Parameters<typeof warmQuery<T>>[1]): Promise<T> {
   return warmQuery(client, options, STARTUP_TIMEOUT_MS)
+}
+
+export async function warmStartupQuery<T>(client: QueryClient, options: Parameters<typeof warmQuery<T>>[1]): Promise<T> {
+  const result = await warmStartupSnapshot(client, options)
+  assertStartupReady(result)
+  return result
 }
 
 /** Start every page without letting a slow or failed page block the others. */
@@ -50,12 +73,15 @@ export async function warmQuery<T>(client: QueryClient, options: {
   queryFn: () => Promise<T>
   staleTime: number
 }, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
+  const cached = client.getQueryData<Envelope<unknown>>(options.queryKey)
+  const lifetime = queryFreshness(options.queryKey)
+  const expired = cached?.meta && effectiveFreshness(cached, Date.now(), lifetime) === 'stale'
   // The outer deadline also covers joining an existing foreground fetch or a query
   // paused by React Query while offline. Never cancel a query another page is using.
-  return withDeadline(() => client.fetchQuery({
+  const result = await withDeadline(() => client.fetchQuery({
     ...options,
     // Hydrated pages are only skipped when they are still fresh by the shared policy.
-    staleTime: Math.min(options.staleTime, queryFreshness(options.queryKey)),
+    staleTime: expired ? 0 : Math.min(options.staleTime, lifetime),
     retry: false,
     networkMode: 'always',
     queryFn: () => withDeadline(async () => {
@@ -63,10 +89,13 @@ export async function warmQuery<T>(client: QueryClient, options: {
       const meta = (result as { meta?: { freshness?: string; failureReason?: string } } | null)?.meta
       // A failed envelope is otherwise cached as success forever by Infinity queries.
       // Keep partial/stale payloads, but let a wholly failed page retry on mount.
-      if (meta?.freshness === 'failed') throw new Error(meta.failureReason || 'Background page load failed')
+      if (meta?.freshness === 'failed') throw new StartupLoadError(meta.failureReason || 'Background page load failed', 'failed')
+      registerSnapshot(result, queryFreshness(options.queryKey))
       return result
     }, timeoutMs),
   }), timeoutMs)
+  registerSnapshot(result, lifetime)
+  return result
 }
 
 export async function waitForWarmSlot(options: {

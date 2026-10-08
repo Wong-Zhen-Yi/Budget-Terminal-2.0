@@ -1,3 +1,5 @@
+import { effectiveFreshness, feedErrorText, useSnapshotClock } from '@/api/snapshotHealth'
+import { FRESHNESS } from '@shared/freshness'
 import { useEffect, useMemo, useState } from 'react'
 import { STOCKS_RANGE_PRESETS } from '@shared/contract'
 import type { StocksRangePreset } from '@shared/contract'
@@ -51,6 +53,8 @@ export function HimsPage({ onStatusChange, onNavigate }: {
   onNavigate: (tabId: string, symbol?: string) => void
 }) {
   const query = useHims()
+  const now = useSnapshotClock()
+  const freshness = query.data ? effectiveFreshness(query.data, now, FRESHNESS.hims) : 'unavailable'
   const refresh = useRefreshHims()
   const [notice, setNotice] = useState('')
   const [refreshing, setRefreshing] = useState(false)
@@ -79,7 +83,7 @@ export function HimsPage({ onStatusChange, onNavigate }: {
     return all.filter(candle => candle.time * 1000 >= start.getTime())
   }, [data?.market?.chart.candles, range])
   const dates = useMemo(() => candles.map(candle => new Date(candle.time * 1000).toISOString().slice(0, 10)), [candles])
-  useEffect(() => onStatusChange([{ label: 'HIMS', envelope: query.data, loading: busy }], ''), [query.data, busy, onStatusChange])
+  useEffect(() => onStatusChange([{ label: 'HIMS', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: busy }], ''), [query.data, busy, onStatusChange])
   const onRefresh = async () => {
     setNotice('')
     setRefreshing(true)
@@ -104,12 +108,12 @@ export function HimsPage({ onStatusChange, onNavigate }: {
       {['charts', 'fundamentals', 'options', 'valuation'].map(id => <Button key={id} className="capitalize" onClick={() => onNavigate(id, 'HIMS')}>{id}</Button>)}
     </div>
     <div className="flex shrink-0 flex-wrap items-center gap-2 text-2xs text-text-muted">
-      <span>{loading ? 'Loading Hims & Hers dashboard…' : `${busy ? 'Updating cached dashboard · ' : ''}${query.data?.meta.freshness ?? 'Unavailable'} · fetched ${data?.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : 'unavailable'}`} · price from daily bars{data?.market?.chart.candles.at(-1) ? ` as of ${new Date(data.market.chart.candles.at(-1)!.time * 1000).toISOString().slice(0, 10)}` : ''}</span>
+      <span>{loading ? 'Loading Hims & Hers dashboard…' : `${busy ? 'Updating cached dashboard · ' : ''}${freshness} · fetched ${data?.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : 'unavailable'}`} · price from daily bars{data?.market?.chart.candles.at(-1) ? ` as of ${new Date(data.market.chart.candles.at(-1)!.time * 1000).toISOString().slice(0, 10)}` : ''}</span>
       <label className="ml-auto flex items-center gap-2">Reporting quarter<select aria-label="Reporting quarter" className="no-drag border border-border-strong bg-surface-raised p-1 text-text" value={report?.period ?? ''} onChange={event => setSelectedPeriod(event.target.value)} disabled={!reports.length}>
         {!reports.length ? <option value="">Unavailable</option> : reports.map(entry => <option key={entry.period}>{entry.period}</option>)}
       </select></label>
     </div>
-    {(notice || query.error || query.data?.errors.length) ? <div role="status" className="shrink-0 border border-warn/40 bg-surface p-2 text-xs text-warn">{notice || query.error?.message || query.data?.meta.failureReason || query.data?.errors.map(error => `${error.symbol}: ${error.reason}`).join(' · ')}</div> : null}
+    {(notice || query.error || query.data?.errors.length) ? <div role="status" className="shrink-0 border border-warn/40 bg-surface p-2 text-xs text-warn">{notice || query.error?.message || query.data?.meta.failureReason || query.data?.errors.map(feedErrorText).join(' · ')}</div> : null}
     <div className="grid shrink-0 grid-cols-2 gap-2 lg:grid-cols-3 2xl:grid-cols-6">{tileIds.map(id => {
       const spec = HIMS_METRICS.find(entry => entry.id === id)!
       const metric = report?.metrics[id]
@@ -183,7 +187,7 @@ export function HimsPage({ onStatusChange, onNavigate }: {
     </div>
     <Panel title="Company overview & research" warning={warning('market')} className="shrink-0">
       <p className="p-3 text-2xs text-text-muted">{market?.company.description || 'Company profile unavailable.'}</p>
-      <div className="flex flex-wrap gap-2 border-t border-border p-2"><Button onClick={() => { void api.openExternal('https://investors.hims.com/') }}>Investor relations ↗</Button><Button onClick={() => { void api.openExternal('https://www.sec.gov/edgar/browse/?CIK=1773751&owner=exclude') }}>SEC EDGAR ↗</Button><span className="self-center text-2xs text-text-muted">Profile: Yahoo Finance · data freshness: {query.data?.meta.freshness ?? 'unavailable'}</span></div>
+      <div className="flex flex-wrap gap-2 border-t border-border p-2"><Button onClick={() => { void api.openExternal('https://investors.hims.com/') }}>Investor relations ↗</Button><Button onClick={() => { void api.openExternal('https://www.sec.gov/edgar/browse/?CIK=1773751&owner=exclude') }}>SEC EDGAR ↗</Button><span className="self-center text-2xs text-text-muted">Profile: Yahoo Finance · data freshness: {freshness}</span></div>
     </Panel>
   </div>
 }

@@ -75,7 +75,7 @@ export function GlobalPage({
 
   useEffect(() => {
     // No file behind this page, so the status bar's path slot stays empty.
-    onStatusChange([{ label: 'Global', envelope: query.data, loading: query.isFetching }], '')
+    onStatusChange([{ label: 'Global', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching }], '')
   }, [onStatusChange, query.data, query.isFetching])
 
   /** The header's own line, which is what `_p26_set_status` writes. */

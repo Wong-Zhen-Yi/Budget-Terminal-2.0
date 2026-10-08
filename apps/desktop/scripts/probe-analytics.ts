@@ -6,7 +6,8 @@
  * Every figure here has a counterpart on the matching sub-tab of the PySide6 Portfolio
  * page; they are expected to agree.
  */
-import { weightedMove } from '../electron/shared/analytics.js'
+import assert from 'node:assert/strict'
+import { weightedMove, buildPortfolioSeries, computeRiskMetrics, computeExposure, toReturnSeries } from '../electron/shared/analytics.js'
 import { buildPositionRows } from '../electron/shared/portfolioMath.js'
 import { sectorFor } from '../electron/shared/sectors.js'
 import type { MetricsLookback, ReturnTimeframe } from '../electron/shared/contract.js'
@@ -63,11 +64,11 @@ async function main(): Promise<void> {
   if (returns.data.missing.length) console.log(`  missing: ${returns.data.missing.join(', ')}`)
 
   /* --------------------------------------------------------------- heatmap */
-  const totalValue = included.reduce((sum, row) => sum + row.marketValue, 0) + cash
+  const totalValue = included.reduce((sum, row) => sum + (row.marketValue ?? 0), 0) + cash
   const tiles = included.map((row) => ({
     ticker: row.ticker,
     sector: sectorFor(row.ticker),
-    weight: totalValue > 0 ? (row.marketValue / totalValue) * 100 : 0,
+    weight: totalValue > 0 ? ((row.marketValue ?? 0) / totalValue) * 100 : 0,
     changePct: row.changePercent,
   }))
   console.log('\n== HEATMAP (live) ==')
@@ -89,7 +90,7 @@ async function main(): Promise<void> {
     const last = series.returns[series.returns.length - 1]
     const lastEma = series.ema[series.ema.length - 1]
     console.log(
-      `  Since ${series.startDate} | Portfolio ${pct(last)} | ${series.includedTickers.length} holdings | ` +
+      `  Since ${series.startDate} | Portfolio ${pct(last)} | ${series.includedTickers.filter(ticker => ticker !== 'CASH').length} included holdings${cash > 0 ? ' + cash' : ''} | ` +
         `${last >= lastEma ? 'Above' : 'Below'} ${series.emaPeriod}-day EMA`,
     )
     console.log(`  points ${series.dates.length}   ema(last) ${pct(lastEma)}`)
@@ -97,7 +98,7 @@ async function main(): Promise<void> {
 
   /* --------------------------------------------------------------- metrics */
   const currentValues: Record<string, number> = {}
-  for (const row of included) if (row.marketValue > 0) currentValues[row.ticker] = row.marketValue
+  for (const row of included) if (row.marketValue !== null && row.marketValue > 0) currentValues[row.ticker] = row.marketValue
   if (cash > 0) currentValues.CASH = cash
 
   const analytics = await yahooProvider.analytics({
@@ -110,7 +111,7 @@ async function main(): Promise<void> {
   const { metrics, exposure } = analytics.data
   console.log(`\n== METRICS (${lookback}, benchmark ${benchmark}) ==`)
   console.log(
-    `  ${analytics.data.includedTickers.length} holdings | ${analytics.data.historyPoints} daily points | ` +
+    `  ${analytics.data.includedTickers.filter(ticker => ticker !== 'CASH').length} included holdings${cash > 0 ? ' + cash' : ''} | ${analytics.data.historyPoints} daily points | ` +
       `${analytics.data.startDate} to ${analytics.data.endDate}`,
   )
   if (analytics.data.note) console.log(`  note: ${analytics.data.note}`)
@@ -146,7 +147,27 @@ async function main(): Promise<void> {
   console.log()
 }
 
-main().catch((error) => {
+function offline(): void {
+  const { series, included, excluded } = buildPortfolioSeries([{ ticker: 'A', shares: 2 }, { ticker: 'B', shares: 1 }],
+    { A: { dates: ['2026-01-01', '2026-01-02', '2026-01-03'], values: [100, 90, 110] } }, 10)
+  assert.deepEqual(series.values, [210, 190, 230])
+  assert.deepEqual(included, ['A', 'CASH'])
+  assert.deepEqual(excluded, ['B'])
+  assert.ok(Math.abs(toReturnSeries(series).at(-1)! - (230 / 210 - 1) * 100) < 1e-10,
+    'Cash remains a constant zero-return balance in portfolio returns')
+  const exposure = computeExposure(2, { A: 200, CASH: 50 })
+  assert.equal(exposure.holdingsCount, 2)
+  assert.equal(exposure.valuedHoldingsCount, 1, 'Cash is not a priced security')
+  assert.equal(exposure.unvaluedHoldingsCount, 1)
+  assert.equal(exposure.coveragePct, 50)
+  assert.equal(exposure.investedValue, 250)
+  assert.equal(exposure.topPositionWeight, 80, 'Counted cash still dilutes portfolio security weights')
+  assert.equal(computeRiskMetrics(series, null).metrics.beta, null)
+  assert.equal(weightedMove([{ weight: 75, changePct: 2 }, { weight: 25, changePct: -2 }]), 1)
+  console.log('PASS: fixed-share series, constant-cash returns, security-only exposure coverage, explicit missing history, optional benchmark and weighted moves')
+}
+offline()
+if (!process.argv.includes('--offline')) main().catch((error) => {
   console.error(error)
   process.exit(1)
 })

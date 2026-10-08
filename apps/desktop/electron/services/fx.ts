@@ -1,6 +1,7 @@
 import type { FxPayload } from '../shared/contract.js'
 import { cache, TTL } from './cache.js'
 import { getQuote } from './yahoo/quotes.js'
+import { sourceSnapshot } from './sourceHealth.js'
 
 /**
  * The USD/SGD rate the Personal Finance page converts with.
@@ -25,7 +26,7 @@ export async function getFxRate(force = false): Promise<FxPayload> {
     async () => {
       const quote = await getQuote(FX_SYMBOL, force)
       if (!usable(quote.price)) throw new Error('Yahoo returned no usable USD/SGD rate.')
-      return { usdSgd: quote.price, collectedAt: Date.now() }
+      return { usdSgd: quote.price, collectedAt: sourceSnapshot()?.fetchedAt ?? Date.now() }
     },
     { force },
   )

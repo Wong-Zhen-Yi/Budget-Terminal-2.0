@@ -29,6 +29,7 @@ import {
 import { localIsoSeconds } from '../shared/crypto.js'
 import { describeError, err } from '../shared/envelope.js'
 import { cache, TTL } from './cache.js'
+import { observeSource } from './sourceHealth.js'
 import { getQuote } from './yahoo/quotes.js'
 
 export const OIL_SOURCE = 'Oil physical fundamentals'
@@ -77,9 +78,17 @@ export const OIL_BLOCK_LABELS: Record<OilBlock, string> = {
 }
 
 async function fetchText(url: string): Promise<string> {
-  const response = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(TIMEOUT_MS) })
-  if (!response.ok) throw new Error(`HTTP ${response.status} from ${url}`)
-  return response.text()
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(TIMEOUT_MS) })
+    if (response.ok) return response.text()
+    if (attempt === 0 && [500, 502, 503, 504].includes(response.status)) {
+      await response.body?.cancel()
+      await new Promise(resolve => setTimeout(resolve, 250))
+      continue
+    }
+    throw new Error(`HTTP ${response.status} from ${url}`)
+  }
+  throw new Error(`Could not download ${url}`)
 }
 
 interface Lane<T> {
@@ -93,7 +102,7 @@ async function lane<T>(key: string, ttlMs: number, force: boolean, load: () => P
     const result = await cache.resolve(key, ttlMs, load, { force })
     return { value: result.value, warning: null }
   } catch (error) {
-    const stale = cache.get<T>(key, { allowStale: true })
+    const stale = cache.get<T>(key, { allowStale: true, observe: true })
     return { value: stale?.value ?? null, warning: error }
   }
 }
@@ -131,13 +140,15 @@ async function fetchEiaBlock(specs: readonly OilSeriesSpec[]): Promise<OilEiaBlo
   const results = await mapLimit(specs, EIA_CONCURRENCY, async (spec): Promise<OilSeries | null> => {
     try {
       const parsed = parseEiaSeriesHtml(await fetchText(eiaSeriesUrl(spec.eiaId)))
-      if (!parsed) return null
+      if (!parsed) throw new Error(`No usable EIA observations for ${spec.eiaId}`)
       releaseDate ??= parsed.releaseDate
       nextReleaseDate ??= parsed.nextReleaseDate
       // The page's own parenthetical unit wins over the spec: it is what EIA actually
       // published, and a series that changes its reporting basis must not keep an old label.
       return summarizeOilSeries({ ...spec, unit: parsed.unit }, parsed.points)
-    } catch {
+    } catch (error) {
+      observeSource({ fetchedAt: Date.now(), stale: false, fromCache: false,
+        failures: [`EIA ${spec.eiaId}: ${describeError(error)}`] })
       return null
     }
   })
@@ -267,6 +278,8 @@ export async function getOil(force = false): Promise<OilFetchResult> {
 }
 
 export const oilTesting = {
+  fetchText,
+  fetchEiaBlock,
   CURVE_MONTHS,
   EIA_CONCURRENCY,
   EIA_SERIES_URL,

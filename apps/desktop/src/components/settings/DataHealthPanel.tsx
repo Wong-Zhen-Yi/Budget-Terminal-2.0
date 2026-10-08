@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { Panel } from '@/components/ui/Panel'
 import { timestampLabel } from '@/lib/format'
 import { sortRecords, useDataHealth, type HealthRecord } from '@/stores/dataHealth'
+import { useSnapshotClock } from '@/api/snapshotHealth'
 
 const PAGE_LABELS = new Map(TABS.map((tab) => [tab.id, tab.label]))
 
@@ -38,6 +39,7 @@ function currentReport(): string {
 
 /** Current observations plus explicitly labeled records retained from prior sessions. */
 export function DataHealthPanel({ onStatus }: { onStatus: (message: string) => void }) {
+  const now = useSnapshotClock()
   const records = useDataHealth((state) => state.records)
   const clear = useDataHealth((state) => state.clear)
   const startup = useDataHealth((state) => state.startup)
@@ -47,7 +49,7 @@ export function DataHealthPanel({ onStatus }: { onStatus: (message: string) => v
   const [report, setReport] = useState(currentReport)
   const refresh = useCallback(() => setReport(currentReport()), [])
 
-  const sorted = useMemo(() => sortRecords(records), [records])
+  const sorted = useMemo(() => sortRecords(records), [records, now])
   const current = sorted.filter((record) => !record.previousSession)
   const degraded = current.filter(
     (record) => record.freshness === 'failed' || record.freshness === 'partial' || record.freshness === 'stale',
@@ -100,7 +102,7 @@ export function DataHealthPanel({ onStatus }: { onStatus: (message: string) => v
         {startup ? <details className="text-2xs text-text-muted">
           <summary className="cursor-pointer">Startup prefetch: {startup.timings.length}/{startup.planned} tasks · {(startup.durationMs / 1000).toFixed(1)}s elapsed</summary>
           <ul className="pl-4 pt-1">{startup.timings.map((entry, index) =>
-            <li key={index}>{entry.label}: {(entry.durationMs / 1000).toFixed(1)}s{entry.failed ? ' · failed; retries when opened' : ''}</li>)}</ul>
+            <li key={index}>{entry.label}: {(entry.durationMs / 1000).toFixed(1)}s · {entry.state ?? (entry.failed ? 'failed' : 'ready')}{entry.reason ? `: ${entry.reason}` : ''}</li>)}</ul>
         </details> : null}
         <pre className="num max-h-72 overflow-auto border border-border-strong bg-bg p-2 text-2xs whitespace-pre text-text-muted select-text">
           {report}

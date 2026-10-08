@@ -66,7 +66,7 @@ export function HeatmapPage({
 
   useEffect(() => {
     // No file behind this page, so the status bar's path slot stays empty.
-    onStatusChange([{ label: 'Heatmap', envelope: query.data, loading }], '')
+    onStatusChange([{ label: 'Heatmap', envelope: query.data, error: query.error, enabled: query.isEnabled, loading }], '')
   }, [onStatusChange, query.data, loading])
 
   const rows = useMemo(

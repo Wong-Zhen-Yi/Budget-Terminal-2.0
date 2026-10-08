@@ -106,7 +106,7 @@ export function OilPage({
   const busy = query.isFetching || refreshing
 
   useEffect(() => {
-    onStatusChange([{ label: 'Oil', envelope: query.data, loading: query.isFetching }], '')
+    onStatusChange([{ label: 'Oil', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching }], '')
   }, [onStatusChange, query.data, query.isFetching])
 
   const status = useMemo(() => {

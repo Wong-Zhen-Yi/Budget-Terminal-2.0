@@ -147,7 +147,7 @@ export function PortfolioPage({
 
   const currentValues = useMemo(() => {
     const values: Record<string, number> = {}
-    for (const row of includedRows) if (row.marketValue > 0) values[row.ticker] = row.marketValue
+    for (const row of includedRows) if (row.marketValue !== null && row.marketValue > 0) values[row.ticker] = row.marketValue
     if (cashAmount > 0) values.CASH = cashAmount
     return values
   }, [includedRows, cashAmount])
@@ -155,30 +155,41 @@ export function PortfolioPage({
   /** Allocation slices, rebased across weight-included positions plus counted cash. */
   const allocation = useMemo(() => {
     const total = Object.values(currentValues).reduce((sum, value) => sum + value, 0)
-    if (total <= 0) return { slices: [], total: 0 }
+    if (total <= 0 || !summary?.complete) return { slices: [], total }
     return {
       slices: Object.entries(currentValues)
         .map(([label, value]) => ({ label, value: (value / total) * 100 }))
         .sort((a, b) => b.value - a.value),
       total,
     }
-  }, [currentValues])
+  }, [currentValues, summary])
 
   useEffect(() => {
     onStatusChange(
       [
-        { label: 'Holdings', envelope: portfolioQuery.data, loading: portfolioQuery.isFetching },
-        { label: 'Quotes', envelope: quotesQuery.data, loading: quotesQuery.isFetching },
+        { label: 'Holdings', envelope: portfolioQuery.data, loading: portfolioQuery.isFetching, error: portfolioQuery.error, enabled: portfolioQuery.isEnabled },
+        { label: 'Option marks', envelope: optionQuotesQuery.data, loading: optionQuotesQuery.isFetching, error: optionQuotesQuery.error, enabled: optionContracts.length > 0 && subTab === 'positions' },
+        { label: 'Quotes', envelope: quotesQuery.data, loading: quotesQuery.isFetching, error: quotesQuery.error, enabled: quotesQuery.isEnabled },
         {
           label: 'Fundamentals',
           envelope: fundamentalsQuery.data,
           loading: fundamentalsQuery.isFetching,
+          error: fundamentalsQuery.error,
+          enabled: fundamentalsQuery.isEnabled,
         },
       ],
       payload?.sourcePath ?? '',
     )
   }, [
     onStatusChange,
+    optionQuotesQuery.data,
+    optionQuotesQuery.isFetching,
+    optionQuotesQuery.error,
+    optionContracts.length,
+    subTab,
+    portfolioQuery.error,
+    quotesQuery.error,
+    fundamentalsQuery.error,
     payload,
     portfolioQuery.data,
     portfolioQuery.isFetching,
@@ -186,6 +197,9 @@ export function PortfolioPage({
     quotesQuery.isFetching,
     fundamentalsQuery.data,
     fundamentalsQuery.isFetching,
+    fundamentalsQuery.isEnabled,
+    quotesQuery.isEnabled,
+    portfolioQuery.isEnabled,
   ])
 
   /** Every edit goes through here so a refused write surfaces in one place. */
@@ -490,11 +504,12 @@ export function PortfolioPage({
           className="min-h-0 flex-1"
           actions={
             <span className="num text-2xs text-text-muted">
-              Filtered Total: {currency(allocation.total)} USD
+              {summary.complete ? 'Included subtotal' : 'Known subtotal'}: {currency(allocation.total)} USD
             </span>
           }
         >
-          <Donut slices={allocation.slices} />
+          {summary.complete ? <Donut slices={allocation.slices} />
+            : <p className="p-4 text-2xs text-warn">Allocation unavailable. {summary.missingReasons.join(' ')}</p>}
         </Panel>
       ) : null}
 
@@ -503,7 +518,7 @@ export function PortfolioPage({
       ) : null}
 
       {subTab === 'momentum' ? (
-        <MomentumTab positions={positions} cashAmount={cashAmount} visible />
+        <MomentumTab positions={positions} cashAmount={cashAmount} valuationComplete={summary.complete} visible />
       ) : null}
 
       {subTab === 'metrics' ? (
@@ -511,6 +526,7 @@ export function PortfolioPage({
           positions={positions}
           cashAmount={cashAmount}
           currentValues={currentValues}
+          valuationComplete={summary.complete}
           visible
         />
       ) : null}

@@ -478,6 +478,12 @@ export function earningsEventKey(row: Pick<EarningsCalendarRow, 'symbol' | 'even
   return `${row.symbol}|${date?.getUTCFullYear() ?? 'unknown'}Q${quarter || 'unknown'}`
 }
 
+/** Calendar-relative labels must be recalculated when a cached schedule is displayed. */
+export function earningsStatus(row: Pick<EarningsCalendarRow, 'date' | 'reportedEpsValue'>, today: string): string {
+  return typeof row.reportedEpsValue === 'number' && Number.isFinite(row.reportedEpsValue)
+    ? 'Reported' : row.date < today ? 'Past date' : row.date === today ? 'Today' : 'Upcoming'
+}
+
 export function parseEarningsVisualization(
   document: EarningsVisualizationDocument,
   startDate: string,
@@ -518,7 +524,7 @@ export function parseEarningsVisualization(
       surprisePctValue,
       marketCap: formatMarketCap(marketCapValue),
       marketCapValue,
-      status: reportedEpsValue !== null ? 'Reported' : date < today ? 'Completed' : date === today ? 'Today' : 'Upcoming',
+      status: earningsStatus({ date, reportedEpsValue }, today),
       previousDate: '',
       previousDatetimeUtc: '',
       changedDate: false,

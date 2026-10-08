@@ -18,6 +18,7 @@ interface GoalPanelProps {
   /** Net worth in the goal's own currency, which is not the Totals selector's. */
   current: number
   available: boolean
+  unavailableReason?: string
   onSetTitle: (title: string) => void
   onSetTarget: (target: number) => void
   onSetCurrency: (currency: FinanceCurrency) => void
@@ -44,6 +45,7 @@ export function GoalPanel({
   goal,
   current,
   available,
+  unavailableReason,
   onSetTitle,
   onSetTarget,
   onSetCurrency,
@@ -92,7 +94,7 @@ export function GoalPanel({
           progress={progress}
           animationProgress={animationProgress}
           available={available}
-          centerText={available ? moneyRounded(current, goal.currency) : 'FX required'}
+          centerText={available ? moneyRounded(current, goal.currency) : 'Unavailable'}
           subtext={
             goal.targetAmount > 0
               ? `of ${moneyRounded(goal.targetAmount, goal.currency)} ${goal.currency}`
@@ -104,7 +106,7 @@ export function GoalPanel({
       {/* The status line is a whole sentence, so it wraps rather than clipping in a
           panel this narrow. */}
       <div className="flex min-h-8 shrink-0 items-center justify-center border-t border-border px-2 py-1 text-center text-2xs leading-tight text-text-muted">
-        {statusText(current, goal.targetAmount, goal.currency, available)}
+        {!available && unavailableReason ? unavailableReason : statusText(current, goal.targetAmount, goal.currency, available)}
       </div>
     </Panel>
   )

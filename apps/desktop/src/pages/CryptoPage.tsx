@@ -20,6 +20,8 @@ import {
 } from '@shared/crypto'
 import { api } from '@/api/client'
 import { useCrypto, useRefreshCrypto } from '@/api/cryptoQueries'
+import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
+import { FRESHNESS } from '@shared/freshness'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { CryptoHeatmap } from '@/components/crypto/CryptoHeatmap'
 import { Button } from '@/components/ui/Button'
@@ -52,12 +54,12 @@ const newsToneClass: Record<CryptoNewsTone, string> = {
 }
 
 /** The dot on a panel whose stage is degraded, as every other multi-panel page reports one. */
-function warningOf(envelope: Envelope<unknown> | undefined, block: string): string | undefined {
+function warningOf(envelope: Envelope<unknown> | undefined, block: string, now: number): string | undefined {
   if (!envelope) return undefined
   const failed = envelope.errors.find((entry) => entry.symbol === block)
   if (failed) return failed.reason
-  const { freshness, failureReason } = envelope.meta
-  if (freshness === 'failed') return failureReason || freshness
+  const freshness = effectiveFreshness(envelope, now, FRESHNESS.crypto)
+  if (freshness === 'failed' || freshness === 'stale') return envelope.meta.failureReason || (freshness === 'stale' ? 'Snapshot expired; refresh to update' : freshness)
   return undefined
 }
 
@@ -68,6 +70,7 @@ export function CryptoPage({
 }) {
   const query = useCrypto()
   const refresh = useRefreshCrypto()
+  const now = useSnapshotClock()
   const [refreshing, setRefreshing] = useState(false)
   const [notice, setNotice] = useState('')
 
@@ -76,7 +79,7 @@ export function CryptoPage({
 
   useEffect(() => {
     // No file behind this page, so the status bar's path slot stays empty.
-    onStatusChange([{ label: 'Crypto', envelope: query.data, loading }], '')
+    onStatusChange([{ label: 'Crypto', envelope: query.data, error: query.error, enabled: query.isEnabled, loading }], '')
   }, [onStatusChange, query.data, loading])
 
   // A notice describes the action that produced it; a refresh replaces the page under it.
@@ -89,7 +92,7 @@ export function CryptoPage({
   /** `_p19_set_refresh_status`, in the same order of precedence the reference writes it. */
   const status = useMemo(() => {
     if (notice) return notice
-    if (loading) return 'Fetching live crypto market data...'
+    if (loading) return 'Fetching crypto market data...'
     if (query.isError) return `Crypto data refresh failed: ${query.error.message}`
     if (!payload) return 'Loading crypto market data...'
     const meta = query.data?.meta
@@ -97,16 +100,18 @@ export function CryptoPage({
       return `Crypto data refresh failed: ${meta.failureReason ?? 'unknown error'}`
     }
     const stamp = clockTail(payload.fetchedAt)
+    const freshness = query.data ? effectiveFreshness(query.data, now, FRESHNESS.crypto) : 'failed'
+    if (freshness === 'stale') return `Snapshot expired (${stamp}); refresh to update. ${meta?.failureReason ?? ''}`.trim()
     if (hasUnavailableStage(payload.progress) || query.data?.errors.length) {
       return `Partial data at ${stamp} — ${loadedStageCount(payload.progress)}/${CRYPTO_STAGES.length} stages ready. ${query.data?.errors.map(error => error.reason).join(' ') ?? ''}`
     }
-    return `Live data refreshed at ${stamp}`
-  }, [notice, loading, payload, query.data, query.isError, query.error])
+    return `Snapshot updated at ${stamp} · ${freshness}`
+  }, [notice, loading, payload, query.data, query.isError, query.error, now])
 
   const coverage = payload?.heatmap.coverage
   const heatmapStatus = loading
-    ? `Live coverage --/${CRYPTO_HEATMAP_LIMIT} | Loading...`
-    : `Live coverage ${coverage ? `${coverage.loaded}/${coverage.total}` : `--/${CRYPTO_HEATMAP_LIMIT}`} | Updated ${
+    ? `Snapshot coverage --/${CRYPTO_HEATMAP_LIMIT} | Loading...`
+    : `Snapshot coverage ${coverage ? `${coverage.loaded}/${coverage.total}` : `--/${CRYPTO_HEATMAP_LIMIT}`} | ${query.data ? effectiveFreshness(query.data, now, FRESHNESS.crypto) : 'unavailable'} | Updated ${
         payload ? clockTail(payload.heatmap.updatedAt) : '--'
       }`
 
@@ -194,7 +199,7 @@ export function CryptoPage({
       <Panel
         className="min-h-0 flex-[3]"
         title="Top 30 Cryptocurrencies"
-        warning={warningOf(query.data, 'Top 30 Cryptocurrencies')}
+        warning={warningOf(query.data, 'Top 30 Cryptocurrencies', now)}
         actions={<span className="text-2xs text-text-muted">{heatmapStatus}</span>}
       >
         <CryptoHeatmap tiles={payload?.heatmap.tiles ?? []} />
@@ -204,7 +209,7 @@ export function CryptoPage({
         <Panel
           className="min-h-0 flex-1"
           title="Watchlist / Movers"
-          warning={warningOf(query.data, 'Watchlist / Movers')}
+          warning={warningOf(query.data, 'Watchlist / Movers', now)}
         >
           <WatchlistTable quotes={quotes} loading={loading} />
         </Panel>
@@ -212,7 +217,7 @@ export function CryptoPage({
         <Panel
           className="min-h-0 flex-[2]"
           title="Crypto News Feed"
-          warning={warningOf(query.data, 'Crypto News Feed')}
+          warning={warningOf(query.data, 'Crypto News Feed', now)}
         >
           <NewsTable articles={payload?.news ?? []} loading={loading} />
         </Panel>
@@ -221,7 +226,7 @@ export function CryptoPage({
         <Panel
           className="min-h-0 flex-1"
           title="ETF / Equity Proxies"
-          warning={warningOf(query.data, 'Watchlist / Movers')}
+          warning={warningOf(query.data, 'Watchlist / Movers', now)}
         >
           <ProxyTable quotes={quotes} loading={loading} />
         </Panel>

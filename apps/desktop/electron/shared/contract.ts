@@ -35,6 +35,10 @@ export interface EnvelopeMeta {
   source: string
   freshness: Freshness
   fetchedAt: number
+  /** Provider observation timestamp, distinct from successful retrieval time. */
+  asOf?: number
+  /** Earliest source cache expiry, including dependencies of a derived payload. */
+  expiresAt?: number
   cacheAgeSeconds?: number
   failureReason?: string
 }
@@ -66,6 +70,8 @@ export interface Quote {
   change: number
   /** Absolute change against the previous close. */
   absChange: number
+  asOf?: number
+  currency?: string
 }
 
 /** The five macro readings across the top of the dashboard, keyed by display name. */
@@ -240,7 +246,7 @@ export interface CardsPerformancePayload {
 
 /* --------------------------------------------------------- option tracker */
 
-export interface OptionPosition {
+export interface OptionPosition extends OptionQuote {
   rowId: string
   ticker: string
   strategy: string
@@ -252,6 +258,8 @@ export interface OptionPosition {
   openDate: string
   /** Live values, refreshed from Yahoo rather than stored. */
   currentPrice: number
+  /** Stored contracts have no live mark until an option quote succeeds. */
+  hasMarketMark?: boolean
   volume: number
   openInterest: number
   impliedVolatility: number
@@ -1931,6 +1939,7 @@ export interface PriceScreenPayload {
 }
 
 export interface PriceScreenRequest extends BackgroundRequest {
+  force?: boolean
   minimumPrice: number
   maximumPrice: number
 }
@@ -3488,7 +3497,7 @@ export interface FundamentalsPageRequest extends BackgroundRequest {
   symbol: string
   force?: boolean
 }
-export interface ReturnsRequest {
+export interface ReturnsRequest extends BackgroundRequest {
   tickers: string[]
   window: ReturnTimeframe | HeatmapInterval
   force?: boolean
@@ -3511,10 +3520,23 @@ export interface OptionQuotesRequest extends BackgroundRequest {
   positions: Array<{ rowId: string; ticker: string; expiry: string; strike: number; strategy: string }>
   force?: boolean
 }
+export interface OptionQuote {
+  currentPrice: number
+  volume: number
+  openInterest: number
+  impliedVolatility: number
+  /** Provider observation time of the last trade, distinct from retrieval time. */
+  asOf?: number
+  source?: string
+  markStale?: boolean
+  markReason?: string
+}
 export interface OptionQuotesPayload {
+  errors?: EnvelopeError[]
+  missing?: string[]
   quotes: Record<
     string,
-    { currentPrice: number; volume: number; openInterest: number; impliedVolatility: number }
+    OptionQuote
   >
   expiries: Record<string, string[]>
 }

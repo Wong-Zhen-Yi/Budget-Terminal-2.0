@@ -67,6 +67,7 @@ export function NewsSection({
               key={article.id}
               article={article}
               price={quotes?.[article.ticker.trim().toUpperCase()]?.price}
+              currency={quotes?.[article.ticker.trim().toUpperCase()]?.currency}
               selected={article.id === selectedId}
               onSelect={onSelect}
               onOpen={onOpen}

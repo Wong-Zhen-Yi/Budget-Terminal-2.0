@@ -138,7 +138,7 @@ export function MarketCapPage({ onStatusChange, onNavigate }: {
   )
 
   useEffect(() => {
-    onStatusChange([{ label: 'Market Cap', envelope: query.data, loading: query.isFetching }, { label: 'P/S', envelope: sales.data, loading: sales.isFetching }], '')
+    onStatusChange([{ label: 'Market Cap', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching }, { label: 'P/S', envelope: sales.data, error: sales.error, enabled: sales.isEnabled, loading: sales.isFetching }], '')
   }, [onStatusChange, query.data, query.isFetching, sales.data, sales.isFetching])
 
   const warning = mismatched

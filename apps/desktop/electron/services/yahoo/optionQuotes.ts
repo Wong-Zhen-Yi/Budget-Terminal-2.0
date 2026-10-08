@@ -1,7 +1,8 @@
-import type { OptionQuotesPayload, OptionQuotesRequest } from '../../shared/contract.js'
+import type { OptionQuote, OptionQuotesPayload, OptionQuotesRequest } from '../../shared/contract.js'
 import { isSellerStrategy } from '../../shared/analytics.js'
 import { cache, TTL } from '../cache.js'
 import { paced, yahoo } from './client.js'
+import { observeSource } from '../sourceHealth.js'
 
 /**
  * Live marks for tracked option positions, plus the expiry list each ticker offers.
@@ -22,19 +23,12 @@ async function fetchExpiries(ticker: string): Promise<Date[]> {
   return result.expirationDates ?? []
 }
 
-interface ContractQuote {
-  currentPrice: number
-  volume: number
-  openInterest: number
-  impliedVolatility: number
-}
-
 async function fetchContract(
   ticker: string,
   expiry: string,
   strike: number,
   strategy: string,
-): Promise<ContractQuote> {
+): Promise<OptionQuote> {
   const result = await paced(() => yahoo.options(ticker, { date: expiry }))
   const chain = result.options?.[0]
   if (!chain) throw new Error(`No chain for ${ticker} ${expiry}.`)
@@ -55,12 +49,25 @@ async function fetchContract(
     }
   }
   if (!best || bestDistance > 0.01) throw new Error(`No ${strike} strike for ${ticker} ${expiry}.`)
+  if (typeof best.lastPrice !== 'number' || !Number.isFinite(best.lastPrice) || best.lastPrice < 0) {
+    throw new Error(`No valid market mark for ${ticker} ${expiry} ${strike}.`)
+  }
+  const tradeTime = best.lastTradeDate instanceof Date ? best.lastTradeDate.getTime() : undefined
+  const asOf = tradeTime !== undefined && Number.isFinite(tradeTime) ? tradeTime : undefined
+  const markStale = asOf !== undefined && Date.now() - asOf > 7 * 24 * 60 * 60_000
+  const markReason = markStale ? `${ticker} ${expiry} ${strike}: last option trade is more than seven days old (${new Date(asOf!).toISOString()}); retaining the reported last-trade mark.` : undefined
+  observeSource({ fetchedAt: Date.now(), ...(asOf === undefined ? {} : { asOf }),
+    stale: markStale, fromCache: false, failures: markReason ? [markReason] : [] })
 
   return {
     currentPrice: Number(best.lastPrice) || 0,
     volume: Number(best.volume) || 0,
     openInterest: Number(best.openInterest) || 0,
     impliedVolatility: Number(best.impliedVolatility) || 0,
+    ...(asOf === undefined ? {} : { asOf }),
+    source: 'Yahoo Finance last trade',
+    markStale,
+    ...(markReason ? { markReason } : {}),
   }
 }
 
@@ -78,8 +85,11 @@ export async function getOptionQuotes({
     ),
   )
   const expiries: OptionQuotesPayload['expiries'] = {}
+  const errors: NonNullable<OptionQuotesPayload['errors']> = []
+  const missing: string[] = []
   expiryResults.forEach((outcome, index) => {
     if (outcome.status === 'fulfilled') expiries[tickers[index]] = outcome.value
+    else errors.push({ source: 'yahoo options', symbol: tickers[index], operation: 'expirations', reason: String(outcome.reason) })
   })
 
   const priced = positions.filter((p) => p.ticker && p.expiry && p.strike > 0)
@@ -87,7 +97,7 @@ export async function getOptionQuotes({
     priced.map((position) =>
       cache
         .resolve(
-          `optquote:${position.ticker}:${position.expiry}:${position.strike}:${isSellerStrategy(position.strategy) ? 'x' : 'l'}:${position.strategy}`,
+          `optquote:v2:${position.ticker}:${position.expiry}:${position.strike}:${isSellerStrategy(position.strategy) ? 'x' : 'l'}:${position.strategy}`,
           TTL.options,
           () =>
             fetchContract(
@@ -106,7 +116,11 @@ export async function getOptionQuotes({
   quoteResults.forEach((outcome, index) => {
     // A contract that cannot be priced simply keeps its stored premium-only row.
     if (outcome.status === 'fulfilled') quotes[priced[index].rowId] = outcome.value
+    else {
+      missing.push(priced[index].rowId)
+      errors.push({ source: 'yahoo options', symbol: priced[index].ticker, operation: 'option mark', reason: String(outcome.reason) })
+    }
   })
 
-  return { quotes, expiries }
+  return { quotes, expiries, errors, missing }
 }

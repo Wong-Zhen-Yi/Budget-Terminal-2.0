@@ -15,6 +15,8 @@ interface TotalsPanelProps {
   slices: TotalsSlice[]
   /** Net worth: assets less debts, before the animation scales it. */
   total: number
+  complete?: boolean
+  incompleteReason?: string
   display: FinanceCurrency
   fx: FxPayload | undefined
   fxLoading: boolean
@@ -46,6 +48,8 @@ function fxLabel(fx: FxPayload | undefined, loading: boolean, error: string): st
 export function TotalsPanel({
   slices,
   total,
+  complete = true,
+  incompleteReason,
   display,
   fx,
   fxLoading,
@@ -83,9 +87,10 @@ export function TotalsPanel({
         empty="Nothing to total yet"
         // The centre counts up with the sweep, as the reference's does.
         centerText={moneyRounded(total * animationProgress, display)}
-        centerSubtext={`Total ${display}`}
+        centerSubtext={`${complete ? 'Total' : 'Known subtotal'} ${display}`}
         animationProgress={animationProgress}
       />
+      {!complete && <p className="px-2 pb-2 text-2xs text-warn">{incompleteReason ?? 'Market marks unavailable; valuation is incomplete.'}</p>}
     </Panel>
   )
 }

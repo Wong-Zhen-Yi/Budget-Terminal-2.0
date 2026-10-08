@@ -9,6 +9,7 @@ import type { Fundamentals, Holding, Portfolio, Quote } from './contract.js'
 /* --------------------------------------------------- dashboard holdings panel */
 
 export interface PortfolioRow {
+  unavailableReason?: string
   ticker: string
   price: number | null
   changePercent: number | null
@@ -17,13 +18,35 @@ export interface PortfolioRow {
   /** Unrealised dollar gain, null when there is no position or quote. */
   gain: number | null
   shares: number
+  includeInWeight: boolean
   avgPrice: number
-  marketValue: number
+  marketValue: number | null
   hasQuote: boolean
 }
 
 function holdingFor(portfolio: Portfolio, ticker: string): Holding {
   return portfolio.holdings[ticker] ?? { ticker, shares: 0, avgPrice: 0, includeInWeight: true }
+}
+
+/** All allocation views use included holdings and only cash selected for weighting. */
+function allocationBasis(portfolio: Portfolio, rows: readonly { shares: number; includeInWeight: boolean; marketValue: number | null }[]) {
+  const included = rows.filter(row => row.includeInWeight && row.shares > 0)
+  return {
+    complete: included.every(row => row.marketValue !== null),
+    total: included.reduce((sum, row) => sum + (row.marketValue ?? 0), 0)
+      + (portfolio.includeCashInWeight ? Math.max(portfolio.cashBalance, 0) : 0),
+  }
+}
+
+/** Brokerage books are USD-native; an unavailable conversion must not become a USD mark. */
+export function usablePortfolioQuote(quote: Quote | undefined): quote is Quote {
+  return Boolean(quote && Number.isFinite(quote.price) && (!quote.currency || quote.currency.toUpperCase() === 'USD'))
+}
+
+export function unavailablePortfolioQuoteReason(ticker: string, quote: Quote | undefined): string {
+  return quote?.currency && quote.currency.toUpperCase() !== 'USD'
+    ? `${ticker} is quoted in ${quote.currency}; USD valuation requires a currency conversion.`
+    : `${ticker}: market mark unavailable.`
 }
 
 export function buildPortfolioRows(
@@ -32,27 +55,29 @@ export function buildPortfolioRows(
 ): PortfolioRow[] {
   const rows: PortfolioRow[] = portfolio.tickers.map((ticker) => {
     const holding = holdingFor(portfolio, ticker)
-    const quote = quotes[ticker]
+    const quote = usablePortfolioQuote(quotes[ticker]) ? quotes[ticker] : undefined
     const hasQuote = Boolean(quote)
     const price = quote?.price ?? 0
     return {
       ticker,
       price: hasQuote ? price : null,
-      changePercent: hasQuote ? quote.change : null,
+      changePercent: quote?.change ?? null,
       weight: null,
       gain: null,
       shares: holding.shares,
+      includeInWeight: holding.includeInWeight,
       avgPrice: holding.avgPrice,
-      marketValue: holding.shares ? holding.shares * price : 0,
+      marketValue: !holding.shares ? 0 : hasQuote ? holding.shares * price : null,
       hasQuote,
+      unavailableReason: hasQuote ? '' : unavailablePortfolioQuoteReason(ticker, quotes[ticker]),
     }
   })
 
-  // Weight is a share of total market value, so it needs every row priced first.
-  const totalValue = rows.reduce((sum, row) => sum + row.marketValue, 0)
+  const { complete, total } = allocationBasis(portfolio, rows)
   for (const row of rows) {
     if (!row.shares || !row.hasQuote) continue
-    row.weight = totalValue > 0 ? (row.marketValue / totalValue) * 100 : 0
+    row.weight = row.includeInWeight && row.shares > 0 && complete && row.marketValue !== null
+      ? total > 0 ? (row.marketValue / total) * 100 : 0 : null
     row.gain = ((row.price ?? 0) - row.avgPrice) * row.shares
   }
 
@@ -63,19 +88,20 @@ export function buildPortfolioRows(
 /* ------------------------------------------------------ portfolio page rows */
 
 export interface PositionRow {
+  unavailableReason?: string
   ticker: string
   shares: number
   avgPrice: number
   cost: number
-  price: number
+  price: number | null
   /** Day's change, as a percent. */
-  changePercent: number
-  marketValue: number
+  changePercent: number | null
+  marketValue: number | null
   /** Null when the position is excluded from weight, which renders as `--`. */
   weight: number | null
-  dollarGain: number
+  dollarGain: number | null
   /** Dollar gain as a percent of cost. */
-  growth: number
+  growth: number | null
   includeInWeight: boolean
   hasQuote: boolean
   size: number | null
@@ -88,6 +114,9 @@ export interface PositionRow {
 }
 
 export interface PortfolioSummary {
+  complete: boolean
+  missingTickers: string[]
+  missingReasons: string[]
   /** Market value of weight-included positions. */
   stockValue: number
   /** Unrealised P&L across weight-included positions. */
@@ -108,10 +137,10 @@ export function buildPositionRows(
 ): PositionRow[] {
   const priced = portfolio.tickers.map((ticker) => {
     const holding = holdingFor(portfolio, ticker)
-    const quote = quotes[ticker]
-    const price = quote?.price ?? 0
+    const quote = usablePortfolioQuote(quotes[ticker]) ? quotes[ticker] : undefined
+    const price = quote?.price ?? null
     const cost = holding.shares * holding.avgPrice
-    const marketValue = holding.shares * price
+    const marketValue = holding.shares === 0 ? 0 : price === null ? null : holding.shares * price
     return {
       ticker,
       holding,
@@ -119,20 +148,19 @@ export function buildPositionRows(
       price,
       cost,
       marketValue,
-      dollarGain: marketValue - cost,
+      dollarGain: marketValue === null ? null : marketValue - cost,
     }
   })
 
-  // The weight denominator is every position plus the full cash balance — the reference
-  // app rebases only the allocation views on the include flags, not this column.
-  const stockMarketValue = priced.reduce((sum, entry) => sum + entry.marketValue, 0)
-  const gross = stockMarketValue + Math.max(portfolio.cashBalance, 0)
+  const { complete, total: gross } = allocationBasis(portfolio, priced.map(entry => ({
+    shares: entry.holding.shares, includeInWeight: entry.holding.includeInWeight, marketValue: entry.marketValue,
+  })))
 
   return priced.map((entry): PositionRow => {
     const facts = fundamentals[entry.ticker]
     const target = facts?.targetMeanPrice ?? null
     const analystUpside =
-      target !== null && entry.price > 0 ? ((target - entry.price) / entry.price) * 100 : null
+      target !== null && entry.price !== null && entry.price > 0 ? ((target - entry.price) / entry.price) * 100 : null
 
     return {
       ticker: entry.ticker,
@@ -140,17 +168,18 @@ export function buildPositionRows(
       avgPrice: entry.holding.avgPrice,
       cost: entry.cost,
       price: entry.price,
-      changePercent: entry.quote?.change ?? 0,
+      changePercent: entry.quote?.change ?? null,
       marketValue: entry.marketValue,
-      weight: entry.holding.includeInWeight
+      weight: entry.holding.includeInWeight && entry.holding.shares > 0 && complete && entry.marketValue !== null
         ? gross > 0
           ? (entry.marketValue / gross) * 100
           : 0
         : null,
       dollarGain: entry.dollarGain,
-      growth: entry.cost ? (entry.dollarGain / entry.cost) * 100 : 0,
+      growth: entry.dollarGain === null ? null : entry.cost ? (entry.dollarGain / entry.cost) * 100 : 0,
       includeInWeight: entry.holding.includeInWeight,
       hasQuote: Boolean(entry.quote),
+      unavailableReason: entry.quote ? '' : unavailablePortfolioQuoteReason(entry.ticker, quotes[entry.ticker]),
       size: facts?.size ?? null,
       sizeType: facts?.sizeType ?? null,
       analystTarget: target,
@@ -170,17 +199,21 @@ export function summarizePortfolio(
   rows: PositionRow[],
 ): PortfolioSummary {
   const included = rows.filter((row) => row.includeInWeight)
-  const stockValue = included.reduce((sum, row) => sum + row.marketValue, 0)
-  const stockPnl = included.reduce((sum, row) => sum + row.dollarGain, 0)
+  const missingTickers = included.filter(row => row.marketValue === null).map(row => row.ticker)
+  const stockValue = included.reduce((sum, row) => sum + (row.marketValue ?? 0), 0)
+  const stockPnl = included.reduce((sum, row) => sum + (row.dollarGain ?? 0), 0)
   const cash = portfolio.includeCashInWeight ? Math.max(portfolio.cashBalance, 0) : 0
   const margin = Math.max(portfolio.marginDebt, 0)
   const grossAssets = Math.max(stockValue, 0) + Math.max(portfolio.cashBalance, 0)
 
   return {
+    complete: missingTickers.length === 0,
+    missingTickers,
+    missingReasons: included.filter(row => row.marketValue === null).map(row => row.unavailableReason ?? `${row.ticker}: market mark unavailable.`),
     stockValue,
     stockPnl,
     total: stockValue + cash - margin,
-    marginUtilization: margin > 0 && grossAssets > 0 ? (margin / grossAssets) * 100 : null,
+    marginUtilization: !missingTickers.length && margin > 0 && grossAssets > 0 ? (margin / grossAssets) * 100 : null,
     positionCount: rows.length,
   }
 }

@@ -86,13 +86,13 @@ export function EtfPage({
   useEffect(() => {
     onStatusChange(
       [
-        { label: 'ETF Holdings', envelope: holdingsQuery.data, loading: holdingsBusy },
+        { label: 'ETF Holdings', envelope: holdingsQuery.data, error: holdingsQuery.error, enabled: holdingsQuery.isEnabled, loading: holdingsBusy },
         {
           label: 'ETF Arbitrage',
-          envelope: arbitrageQuery.data,
+          envelope: arbitrageQuery.data, error: arbitrageQuery.error, enabled: arbitrageQuery.isEnabled,
           loading: arbitrageQuery.isFetching || refreshingArbitrage,
         },
-        { label: 'ETF AUM', envelope: aumQuery.data, loading: aumQuery.isFetching || refreshingAum },
+        { label: 'ETF AUM', envelope: aumQuery.data, error: aumQuery.error, enabled: aumQuery.isEnabled, loading: aumQuery.isFetching || refreshingAum },
       ],
       // No file behind this page, so the status bar's path slot stays empty.
       '',

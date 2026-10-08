@@ -79,7 +79,7 @@ export function TradingVolumesPage({
 
   useEffect(() => {
     onStatusChange(
-      [{ label: 'Trading Volumes', envelope: query.data, loading: query.isFetching }],
+      [{ label: 'Trading Volumes', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching }],
       '',
     )
   }, [onStatusChange, query.data, query.isFetching])

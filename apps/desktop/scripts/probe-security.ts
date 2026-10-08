@@ -29,12 +29,13 @@ try {
       import { isTrustedRendererUrl } from './electron/shared/ipcSecurity'
       import { acquireDataSession } from './electron/services/dataSession'
       import { startMcpHost } from './electron/mcp/host'
-      import { invokeBridge } from './mcp/runtime'
+      import { invokeBridge, runtimePath } from './mcp/runtime'
       app.setPath('userData', ${JSON.stringify(join(directory, 'userData'))})
       const expected = pathToFileURL(${JSON.stringify(trustedPath)}).href
       app.whenReady().then(async () => {
         let dispose, release
         try {
+          assert.equal(runtimePath(), ${JSON.stringify(join(directory, 'BudgetTerminalElectron', '.mcp', 'runtime.json'))})
           release = acquireDataSession()
           dispose = registerIpcHandlers(event => {
             const frame = event.senderFrame
@@ -77,7 +78,10 @@ try {
     ` },
     outfile: join(directory, 'main.mjs'), bundle: true, platform: 'node', format: 'esm', packages: 'external',
   })
-  const env: NodeJS.ProcessEnv = { ...process.env, APPDATA: directory, LOCALAPPDATA: directory }
+  // Keep the bridge client and Electron host on this probe's profile, including
+  // when the maintenance runner already supplied its own outer scratch path.
+  const env: NodeJS.ProcessEnv = { ...process.env, APPDATA: directory, LOCALAPPDATA: directory,
+    BUDGET_TERMINAL_DATA_DIR: join(directory, 'BudgetTerminalElectron') }
   delete env.ELECTRON_RUN_AS_NODE
   const result = await new Promise<{ code: number | null; output: string }>((resolveRun, reject) => {
     const child = spawn(createRequire(import.meta.url)('electron') as string, [join(directory, 'main.mjs')], {

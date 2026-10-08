@@ -1,3 +1,4 @@
+import { FRESHNESS } from '@shared/freshness'
 import { useEffect, useMemo, useState } from 'react'
 import { SOFI_METRICS } from '@shared/sofi'
 import type { SofiMetric, SofiQuarter, SofiUnit } from '@shared/sofi'
@@ -58,12 +59,13 @@ export function SofiPage({ onStatusChange }: { onStatusChange: (panels: PanelSta
       const errors = query.data?.errors.filter(error => error.symbol === block) ?? []
       const progress = payload?.progress[block as 'market' | 'reports']
       return { label: block === 'market' ? 'SOFI market' : 'SOFI reported quarters', loading,
+        error: query.error, enabled: query.isEnabled, freshnessMs: FRESHNESS.sofi,
         envelope: query.data ? { ...query.data, errors, meta: { ...query.data.meta,
           freshness: progress === 'unavailable' ? 'failed' : progress === 'stale' ? 'stale' : progress === 'partial' ? 'partial' : query.data.meta.freshness === 'cached' ? 'cached' : 'fresh',
           failureReason: errors.map(error => error.reason).join(' · ') || undefined } } : undefined }
     })
     onStatusChange(panels, '')
-  }, [query.data, payload, loading, onStatusChange])
+  }, [query.data, query.error, query.isEnabled, payload, loading, onStatusChange])
 
   const candles = useMemo(() => {
     const all = payload?.market?.chart.candles ?? []

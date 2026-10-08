@@ -80,13 +80,13 @@ export function FundamentalsPage({
   useEffect(() => {
     const panels: PanelStatus[] = [{
       label: 'Fundamentals',
-      envelope: primaryQuery.data,
+      envelope: primaryQuery.data, error: primaryQuery.error, enabled: primaryQuery.isEnabled,
       loading: primaryQuery.isFetching,
     }]
     if (compareSymbol) {
       panels.push({
         label: `Compare ${compareSymbol}`,
-        envelope: compareQuery.data,
+        envelope: compareQuery.data, error: compareQuery.error, enabled: compareQuery.isEnabled,
         loading: compareQuery.isFetching,
       })
     }

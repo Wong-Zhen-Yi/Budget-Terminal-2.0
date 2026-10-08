@@ -114,7 +114,7 @@ export function PositionsTable({
       align: 'right',
       numeric: true,
       sortValue: (row) => (row.hasQuote ? row.price : null),
-      cell: (row) => (row.hasQuote ? currency(row.price) : '--'),
+      cell: (row) => (row.hasQuote ? currency(row.price) : <span title={row.unavailableReason}>N/A</span>),
     },
     {
       key: 'change',
@@ -124,7 +124,7 @@ export function PositionsTable({
       sortValue: (row) => (row.hasQuote ? row.changePercent : null),
       cell: (row) =>
         row.hasQuote ? (
-          <span className={row.changePercent >= 0 ? 'text-up' : 'text-down'}>
+          <span className={(row.changePercent ?? 0) >= 0 ? 'text-up' : 'text-down'}>
             {percent(row.changePercent)}
           </span>
         ) : (
@@ -155,9 +155,8 @@ export function PositionsTable({
       numeric: true,
       sortValue: (row) => row.dollarGain,
       cell: (row) => (
-        <span className={row.dollarGain >= 0 ? 'text-up' : 'text-down'}>
-          {row.dollarGain >= 0 ? '+' : '-'}
-          {currency(Math.abs(row.dollarGain))}
+        <span className={row.dollarGain === null ? 'text-text-muted' : row.dollarGain >= 0 ? 'text-up' : 'text-down'}>
+          {row.dollarGain === null ? 'N/A' : `${row.dollarGain >= 0 ? '+' : '-'}${currency(Math.abs(row.dollarGain))}`}
         </span>
       ),
     },
@@ -168,7 +167,7 @@ export function PositionsTable({
       numeric: true,
       sortValue: (row) => row.growth,
       cell: (row) => (
-        <span className={row.growth >= 0 ? 'text-up' : 'text-down'}>
+        <span className={row.growth === null ? 'text-text-muted' : row.growth >= 0 ? 'text-up' : 'text-down'}>
           {percent(row.growth, 1)}
         </span>
       ),

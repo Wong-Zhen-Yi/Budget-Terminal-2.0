@@ -6,6 +6,7 @@ import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { deserialize, serialize } from 'node:v8'
 import { DatabaseSync, type StatementSync } from 'node:sqlite'
+import { captureSources, observeSource, type SourceSnapshot } from './sourceHealth.js'
 
 import {
   CACHE_SCHEMA_VERSION,
@@ -19,6 +20,7 @@ interface Entry<T> {
   value: T
   storedAt: number
   ttlMs: number
+  snapshot?: SourceSnapshot
 }
 
 type RetentionClass = 'snapshot' | 'asset' | 'intraday' | 'history'
@@ -39,6 +41,7 @@ export interface CachedResult<T> {
   /** Age of the returned value in seconds; 0 when it was fetched just now. */
   ageSeconds: number
   fromCache: boolean
+  snapshot?: SourceSnapshot
 }
 
 const cacheRoot = (): string => {
@@ -47,6 +50,31 @@ const cacheRoot = (): string => {
 }
 
 export const persistentCachePath = (): string => join(cacheRoot(), 'market-cache-v2.sqlite')
+
+/** Discard derivatives produced by the repaired legacy cache decoder fault. */
+export function repairedSeriesCacheFailure(reason: string): boolean {
+  return /Cannot read properties of (?:undefined|null) \(reading ['"](?:coveredFrom|rows)['"]\)/i.test(reason)
+}
+
+function usableSnapshot(value: unknown): value is SourceSnapshot {
+  if (!value || typeof value !== 'object') return false
+  const source = value as Partial<SourceSnapshot>
+  return Number.isFinite(source.fetchedAt)
+    && (source.asOf === undefined || Number.isFinite(source.asOf))
+    && (source.expiresAt === undefined || Number.isFinite(source.expiresAt))
+    && typeof source.stale === 'boolean' && typeof source.fromCache === 'boolean'
+    && Array.isArray(source.failures) && source.failures.every(reason => typeof reason === 'string')
+}
+
+function usableDiskDocument(value: unknown): value is { value: unknown; snapshot?: SourceSnapshot } {
+  if (!value || typeof value !== 'object') return false
+  const document = value as { value?: unknown; snapshot?: unknown }
+  // Bare legacy blobs may share the schema number but cannot be decoded as wrapped values.
+  return Object.hasOwn(document, 'value') && Object.hasOwn(document, 'snapshot')
+    && Object.keys(document).every(key => key === 'value' || key === 'snapshot')
+    && document.value !== undefined
+    && (document.snapshot === undefined || usableSnapshot(document.snapshot))
+}
 
 function retentionClass(key: string): RetentionClass {
   if (/image|thumbnail|preview/.test(key)) return 'asset'
@@ -117,14 +145,17 @@ export class TtlCache {
     }
   }
 
-  get<T>(key: string, { allowStale = false } = {}): CachedResult<T> | null {
+  get<T>(key: string, { allowStale = false, observe = !allowStale }: { allowStale?: boolean; observe?: boolean } = {}): CachedResult<T> | null {
     let entry = this.entries.get(key) as Entry<T> | undefined
     if (!entry && this.selectEntry) {
       try {
         const row = this.selectEntry.get(key, CACHE_SCHEMA_VERSION) as unknown as DiskRow | undefined
         if (row) {
+          const document: unknown = deserialize(Buffer.from(row.value))
+          if (!usableDiskDocument(document)) { this.delete(key); return null }
           entry = {
-            value: deserialize(Buffer.from(row.value)) as T,
+            value: document.value as T,
+            snapshot: document.snapshot,
             storedAt: row.stored_at,
             ttlMs: row.ttl_ms,
           }
@@ -136,24 +167,38 @@ export class TtlCache {
       }
     }
     if (!entry) return null
+    if (entry.value === undefined || (entry.snapshot !== undefined
+      && (!usableSnapshot(entry.snapshot) || entry.snapshot.failures.some(repairedSeriesCacheFailure)))) {
+      this.delete(key)
+      return null
+    }
     const now = Date.now()
-    const ageMs = Math.max(0, now - entry.storedAt)
-    if (ageMs > entry.ttlMs && !allowStale) return null
+    const expiresAt = Math.min(entry.storedAt + entry.ttlMs, entry.snapshot?.expiresAt ?? Infinity)
+    if (now > expiresAt && !allowStale) return null
     try {
       this.touchEntry?.run(now, key)
     } catch {
       // Access timestamps are advisory; the value remains usable if touching fails.
     }
-    return { value: entry.value, ageSeconds: ageMs / 1000, fromCache: true }
+    const snapshot: SourceSnapshot = {
+      fetchedAt: Math.min(entry.storedAt, entry.snapshot?.fetchedAt ?? entry.storedAt),
+      asOf: entry.snapshot?.asOf,
+      expiresAt: entry.ttlMs > 0 ? expiresAt : entry.snapshot?.expiresAt,
+      stale: Boolean(entry.snapshot?.stale || (observe && now > expiresAt) || (entry.snapshot?.expiresAt !== undefined && now > entry.snapshot.expiresAt)),
+      fromCache: true,
+      failures: entry.snapshot?.failures ?? [],
+    }
+    if (observe) observeSource(snapshot)
+    return { value: entry.value, ageSeconds: Math.max(0, now - snapshot.fetchedAt) / 1000, fromCache: true, snapshot }
   }
 
-  set<T>(key: string, value: T, ttlMs: number): void {
+  set<T>(key: string, value: T, ttlMs: number, snapshot?: SourceSnapshot): void {
     this.failures.delete(key)
     const storedAt = Date.now()
-    this.entries.set(key, { value, storedAt, ttlMs })
+    this.entries.set(key, { value, storedAt, ttlMs, snapshot })
     if (!this.upsertEntry) return
     try {
-      const encoded = serialize(value)
+      const encoded = serialize({ value, snapshot })
       this.upsertEntry.run(
         key,
         encoded,
@@ -248,21 +293,33 @@ export class TtlCache {
   ): Promise<CachedResult<T>> {
     if (!force) {
       const hit = this.get<T>(key)
-      if (hit) return hit
+      if (hit) { if (hit.snapshot) observeSource(hit.snapshot); return hit }
     }
     const existing = this.inFlight.get(key) as Promise<T> | undefined
-    if (existing) return { value: await existing, ageSeconds: 0, fromCache: false }
+    if (existing) {
+      const value = await existing
+      const result = this.get<T>(key, { allowStale: true })
+      const snapshot = result?.snapshot ? { ...result.snapshot, fromCache: false } : undefined
+      if (snapshot) observeSource(snapshot)
+      return result ? { ...result, snapshot, fromCache: false } : { value, ageSeconds: 0, fromCache: false }
+    }
 
     const failure = this.failures.get(key)
-    if (failure && Date.now() < failure.retryAt) throw failure.error
+    if (failure && Date.now() < failure.retryAt) {
+      observeSource({ fetchedAt: Date.now(), stale: false, fromCache: false,
+        failures: [`${key}: ${failure.error instanceof Error ? failure.error.message : String(failure.error)}`] })
+      throw failure.error
+    }
     this.failures.delete(key)
 
-    const pending = Promise.resolve().then(loader)
-      .then((value) => {
-        this.set(key, value, ttlMs)
+    const pending = captureSources(loader)
+      .then(({ value, snapshot }) => {
+        this.set(key, value, ttlMs, snapshot)
         return value
       })
       .catch((error: unknown) => {
+        observeSource({ fetchedAt: Date.now(), stale: false, fromCache: false,
+          failures: [`${key}: ${error instanceof Error ? error.message : String(error)}`] })
         if (this.failures.size >= 1000) this.failures.delete(this.failures.keys().next().value!)
         this.failures.set(key, { error, retryAt: Date.now() + 10_000 })
         throw error
@@ -271,7 +328,13 @@ export class TtlCache {
         this.inFlight.delete(key)
       })
     this.inFlight.set(key, pending)
-    return { value: await pending, ageSeconds: 0, fromCache: false }
+    const value = await pending
+    const saved = this.get<T>(key, { allowStale: true })
+    const snapshot: SourceSnapshot = saved?.snapshot
+      ? { ...saved.snapshot, fromCache: false }
+      : { fetchedAt: Date.now(), stale: false, fromCache: false, failures: [] }
+    observeSource(snapshot)
+    return { value, ageSeconds: Math.max(0, Date.now() - snapshot.fetchedAt) / 1000, fromCache: false, snapshot }
   }
 
   async resolveWithStaleFallback<T>(
@@ -282,10 +345,16 @@ export class TtlCache {
   ): Promise<CachedResult<T> & { stale: boolean }> {
     try {
       const result = await this.resolve(key, ttlMs, loader, { force })
-      return { ...result, stale: false }
+      return { ...result, stale: result.snapshot?.stale ?? false }
     } catch (error) {
       const stale = this.get<T>(key, { allowStale: true })
-      if (stale) return { ...stale, stale: true }
+      if (stale) {
+        const reason = error instanceof Error ? error.message : String(error)
+        const snapshot: SourceSnapshot = { ...stale.snapshot!, stale: true,
+          failures: [...new Set([...(stale.snapshot?.failures ?? []), `${key}: ${reason}`])] }
+        observeSource(snapshot)
+        return { ...stale, snapshot, stale: true }
+      }
       throw error
     }
   }

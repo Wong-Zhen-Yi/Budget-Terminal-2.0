@@ -22,13 +22,16 @@ import { useValuationPage } from '@/stores/valuation'
 import { useDashboard } from '@/stores/dashboard'
 import { useEtfPage } from '@/stores/etf'
 import { useUpDownPage } from '@/stores/upDown'
+import { useNewsPageStore } from '@/stores/news'
 import { api, queryKeys } from './client'
 import { priceScreenKey } from './priceQueries'
 import { backtestKey } from './backtestQueries'
 import { cardsPerformanceKey } from './cardsQueries'
 import { queryFreshness } from './queryPersistence'
 import { usePortfolio } from './queries'
-import { runWarmTasks, warmStartupQuery } from './warmQueue'
+import { assertStartupReady, runWarmTasks, StartupLoadError, warmStartupQuery, warmStartupSnapshot } from './warmQueue'
+import { initialNewsImages, initialYouTubeVideo, newsQuoteTickers } from './initialContent'
+import { errorMessage } from './snapshotHealth'
 
 /**
  * Load every implemented page's automatic initial data when the app opens.
@@ -57,6 +60,7 @@ export interface WarmProgress {
   total: number
   label: string
   failed: number
+  degraded: number
 }
 
 /** The four different holding sets the pages ask for, from one document. */
@@ -130,6 +134,15 @@ export function buildTasks(
   const dashboardBook = payload?.portfolios.find((entry) => entry.id === (dashboard.portfolioId ?? payload.activeId))
     ?? payload?.portfolios[0]
   const dashboardTickers = dashboardBook?.tickers ?? []
+  // The macro bar has quotes even when the saved holdings book is empty.
+  if (!dashboardTickers.length) tasks.push({
+    tab: 'dashboard', label: 'Macro quotes',
+    run: (client, backgroundOrder) => warmStartupQuery(client, {
+      queryKey: queryKeys.quotes([]),
+      queryFn: () => api.quotes({ holdings: [], background: true, backgroundOrder }),
+      staleTime: queryFreshness(queryKeys.quotes([])),
+    }),
+  })
   if (dashboardTickers.length && dashboardTickers.join(',') !== active.join(',')) {
     tasks.push({
       tab: 'dashboard', label: 'Dashboard holdings',
@@ -207,6 +220,17 @@ export function buildTasks(
       }),
     })
   }
+
+  // Dip Finder is part of the Portfolio's initial Positions view, not a deferred
+  // analytics subtab. Its default month return must be available on first visit.
+  if (upDown.length) tasks.push({
+    tab: 'portfolio', label: 'Portfolio Dip Finder',
+    run: (client, backgroundOrder) => warmStartupQuery(client, {
+      queryKey: queryKeys.returns(upDown, '1mo'),
+      queryFn: () => api.returns({ tickers: upDown, window: '1mo', background: true, backgroundOrder }),
+      staleTime: queryFreshness(queryKeys.returns(upDown, '1mo')),
+    }),
+  })
 
   const selectedBook = payload?.portfolios.find((entry) => entry.id === payload.activeId)
     ?? payload?.portfolios[0]
@@ -480,12 +504,33 @@ export function buildTasks(
     tasks.push({
       tab: 'news',
       label: 'News',
-      run: (client, backgroundOrder) =>
-        warmStartupQuery(client, {
+      run: async (client, backgroundOrder) => {
+        const result = await warmStartupSnapshot(client, {
           queryKey: queryKeys.newsPage(every),
           queryFn: () => api.newsPage({ tickers: every, background: true, backgroundOrder }),
           staleTime: queryFreshness(queryKeys.newsPage(every)),
-        }),
+        })
+        const tickers = newsQuoteTickers(result.data.articles)
+        const preferences = useNewsPageStore.getState()
+        const requests: Array<Promise<unknown>> = []
+        if (tickers.length) requests.push(warmStartupQuery(client, {
+          queryKey: queryKeys.quotes(tickers),
+          queryFn: () => api.quotes({ holdings: tickers, background: true, backgroundOrder }),
+          staleTime: queryFreshness(queryKeys.quotes(tickers)),
+        }))
+        if (preferences.showImages) for (const url of initialNewsImages(result.data.articles, preferences.filter, preferences.sort)) {
+          requests.push(warmStartupQuery(client, {
+            queryKey: queryKeys.newsThumbnail(url),
+            queryFn: () => api.newsThumbnail({ url }), staleTime: Infinity,
+          }))
+        }
+        const outcomes = await Promise.allSettled(requests)
+        const failure = outcomes.find((entry) => entry.status === 'rejected' && !(entry.reason instanceof StartupLoadError && entry.reason.state === 'degraded'))
+          ?? outcomes.find((entry) => entry.status === 'rejected')
+        if (failure?.status === 'rejected') throw failure.reason
+        assertStartupReady(result)
+        return result
+      },
     })
   }
 
@@ -669,12 +714,21 @@ export function buildTasks(
     tasks.push({
       tab: 'youtube',
       label: 'YouTube',
-      run: (client, backgroundOrder) =>
-        warmStartupQuery(client, {
+      run: async (client, backgroundOrder) => {
+        const result = await warmStartupSnapshot(client, {
           queryKey: queryKeys.youtube(every),
           queryFn: () => api.youtube({ tickers: every, background: true, backgroundOrder }),
           staleTime: queryFreshness(queryKeys.youtube(every)),
-        }),
+        })
+        const selected = initialYouTubeVideo(result.data.items, settings?.youtubePage)
+        if (selected && (selected.videoId || selected.thumbnailUrl)) await warmStartupQuery(client, {
+          queryKey: queryKeys.youtubeThumbnail(selected.videoId, selected.thumbnailUrl),
+          queryFn: () => api.youtubeThumbnail({ videoId: selected.videoId, thumbnailUrl: selected.thumbnailUrl }),
+          staleTime: Infinity,
+        })
+        assertStartupReady(result)
+        return result
+      },
     })
   }
 
@@ -883,7 +937,7 @@ export function buildTasks(
   return tasks
 }
 
-export function useWarmPages(settings: AppSettings | undefined, settingsSettled: boolean, activeTab: string, recent: string[]): WarmProgress {
+export function useWarmPages(settings: AppSettings | undefined, settingsSettled: boolean, activeTab: string, recent: string[], settingsError?: unknown): WarmProgress {
   const queryClient = useQueryClient()
   const portfolioQuery = usePortfolio()
 
@@ -900,6 +954,7 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
     total: 0,
     label: '',
     failed: 0,
+    degraded: 0,
   })
 
   // One warm-up per session, and it must survive StrictMode's double effect.
@@ -927,6 +982,8 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
     calendarMonth,
     earningsYear,
     ipoYear,
+    settingsError,
+    portfolioError: portfolioQuery.error ?? (portfolioQuery.data?.meta.freshness === 'failed' ? portfolioQuery.data.meta.failureReason || 'Holdings could not load' : undefined),
   })
   inputs.current = {
     activeTab, recent, favorites: settings?.favoriteTabs ?? [],
@@ -938,6 +995,8 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
     calendarMonth,
     earningsYear,
     ipoYear,
+    settingsError,
+    portfolioError: portfolioQuery.error ?? (portfolioQuery.data?.meta.freshness === 'failed' ? portfolioQuery.data.meta.failureReason || 'Holdings could not load' : undefined),
   }
 
   // A failed local read must not prevent unrelated pages from starting their loads.
@@ -947,6 +1006,13 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
 
   useEffect(() => {
     if (started.current || !ready) return
+    // Calendar's persisted timezone selects its civil date. Initialize it before
+    // warming keys, so its first mount cannot move to a different month/year.
+    const calendarState = useCalendarPage.getState()
+    calendarState.initialize(calendarToday(calendarState.timezone))
+    const initializedCalendar = useCalendarPage.getState()
+    const currentIpoYear = new Date().getFullYear()
+    if (useIpoPage.getState().completedYear !== currentIpoYear) useIpoPage.getState().setCompletedYear(currentIpoYear)
     const current = inputs.current
     const priority = startupPageOrder(
       startupPages(current.activeTab, current.favorites, current.recent),
@@ -957,10 +1023,10 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
       current.settings,
       { stocks: current.stocksSymbol, fundamentals: current.fundamentalsSymbol },
       {
-        year: current.calendarYear,
-        month: current.calendarMonth,
-        earningsYear: current.earningsYear,
-        ipoYear: current.ipoYear,
+        year: initializedCalendar.year,
+        month: initializedCalendar.month,
+        earningsYear: initializedCalendar.earningsYear,
+        ipoYear: currentIpoYear,
       },
     ).sort((a, b) => {
       const rank = (tab: string) => priority.indexOf(tab)
@@ -972,7 +1038,7 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
       return
     }
 
-    const pageOrder = priority.filter((page) => tasks.some((task) => task.tab === page))
+    const pageOrder = priority
     const pageRanks = new Map(pageOrder.map((page, index) => [page, index]))
     let cancelled = false
     // Defer startup so StrictMode's trial effect can clean up before marking this run
@@ -982,11 +1048,25 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
       const startedAt = performance.now()
       const timings: StartupTiming[] = []
       let failedCount = 0
+      let degradedCount = 0
       let completed = 0
       const activeLabels = new Set<string>()
       const taskStarts = new Map<WarmTask, number>()
+      const pages: NonNullable<NonNullable<ReturnType<typeof useDataHealth.getState>['startup']>['pages']> = Object.fromEntries(pageOrder.map((page) => [page, {
+        state: tasks.some((task) => task.tab === page) ? 'loading' as const
+          : ['options', 'news', 'youtube', 'valuation', 'backtest', 'stocks', 'fundamentals', 'projections'].includes(page) ? 'idle' as const : 'ready' as const,
+        reason: tasks.some((task) => task.tab === page) ? undefined
+          : page === 'beta' ? 'Shares Trading Volumes startup data'
+          : ['options', 'news', 'youtube', 'valuation', 'backtest', 'stocks', 'fundamentals', 'projections'].includes(page) ? 'Awaiting configured inputs'
+          : 'Local or shared initial state',
+      }]))
+      for (const [page, error] of [['settings', current.settingsError], ['portfolio', current.portfolioError]] as const) {
+        if (!error) continue
+        pages[page] = { state: 'failed', reason: errorMessage(error) }
+        failedCount += 1
+      }
       const report = () => useDataHealth.getState().setStartup({
-        durationMs: performance.now() - startedAt, planned: tasks.length, timings: [...timings], pageOrder,
+        durationMs: performance.now() - startedAt, planned: tasks.length, timings: [...timings], pageOrder, pages: { ...pages },
       })
       const reportProgress = () => setProgress({
         active: completed < tasks.length,
@@ -994,6 +1074,7 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
         total: tasks.length,
         label: activeLabels.values().next().value ?? '',
         failed: failedCount,
+        degraded: degradedCount,
       })
       report()
       reportProgress()
@@ -1006,19 +1087,27 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
           reportProgress()
         },
         onSettled: (task, result) => {
-          const failed = result.status === 'rejected'
+          const state = result.status === 'fulfilled' ? 'ready' : result.reason instanceof StartupLoadError && result.reason.state === 'degraded' ? 'degraded' : 'failed'
+          const failed = state === 'failed'
+          const reason = result.status === 'rejected' ? errorMessage(result.reason) : undefined
+          if (state === 'degraded') degradedCount += 1
           if (failed) {
             failedCount += 1
-            console.warn(`[warm-up] ${task.label}:`, result.reason)
+            console.warn(`[warm-up] ${task.label}:`, reason)
           }
           activeLabels.delete(task.label)
           completed += 1
-          timings.push({ tab: task.tab, label: task.label, durationMs: performance.now() - taskStarts.get(task)!, failed })
+          timings.push({ tab: task.tab, label: task.label, durationMs: performance.now() - taskStarts.get(task)!, failed, state, reason })
           const pageTimings = timings.filter((entry) => entry.tab === task.tab)
           if (pageTimings.length === tasks.filter((entry) => entry.tab === task.tab).length) {
+            const worst = pageTimings.find((entry) => entry.state === 'failed') ?? pageTimings.find((entry) => entry.state === 'degraded')
+            if (!(task.tab === 'portfolio' && current.portfolioError)) {
+              pages[task.tab] = { state: worst?.state ?? 'ready', reason: worst?.reason }
+            }
+            if (task.tab === 'trading-volumes') pages.beta = { ...pages[task.tab], reason: worst?.reason ?? 'Shares Trading Volumes startup data' }
             useDataHealth.getState().recordStartupLoad(
               task.tab, Math.max(...pageTimings.map((entry) => entry.durationMs)),
-              pageTimings.some((entry) => entry.failed),
+              pageTimings.some((entry) => entry.state !== 'ready'),
             )
           }
           report()

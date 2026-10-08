@@ -8,6 +8,8 @@ import { MainWorkspace } from '@/components/chartsworkstation/MainWorkspace'
 import { MultiCharts } from '@/components/chartsworkstation/MultiCharts'
 import { RelationshipLab } from '@/components/chartsworkstation/RelationshipLab'
 import type { ChartsSubtab } from '@/stores/charts'
+import { useChartsStore } from '@/stores/charts'
+import { queryFreshness } from '@/api/queryPersistence'
 
 const TABS: Array<[ChartsSubtab, string]> = [
   ['main', 'Main'],
@@ -19,13 +21,16 @@ const TABS: Array<[ChartsSubtab, string]> = [
 
 export function ChartsPage({ onStatusChange }: { onStatusChange: (panels: PanelStatus[], sourcePath: string) => void }) {
   const [tab, setTab] = useState<ChartsSubtab>('main')
-  const reportStatus = useCallback((meta: EnvelopeMeta | undefined, loading: boolean) => {
+  const interval = useChartsStore((state) => state.interval)
+  const reportStatus = useCallback((meta: EnvelopeMeta | undefined, loading: boolean, error?: unknown) => {
     onStatusChange([{
       label: 'Charts',
       envelope: meta ? { data: null, errors: [], meta } : undefined,
       loading,
+      error,
+      freshnessMs: queryFreshness(['chartsHistory', '', interval]),
     }], '')
-  }, [onStatusChange])
+  }, [onStatusChange, interval])
   useEffect(() => {
     if (tab === 'cheat') onStatusChange([], '')
   }, [onStatusChange, tab])

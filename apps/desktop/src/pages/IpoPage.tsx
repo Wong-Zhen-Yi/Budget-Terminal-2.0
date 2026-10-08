@@ -86,8 +86,8 @@ export function IpoPage({
   useEffect(() => {
     onStatusChange(
       [
-        { label: 'Upcoming IPOs', envelope: upcomingQuery.data, loading: upcomingBusy },
-        { label: 'Completed IPOs', envelope: completedQuery.data, loading: completedBusy },
+        { label: 'Upcoming IPOs', envelope: upcomingQuery.data, error: upcomingQuery.error, enabled: upcomingQuery.isEnabled, loading: upcomingBusy },
+        { label: 'Completed IPOs', envelope: completedQuery.data, error: completedQuery.error, enabled: completedQuery.isEnabled, loading: completedBusy },
       ],
       // The two JSON caches are the main process's own; no user file sits behind the page.
       '',

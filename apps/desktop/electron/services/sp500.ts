@@ -91,7 +91,7 @@ export async function getSp500(request: Sp500Request): Promise<Envelope<Sp500Dat
       data.asOf = result.asOfDate
       data.source = result.sourceUrl || SPY_URL
       if (result.isPartial) data.warnings.push(result.coverageNote || 'Only partial holdings are available.')
-      const cached = cache.get('etf-holdings:SPY', { allowStale: true })
+      const cached = cache.get('etf-holdings:SPY', { allowStale: true, observe: true })
       if (cached && cached.ageSeconds * 1000 > HOURS6) data.warnings.push('Holdings refresh failed; showing stale holdings.')
     } else if (part === 'market') {
       const result = await cache.resolveWithStaleFallback('sp500:market', 60_000, async () => {

@@ -7,7 +7,7 @@ interface SummaryBarProps {
   portfolio: Portfolio
   summary: PortfolioSummary
   /** Total across the option tracker, shown beside the stock P&L. */
-  optionsPnl: number
+  optionsPnl: number | null
   onSetCash: (value: number) => void
   onSetMargin: (value: number) => void
   onToggleIncludeCash: (value: boolean) => void
@@ -83,14 +83,16 @@ export function SummaryBar({
         ) : null}
       </Chip>
 
-      <Metric label="Stock P&L" tone={summary.stockPnl >= 0 ? 'text-up' : 'text-down'}>
-        {signedCurrency(summary.stockPnl)}
+      <Metric label="Stock P&L" tone={!summary.complete ? 'text-text-muted' : summary.stockPnl >= 0 ? 'text-up' : 'text-down'}>
+        {summary.complete ? signedCurrency(summary.stockPnl) : 'N/A'}
       </Metric>
-      <Metric label="Options P&L" tone={optionsPnl >= 0 ? 'text-up' : 'text-down'}>
-        {signedCurrency(optionsPnl)}
+      <Metric label="Options P&L" tone={optionsPnl === null ? 'text-text-muted' : optionsPnl >= 0 ? 'text-up' : 'text-down'}>
+        {optionsPnl === null ? 'N/A' : signedCurrency(optionsPnl)}
       </Metric>
       <Metric label="Positions">{integer(summary.positionCount)}</Metric>
-      <Metric label="Total">{currency(summary.total)} USD</Metric>
+      <Metric label={summary.complete ? 'Included stocks + cash − margin' : 'Known stocks + cash − margin'}>{currency(summary.total)} USD</Metric>
+      {portfolio.options.some(option => option.ticker && option.contracts) && <span className="text-2xs text-text-muted">Options equity is included in Personal Finance net worth.</span>}
+      {!summary.complete && <span className="text-2xs text-warn">Incomplete: {summary.missingReasons.join(' ')}</span>}
     </div>
   )
 }

@@ -5,6 +5,7 @@ import { METRICS_LOOKBACKS } from '@shared/contract'
 import { useAnalytics } from '@/api/portfolioQueries'
 import { Button } from '@/components/ui/Button'
 import { DataFreshness } from '@/components/ui/DataFreshness'
+import { FRESHNESS } from '@shared/freshness'
 import { currency, decimals, integer, percent, plainPercent } from '@/lib/format'
 
 interface MetricsTabProps {
@@ -12,6 +13,7 @@ interface MetricsTabProps {
   cashAmount: number
   currentValues: Record<string, number>
   visible: boolean
+  valuationComplete: boolean
 }
 
 /** Card copy, ported verbatim from `_P4_METRICS_CARD_SPECS`. */
@@ -80,15 +82,20 @@ const CARDS: Array<{
   },
 ]
 
-export function MetricsTab({ positions, cashAmount, currentValues, visible }: MetricsTabProps) {
+export function MetricsTab({ positions, cashAmount, currentValues, visible, valuationComplete }: MetricsTabProps) {
   const [benchmark, setBenchmark] = useState('SPY')
   const [benchmarkDraft, setBenchmarkDraft] = useState('SPY')
   const [lookback, setLookback] = useState<MetricsLookback>('1y')
 
   const query = useAnalytics(positions, cashAmount, currentValues, benchmark, lookback, visible)
   const data = query.data?.data
-  const metrics = data?.metrics
-  const exposure = data?.exposure
+  const includedHoldings = data?.includedTickers.filter(ticker => ticker !== 'CASH').length ?? 0
+  const countsCash = cashAmount > 0
+  const historyComplete = Boolean(data && !data.excludedTickers.length)
+  const metrics = historyComplete && valuationComplete ? data?.metrics : undefined
+  const exposure = valuationComplete ? data?.exposure : data?.exposure ? { ...data.exposure,
+    largestPositionTicker: null, largestPositionValue: null, topPositionWeight: null, top3Weight: null,
+    top5Weight: null, concentrationScore: null, effectiveHoldings: null, topPositions: [] } : undefined
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto">
@@ -128,15 +135,19 @@ export function MetricsTab({ positions, cashAmount, currentValues, visible }: Me
             : data?.reason
               ? data.reason
               : data
-                ? `${data.includedTickers.length} holdings | ${integer(data.historyPoints)} daily points | ` +
+                ? `${includedHoldings} included holdings${countsCash ? ' · cash included' : ''} | ${integer(data.historyPoints)} daily points | ` +
                   `${data.startDate} to ${data.endDate} | Benchmark ${data.benchmarkSymbol} | ${lookback.toUpperCase()}`
                 : 'No metrics yet'}
         </p>
         {data?.note ? <p className="text-2xs text-down">{data.note}</p> : null}
+        {countsCash ? <p className="text-2xs text-text-muted">Cash is a constant balance with 0% modeled return; it is included in portfolio returns and allocation weights.</p> : null}
       </section>
 
-      <DataFreshness envelope={query.data} loading={query.isFetching}
-        coverage={data ? `${data.includedTickers.length}/${data.includedTickers.length + data.excludedTickers.length} holdings in history` : undefined} />
+      <DataFreshness envelope={query.data} loading={query.isFetching} error={query.error} freshnessMs={FRESHNESS.chartDaily}
+        coverage={data ? `${includedHoldings}/${positions.length} holdings in history` : undefined} />
+      {(!valuationComplete || data?.excludedTickers.length) ? <p className="text-2xs text-warn">
+        Portfolio metrics unavailable: {!valuationComplete ? 'market marks are incomplete.' : `history missing for ${data?.excludedTickers.join(', ')}.`}
+      </p> : null}
       <div className="grid shrink-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))]">
         {CARDS.map((card) => {
           const value = metrics?.[card.key] ?? null
@@ -163,7 +174,7 @@ export function MetricsTab({ positions, cashAmount, currentValues, visible }: Me
             <Row label="Valued Holdings" value={integer(exposure?.valuedHoldingsCount)} />
             <Row label="Unpriced Holdings" value={integer(exposure?.unvaluedHoldingsCount)} />
             <Row label="Coverage" value={plainPercent(exposure?.coveragePct)} />
-            <Row label="Invested Value" value={currency(exposure?.investedValue)} />
+            <Row label={valuationComplete ? countsCash ? 'Included Value (with cash)' : 'Invested Value' : 'Known Invested Subtotal'} value={currency(exposure?.investedValue)} />
           </Group>
 
           <Group title="Concentration">
@@ -175,11 +186,11 @@ export function MetricsTab({ positions, cashAmount, currentValues, visible }: Me
           </Group>
 
           <Group title="Diversification">
-            <Row label="Effective Holdings" value={decimals(exposure?.effectiveHoldings, 1)} />
+            <Row label={countsCash ? 'Effective Allocations (with cash)' : 'Effective Holdings'} value={decimals(exposure?.effectiveHoldings, 1)} />
             <Row label="HHI" value={decimals(exposure?.concentrationScore, 3)} />
           </Group>
 
-          <Group title="Top Holdings" note="Largest priced positions by current market value.">
+          <Group title={countsCash ? 'Top Allocations' : 'Top Holdings'} note={countsCash ? 'Largest allocations, including cash, by current value.' : 'Largest priced positions by current market value.'}>
             {Array.from({ length: 5 }, (_, index) => {
               const position = exposure?.topPositions[index]
               return (

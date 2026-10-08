@@ -8,7 +8,7 @@ import { queryFreshness } from './queryPersistence'
 // Stable combined results keep the dashboard's health-report effect from rerunning
 // simply because useQueries returned a new array during a parent render.
 function combineCharts(results: UseQueryResult<Envelope<ChartPayload>>[]) {
-  return results.map(({ data, isLoading, isError, isFetching }) => ({ data, isLoading, isError, isFetching }))
+  return results.map(({ data, error, isEnabled, isLoading, isError, isFetching }) => ({ data, error, isEnabled, isLoading, isError, isFetching }))
 }
 
 export function useMacroCharts() {

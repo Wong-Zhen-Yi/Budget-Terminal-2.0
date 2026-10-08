@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -109,6 +109,17 @@ async function runOffline(): Promise<void> {
   const statements = secTesting.normalizeStatements(secFixture)
   assert.deepEqual(statements.quarterly.revenue.map((item) => item.value), [200, 250, 250, 300])
   assert.equal(statements.quarterly.revenue.at(-1)?.source, 'derived')
+
+  const debtFact = (year: number, val: number) => ({ end: `${year}-12-31`, filed: `${year + 1}-02-01`, form: '10-K', fp: 'FY', val })
+  const mixedDebt = secTesting.normalizeStatements({ facts: { 'us-gaap': {
+    DebtAndFinanceLeaseObligations: { units: { USD: [debtFact(2023, 95), debtFact(2024, 120), debtFact(2025, 130)] } },
+    DebtCurrent: { units: { USD: [debtFact(2024, 20), debtFact(2025, 30)] } },
+    LongTermDebtNoncurrent: { units: { USD: [debtFact(2024, 80)] } },
+  } } })
+  for (const series of [mixedDebt.annual.totalDebt, mixedDebt.quarterly.totalDebt]) {
+    assert.deepEqual(series.map(item => [item.endDate, item.value]), [['2023-12-31', 95], ['2024-12-31', 100], ['2025-12-31', 130]],
+      'Complete component debt must not discard reported totals on other dates or use an incomplete component')
+  }
 
   assert.deepEqual(
     subtractSeries([point('2024-12-31', '2024', 100)], [point('2024-12-31', '2024', -30)]).map((item) => item.value),
@@ -346,6 +357,49 @@ async function checkSecCacheLifecycle(): Promise<void> {
     const cached = await secTesting.cachedJson('fixture', 'key', 'https://example.test/sec', 60_000, false)
     assert.equal(cached.metadata.freshness, 'cached')
     assert.equal(cached.payload.state, 'fresh-cache')
+
+    let networkReads = 0
+    globalThis.fetch = async () => {
+      networkReads++
+      return new Response(JSON.stringify({ state: 'concurrent-refresh' }), { status: 200 })
+    }
+    const refreshed = await Promise.all(Array.from({ length: 8 }, () =>
+      secTesting.cachedJson('fixture', 'key', 'https://example.test/sec', 60_000, true)))
+    assert.equal(networkReads, 1, 'Simultaneous earnings/financials reads share one SEC refresh and cache replacement')
+    assert(refreshed.every(result => result.metadata.freshness === 'fresh' && result.payload.state === 'concurrent-refresh'))
+    assert.equal(JSON.parse(await readFile(target, 'utf8')).payload.state, 'concurrent-refresh')
+
+    let replacements = 0
+    let pauses = 0
+    await secTesting.writeCached('fixture', 'key', { state: 'retry-succeeded' }, (temporary, destination) =>
+      secTesting.replaceCachedFile(temporary, destination, async (source, output) => {
+        replacements++
+        if (replacements === 1) {
+          assert.equal(JSON.parse(await readFile(output, 'utf8')).payload.state, 'concurrent-refresh', 'Keep old cache intact while locked')
+          throw Object.assign(new Error('Transient Windows reader lock'), { code: 'EPERM' })
+        }
+        await rename(source, output)
+      }, async () => { pauses++ }))
+    assert.equal(replacements, 2)
+    assert.equal(pauses, 1)
+    assert.equal(JSON.parse(await readFile(target, 'utf8')).payload.state, 'retry-succeeded')
+
+    const diskError = Object.assign(new Error('Fixture disk full'), { code: 'ENOSPC' })
+    const noPersistence = await secTesting.cachedJson('fixture', 'key', 'https://example.test/sec', 60_000, true, async () => { throw diskError })
+    assert.equal(noPersistence.metadata.freshness, 'fresh', 'A local write failure must not discard newly fetched SEC data')
+    assert.equal(noPersistence.payload.state, 'concurrent-refresh')
+    assert.match(noPersistence.metadata.cacheWarning ?? '', /local cache save failed/)
+    assert.equal(noPersistence.metadata.warning, undefined, 'Do not mislabel local storage errors as a failed provider refresh')
+    await assert.rejects(() => secTesting.writeCached('fixture', 'key', { state: 'must-not-replace' }, async () => { throw diskError }), /Fixture disk full/)
+    assert.equal(JSON.parse(await readFile(target, 'utf8')).payload.state, 'retry-succeeded')
+    assert(!(await readdir(secRoot)).some(name => name.endsWith('.tmp')), 'Failed replacements clean up only their temporary files')
+
+    let lockedAttempts = 0
+    await assert.rejects(() => secTesting.replaceCachedFile('fixture.tmp', 'fixture.json', async () => {
+      lockedAttempts++
+      throw Object.assign(new Error('Persistent Windows lock'), { code: 'EBUSY' })
+    }, async () => {}), /Persistent Windows lock/)
+    assert.equal(lockedAttempts, 5, 'Persistent locks use a bounded retry window')
 
     globalThis.fetch = async () => new Response('{}', { status: 404 })
     await writeFile(target, JSON.stringify({ storedAt: Date.now() - 2 * 86_400_000, payload: { state: 'stale-cache' } }), 'utf8')

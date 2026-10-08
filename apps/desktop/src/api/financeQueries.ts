@@ -10,6 +10,7 @@ import type {
 import { api, queryKeys } from './client'
 import { queryFreshness } from './queryPersistence'
 import { FX_REFRESH_MS } from './refreshRates'
+import { forcing } from './queries'
 
 export function usePersonalFinance(): UseQueryResult<Envelope<PersonalFinancePayload>> {
   const queryClient = useQueryClient()
@@ -53,7 +54,7 @@ export function useFinanceMutation(): (
 export function useFxRate(): UseQueryResult<Envelope<FxPayload>> {
   return useQuery({
     queryKey: queryKeys.fx,
-    queryFn: () => api.fx({}),
+    queryFn: () => api.fx({ force: forcing() }),
     refetchInterval: FX_REFRESH_MS,
     refetchIntervalInBackground: false,
     staleTime: queryFreshness(queryKeys.fx),

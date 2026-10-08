@@ -50,7 +50,7 @@ export function MoneyPage({ onStatusChange }: { onStatusChange: (panels: PanelSt
     try { await refresh(force) } catch (error) { setRefreshError(error instanceof Error ? error.message : String(error)) }
   }
   useEffect(() => {
-    onStatusChange([{ label: 'Money', envelope: query.data, loading: query.isFetching }], '')
+    onStatusChange([{ label: 'Money', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching }], '')
   }, [onStatusChange, query.data, query.isFetching])
 
   return <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto p-2">

@@ -15,6 +15,7 @@ import type {
 import { api, queryKeys } from './client'
 import { computeExposure } from '@shared/analytics'
 import { queryFreshness } from './queryPersistence'
+import { forcing } from './queries'
 
 /**
  * The Portfolio page's analytics queries.
@@ -39,7 +40,7 @@ export function useReturns(
 ): UseQueryResult<Envelope<ReturnsPayload>> {
   return useQuery({
     queryKey: queryKeys.returns(tickers, window),
-    queryFn: () => api.returns({ tickers, window }),
+    queryFn: () => api.returns({ tickers, window, force: forcing() }),
     enabled: enabled && tickers.length > 0,
     staleTime: queryFreshness(queryKeys.returns(tickers, window)),
   })
@@ -53,7 +54,7 @@ export function useMomentum(
 ): UseQueryResult<Envelope<MomentumPayload>> {
   return useQuery({
     queryKey: queryKeys.momentum(positionsSignature(positions, cashAmount), timeframe),
-    queryFn: () => api.momentum({ positions, cashAmount, timeframe }),
+    queryFn: () => api.momentum({ positions, cashAmount, timeframe, force: forcing() }),
     enabled: enabled && (positions.length > 0 || cashAmount > 0),
     staleTime: queryFreshness(queryKeys.momentum(positionsSignature(positions, cashAmount), timeframe)),
   })
@@ -74,7 +75,7 @@ export function useAnalytics(
       lookback,
     ),
     queryFn: () =>
-      api.analytics({ positions, cashAmount, currentValues, benchmarkSymbol, lookback }),
+      api.analytics({ positions, cashAmount, currentValues, benchmarkSymbol, lookback, force: forcing() }),
     // Exposure uses live quotes. Recompute it when inputs change while retaining
     // cached historical metrics, avoiding history requests on every quote tick.
     select: (envelope) => ({
@@ -82,7 +83,7 @@ export function useAnalytics(
       data: {
         ...envelope.data,
         exposure: computeExposure(
-          positions.filter((position) => position.shares > 0).length + (cashAmount > 0 ? 1 : 0),
+          positions.filter((position) => position.shares > 0).length,
           currentValues,
         ),
       },
@@ -101,7 +102,7 @@ export function useOptionQuotes(
     .join('|')
   return useQuery({
     queryKey: queryKeys.optionQuotes(signature),
-    queryFn: () => api.optionQuotes({ positions }),
+    queryFn: () => api.optionQuotes({ positions, force: forcing() }),
     enabled: enabled && positions.length > 0,
     staleTime: queryFreshness(queryKeys.optionQuotes(signature)),
   })

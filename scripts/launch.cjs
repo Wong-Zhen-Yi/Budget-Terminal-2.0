@@ -1,5 +1,7 @@
 const { spawnSync } = require('node:child_process')
 const path = require('node:path')
+const { supportedNodeVersion, supportedNpmVersion, runtimeEnvironment } = require('./runtime.cjs')
+const { engines } = require('../package.json')
 
 const root = path.resolve(__dirname, '..')
 
@@ -10,22 +12,34 @@ function platformName(platform) {
   return null
 }
 
-function launch({ platform = process.platform, spawn = spawnSync, log = console } = {}) {
+function launch({ platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, log = console } = {}) {
   const os = platformName(platform)
   if (!os) {
     log.error(`Budget Terminal supports Windows, macOS, and Linux; found ${platform}.`)
     return 1
   }
 
-  const npm = (args, quiet = false) => {
-    const command = platform === 'win32' ? process.env.ComSpec || 'cmd.exe' : 'npm'
+  if (!supportedNodeVersion(nodeVersion)) {
+    log.error(`Unsupported Node.js ${nodeVersion}. Required: ${engines.node}. Latest Node.js 24 LTS is recommended.`)
+    return 1
+  }
+
+  const env = runtimeEnvironment(environment)
+
+  const npm = (args, capture = false) => {
+    const command = platform === 'win32' ? env.ComSpec || 'cmd.exe' : 'npm'
     const commandArgs = platform === 'win32' ? ['/d', '/s', '/c', `npm ${args.join(' ')}`] : args
-    return spawn(command, commandArgs, { cwd: root, stdio: quiet ? 'ignore' : 'inherit' })
+    return spawn(command, commandArgs, { cwd: root, env, stdio: capture ? 'pipe' : 'inherit', encoding: 'utf8' })
   }
 
   const installed = npm(['--version'], true)
   if (installed.error || installed.status !== 0) {
-    log.error('npm is required. Install Node.js 24 or newer with npm, then relaunch Budget Terminal.')
+    log.error('npm is required. Install the latest Node.js 24 LTS with npm, then relaunch Budget Terminal.')
+    return 1
+  }
+  const npmVersion = installed.stdout?.trim()
+  if (!supportedNpmVersion(npmVersion)) {
+    log.error(`Unsupported npm ${npmVersion || '(unknown)'}. Required: ${engines.npm}. npm 11 is recommended.`)
     return 1
   }
 

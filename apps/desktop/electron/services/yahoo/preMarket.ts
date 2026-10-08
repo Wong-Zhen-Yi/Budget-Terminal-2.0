@@ -25,7 +25,8 @@ import { getYahooSeries } from './series.js'
  * identical, and the range buttons get their data without a second round trip.
  */
 
-const CACHE_KEY = 'pre-market:data'
+// Pre-v2 aggregates may contain missing panels produced by the repaired history-cache decoder.
+const CACHE_KEY = 'pre-market:data:v2'
 const SOURCE = 'yahoo chart'
 
 /** Futures trade nearly around the clock, so sessions are ET days, as yfinance indexes them. */

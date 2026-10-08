@@ -90,9 +90,9 @@ export function QuantPage({
 
   useEffect(() => {
     const panels: PanelStatus[] = [
-      { label: 'Quant scan', envelope, loading: latest.isPending || scan.isPending },
+      { label: 'Quant scan', envelope, error: scan.error ?? latest.error, enabled: true, loading: latest.isPending || scan.isPending },
     ]
-    if (pair.data || pair.isPending) panels.push({ label: 'Pair model', envelope: pair.data, loading: pair.isPending })
+    if (pair.data || pair.isPending || pair.error) panels.push({ label: 'Pair model', envelope: pair.data, error: pair.error, enabled: true, loading: pair.isPending })
     onStatusChange(panels, '')
   }, [onStatusChange, envelope, latest.isPending, scan.isPending, pair.data, pair.isPending])
 

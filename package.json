@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "description": "Budget Terminal - Electron rebuild",
+  "engines": {
+    "node": "^22.20.0 || ^24.12.0 || ^26.0.0",
+    "npm": ">=10.9.8"
+  },
   "workspaces": [
     "apps/desktop"
   ],
@@ -14,6 +18,10 @@
     "build": "npm run build --workspace budget-terminal-desktop",
     "typecheck": "npm run typecheck --workspace budget-terminal-desktop",
     "probe": "npm run probe --workspace budget-terminal-desktop",
+    "probe:launcher": "node scripts/probe-launcher.cjs",
+    "probe:readiness-ui": "npm run --workspace budget-terminal-desktop probe:readiness-ui --",
+    "probe:maintenance": "npm run --workspace budget-terminal-desktop probe:maintenance --",
+    "probe:maintenance-live": "npm run --workspace budget-terminal-desktop probe:maintenance-live --",
     "probe:portfolio": "npm run --workspace budget-terminal-desktop probe:portfolio --",
     "probe:stocks": "npm run --workspace budget-terminal-desktop probe:stocks --",
     "probe:fundamentals": "npm run --workspace budget-terminal-desktop probe:fundamentals --",

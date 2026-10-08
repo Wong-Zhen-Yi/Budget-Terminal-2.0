@@ -86,9 +86,9 @@ export const ECONOMIC_SERIES: readonly EconomicSeries[] = [
     provider: 'bls', providerKey: 'CUSR0000SA0L1E',
   },
   {
-    seriesId: 'PPIACO', label: 'Producer Prices (YoY)', group: 'Inflation', units: 'percent',
+    seriesId: 'PPIFID', label: 'Producer Prices (YoY)', group: 'Inflation', units: 'percent',
     frequency: 'monthly', transform: 'yoy_pct', decimals: 1, higherIsBetter: false,
-    note: 'Final demand, seasonally adjusted.',
+    note: 'Final demand, not seasonally adjusted.',
     provider: 'bls', providerKey: 'WPUFD4',
   },
   {

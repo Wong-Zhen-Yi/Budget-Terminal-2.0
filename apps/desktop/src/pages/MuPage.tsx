@@ -1,3 +1,5 @@
+import { effectiveFreshness, feedErrorText, useSnapshotClock } from '@/api/snapshotHealth'
+import { FRESHNESS } from '@shared/freshness'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { LogicalRange } from 'lightweight-charts'
 import { STOCKS_RANGE_PRESETS, type StocksRangePreset } from '@shared/contract'
@@ -38,6 +40,8 @@ export function MuPage({ onStatusChange, onNavigate }: {
   onNavigate: (tabId: string, symbol?: string) => void
 }) {
   const query = useMu()
+  const now = useSnapshotClock()
+  const freshness = query.data ? effectiveFreshness(query.data, now, FRESHNESS.mu) : 'unavailable'
   const refresh = useRefreshMu()
   const [notice, setNotice] = useState('')
   const [refreshing, setRefreshing] = useState(false)
@@ -49,7 +53,7 @@ export function MuPage({ onStatusChange, onNavigate }: {
   const memory = payload?.memory
   const busy = query.isFetching || refreshing
   const history = useMemo(() => muHistory(payload?.financials ?? null), [payload?.financials])
-  useEffect(() => onStatusChange([{ label: 'MU', envelope: query.data, loading: busy }], ''), [onStatusChange, query.data, busy])
+  useEffect(() => onStatusChange([{ label: 'MU', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: busy }], ''), [onStatusChange, query.data, busy])
   const warning = (block: MuBlock) => query.data?.errors.filter(error => error.symbol === block).map(error => error.reason).join(' · ') || undefined
   const empty = (block: MuBlock) => busy ? 'Loading Micron data...' : warning(block) || query.error?.message || `${block} data unavailable`
   const metric = (id: string) => earnings?.metrics.find(row => row.id === id)
@@ -85,7 +89,7 @@ export function MuPage({ onStatusChange, onNavigate }: {
     ...(['dram', 'nand'] as const).map(key => ({ key, header: key.toUpperCase(), wrap: true,
       cell: (row: typeof memoryRows[number]) => <div className="flex items-start gap-2"><span className="min-w-0 flex-1">{metricText(row[key])}</span><Source metric={row[key]} /></div> })),
   ]
-  const status = notice || (busy ? 'Loading MU...' : query.error ? `MU load failed: ${query.error.message}` : query.data ? `${query.data.meta.freshness} · ${earnings?.period ?? 'earnings unavailable'}` : 'MU data unavailable')
+  const status = notice || (busy ? 'Loading MU...' : query.error ? `MU load failed: ${query.error.message}` : query.data ? `${freshness} · ${earnings?.period ?? 'earnings unavailable'}` : 'MU data unavailable')
   const otherMemory = memory?.metrics.filter(row => !/^(dram|nand)/.test(row.id)) ?? []
 
   return <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-auto p-2" data-mu-page>
@@ -97,7 +101,7 @@ export function MuPage({ onStatusChange, onNavigate }: {
       <Button onClick={() => onNavigate('charts', 'MU')}>Charts</Button><Button onClick={() => onNavigate('fundamentals', 'MU')}>Fundamentals</Button>
       <Button onClick={() => void api.openExternal('https://investors.micron.com/overview/default.aspx')}>Investor relations</Button>
     </div>
-    {query.data?.errors.length ? <div role="alert" className="shrink-0 border border-warn/40 bg-surface px-2 py-1 text-2xs text-warn">{query.data.errors.map(error => `${error.symbol}: ${error.reason}`).join(' · ')}</div> : null}
+    {query.data?.errors.length ? <div role="alert" className="shrink-0 border border-warn/40 bg-surface px-2 py-1 text-2xs text-warn">{query.data.errors.map(feedErrorText).join(' · ')}</div> : null}
     <div className="grid shrink-0 grid-cols-2 gap-2 md:grid-cols-3 2xl:grid-cols-6">
       <Tile label="Share price" value={currency(market?.chart.stats.price)} sub={`USD · ${percent(market?.chart.stats.change)} daily`} />
       <Tile label="Market cap" value={market?.metrics.marketCap ?? unavailable} sub="Yahoo Finance · market" />

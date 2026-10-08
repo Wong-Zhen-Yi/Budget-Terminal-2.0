@@ -5,7 +5,9 @@ TypeScript. This repository is the application source of truth.
 
 ## Setup and launch
 
-Use Node.js 24 or newer and npm 11. From the repository root:
+Use the latest Node.js 24 LTS and npm 11 for new installations. Supported runtimes
+are Node.js 22.20+, 24.12+, or 26.x, with npm 10.9.8 or newer. The launchers check
+these versions before installing dependencies. From the repository root:
 
 ```bash
 npm install
@@ -30,17 +32,18 @@ an installer.
 
 ## Workspaces
 
-All 41 pages, including Settings, are implemented:
+All 49 pages, including Settings, are implemented:
 
 | Workspace | Pages |
 |---|---|
 | Overview | Dashboard, News, Calendar, YouTube, Dictionary |
 | Markets | Pre-Market, Heatmap, Up/Down, Trading Volumes, Beta, Market Cap, Price, ETF, S&P500, Forex, Crypto, Gold, Oil |
-| Research | Stocks, Fundamentals, Valuation, Institutions |
-| Focus | BMNR, Bitcoin |
-| Trading | Charts, Options, Day Trading, Quant, Backtest, Roll |
+| Research | Stocks, Discovery, Fundamentals, Valuation, Institutions |
+| Focus | BMNR, Bitcoin, SOFI, MU, AMZN, AVGO, VST, HOOD, HIMS |
+| Trading | Charts, Options, Day Trading, Technical Indicators, Quant, Backtest |
 | Macro & events | Global, Economic, Bonds, Money, IPO, Politics |
 | My money | Portfolio, Personal Finance, Cards, Projections |
+| Settings | Settings |
 
 Star pages to pin them to Favorites. Recently viewed pages appear in the sidebar;
 Ctrl+K or backtick opens page search with recent pages first. Settings controls page
@@ -53,17 +56,19 @@ handoffs open a single-expiration chain. Hidden pages remain hidden.
 
 ## Startup and data freshness
 
-Startup prefetch is limited to five eligible pages: the current page, favorites,
-then recently viewed pages. Hidden pages are excluded. Heavy screens (Trading
-Volumes, Heatmap, Economic, Bonds and ETF) are prefetched only when current or
-favorited. Pages without a prefetch task load when opened. Background work yields
-to foreground requests and skips fresh cached results.
+Startup begins loading every implemented page, including hidden and unvisited
+pages. The current page, favorites and recent pages help order the work; previously
+observed load times also inform ordering. Pages share cached queries where
+appropriate, and local-only pages use saved data. Once startup finishes, page
+switching uses the prepared content. Startup progress and provider failures remain
+visible; failed pages are not treated as ready. Background work yields to foreground
+requests and reuses fresh cached results.
 
 Settings > Data Health shows startup task timings and the latest observed feed
 results. Up to 200 panel records persist in the local renderer profile; older
 records are marked **Previous session** and do not count as current health. Clear
-removes that history. This report describes observed results, not continuous
-monitoring of unopened pages.
+removes that history. This report describes observed startup and subsequent feed
+results, not continuous monitoring of every feed.
 
 Valuation, ETF and Portfolio Metrics show source, freshness, snapshot time and data
 issues beside their results. ETF and portfolio history also show coverage. Snapshot
@@ -139,6 +144,7 @@ Run from the repository root:
 ```bash
 npm run typecheck
 npm run build
+npm run probe:launcher
 npm run probe:settings
 npm run probe:backup --workspace budget-terminal-desktop
 npm run probe:charts -- --offline
@@ -154,6 +160,12 @@ The security probe requires a desktop build and runs the real sandboxed preload 
 Electron. Session checks cover cross-process exclusion and recovery after a crash.
 Persistence probes use temporary data directories. The loading probe tests cache
 coalescing, startup selection, stale fallback and foreground request isolation.
+
+For the complete maintenance pass after building, run
+`npm run probe:maintenance -- --ui` for offline and Electron UI probes in isolated
+profiles. `npm run probe:maintenance-live` checks public feeds separately. These commands save their
+results under `apps/desktop/out/maintenance` for inspection; provider failures
+remain visible in the live report.
 
 Use the matching offline probe after changing calculations or UI. Use live probes
 when changing a provider, for example `npm run probe:stocks -- AAPL`. Live probes
@@ -176,7 +188,7 @@ Installer packaging and automatic application updates are not configured.
 
 ## Local MCP for ChatGPT and Codex
 
-Budget Terminal exposes 77 MCP tools: all 75 service operations, page screenshots,
+Budget Terminal exposes 84 MCP tools: all 82 service operations, page screenshots,
 and connection status. Research tools use the same caches and provider rate gate as the app.
 Write tools edit saved portfolios, options records, Cards, personal finance and
 settings through the existing stores and automatic backup. These are local record
@@ -197,9 +209,9 @@ npm run build
 npm run probe:mcp
 ```
 
-The standalone entrypoint is `apps/desktop/out/mcp/server.mjs` and requires
-Node.js 22 or newer. Register it with the installed Codex CLI using absolute
-paths (quote each path separately):
+The standalone entrypoint is `apps/desktop/out/mcp/server.mjs`. Use the supported
+Node.js versions listed under Setup and launch. Register it with the installed
+Codex CLI using absolute paths (quote each path separately):
 
 ```text
 codex mcp add budget-terminal --env BUDGET_TERMINAL_DATA_DIR=<absolute-data-folder> -- <absolute-node-executable> <absolute-repository>/apps/desktop/out/mcp/server.mjs

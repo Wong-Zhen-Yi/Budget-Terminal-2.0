@@ -1,13 +1,17 @@
 import { resolve } from 'node:path'
-import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
+import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+
+// Direct npm dev/preview commands must launch the desktop runtime too.
+for (const key of Object.keys(process.env)) {
+  if (key.toUpperCase() === 'ELECTRON_RUN_AS_NODE') delete process.env[key]
+}
 
 const root = __dirname
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
     build: {
       outDir: 'out/main',
       lib: { entry: resolve(root, 'electron/main.ts') },
@@ -17,7 +21,6 @@ export default defineConfig({
     },
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
     build: {
       outDir: 'out/preload',
       lib: { entry: resolve(root, 'electron/preload.ts') },

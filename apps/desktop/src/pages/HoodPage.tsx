@@ -1,3 +1,5 @@
+import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
+import { FRESHNESS } from '@shared/freshness'
 import { useEffect, useMemo, useState } from 'react'
 import { STOCKS_RANGE_PRESETS } from '@shared/contract'
 import type { StocksRangePreset } from '@shared/contract'
@@ -48,6 +50,8 @@ export function HoodPage({ onStatusChange, onNavigate }: {
   onNavigate: (tabId: string, symbol?: string) => void
 }) {
   const query = useHood()
+  const now = useSnapshotClock()
+  const freshness = query.data ? effectiveFreshness(query.data, now, FRESHNESS.hood) : 'unavailable'
   const refresh = useRefreshHood()
   const [notice, setNotice] = useState('')
   const [refreshing, setRefreshing] = useState(false)
@@ -67,7 +71,7 @@ export function HoodPage({ onStatusChange, onNavigate }: {
     return all.filter(candle => candle.time * 1000 >= start.getTime())
   }, [data?.market?.chart.candles, range])
   const dates = useMemo(() => candles.map(candle => new Date(candle.time * 1000).toISOString().slice(0, 10)), [candles])
-  useEffect(() => onStatusChange([{ label: 'HOOD', envelope: query.data, loading: busy }], ''), [query.data, busy, onStatusChange])
+  useEffect(() => onStatusChange([{ label: 'HOOD', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: busy }], ''), [query.data, busy, onStatusChange])
   const onRefresh = async () => {
     setNotice('')
     setRefreshing(true)
@@ -90,7 +94,7 @@ export function HoodPage({ onStatusChange, onNavigate }: {
       <Button className="ml-auto" variant="accent" disabled={busy} onClick={onRefresh}>{busy ? 'Loading HOOD…' : 'Refresh'}</Button>
       {['charts', 'fundamentals', 'options', 'valuation'].map(id => <Button key={id} className="capitalize" onClick={() => onNavigate(id, 'HOOD')}>{id}</Button>)}
     </div>
-    <div className="shrink-0 text-2xs text-text-muted">{busy ? 'Loading Robinhood dashboard…' : `${query.data?.meta.freshness ?? 'Unavailable'} · fetched ${data?.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : 'unavailable'}`} · USD · market price from daily bars{stats && data?.market?.chart.candles.at(-1) ? ` as of ${new Date(data.market.chart.candles.at(-1)!.time * 1000).toISOString().slice(0, 10)}` : ''}</div>
+    <div className="shrink-0 text-2xs text-text-muted">{busy ? 'Loading Robinhood dashboard…' : `${freshness} · fetched ${data?.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : 'unavailable'}`} · USD · market price from daily bars{stats && data?.market?.chart.candles.at(-1) ? ` as of ${new Date(data.market.chart.candles.at(-1)!.time * 1000).toISOString().slice(0, 10)}` : ''}</div>
     {(notice || query.error || query.data?.errors.length) ? <div role="status" className="shrink-0 border border-warn/40 bg-surface p-2 text-xs text-warn">{notice || query.error?.message || query.data?.meta.failureReason}</div> : null}
     <div className="grid shrink-0 grid-cols-2 gap-2 lg:grid-cols-3 2xl:grid-cols-6">{tiles.map(([label, value, period]) => <div key={label} className="border border-border bg-surface p-3 text-center"><div className="text-2xs text-text-muted">{label}</div><div className="num my-1 text-lg font-bold">{value}</div><div className="text-2xs text-text-muted">{period}</div></div>)}</div>
     <div className="grid shrink-0 gap-2 xl:grid-cols-[2fr_1fr]">

@@ -15,10 +15,12 @@ export interface DiscoveryEntry {
 export function useDiscoveryScan(active: boolean, intervalSeconds: number) {
   const queryClient = useQueryClient()
   const startupUniverse = queryClient.getQueryData<Envelope<DiscoveryUniverse>>(['discoveryUniverse'])?.data.symbols ?? []
-  const startupSnapshot = queryClient.getQueryData<Envelope<DiscoverySnapshot | null>>(['discoveryStartup'])?.data ?? null
+  const startupEnvelope = queryClient.getQueryData<Envelope<DiscoverySnapshot | null>>(['discoveryStartup'])
+  const startupSnapshot = startupEnvelope?.data ?? null
   const startupHistory: DiscoveryEntry[] = startupSnapshot ? [{ snapshot: startupSnapshot, seenAt: Date.now() }] : []
   const [universeCount, setUniverseCount] = useState(startupUniverse.length)
   const [snapshot, setSnapshot] = useState<DiscoverySnapshot | null>(startupSnapshot)
+  const [envelope, setEnvelope] = useState(startupEnvelope)
   const [history, setHistory] = useState<DiscoveryEntry[]>(startupHistory)
   const [paused, setPaused] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -78,6 +80,7 @@ export function useDiscoveryScan(active: boolean, intervalSeconds: number) {
         throw new Error(response.meta.failureReason || `No market data for ${symbol}.`)
       }
       snapshotRef.current = response.data
+      setEnvelope(response)
       failuresRef.current = 0
       failedRef.current = failedRef.current.filter((entry) => entry !== symbol)
       setSnapshot(response.data)
@@ -180,7 +183,8 @@ export function useDiscoveryScan(active: boolean, intervalSeconds: number) {
   }, [inspect])
 
   return {
-    universeCount, snapshot, history, paused, loading, remaining, error,
+    universeCount, snapshot, envelope, history, paused, loading, remaining, error,
+    failure: failuresRef.current > 0 ? error : undefined,
     togglePause, resetCountdown, next: () => void load(), previous, inspect,
     search: (ticker: string) => void load(ticker.trim().toUpperCase()),
   }

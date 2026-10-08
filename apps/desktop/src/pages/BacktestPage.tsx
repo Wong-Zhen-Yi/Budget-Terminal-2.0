@@ -129,9 +129,11 @@ export function BacktestPage({
   useEffect(() => {
     onStatusChange(
       [
-        { label: 'Backtest', envelope: backtest.data ?? startupBacktest.data, loading: backtest.isPending || startupBacktest.isFetching },
-        { label: 'Holdings', envelope: portfolioQuery.data, loading: portfolioQuery.isFetching },
-        { label: 'Quotes', envelope: quotesQuery.data, loading: quotesQuery.isFetching },
+        { label: 'Backtest', envelope: backtest.data ?? startupBacktest.data, error: backtest.error ?? startupBacktest.error,
+          enabled: savedBacktest.rows.some((row) => row.symbol && row.weight > 0) || !backtest.isIdle,
+          loading: backtest.isPending || startupBacktest.isFetching },
+        { label: 'Holdings', envelope: portfolioQuery.data, error: portfolioQuery.error, enabled: portfolioQuery.isEnabled, loading: portfolioQuery.isFetching },
+        { label: 'Quotes', envelope: quotesQuery.data, error: quotesQuery.error, enabled: quotesQuery.isEnabled, loading: quotesQuery.isFetching },
       ],
       settingsQuery.data?.data.sourcePath ?? '',
     )

@@ -1,3 +1,5 @@
+import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
+import { FRESHNESS } from '@shared/freshness'
 import type { ChartPayload, Envelope, MacroQuotes } from '@shared/contract'
 import { MACRO_SYMBOLS } from '@shared/contract'
 import { decimals, EM_DASH, percent } from '@/lib/format'
@@ -8,6 +10,7 @@ export function MacroBar({ macro, loading, charts }: {
   loading: boolean
   charts: Array<{ data?: Envelope<ChartPayload>; isLoading: boolean; isError: boolean }>
 }) {
+  const now = useSnapshotClock()
   return (
     <div className="flex shrink-0 gap-1">
       {MACRO_SYMBOLS.map((entry, index) => {
@@ -25,7 +28,7 @@ export function MacroBar({ macro, loading, charts }: {
           const y = high === low ? 14 : 26 - ((value - low) / (high - low)) * 24
           return `${x.toFixed(2)},${y.toFixed(2)}`
         }).join(' ')
-        const freshness = chart?.data?.meta.freshness
+        const freshness = chart?.data ? effectiveFreshness(chart.data, now, FRESHNESS.chartDaily) : undefined
         const warning = chart?.isError || freshness === 'failed' || freshness === 'partial' || freshness === 'stale'
         const message = chart?.isLoading ? 'Loading history…' : 'History unavailable'
         const description = `${entry.label}: last ${values.length} trading sessions (daily closes)`

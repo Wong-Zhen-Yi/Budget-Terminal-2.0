@@ -76,7 +76,7 @@ export function Sp500Page({ onStatusChange }: { onStatusChange: (panels: PanelSt
   const forward = values.find((row) => row.label === 'Forward P/E (FY1)')
   const labels = ['Constituents', 'Market', 'History', 'Holdings', 'Valuation']
   useEffect(() => {
-    onStatusChange(queries.map((query, i) => ({ label: `S&P500 ${labels[i]}`, envelope: query.data, loading: query.isFetching })), '')
+    onStatusChange(queries.map((query, i) => ({ label: `S&P500 ${labels[i]}`, envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching })), '')
   }, [onStatusChange, constituentsQ.data, marketQ.data, historyQ.data, holdingsQ.data, valuationQ.data, busy])
   // Capture F5 before the application-wide refresh so an explicit breadth action stays separate.
   useEffect(() => {

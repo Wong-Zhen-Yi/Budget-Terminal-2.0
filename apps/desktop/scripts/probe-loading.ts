@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { computeExposure, emptyRiskMetrics } from '../electron/shared/analytics.js'
 import { ok } from '../electron/shared/envelope.js'
-import { MACRO_SYMBOLS, TABS, type AnalyticsPayload } from '../electron/shared/contract.js'
-import { runWarmTasks, waitForWarmSlot, warmQuery } from '../src/api/warmQueue.js'
+import { MACRO_SYMBOLS, TABS, type AnalyticsPayload, type ChartPayload, type CryptoPayload, type NewsArticle, type OptionPosition, type Portfolio, type SignalsPayload, type SignalsRequest } from '../electron/shared/contract.js'
+import { runWarmTasks, waitForWarmSlot, warmQuery, warmStartupQuery, StartupLoadError } from '../src/api/warmQueue.js'
 import { recentPages, startupPages } from '../electron/shared/navigation.js'
 import { recordStartupLoad, restoreStartupLoads, startupPageOrder } from '../electron/shared/startupLoading.js'
 
@@ -40,6 +40,20 @@ assert.deepEqual(restoreStartupLoads({ ...learnedLoads,
 }), learnedLoads)
 assert.deepEqual(restoreStartupLoads(null), {})
 console.log('Adaptive loading checks passed: first launch order, learned slow pages last, all pages retained, cache/failure isolation and smoothing.')
+
+const expiredClient = new QueryClient()
+expiredClient.setQueryData(['quotes', 'EXPIRED'], { ...ok({ price: 99 }, 'fixture'),
+  meta: { source: 'fixture', freshness: 'fresh', fetchedAt: Date.now(), expiresAt: Date.now() - 1 } })
+let expiryRefreshes = 0
+await warmQuery(expiredClient, { queryKey: ['quotes', 'EXPIRED'], staleTime: Infinity,
+  queryFn: async () => { expiryRefreshes += 1; return ok({ price: 100 }, 'fixture') } })
+assert.equal(expiryRefreshes, 1, 'A recently retrieved snapshot whose dependencies expired must refresh')
+const degradedSnapshot = { ...ok({ price: 100 }, 'fixture'),
+  meta: { source: 'fixture', freshness: 'partial', fetchedAt: Date.now(), failureReason: 'Missing observation' } }
+await assert.rejects(warmStartupQuery(expiredClient, { queryKey: ['startupDegraded'], staleTime: 0,
+  queryFn: async () => degradedSnapshot }), (error: unknown) => error instanceof StartupLoadError && error.state === 'degraded')
+assert.equal(expiredClient.getQueryData(['startupDegraded']), degradedSnapshot, 'Degraded startup retains usable panels')
+expiredClient.clear()
 
 // Build the actual startup task list with a representative portfolio. An added page
 // must receive a task or be explicitly accounted for as local/shared initial state.
@@ -387,15 +401,20 @@ try {
   })
   const key = queryKeys.analytics(positionsSignature(positions, 0), 'SPY', '1y')
   metricsClient.setQueryData(key, history)
-  const render = (currentValues: Record<string, number>) => renderToStaticMarkup(
+  const render = (currentValues: Record<string, number>, valuationComplete = true) => renderToStaticMarkup(
     createElement(QueryClientProvider, { client: metricsClient },
-      createElement(MetricsTab, { positions, cashAmount: 0, currentValues, visible: true })),
+      createElement(MetricsTab, { positions, cashAmount: 0, currentValues, visible: true, valuationComplete })),
   )
   assert.match(render({}), /\$0\.00/)
   assert.match(render({ AAPL: 2000 }), /\$2,000\.00/)
   const updated = render({ AAPL: 2500 })
   assert.match(updated, /\$2,500\.00/)
   assert.match(updated, /1\.25x/)
+  const incomplete = render({ AAPL: 2500 }, false)
+  assert.match(incomplete, /market marks are incomplete/)
+  assert.match(incomplete, /Known Invested Subtotal/)
+  assert.doesNotMatch(incomplete, /1\.25x/)
+  assert.doesNotMatch(incomplete, /100\.00%/)
   assert.equal(historyCalls, 0)
   assert.deepEqual(metricsClient.getQueryData(key), history)
   console.log('Metrics renderer smoke passed: exposure follows quote arrivals and updates without refetching or changing cached history.')
@@ -403,4 +422,151 @@ try {
   metricsClient.clear()
   if (windowDescriptor) Object.defineProperty(globalThis, 'window', windowDescriptor)
   else Reflect.deleteProperty(globalThis, 'window')
+}
+
+// Exercise the rendered quote header, rather than only the formatting functions.
+const { ChartPanel } = await import('../src/components/dashboard/ChartPanel.js')
+const quoteFixture = (unit: string): ChartPayload => ({
+  symbol: 'FIXTURE', timeframe: '1 Day', interval: '1d', candles: [],
+  stats: { symbol: 'FIXTURE', price: 123.45, absChange: -2.5, change: -1.98,
+    open: 124, high: 125, low: 123, close: 123.45, volume: 100, currency: unit, longName: 'Fixture' },
+  indicators: { ma200: [{ time: 1, value: 120 }], rsi: [], rsiMa: [] },
+})
+const quoteHeader = (unit: string) => renderToStaticMarkup(createElement(ChartPanel, {
+  payload: quoteFixture(unit), loading: false, indicators: { ma200: true, rsi: false, volume: false },
+}))
+const euroHeader = quoteHeader('EUR')
+assert.match(euroHeader, /123\.45 EUR/)
+assert.match(euroHeader, /-2\.50 EUR/)
+assert.match(euroHeader, /MA200 120\.00 EUR/)
+assert.doesNotMatch(euroHeader, /\$/)
+const penceHeader = quoteHeader('GBp')
+assert.match(penceHeader, /123\.45 GBp/)
+assert.match(penceHeader, /-2\.50 GBp/)
+assert.doesNotMatch(penceHeader, /GBP|£|\$/)
+assert.match(quoteHeader('USD'), /\$123\.45/)
+assert.match(quoteHeader('USD'), /-\$2\.50/)
+
+const { buildOptionRows, OptionsTable } = await import('../src/components/portfolio/OptionsTable.js')
+const option: OptionPosition = { rowId: 'old-trade', ticker: 'AAPL', strategy: 'Buy Call', expiry: '2027-01-15',
+  strike: 100, contracts: 1, premium: 2, status: 'Open', openDate: '2026-10-01',
+  currentPrice: 0, volume: 0, openInterest: 0, impliedVolatility: 0 }
+const optionBook: Portfolio = { id: 'fixture', name: 'Fixture', readOnly: true, tickers: [], holdings: {},
+  options: [option], cashBalance: 0, marginDebt: 0, includeCashInWeight: false }
+const optionRows = buildOptionRows([option], { 'old-trade': { currentPrice: 3.5, volume: 1, openInterest: 1,
+  impliedVolatility: 0.2, asOf: Date.now() - 8 * 86400_000, source: 'Yahoo Finance last trade',
+  markStale: true, markReason: 'Provider trade is older than seven days' } })
+const optionMarkup = renderToStaticMarkup(createElement(OptionsTable, { portfolio: optionBook, rows: optionRows,
+  expiries: {}, loading: false, onPatch: () => {}, onRemove: () => {} }))
+for (const label of ['Last trade', '3.50', '(stale)', '192.0 hours old', 'Yahoo Finance last trade', 'Provider trade is older than seven days']) assert.ok(optionMarkup.includes(label), label)
+assert.match(optionMarkup, /title="[^"]*192\.0 hours old/)
+console.log('Native quote unit and stale option last-trade renderer checks passed: EUR, GBp, unchanged USD and dated mark provenance.')
+
+const { NewsCard } = await import('../src/components/news/NewsCard.js')
+const associatedStory: NewsArticle = { id: 'query-association', ticker: 'NVDA', title: 'Can Dell (DELL) sustain its growth?',
+  source: 'Yahoo Finance', time: '', url: 'https://example.test/story', category: 'portfolio', publishedAt: Date.now(),
+  score: null, signals: [], imageUrl: '', summary: '' }
+const storyMarkup = renderToStaticMarkup(createElement(NewsCard, { article: associatedStory, price: 237.47,
+  selected: false, onSelect: () => {}, onOpen: () => {}, showImages: false, now: Date.now() }))
+assert.match(storyMarkup, /Related NVDA/)
+assert.match(storyMarkup, /Yahoo associates this article with NVDA; the headline may concern another company/)
+assert.match(storyMarkup, /Can Dell \(DELL\)/)
+const { NewsTickerBadge } = await import('../src/components/news/NewsTickerBadge.js')
+const feedBadge = renderToStaticMarkup(createElement(NewsTickerBadge, { ticker: 'SPY', category: 'macro' }))
+assert.match(feedBadge, /Feed SPY/)
+assert.match(feedBadge, /does not identify the article&#x27;s main company/)
+const mentionBadge = renderToStaticMarkup(createElement(NewsTickerBadge, { ticker: 'SAP', price: 100, currency: 'EUR', category: 'other' }))
+assert.match(mentionBadge, /Mentioned SAP/)
+assert.match(mentionBadge, /100\.00 EUR/)
+assert.doesNotMatch(mentionBadge, /\$/)
+console.log('News attribution renderer checks passed: Yahoo association, macro feed and extracted mention remain distinct.')
+
+const documentDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'document')
+Object.defineProperty(globalThis, 'document', { configurable: true, value: { hidden: false } })
+const cryptoClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+try {
+  const { CryptoPage } = await import('../src/pages/CryptoPage.js')
+  const cryptoSnapshot: CryptoPayload = { fetchedAt: '2026-10-08T07:50:45', quotes: {}, global: null, fearGreed: null, news: [],
+    heatmap: { tiles: [], coverage: { loaded: 0, total: 30 }, updatedAt: '2026-10-08T07:50:45' },
+    progress: { heatmap: 'loaded', quotes: 'loaded', market: 'loaded', news: 'loaded' } }
+  const cryptoEnvelope = ok(cryptoSnapshot)
+  cryptoClient.setQueryData(['crypto'], { ...cryptoEnvelope, meta: { ...cryptoEnvelope.meta, fetchedAt: Date.now() - 180_000 } })
+  const cryptoMarkup = renderToStaticMarkup(createElement(QueryClientProvider, { client: cryptoClient },
+    createElement(CryptoPage, { onStatusChange: () => {} })))
+  assert.match(cryptoMarkup, /Snapshot expired \(07:50:45\); refresh to update/)
+  assert.match(cryptoMarkup, /Snapshot coverage 0\/30 \| stale \| Updated 07:50:45/)
+  assert.doesNotMatch(cryptoMarkup, /Live data|Live coverage/)
+  cryptoClient.setQueryData(['crypto'], cryptoEnvelope)
+  const freshCryptoMarkup = renderToStaticMarkup(createElement(QueryClientProvider, { client: cryptoClient },
+    createElement(CryptoPage, { onStatusChange: () => {} })))
+  assert.match(freshCryptoMarkup, /Snapshot updated at 07:50:45 · fresh/)
+  console.log('Crypto renderer expiration checks passed: expired snapshots stop advertising live data or coverage.')
+  const { BmnrPage } = await import('../src/pages/BmnrPage.js')
+  const { emptyBmnrPayload, parseLiveTreasury } = await import('../electron/shared/bmnr.js')
+  const bmnrSnapshot = emptyBmnrPayload('2026-10-08T07:51:55')
+  bmnrSnapshot.live = parseLiveTreasury({ companies: [{ symbol: 'BMNR', total_holdings: 5000,
+    percentage_of_total_supply: 0.01, total_current_value_usd: 17_500_000 }] }, bmnrSnapshot.fetchedAt)
+  bmnrSnapshot.progress.treasury = 'loaded'
+  bmnrSnapshot.market.ethPrice.value = 3500
+  const bmnrEnvelope = ok(bmnrSnapshot)
+  cryptoClient.setQueryData(['bmnr'], { ...bmnrEnvelope, meta: { ...bmnrEnvelope.meta, fetchedAt: Date.now() - 360_000 } })
+  const bmnrMarkup = renderToStaticMarkup(createElement(QueryClientProvider, { client: cryptoClient },
+    createElement(BmnrPage, { onStatusChange: () => {} })))
+  assert.match(bmnrMarkup, /CoinGecko ETH snapshot 07:51:55 · stale/)
+  assert.match(bmnrMarkup, /CoinGecko · stale snapshot/)
+  assert.match(bmnrMarkup, /Market Snapshot vs SEC Filed/)
+  assert.match(bmnrMarkup, /Market cap \(snapshot\)/)
+  assert.match(bmnrMarkup, /Market snapshot expired; refresh to update/)
+  assert.doesNotMatch(bmnrMarkup, /Live ETH|marked live|· live|Market cap \(live\)|Basis: live/)
+  console.log('BMNR renderer expiration checks passed: aged market snapshots retain their distinct SEC filed basis.')
+  const { MuPage } = await import('../src/pages/MuPage.js')
+  const { emptyMuPayload } = await import('../electron/shared/mu.js')
+  const cacheFailure = ok(emptyMuPayload())
+  cacheFailure.meta.freshness = 'partial'
+  cacheFailure.errors = [{ source: 'cache', reason: 'Micron document request failed: HTTP 403', operation: 'resolve' }]
+  cryptoClient.setQueryData(['mu'], cacheFailure)
+  const muMarkup = renderToStaticMarkup(createElement(QueryClientProvider, { client: cryptoClient },
+    createElement(MuPage, { onStatusChange: () => {}, onNavigate: () => {} })))
+  assert.match(muMarkup, /cache: Micron document request failed: HTTP 403/)
+  assert.doesNotMatch(muMarkup, /undefined:|null:/)
+  console.log('Focus warning renderer checks passed: generic cache failures keep their source without an undefined lane prefix.')
+  const { useSignalsLatest } = await import('../src/api/signalsQueries.js')
+  const { useReloadAll } = await import('../src/api/queries.js')
+  const { signalsHealth } = await import('../src/api/signalsHealth.js')
+  const { StatusBar } = await import('../src/components/chrome/StatusBar.js')
+  const closedTime = Date.parse('2026-10-10T20:00:00Z')
+  const incompleteSignals: SignalsPayload = { version: 5, session: '2026-10-09', marketOpen: false, candidates: [], results: [],
+    source: 'Fixture', sourcedAt: '', startedAt: '', completedAt: '', sourceCandidateCount: 1,
+    prefilteredCount: 1, confirmedCount: 0, errors: { AAPL: 'Historical feed incomplete' }, universeFromCache: true }
+  const savedSignals = ok(incompleteSignals)
+  const signalsFooter = renderToStaticMarkup(createElement(StatusBar, { sourcePath: '', panels: [{ label: 'Day Trading',
+    envelope: signalsHealth(savedSignals, closedTime), loading: false, enabled: true }] }))
+  assert.match(signalsFooter, /1 ticker\(s\) have incomplete data/)
+  assert.doesNotMatch(signalsFooter, /data: OK/)
+  const requests: SignalsRequest[] = []
+  const { api: fixtureApi } = await import('../src/api/client.js')
+  const originalSignals = fixtureApi.signals
+  fixtureApi.signals = async (request: SignalsRequest) => { requests.push(request); return savedSignals }
+  try {
+    cryptoClient.setQueryData(['signals'], savedSignals)
+    let reload!: () => Promise<void>
+    function SignalsReloadFixture() { useSignalsLatest(); reload = useReloadAll(); return null }
+    renderToStaticMarkup(createElement(QueryClientProvider, { client: cryptoClient }, createElement(SignalsReloadFixture)))
+    const query = cryptoClient.getQueryCache().find({ queryKey: ['signals'] })!
+    const observer = new QueryObserver(cryptoClient, { ...query.options, queryKey: ['signals'], staleTime: Infinity })
+    const unsubscribe = observer.subscribe(() => {})
+    try { await reload() } finally { unsubscribe(); observer.destroy() }
+    assert.equal(requests.length, 1, 'Explicit F5 must perform one scan without relying on the session timer')
+    assert.deepEqual(requests[0], { forceMarketRefresh: true, forceUniverseRefresh: true })
+    assert.doesNotMatch(renderToStaticMarkup(createElement(StatusBar, { sourcePath: '', panels: [{ label: 'Day Trading',
+      envelope: signalsHealth(cryptoClient.getQueryData(['signals']), closedTime), loading: false, enabled: true }] })), /data: OK/)
+  } finally {
+    if (originalSignals) fixtureApi.signals = originalSignals
+    else Reflect.deleteProperty(fixtureApi, 'signals')
+  }
+  console.log('Day Trading renderer reload checks passed: explicit F5 forces a scan and closed-session incomplete data stays degraded.')
+} finally {
+  cryptoClient.clear()
+  if (documentDescriptor) Object.defineProperty(globalThis, 'document', documentDescriptor)
+  else Reflect.deleteProperty(globalThis, 'document')
 }

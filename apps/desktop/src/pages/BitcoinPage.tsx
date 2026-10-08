@@ -1,3 +1,5 @@
+import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
+import { FRESHNESS } from '@shared/freshness'
 import { useEffect, useState } from 'react'
 import { bitcoinCycle } from '@shared/bitcoin'
 import { useBitcoin, useRefreshBitcoin } from '@/api/bitcoinQueries'
@@ -15,6 +17,8 @@ function Rows({ rows }: { rows: Array<[string, string]> }) {
 
 export function BitcoinPage({ onStatusChange }: { onStatusChange: (panels: PanelStatus[], sourcePath: string) => void }) {
   const query = useBitcoin()
+  const now = useSnapshotClock()
+  const freshness = query.data ? effectiveFreshness(query.data, now, FRESHNESS.bitcoin) : 'unavailable'
   const refresh = useRefreshBitcoin()
   const [refreshing, setRefreshing] = useState(false)
   const [notice, setNotice] = useState('')
@@ -23,7 +27,7 @@ export function BitcoinPage({ onStatusChange }: { onStatusChange: (panels: Panel
   const tip = data?.blocks[0]
   const cycle = tip ? bitcoinCycle(tip.height) : null
   const busy = refreshing || query.isFetching
-  useEffect(() => onStatusChange([{ label: 'Bitcoin', envelope: query.data, loading: busy }], ''), [query.data, busy, onStatusChange])
+  useEffect(() => onStatusChange([{ label: 'Bitcoin', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: busy }], ''), [query.data, busy, onStatusChange])
   const onRefresh = async () => {
     setRefreshing(true)
     setNotice('')
@@ -47,7 +51,7 @@ export function BitcoinPage({ onStatusChange }: { onStatusChange: (panels: Panel
   return <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto p-2">
     <div className="flex flex-wrap items-center gap-2">
       <h1 className="text-sm font-semibold">Bitcoin — network & mining</h1>
-      <span className="ml-auto text-2xs text-text-muted">{busy ? 'Loading Bitcoin network data…' : `${query.data?.meta.freshness ?? 'Unavailable'} · fetched ${stamp(query.data?.meta.fetchedAt)}`}</span>
+      <span className="ml-auto text-2xs text-text-muted">{busy ? 'Loading Bitcoin network data…' : `${freshness} · fetched ${stamp(query.data?.meta.fetchedAt)}`}</span>
       <Button variant="accent" disabled={busy} onClick={onRefresh}>{busy ? 'Refreshing…' : 'Refresh'}</Button>
     </div>
     {(notice || query.error || query.data?.errors.length) ? <div role="status" className="border border-warn/40 bg-surface p-2 text-xs text-warn">{notice || query.error?.message || query.data?.meta.failureReason}</div> : null}

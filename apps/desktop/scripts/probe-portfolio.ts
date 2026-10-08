@@ -37,7 +37,8 @@ function money(value: number | null | undefined, digits = 2): string {
   return typeof value === 'number' && Number.isFinite(value) ? `$${value.toFixed(digits)}` : '--'
 }
 
-function signed(value: number, digits = 2): string {
+function signed(value: number | null, digits = 2): string {
+  if (value === null) return 'N/A'
   return `${value >= 0 ? '+' : '-'}$${Math.abs(value).toFixed(digits)}`
 }
 
@@ -89,7 +90,7 @@ async function main(): Promise<void> {
         `${pad('Price', 10)}${pad('Day %', 9)}${pad('Mkt Value', 14)}${pad('Weight', 9)}` +
         `${pad('Gain', 14)}${pad('Growth', 9)}  ${pad('Size', 14, 'left')}${pad('Analyst PT', 18, 'left')}`,
     )
-    for (const row of [...positions].sort((a, b) => b.marketValue - a.marketValue)) {
+    for (const row of [...positions].sort((a, b) => (b.marketValue ?? -Infinity) - (a.marketValue ?? -Infinity))) {
       const size =
         row.size === null
           ? '--'
@@ -107,11 +108,11 @@ async function main(): Promise<void> {
           pad(row.avgPrice.toFixed(2), 10) +
           pad(money(row.cost), 13) +
           pad(row.hasQuote ? money(row.price) : '--', 10) +
-          pad(`${row.changePercent >= 0 ? '+' : ''}${row.changePercent.toFixed(2)}%`, 9) +
+          pad(`${(row.changePercent ?? 0) >= 0 ? '+' : ''}${row.changePercent?.toFixed(2) ?? '--'}%`, 9) +
           pad(money(row.marketValue), 14) +
           pad(row.weight === null ? '--' : `${row.weight.toFixed(1)}%`, 9) +
           pad(signed(row.dollarGain), 14) +
-          pad(`${row.growth >= 0 ? '+' : ''}${row.growth.toFixed(1)}%`, 9) +
+          pad(`${(row.growth ?? 0) >= 0 ? '+' : ''}${row.growth?.toFixed(1) ?? '--'}%`, 9) +
           '  ' +
           pad(size, 14, 'left') +
           pad(analyst, 18, 'left'),
@@ -133,7 +134,7 @@ async function main(): Promise<void> {
           pad(
             row.changePercent === null
               ? '--'
-              : `${row.changePercent >= 0 ? '+' : ''}${row.changePercent.toFixed(2)}%`,
+              : `${(row.changePercent ?? 0) >= 0 ? '+' : ''}${row.changePercent?.toFixed(2) ?? '--'}%`,
             10,
           ) +
           pad(row.weight === null ? '--' : `${row.weight.toFixed(1)}%`, 10) +

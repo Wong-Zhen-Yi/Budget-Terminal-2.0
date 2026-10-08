@@ -73,7 +73,15 @@ interface CacheMetadata {
   freshness: SecFreshness
   cacheAgeSeconds: number
   warning?: string
+  cacheWarning?: string
 }
+
+interface CachedJsonResult {
+  payload: Record<string, unknown>
+  metadata: CacheMetadata
+}
+
+const pendingDocuments = new Map<string, Promise<CachedJsonResult>>()
 
 export interface SecCompanyBundle {
   annual: FundamentalSeriesMap
@@ -187,12 +195,37 @@ async function readCached(namespace: string, key: string): Promise<CachedDocumen
   }
 }
 
-async function writeCached(namespace: string, key: string, payload: Record<string, unknown>): Promise<void> {
+async function replaceCachedFile(
+  temporary: string,
+  target: string,
+  move = rename,
+  pause = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)),
+): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try { await move(temporary, target); return } catch (error) {
+      const code = error && typeof error === 'object' && 'code' in error ? error.code : ''
+      if (!['EPERM', 'EACCES', 'EBUSY'].includes(String(code)) || attempt >= 4) throw error
+      await pause(50 * 2 ** attempt)
+    }
+  }
+}
+
+async function writeCached(
+  namespace: string,
+  key: string,
+  payload: Record<string, unknown>,
+  replace = replaceCachedFile,
+): Promise<void> {
   const target = cachePath(namespace, key)
   await mkdir(dirname(target), { recursive: true })
   const temporary = `${target}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`
-  await writeFile(temporary, JSON.stringify({ storedAt: Date.now(), payload }), 'utf8')
-  await rename(temporary, target)
+  try {
+    await writeFile(temporary, JSON.stringify({ storedAt: Date.now(), payload }), 'utf8')
+    await replace(temporary, target)
+  } finally {
+    // Never remove the destination: a failed replacement must preserve the previous cache.
+    await rm(temporary, { force: true }).catch(() => {})
+  }
 }
 
 export async function clearSecCaches(): Promise<void> {
@@ -265,29 +298,40 @@ async function cachedJson(
   url: string,
   ttl: number,
   force: boolean,
-): Promise<{ payload: Record<string, unknown>; metadata: CacheMetadata }> {
+  save = writeCached,
+): Promise<CachedJsonResult> {
   const cached = await readCached(namespace, key)
   const age = cached ? Date.now() - cached.storedAt : Number.POSITIVE_INFINITY
   if (!force && cached && age <= ttl) {
     return { payload: cached.payload, metadata: { freshness: 'cached', cacheAgeSeconds: age / 1000 } }
   }
-  try {
-    const payload = await requestJson(url)
-    await writeCached(namespace, key, payload)
-    return { payload, metadata: { freshness: 'fresh', cacheAgeSeconds: 0 } }
-  } catch (error) {
-    if (cached && age <= STALE_LIMIT) {
-      return {
-        payload: cached.payload,
-        metadata: {
-          freshness: 'stale',
-          cacheAgeSeconds: age / 1000,
-          warning: error instanceof Error ? error.message : String(error),
-        },
+  const documentKey = `${cachePath(namespace, key)}:${url}`
+  const pending = pendingDocuments.get(documentKey)
+  if (pending) return pending
+  const load = (async (): Promise<CachedJsonResult> => {
+    try {
+      const payload = await requestJson(url)
+      let cacheWarning: string | undefined
+      try { await save(namespace, key, payload) } catch (error) {
+        cacheWarning = `SEC local cache save failed; fetched data remains usable: ${error instanceof Error ? error.message : String(error)}`
       }
+      return { payload, metadata: { freshness: 'fresh', cacheAgeSeconds: 0, ...(cacheWarning ? { cacheWarning } : {}) } }
+    } catch (error) {
+      if (cached && age <= STALE_LIMIT) {
+        return {
+          payload: cached.payload,
+          metadata: {
+            freshness: 'stale',
+            cacheAgeSeconds: age / 1000,
+            warning: error instanceof Error ? error.message : String(error),
+          },
+        }
+      }
+      throw error
     }
-    throw error
-  }
+  })().finally(() => { pendingDocuments.delete(documentKey) })
+  pendingDocuments.set(documentKey, load)
+  return load
 }
 
 function normalizeTicker(value: string): string {
@@ -454,8 +498,10 @@ function normalizeStatements(companyFacts: Record<string, unknown>): {
     output.freeCashFlow = subtractSeries(raw.operatingCashFlow, raw.capitalExpenditure)
     output.sharesOutstanding = raw.sharesOutstanding
     output.cashAndBonds = combineCashAndBonds(raw.cashCombined, raw.cash, raw.shortTermInvestments, raw.longTermInvestments)
+    // Prefer complete components per date, retaining reported totals for other periods.
     const componentDebt = combineDebt([], raw.currentDebt, raw.nonCurrentDebt)
-    output.totalDebt = componentDebt.length ? componentDebt : combineDebt(raw.totalDebt, [], [])
+    const componentDates = new Set(componentDebt.map(point => point.endDate))
+    output.totalDebt = sortSeries([...raw.totalDebt.filter(point => !componentDates.has(point.endDate)), ...componentDebt])
     output.sellingGeneralAdmin = raw.sellingGeneralAdmin
     output.researchDevelopment = raw.researchDevelopment
     return output
@@ -502,7 +548,10 @@ export async function fetchSecFilingSnapshot(cikInput: string, force = false) {
   const cik = String(Number(cikInput)).padStart(10, '0')
   const result = await cachedJson('submissions', cik, SEC_SUBMISSIONS_URL.replace('{cik}', cik), SUBMISSIONS_TTL, force)
   return { filings: normalizeFilings(result.payload, cik, 500), freshness: result.metadata.freshness,
-    warnings: result.metadata.warning ? [`SEC submissions refresh failed; using cached data: ${result.metadata.warning}`] : [] }
+    warnings: [
+      ...(result.metadata.warning ? [`SEC submissions refresh failed; using cached data: ${result.metadata.warning}`] : []),
+      ...(result.metadata.cacheWarning ? [result.metadata.cacheWarning] : []),
+    ] }
 }
 
 function emptyMetadata(warning: string): FundamentalsSecMetadata {
@@ -540,7 +589,7 @@ export async function fetchSecCompanyBundle(symbolInput: string, force = false):
       cachedJson('companyfacts', cik, SEC_FACTS_URL.replace('{cik}', cik), FACTS_TTL, force),
       cachedJson('submissions', cik, SEC_SUBMISSIONS_URL.replace('{cik}', cik), SUBMISSIONS_TTL, force),
     ])
-    const warnings: string[] = []
+    const warnings: string[] = tickers.metadata.cacheWarning ? [tickers.metadata.cacheWarning] : []
     let facts: Record<string, unknown> = {}
     let submissions: Record<string, unknown> = {}
     let factsMeta: CacheMetadata = { freshness: 'failed', cacheAgeSeconds: 0 }
@@ -549,11 +598,13 @@ export async function fetchSecCompanyBundle(symbolInput: string, force = false):
       facts = factsResult.value.payload
       factsMeta = factsResult.value.metadata
       if (factsMeta.warning) warnings.push(`SEC facts refresh failed; using cached data: ${factsMeta.warning}`)
+      if (factsMeta.cacheWarning) warnings.push(factsMeta.cacheWarning)
     } else warnings.push(`SEC facts unavailable: ${String(factsResult.reason)}`)
     if (submissionsResult.status === 'fulfilled') {
       submissions = submissionsResult.value.payload
       submissionsMeta = submissionsResult.value.metadata
       if (submissionsMeta.warning) warnings.push(`SEC submissions refresh failed; using cached data: ${submissionsMeta.warning}`)
+      if (submissionsMeta.cacheWarning) warnings.push(submissionsMeta.cacheWarning)
     } else warnings.push(`SEC submissions unavailable: ${String(submissionsResult.reason)}`)
 
     const statements = Object.keys(facts).length ? normalizeStatements(facts) : empty
@@ -633,6 +684,7 @@ export async function fetchSecFactsDocument(
     const tickers = await cachedJson('tickers', 'company_tickers', SEC_TICKERS_URL, TICKERS_TTL, force)
     tickerFreshness = tickers.metadata.freshness
     tickerAge = tickers.metadata.cacheAgeSeconds
+    if (tickers.metadata.cacheWarning) warnings.push(tickers.metadata.cacheWarning)
     const entry = findCikEntry(tickers.payload, target.symbol)
     if (!entry) throw new Error(`No domestic SEC filer mapping was found for ${target.symbol}.`)
     cik = String(Number(entry.cik_str)).padStart(10, '0')
@@ -652,12 +704,14 @@ export async function fetchSecFactsDocument(
   const facts = factsResult.value.payload
   const factsMeta = factsResult.value.metadata
   if (factsMeta.warning) warnings.push(`SEC facts refresh failed; using cached data: ${factsMeta.warning}`)
+  if (factsMeta.cacheWarning) warnings.push(factsMeta.cacheWarning)
 
   let filings: SecFiling[] = []
   let submissionsMeta: CacheMetadata | null = null
   if (submissionsResult.status === 'fulfilled' && submissionsResult.value) {
     submissionsMeta = submissionsResult.value.metadata
     if (submissionsMeta.warning) warnings.push(`SEC submissions refresh failed; using cached data: ${submissionsMeta.warning}`)
+    if (submissionsMeta.cacheWarning) warnings.push(submissionsMeta.cacheWarning)
     filings = normalizeFilings(submissionsResult.value.payload, cik)
   } else if (submissionsResult.status === 'rejected') {
     warnings.push(`SEC submissions unavailable: ${String(submissionsResult.reason)}`)
@@ -688,6 +742,8 @@ export async function fetchSecFactsDocument(
 
 export const secTesting = {
   cachedJson,
+  writeCached,
+  replaceCachedFile,
   cacheRoot,
   ttl: {
     tickers: TICKERS_TTL,

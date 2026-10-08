@@ -2,7 +2,11 @@ import assert from 'node:assert/strict'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { DataFreshness } from '../src/components/ui/DataFreshness.js'
-import type { Envelope } from '../electron/shared/contract.js'
+import { StatusBar } from '../src/components/chrome/StatusBar.js'
+import { MacroBar } from '../src/components/dashboard/MacroBar.js'
+import { effectiveFreshness, registerSnapshot } from '../src/api/snapshotHealth.js'
+import { FRESHNESS } from '../electron/shared/freshness.js'
+import type { ChartPayload, Envelope } from '../electron/shared/contract.js'
 
 // Simulate a previous renderer session without touching the user's browser storage.
 const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
@@ -44,6 +48,51 @@ try {
   // A failed refresh can keep the old timestamp. Its new health must still be recorded.
   useDataHealth.getState().record('stocks', [{ label: 'Quote', envelope, loading: false }])
   assert.equal(useDataHealth.getState().records['stocks:Quote'].freshness, 'stale')
+  const failure = new Error('Fixture IPC disconnected')
+  const footer = renderToStaticMarkup(createElement(StatusBar, {
+    panels: [{ label: 'Quotes', envelope: undefined, loading: false, enabled: true, error: failure }], sourcePath: '',
+  }))
+  assert.match(footer, /Fixture IPC disconnected/)
+  assert(!footer.includes('data: OK'), 'A thrown query failure must never report OK')
+  const manual = renderToStaticMarkup(createElement(StatusBar, {
+    panels: [{ label: 'Options', envelope: undefined, loading: false, enabled: false }], sourcePath: '',
+  }))
+  assert.match(manual, /No remote data required/)
+  useDataHealth.getState().record('global', [{ label: 'Markets', envelope: undefined, loading: false, enabled: true, error: failure }])
+  assert.equal(useDataHealth.getState().records['global:Markets'].freshness, 'failed')
+  useDataHealth.getState().record('stocks', [{ label: 'Quote', envelope, loading: false, error: failure }])
+  assert.equal(useDataHealth.getState().records['stocks:Quote'].failureReason, failure.message)
+  const fresh = { ...envelope, meta: { ...envelope.meta, freshness: 'fresh' as const, failureReason: undefined } }
+  const settingsFooter = renderToStaticMarkup(createElement(StatusBar, {
+    panels: [{ label: 'Settings', envelope: { ...fresh, meta: { ...fresh.meta, fetchedAt: Date.now() } }, loading: false }], sourcePath: '',
+  }))
+  assert.match(settingsFooter, /Current page data: OK/, 'Settings must distinguish its local data health from global feed diagnostics')
+  registerSnapshot(fresh, 30_000)
+  assert.equal(effectiveFreshness(fresh), 'stale', 'An expired successful snapshot must be visibly stale')
+  assert.match(renderToStaticMarkup(createElement(DataFreshness, { envelope: fresh })), /STALE/)
+  assert.match(renderToStaticMarkup(createElement(DataFreshness, { envelope: fresh, error: failure })), /REFRESH FAILED/)
+  const dependent = { ...fresh, meta: { ...fresh.meta, fetchedAt: Date.now(), expiresAt: Date.now() - 1 } }
+  assert.equal(effectiveFreshness(dependent, Date.now(), Infinity), 'stale', 'Derived snapshots preserve dependency expiry')
+  // Inline labels must age while a snapshot stays mounted; no provider refresh is involved.
+  const clock = Date.now
+  try {
+    const collected = clock()
+    const history: Envelope<ChartPayload> = { data: { symbol: 'SPY', timeframe: '1 Day', interval: '1d', stats: null,
+      indicators: { ma200: [], rsi: [], rsiMa: [] }, candles: [100, 101].map((close, index) => ({ time: index + 1, open: close, high: close, low: close, close, volume: 1 })) }, errors: [],
+      meta: { source: 'fixture daily bars', freshness: 'fresh' as const, fetchedAt: collected } }
+    const renderMacro = () => renderToStaticMarkup(createElement(MacroBar, { macro: {}, loading: false,
+      charts: [{ data: history, isLoading: false, isError: false }] }))
+    Date.now = () => collected + FRESHNESS.chartDaily - 1
+    assert(!renderMacro().includes('Stale history'), 'Daily history remains current within its policy')
+    Date.now = () => collected + FRESHNESS.chartDaily + 1
+    assert.match(renderMacro(), /Stale history/, 'Inline daily-history label expires without refetching')
+    const copied = { ...fresh, meta: { ...fresh.meta, fetchedAt: collected } }
+    Date.now = () => collected + FRESHNESS.sofi + 1
+    const copiedPanel = { label: 'SOFI reported quarters', envelope: copied, loading: false, enabled: true, freshnessMs: FRESHNESS.sofi }
+    assert.match(renderToStaticMarkup(createElement(StatusBar, { panels: [copiedPanel], sourcePath: '' })), /Snapshot expired/,
+      'A copied panel envelope must retain explicit query TTL after losing WeakMap identity')
+    assert.match(renderToStaticMarkup(createElement(StatusBar, { panels: [{ ...copiedPanel, error: failure }], sourcePath: '' })), /Fixture IPC disconnected/)
+  } finally { Date.now = clock }
   assert.equal(useDataHealth.getState().records['stocks:Quote'].previousSession, undefined)
   // Server rendering uses Zustand's initial hook snapshot; the report reads current state.
   assert.match(renderToStaticMarkup(createElement(DataHealthPanel, { onStatus: () => {} })), /\[STALE\] Stocks/)

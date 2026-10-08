@@ -11,6 +11,7 @@ interface SilosPanelProps {
   bars: SiloBar[]
   display: FinanceCurrency
   className?: string
+  complete?: boolean
 }
 
 /**
@@ -22,7 +23,7 @@ interface SilosPanelProps {
  * row of invisible ones. The toggle is session state — the reference does not persist
  * it either.
  */
-export function SilosPanel({ bars, display, className = '' }: SilosPanelProps) {
+export function SilosPanel({ bars, display, className = '', complete = true }: SilosPanelProps) {
   const [logScale, setLogScale] = useState(true)
 
   return (
@@ -35,6 +36,7 @@ export function SilosPanel({ bars, display, className = '' }: SilosPanelProps) {
         </Button>
       }
     >
+      {!complete && <p className="px-2 py-1 text-2xs text-warn">Partial account values; market marks or FX unavailable.</p>}
       <BarChart
         bars={bars}
         signed={false}

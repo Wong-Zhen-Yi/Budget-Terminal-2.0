@@ -8,13 +8,17 @@ import { AnalystPanel, CompanyPanel, DiscoveryMetrics, TerminalPanel } from './s
 import { compact, money, signedPercent } from './stockDiscovery/format'
 import { useDiscoveryScan } from './stockDiscovery/useDiscoveryScan'
 import './stockDiscovery/discovery.css'
+import type { PanelStatus } from '@/components/chrome/StatusBar'
 
-export function StockDiscoveryPage({ active }: { active: boolean }) {
+export function StockDiscoveryPage({ active, onStatusChange }: { active: boolean; onStatusChange: (panels: PanelStatus[], path: string) => void }) {
   const intervalSeconds = useDiscoverySettings((state) => state.intervalSeconds)
   const setIntervalSeconds = useDiscoverySettings((state) => state.setIntervalSeconds)
   const [intervalDraft, setIntervalDraft] = useState(String(intervalSeconds))
   const [intervalError, setIntervalError] = useState('')
   const scan = useDiscoveryScan(active, intervalSeconds)
+  useEffect(() => {
+    onStatusChange([{ label: 'Discovery', envelope: scan.envelope, error: scan.failure, enabled: true, loading: scan.loading }], '')
+  }, [onStatusChange, scan.envelope, scan.failure, scan.loading])
   const scanRef = useRef(scan)
   scanRef.current = scan
   const [search, setSearch] = useState('')

@@ -21,6 +21,7 @@ import { NewsToolbar, type Tone } from '@/components/news/NewsToolbar'
 import { Splitter } from '@/components/ui/Splitter'
 import { isTextEntry } from '@/lib/shortcuts'
 import { useNewsPageStore } from '@/stores/news'
+import { newsHero, newsQuoteTickers } from '@/api/initialContent'
 
 /**
  * The News page, ported from `NewsMixin` (`mixins/news.py`).
@@ -44,8 +45,6 @@ const MIN_GRID = 420
 const MIN_READER = 300
 
 /** A story older than this is never promoted to the hero, whatever it scored. */
-const HERO_MAX_AGE_MS = 24 * 60 * 60_000
-
 /** `warningOf` from `PreMarketPage`: the per-block error a panel looks itself up by. */
 function warningOf(envelope: Envelope<unknown> | undefined, block: string): string | undefined {
   if (!envelope) return undefined
@@ -117,9 +116,7 @@ export function NewsPage({
   )
 
   const quoteTickers = useMemo(
-    () => [...new Set([...articles, ...searchArticles]
-      .map((article) => article.ticker?.trim().toUpperCase())
-      .filter((ticker): ticker is string => Boolean(ticker) && ticker !== 'OTHER'))].sort(),
+    () => newsQuoteTickers([...articles, ...searchArticles]),
     [articles, searchArticles],
   )
   const quotesQuery = useQuotes(quoteTickers)
@@ -156,11 +153,7 @@ export function NewsPage({
    */
   const hero = useMemo(() => {
     if (queryText || filter !== 'all') return null
-    const fresh = groups.market.filter((article) => now - article.publishedAt < HERO_MAX_AGE_MS)
-    if (!fresh.length) return null
-    return [...fresh].sort(
-      (a, b) => (b.score ?? -1) - (a.score ?? -1) || b.publishedAt - a.publishedAt,
-    )[0] as NewsArticle
+    return newsHero(groups.market, now)
   }, [groups.market, queryText, filter, now])
 
   const heroId = hero?.id ?? ''
@@ -178,9 +171,9 @@ export function NewsPage({
     const loading = query.isFetching
     onStatusChange(
       [
-        { label: 'Portfolio News', envelope: query.data, loading },
-        { label: 'Market & Macro', envelope: query.data, loading },
-        { label: 'News Feeds', envelope: query.data, loading },
+        { label: 'Portfolio News', envelope: query.data, error: query.error, enabled: query.isEnabled, loading },
+        { label: 'Market & Macro', envelope: query.data, error: query.error, enabled: query.isEnabled, loading },
+        { label: 'News Feeds', envelope: query.data, error: query.error, enabled: query.isEnabled, loading },
       ],
       '',
     )
@@ -395,6 +388,7 @@ export function NewsPage({
             <NewsHero
               article={hero}
               price={quotes?.[hero.ticker.trim().toUpperCase()]?.price}
+              currency={quotes?.[hero.ticker.trim().toUpperCase()]?.currency}
               selected={hero.id === selectedId}
               onSelect={selectArticle}
               onOpen={openArticle}

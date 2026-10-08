@@ -20,6 +20,18 @@ export function currency(value: number | null | undefined, decimals = 2): string
   })}`
 }
 
+/** Native quote units, including provider subunits such as GBp, are never converted. */
+export function quotePrice(value: number | null | undefined, unit = 'USD', places = 2): string {
+  if (!finite(value)) return EM_DASH
+  if (unit === 'USD') return currency(value, places)
+  return `${thousands(value, places)} ${unit.trim() || '(unit unknown)'}`
+}
+
+export function signedQuotePrice(value: number | null | undefined, unit = 'USD', places = 2): string {
+  if (!finite(value)) return EM_DASH
+  return `${value >= 0 ? '+' : '-'}${quotePrice(Math.abs(value), unit, places)}`
+}
+
 /**
  * Currency prefixes for the Personal Finance page. The reference prints SGD as `S$`
  * and USD as a bare `$`, except where the two sit in one sentence and USD needs

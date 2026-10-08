@@ -11,7 +11,7 @@ import { StocksChart } from '@/components/stocks/StocksChart'
 import { Button } from '@/components/ui/Button'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Panel, PanelMessage } from '@/components/ui/Panel'
-import { compactNumber, currency, decimals, signedCurrencyPrecise } from '@/lib/format'
+import { compactNumber, quotePrice, decimals, signedQuotePrice } from '@/lib/format'
 import { useStocksPage } from '@/stores/stocks'
 
 const OVERVIEW_ROWS: Array<[string, keyof StocksPayload['metrics']]> = [
@@ -101,7 +101,7 @@ export function StocksPage({
   }, [fetchedPayload, setSnapshot])
   useEffect(() => {
     onStatusChange(
-      [{ label: 'Stocks', envelope: query.data, loading: query.isFetching }],
+      [{ label: 'Stocks', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching }],
       '',
     )
   }, [onStatusChange, query.data, query.isFetching])
@@ -215,9 +215,9 @@ export function StocksPage({
       <section className="flex min-h-0 min-w-[360px] flex-col overflow-hidden border border-border bg-surface" style={{ flexGrow: mainSizes[2], flexBasis: 0 }}>
         <header className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-border px-2 py-1">
           <span className="text-sm font-semibold text-text">{payload?.symbol ?? symbol}</span>
-          <span className="num text-sm font-semibold text-text">{currency(stats?.price)}</span>
+          <span className="num text-sm font-semibold text-text">{quotePrice(stats?.price, stats?.currency)}</span>
           <span className={`num text-2xs ${up ? 'text-up' : 'text-down'}`}>
-            {signedCurrencyPrecise(stats?.absChange)} ({stats ? `${stats.change >= 0 ? '+' : ''}${stats.change.toFixed(2)}%` : '--'})
+            {signedQuotePrice(stats?.absChange, stats?.currency)} ({stats ? `${stats.change >= 0 ? '+' : ''}${stats.change.toFixed(2)}%` : '--'})
           </span>
           <div className="ml-auto flex items-center gap-1">
             {STOCKS_RANGE_PRESETS.map((range) => (

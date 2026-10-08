@@ -5,6 +5,7 @@ import {
   dayTradingDataMessage, dayTradingSession, dayTradingStatus, dayTradingVisible, normalizeDayTradingSettings, shouldRefreshDayTrading,
 } from '@shared/dayTrading'
 import { useSignalsLatest, useSignalsScan } from '@/api/signalsQueries'
+import { signalsHealth } from '@/api/signalsHealth'
 import { useSettings, useSettingsMutation } from '@/api/settingsQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { Button } from '@/components/ui/Button'
@@ -39,12 +40,17 @@ export function SignalsPage({ onStatusChange }: { onStatusChange: (panels: Panel
   const [visible, setVisible] = useState(() => document.visibilityState === 'visible')
   const hydrated = useRef(false)
   const busy = useRef(false)
-  const lastStarted = useRef(-Infinity)
+  const latestFetching = useRef(latest.isFetching)
+  latestFetching.current = latest.isFetching
+  const scanning = latest.isFetching || scan.isPending
+  // Startup already refreshed this workspace; resume its cadence without launching
+  // another initial scan merely because the page is visited for the first time.
+  const lastStarted = useRef(latest.data?.meta.fetchedAt ?? -Infinity)
   const envelope = latest.data
   const payload = envelope?.data ?? null
   const session = dayTradingSession(now)
   const runScan = useCallback(async (force = false) => {
-    if (busy.current) return
+    if (busy.current || latestFetching.current) return
     busy.current = true
     lastStarted.current = Date.now()
     try {
@@ -54,11 +60,10 @@ export function SignalsPage({ onStatusChange }: { onStatusChange: (panels: Panel
   }, [scan.mutateAsync])
 
   useEffect(() => {
-    const unhealthy = session.open && payload?.results.some((row) => ['stale', 'error', 'awaiting_data'].includes(dayTradingStatus(row, now)))
-    const health = envelope && unhealthy && envelope.meta.freshness !== 'failed'
-      ? { ...envelope, meta: { ...envelope.meta, freshness: 'partial' as const } } : envelope
-    onStatusChange([{ label: 'Day Trading', envelope: health, loading: latest.isPending || scan.isPending }], '')
-  }, [onStatusChange, envelope, payload, session.open, now, latest.isPending, scan.isPending])
+    const health = signalsHealth(envelope, now)
+    onStatusChange([{ label: 'Day Trading', envelope: health, error: scan.error ?? latest.error, enabled: true, loading: scanning }], '')
+  }, [onStatusChange, envelope, payload, session.open, now, scanning, scan.error, latest.error])
+  useEffect(() => { if (latest.isFetching) lastStarted.current = Date.now() }, [latest.isFetching])
   useEffect(() => {
     if (!settings.data?.data || hydrated.current) return
     hydrated.current = true
@@ -73,7 +78,7 @@ export function SignalsPage({ onStatusChange }: { onStatusChange: (panels: Panel
     const tick = () => {
       const time = Date.now()
       setNow(time)
-      if (shouldRefreshDayTrading(time, document.visibilityState === 'visible', busy.current, lastStarted.current)) void runScan()
+      if (shouldRefreshDayTrading(time, document.visibilityState === 'visible', busy.current || latestFetching.current, lastStarted.current)) void runScan()
     }
     const visibility = () => {
       const shown = document.visibilityState === 'visible'
@@ -123,12 +128,12 @@ export function SignalsPage({ onStatusChange }: { onStatusChange: (panels: Panel
       </header>
       <section className="flex shrink-0 flex-wrap items-center gap-2 border border-border bg-surface p-2">
         <span className={`text-2xs ${session.open ? 'text-up' : 'text-text-muted'}`}>US MARKET {session.open ? 'OPEN' : 'CLOSED'}</span>
-        <Button variant="accent" disabled={scan.isPending} onClick={() => void runScan()}>{scan.isPending ? 'Refreshing…' : 'Refresh now'}</Button>
-        <Button disabled={scan.isPending} onClick={() => void runScan(true)}>Force full re-download</Button>
+        <Button variant="accent" disabled={scanning} onClick={() => void runScan()}>{scanning ? 'Refreshing…' : 'Refresh now'}</Button>
+        <Button disabled={scanning} onClick={() => void runScan(true)}>Force full re-download</Button>
         <Select value={controls.setup} options={setupOptions} onChange={(setup) => setControls((old) => ({ ...old, setup }))} className="!w-48" aria-label="Setup filter" />
         <Select value={controls.filter} options={statusOptions} onChange={(filter) => setControls((old) => ({ ...old, filter }))} className="!w-36" aria-label="Status filter" />
         <SearchInput value={controls.search} onChange={(search) => setControls((old) => ({ ...old, search }))} placeholder="Search ticker" className="w-32" aria-label="Search ticker" />
-        <span className="text-2xs text-text-muted">{scan.isPending ? `Checking Yahoo · ${Math.max(0, Math.floor((now - lastStarted.current) / 1000))}s` : visible && session.open ? `Next scan in ${Math.max(0, Math.ceil((60_000 - now + lastStarted.current) / 1000))}s` : 'Auto-refresh paused'}</span>
+        <span className="text-2xs text-text-muted">{scanning ? `Checking Yahoo · ${Math.max(0, Math.floor((now - lastStarted.current) / 1000))}s` : visible && session.open ? `Next scan in ${Math.max(0, Math.ceil((60_000 - now + lastStarted.current) / 1000))}s` : 'Auto-refresh paused'}</span>
       </section>
       <div className="shrink-0 space-y-1 border border-border bg-surface px-3 py-2 text-2xs text-text-muted">
         <p><span className="text-up">{rows.filter((row) => row.status === 'ready').length} Ready</span> · {payload?.candidates.length ?? 0} stocks · {filtered.length} setups shown · Yahoo Finance polling · Last scan: {timestamp(payload?.completedAt ?? null)}</p>

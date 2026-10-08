@@ -2,6 +2,7 @@ import type { NewsArticle, NewsPreviewPayload } from '@shared/contract'
 import { ageText, categoryLabel, signalText } from '@shared/news'
 import { Button } from '@/components/ui/Button'
 import { Chip } from '@/components/ui/Chip'
+import { NewsTickerBadge } from './NewsTickerBadge'
 import { PanelMessage } from '@/components/ui/Panel'
 import { tagTone } from './NewsCard'
 import { SignalMeter } from './SignalMeter'
@@ -54,9 +55,7 @@ export function NewsReader({
           </h3>
 
           <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-            {article.ticker && article.ticker !== 'OTHER' ? (
-              <Chip className="num">{article.ticker}</Chip>
-            ) : null}
+            <NewsTickerBadge ticker={article.ticker} category={article.category} />
             <span className="text-2xs text-text-muted">{article.source || '--'}</span>
             <span className="num text-2xs text-text-dim">
               {ageText(article.publishedAt, now)} · {article.time}

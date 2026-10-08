@@ -7,11 +7,13 @@ import { getQuote } from './yahoo/quotes.js'
 import { periodStart } from './yahoo/client.js'
 import { fetchHeadlineFeed } from './yahoo/newsPage.js'
 import { getYahooSeries } from './yahoo/series.js'
+import { sourceSnapshot, withSourceEnvelope } from './sourceHealth.js'
 
 const SOURCE = 'Yahoo Finance'
 
 /** Cache each source independently, retaining its actual collection time on failure. */
 export async function forexLane<T>(key: string, ttl: number, force: boolean, empty: T, loader: () => Promise<T>): Promise<Envelope<T>> {
+  return withSourceEnvelope(async () => {
   try {
     const result = await cache.resolveWithStaleFallback(key, ttl, loader, { force })
     const freshness = result.stale ? 'stale' : result.fromCache ? 'cached' : 'fresh'
@@ -22,9 +24,11 @@ export async function forexLane<T>(key: string, ttl: number, force: boolean, emp
       errors: reason ? [{ source: SOURCE, operation: key, reason }] : [],
     }
   } catch (error) { return failed(empty, describeError(error), SOURCE) }
+  })
 }
 
 export async function getForexQuotes(request: ForexRequest = {}): Promise<Envelope<ForexQuotesPayload>> {
+  return withSourceEnvelope(async () => {
   const lanes = await Promise.all(FOREX_PAIRS.map(async (pair) => {
     const result = await forexLane<Quote | null>(`forex:quote:${pair.id}`, FOREX_MARKET_MS, Boolean(request.force), null, async () => {
       const quote = await getQuote(pair.symbol, Boolean(request.force))
@@ -39,6 +43,7 @@ export async function getForexQuotes(request: ForexRequest = {}): Promise<Envelo
   envelope.meta.freshness = lanes.every(({ result }) => result.meta.freshness === 'failed') ? 'failed'
     : envelope.errors.length ? 'partial' : lanes.every(({ result }) => result.meta.freshness === 'cached') ? 'cached' : 'fresh'
   return envelope
+  })
 }
 
 export async function getForexHistory(request: ForexHistoryRequest): Promise<Envelope<ForexHistoryPayload>> {
@@ -63,6 +68,7 @@ export async function getForexHistory(request: ForexHistoryRequest): Promise<Env
 }
 
 export async function getForexNews(request: ForexPairRequest): Promise<Envelope<ForexNewsPayload>> {
+  return withSourceEnvelope(async () => {
   let pair
   try { pair = forexPair(request.pair) } catch (error) { return failed({ pair: request.pair, articles: [] }, describeError(error), SOURCE) }
   const key = `forex:news:${pair.id}`
@@ -76,6 +82,7 @@ export async function getForexNews(request: ForexPairRequest): Promise<Envelope<
   envelope.meta.fetchedAt = Math.min(...lanes.map((lane) => lane.meta.fetchedAt))
   envelope.meta.freshness = lanes.every((lane) => lane.meta.freshness === 'failed') ? 'failed' : envelope.errors.length ? 'partial' : lanes.every((lane) => lane.meta.freshness === 'cached') ? 'cached' : 'fresh'
   // A pair assembled from cached currency feeds must not extend those feeds' lifetime.
-  if (!envelope.errors.length) cache.set(key, envelope, Math.max(0, FOREX_NEWS_MS - (Date.now() - envelope.meta.fetchedAt)))
+  if (!envelope.errors.length) cache.set(key, envelope, Math.max(0, FOREX_NEWS_MS - (Date.now() - envelope.meta.fetchedAt)), sourceSnapshot())
   return envelope
+  })
 }

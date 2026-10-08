@@ -6,28 +6,35 @@ import { useMomentum } from '@/api/portfolioQueries'
 import { LineChart } from '@/components/charts/LineChart'
 import { Button } from '@/components/ui/Button'
 import { percent } from '@/lib/format'
+import { DataFreshness } from '@/components/ui/DataFreshness'
+import { FRESHNESS } from '@shared/freshness'
 
 interface MomentumTabProps {
   positions: PositionInput[]
   cashAmount: number
   visible: boolean
+  valuationComplete: boolean
 }
 
 /** Portfolio return since the start of the window, against its own EMA. */
-export function MomentumTab({ positions, cashAmount, visible }: MomentumTabProps) {
+export function MomentumTab({ positions, cashAmount, visible, valuationComplete }: MomentumTabProps) {
   const [timeframe, setTimeframe] = useState<ReturnTimeframe>('1mo')
   const query = useMomentum(positions, cashAmount, timeframe, visible)
   const data = query.data?.data
+  const complete = valuationComplete && Boolean(data && !data.excludedTickers.length)
 
   const last = data?.returns.at(-1) ?? null
   const lastEma = data?.ema.at(-1) ?? null
 
   const summary = () => {
+    if (!valuationComplete) return 'Portfolio momentum unavailable: market marks are incomplete.'
+    if (data?.excludedTickers.length) return `Portfolio momentum unavailable: history missing for ${data.excludedTickers.join(', ')}.`
     if (!data || data.reason) return data?.reason || 'No momentum data available'
+    const holdingCount = data.includedTickers.filter(ticker => ticker !== 'CASH').length
     const parts = [
       `Since ${data.startDate}`,
       `Portfolio ${percent(last, 1)}`,
-      `${data.includedTickers.length} holding${data.includedTickers.length === 1 ? '' : 's'}`,
+      `${holdingCount} included holding${holdingCount === 1 ? '' : 's'}${data.includedTickers.includes('CASH') ? ' · cash included' : ''}`,
     ]
     if (last !== null && lastEma !== null) {
       parts.push(`${last >= lastEma ? 'Above' : 'Below'} ${data.emaPeriod}-day EMA`)
@@ -38,6 +45,8 @@ export function MomentumTab({ positions, cashAmount, visible }: MomentumTabProps
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <DataFreshness envelope={query.data} loading={query.isFetching} error={query.error} freshnessMs={FRESHNESS.chartDaily}
+        coverage={data ? `${data.includedTickers.filter(ticker => ticker !== 'CASH').length}/${positions.length} holdings in history` : undefined} />
       <div className="flex shrink-0 items-center gap-1">
         {RETURN_TIMEFRAMES.map((entry) => (
           <Button
@@ -54,9 +63,9 @@ export function MomentumTab({ positions, cashAmount, visible }: MomentumTabProps
 
       <div className="flex min-h-0 flex-1 flex-col border border-border bg-surface p-2">
         <LineChart
-          labels={(data?.dates ?? []).map((date) => date.slice(5))}
+          labels={(complete ? data?.dates ?? [] : []).map((date) => date.slice(5))}
           series={
-            data && data.returns.length
+            complete && data && data.returns.length
               ? [
                   { values: data.returns, color: '#4f8ff0', label: 'Portfolio' },
                   {
@@ -69,7 +78,7 @@ export function MomentumTab({ positions, cashAmount, visible }: MomentumTabProps
               : []
           }
           format={(value) => `${value.toFixed(0)}%`}
-          empty={query.isLoading ? 'Loading momentum...' : 'No momentum data available'}
+          empty={query.isLoading ? 'Loading momentum...' : summary()}
         />
       </div>
 

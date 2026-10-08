@@ -1,23 +1,24 @@
-import type { OptionPosition, Portfolio } from '@shared/contract'
+import type { OptionPosition, OptionQuote, Portfolio } from '@shared/contract'
 import { computeOptionMetrics, OPTION_STATUSES, OPTION_STRATEGIES } from '@shared/analytics'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { NumberInput } from '@/components/ui/NumberInput'
 import { decimals, integer, percent } from '@/lib/format'
 
 export interface OptionRowView extends OptionPosition {
-  pnl: number
-  returnPct: number
-  annualPct: number
+  pnl: number | null
+  returnPct: number | null
+  annualPct: number | null
+  hasMark: boolean
 }
 
 /** Attach the derived columns to each stored row. */
 export function buildOptionRows(
   options: OptionPosition[],
-  quotes: Record<string, { currentPrice: number; volume: number; openInterest: number; impliedVolatility: number }>,
+  quotes: Record<string, OptionQuote>,
 ): OptionRowView[] {
   return options.map((option) => {
     const live = quotes[option.rowId]
-    const merged: OptionPosition = live ? { ...option, ...live } : option
+    const merged: OptionPosition = live ? { ...option, ...live, hasMarketMark: true } : { ...option, hasMarketMark: false }
     const { pnl, returnPct, annualPct } = computeOptionMetrics({
       strategy: merged.strategy,
       contracts: merged.contracts,
@@ -27,13 +28,14 @@ export function buildOptionRows(
       expiry: merged.expiry,
       openDate: merged.openDate,
     })
-    return { ...merged, pnl, returnPct, annualPct }
+    return { ...merged, hasMark: Boolean(live), pnl: live ? pnl : null, returnPct: live ? returnPct : null, annualPct: live ? annualPct : null }
   })
 }
 
 /** Total across the tracker, which the header shows as Options P&L. */
-export function totalOptionsPnl(rows: OptionRowView[]): number {
-  return rows.reduce((sum, row) => sum + row.pnl, 0)
+export function totalOptionsPnl(rows: OptionRowView[]): number | null {
+  if (rows.some(row => row.pnl === null && row.ticker && row.contracts)) return null
+  return rows.reduce((sum, row) => sum + (row.pnl ?? 0), 0)
 }
 
 interface OptionsTableProps {
@@ -181,11 +183,14 @@ export function OptionsTable({
     },
     {
       key: 'market',
-      header: 'Market Price',
+      header: 'Last trade',
       align: 'right',
       numeric: true,
       sortValue: (row) => row.currentPrice,
-      cell: (row) => (row.currentPrice ? decimals(row.currentPrice, 2) : '--'),
+      cell: (row) => (row.hasMark ? <span className={row.markStale ? 'text-warn' : undefined}
+        title={`${row.source ?? 'Yahoo Finance last trade'} · ${row.asOf === undefined ? 'Trade time unavailable' : `${new Date(row.asOf).toLocaleString()} · ${Math.max(0, (Date.now() - row.asOf) / 3600_000).toFixed(1)} hours old`}${row.markReason ? ` · ${row.markReason}` : ''}`}>
+        {decimals(row.currentPrice, 2)}{row.markStale ? ' (stale)' : ''}
+      </span> : 'N/A'),
     },
     {
       key: 'vol',
@@ -193,7 +198,7 @@ export function OptionsTable({
       align: 'right',
       numeric: true,
       sortValue: (row) => row.volume,
-      cell: (row) => integer(row.volume),
+      cell: (row) => row.hasMark ? integer(row.volume) : 'N/A',
     },
     {
       key: 'oi',
@@ -201,7 +206,7 @@ export function OptionsTable({
       align: 'right',
       numeric: true,
       sortValue: (row) => row.openInterest,
-      cell: (row) => integer(row.openInterest),
+      cell: (row) => row.hasMark ? integer(row.openInterest) : 'N/A',
     },
     {
       key: 'iv',
@@ -218,8 +223,8 @@ export function OptionsTable({
       numeric: true,
       sortValue: (row) => row.pnl,
       cell: (row) => (
-        <span className={row.pnl >= 0 ? 'text-up' : 'text-down'}>
-          {row.pnl >= 0 ? '+' : '-'}${Math.abs(row.pnl).toFixed(2)}
+        <span className={row.pnl === null ? 'text-text-muted' : row.pnl >= 0 ? 'text-up' : 'text-down'}>
+          {row.pnl === null ? 'N/A' : `${row.pnl >= 0 ? '+' : '-'}$${Math.abs(row.pnl).toFixed(2)}`}
         </span>
       ),
     },
@@ -230,7 +235,7 @@ export function OptionsTable({
       numeric: true,
       sortValue: (row) => row.returnPct,
       cell: (row) => (
-        <span className={row.returnPct >= 0 ? 'text-up' : 'text-down'}>
+        <span className={row.returnPct === null ? 'text-text-muted' : row.returnPct >= 0 ? 'text-up' : 'text-down'}>
           {percent(row.returnPct, 1)}
         </span>
       ),
@@ -242,7 +247,7 @@ export function OptionsTable({
       numeric: true,
       sortValue: (row) => row.annualPct,
       cell: (row) => (
-        <span className={row.annualPct >= 0 ? 'text-up' : 'text-down'}>
+        <span className={row.annualPct === null ? 'text-text-muted' : row.annualPct >= 0 ? 'text-up' : 'text-down'}>
           {percent(row.annualPct, 1)}
         </span>
       ),

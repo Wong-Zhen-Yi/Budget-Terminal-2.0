@@ -498,7 +498,7 @@ export function ValuationPage({
     const rows: Array<[string, string]> = []
     if (payload?.sources.quote) {
       rows.push(
-        ['Live quote', payload.sources.quote],
+        ['Quote snapshot', payload.sources.quote],
         ['Statements', payload.sources.statements],
         ['Computed ratios', payload.sources.computed],
         ['Derived assumptions', payload.sources.suggestions],
@@ -590,7 +590,7 @@ export function ValuationPage({
         <Tile
           title="Upside / Downside"
           value={blocked ? EM_DASH : pct(upside)}
-          caption="Against the live price"
+          caption="Against the snapshot price"
           className={
             blocked || upside === null ? 'text-text' : upside >= 0 ? 'text-up' : 'text-down'
           }

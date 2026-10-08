@@ -10,6 +10,7 @@ import {
   buildMarketHolidays,
   calendarToday,
   earningsWeekRows,
+  earningsStatus,
   mergeEarningsRows,
   monthCells,
   parseBeaSchedule,
@@ -43,6 +44,14 @@ function runOffline(): void {
   assert.equal(startOfWeek('2026-08-27'), '2026-08-24')
   assert.equal(calendarToday('pst', new Date('2026-01-01T00:30:00Z')), '2025-12-31')
   assert.equal(calendarToday('sgt', new Date('2026-01-01T00:30:00Z')), '2026-01-01')
+  const staleToday = { date: '2026-10-06', reportedEpsValue: null, status: 'Today' }
+  assert.equal(earningsStatus(staleToday, '2026-10-08'), 'Past date', 'A cached Today label expires after its event date')
+  assert.equal(earningsStatus({ ...staleToday, date: '2026-10-08' }, '2026-10-08'), 'Today')
+  assert.equal(earningsStatus({ ...staleToday, date: '2026-10-09' }, '2026-10-08'), 'Upcoming')
+  assert.equal(earningsStatus({ ...staleToday, reportedEpsValue: 0 }, '2026-10-08'), 'Reported', 'Actual zero EPS still counts as reported')
+  const boundary = new Date('2026-10-08T00:30:00Z')
+  assert.equal(earningsStatus({ ...staleToday, date: '2026-10-07' }, calendarToday('pst', boundary)), 'Today')
+  assert.equal(earningsStatus({ ...staleToday, date: '2026-10-07' }, calendarToday('sgt', boundary)), 'Past date')
 
   const holidays = buildMarketHolidays(2026)
   assert.ok(holidays.some((event) => event.date === '2026-11-26' && event.event === 'Thanksgiving'))

@@ -19,6 +19,7 @@
 
 import { paced, yahoo } from './client.js'
 import { cache } from '../cache.js'
+import { observeSource, type SourceSnapshot } from '../sourceHealth.js'
 
 const SPARK_URL = 'https://query1.finance.yahoo.com/v8/finance/spark'
 
@@ -29,6 +30,7 @@ export interface SparkSeries {
   /** `YYYY-MM-DD`, ascending. */
   dates: string[]
   closes: number[]
+  asOf?: number
 }
 
 interface SparkEntry {
@@ -43,11 +45,13 @@ function toSeries(entry: SparkEntry): SparkSeries | null {
   const dates: string[] = []
   const values: number[] = []
   let previousDate = ''
+  let asOf: number | undefined
 
   for (let index = 0; index < stamps.length; index += 1) {
     const stamp = stamps[index]
     const close = closes[index]
-    if (typeof stamp !== 'number' || typeof close !== 'number' || !Number.isFinite(close)) continue
+    if (typeof stamp !== 'number' || !Number.isFinite(stamp) || typeof close !== 'number' || !Number.isFinite(close)) continue
+    asOf = stamp * 1000
     const date = new Date(stamp * 1000).toISOString().slice(0, 10)
     if (date === previousDate) {
       // Yahoo repeats the current session as a live bar; keep the newer value, exactly as
@@ -59,7 +63,7 @@ function toSeries(entry: SparkEntry): SparkSeries | null {
     dates.push(date)
     values.push(close)
   }
-  return dates.length ? { dates, closes: values } : null
+  return dates.length ? { dates, closes: values, asOf } : null
 }
 
 async function fetchChunk(symbols: string[], range: string): Promise<Record<string, SparkSeries>> {
@@ -110,7 +114,7 @@ export async function fetchSparkCloses(symbols: string[], range = '1y', force = 
   const unique = [...new Set(symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean))].sort()
   const series: Record<string, SparkSeries> = {}
   const needed = unique.filter((symbol) => {
-    const hit = force ? null : cache.get<SparkSeries>(`spark:${range}:${symbol}`)
+    const hit = force ? null : cache.get<SparkSeries>(`spark:v2:${range}:${symbol}`)
     if (hit) series[symbol] = hit.value
     return !hit
   })
@@ -125,7 +129,11 @@ export async function fetchSparkCloses(symbols: string[], range = '1y', force = 
     const result = await cache.resolve(`spark-batch:${range}:${chunk.join(',')}`, 0, async () => {
       const rows = await fetchChunk(chunk, range)
       for (const [symbol, value] of Object.entries(rows)) {
-        cache.set(`spark:${range}:${symbol}`, value, 120_000)
+        const fetchedAt = Date.now()
+        const snapshot: SourceSnapshot = { fetchedAt, asOf: value.asOf, expiresAt: fetchedAt + 120_000,
+          stale: false, fromCache: false, failures: [] }
+        cache.set(`spark:v2:${range}:${symbol}`, value, 120_000, snapshot)
+        observeSource(snapshot)
       }
       return rows
     }, { force: true })

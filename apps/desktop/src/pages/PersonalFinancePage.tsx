@@ -109,7 +109,7 @@ export function PersonalFinancePage({
       ...entry,
       options: entry.options.map((option): OptionPosition => {
         const live = quotes[`${entry.id}:${option.rowId}`]
-        return live ? { ...option, ...live } : option
+        return live ? { ...option, ...live, hasMarketMark: true } : { ...option, hasMarketMark: false }
       }),
     }))
   }, [portfolios, optionQuotesQuery.data])
@@ -140,7 +140,8 @@ export function PersonalFinancePage({
     () => totalsSeries(book, breakdown, display, rate),
     [book, breakdown, display, rate],
   )
-  const netWorth = useMemo(() => totalsCenter(slices), [slices])
+  const valuation = useMemo(() => goalNetWorth(book, breakdown, display, rate), [book, breakdown, display, rate])
+  const netWorth = valuation.available ? valuation.value : totalsCenter(slices)
   const goal = useMemo(
     () => goalNetWorth(book, breakdown, finance.goal.currency, rate),
     [book, breakdown, finance.goal.currency, rate],
@@ -171,15 +172,28 @@ export function PersonalFinancePage({
   useEffect(() => {
     onStatusChange(
       [
-        { label: 'Finance', envelope: financeQuery.data, loading: financeQuery.isFetching },
-        { label: 'Holdings', envelope: portfolioQuery.data, loading: portfolioQuery.isFetching },
-        { label: 'Quotes', envelope: quotesQuery.data, loading: quotesQuery.isFetching },
-        { label: 'FX', envelope: fxQuery.data, loading: fxQuery.isFetching },
+        { label: 'Finance', envelope: financeQuery.data, loading: financeQuery.isFetching, error: financeQuery.error, enabled: financeQuery.isEnabled },
+        { label: 'Holdings', envelope: portfolioQuery.data, loading: portfolioQuery.isFetching, error: portfolioQuery.error, enabled: portfolioQuery.isEnabled },
+        { label: 'Quotes', envelope: quotesQuery.data, loading: quotesQuery.isFetching, error: quotesQuery.error, enabled: quotesQuery.isEnabled },
+        { label: 'Option marks', envelope: optionQuotesQuery.data, loading: optionQuotesQuery.isFetching, error: optionQuotesQuery.error, enabled: optionPositions.length > 0 },
+        { label: 'FX', envelope: fxQuery.data, loading: fxQuery.isFetching, error: fxQuery.error, enabled: fxQuery.isEnabled },
       ],
       finance.sourcePath,
     )
   }, [
     onStatusChange,
+    optionQuotesQuery.data,
+    optionQuotesQuery.isFetching,
+    optionQuotesQuery.error,
+    optionPositions.length,
+    financeQuery.error,
+    portfolioQuery.error,
+    quotesQuery.error,
+    fxQuery.error,
+    financeQuery.isEnabled,
+    portfolioQuery.isEnabled,
+    quotesQuery.isEnabled,
+    fxQuery.isEnabled,
     finance.sourcePath,
     financeQuery.data,
     financeQuery.isFetching,
@@ -290,6 +304,8 @@ export function PersonalFinancePage({
           className="min-h-0 flex-[55] min-w-[18rem]"
           slices={slices}
           total={netWorth}
+          complete={valuation.available}
+          incompleteReason={valuation.reason}
           display={display}
           fx={fxQuery.data?.data}
           fxLoading={fxQuery.isFetching}
@@ -303,6 +319,7 @@ export function PersonalFinancePage({
           goal={finance.goal}
           current={goal.value}
           available={goal.available}
+          unavailableReason={goal.reason}
           animationProgress={ring.progress}
           onSetTitle={(title) => void send({ type: 'setGoal', title })}
           onSetTarget={(targetAmount) => void send({ type: 'setGoal', targetAmount })}
@@ -310,7 +327,7 @@ export function PersonalFinancePage({
         />
       </div>
 
-      <SilosPanel className="min-h-0 flex-1" bars={bars} display={display} />
+      <SilosPanel className="min-h-0 flex-1" bars={bars} display={display} complete={valuation.available} />
     </div>
   )
 }

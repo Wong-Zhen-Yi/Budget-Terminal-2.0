@@ -5,7 +5,8 @@ export function meta(
   freshness: Freshness,
   extra: Partial<EnvelopeMeta> = {},
 ): EnvelopeMeta {
-  return { source, freshness, fetchedAt: Date.now(), ...extra }
+  const fetchedAt = extra.fetchedAt ?? Date.now() - Math.max(0, extra.cacheAgeSeconds ?? 0) * 1000
+  return { source, freshness, fetchedAt, ...extra }
 }
 
 export function ok<T>(data: T, source = 'yahoo', extra: Partial<EnvelopeMeta> = {}): Envelope<T> {

@@ -1,6 +1,7 @@
 import type { Quote } from '../../shared/contract.js'
 import { cache, TTL } from '../cache.js'
 import { paced, periodStart, yahoo } from './client.js'
+import { observeSource } from '../sourceHealth.js'
 
 interface QuoteChartResult {
   quotes: Array<{ date: Date; close: number | null }>
@@ -9,6 +10,7 @@ interface QuoteChartResult {
     regularMarketTime?: Date
     chartPreviousClose?: number
     previousClose?: number
+    currency?: string
   }
 }
 
@@ -48,6 +50,8 @@ export function quoteFromChart(symbol: string, result: QuoteChartResult): Quote 
       price: metaPrice,
       change: previousClose ? (absChange / previousClose) * 100 : 0,
       absChange,
+      asOf: result.meta?.regularMarketTime?.getTime(),
+      currency: result.meta?.currency,
     }
   }
 
@@ -60,6 +64,8 @@ export function quoteFromChart(symbol: string, result: QuoteChartResult): Quote 
     price,
     change: previous ? (absChange / previous) * 100 : 0,
     absChange,
+    asOf: result.quotes.at(-1)?.date.getTime(),
+    currency: result.meta?.currency,
   }
 }
 
@@ -77,7 +83,10 @@ async function fetchQuote(symbol: string): Promise<Quote> {
       includePrePost: true,
     }),
   )
-  return quoteFromChart(symbol, result) ?? fetchQuoteFallback(symbol)
+  const quote = quoteFromChart(symbol, result)
+  if (!quote) return fetchQuoteFallback(symbol)
+  observeSource({ fetchedAt: Date.now(), asOf: quote.asOf, stale: false, fromCache: false, failures: [] })
+  return quote
 }
 
 async function fetchQuoteFallback(symbol: string): Promise<Quote> {
@@ -87,11 +96,15 @@ async function fetchQuoteFallback(symbol: string): Promise<Quote> {
     throw new Error(`No quote data returned for ${symbol}.`)
   }
   const absChange = quote.regularMarketChange ?? 0
+  observeSource({ fetchedAt: Date.now(), asOf: quote.regularMarketTime instanceof Date ? quote.regularMarketTime.getTime() : undefined,
+    stale: false, fromCache: false, failures: [] })
   return {
     symbol,
     price,
     change: quote.regularMarketChangePercent ?? 0,
     absChange,
+    asOf: quote.regularMarketTime instanceof Date ? quote.regularMarketTime.getTime() : undefined,
+    currency: quote.currency,
   }
 }
 

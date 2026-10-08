@@ -1,4 +1,5 @@
 import { getMoney, clearMoneyCache } from './money.js'
+import { withSourceEnvelope } from './sourceHealth.js'
 import { getHims } from './hims.js'
 import type { HimsPayload, HimsRequest } from '../shared/hims.js'
 import { getHood } from './hood.js'
@@ -558,7 +559,7 @@ function calendarEnvelope<T>(result: CalendarFetchResult<T>, source: string): En
           : result.fromCache
             ? 'cached'
             : 'fresh',
-      fetchedAt: Date.now(),
+      fetchedAt: Date.now() - result.cacheAgeSeconds * 1000,
       cacheAgeSeconds: result.cacheAgeSeconds,
       ...(failureReason ? { failureReason } : {}),
     },
@@ -670,7 +671,7 @@ function upDownEnvelope(result: UpDownFetchResult): Envelope<UpDownPayload> {
   }
 }
 
-export const yahooProvider: MarketDataProvider = {
+const providerImplementation: MarketDataProvider = {
   async quotes({ holdings, force }) {
     const macroSymbols = MACRO_SYMBOLS.map((entry) => entry.symbol)
     const batch = await getQuotes([...macroSymbols, ...holdings], force)
@@ -1014,7 +1015,7 @@ export const yahooProvider: MarketDataProvider = {
 
   async analytics({ positions, cashAmount, currentValues, benchmarkSymbol, lookback, force }) {
     const held = positions.filter((position) => position.shares > 0)
-    const exposure = computeExposure(held.length + (cashAmount > 0 ? 1 : 0), currentValues)
+    const exposure = computeExposure(held.length, currentValues)
     const base: AnalyticsPayload = {
       metrics: emptyRiskMetrics(),
       exposure,
@@ -1061,7 +1062,12 @@ export const yahooProvider: MarketDataProvider = {
 
   async optionQuotes(request) {
     try {
-      return ok(await getOptionQuotes(request), 'yahoo options')
+      const payload = await getOptionQuotes(request)
+      const errors = payload.errors ?? []
+      if (errors.length && !Object.keys(payload.quotes).length && !Object.keys(payload.expiries).length) {
+        return { data: payload, meta: meta('yahoo options', 'failed', { failureReason: 'Option marks and expirations unavailable.' }), errors }
+      }
+      return partial(payload, errors, 'yahoo options', errors.length ? 'Some option marks or expirations unavailable.' : '')
     } catch (error) {
       return failed({ quotes: {}, expiries: {} }, describeError(error), 'yahoo options')
     }
@@ -2016,3 +2022,12 @@ export const yahooProvider: MarketDataProvider = {
     }
   },
 }
+
+/** Preserve source provenance through every provider entrypoint, including nested caches. */
+export const yahooProvider: MarketDataProvider = new Proxy(providerImplementation, {
+  get(target, property, receiver) {
+    const method = Reflect.get(target, property, receiver)
+    if (typeof method !== 'function') return method
+    return (...args: unknown[]) => withSourceEnvelope(() => method.apply(target, args))
+  },
+})

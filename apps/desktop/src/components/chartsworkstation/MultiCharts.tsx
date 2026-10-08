@@ -1,3 +1,5 @@
+import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
+import { FRESHNESS } from '@shared/freshness'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import type { ChartsHistoryPayload, Envelope, EnvelopeMeta } from '@shared/contract'
@@ -5,6 +7,7 @@ import { useChartsHistory } from '@/api/chartsQueries'
 import { usePortfolio } from '@/api/queries'
 import { MiniChart } from '@/components/chartsworkstation/MiniChart'
 import { Button } from '@/components/ui/Button'
+import { quotePrice } from '@/lib/format'
 import { useChartsStore } from '@/stores/charts'
 
 const REQUESTS = {
@@ -13,7 +16,7 @@ const REQUESTS = {
   '1M': { interval: '1 Month', range: '5Y' },
 } as const
 
-export function MultiCharts({ onStatus }: { onStatus: (meta: EnvelopeMeta | undefined, loading: boolean) => void }) {
+export function MultiCharts({ onStatus }: { onStatus: (meta: EnvelopeMeta | undefined, loading: boolean, error?: unknown) => void }) {
   const mode = useChartsStore((state) => state.multiMode)
   const interval = useChartsStore((state) => state.multiInterval)
   const style = useChartsStore((state) => state.multiStyle)
@@ -30,7 +33,7 @@ export function MultiCharts({ onStatus }: { onStatus: (meta: EnvelopeMeta | unde
   const [active, setActive] = useState<string | null>(null)
   const [orderOpen, setOrderOpen] = useState(false)
   const [dragged, setDragged] = useState<string | null>(null)
-  const [cardHealth, setCardHealth] = useState<Record<string, { meta?: EnvelopeMeta; loading: boolean }>>({})
+  const [cardHealth, setCardHealth] = useState<Record<string, { meta?: EnvelopeMeta; loading: boolean; error?: unknown }>>({})
   const portfolioData = portfolio.data?.data
   const activePortfolio = portfolioData?.portfolios.find((entry) => entry.id === portfolioData.activeId)
     ?? portfolioData?.portfolios.find((entry) => entry.id === portfolioData.mainId)
@@ -42,11 +45,11 @@ export function MultiCharts({ onStatus }: { onStatus: (meta: EnvelopeMeta | unde
     return [...unique].sort((left, right) => (rank.get(left) ?? 9999) - (rank.get(right) ?? 9999))
   }, [mode, protectedSymbols, custom, watchlist, order])
 
-  const reportCard = useCallback((symbol: string, meta: EnvelopeMeta | undefined, loading: boolean) => {
+  const reportCard = useCallback((symbol: string, meta: EnvelopeMeta | undefined, loading: boolean, error?: unknown) => {
     setCardHealth((current) => {
       const previous = current[symbol]
-      if (previous && previous.meta === meta && previous.loading === loading) return current
-      return { ...current, [symbol]: { meta, loading } }
+      if (previous && previous.meta === meta && previous.loading === loading && previous.error === error) return current
+      return { ...current, [symbol]: { meta, loading, error } }
     })
   }, [])
   useEffect(() => {
@@ -54,7 +57,7 @@ export function MultiCharts({ onStatus }: { onStatus: (meta: EnvelopeMeta | unde
     const rows = symbols.map((symbol) => cardHealth[symbol]).filter(Boolean)
     const worst = rows.map((row) => row.meta).filter((meta): meta is EnvelopeMeta => Boolean(meta)).sort((left, right) => severity[right.freshness] - severity[left.freshness])[0]
       ?? portfolio.data?.meta
-    onStatus(worst, portfolio.isFetching || rows.some((row) => row.loading))
+    onStatus(worst, portfolio.isFetching || rows.some((row) => row.loading), rows.find((row) => row.error)?.error ?? portfolio.error)
   }, [cardHealth, onStatus, portfolio.data?.meta, portfolio.isFetching, symbols])
 
   const add = () => {
@@ -94,12 +97,14 @@ export function MultiCharts({ onStatus }: { onStatus: (meta: EnvelopeMeta | unde
   )
 }
 
-function MultiCard({ symbol, request, style, active, protectedSymbol, onActivate, onRemove, onStatus }: { symbol: string; request: { interval: '1 Day' | '1 Week' | '1 Month'; range: '1Y' | '5Y' }; style: 'candles' | 'line'; active: boolean; protectedSymbol: boolean; onActivate: () => void; onRemove: () => void; onStatus: (symbol: string, meta: EnvelopeMeta | undefined, loading: boolean) => void }) {
+function MultiCard({ symbol, request, style, active, protectedSymbol, onActivate, onRemove, onStatus }: { symbol: string; request: { interval: '1 Day' | '1 Week' | '1 Month'; range: '1Y' | '5Y' }; style: 'candles' | 'line'; active: boolean; protectedSymbol: boolean; onActivate: () => void; onRemove: () => void; onStatus: (symbol: string, meta: EnvelopeMeta | undefined, loading: boolean, error?: unknown) => void }) {
   const query = useChartsHistory({ symbol, ...request })
+  const now = useSnapshotClock()
   const [snapshot, setSnapshot] = useState<Envelope<ChartsHistoryPayload> | null>(null)
   useEffect(() => { if (query.data?.data.candles.length) setSnapshot(query.data) }, [query.data])
-  useEffect(() => onStatus(symbol, query.data?.meta, query.isFetching), [onStatus, query.data?.meta, query.isFetching, symbol])
+  useEffect(() => onStatus(symbol, query.data?.meta, query.isFetching, query.error), [onStatus, query.data?.meta, query.isFetching, query.error, symbol])
   const envelope = query.data?.data.candles.length ? query.data : snapshot
   const last = envelope?.data.candles.at(-1)
-  return <section className={`flex min-h-0 flex-col border bg-surface ${active ? 'border-accent' : 'border-border'}`} onMouseDown={onActivate}><header className="flex h-8 shrink-0 items-center gap-2 border-b border-border px-2 text-2xs"><strong className="text-text">{symbol}</strong><span className="text-text-muted">{last ? last.close.toFixed(last.close >= 100 ? 2 : 4) : '--'}</span><span className="ml-auto text-text-dim">{query.isFetching ? 'loading…' : query.data?.meta.freshness ?? 'waiting'}</span>{!protectedSymbol ? <button type="button" onClick={(event) => { event.stopPropagation(); onRemove() }} className="text-text-muted hover:text-down" aria-label={`Remove ${symbol}`}>×</button> : null}</header>{envelope?.data.candles.length ? <MiniChart payload={envelope.data} style={style} active={active} /> : <div className="flex flex-1 items-center justify-center text-2xs text-text-dim">{query.data?.meta.failureReason ?? 'Loading chart…'}</div>}</section>
+  const freshness = envelope ? effectiveFreshness(envelope, now, FRESHNESS.chartDaily) : 'waiting'
+  return <section className={`flex min-h-0 flex-col border bg-surface ${active ? 'border-accent' : 'border-border'}`} onMouseDown={onActivate}><header className="flex h-8 shrink-0 items-center gap-2 border-b border-border px-2 text-2xs"><strong className="text-text">{symbol}</strong><span className="text-text-muted">{last ? quotePrice(last.close, envelope?.data.stats?.currency, last.close >= 100 ? 2 : 4) : '--'}</span><span className="ml-auto text-text-dim">{query.isFetching ? 'loading…' : freshness}</span>{!protectedSymbol ? <button type="button" onClick={(event) => { event.stopPropagation(); onRemove() }} className="text-text-muted hover:text-down" aria-label={`Remove ${symbol}`}>×</button> : null}</header>{envelope?.data.candles.length ? <MiniChart payload={envelope.data} style={style} active={active} /> : <div className="flex flex-1 items-center justify-center text-2xs text-text-dim">{query.data?.meta.failureReason ?? 'Loading chart…'}</div>}</section>
 }

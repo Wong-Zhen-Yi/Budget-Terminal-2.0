@@ -99,7 +99,7 @@ export function EconomicPage({
   const busy = refreshing || query.isFetching
 
   useEffect(() => {
-    onStatusChange([{ label: 'Economic', envelope: query.data, loading: query.isFetching }], '')
+    onStatusChange([{ label: 'Economic', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching }], '')
   }, [onStatusChange, query.data, query.isFetching])
 
   const allRows = useMemo(() => {

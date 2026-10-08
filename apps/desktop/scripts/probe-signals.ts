@@ -95,6 +95,7 @@ async function serviceChecks(): Promise<void> {
   const { yahoo } = await import('../electron/services/yahoo/client.js')
   const { getSignals, getLatestSignals, clearLatestSignals } = await import('../electron/services/yahoo/signals.js')
   const folder = join(process.env.APPDATA!, 'BudgetTerminalElectron')
+  const newPath = join(folder, 'signals-latest-v5.json')
   await mkdir(folder, { recursive: true })
   await writeFile(join(folder, 'signals-latest-v4.json'), JSON.stringify({ results: [{ rawScore: 99 }], completedAt: new Date().toISOString() }))
   assert.equal(await getLatestSignals(), null, 'old cache is never loaded')
@@ -110,6 +111,12 @@ async function serviceChecks(): Promise<void> {
   }
   await writeFile(join(folder, 'signals-latest-v5.json'), JSON.stringify(cachedPayload))
   assert.deepEqual(await getLatestSignals(), cachedPayload, 'restore new cache after restart')
+  await clearLatestSignals()
+  await writeFile(newPath, JSON.stringify({ ...cachedPayload,
+    errors: { TEST: "Cannot read properties of undefined (reading 'coveredFrom')" } }))
+  assert.equal(await getLatestSignals(), null, 'Saved results from the repaired cache fault must reload instead of retaining false degradation')
+  await writeFile(newPath, JSON.stringify(cachedPayload))
+  assert.deepEqual(await getLatestSignals(), cachedPayload, 'Compatible results remain restorable')
   cache.set(`signals:day-trading-universe-v5:${session.date}`, {
     candidates: [candidate('GOOD'), { ...candidate('FAIL'), qualityRank: 2 }], sourcedAt: new Date().toISOString(),
     sourceCandidateCount: 2, prefilteredCount: 2, confirmedCount: 2, rejectedCandidateCount: 0, passedFilterCount: 2,

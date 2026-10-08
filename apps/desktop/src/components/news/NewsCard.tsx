@@ -62,6 +62,7 @@ export function ageClass(publishedAt: number, now: number): string {
 export const NewsCard = memo(function NewsCard({
   article,
   price,
+  currency,
   selected,
   onSelect,
   onOpen,
@@ -69,6 +70,7 @@ export const NewsCard = memo(function NewsCard({
   now,
 }: {
   price?: number
+  currency?: string
   article: NewsArticle
   selected: boolean
   onSelect: (article: NewsArticle) => void
@@ -94,7 +96,7 @@ export const NewsCard = memo(function NewsCard({
         <span className={`shrink-0 text-2xs font-semibold ${categoryTextClass[tone]}`}>
           {categoryLabel(article)}
         </span>
-        <NewsTickerBadge ticker={article.ticker} price={price} />
+        <NewsTickerBadge ticker={article.ticker} price={price} currency={currency} category={article.category} />
         <span
           className={`num ml-auto shrink-0 text-2xs ${ageClass(article.publishedAt, now)}`}
           title={article.time}

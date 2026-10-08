@@ -25,6 +25,7 @@ const railClass: Record<NewsTone, string> = {
 export function NewsHero({
   article,
   price,
+  currency,
   selected,
   onSelect,
   onOpen,
@@ -32,6 +33,7 @@ export function NewsHero({
   now,
 }: {
   price?: number
+  currency?: string
   article: NewsArticle
   selected: boolean
   onSelect: (article: NewsArticle) => void
@@ -67,7 +69,7 @@ export function NewsHero({
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <Chip tone="accent">TOP STORY</Chip>
           <span className="shrink-0 text-2xs text-text-muted">{categoryLabel(article)}</span>
-          <NewsTickerBadge ticker={article.ticker} price={price} />
+          <NewsTickerBadge ticker={article.ticker} price={price} currency={currency} category={article.category} />
           <SignalMeter score={article.score} label={signalText(article)} />
           <span
             className={`num ml-auto shrink-0 text-2xs ${ageClass(article.publishedAt, now)}`}

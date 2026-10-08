@@ -1157,6 +1157,10 @@
             "type": "number",
             "description": "Live values, refreshed from Yahoo rather than stored."
           },
+          "hasMarketMark": {
+            "type": "boolean",
+            "description": "Stored contracts have no live mark until an option quote succeeds."
+          },
           "volume": {
             "type": "number"
           },
@@ -1165,6 +1169,19 @@
           },
           "impliedVolatility": {
             "type": "number"
+          },
+          "asOf": {
+            "type": "number",
+            "description": "Provider observation time of the last trade, distinct from retrieval time."
+          },
+          "source": {
+            "type": "string"
+          },
+          "markStale": {
+            "type": "boolean"
+          },
+          "markReason": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -1847,6 +1864,9 @@
       "PriceScreenRequest": {
         "type": "object",
         "properties": {
+          "force": {
+            "type": "boolean"
+          },
           "minimumPrice": {
             "type": "number"
           },

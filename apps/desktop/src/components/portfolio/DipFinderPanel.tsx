@@ -8,6 +8,8 @@ import { BarChart, type Bar } from '@/components/charts/BarChart'
 import { colorForIndex } from '@/components/charts/Donut'
 import { Button } from '@/components/ui/Button'
 import { Panel } from '@/components/ui/Panel'
+import { DataFreshness } from '@/components/ui/DataFreshness'
+import { FRESHNESS } from '@shared/freshness'
 import { percent, plainPercent } from '@/lib/format'
 
 interface DipFinderPanelProps {
@@ -51,6 +53,8 @@ export function DipFinderPanel({ rows, visible }: DipFinderPanelProps) {
         </div>
       }
     >
+      {tickers.length > 0 && <DataFreshness envelope={query.data} loading={query.isFetching} error={query.error}
+        freshnessMs={FRESHNESS.chartDaily} coverage={`${Object.keys(query.data?.data.returns ?? {}).length}/${tickers.length} holdings`} />}
       <BarChart
         bars={bars}
         format={(value) => percent(value, 1)}
@@ -64,14 +68,15 @@ export function DipFinderPanel({ rows, visible }: DipFinderPanelProps) {
 /** Share of the portfolio per position, cash included when it counts toward weight. */
 export function WeightPanel({ portfolio, rows }: { portfolio: Portfolio; rows: PositionRow[] }) {
   const bars: Bar[] = useMemo(() => {
-    const included = rows.filter((row) => row.includeInWeight && row.marketValue > 0)
+    if (rows.some(row => row.includeInWeight && row.marketValue === null)) return []
+    const included = rows.filter((row) => row.includeInWeight && row.marketValue !== null && row.marketValue > 0)
     const cash = portfolio.includeCashInWeight ? Math.max(portfolio.cashBalance, 0) : 0
-    const total = included.reduce((sum, row) => sum + row.marketValue, 0) + cash
+    const total = included.reduce((sum, row) => sum + (row.marketValue ?? 0), 0) + cash
     if (total <= 0) return []
 
     const entries = included.map((row) => ({
       label: row.ticker,
-      value: (row.marketValue / total) * 100,
+      value: ((row.marketValue ?? 0) / total) * 100,
     }))
     if (cash > 0) entries.push({ label: 'CASH', value: (cash / total) * 100 })
 
@@ -86,7 +91,7 @@ export function WeightPanel({ portfolio, rows }: { portfolio: Portfolio; rows: P
         bars={bars}
         signed={false}
         format={(value) => plainPercent(value)}
-        empty="No weighted positions"
+        empty={rows.some(row => row.includeInWeight && row.marketValue === null) ? 'Market marks missing; allocation unavailable' : 'No weighted positions'}
         minBarWidth={48}
       />
     </Panel>

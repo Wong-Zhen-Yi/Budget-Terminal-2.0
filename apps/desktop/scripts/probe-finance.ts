@@ -12,6 +12,7 @@
  * It never reads or writes the legacy app data.
  */
 import { mkdtempSync, rmSync } from 'node:fs'
+import assert from 'node:assert/strict'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -303,5 +304,11 @@ async function exerciseWrites(): Promise<void> {
   }
 }
 
-await report()
+const fixtureBook = { cash: [], debt: [], recurringBills: [], goal: { title: 'Goal', targetAmount: 100, currency: 'USD' as const } }
+const fixtureSilos = [{ id: 'p', name: 'P', stocks: 100, cash: 0, options: 0, marginDebt: 150 }]
+assert.equal(totalsCenter(totalsSeries(fixtureBook, fixtureSilos, 'USD', null)), -50)
+assert.equal(goalNetWorth(fixtureBook, fixtureSilos, 'USD', null).value, -50)
+assert.equal(goalNetWorth(fixtureBook, [{ ...fixtureSilos[0], complete: false }], 'USD', null).available, false)
+assert.equal(billTotals([{ id: 'b', desc: 'Bill', amount: 120, frequency: 'yearly', currency: 'USD' }], 'SGD', null).available, false)
+if (!process.argv.includes('--offline')) await report()
 await exerciseWrites()

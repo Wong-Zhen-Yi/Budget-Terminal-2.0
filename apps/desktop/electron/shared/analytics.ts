@@ -287,7 +287,8 @@ export function computeExposure(
   currentValues: Record<string, number>,
 ): ExposureMetrics {
   const priced = Object.entries(currentValues).filter(([, value]) => value > 0)
-  const valuedHoldingsCount = priced.length
+  // Cash is an allocation and dilutes security weights, but requires no market mark.
+  const valuedHoldingsCount = priced.filter(([ticker]) => ticker !== 'CASH').length
   const totalValue = priced.reduce((sum, [, value]) => sum + value, 0)
 
   const empty: ExposureMetrics = {

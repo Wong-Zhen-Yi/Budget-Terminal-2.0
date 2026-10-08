@@ -121,7 +121,8 @@ export function App() {
   }
   const record = useDataHealth((state) => state.record)
   // Start every page's automatic initial load after local settings and holdings settle.
-  const warm = useWarmPages(settings, !settingsQuery.isPending, selectedTab, recent)
+  const warm = useWarmPages(settings, !settingsQuery.isPending, selectedTab, recent,
+    settingsQuery.error ?? (settingsQuery.data?.meta.freshness === 'failed' ? settingsQuery.data.meta.failureReason || 'Settings could not load' : undefined))
   const hideCurrent = obscured && (settings?.obscuredTabs ?? []).includes(activeTab)
   useScreenshotReady(screenshot, activeTab, hideCurrent, warm.active, completeScreenshot)
   const setFundamentalsSymbol = useFundamentalsStore((state) => state.setSymbol)
@@ -370,8 +371,8 @@ export function App() {
         notice={notice}
         warming={
           warm.active
-            ? `Loading pages (${warm.done}/${warm.total} complete): ${warm.label}...${warm.failed ? ` · ${warm.failed} failed` : ''}`
-            : warm.failed ? `${warm.failed} startup load(s) failed. Open Settings for details.` : ''
+            ? `Loading pages (${warm.done}/${warm.total} complete): ${warm.label}...${warm.failed ? ` · ${warm.failed} failed` : ''}${warm.degraded ? ` · ${warm.degraded} degraded` : ''}`
+            : warm.failed || warm.degraded ? `${warm.failed} startup load(s) failed · ${warm.degraded} degraded. Open Settings for details.` : ''
         }
       />
 
@@ -489,7 +490,7 @@ function renderPage({
     ) : tabId === 'stocks' ? (
       <StocksPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'stock-discovery' ? (
-      <StockDiscoveryPage active={active} />
+      <StockDiscoveryPage active={active} onStatusChange={onStatusChange} />
     ) : tabId === 'fundamentals' ? (
       <FundamentalsPage onStatusChange={onStatusChange} />
     ) : tabId === 'valuation' ? (

@@ -1,5 +1,6 @@
 import { cache, TTL, type CachedResult, type TtlCache } from '../cache.js'
 import { paced, yahoo } from './client.js'
+import { observeSource } from '../sourceHealth.js'
 
 export type YahooSeriesInterval = '1m' | '2m' | '5m' | '15m' | '30m' | '60m' | '90m' | '1h' | '1d' | '5d' | '1wk' | '1mo' | '3mo'
 
@@ -55,6 +56,17 @@ interface RangeResult {
 const DAY = 24 * 60 * 60_000
 const WEEKLY_RECONCILE_MS = 7 * DAY
 
+function usableSeriesDocument(value: unknown): value is SeriesDocument {
+  if (!value || typeof value !== 'object') return false
+  const document = value as Partial<SeriesDocument>
+  return Number.isFinite(document.coveredFrom) && Number.isFinite(document.refreshedAt)
+    && Number.isFinite(document.fullSyncAt) && typeof document.currency === 'string'
+    && typeof document.longName === 'string' && Array.isArray(document.rows) && document.rows.length > 0
+    && document.rows.every(row => row && typeof row === 'object' && Number.isFinite(row.time)
+      && [row.open, row.high, row.low, row.close, row.adjclose, row.volume]
+        .every(cell => cell === null || (typeof cell === 'number' && Number.isFinite(cell))))
+}
+
 function finite(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
@@ -103,6 +115,9 @@ async function fetchRange(
     }]
   })
   if (!rows.length) throw new Error(`No history returned for ${symbol}.`)
+  const observation = result.meta?.regularMarketTime
+  observeSource({ fetchedAt: Date.now(), asOf: observation instanceof Date ? observation.getTime() : rows.at(-1)!.time * 1000,
+    stale: false, fromCache: false, failures: [] })
   return {
     rows,
     currency: result.meta?.currency ?? 'USD',
@@ -127,7 +142,9 @@ export async function getYahooSeries(
   const ttl = ['1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h'].includes(options.interval)
     ? TTL.chartIntraday
     : TTL.chartDaily
-  const previous = store.get<SeriesDocument>(key, { allowStale: true })
+  const candidate = store.get<unknown>(key, { allowStale: true })
+  const previous = candidate && usableSeriesDocument(candidate.value) ? candidate as CachedResult<SeriesDocument> : null
+  if (candidate && !previous) store.delete(key)
   const needsEarlierCoverage = Boolean(previous && startSeconds < previous.value.coveredFrom)
   const now = Date.now()
   const needsReconcile = Boolean(
@@ -199,6 +216,10 @@ export async function getYahooSeries(
   )
 
   const document = resolved.value
+  if (!usableSeriesDocument(document)) {
+    store.delete(key)
+    throw new Error(`Cached history for ${symbol} was incompatible; retry to reload it.`)
+  }
   const rows = document.rows.filter((row) => row.time >= startSeconds)
   if (!rows.length) throw new Error(`No history returned for ${symbol}.`)
   return {
