@@ -201,6 +201,7 @@ try {
           check(client.getQueryData(['newsThumbnail', 'https://example.com/fixture.png']), 'Initial News media was not warmed')
           check(client.getQueryData(['youtubeThumbnail', 'fixture1', 'https://example.com/video.png']), 'Selected video media was not warmed')
         }
+        check(client.getQueryData(['webAccessStatus']), 'Desktop web status was not loaded at startup')
         for (const tab of TABS.filter(tab => tab.implemented)) {
           const before = calls.length
           await selectPage(tab)
@@ -210,7 +211,7 @@ try {
             check(text.includes('123.45 EUR') && text.includes('-2.50 EUR') && !text.includes('$123.45'), 'Foreign quote header mislabeled: ' + tab.id)
           }
           if (restored && tab.id === 'charts') check(visiblePage(tab.id).innerText.includes('100.00 GBp'), 'Charts did not retain the raw pence unit')
-          const initial = calls.slice(before).filter(call => !['mcpStatus', 'apiUsage', 'mutateSettings'].includes(call.method))
+          const initial = calls.slice(before).filter(call => !['mcpStatus', 'apiUsage', 'webStatus', 'mutateSettings'].includes(call.method))
           check(initial.length === 0, 'First-visit request on ' + scenario + '/' + tab.id + ': ' + JSON.stringify(initial))
           if (scenario === 'populated' && ['dashboard', 'news', 'youtube', 'settings'].includes(tab.id)) {
             await paint()

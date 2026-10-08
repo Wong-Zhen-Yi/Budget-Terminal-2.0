@@ -158,6 +158,7 @@ function rendererPolicyChecks(): void {
     errors: [],
   })
   client.setQueryData(['portfolio'], { data: { private: true } })
+  client.setQueryData(['webAccessStatus'], { running: true, pairingCode: 'SECRET-PAIRING-CODE' })
   client.setQueryData(['stocks', 'FAIL'], {
     data: {},
     meta: { freshness: 'failed', fetchedAt: Date.now() },

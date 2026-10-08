@@ -19,6 +19,7 @@ let closeCache: (() => void) | null = null
 let backupPending: (() => boolean) | null = null
 let flushBackup: (() => Promise<void>) | null = null
 let stopMcp: (() => Promise<void>) | null = null
+let stopWeb: (() => Promise<void>) | null = null
 const rendererUrl = isDev && process.env.ELECTRON_RENDERER_URL
   ? process.env.ELECTRON_RENDERER_URL
   : pathToFileURL(join(dirname, '../renderer/index.html')).href
@@ -109,6 +110,9 @@ if (ownsInstance) app.whenReady().then(async () => {
     const { registerIpcHandlers } = await import('./ipc/handlers.js')
     const { cache } = await import('./services/cache.js')
     closeCache = () => cache.close()
+    const web = await import('./web/host.js')
+    await web.initializeWebAccess(join(dirname, '../renderer'), join(process.env.APPDATA!, 'BudgetTerminalElectron'))
+    stopWeb = web.stopWebAccess
     disposeIpc = registerIpcHandlers((event) => {
       const frame = event.senderFrame
       return Boolean(frame && frame === event.sender.mainFrame &&
@@ -135,12 +139,12 @@ app.on('window-all-closed', () => {
 let finishingQuit = false
 let drainedQuit = false
 app.on('before-quit', (event) => {
-  if (drainedQuit || (!stopMcp && !backupPending?.())) return
+  if (drainedQuit || (!stopMcp && !stopWeb && !backupPending?.())) return
   event.preventDefault()
   if (finishingQuit) return
   finishingQuit = true
   void (async () => {
-    await stopMcp?.()
+    await Promise.all([stopMcp?.(), stopWeb?.()])
     await flushBackup?.()
   })().catch((error) => console.warn('Shutdown flush failed:', error)).finally(() => {
     drainedQuit = true

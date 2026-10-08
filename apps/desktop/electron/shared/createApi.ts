@@ -7,6 +7,11 @@ export type Subscribe = <Payload>(channel: string, listener: (payload?: Payload)
 
 export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS.Platform): DesktopApi {
   return {
+    webStatus: () => invoke(CHANNELS.webStatus),
+    configureWebAccess: (enabled) => invoke(CHANNELS.configureWebAccess, enabled),
+    rotateWebPairingCode: () => invoke(CHANNELS.rotateWebPairingCode),
+    revokeWebSessions: () => invoke(CHANNELS.revokeWebSessions),
+    decideWebAccess: (id, approve) => invoke(CHANNELS.decideWebAccess, id, approve),
     mcpStatus: () => invoke(CHANNELS.mcpStatus),
     onScreenshotRequested: (listener) => subscribe<ScreenshotCommand>(CHANNELS.screenshotRequested, (payload) => {
       if (payload) listener(payload)

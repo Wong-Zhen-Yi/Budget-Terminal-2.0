@@ -3373,6 +3373,11 @@ export interface PoliticsExportRequest {
 }
 
 export const CHANNELS = {
+  webStatus: 'system:web-status',
+  configureWebAccess: 'system:web-configure',
+  rotateWebPairingCode: 'system:web-pairing-rotate',
+  revokeWebSessions: 'system:web-revoke',
+  decideWebAccess: 'system:web-access-decide',
   mcpStatus: 'system:mcp-status',
   screenshotRequested: 'mcp:screenshot-requested',
   screenshotReady: 'mcp:screenshot-ready',
@@ -3548,6 +3553,11 @@ export interface FxRequest extends BackgroundRequest {
 export type WindowAction = 'minimize' | 'maximize' | 'close'
 
 export interface DesktopApi {
+  webStatus(): Promise<WebAccessStatus>
+  configureWebAccess(enabled: boolean): Promise<WebAccessStatus>
+  rotateWebPairingCode(): Promise<WebAccessStatus>
+  revokeWebSessions(): Promise<WebAccessStatus>
+  decideWebAccess(id: string, approve: boolean): Promise<WebAccessStatus>
   mcpStatus(): Promise<McpStatus>
   onScreenshotRequested(listener: (command: ScreenshotCommand) => void): () => void
   screenshotReady(result: ScreenshotReady): Promise<void>
@@ -3662,4 +3672,18 @@ export interface DesktopApi {
 
 export type SavedDataDomain = 'portfolio' | 'cards' | 'personalFinance' | 'settings'
 export interface SavedDataChanged { domains: SavedDataDomain[] }
+
+export interface WebAccessStatus {
+  enabled: boolean
+  running: boolean
+  port: number
+  localUrl: string
+  tailscaleUrl?: string
+  pairingCode?: string
+  pairingExpiresAt?: number
+  sessionCount: number
+  connectionCount?: number
+  accessRequests?: Array<{ id: string; label: string; requestedAt: number; expiresAt: number }>
+  error?: string
+}
 export interface McpStatus { available: boolean; connected?: boolean; active?: boolean; tools?: number; error?: string }

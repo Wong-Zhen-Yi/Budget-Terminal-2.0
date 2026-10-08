@@ -12,7 +12,7 @@ export function MacroBar({ macro, loading, charts }: {
 }) {
   const now = useSnapshotClock()
   return (
-    <div className="flex shrink-0 gap-1">
+    <div className="dashboard-macro flex shrink-0 gap-1">
       {MACRO_SYMBOLS.map((entry, index) => {
         const quote = macro[entry.label]
         const up = (quote?.change ?? 0) >= 0

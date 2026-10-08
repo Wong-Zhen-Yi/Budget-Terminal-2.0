@@ -68,6 +68,7 @@ import { useOptionsPage } from '@/stores/options'
 import { useStocksPage } from '@/stores/stocks'
 import { useValuationPage } from '@/stores/valuation'
 import { useNavigation } from '@/stores/navigation'
+import { isBrowser } from '@/api/browser'
 
 const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
 
@@ -319,7 +320,7 @@ export function App() {
   }), [statusFor, handleStocksNavigate, activeTab, hideCurrent])
 
   return (
-    <div className={`flex h-full flex-col bg-bg ${isMac ? 'platform-mac' : ''}`}>
+    <div className={`terminal-shell flex h-full flex-col bg-bg ${isBrowser ? 'browser-shell' : ''} ${isMac ? 'platform-mac' : ''}`}>
       <TabBar
         onOpenPicker={() => setPickerOpen(true)}
         onReload={() => void reload()}
@@ -330,7 +331,7 @@ export function App() {
         onToggleObscure={toggleObscure}
       />
 
-      <div className="flex min-h-0 flex-1">
+      <div className="terminal-workspace flex min-h-0 flex-1">
         <WorkspaceSidebar
           tabs={visibleTabs} activeTab={activeTab} onSelectTab={setActiveTab} favorites={favorites} recent={recent}
           collapsed={settings?.sidebarCollapsed ?? false} onToggleCollapsed={() => void toggleSidebar()}

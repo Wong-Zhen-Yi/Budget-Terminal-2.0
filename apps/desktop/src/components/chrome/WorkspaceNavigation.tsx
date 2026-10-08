@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 
 import { SETTINGS_TAB_ID } from '@shared/contract'
 import { WORKSPACES, workspaceFor } from '@shared/navigation'
+import { isBrowser } from '@/api/browser'
 
 interface NavigationTab {
   id: string
@@ -35,7 +36,7 @@ export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, rece
   }, [activeTab, activeWorkspace])
 
   return (
-    <aside aria-label="Workspace sidebar" className={`flex shrink-0 flex-col gap-6 overflow-y-auto border-r border-border ${isMac ? 'bg-[#101722] px-3 py-5' : 'bg-surface px-2 py-4'} ${collapsed ? 'w-16' : isMac ? 'w-52' : 'w-48'}`}>
+    <aside aria-label="Workspace sidebar" className={`workspace-sidebar flex shrink-0 flex-col gap-6 overflow-y-auto border-r border-border ${isMac ? 'bg-[#101722] px-3 py-5' : 'bg-surface px-2 py-4'} ${collapsed ? 'w-16' : isMac ? 'w-52' : 'w-48'}`}>
       <div>
         <div className="mb-2 flex items-center justify-between">
           {!collapsed ? <p className="px-3 text-2xs text-text-dim">Workspaces</p> : null}
@@ -107,7 +108,16 @@ export function WorkspaceHeader({ tabs, activeTab, onSelectTab, favorite, onTogg
   const page = tabs.find((tab) => tab.id === activeTab)
   const pages = tabs.filter((tab) => workspace?.pages.includes(tab.id))
   return (
-    <header className={`shrink-0 border-b border-border bg-surface px-4 pt-3 pb-2 ${isMac ? 'px-5 pt-4 pb-3' : ''}`}>
+    <header className={`workspace-header shrink-0 border-b border-border bg-surface px-4 pt-3 pb-2 ${isMac ? 'px-5 pt-4 pb-3' : ''}`}>
+      {isBrowser ? <label className="browser-page-select mb-2 hidden items-center gap-2 text-2xs text-text-muted">
+        Page
+        <select aria-label="Choose a page" value={activeTab} onChange={(event) => onSelectTab(event.target.value)} className="min-w-0 flex-1 rounded border border-border-strong bg-bg px-2 py-2 text-text">
+          {WORKSPACES.map((group) => <optgroup key={group.id} label={group.label}>
+            {tabs.filter((tab) => tab.implemented && group.pages.includes(tab.id)).map((tab) => <option key={tab.id} value={tab.id}>{tab.label}</option>)}
+          </optgroup>)}
+          <option value={SETTINGS_TAB_ID}>Settings</option>
+        </select>
+      </label> : null}
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-baseline gap-3">
           <span className="text-2xs text-text-muted">{workspace?.label ?? 'Preferences'} /</span>
@@ -119,7 +129,7 @@ export function WorkspaceHeader({ tabs, activeTab, onSelectTab, favorite, onTogg
           {favorite ? '★ Favorited' : '☆ Favorite'}
         </button> : null}
       </div>
-      {pages.length ? <nav aria-label="Workspace pages" className="mt-2 flex flex-wrap gap-1">
+      {pages.length ? <nav aria-label="Workspace pages" className="workspace-pages mt-2 flex flex-wrap gap-1">
         {pages.map((tab) => <button key={tab.id} type="button" disabled={!tab.implemented}
           aria-current={tab.id === activeTab ? 'page' : undefined} onClick={() => onSelectTab(tab.id)}
           className={pageButton + (isMac ? 'rounded-lg ' : '') + (tab.id === activeTab ? selectedStyle : idleStyle)}>{tab.label}</button>)}

@@ -30,6 +30,11 @@ For desktop bundles, run `npm run build`, then
 `npm run preview --workspace budget-terminal-desktop`. The build does not produce
 an installer.
 
+To use Budget Terminal in Chrome or Safari on iPad, build the app and enable **Remote**
+in the desktop top bar or **Settings → Remote**. Tailscale Serve forwards a private HTTPS address to the
+app's localhost server. Pair once using a code or approve the top bar access request; approved browsers remain remembered across app and PC restarts. See
+[the Remote setup guide](docs/web-access.md) for configuration and checks.
+
 ## Workspaces
 
 All 49 pages, including Settings, are implemented:

@@ -6,8 +6,8 @@ declare global {
   }
 }
 
-/** The Electron preload is the renderer's only service bridge. */
-if (!window.api) throw new Error('Electron preload API is unavailable. Start Budget Terminal in Electron.')
+/** Bootstrap installs either the Electron preload or the authenticated browser bridge. */
+if (!window.api) throw new Error('Budget Terminal service API is unavailable.')
 export const api: DesktopApi = window.api
 
 export const queryKeys = {

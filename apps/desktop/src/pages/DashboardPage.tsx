@@ -150,10 +150,10 @@ export function DashboardPage({
   )
 
   return (
-    <div ref={layoutRef} className="flex min-h-0 flex-1 gap-1 p-1">
+    <div ref={layoutRef} className="dashboard-layout flex min-h-0 flex-1 gap-1 p-1">
       {/* Left column: holdings, targets, news. */}
       <div
-        className="flex min-h-0 shrink-0 flex-col gap-1"
+        className="dashboard-holdings flex min-h-0 shrink-0 flex-col gap-1"
         style={{ width: leftWidth }}
       >
         <PortfolioPanel
@@ -184,11 +184,11 @@ export function DashboardPage({
       <Splitter onDrag={dragLeft} />
 
       {/* Centre and right share the macro bar across their combined width. */}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1">
+      <div className="dashboard-market flex min-h-0 min-w-0 flex-1 flex-col gap-1">
         <MacroBar macro={quotesQuery.data?.data.macro ?? {}} loading={quotesQuery.isLoading} charts={macroCharts} />
 
-        <div className="flex min-h-0 min-w-0 flex-1 gap-1">
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1">
+        <div className="dashboard-main flex min-h-0 min-w-0 flex-1 gap-1">
+          <div className="dashboard-chart flex min-h-0 min-w-0 flex-1 flex-col gap-1">
             <ChartToolbar
               symbol={symbol}
               timeframe={timeframe}
@@ -215,7 +215,7 @@ export function DashboardPage({
 
           <Splitter onDrag={dragOptions} />
 
-          <div className="flex min-h-0 shrink-0 flex-col" style={{ width: optionsWidth }}>
+          <div className="dashboard-options-column flex min-h-0 shrink-0 flex-col" style={{ width: optionsWidth }}>
             <OptionsPanel
               symbol={symbol}
               buckets={buckets}

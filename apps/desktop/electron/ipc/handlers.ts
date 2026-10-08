@@ -10,6 +10,8 @@ import { verifyStoredData, watchPortfolios } from '../services/portfolioStore.js
 import { isSafeExternalUrl } from '../services/urls.js'
 import { registerServiceHandlers } from './serviceHandlers.js'
 import { getMcpStatus } from '../mcp/host.js'
+import { configureWebAccess, decideWebAccess, getWebAccessStatus, revokeWebSessions, rotateWebPairingCode } from '../web/host.js'
+import { publishSavedDataChanged, subscribeSavedDataChanged } from '../services/savedDataEvents.js'
 
 export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent) => boolean): () => void {
   const handle: typeof ipcMain.handle = (channel, listener) => {
@@ -19,6 +21,11 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
     })
   }
   const provider = yahooProvider
+  handle(CHANNELS.webStatus, () => getWebAccessStatus())
+  handle(CHANNELS.configureWebAccess, (_event, enabled: boolean) => configureWebAccess(enabled))
+  handle(CHANNELS.rotateWebPairingCode, () => rotateWebPairingCode())
+  handle(CHANNELS.revokeWebSessions, () => revokeWebSessions())
+  handle(CHANNELS.decideWebAccess, (_event, id: string, approve: boolean) => decideWebAccess(id, approve))
   handle(CHANNELS.mcpStatus, () => getMcpStatus())
   registerServiceHandlers((channel, run) => {
     handle(channel, (_event, request) => run(request))
@@ -37,6 +44,14 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
     CHANNELS.maintenance,
     async (event, action: MaintenanceAction): Promise<Envelope<MaintenanceResult>> => {
       const window = BrowserWindow.fromWebContents(event.sender)
+      const notify = async (pending: Promise<Envelope<MaintenanceResult>>) => {
+        const result = await pending
+        if (result.data.performed) publishSavedDataChanged(
+          action === 'importUserData' || action === 'clearUserData'
+            ? ['portfolio', 'cards', 'personalFinance', 'settings'] : ['settings'],
+        )
+        return result
+      }
       const cancelled = (message: string) =>
         ok({ action, performed: false, message, path: '' }, 'settings store')
 
@@ -50,7 +65,7 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
           ? await dialog.showSaveDialog(window, options)
           : await dialog.showSaveDialog(options)
         if (result.canceled || !result.filePath) return cancelled('Export cancelled.')
-        return provider.exportUserData(result.filePath)
+        return notify(provider.exportUserData(result.filePath))
       }
 
       if (action === 'importUserData') {
@@ -64,11 +79,11 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
           : await dialog.showOpenDialog(options)
         const [selected] = result.filePaths
         if (result.canceled || !selected) return cancelled('Import cancelled.')
-        return provider.importUserData(selected)
+        return notify(provider.importUserData(selected))
       }
 
-      if (action === 'clearUserData') return provider.clearUserData()
-      if (action === 'resetCache') return provider.resetCache()
+      if (action === 'clearUserData') return notify(provider.clearUserData())
+      if (action === 'resetCache') return notify(provider.resetCache())
       throw new Error('Unknown maintenance action')
     },
   )
@@ -105,13 +120,19 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
   })
 
   const stopWatching = watchPortfolios(() => {
+    publishSavedDataChanged(['portfolio', 'personalFinance'])
     for (const window of BrowserWindow.getAllWindows()) {
       window.webContents.send(CHANNELS.portfolioChanged)
     }
   })
 
+  const stopSavedData = subscribeSavedDataChanged((payload) => {
+    for (const window of BrowserWindow.getAllWindows()) window.webContents.send(CHANNELS.savedDataChanged, payload)
+  })
+
   return () => {
     stopWatching()
+    stopSavedData()
     for (const channel of Object.values(CHANNELS)) ipcMain.removeHandler(channel)
   }
 }

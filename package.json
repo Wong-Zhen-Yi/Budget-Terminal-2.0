@@ -20,6 +20,8 @@
     "probe": "npm run probe --workspace budget-terminal-desktop",
     "probe:launcher": "node scripts/probe-launcher.cjs",
     "probe:readiness-ui": "npm run --workspace budget-terminal-desktop probe:readiness-ui --",
+    "probe:web": "npm run --workspace budget-terminal-desktop probe:web --",
+    "probe:web-ui": "npm run --workspace budget-terminal-desktop probe:web-ui --",
     "probe:maintenance": "npm run --workspace budget-terminal-desktop probe:maintenance --",
     "probe:maintenance-live": "npm run --workspace budget-terminal-desktop probe:maintenance-live --",
     "probe:portfolio": "npm run --workspace budget-terminal-desktop probe:portfolio --",

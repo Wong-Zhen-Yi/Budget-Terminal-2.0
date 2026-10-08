@@ -76,6 +76,14 @@ import { CHANNELS } from '../shared/contract.js'
 import { yahooProvider } from '../services/provider.js'
 import { runWithPriority } from '../services/yahoo/client.js'
 import { getApiUsageSnapshot } from '../services/apiUsage.js'
+import { publishSavedDataChanged } from '../services/savedDataEvents.js'
+import type { SavedDataDomain } from '../shared/contract.js'
+
+const changedDomains = new Map<string, SavedDataDomain>([
+  [CHANNELS.portfolioMutate, 'portfolio'], [CHANNELS.cardsMutate, 'cards'],
+  [CHANNELS.personalFinanceMutate, 'personalFinance'], [CHANNELS.settingsMutate, 'settings'],
+])
+const pendingReads = new Map<string, Promise<unknown>>()
 
 export type RegisterService = <Request>(channel: string, run: (request: Request) => unknown) => void
 
@@ -95,15 +103,26 @@ export function registerServiceHandlers(register: RegisterService): void {
    * and shell actions are registered separately by each host.
    */
   const handle = <Request>(channel: string, run: (request: Request) => unknown): void => {
-    register(channel, (request: Request) =>
-      runWithPriority(
+    register(channel, (request: Request) => {
+      const domain = changedDomains.get(channel)
+      const key = `${channel}:${JSON.stringify(request ?? {})}`
+      if (!domain && pendingReads.has(key)) return pendingReads.get(key)!
+      const result = runWithPriority(
         (request as { background?: boolean } | undefined)?.background
           ? 'background'
           : 'foreground',
         async () => run(request),
         (request as { backgroundOrder?: number } | undefined)?.backgroundOrder,
-      ),
-    )
+      )
+      if (domain) return result.then((value) => {
+        const envelope = value as { meta?: { freshness?: string } }
+        if (envelope?.meta?.freshness !== 'failed') publishSavedDataChanged(domain === 'settings' ? ['settings'] : [domain, 'settings'])
+        return value
+      })
+      pendingReads.set(key, result)
+      void result.then(() => pendingReads.delete(key), () => pendingReads.delete(key))
+      return result
+    })
   }
 
   handle(CHANNELS.quotes, (request: QuotesRequest) => provider.quotes(request))

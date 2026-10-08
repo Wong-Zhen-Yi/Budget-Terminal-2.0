@@ -4,6 +4,9 @@ import { CLOCK_COUNTRIES, DEFAULT_CLOCK_COUNTRY } from '@shared/contract'
 import { api } from '@/api/client'
 import { clockTime } from '@/lib/format'
 import { McpActivity } from './McpActivity'
+import { BrowserConnection } from './BrowserConnection'
+import { RemoteConnection } from './RemoteConnection'
+import { isBrowser } from '@/api/browser'
 
 interface TabBarProps {
   onOpenPicker: () => void
@@ -36,20 +39,21 @@ export function TabBar({
   }, [])
 
   return (
-    <div className={`drag-region flex shrink-0 items-center gap-2 border-b border-border bg-surface ${isMac ? 'h-[52px] rounded-t-xl pr-3 pl-[86px]' : 'h-12 pr-0 pl-2'}`}>
+    <div className={`terminal-topbar drag-region flex shrink-0 items-center gap-2 border-b border-border bg-surface ${isMac ? 'h-[52px] rounded-t-xl pr-3 pl-[86px]' : 'h-12 pr-0 pl-2'}`}>
       <span className="shrink-0 pr-1 text-2xs font-semibold tracking-widest text-accent-hover">
         BT
       </span>
 
-      <span className={`min-w-0 truncate text-2xs tracking-wide text-text-muted ${isMac ? 'px-1' : 'px-2'}`}>BUDGET TERMINAL</span>
-      <McpActivity />
+      <span className={`terminal-brand min-w-0 truncate text-2xs tracking-wide text-text-muted ${isMac ? 'px-1' : 'px-2'}`}>BUDGET TERMINAL</span>
+      {isBrowser ? <BrowserConnection /> : <McpActivity />}
+      {!isBrowser ? <RemoteConnection /> : null}
       <div className="min-w-0 flex-1" />
       <button type="button" onClick={onOpenPicker}
         className={`no-drag flex items-center gap-4 border border-border-strong px-3 py-2 text-2xs text-text-muted hover:bg-surface-hover ${isMac ? 'rounded-lg bg-surface-raised' : 'rounded'}`}>
-        Find a page <kbd className="num">{isMac ? '⌘ K' : 'Ctrl K'}</kbd>
+        Find a page {!isBrowser ? <kbd className="num">{isMac ? '⌘ K' : 'Ctrl K'}</kbd> : null}
       </button>
 
-      <span className="num no-drag shrink-0 whitespace-nowrap px-2 text-2xs text-text-muted">
+      <span className="terminal-clock num no-drag shrink-0 whitespace-nowrap px-2 text-2xs text-text-muted">
         {now.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric', timeZone: zone })}
         {'  '}{clockTime(now, zone, time12h)}
       </span>
@@ -74,10 +78,10 @@ export function TabBar({
         disabled={reloading}
         className={`no-drag h-9 shrink-0 border border-border-strong bg-surface-raised px-3 text-2xs text-text hover:bg-surface-hover disabled:opacity-50 ${isMac ? 'rounded-lg' : ''}`}
       >
-        {reloading ? 'Reloading...' : `Reload (${isMac ? '⌘ R' : 'F5'})`}
+        {reloading ? 'Reloading...' : isBrowser ? 'Refresh' : `Reload (${isMac ? '⌘ R' : 'F5'})`}
       </button>
 
-      {!isMac ? <WindowControls /> : null}
+      {!isMac && !isBrowser ? <WindowControls /> : null}
     </div>
   )
 }

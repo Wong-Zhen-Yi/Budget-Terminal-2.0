@@ -104,3 +104,243 @@ body {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
+
+/* iPad browsers need dynamic height and stable type sizing on rotation. */
+.browser-mode {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  --text-2xs: 0.75rem;
+  --text-2xs--line-height: 1rem;
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
+}
+
+/* Keep iPad rubber-banding from moving the terminal and exposing the body below
+ * the status bar. Only the panels inside this fixed viewport should scroll. */
+html.browser-mode,
+.browser-mode body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.browser-mode #root {
+  position: fixed;
+  inset: 0;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* Nested scrollers (including the News list) must stop at their own edges too. */
+.browser-mode * {
+  overscroll-behavior: none;
+}
+
+.browser-mode .drag-region {
+  -webkit-app-region: no-drag;
+}
+
+.browser-mode [data-page-id] {
+  min-width: 0;
+  overflow: auto;
+  overscroll-behavior: none;
+}
+
+.browser-mode [data-page-id] > * {
+  min-width: 760px;
+}
+
+.browser-mode [data-page-id='stocks'] > *,
+.browser-mode [data-page-id='charts'] > *,
+.browser-mode [data-page-id='options'] > * {
+  min-width: 1100px;
+}
+
+.browser-mode [data-page-id='settings'] > * {
+  min-width: 0;
+}
+
+.browser-mode .terminal-topbar {
+  /* Browser controls sit below the data and status, including on wide iPads. */
+  order: 1;
+  height: auto;
+  min-height: 52px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 0;
+  padding: 4px 10px max(4px, env(safe-area-inset-bottom));
+}
+
+/* Keep both Pre-Market rows readable instead of shrinking their charts on
+ * short landscape screens. The existing page scroller exposes the overflow. */
+.browser-mode [data-page-id='pre-market'] > * {
+  min-height: 600px;
+  flex-shrink: 0;
+}
+
+.browser-mode .terminal-clock {
+  font-size: 13px;
+}
+
+@media (max-width: 1200px) {
+  .browser-mode .terminal-brand,
+  .browser-mode .terminal-clock {
+    display: none;
+  }
+  .browser-mode .workspace-sidebar {
+    display: none;
+  }
+  .browser-mode .browser-page-select {
+    display: flex;
+  }
+  .browser-mode .workspace-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 4px 12px;
+    padding: 4px 8px;
+  }
+  .browser-mode .browser-page-select {
+    margin-bottom: 0;
+  }
+  .browser-mode .workspace-pages {
+    grid-column: 1 / -1;
+    margin-top: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  .browser-mode .workspace-pages button {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .browser-mode footer {
+    height: auto;
+    min-height: 32px;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+  .browser-mode footer [role='status'] {
+    flex-basis: 100%;
+    white-space: normal;
+  }
+
+  /* Let the chart keep its space; options move below the two main columns.
+   * Ignore saved desktop splitter widths without changing the user's settings. */
+  .browser-mode [data-page-id='dashboard'] > .dashboard-layout {
+    display: grid;
+    flex: none;
+    min-width: 0;
+    grid-template-columns: minmax(0, 0.38fr) minmax(0, 0.62fr);
+    /* A spanning holdings table contributes its full intrinsic height to an auto
+     * track, turning the macro tiles into tall empty columns. Bound that track
+     * so table rows scroll inside their panels and the chart stays near the top. */
+    grid-template-rows: 112px minmax(540px, 70dvh) auto;
+    gap: 8px;
+    padding: 8px;
+  }
+  .browser-mode .dashboard-market,
+  .browser-mode .dashboard-main {
+    display: contents;
+  }
+  .browser-mode .dashboard-layout [role='separator'] {
+    display: none;
+  }
+  .browser-mode .dashboard-holdings {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    width: auto !important;
+    min-width: 0;
+    gap: 8px;
+  }
+  .browser-mode .dashboard-macro {
+    grid-column: 2;
+    grid-row: 1;
+    overflow-x: auto;
+  }
+  .browser-mode .dashboard-macro > div {
+    min-width: 96px;
+  }
+  .browser-mode .dashboard-chart {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  .browser-mode .dashboard-options-column {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    width: auto !important;
+    min-width: 0;
+  }
+  .browser-mode .dashboard-options {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .browser-mode .dashboard-options > section {
+    min-width: 0;
+    height: 280px;
+  }
+}
+
+@media (max-width: 800px) {
+  .browser-mode [data-page-id='dashboard'] > .dashboard-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 112px minmax(520px, 65dvh) auto auto;
+  }
+  .browser-mode .dashboard-macro {
+    grid-column: 1;
+  }
+  .browser-mode .dashboard-chart {
+    grid-column: 1;
+  }
+  .browser-mode .dashboard-holdings {
+    grid-row: 3;
+  }
+  .browser-mode .dashboard-holdings > section {
+    flex: none;
+    height: 240px;
+  }
+  .browser-mode .dashboard-options-column {
+    grid-row: 4;
+  }
+  .browser-mode .dashboard-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .browser-mode .workspace-header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (pointer: coarse) {
+  .browser-mode button,
+  .browser-mode select,
+  .browser-mode input:not([type='checkbox']):not([type='radio']) {
+    min-height: 44px;
+  }
+  .browser-mode input,
+  .browser-mode select {
+    font-size: 16px;
+  }
+  .browser-mode .terminal-panel > header {
+    height: auto;
+    min-height: 44px;
+    flex-wrap: wrap;
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+  .browser-mode td {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  .browser-mode input[type='checkbox'],
+  .browser-mode input[type='radio'] {
+    width: 20px;
+    height: 20px;
+  }
+}

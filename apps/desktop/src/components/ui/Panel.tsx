@@ -14,7 +14,7 @@ interface PanelProps {
 export function Panel({ title, actions, children, className = '', warning }: PanelProps) {
   return (
     <section
-      className={`flex min-h-0 flex-col overflow-hidden border border-border bg-surface ${className}`}
+      className={`terminal-panel flex min-h-0 flex-col overflow-hidden border border-border bg-surface ${className}`}
     >
       <header className="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-surface-raised px-2">
         <h2 className="truncate text-2xs font-semibold tracking-wide text-text uppercase">

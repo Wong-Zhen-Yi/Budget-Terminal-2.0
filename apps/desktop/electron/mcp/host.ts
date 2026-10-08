@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron'
 import { join } from 'node:path'
-import { CHANNELS, type McpStatus } from '../shared/contract.js'
+import type { McpStatus } from '../shared/contract.js'
 import { startBridge } from './bridge.js'
 import { createServiceRoutes } from './routes.js'
 import { createScreenshotService } from './screenshot.js'
@@ -11,9 +11,8 @@ export function getMcpStatus(): McpStatus { return status }
 export async function startMcpHost(): Promise<() => Promise<void>> {
   try {
     const screenshot = createScreenshotService(() => BrowserWindow.getAllWindows().find((window) => !window.isDestroyed()))
-    const bridge = await startBridge({ routes: createServiceRoutes(screenshot), descriptorPath: join(process.env.APPDATA!, 'BudgetTerminalElectron', '.mcp', 'runtime.json'), onChanged: (domains) => {
-      for (const window of BrowserWindow.getAllWindows()) window.webContents.send(CHANNELS.savedDataChanged, { domains })
-    } })
+    // Shared service handlers publish mutations once to both desktop and web clients.
+    const bridge = await startBridge({ routes: createServiceRoutes(screenshot), descriptorPath: join(process.env.APPDATA!, 'BudgetTerminalElectron', '.mcp', 'runtime.json'), onChanged: () => {} })
     status = bridge.status
     return async () => { status = { available: false, error: 'MCP is shutting down.' }; await bridge.stop() }
   } catch (error) {

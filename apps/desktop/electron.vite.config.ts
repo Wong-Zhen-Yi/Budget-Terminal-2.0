@@ -41,6 +41,8 @@ export default defineConfig({
     },
     build: {
       outDir: resolve(root, 'out/renderer'),
+      // Keep the complete theme available before the lazy browser entry opens pages.
+      cssCodeSplit: false,
       rollupOptions: { input: resolve(root, 'src/index.html') },
     },
   },
