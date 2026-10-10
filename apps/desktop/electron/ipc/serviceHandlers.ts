@@ -1,3 +1,5 @@
+import { getArticles, saveArticles } from '../services/articlesStore.js'
+import type { ArticlesMutation } from '../shared/articles.js'
 import { getBitcoin } from '../services/bitcoin.js'
 import type { SofiRequest } from '../shared/sofi.js'
 import type { HimsRequest } from '../shared/hims.js'
@@ -80,6 +82,7 @@ import { publishSavedDataChanged } from '../services/savedDataEvents.js'
 import type { SavedDataDomain } from '../shared/contract.js'
 
 const changedDomains = new Map<string, SavedDataDomain>([
+  [CHANNELS.articlesMutate, 'articles'],
   [CHANNELS.portfolioMutate, 'portfolio'], [CHANNELS.cardsMutate, 'cards'],
   [CHANNELS.personalFinanceMutate, 'personalFinance'], [CHANNELS.settingsMutate, 'settings'],
 ])
@@ -171,6 +174,8 @@ export function registerServiceHandlers(register: RegisterService): void {
   handle(CHANNELS.portfolioMutate, (mutation: PortfolioMutation) =>
     provider.mutatePortfolio(mutation),
   )
+  handle(CHANNELS.articles, () => getArticles())
+  handle(CHANNELS.articlesMutate, (mutation: ArticlesMutation) => saveArticles(mutation))
   handle(CHANNELS.cards, () => provider.cards())
   handle(CHANNELS.cardsMutate, (mutation: CardsMutation) =>
     provider.mutateCards(mutation),

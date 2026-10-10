@@ -13,6 +13,7 @@ export const api: DesktopApi = window.api
 export const queryKeys = {
   marketCap: (tier: MarketCapTier) => ['marketCap', tier] as const,
   portfolio: ['portfolio'] as const,
+  articles: ['articles'] as const,
   cards: ['cards'] as const,
   cardsPerformance: (signature: string) => ['cardsPerformance', signature] as const,
   settings: ['settings'] as const,

@@ -2,6 +2,7 @@ import { TABS } from './contract.js'
 
 /** Stable workspace membership; user ordering still applies within each workspace. */
 export const WORKSPACES = [
+  { id: 'articles', label: 'Articles', pages: ['articles'] },
   { id: 'overview', label: 'Overview', pages: ['dashboard', 'news', 'calendar', 'youtube', 'dictionary'] },
   { id: 'markets', label: 'Markets', pages: ['pre-market', 'heatmap', 'up-down', 'trading-volumes', 'beta', 'market-cap', 'price', 'etf', 'sp500', 'forex', 'crypto', 'gold', 'oil'] },
   { id: 'research', label: 'Research', pages: ['stocks', 'stock-discovery', 'fundamentals', 'valuation', 'institutions'] },

@@ -95,7 +95,9 @@
     "probe:amzn": "tsx scripts/probe-amzn.ts",
     "probe:amzn-ui": "tsx scripts/probe-amzn-ui.ts",
     "probe:vst": "tsx scripts/probe-vst.ts",
-    "probe:vst-ui": "tsx scripts/probe-vst-ui.ts"
+    "probe:vst-ui": "tsx scripts/probe-vst-ui.ts",
+    "probe:articles": "tsx scripts/probe-articles.ts",
+    "probe:articles-ui": "tsx scripts/probe-articles-ui.ts"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

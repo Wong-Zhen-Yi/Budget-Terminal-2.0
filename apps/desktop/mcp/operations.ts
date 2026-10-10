@@ -22,6 +22,8 @@ export const operations = {
   optionQuotes: 'Get market marks for recorded option contracts.',
   portfolio: 'Read saved portfolios, holdings, cash and options records.',
   mutatePortfolio: 'Edit saved portfolios, positions, cash and options records. This records holdings; it does not place broker orders.',
+  articles: 'Read saved articles, including IDs, topics, content, status and revision numbers.',
+  mutateArticles: 'Create, update or remove locally saved articles. Use the current revision for updates/removal to protect concurrent edits. Content is plain text or Markdown. Write AI-authored articles here to keep them in the Articles workspace.',
   cards: 'Read saved investment Cards.',
   mutateCards: 'Add, edit, remove or reorder saved investment Cards.',
   cardsPerformance: 'Calculate performance for supplied Card models.',
@@ -87,6 +89,7 @@ export const operations = {
 
 export type Operation = keyof typeof operations
 export const mutationDomains = {
+  mutateArticles: 'articles',
   mutatePortfolio: 'portfolio',
   mutateCards: 'cards',
   mutatePersonalFinance: 'personalFinance',

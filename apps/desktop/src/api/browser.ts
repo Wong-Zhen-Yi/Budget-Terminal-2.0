@@ -139,7 +139,7 @@ export function connectBrowserEvents() {
   events?.close()
   events = new EventSource('/api/events')
   const refreshLocal = () => {
-    emit(CHANNELS.savedDataChanged, { domains: ['portfolio', 'cards', 'personalFinance', 'settings'] } satisfies SavedDataChanged)
+    emit(CHANNELS.savedDataChanged, { domains: ['articles', 'portfolio', 'cards', 'personalFinance', 'settings'] } satisfies SavedDataChanged)
     window.dispatchEvent(new Event('budget-browser-resume'))
   }
   events.onopen = () => { setConnection('connected'); refreshLocal() }

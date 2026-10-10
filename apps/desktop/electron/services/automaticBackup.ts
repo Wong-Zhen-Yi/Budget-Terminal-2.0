@@ -5,6 +5,7 @@ import type { AutomaticBackupStatus, Envelope } from '../shared/contract.js'
 import { describeError, err, partial } from '../shared/envelope.js'
 import { exportUserData } from './portfolioStore.js'
 import { exportSettings } from './settingsStore.js'
+import { readArticles } from './articlesStore.js'
 import { exportCards } from './cardsStore.js'
 
 export const AUTOMATIC_BACKUP_FILENAME = 'budget-terminal-backup.json'
@@ -42,6 +43,7 @@ async function writeSnapshot(target: string): Promise<void> {
       userData: await exportUserData(),
       settings: await exportSettings(),
       cards: await exportCards(),
+      articles: { articles: (await readArticles()).articles },
     }
     await mkdir(directory, { recursive: true })
     await writeFile(temporary, JSON.stringify(bundle, null, 2), 'utf8')

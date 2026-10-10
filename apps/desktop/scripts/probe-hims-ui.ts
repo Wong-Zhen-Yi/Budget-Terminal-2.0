@@ -77,6 +77,9 @@ try {
         await settle()
         check(text().includes('2.9M') && text().includes('$750M') && text().includes('-$0.37'), 'KPI metrics missing')
         check(document.querySelector('[data-hims-price-range]').dataset.himsPriceRange === '1Y', 'Default range is not 1Y')
+        const priceCanvas = () => document.querySelector('[data-hims-price-range] canvas')
+        check(priceCanvas()?.width > 0 && priceCanvas()?.height > 0, 'Candlestick chart did not render')
+        const yearImage = priceCanvas().toDataURL()
         const yearCount = Number(document.querySelector('[data-hims-price-range]').dataset.himsCandleCount)
         const calls = window.calls
         for (const label of ['1M', '3M', '6M', '1Y', '3Y']) {
@@ -84,6 +87,7 @@ try {
           check(document.querySelector('[data-hims-price-range]').dataset.himsPriceRange === label, 'Range control failed')
         }
         check(Number(document.querySelector('[data-hims-price-range]').dataset.himsCandleCount) > yearCount, 'Range did not change chart data')
+        check(priceCanvas().toDataURL() !== yearImage, 'Range selection did not redraw candlestick history')
         check(window.calls === calls, 'Range selection repeated provider load')
         for (const id of ['charts', 'fundamentals', 'options', 'valuation']) {
           click(id); check(JSON.stringify(window.navigation) === JSON.stringify([id, 'HIMS']), 'Ticker shortcut failed')
@@ -145,8 +149,8 @@ try {
         check(window.calls === restoreCalls + 1 && text().includes('2.9M'), 'First visit repeated the startup load')
         click('1Y'); await settle()
         const priceBox = document.querySelector('[data-hims-price-range]')
-        check(priceBox.querySelector('svg').getBoundingClientRect().bottom <= priceBox.getBoundingClientRect().bottom + 1, 'Price chart overlaps volume: ' + JSON.stringify({ box: priceBox.getBoundingClientRect().toJSON(), svg: priceBox.querySelector('svg').getBoundingClientRect().toJSON() }))
-        check(priceBox.querySelector('svg').getBoundingClientRect().width <= priceBox.getBoundingClientRect().width, 'Price chart width exceeds its panel: ' + JSON.stringify({ box: priceBox.getBoundingClientRect().toJSON(), svg: priceBox.querySelector('svg').getBoundingClientRect().toJSON() }))
+        check(priceBox.querySelector('canvas').getBoundingClientRect().bottom <= priceBox.getBoundingClientRect().bottom + 1, 'Price chart overlaps volume: ' + JSON.stringify({ box: priceBox.getBoundingClientRect().toJSON(), svg: priceBox.querySelector('canvas').getBoundingClientRect().toJSON() }))
+        check(priceBox.querySelector('canvas').getBoundingClientRect().width <= priceBox.getBoundingClientRect().width, 'Price chart width exceeds its panel: ' + JSON.stringify({ box: priceBox.getBoundingClientRect().toJSON(), svg: priceBox.querySelector('canvas').getBoundingClientRect().toJSON() }))
         check(![...document.querySelectorAll('svg path')].some(path => /NaN|Infinity/.test(path.getAttribute('d') || '')), 'Chart produced invalid paths')
         return 'PASS: loading, cached refresh, expired revisit, IndexedDB restoration, startup warming, metrics, ranges, sources, ticker shortcuts, refresh/F5, partial/offline/failed states and recovery'
       }

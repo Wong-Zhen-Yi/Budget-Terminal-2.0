@@ -19,6 +19,7 @@ export function createServiceRoutes(screenshot: (request: ScreenshotRequest) => 
       continue
     }
     const key = operation === 'mutatePortfolio' ? 'portfolioMutate'
+      : operation === 'mutateArticles' ? 'articlesMutate'
       : operation === 'mutateCards' ? 'cardsMutate'
       : operation === 'mutatePersonalFinance' ? 'personalFinanceMutate'
       : operation === 'mutateSettings' ? 'settingsMutate' : operation

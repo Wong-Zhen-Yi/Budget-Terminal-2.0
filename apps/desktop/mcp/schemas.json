@@ -28,6 +28,7 @@
             "enum": [
               "current",
               "all",
+              "articles",
               "dashboard",
               "portfolio",
               "personal-finance",
@@ -1185,6 +1186,127 @@
           }
         },
         "additionalProperties": false
+      }
+    }
+  },
+  "articles": {
+    "$ref": "#/definitions/Input_articles",
+    "definitions": {
+      "Input_articles": {
+        "$ref": "#/definitions/Record%3Cstring%2Cnever%3E"
+      },
+      "Record<string,never>": {
+        "type": "object",
+        "additionalProperties": {
+          "not": {}
+        }
+      }
+    }
+  },
+  "mutateArticles": {
+    "$ref": "#/definitions/Input_mutateArticles",
+    "definitions": {
+      "Input_mutateArticles": {
+        "$ref": "#/definitions/ArticlesMutation"
+      },
+      "ArticlesMutation": {
+        "anyOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "topic": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "draft",
+                  "finished"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "const": "add"
+              }
+            },
+            "required": [
+              "content",
+              "status",
+              "title",
+              "topic",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "topic": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "draft",
+                  "finished"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "const": "update"
+              },
+              "id": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "content",
+              "id",
+              "revision",
+              "status",
+              "title",
+              "topic",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "remove"
+              },
+              "id": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "type",
+              "id",
+              "revision"
+            ],
+            "additionalProperties": false
+          }
+        ]
       }
     }
   },

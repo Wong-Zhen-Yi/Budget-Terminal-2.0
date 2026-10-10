@@ -125,8 +125,9 @@ try {
       }
     }
   }
-  assert.equal(mutationVariants, 41)
-  assert.equal(events.length, 4)
+  assert.equal(mutationVariants, 44)
+  assert.equal(events.length, 5)
+  assert(events.some(domains => domains.includes('articles')), 'Article edits must notify the renderer')
   const screenshotTool = tools.find((tool) => tool.name === toolName('screenshot'))!
   assert(tools.some(tool => tool.name === toolName('amzn')), 'AMZN must expose a company research read tool')
   validateCall(toolName('amzn'), { request: { force: true } })

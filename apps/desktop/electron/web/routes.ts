@@ -26,6 +26,7 @@ export function createWebRoutes(execute?: (channel: string, request: unknown) =>
   for (const operation of Object.keys(operations) as Operation[]) {
     if (operation === 'screenshot') continue
     const key = operation === 'mutatePortfolio' ? 'portfolioMutate'
+      : operation === 'mutateArticles' ? 'articlesMutate'
       : operation === 'mutateCards' ? 'cardsMutate'
       : operation === 'mutatePersonalFinance' ? 'personalFinanceMutate'
       : operation === 'mutateSettings' ? 'settingsMutate' : operation

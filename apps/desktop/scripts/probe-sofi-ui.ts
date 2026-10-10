@@ -75,16 +75,19 @@ try {
         check(text().includes('$8.58') && text().includes('$7.34') && text().includes('2026-06-30'), 'Book values and dates failed')
         check(document.querySelectorAll('thead th').length === 9, 'Missing eight-quarter table')
         check(document.querySelectorAll('tbody tr').length === 21, 'Missing operating and segment metrics')
-        check(document.querySelectorAll('svg').length === 9, 'Missing dashboard charts')
-        check([...document.querySelectorAll('svg')].every(svg => svg.getBoundingClientRect().height > 120), 'A chart collapsed vertically')
+        const trendCharts = document.querySelectorAll('svg[viewBox]')
+        check(trendCharts.length === 8, 'Missing dashboard trend charts')
+        check([...trendCharts].every(svg => svg.getBoundingClientRect().height > 120), 'A chart collapsed vertically')
         document.querySelector('[aria-label="Members source for Q2 2026"]').click()
         check(window.opened.includes('a2026q2earningsrelease.htm'), 'Metric source link failed')
         const pricePanel = () => [...document.querySelectorAll('section')].find(panel => panel.querySelector('h2')?.textContent === 'SOFI price · USD')
-        const path = () => pricePanel().querySelector('path')?.getAttribute('d')
-        const yearPath = path(), beforeRange = window.calls
-        for (const range of ['1M','3M','6M','1Y','3Y']) { button(range).click(); await settle(); check(path(), 'Empty price range '+range) }
+        const priceCanvas = () => pricePanel().querySelector('canvas')
+        const priceImage = () => priceCanvas()?.toDataURL()
+        check(priceCanvas()?.width > 0 && priceCanvas()?.height > 0, 'Candlestick chart did not render')
+        const yearImage = priceImage(), beforeRange = window.calls
+        for (const range of ['1M','3M','6M','1Y','3Y']) { button(range).click(); await settle(); check(priceCanvas()?.width > 0, 'Empty price range '+range) }
         button('1M').click(); await settle()
-        check(path() !== yearPath, 'Range selection did not change price history')
+        check(priceImage() !== yearImage, 'Range selection did not redraw candlestick history')
         check(window.calls === beforeRange, 'Price ranges repeated provider requests')
         window.forced = false
         await window.reloadAll(); await settle()

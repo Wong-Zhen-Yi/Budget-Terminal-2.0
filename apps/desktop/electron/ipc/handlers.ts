@@ -48,7 +48,7 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
         const result = await pending
         if (result.data.performed) publishSavedDataChanged(
           action === 'importUserData' || action === 'clearUserData'
-            ? ['portfolio', 'cards', 'personalFinance', 'settings'] : ['settings'],
+            ? ['articles', 'portfolio', 'cards', 'personalFinance', 'settings'] : ['settings'],
         )
         return result
       }

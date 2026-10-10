@@ -9,6 +9,7 @@ import { useHims, useRefreshHims } from '@/api/himsQueries'
 import { api } from '@/api/client'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { LineChart } from '@/components/charts/LineChart'
+import { CandlestickChart } from '@/components/charts/CandlestickChart'
 import { Donut, colorForIndex } from '@/components/charts/Donut'
 import { FilingsTable } from '@/components/fundamentals/FilingsTable'
 import { Button } from '@/components/ui/Button'
@@ -122,7 +123,9 @@ export function HimsPage({ onStatusChange, onNavigate }: {
     })}</div>
     <div className="grid shrink-0 gap-2 xl:grid-cols-[2fr_1fr]">
       <Panel title="Stock performance · HIMS" warning={warning('market')} className="h-[430px]" actions={STOCKS_RANGE_PRESETS.map(preset => <Button key={preset} variant="toggle" active={range === preset} onClick={() => setRange(preset)}>{preset}</Button>)}>
-        <div className="flex min-h-0 flex-[3] flex-col overflow-hidden p-2" data-hims-price-range={range} data-hims-candle-count={candles.length}><LineChart labels={dates} series={[{ label: 'HIMS · USD', values: candles.map(candle => candle.close), color: colorForIndex(0) }]} format={value => amount(value, true)} baseline="auto" empty={busy ? 'Loading price history…' : 'Price history unavailable.'} /></div>
+        <div className="flex min-h-0 flex-[3] flex-col overflow-hidden p-2" data-hims-price-range={range} data-hims-candle-count={candles.length}>
+          {market?.chart.candles.length ? <CandlestickChart candles={candles} /> : <PanelMessage>{busy ? 'Loading price history…' : 'Price history unavailable.'}</PanelMessage>}
+        </div>
         <div className="border-t border-border px-2 pt-1 text-2xs text-text-muted">Daily trading volume · shares · Yahoo Finance</div>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-2 pb-2"><LineChart labels={dates} series={[{ label: 'Volume', values: candles.map(candle => candle.volume), color: colorForIndex(1) }]} format={value => amount(value)} ticks={4} empty="Volume unavailable." /></div>
       </Panel>

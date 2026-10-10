@@ -1,6 +1,7 @@
 import { getMoney, clearMoneyCache } from './money.js'
 import { withSourceEnvelope } from './sourceHealth.js'
 import { getHims } from './hims.js'
+import { replaceArticles } from './articlesStore.js'
 import type { HimsPayload, HimsRequest } from '../shared/hims.js'
 import { getHood } from './hood.js'
 import { getSofi } from './sofi.js'
@@ -480,6 +481,7 @@ const backupSchema = z.object({
   userData: z.unknown(),
   settings: z.unknown().optional(),
   cards: z.unknown().optional(),
+  articles: z.unknown().optional(),
 })
 
 const emptySettings: AppSettings = {
@@ -1940,6 +1942,7 @@ const providerImplementation: MarketDataProvider = {
         // its holdings rather than being refused outright.
         if (parsed.data.settings) await replaceSettings(parsed.data.settings)
         if (parsed.data.cards) await replaceCards(parsed.data.cards)
+        if (parsed.data.articles) await replaceArticles(parsed.data.articles)
         return ok(
           {
             action: 'importUserData' as const,

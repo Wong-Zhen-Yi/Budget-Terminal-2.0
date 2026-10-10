@@ -9,6 +9,7 @@ import { useHood, useRefreshHood } from '@/api/hoodQueries'
 import { api } from '@/api/client'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { LineChart } from '@/components/charts/LineChart'
+import { CandlestickChart } from '@/components/charts/CandlestickChart'
 import { Donut, colorForIndex } from '@/components/charts/Donut'
 import { FilingsTable } from '@/components/fundamentals/FilingsTable'
 import { Button } from '@/components/ui/Button'
@@ -99,7 +100,9 @@ export function HoodPage({ onStatusChange, onNavigate }: {
     <div className="grid shrink-0 grid-cols-2 gap-2 lg:grid-cols-3 2xl:grid-cols-6">{tiles.map(([label, value, period]) => <div key={label} className="border border-border bg-surface p-3 text-center"><div className="text-2xs text-text-muted">{label}</div><div className="num my-1 text-lg font-bold">{value}</div><div className="text-2xs text-text-muted">{period}</div></div>)}</div>
     <div className="grid shrink-0 gap-2 xl:grid-cols-[2fr_1fr]">
       <Panel title="Stock performance · HOOD" warning={warning('market')} className="h-[430px]" actions={STOCKS_RANGE_PRESETS.map(preset => <Button key={preset} variant="toggle" active={range === preset} onClick={() => setRange(preset)}>{preset}</Button>)}>
-        <div className="flex min-h-0 flex-[3] flex-col overflow-hidden p-2" data-hood-price-range={range} data-hood-candle-count={candles.length}><LineChart labels={dates} series={[{ label: 'HOOD · USD', values: candles.map(candle => candle.close), color: colorForIndex(0) }]} format={value => amount(value, true)} baseline="auto" empty={busy ? 'Loading price history…' : 'Price history unavailable.'} /></div>
+        <div className="flex min-h-0 flex-[3] flex-col overflow-hidden p-2" data-hood-price-range={range} data-hood-candle-count={candles.length}>
+          {data?.market?.chart.candles.length ? <CandlestickChart candles={candles} /> : <PanelMessage>{busy ? 'Loading price history…' : 'Price history unavailable.'}</PanelMessage>}
+        </div>
         <div className="border-t border-border px-2 pt-1 text-2xs text-text-muted">Daily trading volume · shares</div>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-2 pb-2"><LineChart labels={dates} series={[{ label: 'Volume', values: candles.map(candle => candle.volume), color: colorForIndex(1) }]} format={value => amount(value)} ticks={4} empty="Volume unavailable." /></div>
       </Panel>

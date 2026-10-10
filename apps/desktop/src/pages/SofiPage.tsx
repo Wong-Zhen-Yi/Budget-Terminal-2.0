@@ -8,6 +8,7 @@ import { useSofi, useRefreshSofi } from '@/api/sofiQueries'
 import { api } from '@/api/client'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { LineChart } from '@/components/charts/LineChart'
+import { CandlestickChart } from '@/components/charts/CandlestickChart'
 import { colorForIndex } from '@/components/charts/Donut'
 import { Button } from '@/components/ui/Button'
 import { Panel, PanelMessage } from '@/components/ui/Panel'
@@ -125,9 +126,9 @@ export function SofiPage({ onStatusChange }: { onStatusChange: (panels: PanelSta
     </Panel>
     <Panel title="SOFI price · USD" warning={marketWarning} className="h-[300px] shrink-0"
       actions={<div className="flex gap-1">{STOCKS_RANGE_PRESETS.map(preset => <Button key={preset} variant="toggle" active={range === preset} onClick={() => setRange(preset)}>{preset}</Button>)}</div>}>
-      <div className="flex min-h-0 flex-1 flex-col p-2"><LineChart labels={candles.map(candle => new Date(candle.time * 1000).toISOString().slice(0, 10))}
-        series={[{ label: 'SOFI', color: colorForIndex(0), values: candles.map(candle => candle.close) }]}
-        format={value => currency(value)} baseline="auto" empty={loading ? 'Loading SOFI price history...' : 'SOFI price history unavailable'} /></div>
+      <div className="flex min-h-0 flex-1 flex-col p-2" data-sofi-price-range={range} data-sofi-candle-count={candles.length}>
+        {payload?.market?.chart.candles.length ? <CandlestickChart candles={candles} /> : <PanelMessage>{loading ? 'Loading SOFI price history...' : 'SOFI price history unavailable'}</PanelMessage>}
+      </div>
     </Panel>
     <div className="grid shrink-0 grid-cols-1 gap-2 lg:grid-cols-2">
       <Trend title="Members & products" quarters={quarters} metrics={['members', 'products']} unit="count" warning={reportWarning} loading={loading} />

@@ -1,3 +1,4 @@
+import { ArticlesPage } from '@/pages/ArticlesPage'
 import { Sp500Page } from '@/pages/Sp500Page'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -420,7 +421,9 @@ function renderPage({
   onSelectTab: (tabId: string) => void
 }) {
   return (
-    tabId === 'dashboard' ? (
+    tabId === 'articles' ? (
+      <ArticlesPage onStatusChange={onStatusChange} />
+    ) : tabId === 'dashboard' ? (
       <DashboardPage onStatusChange={onStatusChange} />
     ) : tabId === 'global' ? (
       <GlobalPage onStatusChange={onStatusChange} />

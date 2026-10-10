@@ -1,3 +1,5 @@
+import type { ArticlesPayload, ArticlesMutation } from './articles.js'
+export type { Article, ArticlesPayload, ArticlesMutation } from './articles.js'
 import type { BitcoinPayload, BitcoinRequest } from './bitcoin.js'
 import type { SofiPayload, SofiRequest } from './sofi.js'
 export type { SofiPayload, SofiRequest } from './sofi.js'
@@ -1267,6 +1269,7 @@ export const OPTION_BUCKETS: ReadonlyArray<{ key: OptionBucketKey; label: string
  * page-by-page migration.
  */
 export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boolean }> = [
+  { id: 'articles', label: 'Articles', implemented: true },
   { id: 'dashboard', label: 'Dashboard', implemented: true },
   { id: 'portfolio', label: 'Portfolio', implemented: true },
   { id: 'personal-finance', label: 'Personal Finance', implemented: true },
@@ -3395,6 +3398,8 @@ export const CHANNELS = {
   portfolio: 'dashboard:portfolio',
   portfolioMutate: 'portfolio:mutate',
   verifyStoredData: 'user-data:verify',
+  articles: 'articles:read',
+  articlesMutate: 'articles:mutate',
   cards: 'cards:read',
   cardsMutate: 'cards:mutate',
   cardsPerformance: 'cards:performance',
@@ -3581,6 +3586,8 @@ export interface DesktopApi {
   portfolio(): Promise<Envelope<PortfolioPayload>>
   mutatePortfolio(mutation: PortfolioMutation): Promise<Envelope<PortfolioPayload>>
   verifyStoredData(request: StoredDataVerification): Promise<Envelope<boolean>>
+  articles(): Promise<Envelope<ArticlesPayload>>
+  mutateArticles(mutation: ArticlesMutation): Promise<Envelope<ArticlesPayload>>
   cards(): Promise<Envelope<CardsPayload>>
   mutateCards(mutation: CardsMutation): Promise<Envelope<CardsPayload>>
   cardsPerformance(
@@ -3670,7 +3677,7 @@ export interface DesktopApi {
   onPortfolioChanged(listener: () => void): () => void
 }
 
-export type SavedDataDomain = 'portfolio' | 'cards' | 'personalFinance' | 'settings'
+export type SavedDataDomain = 'articles' | 'portfolio' | 'cards' | 'personalFinance' | 'settings'
 export interface SavedDataChanged { domains: SavedDataDomain[] }
 
 export interface WebAccessStatus {

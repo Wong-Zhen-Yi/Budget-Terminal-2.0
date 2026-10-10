@@ -99,7 +99,10 @@ export function buildTasks(
   calendar: { year: number; month: number; earningsYear: number; ipoYear: number },
 ): WarmTask[] {
   const { active, every, editable, main, upDown } = holdingsOf(payload)
-  const tasks: WarmTask[] = []
+  const tasks: WarmTask[] = [{
+    tab: 'articles', label: 'Articles library',
+    run: client => warmStartupQuery(client, { queryKey: queryKeys.articles, queryFn: () => api.articles(), staleTime: Infinity }),
+  }]
 
   const dashboard = useDashboard.getState()
   for (const { symbol, label } of MACRO_SYMBOLS) {
