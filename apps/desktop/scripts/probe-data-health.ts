@@ -83,9 +83,10 @@ try {
     const renderMacro = () => renderToStaticMarkup(createElement(MacroBar, { macro: {}, loading: false,
       charts: [{ data: history, isLoading: false, isError: false }] }))
     Date.now = () => collected + FRESHNESS.chartDaily - 1
-    assert(!renderMacro().includes('Stale history'), 'Daily history remains current within its policy')
+    assert(!renderMacro().includes(' · stale'), 'Daily history remains current within its policy')
     Date.now = () => collected + FRESHNESS.chartDaily + 1
-    assert.match(renderMacro(), /Stale history/, 'Inline daily-history label expires without refetching')
+    assert.match(renderMacro(), / · stale/, 'Daily-history tooltip expires without refetching')
+    assert(!renderMacro().includes('Stale history'), 'Stale sparklines have no yellow history label')
     const copied = { ...fresh, meta: { ...fresh.meta, fetchedAt: collected } }
     Date.now = () => collected + FRESHNESS.sofi + 1
     const copiedPanel = { label: 'SOFI reported quarters', envelope: copied, loading: false, enabled: true, freshnessMs: FRESHNESS.sofi }

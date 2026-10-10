@@ -62,8 +62,8 @@ export function MacroBar({ macro, loading, charts }: {
             ) : (
               <span className="flex h-7 items-center text-2xs text-text-dim">{message}</span>
             )}
-            {warning && values.length >= 2 && (
-              <span className="text-2xs text-warn">{freshness === 'stale' ? 'Stale history' : 'History incomplete'}</span>
+            {warning && freshness !== 'stale' && values.length >= 2 && (
+              <span className="text-2xs text-warn">History incomplete</span>
             )}
           </div>
         )
