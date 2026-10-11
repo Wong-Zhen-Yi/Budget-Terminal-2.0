@@ -2,7 +2,6 @@ import { TABS } from './contract.js'
 
 /** Stable workspace membership; user ordering still applies within each workspace. */
 export const WORKSPACES = [
-  { id: 'articles', label: 'Articles', pages: ['articles'] },
   { id: 'overview', label: 'Overview', pages: ['dashboard', 'news', 'calendar', 'youtube', 'dictionary'] },
   { id: 'markets', label: 'Markets', pages: ['pre-market', 'heatmap', 'up-down', 'trading-volumes', 'beta', 'market-cap', 'price', 'etf', 'sp500', 'forex', 'crypto', 'gold', 'oil'] },
   { id: 'research', label: 'Research', pages: ['stocks', 'stock-discovery', 'fundamentals', 'valuation', 'institutions'] },
@@ -10,6 +9,7 @@ export const WORKSPACES = [
   { id: 'trading', label: 'Trading', pages: ['charts', 'options', 'signals', 'technical-screen', 'quant', 'backtest'] },
   { id: 'macro', label: 'Macro & events', pages: ['global', 'economic', 'bonds', 'money', 'ipo', 'politics'] },
   { id: 'money', label: 'My money', pages: ['portfolio', 'personal-finance', 'cards', 'projections'] },
+  { id: 'articles', label: 'Articles', pages: ['articles'] },
 ]
 
 export const DEFAULT_FAVORITE_TABS = ['dashboard', 'portfolio', 'charts']
