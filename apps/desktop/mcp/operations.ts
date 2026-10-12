@@ -48,6 +48,7 @@ export const operations = {
   amzn: 'Get Amazon (AMZN) market data, eight-quarter financial trends, AWS and retail segments, revenue categories, cash flow and guidance.',
   vst: 'Get Vistra (VST) market data, financials, segment EBITDA, annual guidance, hedges, consolidated revenue categories and generation volumes by fuel. Fuel-level revenue is not disclosed.',
   avgo: 'Get Broadcom (AVGO) market data, financials, semiconductor/software segments, AI revenue and earnings guidance.',
+  semiconductors: 'Get the reviewed U.S.-headquartered semiconductor supply-chain catalog, quotes, adjusted histories, company metrics, earnings dates and news, with coverage and freshness metadata.',
   hims: 'Get Hims & Hers (HIMS) market data, subscriber metrics, quarterly earnings, margins, cash flow and guidance.',
   hood: 'Get Robinhood (HOOD) market data, financials, operating metrics and quarterly results.',
   forexQuotes: 'Get foreign-exchange quotes.',

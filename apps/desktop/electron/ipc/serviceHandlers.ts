@@ -8,6 +8,7 @@ import type { MuRequest } from '../shared/mu.js'
 import type { AmznRequest } from '../shared/amzn.js'
 import type { VstRequest } from '../shared/vst.js'
 import type { AvgoRequest } from '../shared/avgo.js'
+import type { SemiconductorsRequest } from '../shared/semiconductors.js'
 import type { Sp500Request, Sp500BreadthRequest } from '../shared/sp500.js'
 
 import type {
@@ -223,6 +224,7 @@ export function registerServiceHandlers(register: RegisterService): void {
   handle(CHANNELS.mu, (request: MuRequest) => provider.mu(request))
   handle(CHANNELS.amzn, (request: AmznRequest) => provider.amzn(request))
   handle(CHANNELS.avgo, (request: AvgoRequest) => provider.avgo(request))
+  handle(CHANNELS.semiconductors, (request: SemiconductorsRequest) => provider.semiconductors(request))
   handle(CHANNELS.vst, (request: VstRequest) => provider.vst(request))
   handle(CHANNELS.forexQuotes, getForexQuotes)
   handle(CHANNELS.forexHistory, getForexHistory)

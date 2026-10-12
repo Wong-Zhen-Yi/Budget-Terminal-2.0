@@ -60,6 +60,7 @@
               "mu",
               "amzn",
               "avgo",
+              "semiconductors",
               "vst",
               "hood",
               "hims",
@@ -2194,6 +2195,23 @@
         "$ref": "#/definitions/AvgoRequest"
       },
       "AvgoRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "semiconductors": {
+    "$ref": "#/definitions/Input_semiconductors",
+    "definitions": {
+      "Input_semiconductors": {
+        "$ref": "#/definitions/SemiconductorsRequest"
+      },
+      "SemiconductorsRequest": {
         "type": "object",
         "properties": {
           "force": {

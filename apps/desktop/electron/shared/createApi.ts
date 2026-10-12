@@ -66,6 +66,7 @@ export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS
     mu: (request) => invoke(CHANNELS.mu, request),
     amzn: (request) => invoke(CHANNELS.amzn, request),
     avgo: (request) => invoke(CHANNELS.avgo, request),
+    semiconductors: (request) => invoke(CHANNELS.semiconductors, request),
     vst: (request) => invoke(CHANNELS.vst, request),
     hood: (request) => invoke(CHANNELS.hood, request),
     hims: (request) => invoke(CHANNELS.hims, request),

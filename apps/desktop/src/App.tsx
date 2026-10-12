@@ -27,6 +27,7 @@ import { HimsPage } from '@/pages/HimsPage'
 import { MuPage } from '@/pages/MuPage'
 import { AmznPage } from '@/pages/AmznPage'
 import { AvgoPage } from '@/pages/AvgoPage'
+import { SemiconductorsPage } from '@/pages/SemiconductorsPage'
 import { VstPage } from '@/pages/VstPage'
 import { MoneyPage } from '@/pages/MoneyPage'
 import { BondsPage } from '@/pages/BondsPage'
@@ -466,6 +467,8 @@ function renderPage({
       <VstPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'avgo' ? (
       <AvgoPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
+    ) : tabId === 'semiconductors' ? (
+      <SemiconductorsPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'mu' ? (
       <MuPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'amzn' ? (

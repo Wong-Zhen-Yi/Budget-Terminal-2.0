@@ -54,6 +54,8 @@
     "probe:bmnr": "tsx scripts/probe-bmnr.ts",
     "probe:avgo": "tsx scripts/probe-avgo.ts",
     "probe:avgo-ui": "tsx scripts/probe-avgo-ui.ts",
+    "probe:semiconductors": "tsx scripts/probe-semiconductors.ts",
+    "probe:semiconductors-ui": "tsx scripts/probe-semiconductors-ui.ts",
     "probe:mu": "tsx scripts/probe-mu.ts",
     "probe:mu-ui": "tsx scripts/probe-mu-ui.ts",
     "probe:sofi": "tsx scripts/probe-sofi.ts",

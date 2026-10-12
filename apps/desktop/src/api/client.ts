@@ -38,6 +38,7 @@ export const queryKeys = {
   mu: ['mu'] as const,
   amzn: ['amzn'] as const,
   avgo: ['avgo'] as const,
+  semiconductors: ['semiconductors', 1] as const,
   vst: ['vst', 2] as const,
   hood: ['hood'] as const,
   hims: ['hims'] as const,

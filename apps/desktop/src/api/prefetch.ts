@@ -635,6 +635,14 @@ export function buildTasks(
     },
   })
   tasks.push({
+    tab: 'semiconductors', label: 'Semiconductor supply chain',
+    run: (client, backgroundOrder) => warmStartupQuery(client, {
+      queryKey: queryKeys.semiconductors,
+      queryFn: () => api.semiconductors({ background: true, backgroundOrder }),
+      staleTime: queryFreshness(queryKeys.semiconductors),
+    }),
+  })
+  tasks.push({
     tab: 'vst', label: 'VST company dashboard',
     run: async (client, backgroundOrder) => {
       const result = await warmStartupQuery(client, {

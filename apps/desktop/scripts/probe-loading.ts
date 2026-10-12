@@ -18,6 +18,7 @@ assert.deepEqual([...startup].sort(), [...allPages].sort())
 assert.deepEqual(startupPages('heatmap', [], []).slice(0, 1), ['heatmap'])
 assert.equal(startupPages('dashboard', [], []).includes('economic'), true)
 assert.equal(startupPages('dashboard', [], []).includes('settings'), true)
+assert.equal(startupPages('dashboard', [], []).includes('semiconductors'), true)
 
 const firstOrder = startupPages('dashboard', ['heatmap'], ['trading-volumes'])
 assert.deepEqual(startupPageOrder(firstOrder, {}), firstOrder)
