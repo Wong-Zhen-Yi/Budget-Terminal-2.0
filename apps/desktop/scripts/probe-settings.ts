@@ -74,6 +74,17 @@ async function main(): Promise<void> {
     favoriteTabs: ['roll'],
   })
   check('saved Roll navigation is discarded', !withoutRoll.tabOrder.includes('roll') && !withoutRoll.hiddenTabs.includes('roll') && !withoutRoll.favoriteTabs.includes('roll'))
+  const withoutDayTrading = await replaceSettings({
+    ...defaults,
+    tabOrder: ['signals', ...defaults.tabOrder],
+    hiddenTabs: ['signals', 'stocks'],
+    favoriteTabs: ['signals', 'charts'],
+    obscuredTabs: ['signals', 'personal-finance'],
+  })
+  check('saved Day Trading navigation is discarded', !withoutDayTrading.tabOrder.includes('signals')
+    && withoutDayTrading.hiddenTabs.join(',') === 'stocks'
+    && withoutDayTrading.favoriteTabs.join(',') === 'charts'
+    && withoutDayTrading.obscuredTabs.join(',') === 'personal-finance')
   const { favoriteTabs: omittedFavorites, ...legacy } = defaults
   void omittedFavorites
   check('legacy settings receive default favorites', (await replaceSettings(legacy)).favoriteTabs.join(',') === 'dashboard,portfolio,charts')

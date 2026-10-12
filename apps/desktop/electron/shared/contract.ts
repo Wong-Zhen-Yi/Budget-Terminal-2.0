@@ -1288,7 +1288,6 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'charts', label: 'Charts', implemented: true },
   { id: 'valuation', label: 'Valuation', implemented: true },
   { id: 'options', label: 'Options', implemented: true },
-  { id: 'signals', label: 'Day Trading', implemented: true },
   { id: 'technical-screen', label: 'Technical Indicators', implemented: true },
   { id: 'quant', label: 'Quant', implemented: true },
   { id: 'projections', label: 'Projections', implemented: true },

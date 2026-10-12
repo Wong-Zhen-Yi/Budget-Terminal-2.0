@@ -78,14 +78,7 @@ for (const page of allPages) {
   assert(scheduled.has(page) || sharedOrLocal.has(page), `${page} is absent from startup loading`)
 }
 
-let signalsRequest: unknown
-Object.assign(window.api, { signals: async (request: unknown) => { signalsRequest = request; return ok(null, 'fixture') } })
-const signalsStartup = buildTasks(portfolio, undefined, { stocks: 'AAPL', fundamentals: 'AAPL' },
-  { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 }).find((task) => task.tab === 'signals')!
-const signalsClient = new QueryClient()
-await signalsStartup.run(signalsClient, 7)
-assert.deepEqual(signalsRequest, { background: true, backgroundOrder: 7 }, 'startup must pass the learned page order to the provider')
-signalsClient.clear()
+assert(!scheduled.has('signals'), 'removed Day Trading page must not run a startup scan')
 
 let muRequest: unknown
 Object.assign(window.api, { mu: async (request: unknown) => { muRequest = request; return ok({ symbol: 'MU' }, 'fixture') } })

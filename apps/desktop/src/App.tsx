@@ -52,7 +52,6 @@ import { QuantPage } from '@/pages/QuantPage'
 import { TechnicalScreenPage } from '@/pages/TechnicalScreenPage'
 import { IpoPage } from '@/pages/IpoPage'
 import { PoliticsPage } from '@/pages/PoliticsPage'
-import { SignalsPage } from '@/pages/SignalsPage'
 import { BetaPage } from '@/pages/BetaPage'
 import { TradingVolumesPage } from '@/pages/TradingVolumesPage'
 import { UpDownPage } from '@/pages/UpDownPage'
@@ -445,8 +444,6 @@ function renderPage({
       <MarketCapPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'price' ? (
       <PricePage onStatusChange={onStatusChange} />
-    ) : tabId === 'signals' ? (
-      <SignalsPage onStatusChange={onStatusChange} />
     ) : tabId === 'news' ? (
       <NewsPage onStatusChange={onStatusChange} />
     ) : tabId === 'calendar' ? (

@@ -5,13 +5,16 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createRequire } from 'node:module'
 import { build } from 'esbuild'
-import { workspaceFor } from '../electron/shared/navigation.js'
+import { startupPages, workspaceFor } from '../electron/shared/navigation.js'
 import { TABS } from '../electron/shared/contract.js'
 
 assert.equal(workspaceFor('hims')?.id, 'focus')
 assert(TABS.some(tab => tab.id === 'hims' && tab.label === 'HIMS' && tab.implemented))
 assert.equal(workspaceFor('sofi')?.id, 'focus')
 assert(TABS.some(tab => tab.id === 'sofi' && tab.label === 'SOFI' && tab.implemented))
+assert(!TABS.some(tab => tab.id === 'signals'), 'Day Trading must be absent from navigation and settings')
+assert.equal(workspaceFor('signals'), undefined)
+assert(!startupPages('signals', ['signals'], ['signals']).includes('signals'), 'Saved history must not restore Day Trading')
 
 // Exercise the actual page host in Chromium with synthetic data and isolated storage.
 const require = createRequire(import.meta.url)

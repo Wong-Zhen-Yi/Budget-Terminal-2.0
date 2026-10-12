@@ -825,14 +825,6 @@ export function buildTasks(
     }),
   })
   tasks.push({
-    tab: 'signals', label: 'Day Trading',
-    run: (client, backgroundOrder) => warmStartupQuery(client, {
-      queryKey: queryKeys.signals,
-      queryFn: () => api.signals({ background: true, backgroundOrder }),
-      staleTime: 0,
-    }),
-  })
-  tasks.push({
     tab: 'quant', label: 'Quant',
     run: (client, backgroundOrder) => warmStartupQuery(client, {
       queryKey: queryKeys.quant,

@@ -42,7 +42,6 @@
     "probe:market-cap": "tsx scripts/probe-market-cap.ts",
     "probe:price": "tsx scripts/probe-price.ts",
     "probe:signals": "tsx scripts/probe-signals.ts",
-    "probe:signals-ui": "tsx scripts/probe-signals-ui.ts",
     "probe:news": "tsx scripts/probe-news.ts",
     "probe:stocks": "tsx scripts/probe-stocks.ts",
     "probe:discovery": "tsx scripts/probe-discovery.ts",
