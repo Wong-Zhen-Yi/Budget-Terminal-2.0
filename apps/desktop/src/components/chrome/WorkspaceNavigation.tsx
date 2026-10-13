@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 import { SETTINGS_TAB_ID } from '@shared/contract'
 import { WORKSPACES, workspaceFor } from '@shared/navigation'
 import { isBrowser } from '@/api/browser'
+import { NavigationIcon } from './NavigationIcon'
 
 interface NavigationTab {
   id: string
@@ -59,7 +60,7 @@ export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, rece
                 aria-label={workspace.label} title={collapsed ? workspace.label : undefined}
                 onClick={() => onSelectTab(target.id)}
                 className={`${navigationButton}flex items-center ${collapsed ? 'justify-center' : 'justify-between'} gap-2 ${active ? selectedStyle : idleStyle}`}>
-                <span>{collapsed ? workspace.label.split(/[ &]+/).map((word) => word[0]).join('').toUpperCase() : workspace.label}</span>
+                {collapsed ? <NavigationIcon id={workspace.id} workspace /> : <span>{workspace.label}</span>}
                 {!collapsed ? <span className="num text-text-dim">{pages.length}</span> : null}
               </button>
             )
@@ -74,7 +75,7 @@ export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, rece
             return tab ? [<button key={id} type="button" onClick={() => onSelectTab(id)}
               aria-label={tab.label} title={collapsed ? tab.label : undefined}
               aria-current={id === activeTab ? 'page' : undefined}
-              className={navigationButton + (id === activeTab ? selectedStyle : idleStyle)}>{collapsed ? tab.label.slice(0, 2) : tab.label}</button>] : []
+              className={navigationButton + (id === activeTab ? selectedStyle : idleStyle)}>{collapsed ? <NavigationIcon id={id} /> : tab.label}</button>] : []
           })}
         </nav>
         {!collapsed && !favorites.some((id) => tabs.some((tab) => tab.id === id && tab.implemented)) ? (
@@ -94,7 +95,7 @@ export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, rece
       <button type="button" onClick={() => onSelectTab(SETTINGS_TAB_ID)}
         aria-label="Settings" title={collapsed ? 'Settings' : undefined}
         aria-current={activeTab === SETTINGS_TAB_ID ? 'page' : undefined}
-        className={`${navigationButton}mt-auto ${activeTab === SETTINGS_TAB_ID ? selectedStyle : idleStyle}`}>{collapsed ? '⚙' : 'Settings'}</button>
+        className={`${navigationButton}mt-auto ${activeTab === SETTINGS_TAB_ID ? selectedStyle : idleStyle}`}>{collapsed ? <NavigationIcon id={SETTINGS_TAB_ID} /> : 'Settings'}</button>
     </aside>
   )
 }

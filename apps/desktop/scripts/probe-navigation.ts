@@ -31,6 +31,10 @@ try {
         import { createRoot } from 'react-dom/client'
         import { flushSync } from 'react-dom'
         import { PageCache } from './src/components/chrome/PageCache'
+        import { WorkspaceSidebar } from './src/components/chrome/WorkspaceNavigation'
+        import { pageIconPaths } from './src/components/chrome/NavigationIcon'
+        import { TABS } from './electron/shared/contract'
+        import { WORKSPACES } from './electron/shared/navigation'
         const renders = {}, effects = {}, ticks = {}
         const ids = ['a', 'b', 'c', 'd', 'e']
         let select, updateShell, hide
@@ -58,6 +62,41 @@ try {
         const settle = () => new Promise(resolve => setTimeout(resolve, 80))
         const go = async id => { flushSync(() => select(id)); await settle() }
         window.runProbe = async () => {
+          const railHost = document.createElement('div')
+          document.body.append(railHost)
+          const railRoot = createRoot(railHost)
+          let selected, toggled = false
+          const railProps = {
+            tabs: TABS, activeTab: 'articles', favorites: TABS.map(tab => tab.id), recent: [],
+            onSelectTab: id => selected = id, onToggleCollapsed: () => toggled = true,
+            saving: false, isMac: false,
+          }
+          flushSync(() => railRoot.render(<WorkspaceSidebar {...railProps} collapsed />))
+          const favoriteButtons = [...railHost.querySelectorAll('nav[aria-label="Favorite pages"] button')]
+          check(favoriteButtons.length === TABS.length, 'Missing favorite pages')
+          for (const tab of TABS) {
+            check(pageIconPaths[tab.id], 'Missing page icon: ' + tab.id)
+            const button = favoriteButtons.find(button => button.getAttribute('aria-label') === tab.label)
+            check(button.title === tab.label && button.textContent === '', 'Collapsed page label or tooltip incorrect: ' + tab.id)
+            check(button.querySelector('svg[aria-hidden="true"] path'), 'Missing SVG: ' + tab.id)
+            button.click()
+            check(selected === tab.id, 'Favorite icon selected wrong page: ' + tab.id)
+          }
+          check(new Set(TABS.map(tab => pageIconPaths[tab.id])).size === TABS.length, 'Pages must have distinct icons')
+          for (const workspace of WORKSPACES) {
+            const button = railHost.querySelector('nav[aria-label="Workspaces"] button[aria-label="' + workspace.label + '"]')
+            check(button.querySelector('svg') && button.title === workspace.label, 'Missing workspace icon or tooltip')
+            button.click()
+            check(workspace.pages.includes(selected), 'Workspace icon selected wrong workspace')
+          }
+          check(railHost.querySelector('button[aria-label="Articles"][aria-current="page"]'), 'Selected icon lost active state')
+          railHost.querySelector('button[aria-label="Expand sidebar"]').click()
+          check(toggled, 'Expand icon did not toggle sidebar')
+          flushSync(() => railRoot.render(<WorkspaceSidebar {...railProps} collapsed={false} isMac />))
+          check(!railHost.querySelector('[data-navigation-icon]'), 'Expanded sidebar should show labels')
+          check(railHost.textContent.includes('Macro & events') && railHost.textContent.includes('Personal Finance'), 'Expanded labels missing')
+          railRoot.unmount()
+          railHost.remove()
           createRoot(document.getElementById('root')).render(<Shell />)
           await settle()
           const original = document.querySelector('[data-page-id="a"]')
@@ -92,7 +131,7 @@ try {
           check(document.querySelector('[data-page-id="b"]') !== retainedB, 'Evicted page reused stale DOM')
           check(document.querySelector('[data-page-id="b"] button').textContent === '0', 'Evicted page kept local state')
           check(Object.values(effects).reduce((a, b) => a + b, 0) === 1, 'More than one page has active effects')
-          return 'PASS: recent-page retention, resident limit, eviction, shell render isolation, suspended polling, effect resume, hidden-page removal'
+          return 'PASS: all page and workspace icons, tooltips, selection, sidebar expansion, recent-page retention, resident limit, eviction, shell render isolation, suspended polling, effect resume, hidden-page removal'
         }
       `,
     },
