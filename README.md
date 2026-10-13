@@ -18,6 +18,7 @@
 
 <p align="center">
   <a href="#quick-start">Quick start</a> ·
+  <a href="#screenshots">Screenshots</a> ·
   <a href="#explore-the-workspaces">Workspaces</a> ·
   <a href="docs/web-access.md">Remote access</a> ·
   <a href="#documentation">Documentation</a> ·
@@ -41,6 +42,36 @@ research pages.
 | **💼 Track your money** | Manage portfolios, personal finance, Cards, and projections with local saved records and backups. |
 | **⚡ Open ready pages** | Every implemented page starts loading at launch, with startup progress and failures visible. |
 | **🔗 Extend your workspace** | Access the app from an approved browser or connect local research tools through MCP. |
+
+## Screenshots
+
+Screenshots of the current app using an isolated demo profile. Holdings, prices,
+headlines, and indicator values are illustrative sample data.
+
+### Dashboard
+
+Market snapshots, portfolio holdings, price action, analyst targets, and options
+in one workspace.
+
+![Budget Terminal Dashboard with demo holdings, a candlestick chart, market snapshots, and options tables](docs/assets/screenshots/dashboard.png)
+
+<details>
+<summary><strong>Charts — price action and technical tools</strong></summary>
+
+Candlestick history, volume, moving averages, drawing tools, and portfolio context.
+
+![Budget Terminal Charts workspace with demo candlesticks, volume, a moving average, and a portfolio sidebar](docs/assets/screenshots/charts.png)
+
+</details>
+
+<details>
+<summary><strong>Portfolio — positions and allocation</strong></summary>
+
+Position values, gains, portfolio weights, and performance snapshots.
+
+![Budget Terminal Portfolio workspace with a five-position demo portfolio, gains, and allocation bars](docs/assets/screenshots/portfolio.png)
+
+</details>
 
 ## Quick start
 
