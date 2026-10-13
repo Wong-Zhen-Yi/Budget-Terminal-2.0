@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="400" viewBox="0 0 1280 400" role="img" aria-labelledby="title desc">
+  <title id="title">Budget Terminal 2.0</title>
+  <desc id="desc">A dark navy banner with an abstract market chart and the tagline Your markets. Your research. Your workspace.</desc>
+  <defs>
+    <linearGradient id="background" x2="1" y2="1">
+      <stop stop-color="#0b1220"/>
+      <stop offset="1" stop-color="#122940"/>
+    </linearGradient>
+    <linearGradient id="area" x2="0" y2="1">
+      <stop stop-color="#38bdf8" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#38bdf8" stop-opacity="0"/>
+    </linearGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#94a3b8" stroke-opacity=".07"/>
+    </pattern>
+  </defs>
+  <rect width="1280" height="400" rx="20" fill="url(#background)"/>
+  <rect width="1280" height="400" rx="20" fill="url(#grid)"/>
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <rect x="64" y="57" width="44" height="44" rx="10" fill="#38bdf8" fill-opacity=".12" stroke="#38bdf8" stroke-opacity=".45"/>
+    <path d="m76 85 8-8 6 4 9-13" fill="none" stroke="#38bdf8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="123" y="85" fill="#7dd3fc" font-size="15" font-weight="600" letter-spacing="3">BUDGET TERMINAL / 2.0</text>
+    <text x="64" y="167" fill="#f8fafc" font-size="52" font-weight="700">Your markets.</text>
+    <text x="64" y="228" fill="#f8fafc" font-size="52" font-weight="700">Your research.</text>
+    <text x="64" y="289" fill="#7dd3fc" font-size="52" font-weight="700">Your workspace.</text>
+    <text x="66" y="345" fill="#94a3b8" font-size="16">MARKET RESEARCH  /  PORTFOLIOS  /  PERSONAL FINANCE</text>
+  </g>
+  <rect x="690" y="67" width="526" height="268" rx="16" fill="#0b1220" fill-opacity=".65" stroke="#334155"/>
+  <g font-family="Segoe UI, Arial, sans-serif" font-size="12" letter-spacing="2">
+    <text x="718" y="102" fill="#94a3b8">RESEARCH. TRACK. EXPLORE.</text>
+    <circle cx="1187" cy="97" r="4" fill="#38bdf8"/>
+  </g>
+  <g stroke="#334155" stroke-opacity=".6">
+    <path d="M718 145H1188M718 190H1188M718 235H1188M718 280H1188"/>
+  </g>
+  <path d="m718 267 29-12 28 9 31-36 31 9 29-19 30 12 29-45 29 8 29-32 28 10 30-38 29 8 31-30 29 13 29-30v199H718Z" fill="url(#area)"/>
+  <path d="m718 267 29-12 28 9 31-36 31 9 29-19 30 12 29-45 29 8 29-32 28 10 30-38 29 8 31-30 29 13 29-30" fill="none" stroke="#38bdf8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="#94a3b8" font-family="Segoe UI, Arial, sans-serif" font-size="11" letter-spacing="1.5">
+    <text x="718" y="314">PUBLIC MARKET DATA</text>
+    <text x="1020" y="314">LOCAL RECORDS</text>
+  </g>
+</svg>
