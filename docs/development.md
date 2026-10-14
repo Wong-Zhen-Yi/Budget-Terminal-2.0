@@ -24,6 +24,12 @@ sandboxing. Its bundled CommonJS preload exposes specific API methods; IPC handl
 accept only the trusted shell's main frame. Navigation is blocked and HTTP(S) links
 open externally. Clipboard writes are the only renderer permission allowed.
 
+News article and thumbnail requests accept credential-free HTTP(S) URLs and only
+public network addresses. Every redirect is checked, and a custom socket DNS lookup
+rejects mixed public/private answers before connecting. IPv6 transition and mapped
+addresses are rejected conservatively. Requests use fresh sockets and a timeout
+covering DNS lookup and connection as well as response reading.
+
 ## Verification
 
 Run from the repository root:
@@ -35,6 +41,7 @@ npm run probe:launcher
 npm run probe:settings
 npm run probe:backup --workspace budget-terminal-desktop
 npm run probe:charts -- --offline
+npm run probe:news -- --offline
 npm run probe:stocks -- --offline
 npm run probe:loading --workspace budget-terminal-desktop
 npm run probe:session --workspace budget-terminal-desktop
