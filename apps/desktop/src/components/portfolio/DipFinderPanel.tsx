@@ -8,8 +8,6 @@ import { BarChart, type Bar } from '@/components/charts/BarChart'
 import { colorForIndex } from '@/components/charts/Donut'
 import { Button } from '@/components/ui/Button'
 import { Panel } from '@/components/ui/Panel'
-import { DataFreshness } from '@/components/ui/DataFreshness'
-import { FRESHNESS } from '@shared/freshness'
 import { percent, plainPercent } from '@/lib/format'
 
 interface DipFinderPanelProps {
@@ -53,8 +51,6 @@ export function DipFinderPanel({ rows, visible }: DipFinderPanelProps) {
         </div>
       }
     >
-      {tickers.length > 0 && <DataFreshness envelope={query.data} loading={query.isFetching} error={query.error}
-        freshnessMs={FRESHNESS.chartDaily} coverage={`${Object.keys(query.data?.data.returns ?? {}).length}/${tickers.length} holdings`} />}
       <BarChart
         bars={bars}
         format={(value) => percent(value, 1)}
