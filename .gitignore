@@ -16,3 +16,29 @@ apps/desktop/AppData/
 output/playwright/
 output/mockups/
 plugins/budget-terminal/server/
+
+# Local credentials, browser captures, and machine-specific configuration.
+conf/
+.playwright-cli/
+.env
+.env.*
+!.env.example
+!.env.sample
+**/.npmrc
+**/.mcp/
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+
+# Saved records, Remote approvals, and local databases.
+**/articles.json
+**/settings.json
+**/remote-sessions.json
+**/web-access.json
+**/sync-session.bin
+**/sync-checkpoint.json
+**/*.sqlite
+**/*.sqlite-*
+**/*.db
+**/*.db-*
