@@ -37,6 +37,25 @@ or newly disclosed supplier is included. To update membership, check current
 disclosures and the listing directory, amend the catalog and update the review date.
 Do not add foreign-headquartered issuers based solely on a U.S. exchange or SEC registration.
 
+## Supply-chain explorer
+
+The default Supply chain view places the eight subsectors in a two-row industry
+schematic. Arrows describe stages, not verified company-to-company relationships.
+Cards show catalog membership, the equal-weight daily return, quote coverage and
+up to three companies ordered by market cap. Selecting a card or performance bar
+filters the company table and selects a company in that group when needed.
+All subsectors resets the filter; search and Detailed columns support screening.
+
+The daily performance panel uses a shared, zero-centered scale across groups and
+excludes missing quotes rather than treating them as zero. The table retains lane
+status, and research shows source timestamps for cached and partially unavailable data.
+Research, adjusted price history, four-company peer comparison, news and earnings
+remain available below the explorer. Companies, Compare and News & earnings views
+provide more space for each workflow and preserve selections without provider calls.
+Selecting an earnings entry returns to the explorer with that company selected.
+The layout uses four subsector columns on desktop and two on narrower screens;
+tables scroll within their panels.
+
 ## Data and readiness
 
 All catalog companies remain in the table during provider failures. Market/history

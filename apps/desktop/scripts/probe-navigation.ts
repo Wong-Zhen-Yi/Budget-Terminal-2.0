@@ -9,6 +9,8 @@ import { startupPages, workspaceFor } from '../electron/shared/navigation.js'
 import { TABS } from '../electron/shared/contract.js'
 
 assert.equal(workspaceFor('hims')?.id, 'focus')
+assert.equal(workspaceFor('pltr')?.id, 'focus')
+assert(TABS.some(tab => tab.id === 'pltr' && tab.label === 'PLTR' && tab.implemented))
 assert.equal(workspaceFor('semiconductors')?.id, 'focus')
 assert(startupPages('dashboard', [], []).includes('semiconductors'))
 assert(TABS.some(tab => tab.id === 'hims' && tab.label === 'HIMS' && tab.implemented))

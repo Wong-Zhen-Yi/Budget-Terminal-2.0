@@ -64,6 +64,8 @@
     "probe:hims-ui": "tsx scripts/probe-hims-ui.ts",
     "probe:hood": "tsx scripts/probe-hood.ts",
     "probe:hood-ui": "tsx scripts/probe-hood-ui.ts",
+    "probe:pltr": "tsx scripts/probe-pltr.ts",
+    "probe:pltr-ui": "tsx scripts/probe-pltr-ui.ts",
     "probe:gold": "tsx scripts/probe-gold.ts",
     "probe:oil": "tsx scripts/probe-oil.ts",
     "probe:forex": "tsx scripts/probe-forex.ts",

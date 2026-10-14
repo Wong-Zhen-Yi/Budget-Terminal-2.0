@@ -31,6 +31,7 @@ try {
             return envelope()
           },
           writeClipboard: async () => true,
+          openExternal: async url => { window.openedUrl = url; return true },
         }
         const check = (condition, message) => { if (!condition) throw Error(message) }
         const settle = () => new Promise(resolve => setTimeout(resolve, 100))
@@ -73,7 +74,91 @@ try {
           await click('Delete')
           await click('Confirm delete')
           check(data.articles.length === 0, 'Delete did not persist')
-          return 'PASS: Articles empty state, create, edit, read, safe text, unsaved draft guard, AI refresh and delete'
+          const { appZetaVisuals } = await import('./scripts/fixtures/app-zeta-visuals')
+          const fence = String.fromCharCode(96).repeat(3)
+          const visualText = appZetaVisuals.map(visual => fence + 'article-visual\\n' + JSON.stringify(visual, null, 2) + '\\n' + fence).join('\\n\\n')
+          const longContent = '# Long article\\n\\nQ2 2026 financial comparison: APP vs ZETA.\\n\\n' + visualText + '\\n\\n' + Array.from({ length: 60 }, (_, i) => (i + 1) + '. Section ' + i + '\\n\\n' + 'Long article body with useful detail. '.repeat(16)).join('\\n\\n') + '\\n\\n[Official source](https://example.com/research)\\n\\n<script>window.injected = true</script>\\n\\nEND OF SAVED CONTENT'
+          data.articles = Array.from({ length: 40 }, (_, i) => ({ id: 'long-' + i, title: i ? 'Library article ' + i : 'Long article', topic: 'Research', content: longContent, status: 'finished', revision: 1, createdAt: Date.now(), updatedAt: Date.now() - i }))
+          const original = JSON.stringify(data.articles)
+          await client.invalidateQueries({ queryKey: ['articles'] }); await settle()
+          check(document.querySelector('article h2').textContent === 'Long article', 'Saved library did not open in reading mode')
+          check(document.querySelectorAll('.article-visual').length === 5, 'Saved visual blocks did not render')
+          check(!document.querySelector('.article-visual-error'), 'Valid financial visual failed validation')
+          const appBar = document.querySelector('rect[data-value="1923.7"]')
+          const zetaBar = document.querySelector('rect[data-value="442.8"]')
+          check(Math.abs(Number(appBar.getAttribute('width')) / Number(zetaBar.getAttribute('width')) - 1923.7 / 442.8) < 0.001, 'Financial bar lengths do not match reviewed data')
+          check(document.querySelector('.article-matrix').textContent.includes('-10%'), 'Sensitivity formula did not show the article example')
+          const { articleBlocks, articlePages } = await import('./src/components/articles/ArticleContent')
+          const parsedBlocks = articleBlocks(longContent, 'Long article')
+          check(articlePages(parsedBlocks).flat().map(block => block.text).join('') === parsedBlocks.map(block => block.text).join(''), 'Pagination lost or reordered content')
+          const sheets = document.querySelectorAll('.articles-sheet')
+          check(sheets.length > 2, 'Dual page layout did not paginate long content')
+          const firstSheet = sheets[0].getBoundingClientRect()
+          const secondSheet = sheets[1].getBoundingClientRect()
+          check(Math.abs(firstSheet.top - secondSheet.top) < 2 && secondSheet.left > firstSheet.right, 'Dual page sheets are not side by side')
+          await click('Single page')
+          check(document.querySelectorAll('.articles-sheet').length === 1, 'Single page toggle did not restore continuous reading')
+          await click('Dual page')
+          check(document.querySelectorAll('.article-visual').length === 5, 'Layout switching lost visuals')
+          const reader = document.querySelector('[aria-label="Article reader"]')
+          const library = document.querySelector('[aria-label="Saved articles"]')
+          check(reader.clientHeight > 150 && reader.scrollHeight > reader.clientHeight * 3, 'Long article has no bounded scrollport')
+          check(library.scrollHeight > library.clientHeight && library.clientHeight > 0, 'Library cannot scroll independently')
+          check(document.body.scrollHeight <= window.innerHeight, 'Article expanded the application outside the viewport')
+          reader.scrollTop = reader.scrollHeight; await settle()
+          const end = document.querySelector('.articles-end').getBoundingClientRect()
+          const bounds = reader.getBoundingClientRect()
+          check(reader.scrollTop > 0 && end.top >= bounds.top && end.bottom <= bounds.bottom, 'Cannot reach end of long article')
+          await click('Back to top ↑')
+          check(reader.scrollTop === 0, 'Back to top failed')
+          const sectionSelect = document.querySelector('[aria-label="Article sections"] select')
+          sectionSelect.value = sectionSelect.options[30].value
+          sectionSelect.dispatchEvent(new Event('change', { bubbles: true })); await settle()
+          check(reader.scrollTop > 0, 'Section navigation did not scroll the reader')
+          const source = document.querySelector('article a[href="https://example.com/research"]')
+          source.click(); await settle()
+          check(window.openedUrl === 'https://example.com/research', 'Source link did not use the application API')
+          check(!window.injected, 'Reader executed article HTML')
+          await click('Larger text')
+          check(document.querySelector('article').classList.contains('articles-large-text'), 'Reader text size did not change')
+          // Collapse using the main toolbar, not the library's separate Hide button.
+          await click('Hide library')
+          check(getComputedStyle(document.querySelector('.articles-library')).display === 'none', 'Focus reading did not hide library')
+          await click('Show library')
+          await click('Edit article')
+          const editor = document.querySelector('[aria-label="Article editor"]')
+          const textarea = document.querySelector('textarea')
+          check(textarea.value === longContent, 'Reading reformatted the persisted source text')
+          textarea.scrollTop = textarea.scrollHeight
+          check(textarea.scrollTop > 0, 'Long editor text cannot scroll')
+          editor.scrollTop = editor.scrollHeight; await settle()
+          const brief = [...document.querySelectorAll('button')].find(b => b.textContent === 'Copy AI writing brief').getBoundingClientRect()
+          check(brief.bottom <= editor.getBoundingClientRect().bottom, 'Cannot reach editor actions')
+          await click('Read article')
+          check(JSON.stringify(data.articles) === original, 'Reading or UI controls mutated saved articles')
+          window.verifyNarrow = async () => {
+            await settle()
+            await click('Hide library')
+            const viewport = document.querySelector('[aria-label="Article reader"]')
+            check(viewport.clientHeight > 100, 'Narrow layout has no reader height')
+            check(document.body.scrollWidth <= window.innerWidth, 'Narrow layout overflows horizontally')
+            const pages = document.querySelectorAll('.articles-sheet')
+            check(pages[1].getBoundingClientRect().top >= pages[0].getBoundingClientRect().bottom, 'Narrow dual pages did not stack in reading order')
+            check([...document.querySelectorAll('.article-visual')].every(visual => visual.scrollWidth <= visual.clientWidth + 1), 'Visuals overflow narrow pages')
+            viewport.scrollTop = viewport.scrollHeight; await settle()
+            const end = document.querySelector('.articles-end').getBoundingClientRect()
+            check(end.bottom <= viewport.getBoundingClientRect().bottom, 'Narrow layout cannot reach article end')
+            check(JSON.stringify(data.articles) === original, 'Resizing changed saved articles')
+            await click('Back to top ↑')
+            return 'PASS: narrow reader and saved content preservation'
+          }
+          window.prepareChartScreenshot = async () => {
+            const reader = document.querySelector('.articles-viewport')
+            const chart = document.querySelector('figure[aria-label="Financial scale: APP vs ZETA"]')
+            reader.scrollTop = chart.getBoundingClientRect().top - reader.getBoundingClientRect().top + reader.scrollTop - 20
+            await settle()
+          }
+          return 'PASS: Articles CRUD, safe formatting, unsaved guard, AI refresh, scrolling, source-backed charts, sensitivity, dual/single pages and content preservation'
         }
 
       `,
@@ -81,19 +166,50 @@ try {
     bundle: true,
     jsx: 'automatic',
     write: false,
+    outfile: join(directory, 'renderer.js'),
     format: 'iife',
     define: { 'process.env.NODE_ENV': '"production"' },
   })
-  await writeFile(join(directory, 'renderer.js'), bundle.outputFiles[0].text)
-  await writeFile(join(directory, 'index.html'), '<div id="root"></div><script src="renderer.js"></script>')
+  for (const file of bundle.outputFiles) await writeFile(file.path, file.text)
+  await writeFile(join(directory, 'index.html'), '<style>html,body{height:100%;margin:0;overflow:hidden;font-family:Segoe UI,sans-serif}#root{height:100%;display:flex;flex-direction:column}*{box-sizing:border-box}</style><link rel="stylesheet" href="renderer.css"><div id="root"></div><script src="renderer.js"></script>')
   await writeFile(join(directory, 'main.cjs'), `
     const { app, BrowserWindow } = require('electron')
     app.setPath('userData', ${JSON.stringify(join(directory, 'userData'))})
     app.whenReady().then(async () => {
-      const window = new BrowserWindow({ show: false, webPreferences: { backgroundThrottling: false } })
+      const window = new BrowserWindow({ show: false, width: 1280, height: 800, webPreferences: { backgroundThrottling: false, offscreen: true } })
+      window.webContents.on('console-message', event => { if (event.level === 'error') console.error(event.message) })
       try {
         await window.loadFile(${JSON.stringify(join(directory, 'index.html'))})
         console.log(await window.webContents.executeJavaScript('window.runProbe()'))
+        await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })
+        await window.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+        const point = await window.webContents.executeJavaScript('(() => { const reader = document.querySelector(".articles-viewport"); reader.scrollTop = 0; reader.focus(); const bounds = reader.getBoundingClientRect(); return { x: Math.round(bounds.left + bounds.width / 2), y: Math.round(bounds.top + bounds.height / 2) } })()')
+        window.webContents.debugger.attach('1.3')
+        await window.webContents.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseWheel', ...point, deltaY: 420, deltaX: 0 })
+        await new Promise(resolve => setTimeout(resolve, 200))
+        const wheelTop = await window.webContents.executeJavaScript('document.querySelector(".articles-viewport").scrollTop')
+        if (wheelTop <= 0) throw new Error('Mouse wheel did not scroll the article')
+        await window.webContents.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'keyDown', key: 'PageDown', code: 'PageDown', windowsVirtualKeyCode: 34 })
+        await window.webContents.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'keyUp', key: 'PageDown', code: 'PageDown', windowsVirtualKeyCode: 34 })
+        await new Promise(resolve => setTimeout(resolve, 250))
+        const keyboardTop = await window.webContents.executeJavaScript('document.querySelector(".articles-viewport").scrollTop')
+        if (keyboardTop <= wheelTop) throw new Error('PageDown did not scroll the focused article')
+        window.webContents.debugger.detach()
+        console.log('PASS: native mouse wheel and PageDown scrolling')
+        if (process.argv.includes('--screenshots')) {
+          await window.webContents.executeJavaScript('document.querySelector(".articles-viewport").scrollTop = 0')
+          await window.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+          require('node:fs').writeFileSync(${JSON.stringify(join(tmpdir(), 'budget-articles-desktop.png'))}, (await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG())
+          await window.webContents.executeJavaScript('window.prepareChartScreenshot()')
+          await window.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+          require('node:fs').writeFileSync(${JSON.stringify(join(tmpdir(), 'budget-articles-charts.png'))}, (await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG())
+        }
+        window.setSize(520, 700)
+        console.log(await window.webContents.executeJavaScript('window.verifyNarrow()'))
+        if (process.argv.includes('--screenshots')) {
+          await window.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+          require('node:fs').writeFileSync(${JSON.stringify(join(tmpdir(), 'budget-articles-narrow.png'))}, (await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG())
+        }
         app.exit(0)
       } catch (error) { console.error(error); app.exit(1) }
     })
@@ -101,7 +217,7 @@ try {
   const env: NodeJS.ProcessEnv = { ...process.env, APPDATA: directory, LOCALAPPDATA: directory }
   delete env.ELECTRON_RUN_AS_NODE
   const output = await new Promise<{ code: number | null, text: string }>((resolveRun, reject) => {
-    const child = spawn(require('electron') as string, [join(directory, 'main.cjs')], {
+    const child = spawn(require('electron') as string, [join(directory, 'main.cjs'), ...process.argv.slice(2)], {
       env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
     })
     let text = ''

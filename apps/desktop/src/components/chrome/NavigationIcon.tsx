@@ -34,6 +34,7 @@ export const pageIconPaths: Record<string, string> = {
   semiconductors: 'M6 6h12v12H6z M9 9h6v6H9z M9 3v3 M15 3v3 M9 18v3 M15 18v3 M3 9h3 M3 15h3 M18 9h3 M18 15h3',
   vst: 'M13 2 5 14h6l-1 8 9-13h-7z',
   hood: 'M5 20c0-10 4-15 15-17 0 10-6 16-13 16 M5 20 17 7 M10 14h6',
+  pltr: 'M12 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10 M5 21l7-5 7 5 M5 16h14',
   hims: 'M9 3h6v6h6v6h-6v6H9v-6H3V9h6z',
   gold: 'M3 19 7 6h10l4 13z M7 6l3 13 M3 19h18 M10 19l7-13',
   oil: 'M12 3c-2 5-7 8-7 12a7 7 0 0 0 14 0c0-4-5-7-7-12 M9 15c0 2 1 3 3 3',

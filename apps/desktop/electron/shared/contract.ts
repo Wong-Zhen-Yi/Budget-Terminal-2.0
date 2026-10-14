@@ -1306,6 +1306,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'semiconductors', label: 'Semiconductors', implemented: true },
   { id: 'vst', label: 'VST', implemented: true },
   { id: 'hood', label: 'HOOD', implemented: true },
+  { id: 'pltr', label: 'PLTR', implemented: true },
   { id: 'hims', label: 'HIMS', implemented: true },
   { id: 'gold', label: 'Gold', implemented: true },
   { id: 'oil', label: 'Oil', implemented: true },

@@ -1,59 +1,78 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { create } from 'zustand'
 import type { Article, ArticleFields } from '@shared/articles'
 import { useArticles, useArticlesMutation } from '@/api/articlesQueries'
 import { api } from '@/api/client'
+import { ArticleContent, articleBlocks, articlePages, headingText } from '@/components/articles/ArticleContent'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
+import '@/styles/articles.css'
 
 const blank = (): ArticleFields => ({ title: '', topic: '', content: '', status: 'draft' })
-// Retain an unsaved editor even when the page cache evicts this page.
+const fieldsOf = ({ title, topic, content, status }: Article): ArticleFields => ({ title, topic, content, status })
+const wordCount = (text: string) => text.replace(/```article-visual\s*\n[\s\S]*?```/g, '').trim().split(/\s+/).filter(Boolean).length
+// Keep unsaved work and the reading mode when the page cache evicts this page.
 const useEditor = create<{
   selected: Article | null
   draft: ArticleFields | null
+  reading: boolean
   set: (selected: Article | null, draft: ArticleFields | null) => void
-}>((set) => ({ selected: null, draft: null, set: (selected, draft) => set({ selected, draft }) }))
-const button = 'rounded border border-border px-3 py-2 text-2xs hover:bg-surface-hover disabled:opacity-40'
-const input = 'w-full rounded border border-border bg-bg px-3 py-2 text-sm text-text outline-none focus:border-accent'
+  setReading: (reading: boolean) => void
+}>((set) => ({ selected: null, draft: null, reading: true, set: (selected, draft) => set({ selected, draft }), setReading: reading => set({ reading }) }))
 
 export function ArticlesPage({ onStatusChange }: { onStatusChange: (panels: PanelStatus[], path: string) => void }) {
   const query = useArticles()
   const mutate = useArticlesMutation()
-  const { selected, draft, set } = useEditor()
+  const { selected, draft, reading, set, setReading } = useEditor()
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
-  const [reading, setReading] = useState(false)
+  const [libraryOpen, setLibraryOpen] = useState(true)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [pending, setPending] = useState<{ article: Article | null } | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const articles = query.data?.data.articles ?? []
-  const dirty = draft !== null && (selected === null || ['title', 'topic', 'content', 'status'].some(key => draft[key as keyof ArticleFields] !== selected[key as keyof ArticleFields]))
+  const [largeText, setLargeText] = useState(false)
+  const [dualPage, setDualPage] = useState(true)
+  const viewport = useRef<HTMLDivElement>(null)
+  const articles = useMemo(() => query.data?.data.articles ?? [], [query.data])
+  const dirty = draft !== null && (selected === null || (['title', 'topic', 'content', 'status'] as const).some(key => draft[key] !== selected[key]))
   const unavailable = query.isPending || !!query.error || query.data?.meta.freshness === 'failed'
+  const blocks = useMemo(() => articleBlocks(draft?.content ?? '', draft?.title ?? ''), [draft?.content, draft?.title])
+  const sections = blocks.filter(block => block.heading)
+  const pages = useMemo(() => dualPage ? articlePages(blocks) : [blocks], [blocks, dualPage])
 
   useEffect(() => {
-    if (!selected || dirty || unavailable) return
+    if (dirty || unavailable) return
+    if (!selected) {
+      if (!draft && articles.length) { set(articles[0], fieldsOf(articles[0])); setReading(true) }
+      return
+    }
     const latest = articles.find(row => row.id === selected.id)
     if (!latest) set(null, null)
-    else if (latest.revision !== selected.revision) set(latest, { title: latest.title, topic: latest.topic, content: latest.content, status: latest.status })
-  }, [query.data, selected, dirty, unavailable, set])
+    else if (latest.revision !== selected.revision) set(latest, fieldsOf(latest))
+  }, [articles, selected, draft, dirty, unavailable, set, setReading])
 
   useEffect(() => {
     onStatusChange([{ label: 'Articles', envelope: query.data, loading: query.isPending, error: query.error }], query.data?.data.sourcePath ?? '')
   }, [query.data, query.isPending, query.error, onStatusChange])
 
+  useEffect(() => { viewport.current?.scrollTo({ top: 0 }) }, [selected?.id, reading])
+
   const open = (article: Article | null) => {
-    set(article, article ? { title: article.title, topic: article.topic, content: article.content, status: article.status } : blank())
+    set(article, article ? fieldsOf(article) : blank())
     setReading(!!article)
     setMessage('')
     setDeleting(false)
     setPending(null)
+    // On small workspaces the library is a drawer over the reader.
+    if ((viewport.current?.closest('.articles-page')?.clientWidth ?? 1000) < 760) setLibraryOpen(false)
+    viewport.current?.scrollTo({ top: 0 })
   }
   const choose = (article: Article | null) => {
     if (dirty) setPending({ article })
     else open(article)
   }
   const save = async () => {
-    if (!draft || !draft.title.trim()) return
+    if (!draft || !draft.title.trim() || busy) return
     setBusy(true)
     setMessage('')
     try {
@@ -61,12 +80,12 @@ export function ArticlesPage({ onStatusChange }: { onStatusChange: (panels: Pane
         ? { type: 'update', id: selected.id, revision: selected.revision, ...draft }
         : { type: 'add', ...draft })
       const saved = selected ? result.articles.find(row => row.id === selected.id) : result.articles[0]
-      if (saved) { set(saved, { title: saved.title, topic: saved.topic, content: saved.content, status: saved.status }); setMessage('Saved in Articles.') }
+      if (saved) { set(saved, fieldsOf(saved)); setMessage('Saved in Articles.') }
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Could not save article.') }
     finally { setBusy(false) }
   }
   const remove = async () => {
-    if (!selected) return
+    if (!selected || busy) return
     setBusy(true)
     try { await mutate({ type: 'remove', id: selected.id, revision: selected.revision }); set(null, null); setDeleting(false); setMessage('Article deleted.') }
     catch (error) { setMessage(error instanceof Error ? error.message : 'Could not delete article.') }
@@ -74,64 +93,88 @@ export function ArticlesPage({ onStatusChange }: { onStatusChange: (panels: Pane
   }
   const visible = articles.filter(row => (filter === 'all' || row.status === filter) && `${row.title} ${row.topic} ${row.content}`.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => b.updatedAt - a.updatedAt)
-  const words = (draft?.content.trim() ?? '').split(/\s+/).filter(Boolean).length
+  const words = wordCount(draft?.content ?? '')
   const update = (fields: Partial<ArticleFields>) => { if (draft) set(selected, { ...draft, ...fields }) }
+  const counts = { draft: articles.filter(row => row.status === 'draft').length, finished: articles.filter(row => row.status === 'finished').length }
 
-  return <div className="flex min-h-0 flex-1 flex-col text-text">
-    <header className="flex items-center justify-between border-b border-border px-5 py-4">
-      <div><h1 className="text-lg font-semibold">Articles</h1><p className="mt-1 text-2xs text-text-muted">Your topics, drafts and finished articles, saved in Budget Terminal.</p></div>
-      <button className={`${button} bg-accent-dim`} disabled={busy || unavailable} onClick={() => choose(null)}>New article</button>
-    </header>
-    {unavailable ? <div role="alert" className="p-5 text-sm">{query.isPending ? 'Loading articles…' : query.data?.meta.failureReason ?? query.error?.message ?? 'Could not load articles.'}{!query.isPending && <button className={`${button} ml-3`} onClick={() => void query.refetch()}>Retry</button>}</div> : null}
-    <div className="flex min-h-0 flex-1 flex-wrap">
-      <aside className="flex w-72 shrink-0 flex-col border-r border-border bg-surface">
-        <div className="space-y-3 border-b border-border p-4">
-          <input aria-label="Search articles" placeholder="Search titles, topics or text" className={input} value={search} onChange={event => setSearch(event.target.value)} />
-          <select aria-label="Filter articles" className={input} value={filter} onChange={event => setFilter(event.target.value)}><option value="all">All articles ({articles.length})</option><option value="draft">Drafts</option><option value="finished">Finished</option></select>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-2">
-          {visible.map(article => <button key={article.id} disabled={busy} onClick={() => choose(article)} className={`mb-1 w-full rounded p-3 text-left hover:bg-surface-hover ${selected?.id === article.id ? 'bg-accent-dim' : ''}`}>
-            <span className="block break-words text-sm font-medium">{article.title}</span>
-            <span className="mt-1 block text-2xs text-text-muted">{article.topic || 'No topic'} · {article.status}</span>
-            <span className="mt-2 block text-2xs text-text-dim">{new Date(article.updatedAt).toLocaleDateString()}</span>
-          </button>)}
-          {!visible.length && !unavailable && <p className="p-3 text-2xs text-text-muted">{articles.length ? 'No articles match this search.' : 'Your article library starts here.'}</p>}
-        </div>
-      </aside>
-      <main className="min-w-0 flex-1 overflow-y-auto p-6">
-        {pending && <div role="alert" className="mb-4 rounded border border-warn p-3 text-sm">You have unsaved changes. <button className={`${button} ml-2`} onClick={() => open(pending.article)}>Discard changes and continue</button> <button className={button} onClick={() => setPending(null)}>Keep editing</button></div>}
-        {message && <p role="status" className="mb-4 text-sm">{message}</p>}
-        {!draft ? <div className="mx-auto mt-12 max-w-xl rounded border border-border bg-surface p-8">
-          <p className="text-2xs text-text-muted">WRITING WORKSPACE</p><h2 className="mt-3 text-xl">A home for your ideas</h2>
-          <p className="mt-4 text-sm leading-6 text-text-muted">Create an article, give it a topic and write or paste your draft. You can also ask your connected AI to write an article and save it to Budget Terminal’s Articles workspace.</p>
-          <p className="mt-4 text-sm text-text-muted">Select a saved article to read it or continue editing.</p>
-          <button className={`${button} mt-6`} disabled={unavailable} onClick={() => choose(null)}>Create your first draft</button>
-        </div> : <div className="mx-auto max-w-4xl">
-          <div className="mb-5 flex flex-wrap items-center gap-2">
-            <button className={button} onClick={() => setReading(!reading)}>{reading ? 'Edit article' : 'Read article'}</button>
-            <button className={`${button} bg-accent-dim`} disabled={busy || unavailable || !dirty || !draft.title.trim()} onClick={() => void save()}>{busy ? 'Saving…' : 'Save article'}</button>
-            <span className="mr-auto text-2xs text-text-muted">{dirty ? 'Unsaved changes' : 'Saved'} · {words} words · {Math.max(1, Math.ceil(words / 200))} min read</span>
-            {selected && <button className={button} disabled={busy} onClick={() => setDeleting(true)}>Delete</button>}
-            {selected && <button className={button} disabled={busy} onClick={() => {
-              const latest = articles.find(row => row.id === selected.id)
-              if (latest) choose(latest)
-              else setMessage('This article is no longer in the library. Save your text as a new article.')
-            }}>Reload saved version</button>}
+  return <div className="articles-page">
+    <div className={`articles-layout ${libraryOpen ? 'articles-library-open' : ''}`}>
+      <header className="articles-header">
+        <div><span className="articles-eyebrow">RESEARCH & IDEAS</span><h1>Articles</h1></div>
+        <p>Your library. Your thinking.</p>
+        <button className="articles-button articles-primary" disabled={busy || unavailable} onClick={() => choose(null)}>New article</button>
+      </header>
+      {unavailable && <div role="alert" className="articles-notice">{query.isPending ? 'Loading articles…' : query.data?.meta.failureReason ?? query.error?.message ?? 'Could not load articles.'}{!query.isPending && <button className="articles-button" onClick={() => void query.refetch()}>Retry</button>}</div>}
+      <div className="articles-workspace">
+        <aside className="articles-library" aria-label="Article library" id="article-library">
+          <div className="articles-library-controls">
+            <div className="articles-library-heading"><h2>Library <span>{articles.length}</span></h2><button className="articles-link" onClick={() => setLibraryOpen(false)} aria-label="Hide library">Hide</button></div>
+            <input aria-label="Search articles" placeholder="Search your articles" className="articles-input" value={search} onChange={event => setSearch(event.target.value)} />
+            <select aria-label="Filter articles" className="articles-input" value={filter} onChange={event => setFilter(event.target.value)}>
+              <option value="all">All articles ({articles.length})</option><option value="draft">Drafts ({counts.draft})</option><option value="finished">Finished ({counts.finished})</option>
+            </select>
           </div>
-          {deleting && <div role="alert" className="mb-4 rounded border border-border p-3 text-sm">Delete this saved article? <button className={`${button} ml-2 text-down`} disabled={busy} onClick={() => void remove()}>Confirm delete</button> <button className={button} onClick={() => setDeleting(false)}>Cancel</button></div>}
-          {reading ? <article className="select-text rounded border border-border bg-surface p-8">
-            <p className="text-2xs text-text-muted">{draft.topic || 'Article'} · {draft.status}</p>
-            <h2 className="mt-3 break-words text-2xl font-semibold">{draft.title || 'Untitled article'}</h2>
-            <div className="mt-6 whitespace-pre-wrap break-words text-sm leading-7">{draft.content || 'This article has no content yet.'}</div>
-          </article> : <fieldset disabled={busy} className="space-y-4">
-            <label className="block text-2xs text-text-muted">Title<input className={`${input} mt-2`} value={draft.title} maxLength={300} onChange={event => update({ title: event.target.value })} placeholder="Article title" /></label>
-            <div className="flex gap-4"><label className="block flex-1 text-2xs text-text-muted">Topic<input className={`${input} mt-2`} value={draft.topic} maxLength={500} onChange={event => update({ topic: event.target.value })} placeholder="What is this article about?" /></label>
-              <label className="block text-2xs text-text-muted">Status<select className={`${input} mt-2`} value={draft.status} onChange={event => update({ status: event.target.value as ArticleFields['status'] })}><option value="draft">Draft</option><option value="finished">Finished</option></select></label></div>
-            <label className="block text-2xs text-text-muted">Article<textarea className={`${input} mt-2 min-h-80 leading-7`} value={draft.content} maxLength={1_000_000} onChange={event => update({ content: event.target.value })} placeholder="Write here or paste your AI-generated article…" /></label>
-            <button className={button} onClick={() => void api.writeClipboard(`Write an article titled "${draft.title || 'Untitled'}" about ${draft.topic || 'the topic I provide'}. Save it in Budget Terminal’s Articles workspace.\n\n${draft.content}`).then(() => setMessage('Writing brief copied. Paste it into your AI chat.'), () => setMessage('Could not copy writing brief.'))}>Copy AI writing brief</button>
-          </fieldset>}
-        </div>}
-      </main>
+          <div className="articles-list" tabIndex={0} aria-label="Saved articles">
+            {visible.map(article => <button key={article.id} disabled={busy || unavailable} onClick={() => choose(article)} aria-pressed={selected?.id === article.id} className={`articles-card ${selected?.id === article.id ? 'is-selected' : ''}`}>
+              <span className={`articles-badge ${article.status}`}>{article.status}</span>
+              <strong>{article.title}</strong>
+              <span className="articles-card-topic">{article.topic || 'No topic'}</span>
+              <span className="articles-card-excerpt">{article.content.replace(/```article-visual\s*\n[\s\S]*?```/g, '').replace(/^#+\s*/gm, '').replace(/\s+/g, ' ').slice(0, 150) || 'Start writing your next idea.'}</span>
+              <span className="articles-card-meta">{new Date(article.updatedAt).toLocaleDateString()} · {Math.max(1, Math.ceil(wordCount(article.content) / 200))} min read</span>
+            </button>)}
+            {!visible.length && !unavailable && <div className="articles-list-empty"><strong>{articles.length ? 'No matching articles' : 'A fresh page awaits'}</strong><p>{articles.length ? 'Try another search or filter.' : 'Create a draft to start your library.'}</p>{search && <button className="articles-link" onClick={() => { setSearch(''); setFilter('all') }}>Clear search & filter</button>}</div>}
+          </div>
+          <div className="articles-library-footer">{counts.finished} finished · {counts.draft} drafts</div>
+        </aside>
+        <main className="articles-main">
+          <div className="articles-toolbar">
+            <button className="articles-button" aria-expanded={libraryOpen} aria-controls="article-library" onClick={() => setLibraryOpen(!libraryOpen)}>{libraryOpen ? 'Hide library' : 'Show library'}</button>
+            {draft && <>
+              <div className="articles-mode" aria-label="Article view"><button aria-pressed={reading} onClick={() => setReading(true)}>Read article</button><button aria-pressed={!reading} onClick={() => setReading(false)}>Edit article</button></div>
+              <span className={`articles-save-state ${dirty ? 'is-dirty' : ''}`}>{dirty ? 'Unsaved changes' : 'Saved'}</span>
+              <button className="articles-button articles-primary" disabled={busy || unavailable || !dirty || !draft.title.trim()} onClick={() => void save()}>{busy ? 'Saving…' : 'Save article'}</button>
+              {reading && <button className="articles-button" aria-pressed={largeText} onClick={() => setLargeText(!largeText)}>{largeText ? 'Standard text' : 'Larger text'}</button>}
+              {reading && <div className="articles-mode" aria-label="Reading layout"><button aria-pressed={!dualPage} onClick={() => setDualPage(false)}>Single page</button><button aria-pressed={dualPage} onClick={() => setDualPage(true)}>Dual page</button></div>}
+            </>}
+          </div>
+          {(pending || deleting || message) && <div className="articles-notices">
+            {pending && <div role="alert" className="articles-notice articles-warning"><span>You have unsaved changes.</span><button className="articles-button" onClick={() => open(pending.article)}>Discard changes and continue</button><button className="articles-button articles-primary" onClick={() => setPending(null)}>Keep editing</button></div>}
+            {deleting && <div role="alert" className="articles-notice articles-warning"><span>Delete “{selected?.title}”? This cannot be undone.</span><button className="articles-button articles-danger" disabled={busy} onClick={() => void remove()}>Confirm delete</button><button className="articles-button" disabled={busy} onClick={() => setDeleting(false)}>Cancel</button></div>}
+            {message && <p role="status" className="articles-notice">{message}</p>}
+          </div>}
+          {draft && reading && sections.length > 0 && <nav className="articles-section-nav" aria-label="Article sections"><label>Jump to section<select className="articles-input" value="" onChange={event => {
+            const target = viewport.current?.querySelector<HTMLElement>(`#${event.target.value}`)
+            if (target && viewport.current) { viewport.current.scrollTo({ top: target.getBoundingClientRect().top - viewport.current.getBoundingClientRect().top + viewport.current.scrollTop - 24 }); target.tabIndex = -1; target.focus({ preventScroll: true }) }
+          }}><option value="">Contents ({sections.length} sections)</option>{sections.map(section => <option key={section.id} value={section.id}>{headingText(section.text)}</option>)}</select></label></nav>}
+          <div ref={viewport} className="articles-viewport" tabIndex={0} role="region" aria-label={reading ? 'Article reader' : 'Article editor'}>
+            {!draft ? <div className="articles-empty"><span className="articles-empty-symbol" aria-hidden="true">✎</span><span className="articles-eyebrow">WRITING WORKSPACE</span><h2>A home for your ideas</h2><p>Keep research, work through a thesis, or capture your next idea. Select an article from your library or start with a blank page.</p><button className="articles-button articles-primary" disabled={busy || unavailable} onClick={() => choose(null)}>Create your first draft</button></div>
+              : reading ? <article className={`articles-reading ${dualPage ? 'articles-dual-page' : ''} ${largeText ? 'articles-large-text' : ''}`}>
+                <div className="articles-sheets">{pages.map((page, index) => <section key={index} className="articles-paper articles-sheet" aria-label={`Article page ${index + 1} of ${pages.length}`}>
+                {index === 0 ? <>
+                <div className="articles-paper-meta"><span className={`articles-badge ${draft.status}`}>{draft.status}</span><span>{words.toLocaleString()} words · {Math.max(1, Math.ceil(words / 200))} min read</span></div>
+                <h2>{draft.title || 'Untitled article'}</h2>
+                {draft.topic && <p className="articles-topic">{draft.topic}</p>}
+                {selected && <p className="articles-updated">Updated {new Date(selected.updatedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</p>}
+                </> : <p className="articles-running-title">{draft.title || 'Untitled article'}</p>}
+                {page.length ? <ArticleContent blocks={page} /> : <p className="articles-topic">This article has no content yet. Open the editor to start writing.</p>}
+                {dualPage && <div className="articles-page-number">{index + 1} / {pages.length}</div>}
+                </section>)}</div>
+                <div className="articles-end">End of article<button className="articles-link" onClick={() => viewport.current?.scrollTo({ top: 0 })}>Back to top ↑</button></div>
+              </article> : <fieldset disabled={busy || unavailable} className="articles-editor">
+                <div className="articles-editor-intro"><span className="articles-eyebrow">{selected ? 'EDIT YOUR ARTICLE' : 'A NEW IDEA'}</span><h2>{selected ? 'Make it your own' : 'Start with a thought'}</h2><p>Plain text or Markdown. Preview your work in the reader.</p></div>
+                <label>Title<input className="articles-input articles-title-input" value={draft.title} maxLength={300} onChange={event => update({ title: event.target.value })} placeholder="Article title" /></label>
+                <div className="articles-editor-details"><label>Topic<input className="articles-input" value={draft.topic} maxLength={500} onChange={event => update({ topic: event.target.value })} placeholder="What is this article about?" /></label><label>Status<select className="articles-input" value={draft.status} onChange={event => update({ status: event.target.value as ArticleFields['status'] })}><option value="draft">Draft</option><option value="finished">Finished</option></select></label></div>
+                <label>Article<textarea className="articles-input articles-body-input" value={draft.content} maxLength={1_000_000} onChange={event => update({ content: event.target.value })} placeholder="Write here or paste your AI-generated article…" /></label>
+                <div className="articles-editor-actions"><button className="articles-button" onClick={() => void api.writeClipboard(`Write an article titled "${draft.title || 'Untitled'}" about ${draft.topic || 'the topic I provide'}. Save it in Budget Terminal’s Articles workspace.\n\n${draft.content}`).then(() => setMessage('Writing brief copied. Paste it into your AI chat.'), () => setMessage('Could not copy writing brief.'))}>Copy AI writing brief</button></div>
+              </fieldset>}
+          </div>
+          {draft && <footer className="articles-footer"><span>{words.toLocaleString()} words · {Math.max(1, Math.ceil(words / 200))} min read</span>{selected && <div><button className="articles-link" disabled={busy || unavailable} onClick={() => {
+            const latest = articles.find(row => row.id === selected.id)
+            if (latest) choose(latest)
+            else setMessage('This article is no longer in the library. Save your text as a new article.')
+          }}>Reload saved version</button><button className="articles-link articles-danger" disabled={busy || unavailable} onClick={() => { setPending(null); setDeleting(true) }}>Delete</button></div>}</footer>}
+        </main>
+      </div>
     </div>
   </div>
 }

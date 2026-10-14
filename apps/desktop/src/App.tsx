@@ -23,6 +23,7 @@ import { BitcoinPage } from '@/pages/BitcoinPage'
 import { BmnrPage } from '@/pages/BmnrPage'
 import { SofiPage } from '@/pages/SofiPage'
 import { HoodPage } from '@/pages/HoodPage'
+import { PltrPage } from '@/pages/PltrPage'
 import { HimsPage } from '@/pages/HimsPage'
 import { MuPage } from '@/pages/MuPage'
 import { AmznPage } from '@/pages/AmznPage'
@@ -477,6 +478,8 @@ function renderPage({
       <HimsPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'hood' ? (
       <HoodPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
+    ) : tabId === 'pltr' ? (
+      <PltrPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'sp500' ? (
       <Sp500Page onStatusChange={onStatusChange} />
     ) : tabId === 'gold' ? (

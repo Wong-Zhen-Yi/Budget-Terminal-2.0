@@ -694,6 +694,21 @@ export function buildTasks(
       staleTime: queryFreshness(queryKeys.hood),
     }),
   })
+  tasks.push({
+    tab: 'pltr', label: 'PLTR market, chart and news',
+    run: (client, backgroundOrder) => warmStartupQuery(client, {
+      queryKey: queryKeys.stocks('PLTR'),
+      queryFn: () => api.stocks({ symbol: 'PLTR', background: true, backgroundOrder }),
+      staleTime: queryFreshness(queryKeys.stocks('PLTR')),
+    }),
+  }, {
+    tab: 'pltr', label: 'PLTR financials and filings',
+    run: (client, backgroundOrder) => warmStartupQuery(client, {
+      queryKey: queryKeys.fundamentalsPage('PLTR'),
+      queryFn: () => api.fundamentalsPage({ symbol: 'PLTR', background: true, backgroundOrder }),
+      staleTime: queryFreshness(queryKeys.fundamentalsPage('PLTR')),
+    }),
+  })
 
   // One CoinGecko call, two SEC calls behind their own disk cache and three Yahoo quotes.
   tasks.push({

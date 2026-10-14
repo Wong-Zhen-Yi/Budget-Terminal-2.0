@@ -2,12 +2,18 @@ import assert from 'node:assert/strict'
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { articleVisualSchema, parseArticleVisual, sensitivityReturn } from '../src/components/articles/articleVisuals.js'
+import { appZetaVisuals } from './fixtures/app-zeta-visuals.js'
 
 const directory = await mkdtemp(join(tmpdir(), 'budget-articles-'))
 const original = { APPDATA: process.env.APPDATA, LOCALAPPDATA: process.env.LOCALAPPDATA }
 process.env.APPDATA = directory
 process.env.LOCALAPPDATA = directory
 try {
+  appZetaVisuals.forEach(visual => assert(articleVisualSchema.safeParse(visual).success))
+  assert(Math.abs(sensitivityReturn(20, -25) - (-10)) < 1e-9)
+  assert.equal(parseArticleVisual('```article-visual\n{broken}\n```'), null)
+  assert.equal(parseArticleVisual('```article-visual\n' + JSON.stringify({ ...appZetaVisuals[0], sources: [{ label: 'Unsafe', url: 'javascript:alert(1)' }] }) + '\n```'), null)
   const { articlesPath, readArticles, mutateArticles, getArticles, saveArticles } = await import('../electron/services/articlesStore.js')
   const { configureAutomaticBackup, writeUserDataBackup } = await import('../electron/services/automaticBackup.js')
   const { createServiceRoutes } = await import('../electron/mcp/routes.js')

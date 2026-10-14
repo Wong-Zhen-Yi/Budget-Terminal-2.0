@@ -68,6 +68,20 @@ const portfolio = {
 } as unknown as import('../electron/shared/contract.js').PortfolioPayload
 const scheduled = new Set(buildTasks(portfolio, undefined, { stocks: 'AAPL', fundamentals: 'AAPL' },
   { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 }).map((task) => task.tab))
+const pltrTasks = buildTasks(undefined, { hiddenTabs: ['pltr'] } as unknown as import('../electron/shared/contract.js').AppSettings,
+  { stocks: 'AAPL', fundamentals: 'AAPL' }, { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 }).filter(task => task.tab === 'pltr')
+assert.equal(pltrTasks.length, 2, 'Hidden, unvisited PLTR must warm both market and financial data')
+const pltrRequests: unknown[] = []
+Object.assign(window.api, {
+  stocks: async (request: unknown) => { pltrRequests.push(request); return ok({ symbol: 'PLTR' }, 'fixture') },
+  fundamentalsPage: async (request: unknown) => { pltrRequests.push(request); return ok({ symbol: 'PLTR' }, 'fixture') },
+})
+const pltrClient = new QueryClient()
+await Promise.all(pltrTasks.map(task => task.run(pltrClient, 9)))
+assert.deepEqual(pltrRequests, Array(2).fill({ symbol: 'PLTR', background: true, backgroundOrder: 9 }))
+assert(pltrClient.getQueryData(['stocks', 'PLTR']))
+assert(pltrClient.getQueryData(['fundamentalsPage', 'PLTR', 'usd-v2']))
+pltrClient.clear()
 const sharedOrLocal = new Set(['beta', 'bonds', 'dictionary', 'options', 'settings'])
 const macroTasks = buildTasks(undefined, undefined, { stocks: 'AAPL', fundamentals: 'AAPL' },
   { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 })

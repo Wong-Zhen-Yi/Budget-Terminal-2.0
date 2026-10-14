@@ -13,6 +13,8 @@ import { DataTable, type Column } from '@/components/ui/DataTable'
 import { LineChart } from '@/components/charts/LineChart'
 import { colorForIndex } from '@/components/charts/Donut'
 import { compactCurrency, currency, plainPercent } from '@/lib/format'
+import { SupplyChainExplorer, SubsectorPerformance } from '@/components/semiconductors/SupplyChainExplorer'
+import '@/styles/semiconductors.css'
 
 const initialRows: SemiconductorRow[] = SEMICONDUCTOR_CATALOG.map(company => ({ company, market: null, profile: null, news: [],
   progress: { market: 'unavailable', profile: 'unavailable', news: 'unavailable' }, fetchedAt: { market: null, profile: null, news: null } }))
@@ -21,9 +23,6 @@ const pct = (value: number | null | undefined) => value === null || value === un
 const ratio = (value: number | null | undefined) => value === null || value === undefined ? '--' : `${value.toFixed(2)}x`
 const dateText = (value: number | null | undefined) => value ? new Date(value).toLocaleDateString('en-US', { timeZone: 'America/New_York' }) : '--'
 const signed = (value: number | null | undefined) => <span className={value === null || value === undefined ? 'text-text-dim' : value > 0 ? 'text-up' : value < 0 ? 'text-down' : 'text-text'}>{pct(value)}</span>
-function Tile({ label, value, note }: { label: string; value: string; note: string }) {
-  return <div className="min-w-0 border border-border bg-surface px-3 py-2"><div className="text-2xs text-text-muted">{label}</div><div className="num text-lg font-semibold text-text">{value}</div><div className="text-2xs text-text-dim">{note}</div></div>
-}
 function SourceLink({ url, label }: { url: string; label: string }) {
   return <button type="button" className="text-accent hover:underline" title={url} onClick={() => void api.openExternal(url)}>{label}</button>
 }
@@ -41,6 +40,9 @@ export function SemiconductorsPage({ onStatusChange, onNavigate }: {
   const [compare, setCompare] = useState(['NVDA', 'AMD', 'AVGO', 'MU'])
   const [range, setRange] = useState<'1M' | '3M' | 'YTD' | '1Y'>('1Y')
   const [notice, setNotice] = useState('')
+  const [view, setView] = useState<'supply' | 'companies' | 'compare' | 'news'>('supply')
+  const [feed, setFeed] = useState<'news' | 'earnings'>('news')
+  const [detailed, setDetailed] = useState(false)
   const rows = query.data?.data.rows ?? initialRows
   const busy = query.isFetching
   // The payload combines five-minute prices, ten-minute news and twelve-hour
@@ -82,6 +84,15 @@ export function SemiconductorsPage({ onStatusChange, onNavigate }: {
     setNotice('')
     try { await refresh() } catch (error) { setNotice(`Refresh failed: ${error instanceof Error ? error.message : String(error)}`) }
   }
+  const selectGroup = (next: SemiconductorGroup | 'all') => {
+    setGroup(next)
+    setSearch('')
+    if (next !== 'all' && selected?.company.group !== next) {
+      const members = rows.filter(row => row.company.group === next)
+      const leader = [...members].sort((a, b) => (b.market?.marketCap ?? 0) - (a.market?.marketCap ?? 0))[0]
+      if (leader) setSymbol(leader.company.symbol)
+    }
+  }
   const columns: Column<SemiconductorRow>[] = [
     { key: 'symbol', header: 'Ticker', cell: row => <span className="font-semibold text-accent">{row.company.symbol}</span>, sortValue: row => row.company.symbol },
     { key: 'company', header: 'Company', cell: row => <span title={row.company.rationale}>{row.company.name}{row.company.diversified ? ' · diversified' : ''}</span>, sortValue: row => row.company.name, width: '16%', wrap: true },
@@ -98,53 +109,33 @@ export function SemiconductorsPage({ onStatusChange, onNavigate }: {
     { key: 'earnings', header: 'Earnings · est.', cell: row => dateText(row.profile?.earningsDate), sortValue: row => row.profile?.earningsDate ?? null },
     { key: 'status', header: 'Data status', cell: row => <span title={(['market', 'profile', 'news'] as const).map(lane => `${lane}: ${semiconductorLaneStatus(row, lane, now)}`).join(' · ')}>{states(row).every(state => state === 'loaded') ? 'Ready' : states(row).every(state => state === 'unavailable') ? busy ? 'Loading' : 'Unavailable' : states(row).includes('stale') ? 'Cached / stale' : 'Partial'}</span> },
   ]
-
-  return <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-auto p-2" data-semiconductors-page>
-    <div className="flex shrink-0 flex-wrap items-center gap-2">
-      <h1 className="text-sm font-semibold text-text">Semiconductors · U.S. supply chain</h1>
-      <span className="ml-auto text-2xs text-text-muted" role="status">{notice || (busy ? 'Loading company quotes, profiles, adjusted histories and news…' : query.error ? `Load failed: ${query.error.message}` : `${freshness} · ${rows.filter(row => row.market).length}/${rows.length} market snapshots`)}</span>
-      <Button variant="accent" disabled={busy} onClick={() => void onRefresh()}>{busy ? 'Refreshing...' : 'Refresh'}</Button>
-    </div>
-    {(errors.length || query.error || notice) ? <div role="alert" className="shrink-0 border border-warn/40 bg-surface px-2 py-1 text-2xs text-warn">{query.error?.message || notice || `${errors.length} data issue(s) across ${issueCompanies} companies. Usable data remains visible; select a company to inspect its warnings. ${generalWarnings}`}</div> : null}
-    <div className="grid shrink-0 grid-cols-2 gap-2 xl:grid-cols-4">
-      <Tile label="Reviewed companies" value={String(overview.count)} note={`Catalog reviewed ${query.data?.data.catalogReviewedAt ?? SEMICONDUCTOR_REVIEW_DATE}`} />
-      <Tile label="Combined market cap · USD" value={overview.capCount ? compactCurrency(overview.marketCap) : '--'} note={`${overview.capCount}/${overview.count} observations · whole companies`} />
-      <Tile label="Daily breadth" value={overview.quoteCount ? `${overview.advancing} ↑ / ${overview.declining} ↓` : '--'} note={`${overview.unchanged} unchanged · ${overview.quoteCount}/${overview.count} observations`} />
-      <Tile label="Equal-weight daily return" value={pct(overview.daily)} note={`${overview.quoteCount}/${overview.count} quotes · entire reviewed catalog`} />
-    </div>
-    <Panel title="Semiconductor supply chain" className="shrink-0">
-      <div className="grid grid-cols-2 gap-1 p-2 md:grid-cols-4">
-        {SEMICONDUCTOR_GROUPS.map(item => {
-          const members = rows.filter(row => row.company.group === item.id)
-          const stats = semiconductorOverview(members)
-          return <button type="button" key={item.id} aria-pressed={group === item.id} onClick={() => setGroup(group === item.id ? 'all' : item.id)}
-            className={`min-w-0 border p-2 text-left ${group === item.id ? 'border-accent bg-surface-hover' : 'border-border hover:bg-surface-hover'}`}>
-            <div className="flex flex-wrap justify-between gap-1 text-2xs font-semibold text-text"><span>{item.label} · {members.length}</span>{signed(stats.daily)}</div>
-            <div className="mt-1 text-2xs text-text-muted">{item.description}</div><div className="mt-1 text-2xs text-text-dim">{stats.quoteCount}/{members.length} daily observations</div>
-          </button>
-        })}
-      </div>
-    </Panel>
-    <Panel title={`Company universe · ${filtered.length}/${rows.length}`} className="h-[430px] shrink-0" actions={<Button active={group === 'all'} variant="toggle" onClick={() => setGroup('all')}>All subsectors</Button>}>
+  const companyPanel = (
+    <Panel title={`${group === 'all' ? 'Company universe' : groupName(group) + ' · companies'} · ${filtered.length}/${rows.length}`} actions={<Button variant="toggle" active={detailed} onClick={() => setDetailed(!detailed)}>Detailed columns</Button>}>
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border p-2">
         <input type="search" aria-label="Search semiconductor companies" placeholder="Search ticker, company or business" value={search} onChange={event => setSearch(event.target.value)}
           className="min-w-0 flex-1 border border-border-strong bg-bg px-2 py-1 text-2xs text-text outline-none focus:border-accent" />
-        <span className="text-2xs text-text-muted">Click to inspect · double-click opens Stocks</span>
+        <Button variant="toggle" active={group === 'all'} onClick={() => selectGroup('all')}>All subsectors</Button>
       </div>
-      <DataTable columns={columns} rows={filtered} rowKey={row => row.company.symbol} defaultSort={{ key: 'cap', direction: 'desc' }} minWidth="1450px"
+      <DataTable columns={detailed ? columns : columns.filter(column => ['symbol', 'company', 'price', 'daily', 'month', 'ytd', 'cap', 'forward', 'status'].includes(column.key)).map(column => column.key === 'company' ? { ...column, wrap: false } : column)} rows={filtered} rowKey={row => row.company.symbol} defaultSort={{ key: 'cap', direction: 'desc' }} minWidth={detailed ? '1450px' : '850px'}
         onRowClick={row => setSymbol(row.company.symbol)} onRowDoubleClick={row => onNavigate('stocks', row.company.symbol)}
         rowClassName={row => row.company.symbol === symbol ? 'bg-surface-hover' : ''} empty="No companies match your filters" />
       <div className="shrink-0 border-t border-border px-2 py-1 text-2xs text-text-dim">USD quotes · 1D price change; 1M/YTD adjusted-close returns · revenue growth is latest reported quarter YoY · gross margin is TTM · P/E forward and earnings dates are provider estimates. Missing data = --.</div>
     </Panel>
-
-    <div className="grid shrink-0 grid-cols-1 gap-2 xl:grid-cols-2">
+  )
+  const pricePanel = (
       <Panel title={`${selected?.company.symbol ?? '--'} · adjusted share price`} className="h-[350px] min-w-0" warning={selectedErrors.filter(error => error.operation === 'semiconductors-market').map(error => error.reason).join(' · ') || undefined}
         actions={<div className="flex gap-1">{(['1M', '3M', 'YTD', '1Y'] as const).map(value => <Button key={value} variant="toggle" active={range === value} onClick={() => setRange(value)}>{value}</Button>)}</div>}>
         {selectedHistory.length ? <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2" data-semiconductor-price-chart><LineChart labels={selectedHistory.map(point => point.date)} series={[{ label: symbol, values: selectedHistory.map(point => point.close), color: colorForIndex(0) }]} format={currency} baseline="auto" /></div> : <PanelMessage>{busy ? 'Loading adjusted price history…' : 'Adjusted price history unavailable'}</PanelMessage>}
         <div className="shrink-0 border-t border-border px-2 py-1 text-2xs text-text-dim">Split/dividend-adjusted USD close · quote {selected?.market?.quoteTime ? new Date(selected.market.quoteTime).toLocaleString() : '--'}</div>
       </Panel>
-      <Panel title={`${selected?.company.name ?? '--'} · company research`} className="h-[350px] min-w-0" warning={selectedErrors.map(error => error.reason).join(' · ') || undefined}>
-        {selected ? <div className="min-h-0 flex-1 overflow-auto p-2 text-2xs text-text">
+  )
+  const researchPanel = (
+      <Panel title={`${selected?.company.symbol ?? '--'} · ${selected?.company.name ?? '--'} · company research`} warning={selectedErrors.map(error => error.reason).join(' · ') || undefined}>
+        {selected ? <div className="semi-research-scroll text-2xs text-text">
+          <div className="semi-quote"><strong className="num">{currency(selected.market?.price)}</strong>{signed(selected.market?.dailyChange)}</div>
+          {view === 'supply' ? <><div className="flex flex-wrap items-center justify-between gap-1 pb-2"><span className="text-text-muted">Adjusted share price</span><div className="flex gap-1">{(['1M', '3M', 'YTD', '1Y'] as const).map(value => <Button key={value} variant="toggle" active={range === value} onClick={() => setRange(value)}>{value}</Button>)}</div></div>
+          <div className="semi-selected-chart" data-semiconductor-price-chart>{selectedHistory.length ? <LineChart labels={selectedHistory.map(point => point.date)} series={[{ label: symbol, values: selectedHistory.map(point => point.close), color: colorForIndex(0) }]} format={currency} baseline="auto" /> : <PanelMessage>{busy ? 'Loading adjusted price history…' : 'Adjusted price history unavailable'}</PanelMessage>}</div>
+          <div className="mb-2 text-text-dim">Split/dividend-adjusted USD close · quote {selected.market?.quoteTime ? new Date(selected.market.quoteTime).toLocaleString() : '--'}</div></> : null}
           <div className="flex flex-wrap gap-1 pb-2"><Button onClick={() => onNavigate('charts', symbol)}>Charts</Button><Button onClick={() => onNavigate('stocks', symbol)}>Stocks</Button><Button onClick={() => onNavigate('fundamentals', symbol)}>Fundamentals</Button>{['MU', 'AVGO'].includes(symbol) ? <Button onClick={() => onNavigate(symbol.toLowerCase())}>{symbol} Focus</Button> : null}
             <Button disabled={compare.includes(symbol) || compare.length >= 4} onClick={() => setCompare([...compare, symbol])}>+ Compare</Button></div>
           <div className="text-text-muted">{groupName(selected.company.group)} · {selected.company.headquarters} · {selected.company.exchange}{selected.company.diversified ? ' · diversified business' : ''}</div>
@@ -161,41 +152,69 @@ export function SemiconductorsPage({ onStatusChange, onNavigate }: {
           {selectedErrors.length ? <div className="mt-2 text-warn">{selectedErrors.map(error => `${error.operation.replace('semiconductors-', '')}: ${error.reason}`).join(' · ')}</div> : null}
         </div> : <PanelMessage>Company unavailable</PanelMessage>}
       </Panel>
-    </div>
-
-    <Panel title="Peer comparison · adjusted price performance" className="h-[430px] shrink-0">
+  )
+  const comparisonPanel = (
+    <Panel title="Peer comparison · adjusted price performance" className={view === 'compare' ? 'semi-detail-panel' : ''}>
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border p-2 text-2xs">
         {compare.map(ticker => <button type="button" key={ticker} className="border border-border-strong px-2 py-1 text-text hover:border-accent" aria-label={`Remove ${ticker} from comparison`} onClick={() => setCompare(compare.filter(value => value !== ticker))}><span className="mr-1 inline-block size-2" style={{ backgroundColor: comparisonColor(ticker) }} />{ticker} ×</button>)}
         <select aria-label="Add comparison company" value="" disabled={compare.length >= 4} className="max-w-full border border-border-strong bg-surface px-2 py-1 text-text" onChange={event => { if (event.target.value && compare.length < 4) setCompare([...compare, event.target.value]) }}>
           <option value="">{compare.length >= 4 ? 'Four-company limit' : 'Add company…'}</option>{rows.filter(row => !compare.includes(row.company.symbol)).map(row => <option key={row.company.symbol} value={row.company.symbol}>{row.company.symbol} · {row.company.name}</option>)}
-        </select><span className="text-text-dim">{range} · starts at first shared session · missing dates leave gaps</span>
+        </select><div className="flex gap-1">{(['1M', '3M', 'YTD', '1Y'] as const).map(value => <Button key={value} variant="toggle" active={range === value} onClick={() => setRange(value)}>{value}</Button>)}</div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2" data-semiconductor-comparison-chart><LineChart labels={comparison.dates} series={comparison.series.map((series, index) => ({ label: series.symbol, values: series.values, color: colorForIndex(index) }))} format={value => pct(value)} baseline="zero" empty={busy ? 'Loading comparison histories…' : 'Select companies with overlapping adjusted histories'} /></div>
-      <div className="flex h-[140px] shrink-0 flex-col border-t border-border"><DataTable columns={[
+      {view === 'compare' ? <div className="flex h-[140px] shrink-0 flex-col border-t border-border"><DataTable columns={[
         { key: 'symbol', header: 'Ticker', cell: row => row.company.symbol },
         { key: 'cap', header: 'Market cap', cell: row => compactCurrency(row.market?.marketCap), numeric: true },
         { key: 'pe', header: 'P/E · TTM', cell: row => ratio(row.profile?.trailingPe), numeric: true },
         { key: 'forward', header: 'P/E · est.', cell: row => ratio(row.profile?.forwardPe), numeric: true },
         { key: 'growth', header: 'Revenue YoY', cell: row => pct(row.profile?.revenueGrowth === null || row.profile?.revenueGrowth === undefined ? null : row.profile.revenueGrowth * 100), numeric: true },
         { key: 'margin', header: 'Gross margin · TTM', cell: row => pct(row.profile?.grossMargin === null || row.profile?.grossMargin === undefined ? null : row.profile.grossMargin * 100), numeric: true },
-      ]} rows={comparisonRows} rowKey={row => row.company.symbol} minWidth="640px" empty="No comparison companies selected" /></div>
+      ]} rows={comparisonRows} rowKey={row => row.company.symbol} minWidth="640px" empty="No comparison companies selected" /></div> : null}
+      <div className="shrink-0 border-t border-border px-2 py-1 text-2xs text-text-dim">{range} · adjusted returns from first shared session · gaps remain missing</div>
       {comparisonRows.some(row => !row.market?.history.length) ? <div className="shrink-0 px-2 text-2xs text-warn">Missing histories: {comparisonRows.filter(row => !row.market?.history.length).map(row => row.company.symbol).join(', ')}</div> : null}
     </Panel>
-
-    <div className="grid shrink-0 grid-cols-1 gap-2 xl:grid-cols-2">
-      <Panel title="Upcoming earnings · provider estimates" className="h-[280px] min-w-0">
+  )
+  const feedPanel = (
+    <Panel title="News & upcoming earnings" className={view === 'news' ? 'semi-detail-panel' : ''} warning={errors.some(error => error.operation === 'semiconductors-news') ? 'Some company news feeds are unavailable or cached.' : undefined}>
+      <div className="semi-feed-tabs" aria-label="News and earnings views"><button aria-pressed={feed === 'news'} onClick={() => setFeed('news')}>Latest news</button><button aria-pressed={feed === 'earnings'} onClick={() => setFeed('earnings')}>Upcoming earnings</button></div>
+      {feed === 'earnings' ? <>
         <DataTable columns={[
           { key: 'date', header: 'Date · New York', cell: row => dateText(row.profile?.earningsDate) },
           { key: 'symbol', header: 'Ticker', cell: row => row.company.symbol },
           { key: 'name', header: 'Company', cell: row => row.company.name, wrap: true },
-        ]} rows={upcoming} rowKey={row => row.company.symbol} onRowClick={row => setSymbol(row.company.symbol)} empty={busy ? 'Loading earnings estimates…' : 'No upcoming earnings estimates available'} />
+        ]} rows={upcoming} rowKey={row => row.company.symbol} onRowClick={row => { setSymbol(row.company.symbol); setGroup(row.company.group); setSearch(''); setView('supply') }} empty={busy ? 'Loading earnings estimates…' : 'No upcoming earnings estimates available'} />
         <div className="shrink-0 border-t border-border p-2 text-2xs text-text-dim">{rows.filter(row => row.profile?.earningsDate).length}/{rows.length} companies have a date estimate. Dates can change; missing estimates are not confirmed absences.</div>
-      </Panel>
-      <Panel title={`Industry news · ${news.length} headlines`} className="h-[280px] min-w-0" warning={errors.some(error => error.operation === 'semiconductors-news') ? 'Some company news feeds are unavailable or cached.' : undefined}>
+      </> : <>
         {news.length ? <div className="min-h-0 flex-1 overflow-auto px-2">{news.slice(0, 100).map(article => <div key={article.url || article.id} className="border-b border-border py-2 text-2xs"><SourceLink url={article.url} label={article.title} /><div className="mt-1 text-text-dim">{article.ticker} · {article.source} · {new Date(article.publishedAt).toLocaleString()}</div></div>)}</div> : <PanelMessage>{busy ? 'Loading company news…' : rows.every(row => row.progress.news === 'unavailable') ? 'Company news unavailable' : 'No matching company headlines returned'}</PanelMessage>}
         <div className="shrink-0 border-t border-border px-2 py-1 text-2xs text-text-dim">Ticker-associated headlines · latest 100 · {rows.filter(row => row.progress.news !== 'unavailable').length}/{rows.length} company feeds</div>
-      </Panel>
+      </>}
+    </Panel>
+  )
+
+  return <div className="semi-page" data-semiconductors-page>
+    <div className="semi-header">
+      <div className="semi-title"><h1>Semiconductors</h1><p>U.S. supply chain</p></div>
+      <div className="semi-summary">
+        <div title={`Catalog reviewed ${query.data?.data.catalogReviewedAt ?? SEMICONDUCTOR_REVIEW_DATE}`}><strong className="num">{overview.count}</strong><span>Reviewed companies</span></div>
+        <div title={`${overview.capCount}/${overview.count} market cap observations · whole companies`}><strong className="num">{overview.capCount ? compactCurrency(overview.marketCap) : '--'}</strong><span>Combined market cap · USD</span></div>
+        <div title={`${overview.unchanged} unchanged · ${overview.quoteCount}/${overview.count} daily quotes`}><strong className="num">{overview.quoteCount ? <><span className="text-up">{overview.advancing} ↑</span> / <span className="text-down">{overview.declining} ↓</span></> : '--'}</strong><span>Daily breadth</span></div>
+        <div title={`${overview.quoteCount}/${overview.count} observations · equal weight`}><strong className="num">{signed(overview.daily)}</strong><span>Equal-weight daily return</span></div>
+      </div>
+      <div className="semi-load-status"><Button variant="accent" disabled={busy} onClick={() => void onRefresh()}>{busy ? 'Refreshing...' : 'Refresh'}</Button><span role="status">{notice || (busy ? 'Loading company quotes, profiles, adjusted histories and news…' : query.error ? `Load failed: ${query.error.message}` : `${freshness} · ${rows.filter(row => row.market).length}/${rows.length} market snapshots`)}</span></div>
     </div>
+    {(errors.length || query.error || notice) ? <div role="alert" className="shrink-0 border border-warn/40 bg-surface px-2 py-1 text-2xs text-warn">{query.error?.message || notice || `${errors.length} data issue(s) across ${issueCompanies} companies. Usable data remains visible; select a company to inspect its warnings. ${generalWarnings}`}</div> : null}
+    <nav className="semi-nav" aria-label="Semiconductor views">{([
+      ['supply', 'Supply chain'], ['companies', 'Companies'], ['compare', 'Compare'], ['news', 'News & earnings'],
+    ] as const).map(([id, label]) => <button key={id} aria-pressed={view === id} onClick={() => setView(id)}>{label}</button>)}</nav>
+    {view === 'supply' ? <>
+      <SupplyChainExplorer rows={rows} group={group} onSelect={selectGroup} loading={busy} />
+      <div className="semi-screen-grid" data-semiconductor-universe>{companyPanel}<Panel title="Subsector performance"><SubsectorPerformance rows={rows} group={group} onSelect={selectGroup} /></Panel></div>
+      <div className="semi-bottom-grid">{researchPanel}{comparisonPanel}{feedPanel}</div>
+    </> : view === 'companies' ? <>
+      <div className="flex shrink-0 flex-wrap gap-1" aria-label="Subsector filters">{SEMICONDUCTOR_GROUPS.map(item => <Button key={item.id} variant="toggle" active={group === item.id} onClick={() => selectGroup(group === item.id ? 'all' : item.id)}>{item.label}</Button>)}</div>
+      <div className="semi-screen-grid semi-companies-view" data-semiconductor-universe>{companyPanel}</div>
+      <div className="semi-research-view">{pricePanel}{researchPanel}</div>
+    </> : view === 'compare' ? comparisonPanel : feedPanel}
     <div className="shrink-0 border border-border bg-surface p-2 text-2xs text-text-dim">{SEMICONDUCTOR_COVERAGE_NOTE} <SourceLink url="https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqtraded.txt" label="Listing directory" /> · Company-specific inclusion evidence is linked above.</div>
   </div>
 }
