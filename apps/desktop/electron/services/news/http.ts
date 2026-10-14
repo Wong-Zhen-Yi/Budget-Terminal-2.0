@@ -1,7 +1,7 @@
 import { request as httpRequest, type IncomingMessage } from 'node:http'
 import { request as httpsRequest } from 'node:https'
 
-import { isSafeExternalUrl } from '../urls.js'
+import { createPublicLookup, publicNewsUrl } from './publicNetwork.js'
 
 /**
  * A byte-capped GET for the two places the News page reaches a publisher directly.
@@ -23,6 +23,7 @@ import { isSafeExternalUrl } from '../urls.js'
 
 const MAX_HEADER_BYTES = 64 * 1024
 const MAX_REDIRECTS = 5
+const publicLookup = createPublicLookup()
 
 export interface HttpResponse {
   status: number
@@ -42,12 +43,13 @@ export interface HttpGetOptions {
 
 function once(url: string, options: HttpGetOptions): Promise<HttpResponse | { redirect: string }> {
   return new Promise((resolve, reject) => {
-    const target = new URL(url)
+    const target = publicNewsUrl(url)
     const send = target.protocol === 'http:' ? httpRequest : httpsRequest
 
     const request = send(
       target,
-      { method: 'GET', headers: options.headers, maxHeaderSize: MAX_HEADER_BYTES },
+      { method: 'GET', headers: options.headers, maxHeaderSize: MAX_HEADER_BYTES,
+        lookup: publicLookup, agent: false, signal: AbortSignal.timeout(options.timeoutMs) },
       (response: IncomingMessage) => {
         const status = response.statusCode ?? 0
         const location = response.headers.location
@@ -96,11 +98,10 @@ function once(url: string, options: HttpGetOptions): Promise<HttpResponse | { re
   })
 }
 
-/** Follows redirects, refusing any hop that is not http(s). */
+/** Every redirect and socket lookup must stay on the public network. */
 export async function httpGet(url: string, options: HttpGetOptions): Promise<HttpResponse> {
   let target = url
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
-    if (!isSafeExternalUrl(target)) throw new Error('Redirected to a non-http(s) URL.')
     const result = await once(target, options)
     if ('redirect' in result) {
       target = result.redirect

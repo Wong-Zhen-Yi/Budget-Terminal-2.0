@@ -33,6 +33,7 @@ import { getOtherNews } from '../electron/services/news/feeds.js'
 import { extractReadableText } from '../electron/services/news/extract.js'
 import { MACRO_SYMBOLS } from '../electron/services/yahoo/newsPage.js'
 import { yahooProvider } from '../electron/services/provider.js'
+import { runNewsSecurityChecks } from './probe-news-security.js'
 
 function pad(text: string, width: number, align: 'left' | 'right' = 'left'): string {
   const value = text.length > width ? `${text.slice(0, width - 1)}…` : text
@@ -381,6 +382,7 @@ async function main(): Promise<void> {
   }
 
   if (flag('--offline')) {
+    await runNewsSecurityChecks()
     runOffline()
     return report()
   }
