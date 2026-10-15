@@ -1,0 +1,121 @@
+.avgo-page {
+  padding: 12px;
+  gap: 12px;
+}
+
+.avgo-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  flex-shrink: 0;
+}
+
+.avgo-quote {
+  margin-left: auto;
+  text-align: right;
+}
+
+.avgo-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 20px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.avgo-tab {
+  padding: 8px 0;
+  border-bottom: 2px solid transparent;
+  color: var(--color-text-muted);
+}
+
+.avgo-tab:hover,
+.avgo-tab[aria-selected='true'] {
+  color: var(--color-text);
+}
+
+.avgo-tab[aria-selected='true'] {
+  border-bottom-color: var(--color-accent);
+}
+
+.avgo-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--color-border);
+  border-left: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.avgo-kpi {
+  min-width: 0;
+  padding: 12px 16px;
+  border-right: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.avgo-market-grid,
+.avgo-overview-grid,
+.avgo-detail-grid,
+.avgo-source-grid {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.avgo-market-grid > *,
+.avgo-overview-grid > *,
+.avgo-detail-grid > *,
+.avgo-source-grid > * {
+  min-width: 0;
+}
+
+.avgo-market-panel {
+  height: 390px;
+}
+
+.avgo-overview-panel {
+  height: 330px;
+}
+
+/* The segment table supplies the legend at the app's readable type size. */
+[data-avgo-mix-chart] ul {
+  display: none;
+}
+
+.avgo-source-card {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+@media (min-width: 900px) {
+  .avgo-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .avgo-overview-grid,
+  .avgo-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .avgo-kpis {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .avgo-market-grid {
+    grid-template-columns: minmax(0, 1fr) 350px;
+  }
+
+  .avgo-overview-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr) minmax(0, 1.2fr);
+  }
+
+  .avgo-source-grid {
+    grid-template-columns: 1.2fr 1fr 1fr;
+  }
+}

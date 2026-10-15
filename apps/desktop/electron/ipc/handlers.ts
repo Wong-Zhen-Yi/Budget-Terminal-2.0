@@ -12,6 +12,8 @@ import { registerServiceHandlers } from './serviceHandlers.js'
 import { getMcpStatus } from '../mcp/host.js'
 import { configureWebAccess, decideWebAccess, getWebAccessStatus, revokeWebSessions, rotateWebPairingCode } from '../web/host.js'
 import { publishSavedDataChanged, subscribeSavedDataChanged } from '../services/savedDataEvents.js'
+import { articleFilename } from '../shared/articles.js'
+import { articlePdfRequestSchema, writeArticlePdfs } from '../services/articlePdf.js'
 
 export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent) => boolean): () => void {
   const handle: typeof ipcMain.handle = (channel, listener) => {
@@ -108,6 +110,23 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
 
   handle(CHANNELS.writeClipboard, (_event, contents: string) => {
     clipboard.writeText(contents)
+  })
+
+  handle(CHANNELS.exportArticlesPdf, async (event, value: unknown) => {
+    const request = articlePdfRequestSchema.parse(value)
+    const window = BrowserWindow.fromWebContents(event.sender)
+    let destination: string | undefined
+    if (request.all) {
+      const options = { title: 'Export all Articles as individual PDFs', properties: ['openDirectory', 'createDirectory'] as ('openDirectory' | 'createDirectory')[] }
+      const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options)
+      if (!result.canceled) destination = result.filePaths[0]
+    } else {
+      const options = { title: 'Export article as PDF', defaultPath: articleFilename(request.articles[0].title), filters: [{ name: 'PDF document', extensions: ['pdf'] }] }
+      const result = window ? await dialog.showSaveDialog(window, options) : await dialog.showSaveDialog(options)
+      if (!result.canceled) destination = result.filePath
+    }
+    if (!destination) return ok({ cancelled: true, paths: [], failures: [] }, 'article PDF export')
+    return ok(await writeArticlePdfs(request, destination), 'article PDF export')
   })
 
   handle(CHANNELS.windowControl, (event, action: WindowAction) => {

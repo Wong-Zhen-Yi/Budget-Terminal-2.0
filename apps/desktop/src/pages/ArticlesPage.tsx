@@ -4,6 +4,7 @@ import type { Article, ArticleFields } from '@shared/articles'
 import { useArticles, useArticlesMutation } from '@/api/articlesQueries'
 import { api } from '@/api/client'
 import { ArticleContent, articleBlocks, articlePages, headingText } from '@/components/articles/ArticleContent'
+import { articleExport } from '@/components/articles/articleExport'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import '@/styles/articles.css'
 
@@ -27,6 +28,7 @@ export function ArticlesPage({ onStatusChange }: { onStatusChange: (panels: Pane
   const [filter, setFilter] = useState('all')
   const [libraryOpen, setLibraryOpen] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [exporting, setExporting] = useState<'one' | 'all' | null>(null)
   const [message, setMessage] = useState('')
   const [pending, setPending] = useState<{ article: Article | null } | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -91,6 +93,19 @@ export function ArticlesPage({ onStatusChange }: { onStatusChange: (panels: Pane
     catch (error) { setMessage(error instanceof Error ? error.message : 'Could not delete article.') }
     finally { setBusy(false) }
   }
+  const exportArticles = async (all: boolean) => {
+    if (exporting || busy || (!all && !draft) || (all && (unavailable || !articles.length))) return
+    setExporting(all ? 'all' : 'one')
+    setMessage(all ? `Exporting ${articles.length} articles as separate PDFs…` : 'Exporting article as PDF…')
+    try {
+      const result = await api.exportArticlesPdf({ all, articles: (all ? articles : [draft!]).map(articleExport) })
+      const { cancelled, paths, failures } = result.data
+      if (cancelled) setMessage('Export cancelled.')
+      else if (failures.length) setMessage(`Exported ${paths.length} of ${paths.length + failures.length} PDFs. ${failures.map(failure => `${failure.title}: ${failure.message}`).join('; ')}`)
+      else setMessage(all ? `Exported all ${paths.length} articles as individual PDFs.` : `Article exported to ${paths[0]}`)
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Could not export PDFs.') }
+    finally { setExporting(null) }
+  }
   const visible = articles.filter(row => (filter === 'all' || row.status === filter) && `${row.title} ${row.topic} ${row.content}`.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => b.updatedAt - a.updatedAt)
   const words = wordCount(draft?.content ?? '')
@@ -102,6 +117,7 @@ export function ArticlesPage({ onStatusChange }: { onStatusChange: (panels: Pane
       <header className="articles-header">
         <div><span className="articles-eyebrow">RESEARCH & IDEAS</span><h1>Articles</h1></div>
         <p>Your library. Your thinking.</p>
+        <button className="articles-button" disabled={busy || !!exporting || unavailable || !articles.length} title="Choose a folder for one PDF per saved article, including drafts and articles hidden by filters" onClick={() => void exportArticles(true)}>{exporting === 'all' ? 'Exporting all…' : 'Export all Articles'}</button>
         <button className="articles-button articles-primary" disabled={busy || unavailable} onClick={() => choose(null)}>New article</button>
       </header>
       {unavailable && <div role="alert" className="articles-notice">{query.isPending ? 'Loading articles…' : query.data?.meta.failureReason ?? query.error?.message ?? 'Could not load articles.'}{!query.isPending && <button className="articles-button" onClick={() => void query.refetch()}>Retry</button>}</div>}
@@ -133,6 +149,7 @@ export function ArticlesPage({ onStatusChange }: { onStatusChange: (panels: Pane
               <div className="articles-mode" aria-label="Article view"><button aria-pressed={reading} onClick={() => setReading(true)}>Read article</button><button aria-pressed={!reading} onClick={() => setReading(false)}>Edit article</button></div>
               <span className={`articles-save-state ${dirty ? 'is-dirty' : ''}`}>{dirty ? 'Unsaved changes' : 'Saved'}</span>
               <button className="articles-button articles-primary" disabled={busy || unavailable || !dirty || !draft.title.trim()} onClick={() => void save()}>{busy ? 'Saving…' : 'Save article'}</button>
+              <button className="articles-button" disabled={busy || !!exporting} title="Save the current article, including unsaved edits, as PDF" onClick={() => void exportArticles(false)}>{exporting === 'one' ? 'Exporting…' : 'Export article'}</button>
               {reading && <button className="articles-button" aria-pressed={largeText} onClick={() => setLargeText(!largeText)}>{largeText ? 'Standard text' : 'Larger text'}</button>}
               {reading && <div className="articles-mode" aria-label="Reading layout"><button aria-pressed={!dualPage} onClick={() => setDualPage(false)}>Single page</button><button aria-pressed={dualPage} onClick={() => setDualPage(true)}>Dual page</button></div>}
             </>}

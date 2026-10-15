@@ -412,6 +412,58 @@ async function liveCheck(symbol: string): Promise<void> {
   }
 }
 
+async function loadingChecks(): Promise<void> {
+  const { valuationTesting, emptyValuation } = await import('../electron/services/yahoo/valuation.js')
+  const { yahoo } = await import('../electron/services/yahoo/client.js')
+  const { captureSources } = await import('../electron/services/sourceHealth.js')
+  const { emptyFundamentalsPagePayload } = await import('../electron/services/yahoo/fundamentalsPage.js')
+  const originalSummary = yahoo.quoteSummary
+  let requests = 0
+  try {
+    Object.assign(yahoo, {
+      quoteSummary: async () => {
+        requests += 1
+        if (requests === 1) throw new DOMException('This operation was aborted', 'AbortError')
+        return { price: { longName: 'Probe company', regularMarketPrice: 100, currency: 'USD' } }
+      },
+    })
+    const info = await valuationTesting.fetchInfo('VALUATION-PROBE', true)
+    assert(requests === 2 && info.regularMarketPrice === 100, 'interrupted metadata should retry once')
+    requests = 0
+    Object.assign(yahoo, { quoteSummary: async () => {
+      requests += 1
+      throw new DOMException('This operation was aborted', 'AbortError')
+    } })
+    const fallback = await captureSources(() => valuationTesting.fetchInfo('VALUATION-PROBE', true))
+    assert(requests === 2, 'repeated interruptions must stop after two attempts')
+    assert(fallback.value.regularMarketPrice === 100 && fallback.snapshot?.stale, 'metadata fallback must preserve data and mark it stale')
+    let invalidRequests = 0
+    try {
+      await valuationTesting.retryInterrupted(async () => { invalidRequests += 1; throw new Error('Ticker not found') })
+    } catch { /* An invalid symbol must propagate without a transport retry. */ }
+    assert(invalidRequests === 1, 'non-transport failures must not be retried')
+  } finally {
+    Object.assign(yahoo, { quoteSummary: originalSummary })
+  }
+
+  const statements = emptyFundamentalsPagePayload('TEST')
+  const fetchers = {
+    info: async () => ({ symbol: 'TEST', regularMarketPrice: 100, financialCurrency: 'USD', currency: 'USD' }),
+    statements: async () => ({ payload: statements, failures: [{ source: 'SEC EDGAR', operation: 'annual statements', reason: 'SEC request timed out' }], stale: true }),
+    history: async () => [{ date: '2026-10-14', close: 100 }],
+    market: async () => MARKET,
+    peers: async () => ({ rows: [], warnings: [] }),
+  }
+  const partial = await valuationTesting.fetchUncached('TEST', [], true, fetchers)
+  assert(partial.payload.metrics.price === 100, 'partial statements must not discard the quote')
+  assert(partial.errors.some(error => error.source === 'SEC EDGAR' && error.operation === 'annual statements'), 'statement failures must keep their source and operation')
+  const stale = await valuationTesting.fetchUncached('TEST', [], true, {
+    ...fetchers, statements: async () => ({ payload: statements, failures: [], stale: true }),
+  })
+  assert(stale.errors.some(error => error.operation === 'statements' && error.reason.includes('cached')), 'stale statements must remain visible')
+  assert(emptyValuation('MISSING').generatedAt === 0, 'a failed load must not look completed')
+}
+
 async function main(): Promise<void> {
   assumptionChecks()
   dcfChecks()
@@ -419,6 +471,7 @@ async function main(): Promise<void> {
   requiredReturnChecks()
   derivationChecks()
   peerChecks()
+  await loadingChecks()
   console.log('Valuation offline checks passed.')
   if (process.argv.includes('--offline')) return
   const symbol = process.argv.slice(2).find((value) => !value.startsWith('-'))?.toUpperCase() ?? 'NVDA'

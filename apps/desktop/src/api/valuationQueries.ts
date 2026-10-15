@@ -30,8 +30,14 @@ export function useRefreshValuation(): (symbol: string, customPeers: string[]) =
   const queryClient = useQueryClient()
   return useCallback(
     async (symbol, customPeers) => {
-      const result = await api.valuation({ symbol, customPeers, force: true })
-      queryClient.setQueryData(queryKeys.valuation(symbol, customPeers), result)
+      // Register the forced load before the ticker/peer observer renders. A new
+      // observer joins this request, and loading/errors belong to the same query.
+      await queryClient.fetchQuery({
+        queryKey: queryKeys.valuation(symbol, customPeers),
+        queryFn: () => api.valuation({ symbol, customPeers, force: true }),
+        staleTime: 0,
+        retry: false,
+      })
     },
     [queryClient],
   )

@@ -6,6 +6,7 @@ import type {
   ValuationProvenanceEntry,
 } from '../../shared/contract.js'
 import { emptyFundamentalSeriesMap } from '../../shared/fundamentalsPage.js'
+import { describeError } from '../../shared/envelope.js'
 import {
   deriveValuationSuggestions,
   finiteOrNull,
@@ -153,12 +154,23 @@ interface SummaryInfo extends PeerInfo {
 /** The `earningsTrend` rows keyed by symbol, so the anchor's estimates survive a cache hit. */
 const analystCache = new Map<string, Array<Record<string, unknown>>>()
 
+/** A cancelled transport can be transient; each attempt still uses Yahoo's rate gate. */
+async function retryInterrupted<T>(request: () => Promise<T>): Promise<T> {
+  try {
+    return await request()
+  } catch (error) {
+    const name = error instanceof Error ? error.name : ''
+    if (!/^(AbortError|TimeoutError)$/.test(name) && !/\b(aborted|timed out)\b/i.test(describeError(error))) throw error
+    return request()
+  }
+}
+
 async function fetchInfo(symbol: string, force: boolean): Promise<SummaryInfo> {
-  const resolved = await cache.resolve(
+  const resolved = await cache.resolveWithStaleFallback(
     `valuation-info:${symbol}`,
     PEER_INFO_TTL,
     async () => {
-      const summary = await paced(() =>
+      const summary = await retryInterrupted(() => paced(() =>
         yahoo.quoteSummary(symbol, {
           modules: [
             'price',
@@ -170,7 +182,7 @@ async function fetchInfo(symbol: string, force: boolean): Promise<SummaryInfo> {
             'earningsTrend',
           ],
         }),
-      )
+      ))
       const price = summary.price
       const detail = summary.summaryDetail
       const financial = summary.financialData
@@ -636,19 +648,34 @@ export interface ValuationFetchResult {
   cacheAgeSeconds: number
 }
 
+interface ValuationFetchers {
+  info: typeof fetchInfo
+  statements: typeof getFundamentalsPage
+  history: typeof fetchPriceHistory
+  market: typeof fetchRiskFreeSnapshot
+  peers: typeof buildPeerRows
+}
+
 async function fetchUncached(
   symbol: string,
   customPeers: string[],
   force: boolean,
+  fetchers: ValuationFetchers = {
+    info: fetchInfo,
+    statements: getFundamentalsPage,
+    history: fetchPriceHistory,
+    market: fetchRiskFreeSnapshot,
+    peers: buildPeerRows,
+  },
 ): Promise<{ payload: ValuationPayload; errors: EnvelopeError[] }> {
   const errors: EnvelopeError[] = []
-  const info = await fetchInfo(symbol, force)
+  const info = await fetchers.info(symbol, force)
   const analyst = analystEstimates(analystCache.get(symbol) ?? [])
 
   const [statementsResult, historyResult, marketResult] = await Promise.allSettled([
-    getFundamentalsPage(symbol, force),
-    fetchPriceHistory(symbol, force),
-    fetchRiskFreeSnapshot(force),
+    fetchers.statements(symbol, force),
+    fetchers.history(symbol, force),
+    fetchers.market(force),
   ])
 
   let annual: FundamentalSeriesMap | null = null
@@ -660,10 +687,16 @@ async function fetchUncached(
     quarterly = statementsResult.value.payload.quarterly
     secBacked = statementsResult.value.payload.sec.statementsAvailable
     statementSource = secBacked ? 'SEC EDGAR' : 'Yahoo Finance'
+    for (const failure of statementsResult.value.failures) {
+      errors.push({ ...failure, symbol })
+    }
+    if (statementsResult.value.stale && !statementsResult.value.failures.length) {
+      errors.push({ source: statementSource, operation: 'statements', symbol, reason: 'Using cached statements because the source refresh failed.' })
+    }
   } else {
     errors.push({
       source: VALUATION_SOURCE,
-      reason: String(statementsResult.reason),
+      reason: describeError(statementsResult.reason),
       operation: 'statements',
       symbol: 'Statements',
     })
@@ -675,7 +708,7 @@ async function fetchUncached(
   if (historyResult.status === 'rejected') {
     errors.push({
       source: VALUATION_SOURCE,
-      reason: String(historyResult.reason),
+      reason: describeError(historyResult.reason),
       operation: 'history',
       symbol: 'Price history',
     })
@@ -702,7 +735,7 @@ async function fetchUncached(
     throw new Error(`No quote data found for '${symbol}'. Check the ticker symbol.`)
   }
 
-  const peers = await buildPeerRows(symbol, info, customPeers, force)
+  const peers = await fetchers.peers(symbol, info, customPeers, force)
   const trends = buildTrends(annualMap, metrics)
   const suggestions = deriveValuationSuggestions(metrics, trends, metrics.basisType, {
     market,
@@ -783,5 +816,8 @@ export const valuationTesting = {
   completeQuarterTtm,
   currenciesAgree,
   extractMetrics,
+  fetchInfo,
+  fetchUncached,
   provenanceFor,
+  retryInterrupted,
 }

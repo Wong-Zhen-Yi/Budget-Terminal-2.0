@@ -113,6 +113,7 @@ export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS
     openExternal: (url) => invoke(CHANNELS.openExternal, url),
     saveText: (suggestedName, contents) =>
       invoke(CHANNELS.saveText, suggestedName, contents),
+    exportArticlesPdf: (request) => invoke(CHANNELS.exportArticlesPdf, request),
     writeClipboard: (contents) => invoke(CHANNELS.writeClipboard, contents),
     windowControl: (action) => invoke(CHANNELS.windowControl, action),
     onPortfolioChanged: (listener) => subscribe(CHANNELS.portfolioChanged, listener),

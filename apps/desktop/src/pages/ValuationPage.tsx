@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type {
   ValuationAssumptions,
@@ -15,6 +15,7 @@ import {
   valuationCurrencyWarnings,
 } from '@shared/valuation'
 import { useRefreshValuation, useValuation } from '@/api/valuationQueries'
+import { effectiveFreshness, errorMessage, useSnapshotClock } from '@/api/snapshotHealth'
 import { DataFreshness } from '@/components/ui/DataFreshness'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { Button } from '@/components/ui/Button'
@@ -213,11 +214,9 @@ export function ValuationPage({
   const [draft, setDraft] = useState(ticker)
   const [peerDraft, setPeerDraft] = useState('')
   const [sourceFilter, setSourceFilter] = useState('')
-  // `_valuation_on_show` issues one non-forced load the first time the page is shown, and
-  // this component only mounts when its tab is opened — so being armed from the start is
-  // that first load, not a fetch from the app's startup.
-  const [armed, setArmed] = useState(true)
+  const now = useSnapshotClock()
   const [busy, setBusy] = useState(false)
+  const loadInFlight = useRef(false)
   const [notice, setNotice] = useState<{ text: string; tone: Tone } | null>(null)
   /**
    * The last ticker whose derived assumptions were written into the form. A load re-derives
@@ -229,7 +228,7 @@ export function ValuationPage({
     () => customPeersByTicker[ticker] ?? [],
     [customPeersByTicker, ticker],
   )
-  const query = useValuation(ticker, customPeers, armed)
+  const query = useValuation(ticker, customPeers, true)
   const refresh = useRefreshValuation()
   // A handoff must never label the previous ticker's valuation as the new ticker.
   const envelope = query.data?.data.ticker === ticker ? query.data : undefined
@@ -239,8 +238,8 @@ export function ValuationPage({
   useEffect(() => setDraft(ticker), [ticker])
 
   useEffect(() => {
-    onStatusChange([{ label: 'Valuation', envelope, loading: query.isFetching }], '')
-  }, [onStatusChange, envelope, query.isFetching])
+    onStatusChange([{ label: 'Valuation', envelope, loading: query.isFetching, error: query.error }], '')
+  }, [onStatusChange, envelope, query.isFetching, query.error])
 
   const assumptions = useMemo(
     () => savedAssumptions(assumptionsByTicker, ticker),
@@ -272,12 +271,16 @@ export function ValuationPage({
     const materialWarnings = trends?.perShareApproximate
       ? ['Historical per-share trends use current shares and are approximate.']
       : []
-    return calculateValuationScenarios(metrics?.price ?? null, assumptions, {
-      historyPoints: trends?.comparableHistoryPoints ?? 0,
-      materialWarnings,
-      blockingWarnings: valuationCurrencyWarnings(metrics),
-    })
-  }, [assumptions, metrics, trends])
+    return calculateValuationScenarios(
+      metrics?.price ?? null,
+      loaded ? assumptions : { ...assumptions, basisValue: 0 },
+      {
+        historyPoints: trends?.comparableHistoryPoints ?? 0,
+        materialWarnings,
+        blockingWarnings: valuationCurrencyWarnings(metrics),
+      },
+    )
+  }, [assumptions, loaded, metrics, trends])
 
   const derived = useMemo(() => {
     if (!payload || !payload.generatedAt) return { summary: 'Manual assumptions', detail: '' }
@@ -287,18 +290,23 @@ export function ValuationPage({
 
   const load = useCallback(
     async (symbolInput?: string, peers?: string[]) => {
+      if (loadInFlight.current) return
       const symbol = (symbolInput ?? draft).trim().toUpperCase()
       if (!symbol) {
         setNotice({ text: 'Enter a ticker to load valuation data.', tone: 'warning' })
         return
       }
-      setTicker(symbol)
-      setArmed(true)
+      loadInFlight.current = true
       setNotice(null)
       setBusy(true)
       try {
-        await refresh(symbol, peers ?? customPeersByTicker[symbol] ?? [])
+        const pending = refresh(symbol, peers ?? customPeersByTicker[symbol] ?? [])
+        setTicker(symbol)
+        await pending
+      } catch (error) {
+        setNotice({ text: `Could not load ${symbol}: ${errorMessage(error)}`, tone: 'negative' })
       } finally {
+        loadInFlight.current = false
         setBusy(false)
       }
     },
@@ -318,6 +326,7 @@ export function ValuationPage({
   }, [assumptions, payload, setAssumptions])
 
   const addPeer = useCallback(() => {
+    if (loadInFlight.current) return
     const symbol = peerDraft.trim().toUpperCase()
     if (!symbol) {
       setNotice({ text: 'Enter a peer ticker to add.', tone: 'warning' })
@@ -345,6 +354,7 @@ export function ValuationPage({
 
   const dropPeer = useCallback(
     (symbol: string) => {
+      if (loadInFlight.current) return
       removeCustomPeer(ticker, symbol)
       setNotice({
         text: `Removed ${symbol} from custom peers for ${ticker}. Reloading...`,
@@ -372,13 +382,25 @@ export function ValuationPage({
     change !== null && metrics?.previousClose ? (change / metrics.previousClose) * 100 : null
 
   const status = useMemo((): { text: string; tone: Tone } => {
-    if (!loaded && query.isFetching) {
-      return { text: `Loading ${ticker} valuation data...`, tone: 'warning' }
+    if (query.isFetching) {
+      return { text: `${loaded ? 'Refreshing' : 'Loading'} ${ticker} valuation data...`, tone: 'warning' }
     }
-    if (query.data?.meta.freshness === 'failed') {
-      return { text: `Valuation load failed: ${query.data.meta.failureReason}`, tone: 'negative' }
+    if (query.error) {
+      return { text: `Valuation load failed: ${errorMessage(query.error)}`, tone: 'negative' }
+    }
+    if (envelope?.meta.freshness === 'failed') {
+      return { text: `Valuation load failed: ${envelope.meta.failureReason || 'No usable data returned.'}`, tone: 'negative' }
     }
     if (!loaded) return { text: 'Enter a ticker and load valuation data.', tone: 'muted' }
+    if (envelope) {
+      const freshness = effectiveFreshness(envelope, now)
+      if (freshness === 'stale' || freshness === 'partial' || envelope.errors.length) {
+        return {
+          text: `Showing ${freshness === 'stale' ? 'cached' : 'incomplete'} valuation data for ${ticker}. ${envelope.meta.failureReason || envelope.errors[0]?.reason || 'Reload to refresh the snapshot.'}`,
+          tone: 'warning',
+        }
+      }
+    }
     const peerWarnings = payload?.peerWarnings ?? []
     if (peerWarnings.length) {
       return {
@@ -387,7 +409,7 @@ export function ValuationPage({
       }
     }
     return { text: `Loaded valuation data for ${ticker}.`, tone: 'positive' }
-  }, [loaded, payload, query.data, query.isFetching, ticker])
+  }, [envelope, loaded, now, payload, query.error, query.isFetching, ticker])
 
   const peerColumns: Array<Column<ValuationPeerRow>> = [
     {
@@ -537,7 +559,7 @@ export function ValuationPage({
 
         <div className="flex min-w-0 flex-1 items-baseline gap-2">
           <h1 className="truncate text-sm font-semibold text-text" title={metrics?.companyName}>
-            {metrics?.companyName || 'Valuation'}
+            {metrics ? `${ticker} · ${metrics.companyName}` : `${ticker} Valuation`}
           </h1>
           <span className="num shrink-0 text-sm font-semibold text-text">
             {money(metrics?.price)}
@@ -569,7 +591,7 @@ export function ValuationPage({
         </span>
       </div>
 
-      <DataFreshness envelope={envelope} loading={query.isFetching} />
+      <DataFreshness envelope={envelope} loading={query.isFetching} error={query.error} />
       <section className="grid shrink-0 grid-cols-3 divide-x divide-border border border-border bg-surface py-1.5 lg:grid-cols-6">
         <Tile
           title="Verdict"
@@ -819,7 +841,7 @@ export function ValuationPage({
                     aria-label="Custom peer ticker"
                     className="h-8 min-w-0 flex-1 border border-border-strong bg-surface-raised px-2 text-2xs font-semibold tracking-wide text-text outline-none focus:border-accent"
                   />
-                  <Button type="submit" variant="accent">
+                  <Button type="submit" variant="accent" disabled={busy}>
                     Add
                   </Button>
                 </form>
@@ -833,6 +855,7 @@ export function ValuationPage({
                         <span className="num flex-1 text-2xs font-semibold text-text">{peer}</span>
                         <button
                           type="button"
+                          disabled={busy}
                           onClick={() => dropPeer(peer)}
                           aria-label={`Remove ${peer}`}
                           className="text-2xs text-text-muted transition-colors hover:text-down"

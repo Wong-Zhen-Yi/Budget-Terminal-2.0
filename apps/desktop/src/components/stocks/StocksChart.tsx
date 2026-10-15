@@ -4,6 +4,7 @@ import {
   ColorType,
   createChart,
   CrosshairMode,
+  HistogramSeries,
   LineSeries,
   LineStyle,
   type CandlestickData,
@@ -45,6 +46,8 @@ const RANGE_BARS: Record<Exclude<StocksRangePreset, ''>, number> = {
 interface StocksChartProps {
   payload: StocksChartPayload | null
   mfiEnabled: boolean
+  /** Shares traded, on an independent scale beneath the candles. */
+  volumeEnabled?: boolean
   autoFollow: boolean
   rangePreset: StocksRangePreset
   logicalRange: LogicalRange | null
@@ -56,6 +59,7 @@ interface StocksChartProps {
 export function StocksChart({
   payload,
   mfiEnabled,
+  volumeEnabled = false,
   autoFollow,
   rangePreset,
   logicalRange,
@@ -68,6 +72,7 @@ export function StocksChart({
   const seriesRef = useRef<{
     candles: ISeriesApi<'Candlestick'>
     mfi: ISeriesApi<'Line'>
+    volume: ISeriesApi<'Histogram'>
     lastPrice: IPriceLine
   } | null>(null)
   const candlesRef = useRef(new Map<number, Candle>())
@@ -114,7 +119,7 @@ export function StocksChart({
         borderColor: COLORS.border,
         scaleMargins: { top: 0.08, bottom: 0.08 },
       },
-      timeScale: { borderColor: COLORS.border, rightOffset: 4 },
+      timeScale: { borderColor: COLORS.border, rightOffset: 4, lockVisibleTimeRangeOnResize: true },
       crosshair: { mode: CrosshairMode.Normal },
     })
     const candles = chart.addSeries(
@@ -141,6 +146,8 @@ export function StocksChart({
     mfi.createPriceLine({ price: STOCKS_MFI_OVERBOUGHT, color: COLORS.reference, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: '' })
     mfi.createPriceLine({ price: STOCKS_MFI_OVERSOLD, color: COLORS.up, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: '' })
     const lastPrice = candles.createPriceLine({ price: 0, color: COLORS.reference, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '' })
+    const volume = chart.addSeries(HistogramSeries, { priceScaleId: 'volume', priceFormat: { type: 'volume' }, priceLineVisible: false, lastValueVisible: false, visible: false })
+    volume.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } })
 
     const onRange = (range: LogicalRange | null) => {
       if (!range) return
@@ -172,7 +179,7 @@ export function StocksChart({
     })
 
     chartRef.current = chart
-    seriesRef.current = { candles, mfi, lastPrice }
+    seriesRef.current = { candles, mfi, volume, lastPrice }
     return () => {
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange)
       chart.remove()
@@ -188,9 +195,13 @@ export function StocksChart({
     if (!payload?.candles.length) {
       series.candles.setData([])
       series.mfi.setData([])
+      series.volume.setData([])
       candlesRef.current.clear()
       return
     }
+    // Initial data and overlay scales can emit a range event before the saved range
+    // is restored below. Keep that event from being treated as a manual zoom.
+    applyingRange.current = true
     candlesRef.current = new Map(payload.candles.map((candle) => [candle.time, candle]))
     series.candles.setData(payload.candles.map((candle) => ({
       time: candle.time as UTCTimestamp,
@@ -200,6 +211,9 @@ export function StocksChart({
       close: candle.close,
     })))
     series.mfi.setData(payload.mfi.map((point) => ({ time: point.time as UTCTimestamp, value: point.value })))
+    series.volume.setData(volumeEnabled ? payload.candles.map(candle => ({ time: candle.time as UTCTimestamp, value: candle.volume, color: candle.close >= candle.open ? '#26c28166' : '#f0554e66' })) : [])
+    series.volume.applyOptions({ visible: volumeEnabled })
+    chart.priceScale('right').applyOptions({ scaleMargins: { top: 0.08, bottom: volumeEnabled ? 0.25 : 0.08 } })
     series.lastPrice.applyOptions({ price: payload.stats.close })
     callbacksRef.current.onHoverCandle(null)
 
@@ -215,9 +229,12 @@ export function StocksChart({
           : Math.min(STOCKS_DEFAULT_VISIBLE_BARS, count)
         setRange(anchoredRange(count, span))
       } else if (state.logicalRange) setRange(state.logicalRange)
-      else chart.timeScale().fitContent()
+      else {
+        chart.timeScale().fitContent()
+        requestAnimationFrame(() => { applyingRange.current = false })
+      }
     })
-  }, [payload])
+  }, [payload, volumeEnabled])
 
   useEffect(() => {
     const count = payload?.candles.length ?? 0

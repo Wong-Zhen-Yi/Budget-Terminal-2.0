@@ -35,7 +35,12 @@ try {
         if (mode === 'waiting') await new Promise(resolve => { releaseLoading = resolve })
         const data = mode === 'failed' ? emptyAvgoPayload() : avgoFixture()
         if (mode === 'partial') { data.earnings = null; data.progress.earnings = 'unavailable' }
-        const errors = mode === 'success' || mode === 'waiting' ? [] : [{ symbol: 'earnings', source: 'fixture', operation: 'avgo-earnings', reason: 'HTTP 503' }]
+        if (mode === 'sparse') {
+          data.financials.quarterly.freeCashFlow.splice(1, 1)
+          data.financials.quarterly.freeCashFlow[0].value = -2e9
+          data.financials.quarterly.operatingCashFlow[0].value = 0
+        }
+        const errors = ['success', 'waiting', 'sparse'].includes(mode) ? [] : [{ symbol: 'earnings', source: 'fixture', operation: 'avgo-earnings', reason: 'HTTP 503' }]
         return { data, errors, meta: { source: 'AVGO UI fixture', fetchedAt: Date.now(), freshness: mode === 'waiting' || mode === 'success' ? 'fresh' : mode === 'partial' ? 'partial' : 'failed', failureReason: errors.length ? 'earnings: HTTP 503' : undefined } }
       }
       window.api.openExternal = async url => { opened = url }
@@ -56,15 +61,36 @@ try {
         check(text().includes('AVGO — Broadcom') && text().includes('custom AI accelerators'), 'AVGO headline or AI metrics missing')
         check(text().includes('Infrastructure software') && text().includes('FY2026 Q4'), 'Segment or guidance period missing')
         check(document.querySelectorAll('canvas').length > 0, 'Stock chart did not render')
+        check(getComputedStyle(document.querySelector('.avgo-kpis')).backgroundColor === 'rgb(13, 20, 32)', 'AVGO must retain the app surface color')
+        check(getComputedStyle(document.querySelector('.avgo-tab[aria-selected=true]')).borderBottomColor === 'rgb(47, 111, 208)', 'AVGO must retain the app blue accent')
+        const cashChart = () => document.querySelector('[data-avgo-cash-chart]')
+        check(cashChart().querySelectorAll('svg rect').length === 12 && text().includes('Operating cash flow') && text().includes('Free cash flow'), 'Three cash generation series are missing')
         const mixChart = document.querySelector('[data-avgo-mix-chart]'); check(mixChart.querySelector('svg').getBoundingClientRect().bottom <= mixChart.nextElementSibling.getBoundingClientRect().top, 'Revenue mix chart overlaps segment table')
         const range = button('3M'); range.click(); await settle()
         check(calls === 1, 'Chart range triggered a provider fetch')
         button('Charts').click(); check(navigation.join(':') === 'charts:AVGO', 'Charts navigation lost ticker')
         button('Fundamentals').click(); check(navigation.join(':') === 'fundamentals:AVGO', 'Fundamentals navigation lost ticker')
         button('Investor relations').click(); check(opened.includes('investors.broadcom.com'), 'IR link failed')
-        button('Source').click(); check(opened.includes('news-release-details'), 'Disclosure source link failed')
+        button('Earnings release ↗').click(); check(opened.includes('news-release-details'), 'Disclosure source link failed')
+        const selectTab = async label => {
+          const tab = [...document.querySelectorAll('[role=tab]')].find(tab => tab.textContent === label)
+          tab.click(); await settle()
+          check(tab.getAttribute('aria-selected') === 'true' && document.querySelector('[role=tabpanel]').getAttribute('aria-labelledby') === tab.id, 'Tab selection/ARIA failed: ' + label)
+        }
+        await selectTab('AI & segments'); check(text().includes('AI revenue YoY') && text().includes('Infrastructure software'), 'Detailed AI metrics or segment data missing')
+        await selectTab('Financials'); check(text().includes('Net income') && text().includes('non-GAAP') && cashChart(), 'Detailed financials missing')
+        await selectTab('Guidance'); check(text().includes('approximately $34.8B') && text().includes('outlook'), 'Management guidance wording lost')
+        await selectTab('News & filings'); check(text().includes('Broadcom announces AI networking update') && text().includes('8-K'), 'News or filings missing')
+        await selectTab('Overview')
+        check(calls === 1 && button('3M').getAttribute('aria-pressed') === 'true', 'Section switch fetched data or lost chart range: calls=' + calls + ', active=' + button('3M').getAttribute('aria-pressed'))
+        const overviewTab = document.querySelector('[role=tab][aria-selected=true]')
+        overviewTab.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); await settle()
+        check(document.activeElement.textContent === 'AI & segments', 'Keyboard section navigation failed')
+        await selectTab('Overview')
         button('Export snapshot').click(); await settle(); check(JSON.parse(copied).symbol === 'AVGO', 'Snapshot export failed')
         button('Refresh').click(); await settle(); check(lastRequest.force, 'Refresh did not force service request')
+        mode = 'sparse'; button('Refresh').click(); await settle()
+        check(cashChart().querySelectorAll('svg rect').length === 11 && cashChart().textContent.includes('-2.00B'), 'Missing cash data was zero-filled or negative cash flow was hidden')
         mode = 'partial'; await client.invalidateQueries({ queryKey: ['avgo'], refetchType: 'none' }); let startupError = ''; try { await task.run(client, 10) } catch (error) { startupError = String(error) }; check(startupError.includes('HTTP 503') && client.getQueryData(['avgo']).data.market, 'Partial startup was treated as ready or discarded useful content'); button('Refresh').click(); await settle()
         check(text().includes('HTTP 503') && text().includes('Broadcom announces AI networking update'), 'Partial failure hid healthy panels')
         mode = 'failed'; button('Refresh').click(); await settle()
@@ -77,10 +103,10 @@ try {
         host.render(null); await settle(); const before = calls; render(); await settle()
         check(calls === before, 'Returning to AVGO triggered initial loading again')
         check(client.getQueryData(['avgo']).meta.freshness === 'fresh' && text().includes('Broadcom announces AI networking update') && !document.querySelector('[role=alert]'), 'Final populated AVGO state did not settle')
-        return 'PASS: startup warming, first visit, chart ranges, disclosure/IR links, ticker navigation, export, forced refresh/F5, loading, partial/total outages, recovery and revisit'
+        return 'PASS: startup warming, first visit, app theme, three cash series/missing/negative/zero values, section tabs/keyboard, chart ranges, disclosure/IR links, ticker navigation, export, forced refresh/F5, loading, partial/total outages, recovery and revisit'
       }
     ` },
-    bundle: true, jsx: 'automatic', write: false, format: 'iife',
+    bundle: true, jsx: 'automatic', write: false, format: 'iife', loader: { '.css': 'empty' },
     alias: { '@': join(root, 'src'), '@shared': join(root, 'electron/shared') },
     define: { 'process.env.NODE_ENV': '"production"' },
   })
@@ -97,8 +123,19 @@ try {
         await new Promise(resolve => setTimeout(resolve, 300));
         await window.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
         fs.writeFileSync(${JSON.stringify(screenshot)}, (await window.webContents.capturePage()).toPNG());
+        window.setSize(1600, 1200); await new Promise(resolve => setTimeout(resolve, 300));
+        if (!await window.webContents.executeJavaScript('document.querySelector("button[aria-pressed=true]")?.textContent === "1Y"')) throw Error('Resizing lost the selected chart range');
+        fs.writeFileSync(${JSON.stringify(join(root, 'out/avgo-smoke-full.png'))}, (await window.webContents.capturePage()).toPNG());
         window.setSize(720, 850); await new Promise(resolve => setTimeout(resolve, 300));
         if (await window.webContents.executeJavaScript('document.documentElement.scrollWidth > window.innerWidth')) throw Error('AVGO layout overflows at narrow width');
+        await window.webContents.executeJavaScript(\`(async () => {
+          for (const tab of document.querySelectorAll('[role=tab]')) {
+            tab.click(); await new Promise(resolve => setTimeout(resolve, 100));
+            if (document.documentElement.scrollWidth > innerWidth) throw Error('Narrow section overflows: ' + tab.textContent);
+          }
+          document.querySelector('[role=tab]').click();
+        })()\`);
+        await new Promise(resolve => setTimeout(resolve, 200));
         fs.writeFileSync(${JSON.stringify(join(root, 'out/avgo-smoke-narrow.png'))}, (await window.webContents.capturePage()).toPNG());
         console.log('PASS: normal and narrow viewport smoke tests'); app.exit(0);
       } catch (error) { console.error(error); app.exit(1); }

@@ -1,4 +1,5 @@
 import type { ArticlesPayload, ArticlesMutation } from './articles.js'
+import type { ArticlePdfRequest, ArticlePdfResult } from './articles.js'
 export type { Article, ArticlesPayload, ArticlesMutation } from './articles.js'
 import type { BitcoinPayload, BitcoinRequest } from './bitcoin.js'
 import type { SofiPayload, SofiRequest } from './sofi.js'
@@ -3478,6 +3479,7 @@ export const CHANNELS = {
   maintenance: 'settings:maintenance',
   openExternal: 'shell:openExternal',
   saveText: 'shell:saveText',
+  exportArticlesPdf: 'shell:exportArticlesPdf',
   writeClipboard: 'shell:writeClipboard',
   windowControl: 'window:control',
 } as const
@@ -3677,6 +3679,7 @@ export interface DesktopApi {
   maintenance(action: MaintenanceAction): Promise<Envelope<MaintenanceResult>>
   openExternal(url: string): Promise<void>
   saveText(suggestedName: string, contents: string): Promise<string | null>
+  exportArticlesPdf(request: ArticlePdfRequest): Promise<Envelope<ArticlePdfResult>>
   writeClipboard(contents: string): Promise<void>
   windowControl(action: WindowAction): Promise<void>
   onPortfolioChanged(listener: () => void): () => void

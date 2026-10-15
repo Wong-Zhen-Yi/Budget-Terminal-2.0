@@ -112,6 +112,7 @@ export function installBrowserApi(token: string): DesktopApi {
   api.screenshotReady = async () => { throw new Error('Screenshots are available on the desktop.') }
   api.windowControl = async () => { throw new Error('Window controls are available on the desktop.') }
   api.maintenance = async () => { throw new Error('Use desktop Settings for backups and data maintenance.') }
+  api.exportArticlesPdf = async () => { throw new Error('Open Articles in the desktop app to export PDFs.') }
   api.openExternal = async (value) => {
     const url = new URL(value)
     if (!['https:', 'http:'].includes(url.protocol)) throw new Error('Only web links can be opened.')
