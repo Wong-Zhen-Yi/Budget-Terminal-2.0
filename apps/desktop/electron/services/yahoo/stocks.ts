@@ -23,6 +23,7 @@ import { cache, TTL } from '../cache.js'
 import { paced, yahoo } from './client.js'
 import { searchNews } from './newsPage.js'
 import { getYahooSeries } from './series.js'
+import { withBackupStatements, withBackupSummary } from './backup.js'
 
 export const STOCKS_SOURCE = 'yahoo stocks'
 
@@ -100,13 +101,14 @@ async function fetchChart(symbol: string, force: boolean): Promise<ChartResult> 
 }
 
 async function statementFallback(symbol: string): Promise<Record<string, unknown>> {
-  const rows = await paced(() =>
+  const start = new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000)
+  const rows = await withBackupStatements(symbol, 'quarterly', start, () => paced(() =>
     yahoo.fundamentalsTimeSeries(symbol, {
-      period1: new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000),
+      period1: start,
       type: 'quarterly',
       module: 'all',
     }),
-  )
+  ))
   const ordered = [...rows]
     .map((row) => record(row))
     .sort((left, right) => {
@@ -170,7 +172,7 @@ async function fetchSummary(symbol: string, force: boolean): Promise<SummaryResu
     `stocks:summary:${symbol}`,
     TTL.profile,
     async () => {
-      const summary = await paced(() =>
+      const summary = await withBackupSummary(symbol, () => paced(() =>
         yahoo.quoteSummary(symbol, {
           modules: [
             'price',
@@ -183,7 +185,7 @@ async function fetchSummary(symbol: string, force: boolean): Promise<SummaryResu
             'insiderTransactions',
           ],
         }),
-      )
+      ))
       const price = summary.price
       const details = summary.summaryDetail
       const financial = summary.financialData

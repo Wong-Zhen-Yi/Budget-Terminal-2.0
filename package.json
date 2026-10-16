@@ -26,6 +26,7 @@
     "probe:maintenance-live": "npm run --workspace budget-terminal-desktop probe:maintenance-live --",
     "probe:portfolio": "npm run --workspace budget-terminal-desktop probe:portfolio --",
     "probe:stocks": "npm run --workspace budget-terminal-desktop probe:stocks --",
+    "probe:defeatbeta": "npm run --workspace budget-terminal-desktop probe:defeatbeta --",
     "probe:fundamentals": "npm run --workspace budget-terminal-desktop probe:fundamentals --",
     "probe:calendar": "npm run --workspace budget-terminal-desktop probe:calendar --",
     "probe:charts": "npm run --workspace budget-terminal-desktop probe:charts --",

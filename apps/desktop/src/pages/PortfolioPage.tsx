@@ -20,11 +20,13 @@ import { RemovePositionsDialog } from '@/components/portfolio/RemovePositionsDia
 import { SummaryBar } from '@/components/portfolio/SummaryBar'
 import { Button } from '@/components/ui/Button'
 import { Panel } from '@/components/ui/Panel'
-import { Splitter } from '@/components/ui/Splitter'
 import { currency, decimals, percent, plainPercent } from '@/lib/format'
 
 const SUB_TABS = [
-  { id: 'positions', label: 'Positions' },
+  { id: 'stocks', label: 'Stocks' },
+  { id: 'options', label: 'Options' },
+  { id: 'weight', label: 'Portfolio Weight' },
+  { id: 'dip-finder', label: 'Dip Finder' },
   { id: 'pie', label: 'Pie Chart' },
   { id: 'heatmap', label: 'Portfolio Heatmap' },
   { id: 'momentum', label: 'Momentum Tracker' },
@@ -32,10 +34,6 @@ const SUB_TABS = [
 ] as const
 
 type SubTabId = (typeof SUB_TABS)[number]['id']
-
-const MIN_PORTFOLIO_TABLES = 480
-const MIN_PORTFOLIO_ANALYTICS = 320
-const MIN_PORTFOLIO_TABLE_HEIGHT = 160
 
 export function PortfolioPage({
   onStatusChange,
@@ -61,7 +59,7 @@ export function PortfolioPage({
   const quotesQuery = useQuotes(holdings)
   const fundamentalsQuery = useFundamentals(holdings)
 
-  const [subTab, setSubTab] = useState<SubTabId>('positions')
+  const [subTab, setSubTab] = useState<SubTabId>('stocks')
   const [managing, setManaging] = useState(false)
   const [addingPositions, setAddingPositions] = useState(false)
   const [removingPositions, setRemovingPositions] = useState(false)
@@ -69,32 +67,6 @@ export function PortfolioPage({
   const [saveStatus, setSaveStatus] = useState('')
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const [analyticsWidth, setAnalyticsWidth] = useState(416)
-  const [positionsSplit, setPositionsSplit] = useState(0.6)
-  const positionsLayoutRef = useRef<HTMLDivElement>(null)
-  const tablesStackRef = useRef<HTMLDivElement>(null)
-
-  const resizeAnalytics = useCallback((clientX: number) => {
-    const layout = positionsLayoutRef.current
-    if (!layout) return
-    const bounds = layout.getBoundingClientRect()
-    const maximum = bounds.width - MIN_PORTFOLIO_TABLES
-    setAnalyticsWidth(
-      Math.min(Math.max(bounds.right - clientX, MIN_PORTFOLIO_ANALYTICS), maximum),
-    )
-  }, [])
-
-  const resizeTables = useCallback((clientY: number) => {
-    const stack = tablesStackRef.current
-    if (!stack) return
-    const bounds = stack.getBoundingClientRect()
-    if (bounds.height <= MIN_PORTFOLIO_TABLE_HEIGHT * 2) return
-    const topHeight = Math.min(
-      Math.max(clientY - bounds.top, MIN_PORTFOLIO_TABLE_HEIGHT),
-      bounds.height - MIN_PORTFOLIO_TABLE_HEIGHT,
-    )
-    setPositionsSplit(topHeight / bounds.height)
-  }, [])
 
   const rows = useMemo(
     () =>
@@ -127,7 +99,8 @@ export function PortfolioPage({
         })),
     [selected],
   )
-  const optionQuotesQuery = useOptionQuotes(optionContracts, subTab === 'positions')
+  // Option marks also feed the shared summary, so keep them ready on every subtab.
+  const optionQuotesQuery = useOptionQuotes(optionContracts, true)
   const optionRows = useMemo(
     () => buildOptionRows(selected?.options ?? [], optionQuotesQuery.data?.data.quotes ?? {}),
     [selected, optionQuotesQuery.data],
@@ -168,7 +141,7 @@ export function PortfolioPage({
     onStatusChange(
       [
         { label: 'Holdings', envelope: portfolioQuery.data, loading: portfolioQuery.isFetching, error: portfolioQuery.error, enabled: portfolioQuery.isEnabled },
-        { label: 'Option marks', envelope: optionQuotesQuery.data, loading: optionQuotesQuery.isFetching, error: optionQuotesQuery.error, enabled: optionContracts.length > 0 && subTab === 'positions' },
+        { label: 'Option marks', envelope: optionQuotesQuery.data, loading: optionQuotesQuery.isFetching, error: optionQuotesQuery.error, enabled: optionQuotesQuery.isEnabled },
         { label: 'Quotes', envelope: quotesQuery.data, loading: quotesQuery.isFetching, error: quotesQuery.error, enabled: quotesQuery.isEnabled },
         {
           label: 'Fundamentals',
@@ -185,8 +158,7 @@ export function PortfolioPage({
     optionQuotesQuery.data,
     optionQuotesQuery.isFetching,
     optionQuotesQuery.error,
-    optionContracts.length,
-    subTab,
+    optionQuotesQuery.isEnabled,
     portfolioQuery.error,
     quotesQuery.error,
     fundamentalsQuery.error,
@@ -379,13 +351,13 @@ export function PortfolioPage({
         {error ? <span className="text-2xs text-down">{error}</span> : null}
       </div>
 
-      <div className="flex shrink-0 items-center gap-1 border-b border-border">
+      <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-border">
         {SUB_TABS.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => setSubTab(tab.id)}
-            className={`h-8 border-b-2 px-3 text-2xs transition-colors ${
+            className={`h-8 shrink-0 border-b-2 px-3 text-2xs transition-colors ${
               tab.id === subTab
                 ? 'border-accent text-text'
                 : 'border-transparent text-text-muted hover:text-text'
@@ -396,107 +368,93 @@ export function PortfolioPage({
         ))}
       </div>
 
-      {subTab === 'positions' ? (
-        <div ref={positionsLayoutRef} className="flex min-h-0 flex-1">
-          <div ref={tablesStackRef} className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <div className="flex min-h-0 flex-col" style={{ flex: `${positionsSplit} 1 0` }}>
-              <Panel
-                title="Positions"
-                className="min-h-0 flex-1"
-              actions={
-                <div className="flex items-center gap-1">
-                  {selected.readOnly ? (
-                    <span className="pr-1 text-2xs text-text-dim">
-                      Combined is a read-only view of every portfolio
-                    </span>
-                  ) : (
-                    <>
-                      <Button variant="accent" onClick={() => setAddingPositions(true)}>
-                        + Add Position
-                      </Button>
-                      <Button
-                        variant="danger"
-                        onClick={() => setRemovingPositions(true)}
-                        disabled={!selected.tickers.length}
-                      >
-                        - Remove Position
-                      </Button>
-                    </>
-                  )}
-                  <Button onClick={() => void exportForLlm()} disabled={exporting}>
-                    {exporting ? 'Exporting...' : 'Export for LLM'}
-                  </Button>
-                  <Button onClick={() => void exportTickers()} disabled={!selected.tickers.length}>
-                    Export Tickers
-                  </Button>
-                </div>
-              }
-              >
-                <PositionsTable
-                  onResearch={(symbol) => onNavigate?.('stocks', symbol)}
-                portfolio={selected}
-                rows={rows}
-                loading={quotesQuery.isLoading || fundamentalsQuery.isLoading}
-                onSetShares={(ticker, shares) =>
-                  void send({ type: 'setPosition', portfolioId: selected.id, ticker, shares })
-                }
-                onSetAvgPrice={(ticker, avgPrice) =>
-                  void send({ type: 'setPosition', portfolioId: selected.id, ticker, avgPrice })
-                }
-                onToggleWeight={(ticker, includeInWeight) =>
-                  void send({ type: 'setPosition', portfolioId: selected.id, ticker, includeInWeight })
-                }
-                onRemove={(ticker) =>
-                  void send({ type: 'removePosition', portfolioId: selected.id, ticker })
-                }
-                />
-              </Panel>
-            </div>
-
-            <Splitter orientation="horizontal" onDrag={resizeTables} />
-
-            <div className="flex min-h-0 flex-col" style={{ flex: `${1 - positionsSplit} 1 0` }}>
-              <Panel
-                title="Options Positions"
-                className="min-h-0 flex-1"
-              actions={
-                selected.readOnly ? null : (
-                  <Button
-                    variant="accent"
-                    onClick={() => void send({ type: 'addOption', portfolioId: selected.id })}
-                  >
+      {subTab === 'stocks' ? (
+        <Panel
+          title="Stocks"
+          className="min-h-0 flex-1"
+          actions={
+            <div className="flex items-center gap-1">
+              {selected.readOnly ? (
+                <span className="pr-1 text-2xs text-text-dim">
+                  Combined is a read-only view of every portfolio
+                </span>
+              ) : (
+                <>
+                  <Button variant="accent" onClick={() => setAddingPositions(true)}>
                     + Add Position
                   </Button>
-                )
-              }
-              >
-                <OptionsTable
-                portfolio={selected}
-                rows={optionRows}
-                expiries={optionQuotesQuery.data?.data.expiries ?? {}}
-                loading={optionQuotesQuery.isFetching}
-                onPatch={(rowId, patch: Partial<OptionPosition>) =>
-                  void send({ type: 'setOption', portfolioId: selected.id, rowId, patch })
-                }
-                onRemove={(rowId) =>
-                  void send({ type: 'removeOption', portfolioId: selected.id, rowId })
-                }
-                />
-              </Panel>
+                  <Button
+                    variant="danger"
+                    onClick={() => setRemovingPositions(true)}
+                    disabled={!selected.tickers.length}
+                  >
+                    - Remove Position
+                  </Button>
+                </>
+              )}
+              <Button onClick={() => void exportForLlm()} disabled={exporting}>
+                {exporting ? 'Exporting...' : 'Export for LLM'}
+              </Button>
+              <Button onClick={() => void exportTickers()} disabled={!selected.tickers.length}>
+                Export Tickers
+              </Button>
             </div>
-          </div>
-
-          <Splitter onDrag={resizeAnalytics} />
-
-          <div
-            className="flex min-h-0 shrink-0 flex-col gap-2"
-            style={{ width: analyticsWidth }}
-          >
-            <DipFinderPanel rows={rows} visible={subTab === 'positions'} />
-            <WeightPanel portfolio={selected} rows={rows} />
-          </div>
-        </div>
+          }
+        >
+          <PositionsTable
+            onResearch={(symbol) => onNavigate?.('stocks', symbol)}
+            portfolio={selected}
+            rows={rows}
+            loading={quotesQuery.isLoading || fundamentalsQuery.isLoading}
+            onSetShares={(ticker, shares) =>
+              void send({ type: 'setPosition', portfolioId: selected.id, ticker, shares })
+            }
+            onSetAvgPrice={(ticker, avgPrice) =>
+              void send({ type: 'setPosition', portfolioId: selected.id, ticker, avgPrice })
+            }
+            onToggleWeight={(ticker, includeInWeight) =>
+              void send({ type: 'setPosition', portfolioId: selected.id, ticker, includeInWeight })
+            }
+            onRemove={(ticker) =>
+              void send({ type: 'removePosition', portfolioId: selected.id, ticker })
+            }
+          />
+        </Panel>
       ) : null}
+
+      {subTab === 'options' ? (
+        <Panel
+          title="Options"
+          className="min-h-0 flex-1"
+          actions={
+            selected.readOnly ? null : (
+              <Button
+                variant="accent"
+                onClick={() => void send({ type: 'addOption', portfolioId: selected.id })}
+              >
+                + Add Position
+              </Button>
+            )
+          }
+        >
+          <OptionsTable
+            portfolio={selected}
+            rows={optionRows}
+            expiries={optionQuotesQuery.data?.data.expiries ?? {}}
+            loading={optionQuotesQuery.isFetching}
+            onPatch={(rowId, patch: Partial<OptionPosition>) =>
+              void send({ type: 'setOption', portfolioId: selected.id, rowId, patch })
+            }
+            onRemove={(rowId) =>
+              void send({ type: 'removeOption', portfolioId: selected.id, rowId })
+            }
+          />
+        </Panel>
+      ) : null}
+
+      {subTab === 'weight' ? <WeightPanel portfolio={selected} rows={rows} /> : null}
+
+      {subTab === 'dip-finder' ? <DipFinderPanel rows={rows} visible /> : null}
 
       {subTab === 'pie' ? (
         <Panel

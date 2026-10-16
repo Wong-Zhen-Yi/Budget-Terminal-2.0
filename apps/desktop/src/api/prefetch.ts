@@ -32,6 +32,7 @@ import { usePortfolio } from './queries'
 import { assertStartupReady, runWarmTasks, StartupLoadError, warmStartupQuery, warmStartupSnapshot } from './warmQueue'
 import { initialNewsImages, initialYouTubeVideo, newsQuoteTickers } from './initialContent'
 import { errorMessage } from './snapshotHealth'
+import { createProgressReporter } from './progressReporter'
 
 /**
  * Load every implemented page's automatic initial data when the app opens.
@@ -224,8 +225,7 @@ export function buildTasks(
     })
   }
 
-  // Dip Finder is part of the Portfolio's initial Positions view, not a deferred
-  // analytics subtab. Its default month return must be available on first visit.
+  // Warm Dip Finder's default month return even before its Portfolio subtab is opened.
   if (upDown.length) tasks.push({
     tab: 'portfolio', label: 'Portfolio Dip Finder',
     run: (client, backgroundOrder) => warmStartupQuery(client, {
@@ -241,15 +241,25 @@ export function buildTasks(
     rowId: option.rowId, ticker: option.ticker, expiry: option.expiry,
     strike: option.strike, strategy: option.strategy,
   }))
-  if (optionPositions.length) {
-    const signature = optionPositions
+  const financeOptionPositions = (payload?.portfolios ?? []).filter(entry => !entry.readOnly).flatMap(entry =>
+    (entry.options ?? []).map(option => ({
+      rowId: `${entry.id}:${option.rowId}`, ticker: option.ticker, expiry: option.expiry,
+      strike: option.strike, strategy: option.strategy,
+    })),
+  )
+  for (const { tab, label, positions } of [
+    { tab: 'portfolio', label: 'Portfolio options', positions: optionPositions },
+    { tab: 'personal-finance', label: 'Personal Finance option marks', positions: financeOptionPositions },
+  ]) {
+    if (!positions.length) continue
+    const signature = positions
       .map((position) => `${position.rowId}:${position.ticker}:${position.expiry}:${position.strike}:${position.strategy}`)
       .join('|')
     tasks.push({
-      tab: 'portfolio', label: 'Portfolio options',
+      tab, label,
       run: (client, backgroundOrder) => warmStartupQuery(client, {
         queryKey: queryKeys.optionQuotes(signature),
-        queryFn: () => api.optionQuotes({ positions: optionPositions, background: true, backgroundOrder }),
+        queryFn: () => api.optionQuotes({ positions, background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.optionQuotes(signature)),
       }),
     })
@@ -1059,6 +1069,7 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
     const pageOrder = priority
     const pageRanks = new Map(pageOrder.map((page, index) => [page, index]))
     let cancelled = false
+    let reporter: ReturnType<typeof createProgressReporter> | undefined
     // Defer startup so StrictMode's trial effect can clean up before marking this run
     // started. Otherwise the real effect skips a warm-up that was already cancelled.
     const run = async () => {
@@ -1094,15 +1105,18 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
         failed: failedCount,
         degraded: degradedCount,
       })
-      report()
-      reportProgress()
+      reporter = createProgressReporter(() => {
+        report()
+        reportProgress()
+      })
+      reporter.flush()
       await runWarmTasks(tasks, {
         run: (task) => task.run(queryClient, pageRanks.get(task.tab)),
         isCancelled: () => cancelled,
         onStart: (task) => {
           activeLabels.add(task.label)
           taskStarts.set(task, performance.now())
-          reportProgress()
+          reporter!.schedule()
         },
         onSettled: (task, result) => {
           const state = result.status === 'fulfilled' ? 'ready' : result.reason instanceof StartupLoadError && result.reason.state === 'degraded' ? 'degraded' : 'failed'
@@ -1128,8 +1142,10 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
               pageTimings.some((entry) => entry.state !== 'ready'),
             )
           }
-          report()
-          reportProgress()
+          // Keep accounting exact, but publish bursts at most ten times a second.
+          // Flush completion immediately so readiness never waits on the timer.
+          if (completed === tasks.length) reporter!.flush()
+          else reporter!.schedule()
         },
       })
     }
@@ -1137,6 +1153,7 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
 
     return () => {
       cancelled = true
+      reporter?.cancel()
       clearTimeout(timer)
     }
   }, [ready, queryClient])

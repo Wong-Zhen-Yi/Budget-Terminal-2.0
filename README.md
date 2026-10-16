@@ -162,6 +162,8 @@ single-expiration chain. Hidden pages remain hidden.
 
 ## Documentation
 
+- [DefeatBeta backup data feed](docs/defeatbeta-backup.md) — automatic daily US equity fallback when Yahoo fails.
+
 | Guide | What's inside |
 | :--- | :--- |
 | [Data, startup & backups](docs/user-guide.md) | All-page readiness, feed health, saved-data locations, migration, and backup behavior. |

@@ -28,7 +28,6 @@ function Freshness({ envelope, error, freshnessMs }: { envelope?: Envelope<unkno
 export function ForexPage({ onStatusChange }: { onStatusChange: (panels: PanelStatus[], path: string) => void }) {
   const { pair, range, setPair, setRange } = useForexStore()
   const { quotes, history, news, refresh } = useForex(pair, range)
-  const now = useSnapshotClock()
   const [refreshing, setRefreshing] = useState(false)
   const [notice, setNotice] = useState('')
   useEffect(() => {
@@ -42,13 +41,11 @@ export function ForexPage({ onStatusChange }: { onStatusChange: (panels: PanelSt
   const rows = FOREX_PAIRS.map((entry) => ({ ...entry, row: quotes.data?.data.rows.find((row) => row.pair === entry.id) }))
   type Row = typeof rows[number]
   const signed = (id: ForexPair, value: number | undefined) => value === undefined ? '—' : `${value > 0 ? '+' : ''}${forexNumber(id, value)}`
-  const rowFreshness = (entry: Row) => entry.row ? effectiveFreshness({ data: null, errors: [], meta: { source: 'Forex quote', freshness: entry.row.freshness, fetchedAt: entry.row.fetchedAt } }, now, FRESHNESS.quotes) : undefined
   const columns: Column<Row>[] = [
     { key: 'pair', header: 'Pair', cell: (entry) => <button className="font-semibold text-text hover:text-accent" onClick={() => setPair(entry.id)} aria-pressed={pair === entry.id}>{entry.id}</button> },
     { key: 'rate', header: 'Rate', numeric: true, align: 'right', cell: (entry) => forexNumber(entry.id, entry.row?.quote?.price) },
     { key: 'change', header: 'Daily change', numeric: true, align: 'right', cell: (entry) => <span className={directionClass(entry.row?.quote?.absChange)}>{signed(entry.id, entry.row?.quote?.absChange)}</span> },
     { key: 'percent', header: 'Daily %', numeric: true, align: 'right', cell: (entry) => <span className={directionClass(entry.row?.quote?.change)}>{entry.row?.quote ? percent(entry.row.quote.change, 2) : '—'}</span> },
-    { key: 'status', header: 'Status', cell: (entry) => <span className={rowFreshness(entry) === 'stale' || rowFreshness(entry) === 'failed' ? 'text-warn' : 'text-text-dim'}>{rowFreshness(entry) ?? (quotes.isFetching ? 'loading' : 'unavailable')}</span> },
   ]
   const points = history.data?.data.points ?? []
   const articles = news.data?.data.articles ?? []

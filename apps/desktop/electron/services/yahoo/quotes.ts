@@ -2,6 +2,7 @@ import type { Quote } from '../../shared/contract.js'
 import { cache, TTL } from '../cache.js'
 import { paced, periodStart, yahoo } from './client.js'
 import { observeSource } from '../sourceHealth.js'
+import { backupObservation, backupPrices } from '../defeatbeta/data.js'
 
 interface QuoteChartResult {
   quotes: Array<{ date: Date; close: number | null }>
@@ -76,17 +77,34 @@ export function quoteFromChart(symbol: string, result: QuoteChartResult): Quote 
  * fallback rather than the primary.
  */
 async function fetchQuote(symbol: string): Promise<Quote> {
-  const result = await paced(() =>
-    yahoo.chart(symbol, {
-      period1: periodStart(7),
-      interval: '1d',
-      includePrePost: true,
-    }),
-  )
-  const quote = quoteFromChart(symbol, result)
-  if (!quote) return fetchQuoteFallback(symbol)
-  observeSource({ fetchedAt: Date.now(), asOf: quote.asOf, stale: false, fromCache: false, failures: [] })
-  return quote
+  try {
+    const result = await paced(() =>
+      yahoo.chart(symbol, {
+        period1: periodStart(7),
+        interval: '1d',
+        includePrePost: true,
+      }),
+    )
+    const quote = quoteFromChart(symbol, result)
+    if (!quote) throw new Error(`No chart quote returned for ${symbol}.`)
+    observeSource({ fetchedAt: Date.now(), asOf: quote.asOf, stale: false, fromCache: false, failures: [] })
+    return quote
+  } catch (chartError) {
+    try { return await fetchQuoteFallback(symbol) } catch (quoteError) {
+      try {
+        const result = await backupPrices(symbol, periodStart(14))
+        const quote = quoteFromChart(symbol, {
+          quotes: result.rows.map(row => ({ date: new Date(row.time * 1000), close: row.close })),
+          meta: { currency: result.currency },
+        })
+        if (!quote) throw new Error(`DefeatBeta needs two daily closes for ${symbol}.`)
+        backupObservation(result.asOf, `${String(chartError)}; ${String(quoteError)}`)
+        return quote
+      } catch (backupError) {
+        throw new Error(`Yahoo chart: ${String(chartError)}; Yahoo quote: ${String(quoteError)}; DefeatBeta backup: ${String(backupError)}`)
+      }
+    }
+  }
 }
 
 async function fetchQuoteFallback(symbol: string): Promise<Quote> {

@@ -83,7 +83,7 @@ try {
       await new Promise(resolve => setTimeout(resolve, 250))
     }
     const subtabLabels = {
-      portfolio: ['Positions', 'Pie Chart', 'Portfolio Heatmap', 'Momentum Tracker', 'Portfolio Metrics'],
+      portfolio: ['Stocks', 'Options', 'Portfolio Weight', 'Dip Finder', 'Pie Chart', 'Portfolio Heatmap', 'Momentum Tracker', 'Portfolio Metrics'],
       calendar: ['Calendar', 'Earnings'], fundamentals: ['Statements', 'SEC Filings'],
       charts: ['Main', 'Multi Charts', 'Compare', 'Relationship', 'Cheat Sheet'],
       valuation: ['Main', 'Scenarios', 'Peers', 'Risk', 'Trends', 'Notes', 'Sources'],
@@ -101,7 +101,9 @@ try {
     }
     const book = { id: 'main', name: 'Fixture', readOnly: false, tickers: ['AAPL'],
       holdings: { AAPL: { ticker: 'AAPL', shares: 1, avgPrice: 50, includeInWeight: true } },
-      cashBalance: 100, marginDebt: 0, includeCashInWeight: true, options: [] }
+      cashBalance: 100, marginDebt: 0, includeCashInWeight: true, options: [{ rowId: 'fixture-call', ticker: 'AAPL',
+        strategy: 'Calls', expiry: '2026-12-18', strike: 100, contracts: 1, premium: 5, status: 'Open',
+        openDate: '2026-10-01', currentPrice: 0, volume: 0, openInterest: 0, impliedVolatility: 0 }] }
     const settings = { clockCountry: 'US', time12h: true, tabOrder: TABS.map(tab => tab.id),
       hiddenTabs: [], obscuredTabs: [], favoriteTabs: [], sidebarCollapsed: false, sourcePath: '',
       backtestPage: DEFAULT_BACKTEST_PAGE_SETTINGS, quantPage: DEFAULT_QUANT_PAGE_SETTINGS,
@@ -127,6 +129,9 @@ try {
       if (method === 'settings') return ok(fixtureSettings)
       if (method === 'portfolio' || method === 'mutatePortfolio') return ok({ portfolios: populated ? [book] : [], activeId: populated ? 'main' : null, mainId: populated ? 'main' : null, sourcePath: '' })
       if (method === 'quotes') return ok({ macro: Object.fromEntries(MACRO_SYMBOLS.map(row => [row.label, quote(row.symbol)])), holdings: Object.fromEntries((request.holdings ?? []).map(symbol => [symbol, quote(symbol)])), missing: [] })
+      if (method === 'returns') return ok({ returns: Object.fromEntries((request.tickers ?? []).map(symbol => [symbol, -5])) })
+      if (method === 'optionQuotes') return ok({ quotes: Object.fromEntries((request.positions ?? []).map(position => [position.rowId,
+        { currentPrice: 6, volume: 100, openInterest: 200, impliedVolatility: 0.3 }])), expiries: { AAPL: ['2026-12-18'] } })
       if (method === 'signals' || method === 'quantScan' || method === 'technicalScan') return ok(null)
       if (method === 'mcpStatus') return { available: true, tools: 1 }
       if (method === 'apiUsage') return { providers: [], sampledAt: Date.now() }
@@ -213,6 +218,39 @@ try {
           if (restored && tab.id === 'charts') check(visiblePage(tab.id).innerText.includes('100.00 GBp'), 'Charts did not retain the raw pence unit')
           const initial = calls.slice(before).filter(call => !['mcpStatus', 'apiUsage', 'webStatus', 'mutateSettings'].includes(call.method))
           check(initial.length === 0, 'First-visit request on ' + scenario + '/' + tab.id + ': ' + JSON.stringify(initial))
+          if (scenario === 'populated' && tab.id === 'portfolio') {
+            const page = visiblePage(tab.id)
+            const headings = () => [...page.querySelectorAll('h2')].map(heading => heading.textContent.trim())
+            check(headings().includes('Stocks') && !headings().includes('Options'), 'Stocks must have its own subpage')
+            check(!headings().includes('Portfolio Weight') && !headings().includes('Dip Finder'), 'Analytics still shown beside Stocks')
+            const optionSummary = [...page.querySelectorAll('span')].find(span => span.textContent === 'Options P&L')?.parentElement
+            check(optionSummary?.textContent.includes('+$100'), 'Option marks must be ready in the summary before opening Options')
+            await paint(); await window.captureFixture('completed-portfolio-stocks')
+            for (const label of ['Options', 'Portfolio Weight', 'Dip Finder', 'Stocks']) {
+              const beforeSubtab = calls.length
+              const button = [...page.querySelectorAll('button')].find(button => button.textContent.trim() === label)
+              check(button, 'Missing Portfolio subtab: ' + label)
+              button.click(); await wait(); await paint()
+              check(headings().includes(label), 'Portfolio subtab panel missing: ' + label)
+              const subtabRequests = calls.slice(beforeSubtab).filter(call => !['mcpStatus', 'apiUsage', 'webStatus', 'mutateSettings'].includes(call.method))
+              check(subtabRequests.length === 0, 'Portfolio subtab made a first-visit request: ' + label + ': ' + JSON.stringify(subtabRequests))
+              const panel = [...page.querySelectorAll('section')].find(panel => panel.querySelector('h2')?.textContent.trim() === label)
+              check(panel.getBoundingClientRect().width >= page.getBoundingClientRect().width - 20, 'Portfolio subtab must use the full width: ' + label)
+              if (label === 'Options') {
+                check(!headings().includes('Stocks'), 'Stocks remain visible on Options')
+                check(page.querySelector('input[aria-label="Option ticker"]')?.value === 'AAPL', 'Stored option row missing')
+                check(panel.getBoundingClientRect().height >= 300, 'Options must use the available height')
+                await window.captureFixture('completed-portfolio-options')
+              } else if (label !== 'Stocks') {
+                check(!headings().includes('Stocks') && !headings().includes('Options'), 'Holdings tables remain visible on ' + label)
+                check(page.innerText.includes('AAPL'), 'Portfolio chart is empty: ' + label)
+                await window.captureFixture('completed-portfolio-' + (label === 'Dip Finder' ? 'dip-finder' : 'weight'))
+              } else {
+                check(!headings().includes('Options'), 'Options remain visible on Stocks')
+                check(panel.getBoundingClientRect().height >= 300, 'Stocks must use the available height')
+              }
+            }
+          }
           if (scenario === 'populated' && ['dashboard', 'news', 'youtube', 'settings'].includes(tab.id)) {
             await paint()
             check(visiblePage(tab.id), 'Capture page changed: ' + tab.id)
@@ -296,7 +334,7 @@ try {
             coverage.push(record)
           }
           await selectPage(TABS.find(tab => tab.id === 'portfolio'))
-          ;[...visiblePage('portfolio').querySelectorAll('button')].find(button => button.textContent.trim() === 'Positions').click(); await wait()
+          ;[...visiblePage('portfolio').querySelectorAll('button')].find(button => button.textContent.trim() === 'Stocks').click(); await wait()
           const research = visiblePage('portfolio').querySelector('button[title="Research AAPL"]')
           check(research, 'Populated portfolio research handoff missing')
           research.click(); await wait(); await wait()

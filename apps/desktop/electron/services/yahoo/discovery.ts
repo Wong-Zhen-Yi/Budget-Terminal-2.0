@@ -3,6 +3,7 @@ import { companySymbolUniverse } from '../calendar.js'
 import { cache, TTL } from '../cache.js'
 import { paced, yahoo } from './client.js'
 import { getYahooSeries } from './series.js'
+import { withBackupSummary } from './backup.js'
 
 const DAY = 86_400_000
 const modules = ['price', 'summaryDetail', 'financialData', 'defaultKeyStatistics', 'assetProfile', 'calendarEvents'] as const
@@ -61,7 +62,7 @@ export async function getDiscoverySnapshot(input: string): Promise<DiscoverySnap
     cache.resolveWithStaleFallback(
       `discovery:profile:${symbol}`,
       TTL.profile,
-      () => paced(() => yahoo.quoteSummary(symbol, { modules: [...modules] })),
+      () => withBackupSummary(symbol, () => paced(() => yahoo.quoteSummary(symbol, { modules: [...modules] }))),
     ),
   ])
   if (seriesResult.status === 'rejected') throw seriesResult.reason

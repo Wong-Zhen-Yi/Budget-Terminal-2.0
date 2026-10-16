@@ -6,6 +6,7 @@ import type { SemiconductorCompany, SemiconductorMarket, SemiconductorProfile, S
 import { cache, TTL, type TtlCache } from './cache.js'
 import { paced, yahoo } from './yahoo/client.js'
 import { getYahooSeries } from './yahoo/series.js'
+import { withBackupSummary } from './yahoo/backup.js'
 import { fetchPortfolioNews } from './yahoo/newsPage.js'
 
 const SOURCE = 'Yahoo Finance · reviewed SEC company catalog'
@@ -48,7 +49,7 @@ const defaults: SemiconductorFetchers = {
       marketCap: finite(raw.marketCap), quoteTime: timestamp(raw.regularMarketTime), history }, warnings }
   },
   async profile(symbol) {
-    const raw = await paced(() => yahoo.quoteSummary(symbol, { modules: ['assetProfile', 'summaryDetail', 'defaultKeyStatistics', 'financialData', 'calendarEvents'] }))
+    const raw = await withBackupSummary(symbol, () => paced(() => yahoo.quoteSummary(symbol, { modules: ['assetProfile', 'summaryDetail', 'defaultKeyStatistics', 'financialData', 'calendarEvents'] })))
     const profile = object(raw.assetProfile)
     const detail = object(raw.summaryDetail)
     const statistics = object(raw.defaultKeyStatistics)

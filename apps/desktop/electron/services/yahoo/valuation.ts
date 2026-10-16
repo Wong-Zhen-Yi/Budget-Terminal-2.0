@@ -26,6 +26,7 @@ import {
 import { cache, TTL } from '../cache.js'
 import { fetchRiskFreeSnapshot } from '../riskFree.js'
 import { paced, yahoo } from './client.js'
+import { withBackupSummary } from './backup.js'
 import { getFundamentalsPage } from './fundamentalsPage.js'
 import { getYahooSeries } from './series.js'
 
@@ -170,7 +171,7 @@ async function fetchInfo(symbol: string, force: boolean): Promise<SummaryInfo> {
     `valuation-info:${symbol}`,
     PEER_INFO_TTL,
     async () => {
-      const summary = await retryInterrupted(() => paced(() =>
+      const summary = await withBackupSummary(symbol, () => retryInterrupted(() => paced(() =>
         yahoo.quoteSummary(symbol, {
           modules: [
             'price',
@@ -182,7 +183,7 @@ async function fetchInfo(symbol: string, force: boolean): Promise<SummaryInfo> {
             'earningsTrend',
           ],
         }),
-      ))
+      )))
       const price = summary.price
       const detail = summary.summaryDetail
       const financial = summary.financialData

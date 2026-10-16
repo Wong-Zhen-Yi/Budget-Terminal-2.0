@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, type PersistStorage, type StorageValue } from 'zustand/middleware'
 import { profileStorage } from './profileStorage'
 
 import type { Envelope, Freshness } from '@shared/contract'
@@ -58,6 +58,24 @@ function toRecord(page: string, label: string, envelope: Envelope<unknown>): Hea
   }
 }
 
+type HealthProfile = Pick<DataHealthState, 'records' | 'startupLoads'>
+const healthStorage = profileStorage as PersistStorage<HealthProfile>
+let lastSaved: StorageValue<HealthProfile> | undefined
+
+// Zustand calls storage even when only non-persisted progress changes (or a set
+// returns the same state). Skip before JSON serialization and synchronous disk IO.
+const healthProfileStorage: PersistStorage<HealthProfile> = {
+  getItem: (name) => { lastSaved = undefined; return healthStorage.getItem(name) },
+  setItem: (name, value) => {
+    if (lastSaved?.version === value.version && lastSaved?.state.records === value.state.records &&
+      lastSaved?.state.startupLoads === value.state.startupLoads) return
+    const result = healthStorage.setItem(name, value)
+    lastSaved = value
+    return result
+  },
+  removeItem: (name) => { lastSaved = undefined; return healthStorage.removeItem(name) },
+}
+
 export const useDataHealth = create<DataHealthState>()(persist((set) => ({
   records: {},
   startup: null,
@@ -98,7 +116,7 @@ export const useDataHealth = create<DataHealthState>()(persist((set) => ({
   clear: () => set({ records: {} }),
 }), {
   name: 'budget-terminal:data-health',
-  storage: profileStorage,
+  storage: healthProfileStorage,
   partialize: (state) => ({ records: state.records, startupLoads: state.startupLoads }),
   merge: (saved, current) => {
     const records = (saved as Partial<DataHealthState> | null)?.records

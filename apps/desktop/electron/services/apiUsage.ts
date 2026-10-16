@@ -9,6 +9,12 @@ interface ProviderDefinition {
 }
 
 const PROVIDERS: Record<string, ProviderDefinition> = {
+  defeatbeta: {
+    label: 'DefeatBeta',
+    softLimit: 120,
+    windowMs: 60_000,
+    fallbackCooldownMs: 60_000,
+  },
   yahoo: {
     label: 'Yahoo',
     softLimit: 240,

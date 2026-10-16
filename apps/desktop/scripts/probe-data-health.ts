@@ -12,6 +12,7 @@ import type { ChartPayload, Envelope } from '../electron/shared/contract.js'
 const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
 const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'window')
 const storage = new Map<string, string>()
+let storageWrites = 0
 const fetchedAt = Date.now() - 60_000
 storage.set('budget-terminal:data-health', JSON.stringify({ state: { records: {
   'stocks:Quote': { page: 'stocks', label: 'Quote', source: 'fixture', freshness: 'fresh', failureReason: '', errors: [], fetchedAt },
@@ -22,7 +23,7 @@ storage.set('budget-terminal:data-health', JSON.stringify({ state: { records: {
 } }, version: 0 }))
 Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
   getItem: (key: string) => storage.get(key) ?? null,
-  setItem: (key: string, value: string) => storage.set(key, value),
+  setItem: (key: string, value: string) => { storageWrites += 1; storage.set(key, value) },
   removeItem: (key: string) => storage.delete(key),
 } })
 Object.defineProperty(globalThis, 'window', { configurable: true, value: { localStorage: globalThis.localStorage } })
@@ -33,6 +34,13 @@ try {
   assert.deepEqual(useDataHealth.getState().startupLoads, { heatmap: { durationMs: 90_000, samples: 2 } })
   useDataHealth.getState().recordStartupLoad('global', 2_000, false)
   assert.equal(JSON.parse(storage.get('budget-terminal:data-health')!).state.startupLoads.global.durationMs, 2_000)
+  const writesBeforeProgress = storageWrites
+  for (let index = 0; index < 100; index += 1) {
+    useDataHealth.getState().setStartup({ durationMs: index, planned: 100, timings: [] })
+    useDataHealth.getState().record('stocks', [])
+  }
+  assert.equal(storageWrites, writesBeforeProgress, 'Transient progress and unchanged health must not serialize or write profile history')
+  useDataHealth.getState().setStartup(null)
   useDataHealth.setState({ startupLoads: {} })
   // setState persists too, so simulate the saved profile from the previous launch.
   const savedProfile = JSON.parse(storage.get('budget-terminal:data-health')!)
@@ -48,6 +56,12 @@ try {
   // A failed refresh can keep the old timestamp. Its new health must still be recorded.
   useDataHealth.getState().record('stocks', [{ label: 'Quote', envelope, loading: false }])
   assert.equal(useDataHealth.getState().records['stocks:Quote'].freshness, 'stale')
+  assert.equal(JSON.parse(storage.get('budget-terminal:data-health')!).state.records['stocks:Quote'].freshness, 'stale',
+    'Changed health must still persist immediately')
+  const writesBeforeRepeat = storageWrites
+  useDataHealth.getState().record('stocks', [{ label: 'Quote', envelope, loading: true }])
+  useDataHealth.getState().record('stocks', [{ label: 'Quote', envelope, loading: false }])
+  assert.equal(storageWrites, writesBeforeRepeat, 'Loading transitions with the same health must not write history again')
   const failure = new Error('Fixture IPC disconnected')
   const footer = renderToStaticMarkup(createElement(StatusBar, {
     panels: [{ label: 'Quotes', envelope: undefined, loading: false, enabled: true, error: failure }], sourcePath: '',

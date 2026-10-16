@@ -604,7 +604,7 @@ export const FUNDAMENTAL_SERIES_KEYS = [
 ] as const
 export type FundamentalSeriesKey = (typeof FUNDAMENTAL_SERIES_KEYS)[number]
 
-export type FundamentalPointSource = 'sec' | 'yahoo' | 'derived'
+export type FundamentalPointSource = 'sec' | 'yahoo' | 'defeatbeta' | 'derived'
 
 export interface FundamentalSeriesPoint {
   /** ISO fiscal period end. */

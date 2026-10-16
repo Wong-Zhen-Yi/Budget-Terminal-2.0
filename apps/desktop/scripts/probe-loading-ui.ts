@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve, relative } from 'node:path'
 import { createRequire } from 'node:module'
 import { build } from 'esbuild'
-import { operations } from '../mcp/operations'
+import { mutationDomains, operations } from '../mcp/operations'
 import { TABS } from '../electron/shared/contract'
 
 const require = createRequire(import.meta.url)
@@ -67,8 +67,8 @@ try {
           check(pageOrder.at(-1) === 'heatmap', 'Learned slowest page did not go last')
           const heatmapRequest = window.fixtureRequests.find(entry => entry.method === 'heatmap' && entry.request?.background)
           check(heatmapRequest?.request.backgroundOrder === pageOrder.indexOf('heatmap'), 'Learned page rank was not sent through the API')
-          check(useDataHealth.getState().startupLoads.signals?.durationMs >= 100, 'Completed page duration was not learned')
-          check(JSON.parse(localStorage.getItem('budget-terminal:data-health')).state.startupLoads.signals?.samples === 1, 'Completed page duration was not persisted')
+          check(useDataHealth.getState().startupLoads.bitcoin?.durationMs >= 100, 'Completed page duration was not learned')
+          check(JSON.parse(localStorage.getItem('budget-terminal:data-health')).state.startupLoads.bitcoin?.samples === 1, 'Completed page duration was not persisted')
           check(document.querySelector('footer [role=status]')?.textContent.includes('Loading pages'), 'Startup progress hidden by foreground loading')
           for (const key of ['globalMarkets', 'heatmap', 'tradingVolumes', 'money', 'economic', 'sp500', 'technicalScreen']) {
             check(client.getQueryCache().findAll({ queryKey: [key] }).some(query => query.state.fetchStatus === 'fetching'),
@@ -103,7 +103,7 @@ try {
           check(edits, 'Saved-record edit capabilities are missing')
           edits.open = true
           await settle()
-          check(edits.querySelectorAll('[data-mcp-capability]').length === 4, 'Saved-record edit list is incomplete')
+          check(edits.querySelectorAll('[data-mcp-capability]').length === ${Object.keys(mutationDomains).length}, 'Saved-record edit list is incomplete')
           check(edits.querySelector('[data-mcp-capability="budget_terminal_mutate_portfolio"]').getBoundingClientRect().height > 0, 'Expanded capability list is not visible')
           client.setQueryData(['mcpStatus'], { available: false, error: 'Fixture MCP startup failure' })
           await settle()
@@ -165,10 +165,10 @@ try {
         mcpStatus: async () => ({ available: true, tools: ${toolCount} }),
         settings: async () => ok(window.fixtureSettings),
         portfolio: async () => ok({ portfolios: [], activeId: 'main', mainId: 'main', sourcePath: '' }),
-        signals: async request => {
-          window.fixtureRequests.push({ method: 'signals', request });
+        bitcoin: async request => {
+          window.fixtureRequests.push({ method: 'bitcoin', request });
           await new Promise(resolve => setTimeout(resolve, 300));
-          return ok(null);
+          return ok({ stats: null, blocks: [], fees: null, mempool: null });
         },
         apiUsage: async () => ({ providers: [], sampledAt: Date.now() }),
       }, { get: (target, key) => key in target ? target[key] : request => {

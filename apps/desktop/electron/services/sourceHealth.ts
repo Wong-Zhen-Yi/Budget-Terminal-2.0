@@ -4,6 +4,8 @@ import type { Envelope } from '../shared/contract.js'
 /** Retrieval time and source observation time are distinct, especially for daily releases. */
 export interface SourceSnapshot {
   fetchedAt: number
+  /** Additional feeds consumed by a fallback, retained through derived caches. */
+  sources?: string[]
   asOf?: number
   /** Earliest dependency expiry; derived caches cannot extend a quote's lifetime. */
   expiresAt?: number
@@ -30,6 +32,7 @@ export function sourceSnapshot(): SourceSnapshot | undefined {
     stale: sources.some(source => source.stale),
     fromCache: sources.every(source => source.fromCache),
     failures: [...new Set(sources.flatMap(source => source.failures))],
+    sources: [...new Set(sources.flatMap(source => source.sources ?? []))],
   }
 }
 
@@ -47,7 +50,8 @@ function observeEnvelope(value: Envelope<unknown>, fromCache = false): void {
     failures.push(`${value.meta.source}: ${value.meta.freshness} source result`)
   }
   observeSource({ fetchedAt: value.meta.fetchedAt, asOf: value.meta.asOf, expiresAt: value.meta.expiresAt,
-    stale: value.meta.freshness === 'stale', fromCache: fromCache || value.meta.freshness === 'cached', failures })
+    stale: value.meta.freshness === 'stale', fromCache: fromCache || value.meta.freshness === 'cached', failures,
+    sources: value.meta.source.includes('DefeatBeta') ? ['DefeatBeta (daily backup)'] : undefined })
 }
 
 export async function withSourceEnvelope<T>(loader: () => Promise<Envelope<T>>): Promise<Envelope<T>> {
@@ -62,6 +66,7 @@ export async function withSourceEnvelope<T>(loader: () => Promise<Envelope<T>>):
   const errors = [...value.errors, ...snapshot.failures.filter(reason => !value.errors.some(error => error.reason === reason))
     .map(reason => ({ source: value.meta.source, operation: 'source refresh', reason }))]
   const result: Envelope<T> = { ...value, errors, meta: { ...value.meta, freshness, fetchedAt,
+    source: [value.meta.source, ...(snapshot.sources ?? []).filter(source => !value.meta.source.includes(source))].join(' + '),
     ...(snapshot.asOf === undefined ? {} : { asOf: Math.min(value.meta.asOf ?? Infinity, snapshot.asOf) }),
     ...(snapshot.expiresAt === undefined ? {} : { expiresAt: Math.min(value.meta.expiresAt ?? Infinity, snapshot.expiresAt) }),
     cacheAgeSeconds: Math.max(0, (Date.now() - fetchedAt) / 1000),

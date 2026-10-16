@@ -17,6 +17,8 @@ import {
 import { cache, TTL } from '../cache.js'
 import { fetchSecCompanyBundle, type SecCompanyBundle } from '../secEdgar.js'
 import { paced, yahoo } from './client.js'
+import { withBackupStatements, withBackupSummary } from './backup.js'
+import { getQuote } from './quotes.js'
 
 export const FUNDAMENTALS_PAGE_SOURCE = 'SEC EDGAR + Yahoo Finance'
 
@@ -129,6 +131,7 @@ function firstPoint(
 ): FundamentalSeriesPoint | null {
   for (const key of keys) {
     const candidate = point(row.date, row[key], period)
+    if (candidate && row.dataSource === 'defeatbeta') candidate.source = 'defeatbeta'
     if (candidate) return candidate
   }
   return null
@@ -188,9 +191,9 @@ async function fetchSummary(symbol: string): Promise<{
   company: FundamentalsPageCompany
   facts: FundamentalsPageFacts
 }> {
-  const summary = await paced(() => yahoo.quoteSummary(symbol, {
+  const summary = await withBackupSummary(symbol, () => paced(() => yahoo.quoteSummary(symbol, {
     modules: ['price', 'summaryDetail', 'financialData', 'defaultKeyStatistics', 'assetProfile'],
-  }))
+  })))
   const price = summary.price
   const detail = summary.summaryDetail
   const financial = summary.financialData
@@ -230,12 +233,7 @@ async function fetchSummary(symbol: string): Promise<{
 
 async function priceFallback(symbol: string): Promise<number | null> {
   try {
-    const result = await paced(() => yahoo.chart(symbol, {
-      period1: new Date(Date.now() - 7 * 24 * 60 * 60_000),
-      interval: '1d',
-    }))
-    const quotes = Array.isArray(result.quotes) ? result.quotes : []
-    return finite(quotes.at(-1)?.close)
+    return (await getQuote(symbol)).price
   } catch {
     return null
   }
@@ -243,8 +241,10 @@ async function priceFallback(symbol: string): Promise<number | null> {
 
 const defaultFetchers: FundamentalsPageFetchers = {
   summary: fetchSummary,
-  annual: (symbol, period1) => paced(() => yahoo.fundamentalsTimeSeries(symbol, { period1, type: 'annual', module: 'all' })),
-  quarterly: (symbol, period1) => paced(() => yahoo.fundamentalsTimeSeries(symbol, { period1, type: 'quarterly', module: 'all' })),
+  annual: (symbol, period1) => withBackupStatements(symbol, 'annual', period1,
+    () => paced(() => yahoo.fundamentalsTimeSeries(symbol, { period1, type: 'annual', module: 'all' }))),
+  quarterly: (symbol, period1) => withBackupStatements(symbol, 'quarterly', period1,
+    () => paced(() => yahoo.fundamentalsTimeSeries(symbol, { period1, type: 'quarterly', module: 'all' }))),
   sec: fetchSecCompanyBundle,
   price: priceFallback,
   usdRate: fetchUsdRate,

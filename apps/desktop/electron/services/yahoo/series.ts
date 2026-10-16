@@ -1,6 +1,7 @@
 import { cache, TTL, type CachedResult, type TtlCache } from '../cache.js'
 import { paced, yahoo } from './client.js'
 import { observeSource } from '../sourceHealth.js'
+import { backupObservation, backupPrices } from '../defeatbeta/data.js'
 
 export type YahooSeriesInterval = '1m' | '2m' | '5m' | '15m' | '30m' | '60m' | '90m' | '1h' | '1d' | '5d' | '1wk' | '1mo' | '3mo'
 
@@ -134,6 +135,7 @@ export async function getYahooSeries(
   options: IncrementalOptions,
   store: TtlCache = cache,
   rangeLoader: typeof fetchRange = fetchRange,
+  backupLoader: typeof backupPrices | null = rangeLoader === fetchRange ? backupPrices : null,
 ): Promise<IncrementalSeriesResult> {
   const symbol = options.symbol.trim().toUpperCase()
   if (!symbol) throw new Error('No symbol was provided.')
@@ -156,14 +158,15 @@ export async function getYahooSeries(
     ttl,
     async (): Promise<SeriesDocument> => {
       const old = previous?.value
-      const full = !old || Boolean(options.force) || needsReconcile
+      const fromBackup = (old?.meta as { dataSource?: string } | undefined)?.dataSource === 'defeatbeta'
+      const full = !old || Boolean(options.force) || needsReconcile || fromBackup
       // A forced refresh replaces the requested range but preserves any older canonical
       // coverage populated by a previous Max/backtest request.
-      const fullStart = needsReconcile && old
+      const fullStart = (needsReconcile || fromBackup) && old
         ? new Date(old.coveredFrom * 1000)
         : options.start
       let rows = full
-        ? (old && options.force && !needsReconcile
+        ? (old && options.force && !needsReconcile && !fromBackup
             ? old.rows.filter((row) => row.time < startSeconds)
             : [])
         : old.rows
@@ -172,44 +175,59 @@ export async function getYahooSeries(
       let meta = old?.meta
       let coveredFrom = old ? Math.min(old.coveredFrom, startSeconds) : startSeconds
 
-      if (full) {
-        const fetched = await rangeLoader(symbol, options.interval, fullStart)
-        rows = mergeRows(rows, fetched.rows)
-        currency = fetched.currency
-        longName = fetched.longName
-        meta = fetched.meta
-      } else {
-        if (needsEarlierCoverage) {
-          const first = old!.rows[0]
-          const fetched = await rangeLoader(
-            symbol,
-            options.interval,
-            options.start,
-            first ? new Date(first.time * 1000) : undefined,
-          )
+      try {
+        if (full) {
+          const fetched = await rangeLoader(symbol, options.interval, fullStart)
           rows = mergeRows(rows, fetched.rows)
           currency = fetched.currency
           longName = fetched.longName
           meta = fetched.meta
-          coveredFrom = startSeconds
+        } else {
+          if (needsEarlierCoverage) {
+            const first = old!.rows[0]
+            const fetched = await rangeLoader(
+              symbol,
+              options.interval,
+              options.start,
+              first ? new Date(first.time * 1000) : undefined,
+            )
+            rows = mergeRows(rows, fetched.rows)
+            currency = fetched.currency
+            longName = fetched.longName
+            meta = fetched.meta
+            coveredFrom = startSeconds
+          }
+          const last = rows.at(-1)
+          const tailStart = last ? overlapStart(last.time, options.interval) : options.start
+          const fetched = await rangeLoader(symbol, options.interval, tailStart)
+          rows = mergeRows(rows, fetched.rows)
+          currency = fetched.currency
+          longName = fetched.longName
+          meta = fetched.meta
         }
-        const last = rows.at(-1)
-        const tailStart = last ? overlapStart(last.time, options.interval) : options.start
-        const fetched = await rangeLoader(symbol, options.interval, tailStart)
-        rows = mergeRows(rows, fetched.rows)
-        currency = fetched.currency
-        longName = fetched.longName
-        meta = fetched.meta
-      }
 
-      return {
-        rows,
-        coveredFrom,
-        refreshedAt: now,
-        fullSyncAt: full ? now : old!.fullSyncAt,
-        currency,
-        longName,
-        meta,
+        return {
+          rows,
+          coveredFrom,
+          refreshedAt: now,
+          fullSyncAt: full ? now : old!.fullSyncAt,
+          currency,
+          longName,
+          meta,
+        }
+      } catch (primaryError) {
+        // Replace the entire canonical series on a feed change. This avoids mixing
+        // daily timestamps or adjustment bases with an incrementally fetched tail.
+        if (options.interval !== '1d' || !backupLoader) throw primaryError
+        try {
+          const backupStart = new Date(Math.min(startSeconds, old?.coveredFrom ?? startSeconds) * 1000)
+          const backup = await backupLoader(symbol, backupStart)
+          backupObservation(backup.asOf, primaryError, 'Daily OHLCV only; dividend-adjusted closes are unavailable.')
+          return { rows: backup.rows, coveredFrom: backupStart.getTime() / 1000,
+            refreshedAt: now, fullSyncAt: now, currency: backup.currency, longName: backup.longName, meta: backup.meta }
+        } catch (backupError) {
+          throw new Error(`Yahoo: ${String(primaryError)}; DefeatBeta backup: ${String(backupError)}`)
+        }
       }
     },
     { force: Boolean(options.force) || Boolean(options.refresh) || needsEarlierCoverage || needsReconcile },

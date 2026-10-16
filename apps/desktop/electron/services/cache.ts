@@ -64,6 +64,7 @@ function usableSnapshot(value: unknown): value is SourceSnapshot {
     && (source.expiresAt === undefined || Number.isFinite(source.expiresAt))
     && typeof source.stale === 'boolean' && typeof source.fromCache === 'boolean'
     && Array.isArray(source.failures) && source.failures.every(reason => typeof reason === 'string')
+    && (source.sources === undefined || (Array.isArray(source.sources) && source.sources.every(name => typeof name === 'string')))
 }
 
 function usableDiskDocument(value: unknown): value is { value: unknown; snapshot?: SourceSnapshot } {
@@ -187,6 +188,7 @@ export class TtlCache {
       stale: Boolean(entry.snapshot?.stale || (observe && now > expiresAt) || (entry.snapshot?.expiresAt !== undefined && now > entry.snapshot.expiresAt)),
       fromCache: true,
       failures: entry.snapshot?.failures ?? [],
+      sources: entry.snapshot?.sources,
     }
     if (observe) observeSource(snapshot)
     return { value: entry.value, ageSeconds: Math.max(0, now - snapshot.fetchedAt) / 1000, fromCache: true, snapshot }

@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
-import YahooFinance from 'yahoo-finance2'
+import { createYahooWorkerClient } from './workerClient.js'
 
 import { rateGate, type Priority } from './rateGate.js'
 import { trackApiRequest } from '../apiUsage.js'
@@ -12,11 +12,9 @@ import { trackApiRequest } from '../apiUsage.js'
  * fields we need defensively instead. Every call goes through `paced()` so the rate
  * gate sees it; nothing should call `yahoo.*` directly.
  */
-export const yahoo = new YahooFinance({
-  suppressNotices: ['yahooSurvey'],
-  validation: { logErrors: false, logOptionsErrors: false },
-  queue: { concurrency: 4 },
-})
+const workerClient = createYahooWorkerClient()
+export const yahoo = workerClient.yahoo
+export const closeYahooWorker = workerClient.close
 
 /**
  * The lane and startup order the current request belongs in. An `AsyncLocalStorage`

@@ -1,6 +1,7 @@
 import type { Fundamentals } from '../../shared/contract.js'
 import { cache, TTL } from '../cache.js'
 import { paced, yahoo } from './client.js'
+import { withBackupSummary } from './backup.js'
 
 /**
  * Per-ticker facts the positions table needs: what kind of instrument it is, how big it
@@ -20,11 +21,11 @@ function firstFinite(...values: unknown[]): number | null {
 }
 
 async function fetchFundamentals(ticker: string): Promise<Fundamentals> {
-  const summary = await paced(() =>
+  const summary = await withBackupSummary(ticker, () => paced(() =>
     yahoo.quoteSummary(ticker, {
       modules: ['price', 'summaryDetail', 'financialData', 'defaultKeyStatistics'],
     }),
-  )
+  ))
 
   const quoteType = String(summary?.price?.quoteType ?? '').toUpperCase()
   const isFund = FUND_QUOTE_TYPES.has(quoteType)

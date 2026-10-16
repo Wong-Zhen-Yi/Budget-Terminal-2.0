@@ -8,6 +8,26 @@ import { MACRO_SYMBOLS, TABS, type AnalyticsPayload, type ChartPayload, type Cry
 import { runWarmTasks, waitForWarmSlot, warmQuery, warmStartupQuery, StartupLoadError } from '../src/api/warmQueue.js'
 import { recentPages, startupPages } from '../electron/shared/navigation.js'
 import { recordStartupLoad, restoreStartupLoads, startupPageOrder } from '../electron/shared/startupLoading.js'
+import { createProgressReporter } from '../src/api/progressReporter.js'
+
+let progressValue = 0
+const reportedProgress: number[] = []
+const reporter = createProgressReporter(() => reportedProgress.push(progressValue), 10)
+for (let index = 1; index <= 100; index += 1) {
+  progressValue = index
+  reporter.schedule()
+}
+assert.deepEqual(reportedProgress, [], 'API bursts must not synchronously publish every result')
+await new Promise(resolve => setTimeout(resolve, 30))
+assert.deepEqual(reportedProgress, [100], 'Batched progress must include every completed result')
+progressValue = 101
+reporter.schedule()
+reporter.flush()
+assert.deepEqual(reportedProgress, [100, 101], 'Final readiness must publish immediately')
+reporter.schedule()
+reporter.cancel()
+await new Promise(resolve => setTimeout(resolve, 30))
+assert.deepEqual(reportedProgress, [100, 101], 'Unmount must discard pending progress callbacks')
 
 assert.deepEqual(recentPages(['stocks', 'charts', 'portfolio'], 'charts'), ['charts', 'stocks', 'portfolio'])
 assert.equal(recentPages(['a', 'b', 'c', 'd', 'e', 'f'], 'g').length, 6)

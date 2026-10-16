@@ -16,6 +16,8 @@ if (!ownsInstance) app.quit()
 let disposeIpc: (() => void) | null = null
 let releaseDataSession: (() => void) | null = null
 let closeCache: (() => void) | null = null
+let closeYahooWorker: (() => void) | null = null
+let closeDefeatBetaDecoder: (() => void) | null = null
 let backupPending: (() => boolean) | null = null
 let flushBackup: (() => Promise<void>) | null = null
 let stopMcp: (() => Promise<void>) | null = null
@@ -109,6 +111,8 @@ if (ownsInstance) app.whenReady().then(async () => {
     // Resolve paths and take ownership before a service opens its persistent cache.
     const { registerIpcHandlers } = await import('./ipc/handlers.js')
     const { cache } = await import('./services/cache.js')
+    closeYahooWorker = (await import('./services/yahoo/client.js')).closeYahooWorker
+    closeDefeatBetaDecoder = (await import('./services/defeatbeta/decoder.js')).closeDefeatBetaDecoder
     closeCache = () => cache.close()
     const web = await import('./web/host.js')
     await web.initializeWebAccess(join(dirname, '../renderer'), join(process.env.APPDATA!, 'BudgetTerminalElectron'))
@@ -156,6 +160,8 @@ app.on('will-quit', () => {
   disposeIpc?.()
   disposeIpc = null
   closeCache?.()
+  closeYahooWorker?.()
+  closeDefeatBetaDecoder?.()
 })
 
 // Hold ownership until the process exits, including any final in-flight store writes.

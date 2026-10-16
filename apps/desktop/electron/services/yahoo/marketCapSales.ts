@@ -2,6 +2,7 @@ import type { Envelope } from '../../shared/contract.js'
 import { meta } from '../../shared/envelope.js'
 import { cache } from '../cache.js'
 import { paced, yahoo } from './client.js'
+import { withBackupSummary } from './backup.js'
 
 export function priceToSalesValue(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
@@ -13,7 +14,7 @@ export async function getMarketCapSales(symbols: string[], force = false): Promi
   const entries = await Promise.all(unique.map(async (symbol) => {
     try {
       const result = await cache.resolveWithStaleFallback(`market-cap-sales:${symbol}`, 5 * 60_000, async () => {
-        const summary = await paced(() => yahoo.quoteSummary(symbol, { modules: ['summaryDetail'] }))
+        const summary = await withBackupSummary(symbol, () => paced(() => yahoo.quoteSummary(symbol, { modules: ['summaryDetail'] })))
         return priceToSalesValue(summary.summaryDetail?.priceToSalesTrailing12Months)
       }, { force })
       if (result.stale) errors.push({ source: 'Yahoo Finance', symbol, operation: 'P/S', reason: 'Refresh failed; showing cached P/S.' })

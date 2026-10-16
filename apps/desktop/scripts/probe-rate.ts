@@ -10,6 +10,7 @@ import { ApiUsageTracker } from '../electron/services/apiUsage.js'
 import { getQuote, quoteFromChart } from '../electron/services/yahoo/quotes.js'
 import { RateGate, isRateLimitError, rateGate } from '../electron/services/yahoo/rateGate.js'
 import { paced, runWithPriority } from '../electron/services/yahoo/client.js'
+import './probe-yahoo-worker.js'
 
 const SYMBOLS = [
   'AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'META', 'TSLA', 'AVGO', 'JPM', 'V',
