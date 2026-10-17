@@ -59,7 +59,7 @@ function warningOf(envelope: Envelope<unknown> | undefined, block: string, now: 
   const failed = envelope.errors.find((entry) => entry.symbol === block)
   if (failed) return failed.reason
   const freshness = effectiveFreshness(envelope, now, FRESHNESS.crypto)
-  if (freshness === 'failed' || freshness === 'stale') return envelope.meta.failureReason || (freshness === 'stale' ? 'Snapshot expired; refresh to update' : freshness)
+  if (freshness === 'failed') return envelope.meta.failureReason || freshness
   return undefined
 }
 
@@ -101,7 +101,7 @@ export function CryptoPage({
     }
     const stamp = clockTail(payload.fetchedAt)
     const freshness = query.data ? effectiveFreshness(query.data, now, FRESHNESS.crypto) : 'failed'
-    if (freshness === 'stale') return `Snapshot expired (${stamp}); refresh to update. ${meta?.failureReason ?? ''}`.trim()
+    if (freshness === 'stale') return `Snapshot updated at ${stamp}`
     if (hasUnavailableStage(payload.progress) || query.data?.errors.length) {
       return `Partial data at ${stamp} — ${loadedStageCount(payload.progress)}/${CRYPTO_STAGES.length} stages ready. ${query.data?.errors.map(error => error.reason).join(' ') ?? ''}`
     }

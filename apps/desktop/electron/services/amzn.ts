@@ -1,5 +1,5 @@
 import type { Envelope, EnvelopeError } from '../shared/contract.js'
-import { AMZN_BLOCKS, amznEarningsFilings, amznExhibitUrl, amznIrUrl, amznPeriodBeforePublication, amznText, emptyAmznPayload, parseAmznReport } from '../shared/amzn.js'
+import { AMZN_BLOCKS, amznEarningsFilings, amznExhibitUrl, amznPeriodBeforePublication, emptyAmznPayload, parseAmznReport } from '../shared/amzn.js'
 import type { AmznBlock, AmznEarnings, AmznPayload, AmznRequest } from '../shared/amzn.js'
 import { describeError, err } from '../shared/envelope.js'
 import { cache, TTL, type TtlCache } from './cache.js'
@@ -7,57 +7,17 @@ import { fetchSecFilingSnapshot, fetchSecText } from './secEdgar.js'
 import { getStocks } from './yahoo/stocks.js'
 import { getFundamentalsPage } from './yahoo/fundamentalsPage.js'
 
-export const AMZN_SOURCE = 'Yahoo Finance · SEC EDGAR · Amazon investor relations'
-
-async function irRelease(period: string): Promise<{ html: string; url: string }> {
-  const url = amznIrUrl(period)
-  const result = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'text/html' }, signal: AbortSignal.timeout(20_000) })
-  if (!result.ok) throw new Error(`Amazon investor relations: HTTP ${result.status}`)
-  if (new URL(result.url || url).hostname !== 'ir.aboutamazon.com') throw new Error('Unexpected Amazon document redirect.')
-  return { html: await result.text(), url }
-}
+export const AMZN_SOURCE = 'Yahoo Finance · SEC EDGAR'
 
 export interface AmznDocumentFetchers {
   filings: typeof fetchSecFilingSnapshot
   text: typeof fetchSecText
-  ir: typeof irRelease
-  now?: () => Date
 }
-const documentDefaults: AmznDocumentFetchers = { filings: fetchSecFilingSnapshot, text: fetchSecText, ir: irRelease }
+const documentDefaults: AmznDocumentFetchers = { filings: fetchSecFilingSnapshot, text: fetchSecText }
 
 export async function fetchAmznEarnings(force: boolean, sources: AmznDocumentFetchers = documentDefaults, storage: TtlCache = cache): Promise<AmznEarnings> {
   const warnings: string[] = []
-  let snapshot: Awaited<ReturnType<typeof fetchSecFilingSnapshot>>
-  try { snapshot = await sources.filings('1018724', force) }
-  catch (error) {
-    // The release paths are public and stable; validate their actual period before use.
-    const reports: AmznEarnings['reports'] = []
-    warnings.push(`SEC submissions unavailable: ${describeError(error)}; using Amazon investor relations.`)
-    const date = sources.now?.() ?? new Date()
-    const completed = date.getUTCFullYear() * 4 + Math.floor(date.getUTCMonth() / 3) - 1
-    for (let offset = 0; offset < 9 && reports.length < 8; offset++) {
-      const index = completed - offset
-      const period = `${Math.floor(index / 4)} Q${index % 4 + 1}`
-      try {
-        const release = await storage.resolve(`amzn:v1:ir:${period}`, TTL.amznReports, async () => {
-          const document = await sources.ir(period)
-          const date = /(?:January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, 20\d{2}/.exec(amznText(document.html))?.[0]
-          const publishedAt = date ? new Date(`${date} 00:00:00 UTC`).toISOString().slice(0, 10) : ''
-          return parseAmznReport(document.html, document.url, publishedAt, period)
-        }, { force })
-        reports.push(release.value)
-      } catch (irError) {
-        // Missing not-yet-published quarters are expected. A host outage is not.
-        if (!/HTTP 404/.test(describeError(irError))) {
-          warnings.push(`${period}: ${describeError(irError)}`)
-          if (/HTTP (403|429)|fetch failed|timeout/i.test(describeError(irError))) break
-        }
-      }
-    }
-    if (!reports.length) throw new Error(warnings.join(' · '))
-    if (reports.length < 8) warnings.push(`Only ${reports.length} of eight quarterly releases available.`)
-    return { reports, warnings: [...warnings, ...reports.flatMap(report => report.warnings)] }
-  }
+  const snapshot = await sources.filings('1018724', force)
   const filings = amznEarningsFilings(snapshot.filings)
   if (!filings.length) throw new Error('Amazon earnings filings were not found.')
   warnings.push(...snapshot.warnings)
@@ -68,20 +28,11 @@ export async function fetchAmznEarnings(force: boolean, sources: AmznDocumentFet
     while (next < filings.length) {
       const filing = filings[next++]
       try {
-        const result = await storage.resolve(`amzn:v1:report:${filing.accessionNumber}`, TTL.amznReports, async () => {
+        const result = await storage.resolve(`amzn:sec-v2:report:${filing.accessionNumber}`, TTL.amznReports, async () => {
           const period = amznPeriodBeforePublication(filing.filedDate)
-          try {
-            const filingHtml = await sources.text(filing.documentUrl)
-            const url = amznExhibitUrl(filingHtml, filing.documentUrl)
-            return parseAmznReport(await sources.text(url), url, filing.filedDate, period)
-          } catch (secError) {
-            try {
-              const release = await sources.ir(period)
-              return parseAmznReport(release.html, release.url, filing.filedDate, period)
-            } catch (irError) {
-              throw new Error(`SEC: ${describeError(secError)} · IR: ${describeError(irError)}`)
-            }
-          }
+          const filingHtml = await sources.text(filing.documentUrl)
+          const url = amznExhibitUrl(filingHtml, filing.documentUrl)
+          return parseAmznReport(await sources.text(url), url, filing.filedDate, period)
         }, { force })
         reports.push(result.value)
       } catch (error) { warnings.push(`Earnings published ${filing.filedDate}: ${describeError(error)}`) }
@@ -113,7 +64,7 @@ export async function getAmzn({ force = false }: AmznRequest = {}, fetchers: Amz
   let cached = false
   const lane = async <T>(block: AmznBlock, ttl: number, loader: () => Promise<T>, apply: (value: T) => string[]) => {
     try {
-      const result = await storage.resolveWithStaleFallback(`amzn:v1:${block}`, ttl,
+      const result = await storage.resolveWithStaleFallback(`amzn:sec-v2:${block}`, ttl,
         async () => ({ value: await loader(), fetchedAt: Date.now() }), { force })
       const warnings = apply(result.value.value)
       if (result.stale) warnings.push('Refresh failed; showing cached data.')

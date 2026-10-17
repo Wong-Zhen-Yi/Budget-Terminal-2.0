@@ -114,7 +114,7 @@ export async function fetchSparkCloses(symbols: string[], range = '1y', force = 
   const unique = [...new Set(symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean))].sort()
   const series: Record<string, SparkSeries> = {}
   const needed = unique.filter((symbol) => {
-    const hit = force ? null : cache.get<SparkSeries>(`spark:v2:${range}:${symbol}`)
+    const hit = force ? null : cache.get<SparkSeries>(`spark:yahoo-v4:${range}:${symbol}`, { observe: true })
     if (hit) series[symbol] = hit.value
     return !hit
   })
@@ -132,7 +132,7 @@ export async function fetchSparkCloses(symbols: string[], range = '1y', force = 
         const fetchedAt = Date.now()
         const snapshot: SourceSnapshot = { fetchedAt, asOf: value.asOf, expiresAt: fetchedAt + 120_000,
           stale: false, fromCache: false, failures: [] }
-        cache.set(`spark:v2:${range}:${symbol}`, value, 120_000, snapshot)
+        cache.set(`spark:yahoo-v4:${range}:${symbol}`, value, 120_000, snapshot)
         observeSource(snapshot)
       }
       return rows

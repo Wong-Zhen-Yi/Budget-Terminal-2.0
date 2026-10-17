@@ -111,6 +111,7 @@ export function SemiconductorsPage({ onStatusChange, onNavigate }: {
   ]
   const companyPanel = (
     <Panel title={`${group === 'all' ? 'Company universe' : groupName(group) + ' · companies'} · ${filtered.length}/${rows.length}`} actions={<Button variant="toggle" active={detailed} onClick={() => setDetailed(!detailed)}>Detailed columns</Button>}>
+      <div className="shrink-0 border-b border-border px-2 py-1 text-2xs text-text-dim">Yahoo Finance supplies market data and company profiles. The status bar shows source freshness and failures.</div>
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border p-2">
         <input type="search" aria-label="Search semiconductor companies" placeholder="Search ticker, company or business" value={search} onChange={event => setSearch(event.target.value)}
           className="min-w-0 flex-1 border border-border-strong bg-bg px-2 py-1 text-2xs text-text outline-none focus:border-accent" />

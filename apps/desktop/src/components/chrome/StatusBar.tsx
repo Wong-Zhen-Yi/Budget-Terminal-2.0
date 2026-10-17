@@ -22,14 +22,6 @@ const severity: Record<Freshness, number> = {
   fresh: 0,
 }
 
-const toneFor: Record<Freshness, string> = {
-  failed: 'text-down',
-  partial: 'text-down',
-  stale: 'text-warn',
-  cached: 'text-text-muted',
-  fresh: 'text-up',
-}
-
 const EMPTY_USAGE: ApiUsageSnapshot = { providers: [], sampledAt: 0 }
 
 function usageTone(provider: ApiProviderUsage): string {
@@ -62,7 +54,7 @@ function ApiLimitBars() {
 
   return (
     <div
-      className="flex min-w-0 max-w-[48vw] shrink-0 items-center gap-2 overflow-hidden"
+      className="flex min-w-0 max-w-[48vw] shrink-0 flex-wrap items-center justify-end gap-2"
       aria-label="API request pressure"
     >
       <span className="shrink-0 tracking-wide text-text-dim">API LIMITS</span>
@@ -94,8 +86,8 @@ function ApiLimitBars() {
 }
 
 /**
- * The bottom strip. It reports the worst state across the panels rather than the last
- * one to finish, so a single failed feed stays visible while everything else refreshes.
+ * The bottom strip shows loading and action results. Snapshot health details live in
+ * Settings; retained data must not be described as healthy merely to hide diagnostics.
  */
 export function StatusBar({
   panels,
@@ -139,9 +131,8 @@ export function StatusBar({
     health = `Loading ${loading.map((panel) => panel.label).join(', ')}...`
     tone = 'text-text-muted'
   } else if (worst) {
-    const meta = worst.envelope!.meta
-    health = `${worst.label}: ${meta.failureReason || (freshness(worst) === 'stale' ? 'Snapshot expired; refresh to update' : freshness(worst))}`
-    tone = toneFor[freshness(worst)]
+    health = 'Current page data loaded'
+    tone = 'text-text-muted'
   } else if (expected.some((panel) => panel.enabled === true && !panel.envelope)) {
     health = 'Data health: awaiting required data'
     tone = 'text-warn'

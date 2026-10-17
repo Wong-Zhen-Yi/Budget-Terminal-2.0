@@ -11,6 +11,8 @@ if (!window.api) throw new Error('Budget Terminal service API is unavailable.')
 export const api: DesktopApi = window.api
 
 export const queryKeys = {
+  agents: ['agents'] as const,
+  defeatbetaTerminal: (symbol: string, section: string) => ['defeatbetaTerminal', symbol, section, 1] as const,
   marketCap: (tier: MarketCapTier) => ['marketCap', tier] as const,
   portfolio: ['portfolio'] as const,
   articles: ['articles'] as const,
@@ -44,7 +46,7 @@ export const queryKeys = {
   hims: ['hims'] as const,
   gold: ['gold'] as const,
   oil: ['oil'] as const,
-  heatmap: (etf: string) => ['heatmap', etf] as const,
+  heatmap: (etf: string) => ['heatmap', etf, 'yahoo-v1'] as const,
   // One key per ticker, so switching back to a fund already loaded repaints instantly
   // the way `_p13_last_result` does. Arbitrage is keyed the same way and separately: it
   // is a second, opt-in load over the same basket, not part of the holdings payload.

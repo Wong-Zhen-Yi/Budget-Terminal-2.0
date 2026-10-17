@@ -172,7 +172,8 @@ try {
     window.fixtureHandler = (method, request) => { calls.push({ method, request }); return Promise.resolve(fixture(method, request)) }
     window.runReadinessProbe = async () => {
       const element = document.getElementById('root')
-      for (const scenario of ['empty', 'populated', 'persisted']) {
+      const agentsOnly = ${JSON.stringify(process.argv.includes('--agents'))}
+      for (const scenario of agentsOnly ? ['empty'] : ['empty', 'populated', 'persisted']) {
         console.log('Completed-startup scenario: ' + scenario)
         populated = scenario !== 'empty'
         const restored = scenario === 'persisted'
@@ -207,6 +208,19 @@ try {
           check(client.getQueryData(['youtubeThumbnail', 'fixture1', 'https://example.com/video.png']), 'Selected video media was not warmed')
         }
         check(client.getQueryData(['webAccessStatus']), 'Desktop web status was not loaded at startup')
+        if (agentsOnly) {
+          const before = calls.length
+          await selectPage(TABS.find(tab => tab.id === 'agents'))
+          check(visiblePage('agents').querySelector('[role=switch]').getAttribute('aria-checked') === 'false', 'Agents autonomy must start off')
+          check(!calls.slice(before).some(call => ['agentsStatus', 'agentsCommand'].includes(call.method)), 'Agents must be ready without a first-visit request or connection')
+          await selectPage(TABS.find(tab => tab.id === 'dashboard'))
+          client.setQueryData(['agents'], ok({ connected: true, busy: true, autonomy: false, objective: '', intervalMinutes: 15, runsRemaining: 0, nextRunAt: null, messages: [], error: '', navigation: { id: 'fixture-navigation', page: 'charts', symbol: 'MSFT' } }))
+          await wait(); await wait()
+          check(visiblePage('charts') && useChartsStore.getState().symbol === 'MSFT', 'Agent navigation must select Charts/MSFT while another page is active')
+          check(calls.some(call => call.method === 'agentsCommand' && call.request.type === 'navigationResult' && call.request.id === 'fixture-navigation'), 'App must acknowledge agent navigation')
+          rendered.unmount(); client.clear()
+          return 'PASS: all pages ready at startup, Agents first visit without loading or inference, autonomy off and global agent navigation to Charts/MSFT'
+        }
         for (const tab of TABS.filter(tab => tab.implemented)) {
           const before = calls.length
           await selectPage(tab)

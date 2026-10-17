@@ -99,7 +99,7 @@ function closeSeries(rows: YahooSeriesRow[]): CloseSeries {
 }
 
 export async function fetchCloses(symbol: string, start: Date, force = false): Promise<CloseSeries> {
-  const result = await getYahooSeries({ symbol, start, interval: '1d', force })
+  const result = await getYahooSeries({ symbol, start, interval: '1d', force, adjusted: true })
   const series = closeSeries(result.rows)
   if (series.dates.length < 2) throw new Error(`No history returned for ${symbol}.`)
   return series
@@ -111,7 +111,7 @@ export async function getCloses(
   force = false,
 ): Promise<CloseSeries> {
   const start = windowStart(window)
-  const result = await getYahooSeries({ symbol, start, interval: '1d', force })
+  const result = await getYahooSeries({ symbol, start, interval: '1d', force, adjusted: true })
   const series = closeSeries(result.rows)
   if (series.dates.length < 2) throw new Error(`No history returned for ${symbol}.`)
   return series
@@ -198,7 +198,7 @@ function closeVolumeSeries(rows: YahooSeriesRow[]): CloseVolumeSeries {
 }
 
 export async function fetchCloseVolume(symbol: string, start: Date, force = false): Promise<CloseVolumeSeries> {
-  const result = await getYahooSeries({ symbol, start, interval: '1d', force })
+  const result = await getYahooSeries({ symbol, start, interval: '1d', force, adjusted: true })
   const series = closeVolumeSeries(result.rows)
   if (!series.dates.length) throw new Error(`No history returned for ${symbol}.`)
   return series
@@ -223,7 +223,7 @@ export async function getCloseVolumeBatch(
   const unique = [...new Set(symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean))]
   const settled = await Promise.allSettled(
     unique.map(async (symbol) => {
-      const result = await getYahooSeries({ symbol, start, interval: '1d', force })
+      const result = await getYahooSeries({ symbol, start, interval: '1d', force, adjusted: true })
       const series = closeVolumeSeries(result.rows)
       if (!series.dates.length) throw new Error(`No history returned for ${symbol}.`)
       return series

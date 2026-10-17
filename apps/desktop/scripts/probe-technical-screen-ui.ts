@@ -30,7 +30,7 @@ try {
           row('BBB', { aboveSma200: false, goldenCross: false, rsiBreakout: true, macdBreakout: false }),
           row('CCC', { aboveSma200: false, goldenCross: false, rsiBreakout: false, macdBreakout: true }),
           row('EEE', { aboveSma200: true, goldenCross: false, rsiBreakout: false, macdBreakout: false }),
-        ], universeCount: 5, scannedCount: 4, errors: { DDD: 'No history' }, sourcedAt: new Date().toISOString(), completedAt: new Date().toISOString() }
+        ], universeCount: 6, scannedCount: 4, errors: { DDD: 'No history' }, excluded: { SPCX: 'Listed recently; 87 of 201 required completed daily bars available.' }, sourcedAt: new Date().toISOString(), completedAt: new Date().toISOString() }
         let calls = 0
         let mode = 'partial'
         let navigated = ''
@@ -56,6 +56,7 @@ try {
           Array.from(document.querySelectorAll('th')).find(header => header.textContent.includes('Ticker')).click(); await settle()
           check(document.querySelector('tbody tr').textContent.includes('EEE'), 'Ticker sort')
           check(body().includes('1 failed'), 'Partial failure count')
+          check(body().includes('1 recent listings excluded') && body().includes('SPCX: Listed recently; 87 of 201'), 'Recent listing coverage must remain visible separately from failed requests')
           await choose('goldenCross')
           check(document.querySelectorAll('tbody tr').length === 1 && body().includes('AAA'), 'Golden cross screen')
           await choose('rsiBreakout')

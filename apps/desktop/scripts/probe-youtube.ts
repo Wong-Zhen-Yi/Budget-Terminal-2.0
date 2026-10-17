@@ -87,7 +87,7 @@ async function liveCheck(ticker: string): Promise<void> {
     const fresh = await getYouTube({ tickers: [ticker], force: true })
     assert.equal(fresh.payload.tickersTotal, 1)
     assert.equal(fresh.payload.fetchedCount, 1)
-    assert.ok(fresh.payload.items.length > 0, fresh.payload.warnings.join(' | ') || 'No YouTube matches returned.')
+    assert.deepEqual(fresh.errors, [], 'A valid empty search is allowed, but failed requests must remain visible.')
     assert.ok(fresh.payload.items.length <= 3)
     for (const item of fresh.payload.items) {
       assert.equal(item.ticker, ticker)

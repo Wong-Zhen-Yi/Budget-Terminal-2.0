@@ -891,7 +891,7 @@ function sortByWeight(holdings: EtfHolding[]): void {
   holdings.sort((a, b) => (b.weight ?? -1) - (a.weight ?? -1))
 }
 
-async function loadHoldings(symbol: string, enrich: boolean): Promise<EtfHoldingsResult> {
+async function loadHoldings(symbol: string, enrich: boolean, allowYahooFallback = true): Promise<EtfHoldingsResult> {
   const errors: string[] = []
   for (const provider of PROVIDERS) {
     let result: EtfHoldingsResult | null = null
@@ -907,7 +907,7 @@ async function loadHoldings(symbol: string, enrich: boolean): Promise<EtfHolding
     return result
   }
 
-  const fallback = await fetchYahooFallback(symbol).catch(() => null)
+  const fallback = allowYahooFallback ? await fetchYahooFallback(symbol).catch(() => null) : null
   if (fallback) {
     sortByWeight(fallback.holdings)
     return fallback
@@ -917,6 +917,14 @@ async function loadHoldings(symbol: string, enrich: boolean): Promise<EtfHolding
       ? `Issuer not yet supported for full holdings import. Tried official sources: ${errors.join(', ')}`
       : 'Issuer not yet supported for full holdings import.',
   )
+}
+
+/** Heatmap requires the issuer's full basket and never calls Yahoo for enrichment. */
+export function getIssuerEtfHoldings(ticker: string, force = false): Promise<EtfHoldingsResult> {
+  const symbol = ticker.trim().toUpperCase()
+  if (!symbol) return Promise.reject(new Error('Ticker is required.'))
+  return cache.resolveWithStaleFallback(`etf-holdings:issuer-only:${symbol}`, HOLDINGS_TTL_MS,
+    () => loadHoldings(symbol, false, false), { force }).then(result => result.value)
 }
 
 export function getEtfHoldings(

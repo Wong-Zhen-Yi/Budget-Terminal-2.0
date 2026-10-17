@@ -401,6 +401,7 @@ export function PortfolioPage({
             </div>
           }
         >
+          {Object.values(quotesQuery.data?.data.holdings ?? {}).some(quote => quote.priceBasis === 'published-close') && <div className="shrink-0 px-2 py-1 text-2xs text-text-dim">DefeatBeta prices are published daily closes, not live quotes. The status bar shows the source date.</div>}
           <PositionsTable
             onResearch={(symbol) => onNavigate?.('stocks', symbol)}
             portfolio={selected}

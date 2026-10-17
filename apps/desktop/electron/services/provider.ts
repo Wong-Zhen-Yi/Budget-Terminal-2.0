@@ -1421,17 +1421,15 @@ const providerImplementation: MarketDataProvider = {
     const key = normalizeEtfKey(etf)
     try {
       const { payload, errors } = await getHeatmap(key, force)
-      if (!errors.length) return ok(payload, HEATMAP_SOURCE)
-      // A degraded load is the normal case here, not the exception: a five-hundred-name
-      // index nearly always has a handful of symbols Yahoo will not quote, and those
-      // render as outlined no-data tiles beside a coverage count that says how many.
+      if (!errors.length) return ok(payload, HEATMAP_SOURCE, { asOf: Date.parse(payload.priceAsOfDate!) })
+      if (!payload.quoteCoverage) return { ...failed(payload, errors.map(error => error.reason).join(' · '), HEATMAP_SOURCE), errors }
+      // Missing Yahoo histories render as outlined no-data tiles beside the coverage
+      // count; history and holdings failures retain their reasons.
       return partial(
         payload,
         errors,
         HEATMAP_SOURCE,
-        payload.holdingsLoaded
-          ? `${payload.holdingsLoaded - payload.quoteCoverage} of ${payload.holdingsLoaded} holdings are unquoted.`
-          : `No holdings were loaded for ${payload.ticker}.`,
+        errors.map(error => error.reason).join(' · '),
       )
     } catch (error) {
       return failed(emptyHeatmapPayload(key), describeError(error), HEATMAP_SOURCE)
@@ -1868,7 +1866,7 @@ const providerImplementation: MarketDataProvider = {
     }
     try {
       const result = await getYouTube(request)
-      const errors = result.payload.warnings.map((reason) =>
+      const errors = result.errors.map((reason) =>
         err(YOUTUBE_SOURCE, reason, 'youtube', reason.match(/^([^:]+):/)?.[1]),
       )
       if (errors.length) {

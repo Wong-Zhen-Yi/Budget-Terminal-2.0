@@ -97,6 +97,7 @@ export function PortfolioPanel({
         ) : null
       }
     >
+      {Object.values(quotes).some(quote => quote.priceBasis === 'published-close') && <div className="shrink-0 px-2 py-1 text-2xs text-text-dim">DefeatBeta prices are published daily closes, not live quotes.</div>}
       <DataTable
         columns={columns}
         rows={rows}

@@ -104,8 +104,10 @@ try {
     const copied = { ...fresh, meta: { ...fresh.meta, fetchedAt: collected } }
     Date.now = () => collected + FRESHNESS.sofi + 1
     const copiedPanel = { label: 'SOFI reported quarters', envelope: copied, loading: false, enabled: true, freshnessMs: FRESHNESS.sofi }
-    assert.match(renderToStaticMarkup(createElement(StatusBar, { panels: [copiedPanel], sourcePath: '' })), /Snapshot expired/,
-      'A copied panel envelope must retain explicit query TTL after losing WeakMap identity')
+    const expiredFooter = renderToStaticMarkup(createElement(StatusBar, { panels: [copiedPanel], sourcePath: '' }))
+    assert.match(expiredFooter, /Current page data loaded/)
+    assert.doesNotMatch(expiredFooter, /Snapshot expired|degraded|data: OK/,
+      'Snapshot diagnostics belong in Settings without calling retained data healthy')
     assert.match(renderToStaticMarkup(createElement(StatusBar, { panels: [{ ...copiedPanel, error: failure }], sourcePath: '' })), /Fixture IPC disconnected/)
   } finally { Date.now = clock }
   assert.equal(useDataHealth.getState().records['stocks:Quote'].previousSession, undefined)

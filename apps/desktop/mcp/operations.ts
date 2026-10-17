@@ -16,6 +16,7 @@ export const operations = {
   newsThumbnail: 'Get a news thumbnail from a public URL.',
   fundamentals: 'Get fundamentals for a set of tickers.',
   fundamentalsPage: 'Get detailed financial statements and fundamentals.',
+  defeatbetaTerminal: 'Read a DefeatBeta Terminal research section from the published dataset.',
   returns: 'Calculate historical returns for tickers.',
   momentum: 'Calculate momentum for supplied positions.',
   analytics: 'Calculate portfolio metrics against a benchmark.',

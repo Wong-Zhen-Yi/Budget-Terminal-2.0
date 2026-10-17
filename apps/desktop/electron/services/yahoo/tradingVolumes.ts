@@ -17,7 +17,7 @@ import { screenEquityUniverse, type ScreenerQuote } from './screener.js'
  * pull three years of daily bars for those 100 to fill in every other column.
  */
 
-const CACHE_KEY = 'trading-volumes:data:v2'
+const CACHE_KEY = 'trading-volumes:data:v3-published'
 const SOURCE = 'Yahoo Finance'
 
 export const TRADING_VOLUMES_SOURCE = SOURCE

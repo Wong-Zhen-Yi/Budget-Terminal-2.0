@@ -2,6 +2,7 @@ const { spawnSync } = require('node:child_process')
 const path = require('node:path')
 const { supportedNodeVersion, supportedNpmVersion, runtimeEnvironment } = require('./runtime.cjs')
 const { engines } = require('../package.json')
+const { findCodex } = require('./codex-runtime.cjs')
 
 const root = path.resolve(__dirname, '..')
 
@@ -12,7 +13,7 @@ function platformName(platform) {
   return null
 }
 
-function launch({ platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, log = console } = {}) {
+function launch({ platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, log = console } = {}) {
   const os = platformName(platform)
   if (!os) {
     log.error(`Budget Terminal supports Windows, macOS, and Linux; found ${platform}.`)
@@ -25,6 +26,19 @@ function launch({ platform = process.platform, nodeVersion = process.versions.no
   }
 
   const env = runtimeEnvironment(environment)
+  log.log('Checking Codex for the Agents page...')
+  const codexPath = locateCodex({ platform, environment: env })
+  if (codexPath) {
+    const codex = spawn(codexPath, ['--version'], { cwd: root, env, windowsHide: true, stdio: 'pipe', encoding: 'utf8', timeout: 10_000 })
+    if (!codex.error && codex.status === 0 && /^codex(?:-cli)?\s+\d+\.\d+/i.test(codex.stdout?.trim() || '')) {
+      env.BUDGET_TERMINAL_CODEX_PATH = codexPath
+      log.log(`Agents runtime ready: ${codex.stdout.trim()}. Autonomous mode starts off; connect from Agents when needed.`)
+    } else {
+      log.log('Codex could not run. The app will open; check your Codex installation before connecting from Agents.')
+    }
+  } else {
+    log.log('Codex was not found. The app will open; Agents includes installation and sign-in instructions.')
+  }
 
   const npm = (args, capture = false) => {
     const command = platform === 'win32' ? env.ComSpec || 'cmd.exe' : 'npm'
@@ -58,8 +72,15 @@ function launch({ platform = process.platform, nodeVersion = process.versions.no
     return 1
   }
 
+  log.log('Building the latest Budget Terminal source...')
+  const build = npm(['run', 'build'])
+  if (build.error || build.status !== 0) {
+    log.error('Budget Terminal could not build. See the error above.')
+    return 1
+  }
+
   log.log('Opening Budget Terminal in Electron. Keep this terminal open while using the app.')
-  const app = npm(['run', 'dev'])
+  const app = npm(['run', 'preview', '--workspace', 'budget-terminal-desktop'])
   if (app.error || app.status !== 0) {
     log.error('Budget Terminal stopped with an error. See the output above.')
     return app.status || 1

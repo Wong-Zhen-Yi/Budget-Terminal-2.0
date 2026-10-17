@@ -113,15 +113,9 @@ try {
   const primary = await fetchAmznEarnings(true, sources, new TtlCache())
   assert.equal(primary.reports[0].sourceUrl, sourceUrl)
   assert(primary.warnings.some(warning => /Only 1/.test(warning)))
-  const fallback = await fetchAmznEarnings(true, { ...sources, text: bad }, new TtlCache())
-  assert.equal(fallback.reports[0].sourceUrl, amznIrUrl('2026 Q2'))
-  const outage = await fetchAmznEarnings(true, { ...sources, now: () => new Date('2026-10-06T00:00:00Z'), filings: bad, ir: async period => {
-    if (period !== '2026 Q2') throw new Error('Amazon investor relations: HTTP 404')
-    return sources.ir()
-  } }, new TtlCache())
-  assert.equal(outage.reports[0].period, '2026 Q2')
-  assert(outage.warnings.some(warning => /SEC submissions unavailable/.test(warning)))
-  console.log('PASS: AMZN real releases, quarterly/annual/TTM selection, units, margins, categories, guidance, discovery, IR fallback, API, cache, outages and recovery')
+  await assert.rejects(() => fetchAmznEarnings(true, { ...sources, text: bad }, new TtlCache()), /HTTP 503/)
+  await assert.rejects(() => fetchAmznEarnings(true, { ...sources, filings: bad }, new TtlCache()), /HTTP 503/)
+  console.log('PASS: AMZN real releases, quarterly/annual/TTM selection, units, margins, categories, guidance, discovery, SEC-only failure handling, API, cache, outages and recovery')
 
   if (process.argv.includes('--live')) {
     const live = await getAmzn({ force: true })

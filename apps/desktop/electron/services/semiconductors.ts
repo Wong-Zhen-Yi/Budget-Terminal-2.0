@@ -6,7 +6,7 @@ import type { SemiconductorCompany, SemiconductorMarket, SemiconductorProfile, S
 import { cache, TTL, type TtlCache } from './cache.js'
 import { paced, yahoo } from './yahoo/client.js'
 import { getYahooSeries } from './yahoo/series.js'
-import { withBackupSummary } from './yahoo/backup.js'
+import { withYahooSummary } from './yahoo/requests.js'
 import { fetchPortfolioNews } from './yahoo/newsPage.js'
 
 const SOURCE = 'Yahoo Finance · reviewed SEC company catalog'
@@ -24,6 +24,7 @@ function timestamp(value: unknown): number | null {
   const number = finite(value)
   return number === null ? null : number < 1e12 ? number * 1000 : number
 }
+
 const defaults: SemiconductorFetchers = {
   async market(symbol, force) {
     const [quote, series] = await Promise.allSettled([
@@ -49,7 +50,7 @@ const defaults: SemiconductorFetchers = {
       marketCap: finite(raw.marketCap), quoteTime: timestamp(raw.regularMarketTime), history }, warnings }
   },
   async profile(symbol) {
-    const raw = await withBackupSummary(symbol, () => paced(() => yahoo.quoteSummary(symbol, { modules: ['assetProfile', 'summaryDetail', 'defaultKeyStatistics', 'financialData', 'calendarEvents'] })))
+    const raw = await withYahooSummary(symbol, () => paced(() => yahoo.quoteSummary(symbol, { modules: ['assetProfile', 'summaryDetail', 'defaultKeyStatistics', 'financialData', 'calendarEvents'] })))
     const profile = object(raw.assetProfile)
     const detail = object(raw.summaryDetail)
     const statistics = object(raw.defaultKeyStatistics)
@@ -79,7 +80,7 @@ export async function getSemiconductors({ force = false }: SemiconductorsRequest
   let cached = false
   const lane = async <T>(row: SemiconductorRow, block: Lane, ttl: number, loader: () => Promise<{ value: T; warnings: string[] }>, apply: (value: T) => void) => {
     try {
-      const result = await storage.resolveWithStaleFallback<LaneData<T>>(`semiconductors:v1:${row.company.symbol}:${block}`, ttl,
+      const result = await storage.resolveWithStaleFallback<LaneData<T>>(`semiconductors:v2:${row.company.symbol}:${block}`, ttl,
         async () => ({ ...await loader(), fetchedAt: Date.now() }), { force })
       apply(result.value.value)
       const warnings = [...result.value.warnings]

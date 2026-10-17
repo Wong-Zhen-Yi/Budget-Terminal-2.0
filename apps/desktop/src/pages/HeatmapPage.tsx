@@ -40,12 +40,6 @@ const changeClass = (value: number | null | undefined) =>
       ? 'text-up'
       : 'text-down'
 
-/** `_p17_update_summary` prints the clock, not the date. */
-function clockTail(stamp: number): string {
-  if (!stamp) return '--'
-  return new Date(stamp).toLocaleTimeString('en-GB', { hour12: false })
-}
-
 export function HeatmapPage({
   onStatusChange,
   onNavigate,
@@ -61,7 +55,7 @@ export function HeatmapPage({
   const refresh = useRefreshHeatmap()
   const [refreshing, setRefreshing] = useState(false)
 
-  const payload = query.data?.data
+  const payload = query.data?.data.etf === etf ? query.data.data : undefined
   const loading = query.isFetching
 
   useEffect(() => {
@@ -97,26 +91,27 @@ export function HeatmapPage({
     }
     const meta = query.data?.meta
     if (!payload || meta?.freshness === 'failed') {
-      return `${etfLabel(etf)} heatmap refresh failed: ${meta?.failureReason ?? 'unknown error'}`
+      return `${etfLabel(etf)} heatmap refresh failed: ${meta?.failureReason ?? query.error?.message ?? 'unknown error'}`
     }
     const loaded = `Loaded ${rows.length} ${etfLabel(etf)} holdings (${etfTicker(etf)}) from ${
       payload.issuer || 'ETF holdings source'
-    }${payload.asOfDate ? `, as of ${payload.asOfDate}` : ''} - ${intervalLabel(interval)}.`
+    }${payload.asOfDate ? `, holdings as of ${payload.asOfDate}` : ''}. ${payload.priceSource || 'Yahoo Finance'} · prices as of ${payload.priceAsOfDate || '--'} · ${intervalLabel(interval)}.`
     // `describe_market_data_status` returns only the failure reason for a degraded
     // payload; keeping the loaded count too is what stops "356 quotes unavailable" from
     // hiding how much of the map did work.
-    if (meta?.freshness === 'partial' && meta.failureReason) return `${loaded} ${meta.failureReason}`
+    if ((meta?.freshness === 'partial' || meta?.freshness === 'stale') && meta.failureReason) return `${loaded} ${meta.failureReason}`
     return loaded
-  }, [loading, query.data, payload, rows.length, etf, interval])
+  }, [loading, query.data, query.error, payload, rows.length, etf, interval])
 
   const missing = Math.max(0, summary.holdingsLoaded - summary.quoteCoverage)
 
   const cells: Array<{ key: string; label: string; value: string; className: string; title?: string }> = [
     {
       key: 'updated',
-      label: 'Last Updated',
-      value: payload ? clockTail(payload.fetchedAt) : '--',
+      label: 'Prices as of',
+      value: payload?.priceAsOfDate || '--',
       className: 'text-text',
+      title: payload ? `Yahoo Finance · fetched ${new Date(payload.fetchedAt).toLocaleString()}` : undefined,
     },
     {
       key: 'holdings',
@@ -189,7 +184,7 @@ export function HeatmapPage({
               active={entry.key === interval}
               onClick={() => setIntervalKey(entry.key)}
             >
-              {entry.label}
+              {intervalLabel(entry.key)}
             </Button>
           ))}
           <Button variant="accent" onClick={() => void onRefresh()} disabled={refreshing || loading}>
@@ -207,7 +202,7 @@ export function HeatmapPage({
         ))}
       </div>
 
-      <p className="shrink-0 truncate text-right text-2xs text-text-muted" title={status}>
+      <p className="shrink-0 text-right text-2xs text-text-muted" title={status}>
         {status}
       </p>
 
@@ -219,7 +214,9 @@ export function HeatmapPage({
         empty={
           loading
             ? 'Loading index holdings...'
-            : 'Loading index holdings - pick an index above or press Refresh'
+            : query.error || query.data?.meta.freshness === 'failed'
+              ? 'Heatmap unavailable. Press Refresh to retry.'
+              : 'No index holdings available. Press Refresh to retry.'
         }
       />
 

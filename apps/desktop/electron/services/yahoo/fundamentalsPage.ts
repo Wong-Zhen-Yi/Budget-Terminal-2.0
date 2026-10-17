@@ -17,7 +17,7 @@ import {
 import { cache, TTL } from '../cache.js'
 import { fetchSecCompanyBundle, type SecCompanyBundle } from '../secEdgar.js'
 import { paced, yahoo } from './client.js'
-import { withBackupStatements, withBackupSummary } from './backup.js'
+import { withYahooStatements, withYahooSummary } from './requests.js'
 import { getQuote } from './quotes.js'
 
 export const FUNDAMENTALS_PAGE_SOURCE = 'SEC EDGAR + Yahoo Finance'
@@ -191,7 +191,7 @@ async function fetchSummary(symbol: string): Promise<{
   company: FundamentalsPageCompany
   facts: FundamentalsPageFacts
 }> {
-  const summary = await withBackupSummary(symbol, () => paced(() => yahoo.quoteSummary(symbol, {
+  const summary = await withYahooSummary(symbol, () => paced(() => yahoo.quoteSummary(symbol, {
     modules: ['price', 'summaryDetail', 'financialData', 'defaultKeyStatistics', 'assetProfile'],
   })))
   const price = summary.price
@@ -241,9 +241,9 @@ async function priceFallback(symbol: string): Promise<number | null> {
 
 const defaultFetchers: FundamentalsPageFetchers = {
   summary: fetchSummary,
-  annual: (symbol, period1) => withBackupStatements(symbol, 'annual', period1,
+  annual: (symbol, period1) => withYahooStatements(symbol, 'annual', period1,
     () => paced(() => yahoo.fundamentalsTimeSeries(symbol, { period1, type: 'annual', module: 'all' }))),
-  quarterly: (symbol, period1) => withBackupStatements(symbol, 'quarterly', period1,
+  quarterly: (symbol, period1) => withYahooStatements(symbol, 'quarterly', period1,
     () => paced(() => yahoo.fundamentalsTimeSeries(symbol, { period1, type: 'quarterly', module: 'all' }))),
   sec: fetchSecCompanyBundle,
   price: priceFallback,
@@ -325,7 +325,12 @@ async function fetchUncached(
           warnings: [String(secResult.reason)],
         },
       }
-  for (const warning of sec.metadata.warnings) failures.push({ source: 'SEC EDGAR', operation: 'fetch', reason: warning })
+  for (const warning of sec.metadata.warnings) {
+    // Both providers are requested up front. An unsupported SEC filing format is
+    // coverage information, retained in the payload, rather than a failed request.
+    if (sec.metadata.statementFreshness === 'unavailable' && warning.startsWith('SEC statement coverage:')) continue
+    failures.push({ source: 'SEC EDGAR', operation: 'fetch', reason: warning })
+  }
 
   if (facts.currentPrice === null) facts = { ...facts, currentPrice: await fetchers.price(symbol) }
   const quoteCurrency = company.quoteCurrency ?? company.currency

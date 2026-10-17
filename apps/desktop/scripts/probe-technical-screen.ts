@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 
-import { completedTechnicalBars, evaluateTechnicalBars, type TechnicalBar } from '../electron/shared/technicalScreen.js'
+import { completedTechnicalBars, evaluateTechnicalBars, recentTechnicalListing, type TechnicalBar } from '../electron/shared/technicalScreen.js'
 
 const now = Date.UTC(2026, 8, 28, 22)
 const day = 86_400_000
@@ -23,6 +23,12 @@ function walk(seed: number): TechnicalBar[] {
 }
 
 assert.equal(evaluateTechnicalBars(bars(Array(200).fill(100)), now), null)
+const recent = bars(Array(69).fill(100))
+assert.match(recentTechnicalListing(recent, new Date(now - 100 * day), now)!, /69 of 201/)
+assert.equal(recentTechnicalListing(recent, undefined, now), null, 'Missing metadata must not conceal incomplete history')
+assert.equal(recentTechnicalListing(recent, new Date(now - 500 * day), now), null, 'Established listings with missing history remain failures')
+assert.equal(recentTechnicalListing(recent, new Date(now + day), now), null)
+assert.equal(recentTechnicalListing(recent, new Date(now - 100 * day), now + 11 * day), null, 'Stale history remains a failure')
 
 const cross = evaluateTechnicalBars(bars([...Array(200).fill(100), 101]), now)!
 assert.equal(cross.matches.goldenCross, true)

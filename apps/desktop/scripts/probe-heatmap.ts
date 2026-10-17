@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import type { HeatmapHolding, HeatmapInterval } from '../electron/shared/contract.js'
 import {
@@ -24,9 +27,13 @@ import {
   weightedMove,
 } from '../electron/shared/heatmap.js'
 import { excelColumnToIndex } from '../electron/services/etf/xlsx.js'
-import { getEtfHoldings } from '../electron/services/etf/holdings.js'
+import { getIssuerEtfHoldings } from '../electron/services/etf/holdings.js'
 import { resolveSector } from '../electron/services/etf/sectorMap.js'
-import { getHeatmap } from '../electron/services/heatmap.js'
+import { fetchHeatmap, getHeatmap, HEATMAP_SOURCE } from '../electron/services/heatmap.js'
+import { cache } from '../electron/services/cache.js'
+import { closeDefeatBetaDecoder } from '../electron/services/defeatbeta/decoder.js'
+import { closeYahooWorker, yahoo } from '../electron/services/yahoo/client.js'
+import { defeatBeta } from '../electron/services/defeatbeta/client.js'
 
 /**
  * The Heatmap page probe, run against `mixins/spy_heatmap.py` side by side.
@@ -228,7 +235,7 @@ async function runLive(etfArgument: string): Promise<void> {
 
   console.log(`\n=== ${etfLabel(key)} (${ticker}) ===`)
   const started = Date.now()
-  const source = await getEtfHoldings(ticker)
+  const source = await getIssuerEtfHoldings(ticker)
   console.log(
     `holdings file: ${source.issuer} | ${source.holdings.length} rows | as of ${
       source.asOfDate || '--'
@@ -237,6 +244,10 @@ async function runLive(etfArgument: string): Promise<void> {
   console.log(`  ${source.sourceUrl}`)
 
   const { payload, errors } = await getHeatmap(key, true)
+  assert(payload.quoteCoverage > 0, JSON.stringify(errors))
+  assert.equal(payload.priceSource, 'Yahoo Finance')
+  assert(payload.priceAsOfDate)
+  assert.equal(payload.publishedAt, undefined)
   const seconds = ((Date.now() - started) / 1000).toFixed(1)
 
   const bySector = new Map<string, { count: number; weight: number }>()
@@ -253,6 +264,7 @@ async function runLive(etfArgument: string): Promise<void> {
         fundName: payload.fundName,
         issuer: payload.issuer,
         asOfDate: payload.asOfDate,
+        priceAsOfDate: payload.priceAsOfDate,
         holdingsLoaded: payload.holdingsLoaded,
         elapsedSeconds: Number(seconds),
         weightSum: Number(
@@ -284,7 +296,7 @@ async function runLive(etfArgument: string): Promise<void> {
     console.log(`  ${sector.padEnd(26)} ${String(bucket.count).padStart(4)}  ${formatHeatmapWeightPct(bucket.weight).padStart(8)}`)
   }
 
-  console.log('\nTop 15 holdings, live')
+  console.log('\nTop 15 holdings, latest day')
   for (const row of buildHeatmapRows(payload, key, 'live').slice(0, 15)) {
     console.log(
       `  ${row.symbol.padEnd(7)} ${formatHeatmapWeightPct(row.weight).padStart(7)} ${formatHeatmapPct(
@@ -305,8 +317,102 @@ async function runLive(etfArgument: string): Promise<void> {
   }
 }
 
-const args = process.argv.slice(2)
-runOffline()
-if (!args.includes('--offline')) {
-  await runLive(args.find((argument) => !argument.startsWith('--')) ?? 'SPY')
+async function runProviderChecks(): Promise<void> {
+  const day = (offset: number) => new Date(Date.now() - offset * 86_400_000).toISOString().slice(0, 10)
+  const source = { ticker: 'SPY', fundName: 'S&P 500', issuer: 'Issuer fixture', asOfDate: day(1),
+    expenseRatio: '--', netAssets: '--', sourceUrl: 'https://example.invalid/holdings', sectorBreakdown: [],
+    isPartial: false, coverageNote: '', holdings: [
+      { symbol: 'AAA', name: 'Alpha', sector: '', weight: 0.5 },
+      { symbol: 'BRK.B', name: 'Berkshire', sector: 'Financials', weight: 0.3 },
+      { symbol: 'OLD', name: 'Old session', sector: '', weight: 0.1 },
+      { symbol: 'MISS', name: 'Missing', sector: '', weight: 0.1 },
+      { symbol: '-', name: 'Cash', sector: '', weight: 0.01 },
+    ] }
+  let observedForce = false
+  const deps = {
+    holdings: async () => source,
+    sectors: async () => ({ AAA: 'Information Technology' }),
+    prices: async (symbols: string[], range = '1y', force = false) => {
+      assert.deepEqual(symbols, ['AAA', 'BRK-B', 'OLD', 'MISS'])
+      assert.equal(range, '1y')
+      observedForce = force
+      return { series: {
+        AAA: { dates: [day(2), day(1)], closes: [100, 110] },
+        'BRK-B': { dates: [day(2), day(1)], closes: [200, 180] },
+      }, missing: ['OLD', 'MISS'] }
+    },
+  }
+  const result = await fetchHeatmap('SPY', true, deps)
+  assert(observedForce, 'Refresh must force Yahoo history reads')
+  assert.equal(result.payload.holdingsLoaded, 4)
+  assert.equal(result.payload.quoteCoverage, 2)
+  assert.equal(result.payload.priceAsOfDate, day(1))
+  assert.equal(result.payload.asOfDate, source.asOfDate)
+  assert.equal(result.payload.holdings[0].sector, 'Information Technology')
+  assert.equal(result.payload.holdings[1].symbol, 'BRK.B')
+  assert.equal(result.payload.holdings[1].price, 180)
+  assert.equal(result.payload.holdings[2].price, null)
+  assert.equal(result.payload.holdings[3].changes.live, undefined)
+  assert.equal(result.payload.weightedDayMove, (0.5 * 10 + 0.3 * -10) / 0.8)
+  assert(result.errors[0].reason.includes('OLD, MISS'))
+  assert.equal(buildHeatmapRows(result.payload, 'SPY', 'live')[0].changeLabel, 'Live Change')
+  assert.equal(result.payload.priceSource, 'Yahoo Finance')
+  assert.equal(result.payload.publishedAt, undefined)
+  await assert.rejects(() => fetchHeatmap('SPY', true, { ...deps, prices: async () => { throw new Error('Yahoo offline') } }), /Yahoo offline/)
+  const empty = await fetchHeatmap('SPY', true, { ...deps, prices: async () => ({ series: {}, missing: ['AAA', 'BRK-B', 'OLD', 'MISS'] }) })
+  assert.equal(empty.payload.quoteCoverage, 0)
+  assert(empty.errors.length)
+  assert(HEATMAP_SOURCE.includes('Yahoo Finance'))
+  assert(!HEATMAP_SOURCE.includes('DefeatBeta'))
+
+  // Exercise the real Yahoo batching path during success and failure. DefeatBeta
+  // methods remain guarded throughout this probe, including a Yahoo outage.
+  const originalSpark = yahoo._fetch
+  Object.assign(yahoo, { _fetch: async () => ({
+    AAA: { symbol: 'AAA', timestamp: [Date.parse(day(2)) / 1000, Date.parse(day(1)) / 1000], close: [100, 110] },
+    'BRK-B': { symbol: 'BRK-B', timestamp: [Date.parse(day(2)) / 1000, Date.parse(day(1)) / 1000], close: [200, 180] },
+  }) })
+  try {
+    const { fetchSparkCloses } = await import('../electron/services/yahoo/spark.js')
+    const actual = await fetchHeatmap('SPY', true, { ...deps, prices: fetchSparkCloses })
+    assert.equal(actual.payload.quoteCoverage, 2)
+    Object.assign(yahoo, { _fetch: async () => { throw new Error('Yahoo offline') } })
+    const unavailable = await fetchHeatmap('SPY', true, { ...deps, prices: fetchSparkCloses })
+    assert.equal(unavailable.payload.quoteCoverage, 0)
+    assert(unavailable.errors.every(error => error.source === 'Yahoo Finance'))
+  } finally { Object.assign(yahoo, { _fetch: originalSpark }) }
+
+  // Issuer outages must never initiate Yahoo enrichment or a top-ten fallback.
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => { throw new Error('Issuer offline') }
+  try { await assert.rejects(() => getIssuerEtfHoldings('HEATMAPTEST', true), /Issuer not yet supported/) }
+  finally { globalThis.fetch = originalFetch }
+  console.log('Yahoo heatmap checks passed: dates, share classes, partial coverage and no DefeatBeta requests during outages')
+}
+
+const scratch = await mkdtemp(join(tmpdir(), 'bt-heatmap-'))
+const previous = { APPDATA: process.env.APPDATA, LOCALAPPDATA: process.env.LOCALAPPDATA }
+process.env.APPDATA = scratch
+process.env.LOCALAPPDATA = scratch
+const defeatBetaMethods = ['rows', 'priceRows', 'companies', 'company'] as const
+const originalDefeatBeta = Object.fromEntries(defeatBetaMethods.map(method => [method, defeatBeta[method]]))
+let defeatBetaCalls = 0
+Object.assign(defeatBeta, Object.fromEntries(defeatBetaMethods.map(method => [method,
+  async () => { defeatBetaCalls += 1; throw new Error('DefeatBeta is inactive') }])))
+try {
+  const args = process.argv.slice(2)
+  runOffline()
+  await runProviderChecks()
+  if (!args.includes('--offline')) await runLive(args.find(argument => !argument.startsWith('--')) ?? 'SPY')
+  assert.equal(defeatBetaCalls, 0)
+} finally {
+  Object.assign(defeatBeta, originalDefeatBeta)
+  closeDefeatBetaDecoder()
+  closeYahooWorker()
+  cache.close()
+  for (const key of ['APPDATA', 'LOCALAPPDATA'] as const) {
+    if (previous[key] === undefined) delete process.env[key]
+    else process.env[key] = previous[key]
+  }
+  if (scratch.startsWith(join(tmpdir(), 'bt-heatmap-'))) await rm(scratch, { recursive: true, force: true })
 }

@@ -100,6 +100,7 @@ export function TechnicalScreenPage({
         <span><strong className="text-text">{matches}</strong> matches</span>
         <span><strong className="text-text">{payload?.scannedCount ?? 0}</strong> scanned</span>
         <span><strong className="text-text">{Object.keys(payload?.errors ?? {}).length}</strong> failed</span>
+        <span><strong className="text-text">{Object.keys(payload?.excluded ?? {}).length}</strong> recent listings excluded</span>
         <span><strong className="text-text">{payload?.universeCount ?? 0}</strong> in shortlist</span>
         <span className="text-text-muted">Double-click a stock to inspect it.</span>
       </section>
@@ -110,6 +111,9 @@ export function TechnicalScreenPage({
       {failure ? <p className="shrink-0 text-2xs text-down">Scan failed: {failure}{payload ? ' Showing the previous result.' : ''}</p> : null}
       {payload && Object.keys(payload.errors).length ? (
         <p className="shrink-0 text-2xs text-warn">{Object.keys(payload.errors).length} ticker(s) had insufficient or unavailable daily history and were excluded.</p>
+      ) : null}
+      {payload && Object.keys(payload.excluded ?? {}).length ? (
+        <p className="shrink-0 text-2xs text-text-muted">{Object.entries(payload.excluded ?? {}).map(([symbol, reason]) => `${symbol}: ${reason}`).join(' · ')}</p>
       ) : null}
 
       <DataTable columns={columns} rows={rows} rowKey={(row) => row.ticker} layout="fixed" minWidth="900px"

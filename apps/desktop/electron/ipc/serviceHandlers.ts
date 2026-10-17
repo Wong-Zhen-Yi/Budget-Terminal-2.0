@@ -1,6 +1,8 @@
 import { getArticles, saveArticles } from '../services/articlesStore.js'
 import type { ArticlesMutation } from '../shared/articles.js'
 import { getBitcoin } from '../services/bitcoin.js'
+import { getDefeatBetaTerminal } from '../services/defeatbeta/terminal.js'
+import type { DefeatBetaTerminalRequest } from '../shared/defeatbetaTerminal.js'
 import type { SofiRequest } from '../shared/sofi.js'
 import type { HimsRequest } from '../shared/hims.js'
 import type { HoodRequest } from '../shared/hood.js'
@@ -130,6 +132,7 @@ export function registerServiceHandlers(register: RegisterService): void {
   }
 
   handle(CHANNELS.quotes, (request: QuotesRequest) => provider.quotes(request))
+  handle(CHANNELS.defeatbetaTerminal, (request: DefeatBetaTerminalRequest) => getDefeatBetaTerminal(request))
   handle(CHANNELS.chart, (request: ChartRequest) => provider.chart(request))
   handle(CHANNELS.chartsHistory, (request: ChartsHistoryRequest) =>
     provider.chartsHistory(request),

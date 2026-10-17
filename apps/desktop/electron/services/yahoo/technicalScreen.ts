@@ -1,5 +1,5 @@
 import type { TechnicalScanPayload, TechnicalScanRow } from '../../shared/contract.js'
-import { evaluateTechnicalBars } from '../../shared/technicalScreen.js'
+import { evaluateTechnicalBars, recentTechnicalListing } from '../../shared/technicalScreen.js'
 import { sourceLiquidUniverse } from './quant.js'
 import { getYahooSeries } from './series.js'
 
@@ -19,6 +19,7 @@ export async function runTechnicalScan(): Promise<TechnicalScanPayload> {
     }),
   ))
   const errors: Record<string, string> = {}
+  const excluded: Record<string, string> = {}
   const rows: TechnicalScanRow[] = []
   universe.candidates.forEach((candidate, index) => {
     const outcome = outcomes[index]
@@ -30,10 +31,14 @@ export async function runTechnicalScan(): Promise<TechnicalScanPayload> {
       errors[candidate.ticker] = 'Daily history is stale.'
       return
     }
-    const metrics = evaluateTechnicalBars(outcome.value.rows.flatMap((bar) =>
+    const bars = outcome.value.rows.flatMap((bar) =>
       bar.close === null ? [] : [{ time: bar.time, close: bar.close }],
-    ), now)
+    )
+    const metrics = evaluateTechnicalBars(bars, now)
     if (!metrics) {
+      const listing = (outcome.value.meta as { firstTradeDate?: unknown } | undefined)?.firstTradeDate
+      const reason = recentTechnicalListing(bars, listing, now)
+      if (reason) { excluded[candidate.ticker] = reason; return }
       errors[candidate.ticker] = 'Insufficient or outdated completed daily history.'
       return
     }
@@ -51,6 +56,7 @@ export async function runTechnicalScan(): Promise<TechnicalScanPayload> {
     universeCount: universe.candidates.length,
     scannedCount: rows.length,
     errors,
+    excluded,
     sourcedAt: universe.sourcedAt,
     completedAt: new Date().toISOString(),
   }

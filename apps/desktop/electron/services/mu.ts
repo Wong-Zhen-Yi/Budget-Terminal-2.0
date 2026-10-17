@@ -55,15 +55,6 @@ async function documentPages(document: MuDocument, force: boolean): Promise<MuTe
 }
 
 async function earnings(force: boolean): Promise<MuEarnings> {
-  const documents = await discover(force)
-  if (documents.release) {
-    try {
-      const release = await documentPages(documents.release, force)
-      return parseMuEarnings(release.pages.join('\n'), release.document)
-    } catch {
-      // Micron's HTML host sometimes presents a challenge; the filed exhibit is public.
-    }
-  }
   const snapshot = await fetchSecFilingSnapshot('723125', force)
   if (snapshot.freshness === 'stale') throw new Error(snapshot.warnings.join(' · ') || 'SEC submissions refresh failed.')
   const filings = snapshot.filings.filter(filing => filing.form === '8-K' && filing.items.includes('2.02')).slice(0, 3)
@@ -75,11 +66,16 @@ async function earnings(force: boolean): Promise<MuEarnings> {
       for (const exhibit of exhibits) {
         const url = `${directory}${exhibit.name}`
         const text = muHtmlText(await fetchSecText(url))
-        try { return parseMuEarnings(text, { period: documents.period, kind: 'release', url }) } catch { /* Try a matching exhibit. */ }
+        // Read the fiscal period from the filed quarterly table. Earnings must
+        // not depend on an investor-relations feed to select its SEC document.
+        const header = /Quarterly Financial Results[\s\S]*?\bFQ([1-4])[- ](\d{2})/i.exec(text)
+        if (!header) continue
+        const period = `FY20${header[2]} Q${header[1]}`
+        try { return parseMuEarnings(text, { period, kind: 'release', url }) } catch { /* Try a matching exhibit. */ }
       }
     } catch { /* One inaccessible filing must not hide other available reports. */ }
   }
-  throw new Error(`Earnings release for ${documents.period} is unavailable or its layout changed.`)
+  throw new Error('Micron SEC earnings release is unavailable or its layout changed.')
 }
 
 async function memory(force: boolean): Promise<MuMemory> {
@@ -112,7 +108,7 @@ export async function getMu({ force = false }: MuRequest = {}, fetchers: MuFetch
   let cached = false
   const lane = async <T>(block: MuBlock, ttl: number, loader: () => Promise<T>, apply: (value: T) => string[]) => {
     try {
-      const result = await storage.resolveWithStaleFallback(`mu:v2:${block}`, ttl,
+      const result = await storage.resolveWithStaleFallback(`mu:sec-v3:${block}`, ttl,
         async () => ({ value: await loader(), fetchedAt: Date.now() }), { force })
       const warnings = apply(result.value.value)
       if (result.stale) warnings.push('Refresh failed; showing cached data.')

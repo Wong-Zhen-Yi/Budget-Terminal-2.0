@@ -57,6 +57,9 @@ async function persistentCacheChecks(): Promise<void> {
   reopened.close()
 
   const database = new DatabaseSync(databasePath)
+  const sizePlan = database.prepare('EXPLAIN QUERY PLAN SELECT COALESCE(SUM(size_bytes), 0) AS total FROM cache_entries').all()
+  assert.ok(sizePlan.some(step => String(step.detail).includes('COVERING INDEX')),
+    'Per-write cache accounting must avoid scanning the table containing large payloads')
   database.prepare('UPDATE cache_entries SET value = ? WHERE key = ?').run(serialize({ rows: [], coveredFrom: 1 }), 'snapshot:fixture')
   database.close()
   const legacy = new TtlCache({ path: databasePath, maxBytes: 4_096 })
@@ -106,7 +109,7 @@ async function incrementalSeriesChecks(): Promise<void> {
 
   try {
     const start = new Date(now - 30 * 86_400_000)
-    store.set('series:yahoo:ohlcv:BAD:1d', { rows: [] }, 60_000)
+    store.set('series:yahoo-only:ohlcv:BAD:1d', { rows: [] }, 60_000)
     const recovered = await getYahooSeries({ symbol: 'BAD', start, interval: '1d' }, store, loader)
     assert.ok(recovered.rows.length >= 30, 'Malformed canonical history is discarded and reloaded')
     calls.length = 0

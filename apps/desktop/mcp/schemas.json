@@ -28,6 +28,7 @@
             "enum": [
               "current",
               "all",
+              "agents",
               "articles",
               "dashboard",
               "portfolio",
@@ -44,6 +45,7 @@
               "stocks",
               "stock-discovery",
               "fundamentals",
+              "defeatbeta",
               "charts",
               "valuation",
               "options",
@@ -542,6 +544,50 @@
           "symbol"
         ],
         "additionalProperties": false
+      }
+    }
+  },
+  "defeatbetaTerminal": {
+    "$ref": "#/definitions/Input_defeatbetaTerminal",
+    "definitions": {
+      "Input_defeatbetaTerminal": {
+        "$ref": "#/definitions/DefeatBetaTerminalRequest"
+      },
+      "DefeatBetaTerminalRequest": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "section": {
+            "$ref": "#/definitions/DefeatBetaSection"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "symbol",
+          "section"
+        ],
+        "additionalProperties": false
+      },
+      "DefeatBetaSection": {
+        "type": "string",
+        "enum": [
+          "prices",
+          "profile",
+          "officers",
+          "statements",
+          "shares",
+          "dividends",
+          "splits",
+          "earnings",
+          "news",
+          "transcripts",
+          "filings",
+          "breakdown"
+        ]
       }
     }
   },

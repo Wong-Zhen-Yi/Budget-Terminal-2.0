@@ -315,6 +315,8 @@ local.set('stale', 9, 1000)
 assert.equal((await local.resolve('stale', 1000, loader)).value, 9)
 
 const originalFetch = yahoo._fetch
+const { defeatBeta } = await import('../electron/services/defeatbeta/client.js')
+const originalPublishedRows = defeatBeta.rows
 const batches: string[][] = []
 Object.defineProperty(yahoo, '_fetch', { configurable: true, value: async (
   _url: string, params: { symbols: string },
@@ -327,6 +329,7 @@ Object.defineProperty(yahoo, '_fetch', { configurable: true, value: async (
 } })
 try {
   cache.clear()
+  defeatBeta.rows = async () => { throw new Error('Fixture publication unavailable') }
   await Promise.all([
     fetchSparkCloses(['AAPL', 'MSFT']),
     fetchSparkCloses(['MSFT', 'AAPL']),
@@ -342,6 +345,7 @@ try {
   await fetchSparkCloses(['MSFT'], '1mo')
   assert.equal(batches.length, 4)
 } finally {
+  defeatBeta.rows = originalPublishedRows
   Object.defineProperty(yahoo, '_fetch', { configurable: true, value: originalFetch })
   cache.clear()
 }
@@ -521,7 +525,8 @@ try {
   cryptoClient.setQueryData(['crypto'], { ...cryptoEnvelope, meta: { ...cryptoEnvelope.meta, fetchedAt: Date.now() - 180_000 } })
   const cryptoMarkup = renderToStaticMarkup(createElement(QueryClientProvider, { client: cryptoClient },
     createElement(CryptoPage, { onStatusChange: () => {} })))
-  assert.match(cryptoMarkup, /Snapshot expired \(07:50:45\); refresh to update/)
+  assert.match(cryptoMarkup, /Snapshot updated at 07:50:45/)
+  assert.doesNotMatch(cryptoMarkup, /Snapshot expired/)
   assert.match(cryptoMarkup, /Snapshot coverage 0\/30 \| stale \| Updated 07:50:45/)
   assert.doesNotMatch(cryptoMarkup, /Live data|Live coverage/)
   cryptoClient.setQueryData(['crypto'], cryptoEnvelope)
@@ -544,7 +549,7 @@ try {
   assert.match(bmnrMarkup, /CoinGecko · stale snapshot/)
   assert.match(bmnrMarkup, /Market Snapshot vs SEC Filed/)
   assert.match(bmnrMarkup, /Market cap \(snapshot\)/)
-  assert.match(bmnrMarkup, /Market snapshot expired; refresh to update/)
+  assert.doesNotMatch(bmnrMarkup, /Market snapshot expired; refresh to update/)
   assert.doesNotMatch(bmnrMarkup, /Live ETH|marked live|· live|Market cap \(live\)|Basis: live/)
   console.log('BMNR renderer expiration checks passed: aged market snapshots retain their distinct SEC filed basis.')
   const { MuPage } = await import('../src/pages/MuPage.js')
@@ -569,7 +574,8 @@ try {
   const savedSignals = ok(incompleteSignals)
   const signalsFooter = renderToStaticMarkup(createElement(StatusBar, { sourcePath: '', panels: [{ label: 'Day Trading',
     envelope: signalsHealth(savedSignals, closedTime), loading: false, enabled: true }] }))
-  assert.match(signalsFooter, /1 ticker\(s\) have incomplete data/)
+  assert.match(signalsFooter, /Current page data loaded/)
+  assert.doesNotMatch(signalsFooter, /incomplete data/)
   assert.doesNotMatch(signalsFooter, /data: OK/)
   const requests: SignalsRequest[] = []
   const { api: fixtureApi } = await import('../src/api/client.js')

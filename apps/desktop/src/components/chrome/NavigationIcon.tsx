@@ -1,5 +1,6 @@
 // Compact, monochrome symbols drawn on the same grid for the workspace rail.
 export const pageIconPaths: Record<string, string> = {
+  agents: 'M5 7h14v13H5z M12 3v4 M9 12h.01 M15 12h.01 M9 16h6 M2 10v7 M22 10v7',
   dashboard: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
   portfolio: 'M3 7h18v14H3z M8 7V3h8v4 M3 12h18 M10 12v3h4v-3',
   'personal-finance': 'M3 6h16v14H3z M3 6V4h14 M15 11h6v5h-6z M18 13.5h.01',
@@ -15,6 +16,7 @@ export const pageIconPaths: Record<string, string> = {
   stocks: 'M3 20h18 M6 15V8 M4 10h4v3H4z M12 17V4 M10 7h4v7h-4z M18 16V6 M16 9h4v4h-4z',
   'stock-discovery': 'M15 9a6 6 0 1 1-12 0 6 6 0 0 1 12 0 M14 14l7 7 M6 10l2-3 2 2 2-3',
   fundamentals: 'M4 21V3h16v18z M8 7h8 M8 11h8 M8 15h3 M8 18h8',
+  defeatbeta: 'M3 4h18v16H3z M6 8l4 4-4 4 M12 16h6 M3 6h18',
   charts: 'M3 3v18h18 M6 16l4-6 4 3 7-8',
   valuation: 'M5 3h14v18H5z M8 6h8v4H8z M8 14h1 M12 14h1 M16 14h.01 M8 18h1 M12 18h1 M16 18h.01',
   options: 'M4 12h6 M10 12l7-7 M10 12l7 7 M14 5h3v3 M14 19h3v-3',
@@ -54,6 +56,7 @@ export const pageIconPaths: Record<string, string> = {
 }
 
 const workspaceIconPaths: Record<string, string> = {
+  agents: pageIconPaths.agents,
   overview: pageIconPaths.dashboard,
   markets: pageIconPaths.economic,
   research: pageIconPaths['stock-discovery'],

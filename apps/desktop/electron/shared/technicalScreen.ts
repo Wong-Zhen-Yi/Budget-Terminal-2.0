@@ -1,3 +1,5 @@
+import { buildMarketHolidays } from './calendar.js'
+
 export const TECHNICAL_PRESETS = [
   { id: 'aboveSma200', label: 'Above 200-day SMA', estimated: false },
   { id: 'goldenCross', label: 'Golden cross today', estimated: false },
@@ -44,6 +46,27 @@ export function completedTechnicalBars(bars: TechnicalBar[], now = Date.now()): 
     .filter((bar) => Number.isFinite(bar.time) && Number.isFinite(bar.close) && bar.close > 0)
     .filter((bar) => nyDate.format(bar.time * 1000) !== today || !beforeClose)
     .sort((left, right) => left.time - right.time)
+}
+
+/** Only a verified recent listing makes short history an expected exclusion. */
+export function recentTechnicalListing(bars: TechnicalBar[], firstTradeDate: unknown, now = Date.now()): string | null {
+  const listed = firstTradeDate instanceof Date ? firstTradeDate.getTime()
+    : typeof firstTradeDate === 'number' ? (firstTradeDate < 1e12 ? firstTradeDate * 1000 : firstTradeDate)
+    : typeof firstTradeDate === 'string' ? Date.parse(firstTradeDate) : NaN
+  const completed = completedTechnicalBars(bars, now)
+  if (!Number.isFinite(listed) || listed > now || now - listed > 400 * 86_400_000 || completed.length >= 201
+    || !completed.length || now - completed.at(-1)!.time * 1000 > 10 * 86_400_000) return null
+  const firstDay = Date.parse(`${nyDate.format(listed)}T00:00:00Z`)
+  const lastDay = Date.parse(`${nyDate.format(completed.at(-1)!.time * 1000)}T00:00:00Z`)
+  const holidays = new Set([new Date(firstDay).getUTCFullYear(), new Date(lastDay).getUTCFullYear()]
+    .flatMap(year => buildMarketHolidays(year)).filter(day => day.detail === 'Closed all day').map(day => day.date))
+  let sessions = 0
+  for (let day = firstDay; day <= lastDay; day += 86_400_000) {
+    const date = new Date(day)
+    if (date.getUTCDay() !== 0 && date.getUTCDay() !== 6 && !holidays.has(date.toISOString().slice(0, 10))) sessions += 1
+  }
+  if (sessions >= 201) return null
+  return `Listed ${new Date(listed).toISOString().slice(0, 10)}; ${completed.length} of 201 required completed daily bars available.`
 }
 
 function average(values: number[], period: number, end: number): number {

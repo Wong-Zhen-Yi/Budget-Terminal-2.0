@@ -120,6 +120,9 @@ export class TtlCache {
         )
       `)
       db.exec(`DELETE FROM cache_entries WHERE schema_version != ${CACHE_SCHEMA_VERSION}`)
+      // Pruning runs on every write. Sum the small index instead of walking the
+      // table's large payload pages and blocking Electron during startup bursts.
+      db.exec('CREATE INDEX IF NOT EXISTS cache_entries_size_bytes ON cache_entries(size_bytes)')
       this.db = db
       this.selectEntry = db.prepare(
         'SELECT value, stored_at, ttl_ms FROM cache_entries WHERE key = ? AND schema_version = ?',

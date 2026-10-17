@@ -6,15 +6,8 @@
  * constituent, from which the seven interval returns and the per-interval summaries are
  * computed.
  *
- * Two hosts are not Yahoo — the issuer and Wikipedia — and both deliberately stay
- * outside `paced()` on the `services/fearGreed.ts` precedent. The closes are Yahoo and
- * do go through the gate, batched twenty at a time by `yahoo/spark.ts`.
- *
- * The reference's per-ticker recovery pass after a batch miss (`_fetch_quote_fallback`,
- * bounded by `_fallback_budget`) has no equivalent here and does not need one: it exists
- * because `yf.download` either answers for the whole batch or dies, so a single failure
- * blanked five hundred tiles. Spark's chunking already contains a failure to its own
- * twenty symbols, and those land in `missing` as no-data tiles.
+ * Prices come exclusively from Yahoo's batched daily history endpoint. Holdings and
+ * weights remain issuer-sourced; missing prices stay visible as no-data tiles.
  */
 
 import type {
@@ -33,13 +26,14 @@ import {
   positiveWeight,
 } from '../shared/heatmap.js'
 import { cache } from './cache.js'
-import { getEtfHoldings } from './etf/holdings.js'
+import { getIssuerEtfHoldings } from './etf/holdings.js'
 import { getSp500SectorMap, resolveSector } from './etf/sectorMap.js'
 import { fetchSparkCloses, yahooSymbol } from './yahoo/spark.js'
 
-export const HEATMAP_SOURCE = 'etf heatmap'
+export const HEATMAP_SOURCE = 'Issuer holdings + Yahoo Finance'
+const PRICE_SOURCE = 'Yahoo Finance'
 
-/** `_P17_REFRESH_TTL_SECONDS = 120`, and `_QUOTE_CACHE_TTL_SECONDS` is the same 120. */
+/** Recheck page snapshots after two minutes, matching the shared Yahoo history cache. */
 export const HEATMAP_TTL_MS = 120_000
 
 export interface HeatmapFetchResult {
@@ -55,6 +49,8 @@ export function emptyHeatmapPayload(etf: HeatmapEtfKey): HeatmapPayload {
     issuer: '',
     asOfDate: '',
     sourceUrl: '',
+    priceSource: PRICE_SOURCE,
+    priceAsOfDate: '',
     holdings: [],
     holdingsLoaded: 0,
     quoteCoverage: 0,
@@ -66,15 +62,22 @@ export function emptyHeatmapPayload(etf: HeatmapEtfKey): HeatmapPayload {
   }
 }
 
-async function fetchHeatmap(etf: HeatmapEtfKey, force: boolean): Promise<HeatmapFetchResult> {
+const dependencies = {
+  holdings: getIssuerEtfHoldings,
+  sectors: getSp500SectorMap,
+  prices: fetchSparkCloses,
+}
+
+export async function fetchHeatmap(etf: HeatmapEtfKey, force: boolean,
+  deps = dependencies): Promise<HeatmapFetchResult> {
   const ticker = etfTicker(etf)
   const errors: EnvelopeError[] = []
 
-  const source = await getEtfHoldings(ticker, force)
+  const source = await deps.holdings(ticker, force)
 
   // `fetch()`: drop the placeholder rows first, then anything without a positive weight.
   // Both filters run before the quote pull so no request is spent on a dead symbol.
-  const sectorMap = await getSp500SectorMap()
+  const sectorMap = await deps.sectors()
   const seeds = source.holdings.flatMap((holding) => {
     const symbol = holding.symbol.trim().toUpperCase()
     if (!isUsableHoldingSymbol(symbol)) return []
@@ -104,21 +107,26 @@ async function fetchHeatmap(etf: HeatmapEtfKey, force: boolean): Promise<Heatmap
     return { payload, errors }
   }
 
-  // Yahoo spells a share class with a hyphen where an issuer file uses a dot, and two
-  // issuer rows can map onto the same Yahoo symbol, so keep the mapping both ways.
-  const byYahooSymbol = new Map<string, string[]>()
+  // Yahoo uses hyphens for share classes; preserve issuer tile symbols.
+  const byPriceSymbol = new Map<string, string[]>()
   for (const seed of seeds) {
     const key = yahooSymbol(seed.symbol)
-    byYahooSymbol.set(key, [...(byYahooSymbol.get(key) ?? []), seed.symbol])
+    byPriceSymbol.set(key, [...(byPriceSymbol.get(key) ?? []), seed.symbol])
   }
 
-  const { series, missing } = await fetchSparkCloses([...byYahooSymbol.keys()], '1y', force)
+  const { series } = await deps.prices([...byPriceSymbol.keys()], '1y', force)
   const quotes = new Map<string, { price: number; changes: HeatmapHolding['changes'] }>()
+  const priceDates: string[] = []
   for (const [key, entry] of Object.entries(series)) {
+    const price = entry.closes.at(-1)
+    if (!byPriceSymbol.has(key) || price === undefined || !Number.isFinite(price) || price <= 0) continue
     const changes = changesFromCloses(entry.dates, entry.closes)
-    const price = entry.closes[entry.closes.length - 1]
-    for (const symbol of byYahooSymbol.get(key) ?? []) quotes.set(symbol, { price, changes })
+    const latestDate = entry.dates.at(-1)
+    if (latestDate) priceDates.push(latestDate)
+    for (const symbol of byPriceSymbol.get(key) ?? []) quotes.set(symbol, { price, changes })
   }
+  const priceAsOfDate = priceDates.sort()[0] ?? ''
+  const missing = seeds.filter(seed => !quotes.has(seed.symbol)).map(seed => seed.symbol)
 
   const holdings: HeatmapHolding[] = seeds.map((seed) => {
     const quote = quotes.get(seed.symbol)
@@ -138,8 +146,8 @@ async function fetchHeatmap(etf: HeatmapEtfKey, force: boolean): Promise<Heatmap
   if (missing.length) {
     errors.push(
       err(
-        'Yahoo Finance',
-        `${missing.length} holding quote(s) were unavailable.`,
+        PRICE_SOURCE,
+        `${missing.length} holding(s) have no usable daily history for ${priceAsOfDate || 'the requested period'}: ${missing.slice(0, 12).join(', ')}${missing.length > 12 ? ` and ${missing.length - 12} more` : ''}.`,
         'etf_heatmap_quotes',
         ticker,
       ),
@@ -164,6 +172,8 @@ async function fetchHeatmap(etf: HeatmapEtfKey, force: boolean): Promise<Heatmap
       issuer: source.issuer,
       asOfDate: source.asOfDate,
       sourceUrl: source.sourceUrl,
+      priceSource: PRICE_SOURCE,
+      priceAsOfDate,
       holdings,
       holdingsLoaded: holdings.length,
       quoteCoverage: live.quoteCoverage,
@@ -187,6 +197,6 @@ async function fetchHeatmap(etf: HeatmapEtfKey, force: boolean): Promise<Heatmap
  */
 export function getHeatmap(etf: HeatmapEtfKey, force = false): Promise<HeatmapFetchResult> {
   return cache
-    .resolve(`heatmap:${etf}`, HEATMAP_TTL_MS, () => fetchHeatmap(etf, force), { force })
+    .resolveWithStaleFallback(`heatmap:yahoo-v1:${etf}`, HEATMAP_TTL_MS, () => fetchHeatmap(etf, force), { force })
     .then((result) => result.value)
 }

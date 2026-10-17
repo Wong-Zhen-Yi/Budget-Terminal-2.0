@@ -1,4 +1,6 @@
 import { ArticlesPage } from '@/pages/ArticlesPage'
+import { AgentsPage } from '@/pages/AgentsPage'
+import { useAgents, useAgentCommand } from '@/api/agentsQueries'
 import { Sp500Page } from '@/pages/Sp500Page'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -38,6 +40,7 @@ import { OilPage } from '@/pages/OilPage'
 import { CryptoPage } from '@/pages/CryptoPage'
 import { DictionaryPage } from '@/pages/DictionaryPage'
 import { FundamentalsPage } from '@/pages/FundamentalsPage'
+import { DefeatBetaPage } from '@/pages/DefeatBetaPage'
 import { EtfPage } from '@/pages/EtfPage'
 import { HeatmapPage } from '@/pages/HeatmapPage'
 import { InstitutionsPage } from '@/pages/InstitutionsPage'
@@ -211,6 +214,20 @@ export function App() {
     setActiveTab(tabId)
   }, [setStocksSymbol, setFundamentalsSymbol, setOptionsSymbol, setChartsSymbol, visibleTabs])
 
+  // Keep agent navigation active even when its page is not mounted.
+  const agents = useAgents(true)
+  const agentCommand = useAgentCommand()
+  const handledNavigation = useRef('')
+  useEffect(() => {
+    const navigation = agents.data?.data.navigation
+    if (!navigation || handledNavigation.current === navigation.id) return
+    handledNavigation.current = navigation.id
+    const available = visibleTabs.some(tab => tab.id === navigation.page)
+    if (available) handleStocksNavigate(navigation.page, navigation.symbol)
+    void agentCommand({ type: 'navigationResult', id: navigation.id,
+      error: available ? undefined : 'This page is hidden. Show it in Settings to open it.' }).catch(error => setNotice(String(error)))
+  }, [agents.data, visibleTabs, handleStocksNavigate, agentCommand])
+
   const reload = useCallback(async () => {
     setReloading(true)
     try {
@@ -374,8 +391,8 @@ export function App() {
         notice={notice}
         warming={
           warm.active
-            ? `Loading pages (${warm.done}/${warm.total} complete): ${warm.label}...${warm.failed ? ` · ${warm.failed} failed` : ''}${warm.degraded ? ` · ${warm.degraded} degraded` : ''}`
-            : warm.failed || warm.degraded ? `${warm.failed} startup load(s) failed · ${warm.degraded} degraded. Open Settings for details.` : ''
+            ? `Loading pages (${warm.done}/${warm.total} complete): ${warm.label}...${warm.failed ? ` · ${warm.failed} failed` : ''}`
+            : warm.failed ? `${warm.failed} startup load(s) failed. Open Settings for details.` : ''
         }
       />
 
@@ -422,7 +439,9 @@ function renderPage({
   onSelectTab: (tabId: string) => void
 }) {
   return (
-    tabId === 'articles' ? (
+    tabId === 'agents' ? (
+      <AgentsPage onStatusChange={onStatusChange} />
+    ) : tabId === 'articles' ? (
       <ArticlesPage onStatusChange={onStatusChange} />
     ) : tabId === 'dashboard' ? (
       <DashboardPage onStatusChange={onStatusChange} />
@@ -500,6 +519,8 @@ function renderPage({
       <StockDiscoveryPage active={active} onStatusChange={onStatusChange} />
     ) : tabId === 'fundamentals' ? (
       <FundamentalsPage onStatusChange={onStatusChange} />
+    ) : tabId === 'defeatbeta' ? (
+      <DefeatBetaPage active={active} onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'valuation' ? (
       <ValuationPage onStatusChange={onStatusChange} />
     ) : tabId === 'economic' ? (

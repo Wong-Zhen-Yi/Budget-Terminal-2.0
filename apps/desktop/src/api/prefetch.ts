@@ -14,6 +14,8 @@ import { calendarToday, earningsDateRange } from '@shared/calendar'
 import { useCalendarPage } from '@/stores/calendar'
 import { useIpoPage } from '@/stores/ipo'
 import { useFundamentalsStore } from '@/stores/fundamentals'
+import { useDefeatBetaTerminal } from '@/stores/defeatbeta'
+import { DEFEATBETA_SECTIONS, TERMINAL_TTL } from '@shared/defeatbetaTerminal'
 import { useStocksPage } from '@/stores/stocks'
 import { useChartsStore } from '@/stores/charts'
 import { useOptionsPage } from '@/stores/options'
@@ -31,6 +33,7 @@ import { queryFreshness } from './queryPersistence'
 import { usePortfolio } from './queries'
 import { assertStartupReady, runWarmTasks, StartupLoadError, warmStartupQuery, warmStartupSnapshot } from './warmQueue'
 import { initialNewsImages, initialYouTubeVideo, newsQuoteTickers } from './initialContent'
+import { loadAgents } from './agentsQueries'
 import { errorMessage } from './snapshotHealth'
 import { createProgressReporter } from './progressReporter'
 
@@ -101,9 +104,21 @@ export function buildTasks(
 ): WarmTask[] {
   const { active, every, editable, main, upDown } = holdingsOf(payload)
   const tasks: WarmTask[] = [{
+    tab: 'agents', label: 'Agents workspace',
+    run: client => warmStartupQuery(client, { queryKey: queryKeys.agents, queryFn: loadAgents, staleTime: Infinity }),
+  }, {
     tab: 'articles', label: 'Articles library',
     run: client => warmStartupQuery(client, { queryKey: queryKeys.articles, queryFn: () => api.articles(), staleTime: Infinity }),
   }]
+  const terminalSymbol = useDefeatBetaTerminal.getState().symbol
+  for (const section of DEFEATBETA_SECTIONS) tasks.push({
+    tab: 'defeatbeta', label: `DefeatBeta ${section}`,
+    run: (client, backgroundOrder) => warmStartupQuery(client, {
+      queryKey: queryKeys.defeatbetaTerminal(terminalSymbol, section),
+      queryFn: () => api.defeatbetaTerminal({ symbol: terminalSymbol, section, background: true, backgroundOrder }),
+      staleTime: TERMINAL_TTL,
+    }),
+  })
 
   const dashboard = useDashboard.getState()
   for (const { symbol, label } of MACRO_SYMBOLS) {

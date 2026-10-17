@@ -18,6 +18,7 @@ import { cache as sharedCache, TtlCache } from '../electron/services/cache.js'
 import { alignBackward, rsi, sma, toPoints } from '../electron/services/indicators.js'
 import { yahooProvider } from '../electron/services/provider.js'
 import { yahoo } from '../electron/services/yahoo/client.js'
+import { defeatBeta } from '../electron/services/defeatbeta/client.js'
 import { DEFAULT_CHARTS_STATE, normalizeChartsState } from '../src/stores/charts.js'
 
 function candle(time: number, close: number, volume = 1_000): Candle {
@@ -224,6 +225,7 @@ async function runOffline(): Promise<void> {
 
   const chartClient = yahoo as unknown as { chart: (symbol: string) => Promise<unknown> }
   const originalChart = yahoo.chart.bind(yahoo) as unknown as (symbol: string) => Promise<unknown>
+  const originalPublishedRows = defeatBeta.rows
   const fixtureStart = Math.floor((Date.now() - 240 * 86_400_000) / 1000)
   const fixtureQuotes = Array.from({ length: 240 }, (_, index) => ({
     date: new Date((fixtureStart + index * 86_400) * 1000),
@@ -236,9 +238,18 @@ async function runOffline(): Promise<void> {
   })).reverse()
   try {
     sharedCache.clear()
-    chartClient.chart = async () => ({ quotes: fixtureQuotes, meta: { currency: 'USD', longName: 'Fixture Corp' } })
+    let yahooCalls = 0
+    let publicationCalls = 0
+    defeatBeta.rows = async () => {
+      publicationCalls += 1
+      throw new Error('DefeatBeta must not be called by Yahoo charts')
+    }
+    chartClient.chart = async () => { yahooCalls += 1; return { quotes: fixtureQuotes, meta: { currency: 'USD', longName: 'Fixture Corp' } } }
     const injectedFresh = await yahooProvider.chartsHistory({ symbol: 'FIXTURE', interval: '1 Day', range: '1Y', force: true })
     assert.equal(injectedFresh.meta.freshness, 'fresh')
+    assert(yahooCalls > 0, 'Daily charts must request Yahoo')
+    assert.equal(publicationCalls, 0, 'Daily charts must not call another provider')
+    assert(!injectedFresh.meta.source.includes('DefeatBeta'))
     assert.equal(injectedFresh.data.candles.length, 240)
     assert.ok(injectedFresh.data.candles.every((row, index, rows) => index === 0 || row.time > rows[index - 1].time))
     const injectedCached = await yahooProvider.chartsHistory({ symbol: 'FIXTURE', interval: '1 Day', range: '1Y' })
@@ -249,6 +260,7 @@ async function runOffline(): Promise<void> {
     assert.equal(injectedStale.data.candles.length, 240)
     const injectedFailed = await yahooProvider.chartsHistory({ symbol: 'NEVER-CACHED', interval: '1 Day', range: '1Y', force: true })
     assert.equal(injectedFailed.meta.freshness, 'failed')
+    assert.equal(publicationCalls, 0, 'Yahoo outages must not switch providers')
     chartClient.chart = async (symbol) => {
       if (symbol === 'FAIL') throw new Error('injected symbol failure')
       return { quotes: fixtureQuotes, meta: { currency: 'USD', longName: symbol } }
@@ -282,6 +294,7 @@ async function runOffline(): Promise<void> {
     assert.equal(aggregated.data.stats?.volume, 3_000)
   } finally {
     chartClient.chart = originalChart
+    defeatBeta.rows = originalPublishedRows
     sharedCache.clear()
   }
 

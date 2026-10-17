@@ -64,4 +64,5 @@ export const FRESHNESS = {
 export const RENDERER_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60_000
 export const RENDERER_CACHE_MAX_BYTES = 64 * 1024 * 1024
 export const SERVICE_CACHE_MAX_BYTES = 512 * 1024 * 1024
-export const CACHE_SCHEMA_VERSION = 3
+// Rebuild remote derivatives after removing automatic cross-provider switching.
+export const CACHE_SCHEMA_VERSION = 4

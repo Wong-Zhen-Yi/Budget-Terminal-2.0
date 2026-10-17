@@ -9,12 +9,6 @@ interface ProviderDefinition {
 }
 
 const PROVIDERS: Record<string, ProviderDefinition> = {
-  defeatbeta: {
-    label: 'DefeatBeta',
-    softLimit: 120,
-    windowMs: 60_000,
-    fallbackCooldownMs: 60_000,
-  },
   yahoo: {
     label: 'Yahoo',
     softLimit: 240,
@@ -32,6 +26,12 @@ const PROVIDERS: Record<string, ProviderDefinition> = {
     softLimit: 60,
     windowMs: 60_000,
     fallbackCooldownMs: 60_000,
+  },
+  defeatbeta: {
+    label: 'DefeatBeta',
+    softLimit: 60,
+    windowMs: 60_000,
+    fallbackCooldownMs: 5 * 60_000,
   },
 }
 
@@ -98,8 +98,7 @@ export class ApiUsageTracker {
     const providers: ApiProviderUsage[] = []
 
     for (const providerId of Object.keys(this.providers)) {
-      const state = this.states.get(providerId)
-      if (!state) continue
+      const state = this.stateFor(providerId)
       const definition = this.providers[providerId]
       this.prune(state, definition, sampledAt)
       const throttled = state.throttledUntil > sampledAt

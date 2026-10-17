@@ -12,7 +12,7 @@ const STORE = 'clients'
 const CLIENT_KEY = 'remote-query-client'
 
 // Host status contains a short-lived pairing code and must never reach disk.
-const LOCAL_ROOTS = new Set(['articles', 'portfolio', 'cards', 'settings', 'personalFinance', 'webAccessStatus'])
+const LOCAL_ROOTS = new Set(['agents', 'articles', 'portfolio', 'cards', 'settings', 'personalFinance', 'webAccessStatus'])
 const LARGE_ROOTS = new Set(['newsThumbnail', 'youtubeThumbnail', 'newsPreview'])
 
 export const RENDERER_CACHE_BUSTER = `budget-terminal-renderer-v${CACHE_SCHEMA_VERSION}`
@@ -46,6 +46,7 @@ export function queryFreshness(queryKey: QueryKey): number {
   if (root === 'newsThumbnail') return FRESHNESS.newsImage
   if (root.startsWith('news')) return FRESHNESS.newsPage
   if (root === 'stocks') return FRESHNESS.chartDaily
+  if (root === 'defeatbetaTerminal') return 60 * 60_000
   if (root === 'backtest') return FRESHNESS.chartDaily
   if (root === 'priceScreen') return FRESHNESS.marketCap
   if (root === 'discoveryUniverse') return FRESHNESS.chartDaily

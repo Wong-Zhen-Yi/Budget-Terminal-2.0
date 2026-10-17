@@ -53,7 +53,6 @@ function warningOf(envelope: Envelope<unknown> | undefined, block: string, now: 
   const freshness = effectiveFreshness(envelope, now, FRESHNESS.bmnr)
   const { failureReason } = envelope.meta
   if (freshness === 'failed') return failureReason || freshness
-  if (freshness === 'stale' && block !== 'SEC Filed Balance Sheet') return failureReason || 'Market snapshot expired; refresh to update'
   return undefined
 }
 

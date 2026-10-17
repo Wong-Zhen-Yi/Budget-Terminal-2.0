@@ -50,10 +50,10 @@ try {
         window.runProbe = async () => {
           createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><CryptoPage onStatusChange={() => {}} /></QueryClientProvider>)
           await settle()
-          check(text().includes('Fetching live crypto'), 'Missing loading state')
+          check(text().includes('Fetching crypto market data'), 'Missing loading state')
           ready = true
           await settle()
-          check(text().includes('Live coverage 30/30'), 'Missing complete heatmap')
+          check(text().includes('Snapshot coverage 30/30'), 'Missing complete heatmap')
           check(document.querySelectorAll('[title^="Rank:"]').length === 30, 'Missing heatmap tiles')
           const refresh = () => [...document.querySelectorAll('button')].find(b => b.textContent === 'Refresh').click()
           mode = 'partial'
@@ -69,8 +69,13 @@ try {
           mode = 'success'
           refresh()
           await settle()
-          check(text().includes('Live coverage 30/30'), 'Refresh did not recover')
+          check(text().includes('Snapshot coverage 30/30'), 'Refresh did not recover')
           check(!text().includes('IPC disconnected'), 'Recovered page retained error')
+          const snapshot = client.getQueryData(['crypto'])
+          client.setQueryData(['crypto'], { ...snapshot, meta: { ...snapshot.meta, freshness: 'stale', fetchedAt: Date.now() - 180000 } })
+          await settle()
+          check(text().includes('Snapshot updated at'), 'Retained snapshot timestamp missing')
+          check(!document.body.innerHTML.includes('Snapshot expired'), 'Expired snapshot warning escaped Settings')
           return 'PASS: loading, 30 tiles, partial readiness, forced refresh, rejection, and recovery'
         }
       `,

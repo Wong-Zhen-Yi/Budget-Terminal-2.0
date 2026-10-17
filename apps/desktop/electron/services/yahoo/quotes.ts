@@ -2,7 +2,6 @@ import type { Quote } from '../../shared/contract.js'
 import { cache, TTL } from '../cache.js'
 import { paced, periodStart, yahoo } from './client.js'
 import { observeSource } from '../sourceHealth.js'
-import { backupObservation, backupPrices } from '../defeatbeta/data.js'
 
 interface QuoteChartResult {
   quotes: Array<{ date: Date; close: number | null }>
@@ -70,60 +69,15 @@ export function quoteFromChart(symbol: string, result: QuoteChartResult): Quote 
   }
 }
 
-/**
- * Quotes come from a 5-day daily chart. Its meta block carries the current regular-market
- * price while its rows provide the previous close. `quote()` is one cheap call but is the
- * endpoint that breaks first when Yahoo rotates its crumb handling, so it remains the
- * fallback rather than the primary.
- */
+/** Yahoo chart supplies both the current price and previous completed close. */
 async function fetchQuote(symbol: string): Promise<Quote> {
-  try {
-    const result = await paced(() =>
-      yahoo.chart(symbol, {
-        period1: periodStart(7),
-        interval: '1d',
-        includePrePost: true,
-      }),
-    )
-    const quote = quoteFromChart(symbol, result)
-    if (!quote) throw new Error(`No chart quote returned for ${symbol}.`)
-    observeSource({ fetchedAt: Date.now(), asOf: quote.asOf, stale: false, fromCache: false, failures: [] })
-    return quote
-  } catch (chartError) {
-    try { return await fetchQuoteFallback(symbol) } catch (quoteError) {
-      try {
-        const result = await backupPrices(symbol, periodStart(14))
-        const quote = quoteFromChart(symbol, {
-          quotes: result.rows.map(row => ({ date: new Date(row.time * 1000), close: row.close })),
-          meta: { currency: result.currency },
-        })
-        if (!quote) throw new Error(`DefeatBeta needs two daily closes for ${symbol}.`)
-        backupObservation(result.asOf, `${String(chartError)}; ${String(quoteError)}`)
-        return quote
-      } catch (backupError) {
-        throw new Error(`Yahoo chart: ${String(chartError)}; Yahoo quote: ${String(quoteError)}; DefeatBeta backup: ${String(backupError)}`)
-      }
-    }
-  }
-}
-
-async function fetchQuoteFallback(symbol: string): Promise<Quote> {
-  const quote = await paced(() => yahoo.quote(symbol))
-  const price = quote?.regularMarketPrice
-  if (typeof price !== 'number' || !Number.isFinite(price)) {
-    throw new Error(`No quote data returned for ${symbol}.`)
-  }
-  const absChange = quote.regularMarketChange ?? 0
-  observeSource({ fetchedAt: Date.now(), asOf: quote.regularMarketTime instanceof Date ? quote.regularMarketTime.getTime() : undefined,
-    stale: false, fromCache: false, failures: [] })
-  return {
-    symbol,
-    price,
-    change: quote.regularMarketChangePercent ?? 0,
-    absChange,
-    asOf: quote.regularMarketTime instanceof Date ? quote.regularMarketTime.getTime() : undefined,
-    currency: quote.currency,
-  }
+  const result = await paced(() => yahoo.chart(symbol, {
+    period1: periodStart(7), interval: '1d', includePrePost: true,
+  }))
+  const quote = quoteFromChart(symbol, result)
+  if (!quote) throw new Error(`No chart quote returned for ${symbol}.`)
+  observeSource({ fetchedAt: Date.now(), asOf: quote.asOf, stale: false, fromCache: false, failures: [] })
+  return quote
 }
 
 /** One quote, cached for `TTL.quotes` and coalesced across concurrent callers. */
@@ -132,12 +86,7 @@ export async function getQuote(symbol: string, force = false): Promise<Quote> {
 }
 
 function resolveQuote(symbol: string, force = false) {
-  return cache.resolveWithStaleFallback(
-    `quote:${symbol}`,
-    TTL.quotes,
-    () => fetchQuote(symbol),
-    { force },
-  )
+  return cache.resolveWithStaleFallback(`quote:yahoo-only:${symbol}`, TTL.quotes, () => fetchQuote(symbol), { force })
 }
 
 export interface QuoteBatch {

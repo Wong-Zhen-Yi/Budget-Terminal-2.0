@@ -519,7 +519,7 @@ function normalizeFilings(submissions: Record<string, unknown>, cik: string, lim
   const filings: SecFiling[] = []
   for (let index = 0; index < forms.length && filings.length < limit; index += 1) {
     const form = String(forms[index] ?? '')
-    if (!['10-K', '10-Q', '8-K'].some((prefix) => form.startsWith(prefix))) continue
+    if (!['10-K', '10-Q', '8-K', '20-F', '40-F', '6-K'].some((prefix) => form.startsWith(prefix))) continue
     const accessionNumber = field('accessionNumber', index)
     const document = field('primaryDocument', index)
     const accession = accessionNumber.replaceAll('-', '')
@@ -611,7 +611,10 @@ export async function fetchSecCompanyBundle(symbolInput: string, force = false):
     const statementsAvailable = [...Object.values(statements.annual), ...Object.values(statements.quarterly)]
       .some((series) => series.length > 0)
     const filings = normalizeFilings(submissions, cik)
-    if (!statementsAvailable) warnings.push('No supported domestic 10-K/10-Q XBRL facts were available; using Yahoo statements only.')
+    const foreignFiler = filings.some(filing => /^(20-F|40-F|6-K)/.test(filing.form))
+    if (!statementsAvailable) warnings.push(foreignFiler
+      ? 'SEC statement coverage: foreign-filer forms are not supported by the domestic XBRL normalizer.'
+      : 'No supported domestic 10-K/10-Q XBRL facts were available.')
     const freshnessValues = [tickers.metadata.freshness, factsMeta.freshness, submissionsMeta.freshness]
     const freshness: SecFreshness = freshnessValues.includes('stale')
       ? 'stale'
@@ -627,7 +630,7 @@ export async function fetchSecCompanyBundle(symbolInput: string, force = false):
         statementsAvailable,
         cik,
         freshness,
-        statementFreshness: factsMeta.freshness,
+        statementFreshness: !statementsAvailable && foreignFiler && factsMeta.freshness !== 'failed' ? 'unavailable' : factsMeta.freshness,
         cacheAgeSeconds: Math.max(tickers.metadata.cacheAgeSeconds, factsMeta.cacheAgeSeconds, submissionsMeta.cacheAgeSeconds),
         filings,
         warnings,

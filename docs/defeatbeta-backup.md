@@ -1,47 +1,50 @@
-# DefeatBeta backup feed
+# Market data provider policy
 
-Yahoo remains the primary feed. When a covered request fails or returns no usable data,
-Budget Terminal automatically tries the public datasets used by
-[defeatbeta-api](https://github.com/defeat-beta/defeatbeta-api). No API key, Python
-installation, or separate service is required.
+Yahoo Finance supplies the application's quotes,
+charts, historical calculations, financial statements, company summaries,
+semiconductor market data and news.
+Every Yahoo request passes through the shared rate gate. A failed request is
+reported against Yahoo; it does not start a request to DefeatBeta or switch quote
+endpoints. Saved data from the same source can remain visible with a stale label
+and the failed refresh reason.
 
-Coverage:
+Amazon quarterly releases and Micron earnings use SEC EDGAR directly, without
+automatic switching between SEC and investor-relations hosts. Micron's separate
+memory disclosures continue to use its published investor documents.
 
-- US equity daily OHLCV history, including shared charts, screens and historical calculations.
-- Quotes: Yahoo daily chart, then Yahoo quote, then the last two DefeatBeta daily closes.
-- Company profiles and reported fundamentals used by Stocks, Fundamentals, Portfolio,
-  Discovery, Valuation, semiconductor profiles and market-cap sales multiples.
-- Annual and quarterly financial statements, with TTM values used for summary facts.
+The remote cache schema changed so older derivatives containing DefeatBeta data
+are rebuilt. Saved portfolios, settings and financial records are unaffected.
+Every implemented page still begins its initial load at startup, and startup
+failures remain visible.
 
-DefeatBeta publishes periodically, typically daily. It is not a live feed. Fallback
-results carry `DefeatBeta (daily backup)` source metadata, the source observation
-date, a stale status and a visible warning explaining the Yahoo failure. Those
-annotations survive caching and derived results. Failed backup requests retain
-both provider errors and allow the existing stale-cache fallback to run.
+The Heatmap page uses Yahoo Finance for constituent daily closes and returns.
+ETF holdings and weights come from issuer files, with no Yahoo enrichment or fallback.
+The page identifies the price date separately from the holdings date and keeps missing
+prices and failed refreshes visible. Refresh forces Yahoo history reads. Heatmap service
+and renderer cache keys exclude the previous DefeatBeta results.
+Its existing startup preload remains enabled.
 
-Intraday/weekly/monthly bars, non-US listings, forex, indices, futures, options,
-news, analyst targets, calendar and ownership data are not supplied by this adapter.
-Unsupported fields remain unavailable. Daily prices have no separate dividend-adjusted
-close; calculations requiring that field remain unavailable or carry the backup
-history warning. Market cap is estimated from the latest reported shares and daily
-close. Reporting currency is kept separate from USD listing prices, and cross-currency
-P/E and sales multiples are not guessed.
+The dedicated [DefeatBeta Terminal page](defeatbeta-terminal.md) explicitly reads
+DefeatBeta published datasets and preloads its research sections at startup.
+Other pages retain the Yahoo-only policy above. DefeatBeta is not a fallback for
+Yahoo failures. Its client, decoder, normalizers, request gate and usage entry
+support the dedicated page and standalone development probes.
+Its revision-pinned Parquet reads, range validation, request pacing and decoder
+worker remain covered by the standalone probe. There is no automatic provider failover.
 
-The adapter reads Hugging Face Parquet byte ranges, prunes row groups by symbol,
-shares metadata and concurrent lookups through the existing cache, decodes data in a
-worker to keep the desktop responsive, and pins reads
-to an immutable dataset revision. It rejects whole-file responses and oversized
-ranges. A change of provider replaces the canonical history rather than mixing
-partial series from different feeds. Subsequent refreshes attempt Yahoo again.
+Verification commands:
 
-Verification:
+- npm run probe:provider-selection --workspace budget-terminal-desktop
+- npm run probe:provider-selection --workspace budget-terminal-desktop -- --live
+- npm run probe:defeatbeta --workspace budget-terminal-desktop -- --offline
+- npm run probe:heatmap -- --offline
+- npm run probe:heatmap -- DJI
+- npm run probe:heatmap-ui --workspace budget-terminal-desktop
+- npm run typecheck
 
-```bash
-npm run probe:defeatbeta -- --offline
-npm run probe:defeatbeta -- AAPL
-npm run typecheck
-```
-
-The live probe forces Yahoo failures so it verifies the actual fallback path,
-including quotes, daily history, profiles, statements and cached source metadata.
-Probes use temporary application-data directories.
+The Heatmap probe guards all DefeatBeta entry points during successful Yahoo reads
+and outages. Its live mode queries Yahoo only.
+The provider-selection probe verifies Yahoo-only behavior during both successful
+reads and outages, ETF calendar classification, successful empty YouTube searches
+and persisted YouTube failures. Its live mode checks the symbols in the reported
+data-health errors. Probes use temporary application-data directories.

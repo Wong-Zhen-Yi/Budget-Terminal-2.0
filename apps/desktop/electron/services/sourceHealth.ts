@@ -51,7 +51,7 @@ function observeEnvelope(value: Envelope<unknown>, fromCache = false): void {
   }
   observeSource({ fetchedAt: value.meta.fetchedAt, asOf: value.meta.asOf, expiresAt: value.meta.expiresAt,
     stale: value.meta.freshness === 'stale', fromCache: fromCache || value.meta.freshness === 'cached', failures,
-    sources: value.meta.source.includes('DefeatBeta') ? ['DefeatBeta (daily backup)'] : undefined })
+    sources: value.meta.source.match(/DefeatBeta \([^)]+\)/g) ?? undefined })
 }
 
 export async function withSourceEnvelope<T>(loader: () => Promise<Envelope<T>>): Promise<Envelope<T>> {

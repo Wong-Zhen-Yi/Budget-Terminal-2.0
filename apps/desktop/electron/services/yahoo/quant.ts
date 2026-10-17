@@ -93,6 +93,7 @@ async function fetchDaily(
         start: new Date(Date.now() - lookbackDays * DAY),
         interval: '1d',
         force,
+        adjusted: role !== 'liquidity',
       })
       const bars = chartBars({ quotes: chart.rows.map((row) => ({
         ...row,
@@ -121,7 +122,7 @@ function completedMedianDollarVolume(bars: QuantBar[], sessionDate: string): num
 export async function sourceLiquidUniverse(force: boolean): Promise<QuantUniverse> {
   const sessionDate = localSessionDate()
   const result = await cache.resolve(
-    `quant:universe:${sessionDate}`,
+    `quant:universe:published-v1:${sessionDate}`,
     UNIVERSE_TTL,
     async () => {
       const page = await equitySignalsScreen(5, 2e9, SIGNAL_EXCHANGES, SOURCE_LIMIT)

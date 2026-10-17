@@ -14,6 +14,8 @@ import { configureWebAccess, decideWebAccess, getWebAccessStatus, revokeWebSessi
 import { publishSavedDataChanged, subscribeSavedDataChanged } from '../services/savedDataEvents.js'
 import { articleFilename } from '../shared/articles.js'
 import { articlePdfRequestSchema, writeArticlePdfs } from '../services/articlePdf.js'
+import { agentsCommand, agentsStatus, closeAgents } from '../services/agentsHost.js'
+import type { AgentsCommand } from '../shared/agents.js'
 
 export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent) => boolean): () => void {
   const handle: typeof ipcMain.handle = (channel, listener) => {
@@ -23,6 +25,8 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
     })
   }
   const provider = yahooProvider
+  handle(CHANNELS.agentsStatus, () => agentsStatus())
+  handle(CHANNELS.agentsCommand, (_event, command: AgentsCommand) => agentsCommand(command))
   handle(CHANNELS.webStatus, () => getWebAccessStatus())
   handle(CHANNELS.configureWebAccess, (_event, enabled: boolean) => configureWebAccess(enabled))
   handle(CHANNELS.rotateWebPairingCode, () => rotateWebPairingCode())
@@ -150,6 +154,7 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
   })
 
   return () => {
+    closeAgents()
     stopWatching()
     stopSavedData()
     for (const channel of Object.values(CHANNELS)) ipcMain.removeHandler(channel)

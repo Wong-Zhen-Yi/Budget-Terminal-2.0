@@ -23,7 +23,7 @@ import { cache, TTL } from '../cache.js'
 import { paced, yahoo } from './client.js'
 import { searchNews } from './newsPage.js'
 import { getYahooSeries } from './series.js'
-import { withBackupStatements, withBackupSummary } from './backup.js'
+import { withYahooStatements, withYahooSummary } from './requests.js'
 
 export const STOCKS_SOURCE = 'yahoo stocks'
 
@@ -102,7 +102,7 @@ async function fetchChart(symbol: string, force: boolean): Promise<ChartResult> 
 
 async function statementFallback(symbol: string): Promise<Record<string, unknown>> {
   const start = new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000)
-  const rows = await withBackupStatements(symbol, 'quarterly', start, () => paced(() =>
+  const rows = await withYahooStatements(symbol, 'quarterly', start, () => paced(() =>
     yahoo.fundamentalsTimeSeries(symbol, {
       period1: start,
       type: 'quarterly',
@@ -172,7 +172,7 @@ async function fetchSummary(symbol: string, force: boolean): Promise<SummaryResu
     `stocks:summary:${symbol}`,
     TTL.profile,
     async () => {
-      const summary = await withBackupSummary(symbol, () => paced(() =>
+      const summary = await withYahooSummary(symbol, () => paced(() =>
         yahoo.quoteSummary(symbol, {
           modules: [
             'price',

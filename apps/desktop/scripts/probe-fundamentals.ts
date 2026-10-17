@@ -279,6 +279,14 @@ async function runOffline(): Promise<void> {
     usdRate: async (currency: string) => { assert.equal(currency, 'TWD'); return 1 / 32 },
   }
   const usd = (await fundamentalsPageTesting.fetchUncached('TSM', false, foreignFetchers)).payload
+  const coverageNote = 'SEC statement coverage: foreign-filer forms are not supported by the domestic XBRL normalizer.'
+  const foreignCoverage = await fundamentalsPageTesting.fetchUncached('NBIS', false, {
+    ...foreignFetchers,
+    sec: async () => ({ annual: emptyFundamentalsPagePayload('NBIS').annual, quarterly: emptyFundamentalsPagePayload('NBIS').quarterly,
+      metadata: { ...foreign.sec, statementFreshness: 'unavailable', warnings: [coverageNote] } }),
+  })
+  assert.deepEqual(foreignCoverage.failures, [], 'An unsupported filing format is coverage information')
+  assert(foreignCoverage.payload.warnings.includes(coverageNote), 'Coverage limitations remain visible')
   assert.equal(usd.displayCurrency, 'USD')
   assert.deepEqual(usd.annual.revenue.map(item => item.value), [80, 100, 200])
   assert.equal(usd.annual.sharesOutstanding[0].value, 100)

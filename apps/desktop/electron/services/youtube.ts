@@ -18,7 +18,7 @@ import { BROWSER_USER_AGENT } from './userAgent.js'
 export const YOUTUBE_SOURCE = 'YouTube search'
 export const YOUTUBE_CACHE_TTL_MS = 30 * 60_000
 
-const CACHE_VERSION = 1
+const CACHE_VERSION = 2
 const FETCH_TIMEOUT_MS = 20_000
 const MAX_PAGE_BYTES = 5 * 1024 * 1024
 const MAX_TICKER_WORKERS = 4
@@ -44,6 +44,7 @@ interface TickerCacheEntry {
   ticker: string
   items: YouTubeVideo[]
   warning: string
+  failed?: boolean
   fetchedAt: number
 }
 
@@ -51,12 +52,14 @@ interface TickerResult {
   ticker: string
   items: YouTubeVideo[]
   warning: string
+  failed?: boolean
   fetchedAt: number
   fromCache: boolean
 }
 
 export interface YouTubeFetchResult {
   payload: YouTubePayload
+  errors: string[]
   cacheAgeSeconds: number
 }
 
@@ -213,7 +216,7 @@ async function loadCache(ticker: string): Promise<TickerCacheEntry | null> {
     const warning = String(parsed.warning ?? '').trim()
     const fetchedAt = Number(parsed.fetchedAt)
     if ((!items.length && !warning) || !Number.isFinite(fetchedAt)) return null
-    return { version: CACHE_VERSION, ticker, items, warning, fetchedAt }
+    return { version: CACHE_VERSION, ticker, items, warning, failed: parsed.failed === true, fetchedAt }
   } catch {
     return null
   }
@@ -228,6 +231,7 @@ async function saveCache(result: TickerResult): Promise<void> {
     ticker: result.ticker,
     items: result.items.slice(0, YOUTUBE_RESULTS_PER_TICKER),
     warning: result.warning,
+    failed: result.failed === true,
     fetchedAt: result.fetchedAt,
   }
   await writeFile(temporary, JSON.stringify(entry, null, 2), 'utf8')
@@ -266,15 +270,19 @@ async function fetchTicker(ticker: string): Promise<TickerResult> {
     }
 
     const items: YouTubeVideo[] = []
+    let watchAttempts = 0
+    let watchFailures = 0
     for (const candidate of candidates) {
       if (candidate.viewCount === null || candidate.viewCount < YOUTUBE_MIN_VIEW_COUNT) continue
       if (obviouslyTooOld(candidate.publishedRelative)) continue
       let watch: WatchMetadata
+      watchAttempts += 1
       try {
         watch = parseYouTubeWatchHtml(
           await fetchPage(`https://www.youtube.com/watch?v=${encodeURIComponent(candidate.videoId)}&hl=en`),
         )
       } catch {
+        watchFailures += 1
         continue
       }
       const publishedDays = daysSincePublished(watch.publishedText)
@@ -298,6 +306,9 @@ async function fetchTicker(ticker: string): Promise<TickerResult> {
       })
       if (items.length >= YOUTUBE_RESULTS_PER_TICKER) break
     }
+    if (watchAttempts > 0 && watchFailures === watchAttempts) {
+      throw new Error('YouTube video metadata requests failed.')
+    }
     const warning = items.length
       ? ''
       : `${ticker}: no YouTube videos met the filter (>= ${YOUTUBE_MIN_VIEW_COUNT.toLocaleString('en-US')} views and <= ${YOUTUBE_MAX_AGE_DAYS} days old).`
@@ -307,6 +318,7 @@ async function fetchTicker(ticker: string): Promise<TickerResult> {
       ticker,
       items: [],
       warning: `${ticker}: YouTube search temporarily failed. Try refreshing again later.`,
+      failed: true,
       fetchedAt,
       fromCache: false,
     }
@@ -351,12 +363,14 @@ export async function getYouTube(request: YouTubeRequest): Promise<YouTubeFetchR
         fetchedCount: 0,
         tickersTotal: 0,
       },
+      errors: [],
       cacheAgeSeconds: 0,
     }
   }
   const results = await mapTickers(tickers, Boolean(request.force))
   const cached = results.filter((result) => result.fromCache)
   return {
+    errors: results.filter(result => result.failed).map(result => result.warning),
     payload: {
       items: results.flatMap((result) => result.items),
       warnings: results.map((result) => result.warning).filter(Boolean),

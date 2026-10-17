@@ -37,7 +37,7 @@ research pages.
 | | What you can do |
 | :--- | :--- |
 | **🌍 Follow the markets** | Explore heatmaps, ETFs, forex, crypto, commodities, news, and economic events. |
-| **🔎 Research companies** | Review fundamentals, valuation, institutional activity, and focused company and semiconductor pages. |
+| **🔎 Research companies** | Review fundamentals, valuation, institutional activity, [DefeatBeta Terminal](docs/defeatbeta-terminal.md), and focused company and semiconductor pages. |
 | **📈 Study price action** | Work with charts, technical indicators, options chains, quantitative tools, and backtests. |
 | **💼 Track your money** | Manage portfolios, personal finance, Cards, and projections with local saved records and backups. |
 | **⚡ Open ready pages** | Every implemented page starts loading at launch, with startup progress and failures visible. |
@@ -99,8 +99,15 @@ Prefer a launcher? Open the file for your operating system from the checkout:
 | :--- | :--- | :--- |
 | [Launch Budget Terminal.cmd](Launch%20Budget%20Terminal.cmd) | [Launch Budget Terminal.command](Launch%20Budget%20Terminal.command) | [Launch Budget Terminal.sh](Launch%20Budget%20Terminal.sh) |
 
-Each launcher checks the runtime, installs dependencies, and opens the app. Keep its
-terminal open while using Budget Terminal.
+Each launcher checks the runtime, installs dependencies, verifies Electron, builds
+the latest source, and opens the production app. Keep its terminal open while using
+Budget Terminal. Build or startup errors stay visible in the launcher window.
+
+The launcher also checks Codex for the **Agents** page and passes the detected
+executable to the app. It detects the Windows Codex desktop installation, native
+CLI installations and native executables behind Windows npm shims. If Codex is
+missing, the app still opens with setup instructions in Agents. The launcher
+does not sign in or start agent work; autonomous mode remains off by default.
 
 <details>
 <summary><strong>Electron repair and production bundles</strong></summary>
@@ -162,7 +169,8 @@ single-expiration chain. Hidden pages remain hidden.
 
 ## Documentation
 
-- [DefeatBeta backup data feed](docs/defeatbeta-backup.md) — automatic daily US equity fallback when Yahoo fails.
+- [Market data provider policy](docs/defeatbeta-backup.md) — Yahoo Finance market data, explicit source failures, and the dedicated DefeatBeta research page.
+- [DefeatBeta Terminal](docs/defeatbeta-terminal.md) — ten research tabs, published datasets, startup loading, and valuation assumptions.
 
 | Guide | What's inside |
 | :--- | :--- |

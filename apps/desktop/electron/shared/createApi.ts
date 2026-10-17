@@ -7,6 +7,8 @@ export type Subscribe = <Payload>(channel: string, listener: (payload?: Payload)
 
 export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS.Platform): DesktopApi {
   return {
+    agentsStatus: () => invoke(CHANNELS.agentsStatus),
+    agentsCommand: (command) => invoke(CHANNELS.agentsCommand, command),
     webStatus: () => invoke(CHANNELS.webStatus),
     configureWebAccess: (enabled) => invoke(CHANNELS.configureWebAccess, enabled),
     rotateWebPairingCode: () => invoke(CHANNELS.rotateWebPairingCode),
@@ -103,6 +105,7 @@ export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS
     youtubeThumbnail: (request) => invoke(CHANNELS.youtubeThumbnail, request),
     fundamentals: (request) => invoke(CHANNELS.fundamentals, request),
     fundamentalsPage: (request) => invoke(CHANNELS.fundamentalsPage, request),
+    defeatbetaTerminal: (request) => invoke(CHANNELS.defeatbetaTerminal, request),
     returns: (request) => invoke(CHANNELS.returns, request),
     momentum: (request) => invoke(CHANNELS.momentum, request),
     analytics: (request) => invoke(CHANNELS.analytics, request),

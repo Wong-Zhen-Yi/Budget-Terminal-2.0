@@ -201,29 +201,16 @@ async function companyEvents(
   const normalized = [...new Set(tickers.map((ticker) => ticker.trim().toUpperCase()).filter(Boolean))].sort()
   if (!normalized.length) return { payload: [], errors: [], fromCache: false, stale: false, cacheAgeSeconds: 0 }
   const signature = createHash('sha256').update(normalized.join(',')).digest('hex').slice(0, 24)
-  const path = join(cacheRoot(), 'company', `${signature}.json`)
+  const path = join(cacheRoot(), 'company', `equities-v2-${signature}.json`)
   const disk = await readCache<CalendarMonthPayload['companyEvents']>(path, COMPANY_TTL_MS)
   if (!force && disk?.fresh) {
     return { payload: disk.value, errors: [], fromCache: true, stale: false, cacheAgeSeconds: disk.ageSeconds }
   }
   const cached = await cache.resolveWithStaleFallback(
-    `calendar:company:${normalized.join(',')}`,
+    `calendar:company:equities-v2:${normalized.join(',')}`,
     COMPANY_TTL_MS,
     async () => {
-      const settled = await Promise.allSettled(
-        normalized.map(async (ticker) => {
-          const result = await paced(() => yahoo.quoteSummary(ticker, { modules: ['calendarEvents'] }))
-          return companyEventsFromCalendar(ticker, result.calendarEvents ?? {})
-        }),
-      )
-      const events: CalendarMonthPayload['companyEvents'] = []
-      const errors: EnvelopeError[] = []
-      settled.forEach((outcome, index) => {
-        if (outcome.status === 'fulfilled') events.push(...outcome.value)
-        else errors.push(sourceError('yahoo calendar', outcome.reason, normalized[index]))
-      })
-      if (!events.length && errors.length === normalized.length) throw new Error('No portfolio company calendars were available.')
-      return { events, errors }
+      return fetchCompanyCalendars(normalized)
     },
     { force },
   ).catch((error) => ({ value: { events: [], errors: [sourceError('yahoo calendar', error, 'Company Events')] }, ageSeconds: 0, fromCache: false, stale: false }))
@@ -239,6 +226,33 @@ async function companyEvents(
     stale: cached.stale,
     cacheAgeSeconds: cached.ageSeconds,
   }
+}
+
+/** Funds have no corporate earnings calendar; confirm their type with Yahoo first. */
+export async function fetchCompanyCalendars(tickers: string[], sources: {
+  quotes: (symbols: string[]) => Promise<Array<{ symbol: string; quoteType?: string }>>
+  calendar: (symbol: string) => Promise<{ calendarEvents?: Parameters<typeof companyEventsFromCalendar>[1] }>
+} = {
+  quotes: async (symbols: string[]) => (await paced(() => yahoo.quote(symbols))).flatMap(quote =>
+    'symbol' in quote ? [{ symbol: quote.symbol, quoteType: 'quoteType' in quote ? quote.quoteType : undefined }] : []),
+  calendar: (symbol: string) => paced(() => yahoo.quoteSummary(symbol, { modules: ['calendarEvents'] })),
+}) {
+  const quotes = await sources.quotes(tickers)
+  const funds = new Set(quotes.filter(quote => ['ETF', 'MUTUALFUND', 'ETN'].includes(String(quote.quoteType)))
+    .map(quote => quote.symbol.toUpperCase()))
+  const companies = tickers.filter(ticker => !funds.has(ticker))
+  const settled = await Promise.allSettled(companies.map(async ticker => {
+    const result = await sources.calendar(ticker)
+    return companyEventsFromCalendar(ticker, result.calendarEvents ?? {})
+  }))
+  const events: CalendarMonthPayload['companyEvents'] = []
+  const errors: EnvelopeError[] = []
+  settled.forEach((outcome, index) => {
+    if (outcome.status === 'fulfilled') events.push(...outcome.value)
+    else errors.push(sourceError('yahoo calendar', outcome.reason, companies[index]))
+  })
+  if (companies.length && errors.length === companies.length) throw new Error('No portfolio company calendars were available.')
+  return { events, errors }
 }
 
 export async function getCalendarMonth(

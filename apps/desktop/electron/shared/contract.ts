@@ -1,4 +1,7 @@
+import type { AgentsCommand, AgentsState } from './agents.js'
 import type { ArticlesPayload, ArticlesMutation } from './articles.js'
+import type { DefeatBetaTerminalRequest, DefeatBetaTerminalPayload } from './defeatbetaTerminal.js'
+export type { DefeatBetaTerminalRequest, DefeatBetaTerminalPayload } from './defeatbetaTerminal.js'
 import type { ArticlePdfRequest, ArticlePdfResult } from './articles.js'
 export type { Article, ArticlesPayload, ArticlesMutation } from './articles.js'
 import type { BitcoinPayload, BitcoinRequest } from './bitcoin.js'
@@ -77,6 +80,8 @@ export interface Quote {
   absChange: number
   asOf?: number
   currency?: string
+  /** Published session closes are not live market quotes. */
+  priceBasis?: 'published-close'
 }
 
 /** The five macro readings across the top of the dashboard, keyed by display name. */
@@ -1272,6 +1277,7 @@ export const OPTION_BUCKETS: ReadonlyArray<{ key: OptionBucketKey; label: string
  * page-by-page migration.
  */
 export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boolean }> = [
+  { id: 'agents', label: 'Agents', implemented: true },
   { id: 'articles', label: 'Articles', implemented: true },
   { id: 'dashboard', label: 'Dashboard', implemented: true },
   { id: 'portfolio', label: 'Portfolio', implemented: true },
@@ -1288,6 +1294,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'stocks', label: 'Stocks', implemented: true },
   { id: 'stock-discovery', label: 'Discovery', implemented: true },
   { id: 'fundamentals', label: 'Fundamentals', implemented: true },
+  { id: 'defeatbeta', label: 'DefeatBeta Terminal', implemented: true },
   { id: 'charts', label: 'Charts', implemented: true },
   { id: 'valuation', label: 'Valuation', implemented: true },
   { id: 'options', label: 'Options', implemented: true },
@@ -2694,6 +2701,10 @@ export interface HeatmapPayload {
   issuer: string
   asOfDate: string
   sourceUrl: string
+  /** Price provider, latest trading date, and dataset publication time (separate from holdings). */
+  priceSource?: string
+  priceAsOfDate?: string
+  publishedAt?: number
   holdings: HeatmapHolding[]
   holdingsLoaded: number
   quoteCoverage: number
@@ -2701,7 +2712,7 @@ export interface HeatmapPayload {
   strongest: HeatmapHoldingSummary | null
   weakest: HeatmapHoldingSummary | null
   intervalSummaries: Record<HeatmapInterval, HeatmapIntervalSummary>
-  /** Epoch milliseconds; the summary strip prints its clock tail. */
+  /** Retrieval time in epoch milliseconds, distinct from the published price date. */
   fetchedAt: number
 }
 
@@ -3130,6 +3141,8 @@ export interface TechnicalScanPayload {
   universeCount: number
   scannedCount: number
   errors: Record<string, string>
+  /** Recent listings cannot yet provide the 201 completed bars required by this scan. */
+  excluded?: Record<string, string>
   sourcedAt: string
   completedAt: string
 }
@@ -3380,6 +3393,8 @@ export interface PoliticsExportRequest {
 }
 
 export const CHANNELS = {
+  agentsStatus: 'agents:status',
+  agentsCommand: 'agents:command',
   webStatus: 'system:web-status',
   configureWebAccess: 'system:web-configure',
   rotateWebPairingCode: 'system:web-pairing-rotate',
@@ -3466,6 +3481,7 @@ export const CHANNELS = {
   youtubeThumbnail: 'youtube:thumbnail',
   fundamentals: 'dashboard:fundamentals',
   fundamentalsPage: 'fundamentals:read',
+  defeatbetaTerminal: 'defeatbeta:terminal',
   chartsHistory: 'charts:history',
   chartsCompare: 'charts:compare',
   chartsRelationship: 'charts:relationship',
@@ -3564,6 +3580,8 @@ export interface FxRequest extends BackgroundRequest {
 export type WindowAction = 'minimize' | 'maximize' | 'close'
 
 export interface DesktopApi {
+  agentsStatus(): Promise<Envelope<AgentsState>>
+  agentsCommand(command: AgentsCommand): Promise<Envelope<AgentsState>>
   webStatus(): Promise<WebAccessStatus>
   configureWebAccess(enabled: boolean): Promise<WebAccessStatus>
   rotateWebPairingCode(): Promise<WebAccessStatus>
@@ -3670,6 +3688,7 @@ export interface DesktopApi {
   ): Promise<Envelope<YouTubeThumbnailPayload>>
   fundamentals(request: FundamentalsRequest): Promise<Envelope<FundamentalsPayload>>
   fundamentalsPage(request: FundamentalsPageRequest): Promise<Envelope<FundamentalsPagePayload>>
+  defeatbetaTerminal(request: DefeatBetaTerminalRequest): Promise<Envelope<DefeatBetaTerminalPayload>>
   returns(request: ReturnsRequest): Promise<Envelope<ReturnsPayload>>
   momentum(request: MomentumRequest): Promise<Envelope<MomentumPayload>>
   analytics(request: AnalyticsRequest): Promise<Envelope<AnalyticsPayload>>
