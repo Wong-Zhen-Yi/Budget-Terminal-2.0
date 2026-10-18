@@ -113,7 +113,7 @@ export function App() {
     }
   }
   const favorites = settings?.favoriteTabs ?? []
-  const toggleFavorite = async () => {
+  const toggleFavorite = useCallback(async () => {
     if (savingFavorite || !settings) return
     setSavingFavorite(true)
     try {
@@ -124,7 +124,7 @@ export function App() {
     } finally {
       setSavingFavorite(false)
     }
-  }
+  }, [savingFavorite, settings, mutateSettings, activeTab, favorites])
   const record = useDataHealth((state) => state.record)
   // Start every page's automatic initial load after local settings and holdings settle.
   const warm = useWarmPages(settings, !settingsQuery.isPending, selectedTab, recent,
@@ -336,7 +336,10 @@ export function App() {
     onStatusChange: statusFor(tabId),
     onNavigate: handleStocksNavigate,
     onSelectTab: setActiveTab,
-  }), [statusFor, handleStocksNavigate, activeTab, hideCurrent])
+    agentFavorite: favorites.includes('agents'),
+    savingFavorite: savingFavorite || !settings,
+    onToggleFavorite: toggleFavorite,
+  }), [statusFor, handleStocksNavigate, activeTab, hideCurrent, favorites, savingFavorite, settings, toggleFavorite])
 
   return (
     <div className={`terminal-shell flex h-full flex-col bg-bg ${isBrowser ? 'browser-shell' : ''} ${isMac ? 'platform-mac' : ''}`}>
@@ -358,10 +361,10 @@ export function App() {
           saving={savingSidebar || !settings}
         />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <WorkspaceHeader tabs={visibleTabs} activeTab={activeTab} onSelectTab={setActiveTab}
+          {(activeTab !== 'agents' || isBrowser) && <WorkspaceHeader tabs={visibleTabs} activeTab={activeTab} onSelectTab={setActiveTab}
             isMac={isMac}
             favorite={favorites.includes(activeTab)} onToggleFavorite={() => void toggleFavorite()}
-            saving={savingFavorite || !settings} />
+            saving={savingFavorite || !settings} />}
           <div className="relative flex min-h-0 flex-1 flex-col">
             {/* Blurred and inert, matching the reference's blur effect plus `setEnabled(False)`. */}
             <div
@@ -431,20 +434,26 @@ function renderPage({
   onStatusChange,
   onNavigate,
   onSelectTab,
+  agentFavorite,
+  savingFavorite,
+  onToggleFavorite,
 }: {
   tabId: string
   active: boolean
   onStatusChange: (panels: PanelStatus[], sourcePath: string) => void
   onNavigate: (tabId: string, symbol?: string) => void
   onSelectTab: (tabId: string) => void
+  agentFavorite: boolean
+  savingFavorite: boolean
+  onToggleFavorite: () => void
 }) {
   return (
     tabId === 'agents' ? (
-      <AgentsPage onStatusChange={onStatusChange} />
+      <AgentsPage onStatusChange={onStatusChange} favorite={agentFavorite} savingFavorite={savingFavorite} onToggleFavorite={onToggleFavorite} />
     ) : tabId === 'articles' ? (
       <ArticlesPage onStatusChange={onStatusChange} />
-    ) : tabId === 'dashboard' ? (
-      <DashboardPage onStatusChange={onStatusChange} />
+    ) : tabId === 'dashboard' || tabId === 'dashboard-2' ? (
+      <DashboardPage onStatusChange={onStatusChange} newsFocused={tabId === 'dashboard-2'} />
     ) : tabId === 'global' ? (
       <GlobalPage onStatusChange={onStatusChange} />
     ) : tabId === 'portfolio' ? (

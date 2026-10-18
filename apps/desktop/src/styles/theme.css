@@ -230,7 +230,8 @@ html.browser-mode,
 
   /* Let the chart keep its space; options move below the two main columns.
    * Ignore saved desktop splitter widths without changing the user's settings. */
-  .browser-mode [data-page-id='dashboard'] > .dashboard-layout {
+  .browser-mode [data-page-id='dashboard'] > .dashboard-layout,
+  .browser-mode [data-page-id='dashboard-2'] > .dashboard-layout {
     display: grid;
     flex: none;
     min-width: 0;
@@ -283,10 +284,27 @@ html.browser-mode,
     min-width: 0;
     height: 280px;
   }
+  .browser-mode [data-page-id='dashboard-2'] > .dashboard-layout {
+    grid-template-rows: minmax(540px, 70dvh) minmax(600px, 75dvh);
+  }
+  .browser-mode .dashboard-news-layout .dashboard-holdings {
+    grid-row: 1;
+  }
+  .browser-mode .dashboard-agents-column {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .browser-mode .dashboard-heatmap-column {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: auto !important;
+    min-width: 0;
+  }
 }
 
 @media (max-width: 800px) {
-  .browser-mode [data-page-id='dashboard'] > .dashboard-layout {
+  .browser-mode [data-page-id='dashboard'] > .dashboard-layout,
+  .browser-mode [data-page-id='dashboard-2'] > .dashboard-layout {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: 112px minmax(520px, 65dvh) auto auto;
   }
@@ -309,6 +327,12 @@ html.browser-mode,
   .browser-mode .dashboard-options {
     grid-template-columns: minmax(0, 1fr);
   }
+  .browser-mode [data-page-id='dashboard-2'] > .dashboard-layout {
+    grid-template-rows: minmax(520px, 65dvh) auto minmax(600px, 75dvh);
+  }
+  .browser-mode .dashboard-news-layout .dashboard-holdings { grid-row: 2; }
+  .browser-mode .dashboard-agents-column { grid-column: 1; }
+  .browser-mode .dashboard-heatmap-column { grid-row: 3; }
 }
 
 @media (max-width: 600px) {

@@ -2,6 +2,10 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { createInterface } from 'node:readline'
 
 export interface CodexResult {
+  model?: string
+  reasoningEffort?: string | null
+  data?: { model: string; displayName: string; hidden?: boolean; inputModalities?: string[]; defaultReasoningEffort: string; supportedReasoningEfforts: { reasoningEffort: string; description: string }[] }[]
+  nextCursor?: string | null
   account?: unknown
   config?: { mcp_servers?: Record<string, unknown> }
   thread?: { id: string }

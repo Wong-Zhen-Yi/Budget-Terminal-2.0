@@ -1,6 +1,8 @@
 import type { NewsItem } from '@shared/contract'
 import { api } from '@/api/client'
+import { Button } from '@/components/ui/Button'
 import { DataTable, type Column } from '@/components/ui/DataTable'
+import { NEWS_REFRESH_MS } from '@/api/refreshRates'
 import { Panel } from '@/components/ui/Panel'
 import { newsTime } from '@/lib/format'
 
@@ -14,11 +16,19 @@ export function NewsPanel({
   loading,
   warning,
   className,
+  live = false,
+  refreshing = false,
+  updatedAt,
+  onRefresh,
 }: {
   items: NewsItem[]
   loading: boolean
   warning?: string
   className?: string
+  live?: boolean
+  refreshing?: boolean
+  updatedAt?: number
+  onRefresh?: () => void
 }) {
   const columns: Array<Column<NewsItem>> = [
     {
@@ -30,6 +40,7 @@ export function NewsPanel({
       width: 'auto',
       wrap: true,
     },
+    ...(live ? [{ key: 'source', header: 'Source', cell: (item: NewsItem) => item.source, width: '100px', wrap: true }] : []),
     { key: 'ticker', header: 'Ticker', cell: (item) => item.ticker, width: '76px' },
     {
       key: 'time',
@@ -42,7 +53,14 @@ export function NewsPanel({
   ]
 
   return (
-    <Panel title="Live News Feed" warning={warning} className={className}>
+    <Panel title="Live News Feed" warning={warning} className={className} actions={live ? (
+      <>
+        <span className="text-2xs text-text-dim" title={updatedAt ? `Updated ${new Date(updatedAt).toLocaleString()}` : 'Waiting for headlines'}>
+          {refreshing ? 'Updating...' : `Auto · ${NEWS_REFRESH_MS / 60_000}m`}
+        </span>
+        <Button onClick={onRefresh} disabled={refreshing} aria-label="Refresh live news">Refresh</Button>
+      </>
+    ) : undefined}>
       <DataTable
         columns={columns}
         rows={items}
@@ -50,7 +68,7 @@ export function NewsPanel({
         showIndex
         layout="fixed"
         onRowClick={(item) => void api.openExternal(item.url)}
-        empty={loading ? 'Loading news...' : 'No recent headlines for these holdings'}
+        empty={loading ? 'Loading news...' : warning ? 'News unavailable. Refresh to retry.' : 'No recent headlines for these holdings'}
       />
     </Panel>
   )

@@ -2,9 +2,13 @@ import { app } from 'electron'
 import { existsSync, mkdirSync } from 'node:fs'
 import { delimiter, join } from 'node:path'
 import { createServiceRoutes } from '../mcp/routes.js'
+import { captureTerminalScreenshot, getMcpStatus } from '../mcp/host.js'
 import type { AgentsCommand } from '../shared/agents.js'
 import { failed, ok } from '../shared/envelope.js'
 import { AgentsService } from './agents.js'
+import { applyAgentPortfolioUpdate, readPortfolios } from './portfolioStore.js'
+import { publishSavedDataChanged } from './savedDataEvents.js'
+import { withAutomaticBackup } from './automaticBackup.js'
 
 let service: AgentsService | null = null
 
@@ -20,7 +24,14 @@ function agent() {
   if (!service) {
     const cwd = join(app.getPath('userData'), 'agents')
     mkdirSync(cwd, { recursive: true })
-    service = new AgentsService({ executable: executable(), cwd, routes: createServiceRoutes() })
+    service = new AgentsService({ executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), connectionStatus: getMcpStatus, portfolio: {
+      read: readPortfolios,
+      apply: async (before, after) => {
+        const result = await withAutomaticBackup(async () => ok(await applyAgentPortfolioUpdate(before, after), 'portfolio store'))
+        publishSavedDataChanged(['portfolio', 'settings'])
+        return { ...result.data, warning: result.errors.length ? result.errors.map(error => error.reason).join(' · ') : undefined }
+      },
+    } })
   }
   return service
 }

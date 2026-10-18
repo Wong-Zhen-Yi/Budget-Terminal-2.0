@@ -27,6 +27,7 @@
     "probe:web": "tsx scripts/probe-web.ts",
     "probe:web-ui": "tsx scripts/probe-web-ui.ts",
     "probe:dashboard-ui": "tsx scripts/probe-dashboard-ui.ts",
+    "probe:renderer-startup": "tsx scripts/probe-renderer-startup.ts",
     "probe:mac-relaunch": "tsx scripts/probe-mac-relaunch.ts",
     "probe:relaunch": "tsx scripts/probe-mac-relaunch.ts",
     "probe:navigation": "tsx scripts/probe-navigation.ts",
@@ -137,6 +138,8 @@
     "pdfjs-dist": "^6.4.299",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "yahoo-finance2": "^4.0.4",
     "zod": "^4.6.7",
     "zustand": "^5.0.15"

@@ -7,8 +7,11 @@
  * which is the thing the warm-up exists to avoid.
  */
 
-/** Quotes and the macro bar tick on their own; everything else refetches on demand. */
+/** Quotes and the macro bar tick on their own. */
 export const QUOTE_REFRESH_MS = 60_000
+
+/** Dashboard 2 polls headlines at a provider-friendly cadence while visible. */
+export const NEWS_REFRESH_MS = 5 * 60_000
 
 /** The reference refreshes USD/SGD every 300 seconds; match it. */
 export const FX_REFRESH_MS = 300_000

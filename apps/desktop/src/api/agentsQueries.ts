@@ -5,7 +5,7 @@ import { api, queryKeys } from './client'
 import { isBrowser } from './browser'
 
 export const loadAgents = () => isBrowser
-  ? Promise.resolve(ok<AgentsState>({ connected: false, busy: false, autonomy: false, objective: '', intervalMinutes: 15, runsRemaining: 0, nextRunAt: null, messages: [], error: 'Open Agents in the desktop app to connect Codex.', navigation: null }, 'Codex agent'))
+  ? Promise.resolve(ok<AgentsState>({ portfolioProposal: null, model: null, thinking: null, models: [], connected: false, busy: false, autonomy: false, objective: '', intervalMinutes: 15, runsRemaining: 0, nextRunAt: null, messages: [], error: 'Open Agents in the desktop app to connect Codex.', navigation: null }, 'Codex agent'))
   : api.agentsStatus()
 
 export function useAgents(poll = false) {

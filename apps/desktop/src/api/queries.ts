@@ -14,7 +14,7 @@ import type {
   TimeframeLabel,
 } from '@shared/contract'
 import { api, queryKeys } from './client'
-import { QUOTE_REFRESH_MS } from './refreshRates'
+import { NEWS_REFRESH_MS, QUOTE_REFRESH_MS } from './refreshRates'
 import { queryFreshness } from './queryPersistence'
 
 /**
@@ -91,11 +91,14 @@ export function useTargets(tickers: string[]): UseQueryResult<Envelope<TargetsPa
   })
 }
 
-export function useNews(tickers: string[]): UseQueryResult<Envelope<NewsPayload>> {
+export function useNews(tickers: string[], live = false): UseQueryResult<Envelope<NewsPayload>> {
   return useQuery({
     queryKey: queryKeys.news(tickers),
-    queryFn: () => api.news({ tickers, force: forcing() }),
+    // Live polling and its Refresh button must bypass the service's longer TTL.
+    queryFn: () => api.news({ tickers, force: live || forcing() }),
     enabled: tickers.length > 0,
+    refetchInterval: live ? NEWS_REFRESH_MS : false,
+    refetchIntervalInBackground: false,
     staleTime: queryFreshness(queryKeys.news(tickers)),
   })
 }

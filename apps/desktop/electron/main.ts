@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { acquireDataSession } from './services/dataSession.js'
+import { loadRenderer } from './services/rendererStartup.js'
 import { isTrustedRendererUrl } from './shared/ipcSecurity.js'
 import { isSafeExternalUrl } from './services/urls.js'
 
@@ -64,12 +65,14 @@ function createWindow(): BrowserWindow {
   window.webContents.session.setPermissionCheckHandler((contents, permission) =>
     permission === 'clipboard-sanitized-write' && Boolean(contents && isTrustedRendererUrl(contents.getURL(), rendererUrl)))
 
-  const devServerUrl = process.env.ELECTRON_RENDERER_URL
-  if (isDev && devServerUrl) {
-    void window.loadURL(devServerUrl)
-  } else {
-    void window.loadFile(join(dirname, '../renderer/index.html'))
-  }
+  // Missing files during a rebuild get a bounded retry and an actionable error.
+  void loadRenderer(window, join(dirname, '../renderer/index.html'),
+    isDev ? process.env.ELECTRON_RENDERER_URL : undefined).catch((error) => {
+    if (window.isDestroyed()) return
+    console.error('Budget Terminal interface failed to load:', error)
+    dialog.showErrorBox('Budget Terminal could not load its interface', error instanceof Error ? error.message : String(error))
+    app.quit()
+  })
   return window
 }
 

@@ -23,10 +23,10 @@ function launch(primary: boolean, mode: string) {
   return { child, output: () => output }
 }
 
-async function waitFor(check: () => boolean, label: string): Promise<void> {
+async function waitFor(check: () => boolean, label: string, diagnostics = () => ''): Promise<void> {
   const deadline = Date.now() + 30_000
   while (!check() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25))
-  assert.ok(check(), `Timed out waiting for ${label}`)
+  assert.ok(check(), `Timed out waiting for ${label}\n${diagnostics()}`)
 }
 
 try {
@@ -35,11 +35,14 @@ try {
     const first = launch(true, mode)
     let second: ReturnType<typeof launch> | undefined
     try {
-      await waitFor(() => first.output().includes(mode.toUpperCase()) || first.child.exitCode !== null, `first window to become ${mode}`)
+      await waitFor(() => first.output().includes(mode.toUpperCase()) || first.child.exitCode !== null,
+        `first window to become ${mode}`, first.output)
       assert.equal(first.child.exitCode, null, first.output())
       assert.ok(first.output().includes(mode.toUpperCase()), first.output())
       second = launch(false, mode)
-      await waitFor(() => first.output().includes('REOPENED'), 'second launch to reopen the first process')
+      await waitFor(() => first.output().includes('REOPENED') || first.child.exitCode !== null,
+        'second launch to reopen the first process')
+      assert(first.output().includes('REOPENED'), `${first.output()}\nSecond launch:\n${second.output()}`)
       await waitFor(() => second!.child.exitCode !== null && first.child.exitCode !== null, 'both probe processes to exit')
       assert.equal(first.child.exitCode, 0, first.output())
       assert.equal(second.child.exitCode, 0, second.output())

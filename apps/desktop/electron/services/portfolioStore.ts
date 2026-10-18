@@ -687,6 +687,29 @@ export async function mutatePortfolios(mutation: PortfolioMutation): Promise<Por
   return readPortfolios()
 }
 
+/** Commit an agent-reviewed portfolio as one write, with a compare-and-swap inside the store queue. */
+export async function applyAgentPortfolioUpdate(before: Portfolio, after: Portfolio): Promise<PortfolioPayload> {
+  let failure: unknown = null
+  const run = writeChain.then(async () => {
+    try {
+      if (before.readOnly || after.readOnly || before.id !== after.id) throw new Error('Choose an editable portfolio.')
+      const document = structuredClone(await loadDocument())
+      const current = requireEditable(document, before.id)
+      if (!isDeepStrictEqual(current, portfolioSchema.parse(before))) throw new Error('This portfolio changed after the preview. Dismiss this update and ask Codex to read it again.')
+      document.portfolios[before.id] = portfolioSchema.parse(after)
+      normalize(document)
+      await persist(document)
+      const saved = importDocumentSchema.parse(JSON.parse(await readFile(storePath(), 'utf8')))
+      if (!isDeepStrictEqual(saved.portfolios[before.id], document.portfolios[before.id])) throw new Error('Could not verify the saved portfolio. Reload before repeating the update.')
+      cached = document
+    } catch (error) { failure = error }
+  })
+  writeChain = run
+  await run
+  if (failure) throw failure
+  return readPortfolios()
+}
+
 /* --------------------------------------------------- personal finance */
 
 export async function readPersonalFinance(): Promise<PersonalFinancePayload> {

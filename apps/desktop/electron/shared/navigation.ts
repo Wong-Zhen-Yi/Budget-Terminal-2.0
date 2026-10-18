@@ -2,8 +2,7 @@ import { TABS } from './contract.js'
 
 /** Stable workspace membership; user ordering still applies within each workspace. */
 export const WORKSPACES = [
-  { id: 'agents', label: 'Agents', pages: ['agents'] },
-  { id: 'overview', label: 'Overview', pages: ['dashboard', 'news', 'calendar', 'youtube', 'dictionary'] },
+  { id: 'overview', label: 'Overview', pages: ['dashboard', 'dashboard-2', 'news', 'calendar', 'youtube', 'dictionary'] },
   { id: 'markets', label: 'Markets', pages: ['pre-market', 'heatmap', 'up-down', 'trading-volumes', 'beta', 'market-cap', 'price', 'etf', 'sp500', 'forex', 'crypto', 'gold', 'oil'] },
   { id: 'research', label: 'Research', pages: ['stocks', 'stock-discovery', 'fundamentals', 'defeatbeta', 'valuation', 'institutions'] },
   { id: 'focus', label: 'Focus', pages: ['bmnr', 'bitcoin', 'pltr', 'hood', 'hims', 'sofi', 'mu', 'amzn', 'avgo', 'semiconductors', 'vst'] },
@@ -11,6 +10,7 @@ export const WORKSPACES = [
   { id: 'macro', label: 'Macro & events', pages: ['global', 'economic', 'bonds', 'money', 'ipo', 'politics'] },
   { id: 'money', label: 'My money', pages: ['portfolio', 'personal-finance', 'cards', 'projections'] },
   { id: 'articles', label: 'Articles', pages: ['articles'] },
+  { id: 'agents', label: 'Agents', pages: ['agents'] },
 ]
 
 export const DEFAULT_FAVORITE_TABS = ['dashboard', 'portfolio', 'charts']

@@ -85,6 +85,28 @@ export function buildPortfolioRows(
   return rows.sort((a, b) => (b.gain ?? -Infinity) - (a.gain ?? -Infinity))
 }
 
+/** Positive, weight-included allocations; never rebase around missing market marks. */
+export function buildPortfolioAllocation(portfolio: Portfolio, quotes: Record<string, Quote>) {
+  const included = buildPortfolioRows(portfolio, quotes)
+    .filter(row => row.includeInWeight && row.shares > 0)
+  const missingReasons = included
+    .filter(row => row.marketValue === null || !Number.isFinite(row.marketValue))
+    .map(row => row.unavailableReason || `${row.ticker}: market value unavailable.`)
+  const slices = included
+    .filter(row => row.marketValue !== null && Number.isFinite(row.marketValue) && row.marketValue > 0)
+    .map(row => ({ label: row.ticker, value: row.marketValue! }))
+  if (portfolio.includeCashInWeight && Number.isFinite(portfolio.cashBalance) && portfolio.cashBalance > 0) {
+    slices.push({ label: 'CASH', value: portfolio.cashBalance })
+  }
+  const total = slices.reduce((sum, slice) => sum + slice.value, 0)
+  return {
+    complete: missingReasons.length === 0,
+    missingReasons,
+    total,
+    slices: missingReasons.length ? [] : slices.sort((a, b) => b.value - a.value),
+  }
+}
+
 /* ------------------------------------------------------ portfolio page rows */
 
 export interface PositionRow {

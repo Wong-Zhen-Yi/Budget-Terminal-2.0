@@ -7,12 +7,13 @@ import { createScreenshotService } from './screenshot.js'
 
 let status: McpStatus = { available: false, error: 'MCP is starting.' }
 export function getMcpStatus(): McpStatus { return status }
+// One capture queue across embedded agents and external MCP clients.
+export const captureTerminalScreenshot = createScreenshotService(() => BrowserWindow.getAllWindows().find((window) => !window.isDestroyed()))
 
 export async function startMcpHost(): Promise<() => Promise<void>> {
   try {
-    const screenshot = createScreenshotService(() => BrowserWindow.getAllWindows().find((window) => !window.isDestroyed()))
     // Shared service handlers publish mutations once to both desktop and web clients.
-    const bridge = await startBridge({ routes: createServiceRoutes(screenshot), descriptorPath: join(process.env.APPDATA!, 'BudgetTerminalElectron', '.mcp', 'runtime.json'), onChanged: () => {} })
+    const bridge = await startBridge({ routes: createServiceRoutes(captureTerminalScreenshot), descriptorPath: join(process.env.APPDATA!, 'BudgetTerminalElectron', '.mcp', 'runtime.json'), onChanged: () => {} })
     status = bridge.status
     return async () => { status = { available: false, error: 'MCP is shutting down.' }; await bridge.stop() }
   } catch (error) {

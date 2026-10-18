@@ -1,7 +1,11 @@
 const assert = require('node:assert/strict')
 const { spawnSync } = require('node:child_process')
-const { resolve } = require('node:path')
-const { launch } = require('./launch.cjs')
+const { join, resolve } = require('node:path')
+const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = require('node:fs')
+const { tmpdir } = require('node:os')
+const { launch: runLaunch } = require('./launch.cjs')
+const { verifyDesktopBuild } = require('./verify-desktop-build.cjs')
+const launch = options => runLaunch({ verifyBuild() {}, ...options })
 const { findCodex } = require('./codex-runtime.cjs')
 const { tryRun, ensureElectron } = require('./ensure-electron.cjs')
 const { supportedNodeVersion, supportedNpmVersion, runtimeEnvironment } = require('./runtime.cjs')
@@ -32,6 +36,36 @@ for (const platform of ['win32', 'darwin', 'linux']) {
   assert(calls[3].args.join(' ').includes('run build'))
   assert(calls[4].args.join(' ').includes('run preview --workspace budget-terminal-desktop'))
   for (const call of calls) assert.deepEqual(call.options.env, { PATH: 'unchanged' })
+}
+
+const buildDirectory = mkdtempSync(join(tmpdir(), 'budget-launcher-build-'))
+try {
+  const directory = join(buildDirectory, 'desktop with spaces # %')
+  assert.throws(() => verifyDesktopBuild(directory), /desktop build is incomplete/)
+  for (const file of ['out/main/main.js', 'out/preload/preload.cjs', 'out/renderer/assets/entry.js', 'out/renderer/assets/theme.css']) {
+    mkdirSync(resolve(directory, file, '..'), { recursive: true })
+    writeFileSync(join(directory, file), 'fixture')
+  }
+  const html = join(directory, 'out/renderer/index.html')
+  writeFileSync(html, '<script src="./assets/entry.js"></script><link href="./assets/theme.css" rel="stylesheet">')
+  verifyDesktopBuild(directory)
+  rmSync(join(directory, 'out/renderer/assets/entry.js'))
+  assert.throws(() => verifyDesktopBuild(directory), /desktop build is incomplete/)
+  let calls = 0
+  const messages = []
+  assert.equal(launch({ nodeVersion: '22.23.2', locateCodex: () => null,
+    log: { log() {}, error: message => messages.push(message) },
+    verifyBuild: () => verifyDesktopBuild(directory),
+    spawn() { calls++; return { status: 0, stdout: '10.9.8' } },
+  }), 1)
+  assert.equal(calls, 4, 'A successful build command with missing assets must never launch Electron')
+  assert(messages.some(message => message.includes('Launch Budget Terminal.cmd')))
+  writeFileSync(join(directory, 'out/renderer/assets/entry.js'), '')
+  assert.throws(() => verifyDesktopBuild(directory), /Missing or empty build file/)
+  writeFileSync(html, '<div>Not a built renderer</div>')
+  assert.throws(() => verifyDesktopBuild(directory), /does not reference a built JavaScript entry/)
+} finally {
+  rmSync(buildDirectory, { recursive: true, force: true })
 }
 
 for (const configuration of [{ platform: 'freebsd' }, { nodeVersion: '22.19.9' }]) {
@@ -108,4 +142,4 @@ const configCheck = spawnSync(process.execPath, [require.resolve('tsx/cli'), '-e
   "import './apps/desktop/electron.vite.config.ts'; if (process.env.ELECTRON_RUN_AS_NODE !== undefined) throw new Error('Direct dev/preview retained Node mode')",
 ], { cwd: resolve(__dirname, '..'), env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, encoding: 'utf8', timeout: 30_000 })
 assert.equal(configCheck.status, 0, configCheck.stderr || configCheck.error?.message)
-console.log('Launcher checks passed: supported toolchains, platform commands, inherited environment, Codex discovery and handoff, optional Agents runtime, failure paths, exact Electron version and transient locks.')
+console.log('Launcher checks passed: supported toolchains, platform commands, inherited environment, Codex discovery and handoff, optional Agents runtime, failure paths, complete renderer/asset verification, exact Electron version and transient locks.')

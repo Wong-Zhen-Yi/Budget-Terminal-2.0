@@ -8,6 +8,7 @@ if errorlevel 1 (
   goto :failed
 )
 
+echo Building and verifying the latest app files, including Dashboard 2 with a portfolio pie, Agents in the center and a portfolio heatmap on the right...
 node "%~dp0scripts\launch.cjs"
 if errorlevel 1 goto :failed
 exit /b 0

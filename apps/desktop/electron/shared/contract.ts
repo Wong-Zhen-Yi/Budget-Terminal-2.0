@@ -1277,9 +1277,10 @@ export const OPTION_BUCKETS: ReadonlyArray<{ key: OptionBucketKey; label: string
  * page-by-page migration.
  */
 export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boolean }> = [
-  { id: 'agents', label: 'Agents', implemented: true },
   { id: 'articles', label: 'Articles', implemented: true },
+  { id: 'agents', label: 'Agents', implemented: true },
   { id: 'dashboard', label: 'Dashboard', implemented: true },
+  { id: 'dashboard-2', label: 'Dashboard 2', implemented: true },
   { id: 'portfolio', label: 'Portfolio', implemented: true },
   { id: 'personal-finance', label: 'Personal Finance', implemented: true },
   { id: 'global', label: 'Global', implemented: true },

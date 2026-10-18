@@ -28,9 +28,10 @@
             "enum": [
               "current",
               "all",
-              "agents",
               "articles",
+              "agents",
               "dashboard",
+              "dashboard-2",
               "portfolio",
               "personal-finance",
               "global",

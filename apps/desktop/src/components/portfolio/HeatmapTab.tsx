@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import type { HeatmapInterval, Portfolio } from '@shared/contract'
 import { HEATMAP_INTERVALS } from '@shared/contract'
@@ -6,6 +6,7 @@ import { weightedMove } from '@shared/analytics'
 import { sectorFor } from '@shared/sectors'
 import type { PositionRow } from '@shared/portfolioMath'
 import { useReturns } from '@/api/portfolioQueries'
+import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { Treemap, type TreemapTile } from '@/components/charts/Treemap'
 import { Button } from '@/components/ui/Button'
 import { DataFreshness } from '@/components/ui/DataFreshness'
@@ -16,9 +17,11 @@ interface HeatmapTabProps {
   portfolio: Portfolio
   rows: PositionRow[]
   visible: boolean
+  compact?: boolean
+  onStatusChange?: (panels: PanelStatus[], path: string) => void
 }
 
-export function HeatmapTab({ portfolio, rows, visible }: HeatmapTabProps) {
+export function HeatmapTab({ portfolio, rows, visible, compact = false, onStatusChange }: HeatmapTabProps) {
   const [interval, setInterval] = useState<HeatmapInterval>('live')
   const [hovered, setHovered] = useState<TreemapTile | null>(null)
 
@@ -41,6 +44,11 @@ export function HeatmapTab({ portfolio, rows, visible }: HeatmapTabProps) {
     interval,
     visible && historical,
   )
+
+  useEffect(() => {
+    onStatusChange?.([{ label: 'Heatmap returns', envelope: returnsQuery.data,
+      error: returnsQuery.error, loading: returnsQuery.isFetching, enabled: returnsQuery.isEnabled }], '')
+  }, [onStatusChange, returnsQuery.data, returnsQuery.error, returnsQuery.isFetching, returnsQuery.isEnabled])
 
   const tiles: TreemapTile[] = useMemo(
     () =>
@@ -66,7 +74,7 @@ export function HeatmapTab({ portfolio, rows, visible }: HeatmapTabProps) {
     .filter((tile) => tile.changePct !== null)
     .sort((a, b) => (b.changePct ?? 0) - (a.changePct ?? 0))
   const largest = [...tiles].sort((a, b) => b.weight - a.weight)[0]
-  const detail = complete ? hovered ?? largest ?? null : null
+  const detail = complete ? tiles.find(tile => tile.key === hovered?.key) ?? largest ?? null : null
   const detailRow = detail ? included.find((row) => row.ticker === detail.key) : null
 
   return (
@@ -75,31 +83,35 @@ export function HeatmapTab({ portfolio, rows, visible }: HeatmapTabProps) {
       {historical && included.length > 0 && <DataFreshness envelope={returnsQuery.data} loading={returnsQuery.isFetching}
         error={returnsQuery.error} freshnessMs={FRESHNESS.chartDaily}
         coverage={`${Object.keys(returnsQuery.data?.data.returns ?? {}).length}/${included.length} holdings`} />}
-      <div className="flex shrink-0 flex-wrap border border-border bg-surface">
+      <div className={`${compact ? 'grid grid-cols-2' : 'flex flex-wrap'} shrink-0 border border-border bg-surface`}>
         <Stat label="Holdings" value={String(holdings.length)} />
-        <Stat label="Priced holdings" value={`${included.length}/${holdings.length}`} />
+        {!compact ? <Stat label="Priced holdings" value={`${included.length}/${holdings.length}`} /> : null}
         <Stat
           label="Cash"
           value={`${currency(cash, 0)} / ${!complete ? 'N/A' : totalValue > 0 ? plainPercent((cash / totalValue) * 100) : '--'}`}
         />
         <Stat label="Return coverage" value={`${tiles.filter((t) => t.changePct !== null).length}/${holdings.length}`} />
         <Stat label="Weighted Move" value={percent(move)} tone={(move ?? 0) >= 0 ? 'text-up' : 'text-down'} />
-        <Stat label="Largest" value={largest ? `${largest.label} ${plainPercent(largest.weight)}` : '--'} />
-        <Stat
-          label="Strongest"
-          value={ranked[0] ? `${ranked[0].label} ${percent(ranked[0].changePct)}` : '--'}
-          tone="text-up"
-        />
-        <Stat
-          label="Weakest"
-          value={
-            ranked.length ? `${ranked[ranked.length - 1].label} ${percent(ranked[ranked.length - 1].changePct)}` : '--'
-          }
-          tone="text-down"
-        />
+        {!compact ? (
+          <>
+            <Stat label="Largest" value={largest ? `${largest.label} ${plainPercent(largest.weight)}` : '--'} />
+            <Stat
+              label="Strongest"
+              value={ranked[0] ? `${ranked[0].label} ${percent(ranked[0].changePct)}` : '--'}
+              tone="text-up"
+            />
+            <Stat
+              label="Weakest"
+              value={
+                ranked.length ? `${ranked[ranked.length - 1].label} ${percent(ranked[ranked.length - 1].changePct)}` : '--'
+              }
+              tone="text-down"
+            />
+          </>
+        ) : null}
       </div>
 
-      <div className="flex shrink-0 items-center gap-1">
+      <div className={`flex shrink-0 items-center gap-1${compact ? ' flex-wrap' : ''}`}>
         <span className="pr-1 text-2xs text-text-muted">Interval</span>
         {HEATMAP_INTERVALS.map((entry) => (
           <Button
@@ -116,11 +128,11 @@ export function HeatmapTab({ portfolio, rows, visible }: HeatmapTabProps) {
         ) : null}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col border border-border bg-surface p-1">
+      <div className={`portfolio-heatmap-map flex flex-1 flex-col border border-border bg-surface p-1 ${compact ? 'min-h-48 overflow-hidden' : 'min-h-0'}`}>
         <Treemap tiles={tiles} onHover={setHovered} format={(value) => percent(value)} />
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-4 border border-border bg-surface px-2 py-1 text-2xs">
+      <div className={`flex shrink-0 flex-wrap items-center border border-border bg-surface px-2 py-1 text-2xs ${compact ? 'gap-x-3 gap-y-1' : 'gap-4'}`}>
         {detail && detailRow ? (
           <>
             <span className="font-semibold text-text">{detail.label}</span>

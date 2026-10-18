@@ -2,6 +2,7 @@
 export const pageIconPaths: Record<string, string> = {
   agents: 'M5 7h14v13H5z M12 3v4 M9 12h.01 M15 12h.01 M9 16h6 M2 10v7 M22 10v7',
   dashboard: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
+  'dashboard-2': 'M3 3h18v18H3z M8 3v18 M16 3v18 M10 7h4 M10 11h4 M10 15h4 M10 18h4',
   portfolio: 'M3 7h18v14H3z M8 7V3h8v4 M3 12h18 M10 12v3h4v-3',
   'personal-finance': 'M3 6h16v14H3z M3 6V4h14 M15 11h6v5h-6z M18 13.5h.01',
   global: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0 M3 12h18 M12 3c-5 5-5 13 0 18 5-5 5-13 0-18',

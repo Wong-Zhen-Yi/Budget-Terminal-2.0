@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { Envelope, OptionBucket } from '@shared/contract'
 import { api } from '@/api/client'
@@ -11,10 +11,13 @@ import { MacroBar } from '@/components/dashboard/MacroBar'
 import { NewsPanel } from '@/components/dashboard/NewsPanel'
 import { OptionsPanel } from '@/components/dashboard/OptionsPanel'
 import { PortfolioPanel } from '@/components/dashboard/PortfolioPanel'
+import { PortfolioPiePanel } from '@/components/dashboard/PortfolioPiePanel'
+import { PortfolioHeatmapPanel } from '@/components/dashboard/PortfolioHeatmapPanel'
 import { TargetsPanel } from '@/components/dashboard/TargetsPanel'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { Splitter } from '@/components/ui/Splitter'
 import { useDashboard } from '@/stores/dashboard'
+import { AgentsPage } from '@/pages/AgentsPage'
 
 /** Show a panel's warning dot only when something actually went wrong. */
 function warningOf(envelope: Envelope<unknown> | undefined): string | undefined {
@@ -26,8 +29,11 @@ function warningOf(envelope: Envelope<unknown> | undefined): string | undefined 
 
 export function DashboardPage({
   onStatusChange,
+  newsFocused = false,
 }: {
   onStatusChange: (panels: PanelStatus[], sourcePath: string) => void
+  /** Dashboard 2 places Agents in the center and the portfolio heatmap on the right. */
+  newsFocused?: boolean
 }) {
   const {
     symbol,
@@ -37,6 +43,7 @@ export function DashboardPage({
     portfolioId,
     leftWidth,
     optionsWidth,
+    agentsWidth: heatmapWidth,
     setSymbol,
     setTimeframe,
     toggleIndicator,
@@ -44,7 +51,10 @@ export function DashboardPage({
     setPortfolioId,
     setLeftWidth,
     setOptionsWidth,
+    setAgentsWidth: setHeatmapWidth,
   } = useDashboard()
+  const [agentPanels, setAgentPanels] = useState<PanelStatus[]>([])
+  const [heatmapPanels, setHeatmapPanels] = useState<PanelStatus[]>([])
 
   const layoutRef = useRef<HTMLDivElement>(null)
 
@@ -57,12 +67,12 @@ export function DashboardPage({
 
   const holdings = useMemo(() => selected?.tickers ?? [], [selected])
 
-  const quotesQuery = useQuotes(holdings, true)
-  const chartQuery = useChart(symbol, timeframe)
-  const optionsQuery = useOptions(symbol)
-  const targetsQuery = useTargets(holdings)
-  const newsQuery = useNews(holdings)
-  const macroCharts = useMacroCharts()
+  const quotesQuery = useQuotes(holdings, !newsFocused)
+  const chartQuery = useChart(newsFocused ? '' : symbol, timeframe)
+  const optionsQuery = useOptions(newsFocused ? '' : symbol)
+  const targetsQuery = useTargets(newsFocused ? [] : holdings)
+  const newsQuery = useNews(newsFocused ? [] : holdings)
+  const macroCharts = useMacroCharts(!newsFocused)
   const macroChartStatus = useMemo(() => macroCharts.map((query, index) => ({
     label: `${MACRO_SYMBOLS[index].label} history`,
     envelope: query.data, error: query.error, enabled: query.isEnabled,
@@ -77,16 +87,21 @@ export function DashboardPage({
       [
         { label: 'Holdings', envelope: portfolioQuery.data, error: portfolioQuery.error, enabled: portfolioQuery.isEnabled, loading: portfolioQuery.isFetching },
         { label: 'Quotes', envelope: quotesQuery.data, error: quotesQuery.error, enabled: quotesQuery.isEnabled, loading: quotesQuery.isFetching },
-        { label: 'Chart', envelope: chartQuery.data, error: chartQuery.error, enabled: chartQuery.isEnabled, loading: chartQuery.isFetching },
-        { label: 'Options', envelope: optionsQuery.data, error: optionsQuery.error, enabled: optionsQuery.isEnabled, loading: optionsQuery.isFetching },
-        { label: 'Targets', envelope: targetsQuery.data, error: targetsQuery.error, enabled: targetsQuery.isEnabled, loading: targetsQuery.isFetching },
-        { label: 'News', envelope: newsQuery.data, error: newsQuery.error, enabled: newsQuery.isEnabled, loading: newsQuery.isFetching },
-        ...macroChartStatus,
+        ...(!newsFocused ? [
+          { label: 'Chart', envelope: chartQuery.data, error: chartQuery.error, enabled: chartQuery.isEnabled, loading: chartQuery.isFetching },
+          { label: 'Options', envelope: optionsQuery.data, error: optionsQuery.error, enabled: optionsQuery.isEnabled, loading: optionsQuery.isFetching },
+        ] : [...agentPanels, ...heatmapPanels]),
+        ...(!newsFocused ? [{ label: 'Targets', envelope: targetsQuery.data, error: targetsQuery.error, enabled: targetsQuery.isEnabled, loading: targetsQuery.isFetching }] : []),
+        ...(!newsFocused ? [{ label: 'News', envelope: newsQuery.data, error: newsQuery.error, enabled: newsQuery.isEnabled, loading: newsQuery.isFetching }] : []),
+        ...(!newsFocused ? macroChartStatus : []),
       ],
       portfolioQuery.data?.data.sourcePath ?? '',
     )
   }, [
     onStatusChange,
+    newsFocused,
+    agentPanels,
+    heatmapPanels,
     portfolioQuery.data,
     portfolioQuery.isFetching,
     quotesQuery.data,
@@ -141,17 +156,19 @@ export function DashboardPage({
     [setLeftWidth],
   )
 
-  const dragOptions = useCallback(
+  const dragRight = useCallback(
     (clientX: number) => {
       const bounds = layoutRef.current?.getBoundingClientRect()
-      if (bounds) setOptionsWidth(bounds.right - clientX)
+      if (!bounds) return
+      if (newsFocused) setHeatmapWidth(bounds.right - clientX)
+      else setOptionsWidth(bounds.right - clientX)
     },
-    [setOptionsWidth],
+    [newsFocused, setHeatmapWidth, setOptionsWidth],
   )
 
   return (
-    <div ref={layoutRef} className="dashboard-layout flex min-h-0 flex-1 gap-1 p-1">
-      {/* Left column: holdings, targets, news. */}
+    <div ref={layoutRef} className={`dashboard-layout flex min-h-0 flex-1 gap-1 p-1${newsFocused ? ' dashboard-news-layout' : ''}`}>
+      {/* Dashboard 2 pairs holdings with their allocation pie; Dashboard keeps targets. */}
       <div
         className="dashboard-holdings flex min-h-0 shrink-0 flex-col gap-1"
         style={{ width: leftWidth }}
@@ -166,63 +183,93 @@ export function DashboardPage({
           onSelectPortfolio={setPortfolioId}
           onSelectTicker={selectTicker}
         />
-        <TargetsPanel
-          className="min-h-24 flex-[2]"
-          targets={targetsQuery.data?.data.targets ?? []}
-          loading={targetsQuery.isLoading}
-          warning={warningOf(targetsQuery.data)}
-          onSelectTicker={selectTicker}
-        />
-        <NewsPanel
-          className="min-h-24 flex-[3]"
-          items={newsQuery.data?.data.items ?? []}
-          loading={newsQuery.isLoading}
-          warning={warningOf(newsQuery.data)}
-        />
+        {newsFocused ? (
+          <PortfolioPiePanel
+            className="min-h-24 flex-[2]"
+            portfolio={selected}
+            quotes={quotesQuery.data?.data.holdings ?? {}}
+            loading={portfolioQuery.isLoading || quotesQuery.isLoading}
+            warning={portfolioQuery.error?.message ?? quotesQuery.error?.message ?? warningOf(portfolioQuery.data) ?? warningOf(quotesQuery.data)}
+          />
+        ) : (
+          <TargetsPanel
+            className="min-h-24 flex-[2]"
+            targets={targetsQuery.data?.data.targets ?? []}
+            loading={targetsQuery.isLoading}
+            warning={warningOf(targetsQuery.data)}
+            onSelectTicker={selectTicker}
+          />
+        )}
+        {!newsFocused ? (
+          <NewsPanel
+            className="min-h-24 flex-[3]"
+            items={newsQuery.data?.data.items ?? []}
+            loading={newsQuery.isLoading}
+            warning={warningOf(newsQuery.data)}
+          />
+        ) : null}
       </div>
 
       <Splitter onDrag={dragLeft} />
 
-      {/* Centre and right share the macro bar across their combined width. */}
+      {/* Dashboard 2 keeps the heatmap and embedded Agents at full height. */}
       <div className="dashboard-market flex min-h-0 min-w-0 flex-1 flex-col gap-1">
-        <MacroBar macro={quotesQuery.data?.data.macro ?? {}} loading={quotesQuery.isLoading} charts={macroCharts} />
+        {!newsFocused ? <MacroBar macro={quotesQuery.data?.data.macro ?? {}} loading={quotesQuery.isLoading} charts={macroCharts} /> : null}
 
         <div className="dashboard-main flex min-h-0 min-w-0 flex-1 gap-1">
-          <div className="dashboard-chart flex min-h-0 min-w-0 flex-1 flex-col gap-1">
-            <ChartToolbar
-              symbol={symbol}
-              timeframe={timeframe}
-              indicators={indicators}
-              autoFollow={autoFollow}
-              canExport={buckets.some((bucket) => bucket.rows.length > 0)}
-              onLoadSymbol={setSymbol}
-              onSetTimeframe={setTimeframe}
-              onToggleIndicator={toggleIndicator}
-              onToggleAutoFollow={toggleAutoFollow}
-              onExportOptions={() => void exportOptions()}
-            />
-            <ChartPanel
-              payload={chartQuery.data?.data ?? null}
-              indicators={indicators}
-              loading={chartQuery.isFetching}
-              failureReason={
-                chartQuery.data?.meta.freshness === 'failed'
-                  ? chartQuery.data.meta.failureReason
-                  : undefined
-              }
-            />
+          <div className={`flex min-h-0 min-w-0 flex-1 flex-col gap-1 ${newsFocused ? 'dashboard-agents-column overflow-hidden border border-border' : 'dashboard-chart'}`} aria-label={newsFocused ? 'Dashboard Agents' : undefined}>
+            {!newsFocused ? (
+              <ChartToolbar
+                symbol={symbol}
+                timeframe={timeframe}
+                indicators={indicators}
+                autoFollow={autoFollow}
+                canExport={buckets.some((bucket) => bucket.rows.length > 0)}
+                onLoadSymbol={setSymbol}
+                onSetTimeframe={setTimeframe}
+                onToggleIndicator={toggleIndicator}
+                onToggleAutoFollow={toggleAutoFollow}
+                onExportOptions={() => void exportOptions()}
+              />
+            ) : null}
+            {newsFocused ? (
+              <AgentsPage embedded onStatusChange={setAgentPanels} />
+            ) : (
+              <ChartPanel
+                payload={chartQuery.data?.data ?? null}
+                indicators={indicators}
+                loading={chartQuery.isFetching}
+                failureReason={
+                  chartQuery.data?.meta.freshness === 'failed'
+                    ? chartQuery.data.meta.failureReason
+                    : undefined
+                }
+              />
+            )}
           </div>
 
-          <Splitter onDrag={dragOptions} />
+          <Splitter onDrag={dragRight} />
 
-          <div className="dashboard-options-column flex min-h-0 shrink-0 flex-col" style={{ width: optionsWidth }}>
-            <OptionsPanel
-              symbol={symbol}
-              buckets={buckets}
-              loading={optionsQuery.isFetching}
-              warning={warningOf(optionsQuery.data)}
-            />
-          </div>
+          {newsFocused ? (
+            <aside className="dashboard-heatmap-column flex min-h-0 min-w-0 shrink-0 flex-col" style={{ width: heatmapWidth }} aria-label="Dashboard portfolio heatmap">
+              <PortfolioHeatmapPanel
+                portfolio={selected}
+                quotes={quotesQuery.data?.data.holdings ?? {}}
+                loading={portfolioQuery.isLoading || quotesQuery.isLoading}
+                warning={portfolioQuery.error?.message ?? quotesQuery.error?.message ?? warningOf(portfolioQuery.data) ?? warningOf(quotesQuery.data)}
+                onStatusChange={setHeatmapPanels}
+              />
+            </aside>
+          ) : (
+            <div className="dashboard-options-column flex min-h-0 shrink-0 flex-col" style={{ width: optionsWidth }}>
+              <OptionsPanel
+                symbol={symbol}
+                buckets={buckets}
+                loading={optionsQuery.isFetching}
+                warning={warningOf(optionsQuery.data)}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>

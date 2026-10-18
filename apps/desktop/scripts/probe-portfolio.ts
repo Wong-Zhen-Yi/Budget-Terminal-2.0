@@ -13,7 +13,7 @@
  */
 import assert from 'node:assert/strict'
 
-import type { OptionPosition, Portfolio } from '../electron/shared/contract.js'
+import type { OptionPosition, Portfolio, Quote } from '../electron/shared/contract.js'
 import {
   OPTION_STATUSES,
   OPTION_STRATEGIES,
@@ -23,6 +23,7 @@ import {
 import { optionsEquity } from '../electron/shared/financeMath.js'
 import {
   buildPortfolioRows,
+  buildPortfolioAllocation,
   buildPositionRows,
   sizeBucket,
   summarizePortfolio,
@@ -431,7 +432,40 @@ async function liveOptions(portfolios: Portfolio[]): Promise<void> {
   )
 }
 
+function offlineAllocation(): void {
+  const portfolio: Portfolio = { id: 'pie', name: 'Allocation fixture', readOnly: false,
+    tickers: ['AAPL', 'MSFT', 'EXCLUDED', 'ZERO'], holdings: {
+      AAPL: { ticker: 'AAPL', shares: 2, avgPrice: 50, includeInWeight: true },
+      MSFT: { ticker: 'MSFT', shares: 1, avgPrice: 100, includeInWeight: true },
+      EXCLUDED: { ticker: 'EXCLUDED', shares: 10, avgPrice: 1, includeInWeight: false },
+      ZERO: { ticker: 'ZERO', shares: 0, avgPrice: 0, includeInWeight: true },
+    }, cashBalance: 100, includeCashInWeight: true, marginDebt: 50, options: [] }
+  const quotes: Record<string, Quote> = {
+    AAPL: { symbol: 'AAPL', price: 100, change: 0, absChange: 0, currency: 'USD' },
+    MSFT: { symbol: 'MSFT', price: 100, change: 0, absChange: 0 },
+  }
+  const allocation = buildPortfolioAllocation(portfolio, quotes)
+  assert.equal(allocation.complete, true, 'Excluded and zero-share holdings need no market marks')
+  assert.equal(allocation.total, 400, 'Use market value plus counted cash, not cost or net equity')
+  assert.deepEqual(allocation.slices, [{ label: 'AAPL', value: 200 }, { label: 'MSFT', value: 100 }, { label: 'CASH', value: 100 }])
+  assert.equal(buildPortfolioAllocation({ ...portfolio, includeCashInWeight: false }, quotes).total, 300)
+  assert.equal(buildPortfolioAllocation({ ...portfolio, cashBalance: -100 }, quotes).total, 300)
+  for (const missing of [undefined, { ...quotes.MSFT, price: NaN }, { ...quotes.MSFT, currency: 'EUR' }]) {
+    const invalid = { AAPL: quotes.AAPL, ...(missing ? { MSFT: missing } : {}) }
+    const result = buildPortfolioAllocation(portfolio, invalid)
+    assert.equal(result.complete, false)
+    assert.equal(result.slices.length, 0, 'Never rebase the chart around a missing or unconverted holding')
+    assert(result.missingReasons.some(reason => reason.includes('MSFT')))
+  }
+  const empty = { ...portfolio, tickers: [], holdings: {}, cashBalance: 0 }
+  assert.deepEqual(buildPortfolioAllocation(empty, {}).slices, [])
+  assert.deepEqual(buildPortfolioAllocation({ ...empty, cashBalance: 250 }, {}).slices, [{ label: 'CASH', value: 250 }])
+  assert.deepEqual(buildPortfolioAllocation({ ...empty, cashBalance: 250, includeCashInWeight: false }, {}).slices, [])
+  console.log('offline: portfolio pie allocation checks passed: market weights, exclusions, cash, missing marks, FX and empty portfolios')
+}
+
 offlineOptions()
+offlineAllocation()
 if (!process.argv.includes('--offline')) {
   await main().catch((error) => {
     console.error(error)

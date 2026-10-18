@@ -165,23 +165,25 @@ export function buildTasks(
   if (dashboardTickers.length && dashboardTickers.join(',') !== active.join(',')) {
     tasks.push({
       tab: 'dashboard', label: 'Dashboard holdings',
-      run: async (client, backgroundOrder) => {
-        await warmStartupQuery(client, {
-          queryKey: queryKeys.quotes(dashboardTickers),
-          queryFn: () => api.quotes({ holdings: dashboardTickers, background: true, backgroundOrder }),
-          staleTime: queryFreshness(queryKeys.quotes(dashboardTickers)),
-        })
-        await warmStartupQuery(client, {
-          queryKey: queryKeys.targets(dashboardTickers),
-          queryFn: () => api.targets({ tickers: dashboardTickers, background: true, backgroundOrder }),
-          staleTime: queryFreshness(queryKeys.targets(dashboardTickers)),
-        })
-        await warmStartupQuery(client, {
-          queryKey: queryKeys.news(dashboardTickers),
-          queryFn: () => api.news({ tickers: dashboardTickers, background: true, backgroundOrder }),
-          staleTime: queryFreshness(queryKeys.news(dashboardTickers)),
-        })
-      },
+      run: (client, backgroundOrder) => warmStartupQuery(client, {
+        queryKey: queryKeys.quotes(dashboardTickers),
+        queryFn: () => api.quotes({ holdings: dashboardTickers, background: true, backgroundOrder }),
+        staleTime: queryFreshness(queryKeys.quotes(dashboardTickers)),
+      }),
+    }, {
+      tab: 'dashboard', label: 'Dashboard targets',
+      run: (client, backgroundOrder) => warmStartupQuery(client, {
+        queryKey: queryKeys.targets(dashboardTickers),
+        queryFn: () => api.targets({ tickers: dashboardTickers, background: true, backgroundOrder }),
+        staleTime: queryFreshness(queryKeys.targets(dashboardTickers)),
+      }),
+    }, {
+      tab: 'dashboard', label: 'Dashboard news',
+      run: (client, backgroundOrder) => warmStartupQuery(client, {
+        queryKey: queryKeys.news(dashboardTickers),
+        queryFn: () => api.news({ tickers: dashboardTickers, background: true, backgroundOrder }),
+        staleTime: queryFreshness(queryKeys.news(dashboardTickers)),
+      }),
     })
   }
 
@@ -976,6 +978,14 @@ export function buildTasks(
       }),
     })
   }
+
+  // Dashboard 2's pie and Live heatmap use the same warmed holdings/quotes;
+  // historical heatmap intervals are explicit user actions. Track Agents too,
+  // without depending on the original Dashboard's news, targets or charts.
+  const dashboard2Labels = new Set(['Quotes', 'Dashboard holdings'])
+  tasks.push(...tasks.filter((task) => task.tab === 'agents' ||
+    (task.tab === 'dashboard' && dashboard2Labels.has(task.label)))
+    .map((task) => ({ ...task, tab: 'dashboard-2' })))
 
   return tasks
 }

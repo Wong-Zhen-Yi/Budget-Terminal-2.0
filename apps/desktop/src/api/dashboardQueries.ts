@@ -11,10 +11,11 @@ function combineCharts(results: UseQueryResult<Envelope<ChartPayload>>[]) {
   return results.map(({ data, error, isEnabled, isLoading, isError, isFetching }) => ({ data, error, isEnabled, isLoading, isError, isFetching }))
 }
 
-export function useMacroCharts() {
+export function useMacroCharts(enabled = true) {
   return useQueries({
     combine: combineCharts,
     queries: MACRO_SYMBOLS.map(({ symbol }) => ({
+      enabled,
       queryKey: queryKeys.chart(symbol, '1 Day'),
       queryFn: () => api.chart({ symbol, timeframe: '1 Day', force: forcing() }),
       staleTime: queryFreshness(queryKeys.chart(symbol, '1 Day')),

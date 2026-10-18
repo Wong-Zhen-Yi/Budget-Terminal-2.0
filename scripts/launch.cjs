@@ -3,6 +3,7 @@ const path = require('node:path')
 const { supportedNodeVersion, supportedNpmVersion, runtimeEnvironment } = require('./runtime.cjs')
 const { engines } = require('../package.json')
 const { findCodex } = require('./codex-runtime.cjs')
+const { verifyDesktopBuild } = require('./verify-desktop-build.cjs')
 
 const root = path.resolve(__dirname, '..')
 
@@ -13,7 +14,7 @@ function platformName(platform) {
   return null
 }
 
-function launch({ platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, log = console } = {}) {
+function launch({ platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
   const os = platformName(platform)
   if (!os) {
     log.error(`Budget Terminal supports Windows, macOS, and Linux; found ${platform}.`)
@@ -72,10 +73,18 @@ function launch({ platform = process.platform, nodeVersion = process.versions.no
     return 1
   }
 
-  log.log('Building the latest Budget Terminal source...')
+  log.log('Building the latest Budget Terminal source, including Dashboard 2 with a portfolio allocation pie, Agents in the center and a portfolio heatmap on the right instead of live news, analyst targets, sparklines and options, the matching Agents terminal theme, compact toolbar, formatted responses, Budget Terminal MCP access, image paste and reviewed portfolio updates...')
   const build = npm(['run', 'build'])
   if (build.error || build.status !== 0) {
     log.error('Budget Terminal could not build. See the error above.')
+    return 1
+  }
+
+  log.log('Verifying the built desktop interface and its assets...')
+  try {
+    verifyBuild()
+  } catch (error) {
+    log.error(error.message)
     return 1
   }
 

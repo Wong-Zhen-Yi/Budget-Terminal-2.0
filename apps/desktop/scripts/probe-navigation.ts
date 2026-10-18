@@ -8,6 +8,9 @@ import { build } from 'esbuild'
 import { startupPages, workspaceFor } from '../electron/shared/navigation.js'
 import { TABS } from '../electron/shared/contract.js'
 
+assert.equal(workspaceFor('dashboard-2')?.id, 'overview')
+assert(TABS.some(tab => tab.id === 'dashboard-2' && tab.label === 'Dashboard 2' && tab.implemented))
+assert(startupPages('dashboard', [], []).includes('dashboard-2'), 'Unvisited Dashboard 2 must load at startup')
 assert.equal(workspaceFor('hims')?.id, 'focus')
 assert.equal(workspaceFor('pltr')?.id, 'focus')
 assert(TABS.some(tab => tab.id === 'pltr' && tab.label === 'PLTR' && tab.implemented))

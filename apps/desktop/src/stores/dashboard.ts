@@ -34,6 +34,8 @@ interface DashboardState {
   leftWidth: number
   /** Options column width in pixels. */
   optionsWidth: number
+  /** Dashboard 2's right panel width; retain the legacy key as panel content changes. */
+  agentsWidth: number
 
   setSymbol: (symbol: string) => void
   setTimeframe: (timeframe: TimeframeLabel) => void
@@ -42,6 +44,7 @@ interface DashboardState {
   setPortfolioId: (id: string | null) => void
   setLeftWidth: (width: number) => void
   setOptionsWidth: (width: number) => void
+  setAgentsWidth: (width: number) => void
 }
 
 export const useDashboard = create<DashboardState>()(
@@ -53,6 +56,7 @@ export const useDashboard = create<DashboardState>()(
       autoFollow: true,
       portfolioId: null,
       ...DEFAULT_WIDTHS,
+      agentsWidth: 400,
 
       setSymbol: (symbol) => set({ symbol: symbol.trim().toUpperCase() || DEFAULT_SYMBOL }),
       setTimeframe: (timeframe) => set({ timeframe }),
@@ -62,6 +66,7 @@ export const useDashboard = create<DashboardState>()(
       setPortfolioId: (portfolioId) => set({ portfolioId }),
       setLeftWidth: (leftWidth) => set({ leftWidth: clamp(leftWidth, MIN_LEFT_WIDTH, MAX_LEFT_WIDTH) }),
       setOptionsWidth: (optionsWidth) => set({ optionsWidth: clamp(optionsWidth, MIN_OPTIONS_WIDTH, MAX_OPTIONS_WIDTH) }),
+      setAgentsWidth: (agentsWidth) => set({ agentsWidth: clamp(agentsWidth, 360, 1000) }),
     }),
     {
       name: 'budget-terminal:dashboard',

@@ -112,6 +112,48 @@ for (const { label } of MACRO_SYMBOLS) {
 for (const page of allPages) {
   assert(scheduled.has(page) || sharedOrLocal.has(page), `${page} is absent from startup loading`)
 }
+const dashboard2Tasks = buildTasks(portfolio, undefined, { stocks: 'AAPL', fundamentals: 'AAPL' },
+  { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 }).filter(task => task.tab === 'dashboard-2')
+for (const label of ['Quotes', 'Agents workspace']) {
+  assert(dashboard2Tasks.some(task => task.label === label), `Dashboard 2 must warm ${label}`)
+}
+assert(!dashboard2Tasks.some(task => ['Dashboard news', 'Market news', 'Targets', 'Dashboard targets', 'Dashboard chart', 'Dashboard options', 'Macro quotes'].includes(task.label) || task.label.endsWith('sparkline')),
+  'Dashboard 2 must not depend on removed news, targets, charts, macro strip or options')
+const dashboard2Agents = dashboard2Tasks.find(task => task.label === 'Agents workspace')!
+let dashboardAgentReads = 0
+Object.assign(window.api, { agentsStatus: async () => { dashboardAgentReads++; return ok({ messages: [] }, 'fixture') } })
+const dashboardAgentClient = new QueryClient()
+await dashboard2Agents.run(dashboardAgentClient)
+assert.equal(dashboardAgentReads, 1, 'Embedded Agents must load before Dashboard 2 is visited')
+assert(dashboardAgentClient.getQueryData(['agents']), 'Embedded Agents must share the Agents session cache')
+dashboardAgentClient.clear()
+assert(!macroTasks.some(task => task.tab === 'dashboard-2' && task.label.toLowerCase().includes('news')),
+  'An empty Dashboard 2 portfolio must not start a removed market news feed')
+
+// A saved, non-active portfolio must warm both its pie and Live heatmap without news or targets.
+const { useDashboard } = await import('../src/stores/dashboard.js')
+const previousDashboardPortfolio = useDashboard.getState().portfolioId
+const dashboardStorage = useDashboard.persist.getOptions().storage
+useDashboard.persist.setOptions({ storage: { getItem: () => null, setItem() {}, removeItem() {} } })
+useDashboard.setState({ portfolioId: 'alternate' })
+const customTasks = buildTasks({ ...portfolio, portfolios: [...portfolio.portfolios,
+  { ...portfolio.portfolios[0], id: 'alternate', tickers: ['MSFT'] }] }, undefined,
+  { stocks: 'AAPL', fundamentals: 'AAPL' }, { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 })
+useDashboard.setState({ portfolioId: previousDashboardPortfolio })
+useDashboard.persist.setOptions({ storage: dashboardStorage })
+assert(customTasks.some(task => task.tab === 'dashboard' && task.label === 'Dashboard targets'), 'Original Dashboard must still warm targets')
+const customDashboard2 = customTasks.filter(task => task.tab === 'dashboard-2')
+assert(!customDashboard2.some(task => /target|news/i.test(task.label)))
+Object.assign(window.api, {
+  quotes: async () => ok({ holdings: {} }, 'fixture'),
+  news: async () => { throw new Error('Removed news must not be needed by Dashboard 2') },
+  targets: async () => { throw new Error('Removed target service must not be needed by the pie') },
+})
+const customClient = new QueryClient()
+await Promise.all(customDashboard2.filter(task => task.label === 'Dashboard holdings')
+  .map(task => task.run(customClient)))
+assert(customClient.getQueryData(['quotes', 'MSFT']), 'Selected portfolio pie and heatmap quotes must be ready before first visit')
+customClient.clear()
 
 assert(!scheduled.has('signals'), 'removed Day Trading page must not run a startup scan')
 
