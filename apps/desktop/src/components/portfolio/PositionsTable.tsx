@@ -181,6 +181,16 @@ export function PositionsTable({
       cell: (row) => <span className={sizeTone(row.size)}>{formatSize(row)}</span>,
     },
     {
+      key: 'pegRatio',
+      header: <span title="Provider-reported price/earnings-to-growth ratio. Negative values may reflect shrinking earnings; unavailable data is shown as --.">PEG Ratio</span>,
+      align: 'right',
+      numeric: true,
+      sortValue: (row) => row.pegRatio,
+      cell: (row) => row.pegNotApplicable
+        ? <span className="text-text-dim" title="PEG is not applicable to funds.">N/A</span>
+        : decimals(row.pegRatio, 2),
+    },
+    {
       key: 'analyst',
       header: 'Analyst PT',
       align: 'right',

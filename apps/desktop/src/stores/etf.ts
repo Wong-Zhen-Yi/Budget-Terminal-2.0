@@ -2,19 +2,9 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 /**
- * The ETF page's session state, standing in for `_p13_session_snapshot` /
- * `_p13_restore_session_snapshot`.
- *
- * Only the ticker is persisted, not the result. The reference stores the whole
- * `EtfHoldingsResult` because its tab-session snapshot is the only thing that survives a
- * restart; here the main process already caches the issuer file for six hours, so
- * persisting the payload as well would put a five-hundred-row book in browser storage to
- * save a request that is already free — and `_p13_restore_startup_session` re-requests
- * the ticker on restore anyway.
- *
- * The two filter boxes and the active subtab are session-only, exactly as they are
- * there: `_p13_holdings_filter` and `_p13_aum_filter` are plain attributes, not snapshot
- * fields.
+ * Persist the selected fund, not duplicate holdings in localStorage. React Query and
+ * the main-process disk cache retain data for 24 hours. Fresh/legacy empty sessions
+ * open on SPY, which is included in startup loading before this page is visited.
  */
 
 export type EtfSubtab = 'holdings' | 'arbitrage'
@@ -34,7 +24,7 @@ interface EtfState {
 export const useEtfPage = create<EtfState>()(
   persist(
     (set) => ({
-      ticker: '',
+      ticker: 'SPY',
       subtab: 'holdings',
       holdingsFilter: '',
       aumFilter: '',
@@ -46,7 +36,15 @@ export const useEtfPage = create<EtfState>()(
     }),
     {
       name: 'etf-page',
-      version: 1,
+      version: 2,
+      migrate: (persisted) => {
+        const ticker = (persisted as { ticker?: unknown } | undefined)?.ticker
+        return { ticker: typeof ticker === 'string' && ticker.trim() ? ticker.trim().toUpperCase() : 'SPY' }
+      },
+      merge: (persisted, current) => {
+        const ticker = (persisted as { ticker?: unknown } | undefined)?.ticker
+        return { ...current, ticker: typeof ticker === 'string' && ticker.trim() ? ticker.trim().toUpperCase() : 'SPY' }
+      },
       partialize: (state) => ({ ticker: state.ticker }),
     },
   ),

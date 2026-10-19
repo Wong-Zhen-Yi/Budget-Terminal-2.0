@@ -186,7 +186,7 @@ export function isUsableHoldingSymbol(value: unknown): boolean {
 /** `_normalize_sector`: an issuer's placeholder dash is not a sector. */
 export function normalizeSector(value: unknown): string {
   const text = String(value ?? '').trim()
-  if (['', '-', '--', 'n/a', 'na', 'none', 'null'].includes(text.toLowerCase())) return ''
+  if (['', '-', '--', 'n/a', 'na', 'none', 'null', 'unknown', 'unclassified', 'not available', 'other', 'others'].includes(text.toLowerCase())) return ''
   return text
 }
 

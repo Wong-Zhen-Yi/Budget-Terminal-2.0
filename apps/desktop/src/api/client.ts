@@ -46,13 +46,13 @@ export const queryKeys = {
   hims: ['hims'] as const,
   gold: ['gold'] as const,
   oil: ['oil'] as const,
-  heatmap: (etf: string) => ['heatmap', etf, 'yahoo-v1'] as const,
+  heatmap: (etf: string) => ['heatmap', etf, 'yahoo-v2'] as const,
   // One key per ticker, so switching back to a fund already loaded repaints instantly
   // the way `_p13_last_result` does. Arbitrage is keyed the same way and separately: it
   // is a second, opt-in load over the same basket, not part of the holdings payload.
-  etfHoldings: (ticker: string) => ['etfHoldings', ticker] as const,
-  etfArbitrage: (ticker: string) => ['etfArbitrage', ticker] as const,
-  etfAum: ['etfAum'] as const,
+  etfHoldings: (ticker: string) => ['etfHoldings', ticker, 2] as const,
+  etfArbitrage: (ticker: string) => ['etfArbitrage', ticker, 2] as const,
+  etfAum: ['etfAum', 2] as const,
   upDown: (source: string, interval: string, symbols: string[]) =>
     ['upDown', source, interval, [...symbols].sort().join(',')] as const,
   stocks: (symbol: string) => ['stocks', symbol] as const,
@@ -91,7 +91,7 @@ export const queryKeys = {
   youtube: (tickers: string[]) => ['youtube', [...tickers].sort().join(',')] as const,
   youtubeThumbnail: (videoId: string, thumbnailUrl: string) =>
     ['youtubeThumbnail', videoId, thumbnailUrl] as const,
-  fundamentals: (tickers: string[]) => ['fundamentals', [...tickers].sort().join(',')] as const,
+  fundamentals: (tickers: string[]) => ['fundamentals', [...tickers].sort().join(','), 'peg-v1'] as const,
   fundamentalsPage: (symbol: string) => ['fundamentalsPage', symbol, 'usd-v2'] as const,
   returns: (tickers: string[], window: string) =>
     ['returns', window, [...tickers].sort().join(',')] as const,

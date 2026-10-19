@@ -4,6 +4,7 @@ import type { HeatmapEtfKey, HeatmapInterval } from '@shared/contract'
 import { HEATMAP_INTERVALS } from '@shared/contract'
 import {
   HEATMAP_ETFS,
+  UNCLASSIFIED,
   buildHeatmapDetail,
   buildHeatmapRows,
   buildHeatmapSummary,
@@ -104,6 +105,7 @@ export function HeatmapPage({
   }, [loading, query.data, query.error, payload, rows.length, etf, interval])
 
   const missing = Math.max(0, summary.holdingsLoaded - summary.quoteCoverage)
+  const unclassified = rows.filter(row => row.sector === UNCLASSIFIED)
 
   const cells: Array<{ key: string; label: string; value: string; className: string; title?: string }> = [
     {
@@ -205,6 +207,13 @@ export function HeatmapPage({
       <p className="shrink-0 text-right text-2xs text-text-muted" title={status}>
         {status}
       </p>
+
+      {rows.length > 0 ? (
+        <p className={`shrink-0 text-2xs ${unclassified.length ? 'text-warn' : 'text-text-muted'}`}>
+          Sector coverage: {rows.length - unclassified.length}/{rows.length}
+          {unclassified.length ? ` — Unclassified: ${unclassified.map(row => row.symbol).join(', ')}` : ''}
+        </p>
+      ) : null}
 
       <IndexHeatmap
         rows={rows}

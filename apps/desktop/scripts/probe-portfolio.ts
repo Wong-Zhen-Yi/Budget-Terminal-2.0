@@ -2,9 +2,10 @@
  * Print both holdings views exactly as the UI renders them.
  *
  *   npm run probe:portfolio
+ *   npm run probe:portfolio -- --offline --peg-live  # synthetic checks + public PEG quotes
  *
  * Compare against the PySide6 app: the Dashboard panel's Weight/Gain, and the Portfolio
- * page's twelve columns and header figures.
+ * page's stock columns (including PEG) and header figures.
  *
  * The two Weight columns legitimately disagree. The Dashboard divides by stock market
  * value alone; the Portfolio page divides by stock value plus cash. That is what the
@@ -29,6 +30,9 @@ import {
   summarizePortfolio,
 } from '../electron/shared/portfolioMath.js'
 import { yahooProvider } from '../electron/services/provider.js'
+import { getFundamentals } from '../electron/services/yahoo/fundamentals.js'
+import { closeYahooWorker, yahoo } from '../electron/services/yahoo/client.js'
+import { cache } from '../electron/services/cache.js'
 
 function pad(text: string, width: number, align: 'left' | 'right' = 'right'): string {
   return align === 'left' ? text.padEnd(width) : text.padStart(width)
@@ -89,7 +93,7 @@ async function main(): Promise<void> {
     console.log(
       `  ${pad('Symbol', 8, 'left')}${pad('Shares', 10)}${pad('Avg', 10)}${pad('Cost', 13)}` +
         `${pad('Price', 10)}${pad('Day %', 9)}${pad('Mkt Value', 14)}${pad('Weight', 9)}` +
-        `${pad('Gain', 14)}${pad('Growth', 9)}  ${pad('Size', 14, 'left')}${pad('Analyst PT', 18, 'left')}`,
+        `${pad('Gain', 14)}${pad('Growth', 9)}  ${pad('Size', 14, 'left')}${pad('PEG', 9)}  ${pad('Analyst PT', 18, 'left')}`,
     )
     for (const row of [...positions].sort((a, b) => (b.marketValue ?? -Infinity) - (a.marketValue ?? -Infinity))) {
       const size =
@@ -116,7 +120,8 @@ async function main(): Promise<void> {
           pad(`${(row.growth ?? 0) >= 0 ? '+' : ''}${row.growth?.toFixed(1) ?? '--'}%`, 9) +
           '  ' +
           pad(size, 14, 'left') +
-          pad(analyst, 18, 'left'),
+          pad(row.pegNotApplicable ? 'N/A' : row.pegRatio === null ? '--' : row.pegRatio.toFixed(2), 9) +
+          '  ' + pad(analyst, 18, 'left'),
       )
     }
     if (positions.some((row) => !row.includeInWeight)) {
@@ -464,11 +469,71 @@ function offlineAllocation(): void {
   console.log('offline: portfolio pie allocation checks passed: market weights, exclusions, cash, missing marks, FX and empty portfolios')
 }
 
-offlineOptions()
-offlineAllocation()
-if (!process.argv.includes('--offline')) {
-  await main().catch((error) => {
-    console.error(error)
-    process.exit(1)
-  })
+async function offlinePeg(): Promise<void> {
+  const originalSummary = yahoo.quoteSummary
+  let calls = 0
+  Object.assign(yahoo, { quoteSummary: async (ticker: string, options: { modules: string[] }) => {
+    calls += 1
+    assert.deepEqual(options.modules, ['price', 'summaryDetail', 'financialData', 'defaultKeyStatistics'])
+    if (ticker === 'PEGFAIL') throw new Error('Provider unavailable')
+    const reported: Record<string, Record<string, unknown>> = {
+      PEGSTOCK: { pegRatio: 1.236 }, PEGNEG: { pegRatio: -0.75 }, PEGZERO: { pegRatio: 0 },
+      PEGTRAIL: { pegRatio: Number.NaN, trailingPegRatio: 2.48 },
+      PEGMISSING: {}, PEGINVALID: { pegRatio: Number.POSITIVE_INFINITY },
+      PEGFUND: { pegRatio: 99 }, PEGMUTUAL: { pegRatio: 99 },
+    }
+    return { price: { quoteType: ticker === 'PEGFUND' ? 'ETF' : ticker === 'PEGMUTUAL' ? 'MUTUALFUND' : 'EQUITY', marketCap: 1e10 },
+      summaryDetail: { totalAssets: 1e9 }, financialData: { targetMeanPrice: 150 },
+      defaultKeyStatistics: reported[ticker] }
+  } })
+  const tickers = ['PEGSTOCK', 'PEGNEG', 'PEGZERO', 'PEGTRAIL', 'PEGMISSING', 'PEGINVALID', 'PEGFUND', 'PEGMUTUAL', 'PEGFAIL']
+  try {
+    const facts = await getFundamentals(tickers, true)
+    assert.equal(calls, tickers.length, 'PEG must reuse the existing summary request, not add one')
+    for (const [ticker, expected] of Object.entries({ PEGSTOCK: 1.236, PEGNEG: -0.75, PEGZERO: 0, PEGTRAIL: 2.48 })) {
+      assert.equal(facts[ticker].pegRatio, expected)
+    }
+    for (const ticker of ['PEGMISSING', 'PEGINVALID', 'PEGFUND', 'PEGMUTUAL', 'PEGFAIL']) assert.equal(facts[ticker].pegRatio, null)
+    await getFundamentals(['PEGSTOCK'])
+    assert.equal(calls, tickers.length, 'Normal quote refreshes must reuse cached fundamentals')
+    const portfolio: Portfolio = { id: 'peg', name: 'PEG fixture', readOnly: false, tickers,
+      holdings: Object.fromEntries(tickers.map(ticker => [ticker, { ticker, shares: 1, avgPrice: 90, includeInWeight: true }])),
+      cashBalance: 0, marginDebt: 0, options: [], includeCashInWeight: true }
+    const quotes: Record<string, Quote> = Object.fromEntries(tickers.map(ticker => [ticker, { symbol: ticker, price: 100, change: 1, absChange: 1 }]))
+    const rows = buildPositionRows(portfolio, quotes, facts)
+    assert.equal(rows[0].pegRatio, 1.236)
+    assert.equal(rows[1].pegRatio, -0.75)
+    assert.equal(rows[2].pegRatio, 0)
+    assert.equal(rows[6].pegNotApplicable, true)
+    assert.equal(rows[7].pegNotApplicable, true)
+    assert.equal(rows[4].pegNotApplicable, false, 'A missing stock PEG is unknown, not inapplicable')
+    assert.equal(buildPositionRows(portfolio, quotes)[0].pegRatio, null, 'Older snapshots must safely show --')
+    assert.equal(rows[0].marketValue, 100)
+    assert.equal(rows[0].analystTarget, 150, 'Existing targets must be preserved')
+    console.log('offline: portfolio PEG checks passed: reported/trailing values, negatives, zero, missing/invalid data, funds, cache and unchanged valuation')
+  } finally {
+    Object.assign(yahoo, { quoteSummary: originalSummary })
+    for (const ticker of tickers) cache.delete(`fundamentals:peg-v1:${ticker}`)
+  }
+}
+
+try {
+  offlineOptions()
+  offlineAllocation()
+  await offlinePeg()
+  if (process.argv.includes('--peg-live')) {
+    const facts = await getFundamentals(['AAPL', 'NVDA', 'SPY'], true)
+    for (const ticker of ['AAPL', 'NVDA', 'SPY']) {
+      console.log(`live PEG: ${ticker} ${JSON.stringify(facts[ticker])}`)
+      assert(facts[ticker].quoteType, `${ticker} provider response unavailable`)
+    }
+    assert.equal(facts.SPY.pegRatio, null)
+  }
+  if (!process.argv.includes('--offline')) await main()
+} catch (error) {
+  console.error(error)
+  process.exitCode = 1
+} finally {
+  closeYahooWorker()
+  cache.close()
 }

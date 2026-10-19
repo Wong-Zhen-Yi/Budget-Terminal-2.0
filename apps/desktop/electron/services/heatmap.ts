@@ -26,6 +26,7 @@ import {
   positiveWeight,
 } from '../shared/heatmap.js'
 import { cache } from './cache.js'
+import { getIndexSectors } from './sectors.js'
 import { getIssuerEtfHoldings } from './etf/holdings.js'
 import { getSp500SectorMap, resolveSector } from './etf/sectorMap.js'
 import { fetchSparkCloses, yahooSymbol } from './yahoo/spark.js'
@@ -66,10 +67,16 @@ const dependencies = {
   holdings: getIssuerEtfHoldings,
   sectors: getSp500SectorMap,
   prices: fetchSparkCloses,
+  classifications: getIndexSectors,
 }
 
 export async function fetchHeatmap(etf: HeatmapEtfKey, force: boolean,
-  deps = dependencies): Promise<HeatmapFetchResult> {
+  deps: {
+    holdings: typeof getIssuerEtfHoldings
+    sectors: typeof getSp500SectorMap
+    prices: typeof fetchSparkCloses
+    classifications?: typeof getIndexSectors
+  } = dependencies): Promise<HeatmapFetchResult> {
   const ticker = etfTicker(etf)
   const errors: EnvelopeError[] = []
 
@@ -77,7 +84,7 @@ export async function fetchHeatmap(etf: HeatmapEtfKey, force: boolean,
 
   // `fetch()`: drop the placeholder rows first, then anything without a positive weight.
   // Both filters run before the quote pull so no request is spent on a dead symbol.
-  const sectorMap = await deps.sectors()
+  const sectorMap = await deps.sectors(force)
   const seeds = source.holdings.flatMap((holding) => {
     const symbol = holding.symbol.trim().toUpperCase()
     if (!isUsableHoldingSymbol(symbol)) return []
@@ -114,7 +121,12 @@ export async function fetchHeatmap(etf: HeatmapEtfKey, force: boolean,
     byPriceSymbol.set(key, [...(byPriceSymbol.get(key) ?? []), seed.symbol])
   }
 
-  const { series } = await deps.prices([...byPriceSymbol.keys()], '1y', force)
+  const unresolved = seeds.filter(seed => seed.sector === 'Unclassified').map(seed => seed.symbol)
+  const [{ series }, classifications] = await Promise.all([
+    deps.prices([...byPriceSymbol.keys()], '1y', force),
+    deps.classifications && unresolved.length ? deps.classifications(unresolved) : Promise.resolve({} as Record<string, string>),
+  ])
+  for (const seed of seeds) if (classifications[seed.symbol]) seed.sector = classifications[seed.symbol]
   const quotes = new Map<string, { price: number; changes: HeatmapHolding['changes'] }>()
   const priceDates: string[] = []
   for (const [key, entry] of Object.entries(series)) {
@@ -152,6 +164,10 @@ export async function fetchHeatmap(etf: HeatmapEtfKey, force: boolean,
         ticker,
       ),
     )
+  }
+  const unclassified = holdings.filter(holding => holding.sector === 'Unclassified')
+  if (unclassified.length) {
+    errors.push(err('Sector classification', `${unclassified.length} holding(s) remain Unclassified: ${unclassified.map(holding => holding.symbol).join(', ')}.`, 'etf_heatmap_sectors', ticker))
   }
   if (source.isPartial) {
     errors.push(
@@ -197,6 +213,6 @@ export async function fetchHeatmap(etf: HeatmapEtfKey, force: boolean,
  */
 export function getHeatmap(etf: HeatmapEtfKey, force = false): Promise<HeatmapFetchResult> {
   return cache
-    .resolveWithStaleFallback(`heatmap:yahoo-v1:${etf}`, HEATMAP_TTL_MS, () => fetchHeatmap(etf, force), { force })
+    .resolveWithStaleFallback(`heatmap:yahoo-v2:${etf}`, HEATMAP_TTL_MS, () => fetchHeatmap(etf, force), { force })
     .then((result) => result.value)
 }

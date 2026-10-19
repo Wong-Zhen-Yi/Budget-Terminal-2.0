@@ -73,6 +73,8 @@ export interface Envelope<T> {
 /** One quote derived from the last two daily closes, like `price_payload` in the PySide6 app. */
 export interface Quote {
   symbol: string
+  /** Optional holding classification, loaded with startup quotes for portfolio heatmaps. */
+  sector?: string
   price: number
   /** Percent change against the previous close. */
   change: number
@@ -589,6 +591,8 @@ export interface Fundamentals {
   size: number | null
   sizeType: 'marketCap' | 'aum' | null
   targetMeanPrice: number | null
+  /** Provider-reported price/earnings-to-growth ratio; null for funds or missing data. */
+  pegRatio: number | null
 }
 
 export interface FundamentalsPayload {
@@ -1280,7 +1284,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'articles', label: 'Articles', implemented: true },
   { id: 'agents', label: 'Agents', implemented: true },
   { id: 'dashboard', label: 'Dashboard', implemented: true },
-  { id: 'dashboard-2', label: 'Dashboard 2', implemented: true },
+  { id: 'dashboard-2', label: 'Dashboard 2.0', implemented: true },
   { id: 'portfolio', label: 'Portfolio', implemented: true },
   { id: 'personal-finance', label: 'Personal Finance', implemented: true },
   { id: 'global', label: 'Global', implemented: true },
@@ -1967,10 +1971,23 @@ export interface CalendarCompanyEvent {
   event: 'Earnings' | 'Ex-Dividend'
 }
 
+export interface CalendarEconomicReading {
+  label: string
+  seriesId: string
+  source: string
+  period: string
+  actual: string | null
+  previous: string | null
+}
+
 export interface EconomicCalendarEvent {
   date: string
   name: string
   importance: string
+  /** Reference month, when supplied by the official release schedule. */
+  referencePeriod?: string
+  readings?: CalendarEconomicReading[]
+  readingsNote?: string
 }
 
 export interface MarketHolidayEvent {
@@ -2795,16 +2812,21 @@ export interface EtfArbitragePayload {
   rows: EtfArbitrageRow[]
 }
 
-/** One row of the `ETF by AUM` rail. */
+/** One discoverable fund; missing published AUM stays null rather than dropping it. */
 export interface EtfAumRow {
   ticker: string
-  netAssets: number
+  name?: string
+  category?: string
+  netAssets: number | null
 }
 
 export interface EtfAumPayload {
+  source?: string
+  sourceUrl?: string
   rows: EtfAumRow[]
-  /** Yahoo's own `total`, which the loaded rows can fall short of. */
+  /** Number of funds in the published directory. */
   totalCount: number
+  /** Funds whose provider did not publish AUM. */
   missingCount: number
   fetchedAt: number
 }

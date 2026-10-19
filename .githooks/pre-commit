@@ -1,0 +1,3 @@
+#!/bin/sh
+# Block private Agents history/inbox/tracker data, including force-added copies.
+node scripts/check-private-agent-data.cjs --staged || exit 1

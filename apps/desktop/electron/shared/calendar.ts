@@ -1,5 +1,7 @@
 import type {
   CalendarCompanyEvent,
+  CalendarEconomicReading,
+  EconomicPoint,
   CalendarExportInput,
   EarningsCalendarPayload,
   EarningsCalendarRow,
@@ -323,8 +325,12 @@ export function parseBeaSchedule(html: string, year: number): EconomicCalendarEv
       continue
     }
     if (!currentDate) continue
-    if (line.startsWith('Personal Income and Outlays,')) events.push({ date: currentDate, name: 'PCE Inflation', importance: 'medium' })
-    else if (/^(GDP \((Advance|Second|Third) Estimate\)|Gross Domestic Product,)/.test(line) && !line.includes('by State')) {
+    if (line.startsWith('Personal Income and Outlays,')) {
+      const reference = /,\s*(\w+) (\d{4})/.exec(line)
+      events.push({ date: currentDate, name: 'PCE Inflation', importance: 'medium',
+        ...(reference && MONTHS[reference[1]] ? { referencePeriod: `${reference[2]}-${pad2(MONTHS[reference[1]])}` } : {}),
+      })
+    } else if (/^(GDP \((Advance|Second|Third) Estimate\)|Gross Domestic Product,)/.test(line) && !line.includes('by State')) {
       events.push({ date: currentDate, name: 'GDP Report', importance: 'high' })
     }
   }
@@ -342,12 +348,62 @@ export function parseBlsSchedule(html: string, year: number): EconomicCalendarEv
     }
     if (!currentDate) continue
     const lower = line.toLowerCase()
+    const before = events.length
     if (lower.startsWith('employment situation for ')) events.push({ date: currentDate, name: 'Jobs Report', importance: 'high' })
     else if (lower.startsWith('consumer price index for ')) events.push({ date: currentDate, name: 'CPI Release', importance: 'high' })
     else if (lower.startsWith('producer price index for ')) events.push({ date: currentDate, name: 'PPI Release', importance: 'medium' })
     else if (lower.startsWith('job openings and labor turnover survey for ')) events.push({ date: currentDate, name: 'JOLTS Report', importance: 'medium' })
+    const reference = /for (\w+) (\d{4})/i.exec(line)
+    if (events.length > before && reference && MONTHS[reference[1]]) {
+      events[events.length - 1].referencePeriod = `${reference[2]}-${pad2(MONTHS[reference[1]])}`
+    }
   }
   return dedupeEconomic(events)
+}
+
+/** Values are current revised observations, not release-day vintages or forecasts. */
+export const CALENDAR_INFLATION_SERIES = [
+  { event: 'CPI Release', id: 'CPIAUCSL', label: 'CPI' },
+  { event: 'CPI Release', id: 'CPILFESL', label: 'Core CPI' },
+  { event: 'PPI Release', id: 'PPIFIS', label: 'PPI final demand' },
+  { event: 'PCE Inflation', id: 'PCEPI', label: 'PCE' },
+  { event: 'PCE Inflation', id: 'PCEPILFE', label: 'Core PCE' },
+] as const
+
+export function calendarEconomicReadings(
+  event: EconomicCalendarEvent,
+  series: ReadonlyMap<string, EconomicPoint[]>,
+  today: string,
+): CalendarEconomicReading[] {
+  const release = parseIsoDate(event.date)
+  if (!release) return []
+  release.setUTCMonth(release.getUTCMonth(), 1)
+  release.setUTCMonth(release.getUTCMonth() - 1)
+  const period = event.referencePeriod && /^\d{4}-(0[1-9]|1[0-2])$/.test(event.referencePeriod)
+    ? event.referencePeriod : release.toISOString().slice(0, 7)
+  const monthBefore = (month: string, delta: number) => {
+    const date = new Date(`${month}-01T00:00:00Z`)
+    date.setUTCMonth(date.getUTCMonth() - delta)
+    return date.toISOString().slice(0, 7)
+  }
+  return CALENDAR_INFLATION_SERIES.filter(spec => spec.event === event.name).flatMap(spec => {
+    const points = new Map((series.get(spec.id) ?? []).map(([date, value]) => [date.slice(0, 7), value]))
+    const change = (month: string, lag: number): string | null => {
+      const current = points.get(month)
+      const base = points.get(monthBefore(month, lag))
+      if (current === undefined || base === undefined || base === 0) return null
+      const value = (current / base - 1) * 100
+      return `${Object.is(Number(value.toFixed(1)), -0) ? '0.0' : value.toFixed(1)}%`
+    }
+    return [1, 12].map(lag => ({
+      label: `${spec.label} ${lag === 1 ? 'MoM (SA)' : 'YoY (SA)'}`,
+      seriesId: spec.id,
+      source: 'FRED · current revised data',
+      period,
+      actual: event.date <= today ? change(period, lag) : null,
+      previous: change(monthBefore(period, 1), lag),
+    }))
+  })
 }
 
 function tableRows(html: string): string[][] {
@@ -652,7 +708,14 @@ export function buildCalendarExport(input: CalendarExportInput): string {
   const section = (title: string, rows: string[]) => {
     lines.push('-'.repeat(70), title, '-'.repeat(70), ...(rows.length ? rows : ['  (none)']), '')
   }
-  if (input.includeEconomic) section('ECONOMIC EVENTS', input.economicEvents.map((event) => `  ${event.date}  ${event.name}  (Importance: ${event.importance})`))
+  if (input.includeEconomic) {
+    section('ECONOMIC EVENTS', input.economicEvents.map(event => [
+      `  ${event.date}  ${event.name}  (Importance: ${event.importance})`,
+      ...(event.readings ?? []).map(reading =>
+        `    ${reading.label}: ${reading.actual ?? 'Not available'} | Previous: ${reading.previous ?? '--'} | Period: ${reading.period} | ${reading.source} (${reading.seriesId})`),
+      ...(event.readingsNote ? [`    ${event.readingsNote}`] : []),
+    ].join('\n')))
+  }
   if (input.includeMarketHolidays) section('MARKET HOLIDAYS & EARLY CLOSES', input.marketHolidays.map((event) => `  ${event.date}  ${event.market}  ${event.event}  ${event.detail}${event.detail.toLowerCase().includes('close') ? '  (timed event)' : ''}`))
   if (input.includeCompany) section('COMPANY EVENTS (Earnings & Ex-Dividend)', input.companyEvents.map((event) => `  ${event.date}  ${event.ticker}  ${event.event}`))
   if (input.includeOptions) section('OPTIONS EXPIRATIONS', input.options.map((option) => `  ${option.expiry}  ${option.ticker}  ${option.strike.toFixed(2)} ${option.strategy} x${option.contracts}`))

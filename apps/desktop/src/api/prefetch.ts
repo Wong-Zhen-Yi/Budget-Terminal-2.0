@@ -593,11 +593,11 @@ export function buildTasks(
       }),
   })
 
-  // The AUM rail is the one request `init_page13` fires on mount; the holdings load
-  // itself is a button, so it is deliberately not warmed.
+  // Warm the directory and the default/restored fund even before the ETF page is visited.
+  // Basket quoting remains a user-triggered analysis, not initial page data.
   tasks.push({
     tab: 'etf',
-    label: 'ETF AUM rail',
+    label: 'ETF fund directory',
     run: (client, backgroundOrder) =>
       warmStartupQuery(client, {
         queryKey: queryKeys.etfAum,
@@ -605,7 +605,7 @@ export function buildTasks(
         staleTime: queryFreshness(queryKeys.etfAum),
       }),
   })
-  const etfTicker = useEtfPage.getState().ticker
+  const etfTicker = useEtfPage.getState().ticker || 'SPY'
   if (etfTicker) {
     tasks.push({
       tab: 'etf', label: `ETF ${etfTicker} holdings`,

@@ -151,7 +151,7 @@ export function ArbitrageTab({
     if (failureReason) return `Arbitrage refresh failed: ${failureReason}`
     if (!hasHoldings) return 'Load ETF holdings before refreshing arbitrage.'
     if (loading) return 'Fetching ETF and basket quotes...'
-    if (!payload) return 'Refresh arbitrage to compare the ETF against the loaded basket.'
+    if (!payload) return 'Run basket analysis to request quotes. No Yahoo requests are made until you run it.'
     return arbitrageStatus(payload).text
   })()
 
@@ -179,7 +179,7 @@ export function ArbitrageTab({
           disabled={loading || !hasHoldings}
           title="Re-fetch ETF and component quotes for the loaded basket."
         >
-          {loading ? 'Refreshing...' : 'Refresh Arbitrage'}
+          {loading ? 'Fetching quotes…' : 'Run basket analysis'}
         </Button>
       </div>
 
@@ -200,7 +200,7 @@ export function ArbitrageTab({
           rows={rows}
           layout="fixed"
           rowKey={(row, index) => `${row.symbol}-${index}`}
-          onRowClick={(row) => onOpenSymbol(row.symbol)}
+          onRowDoubleClick={(row) => onOpenSymbol(row.symbol)}
           defaultSort={{ key: 'contribution', direction: 'desc' }}
           empty={loading ? 'Fetching basket quotes...' : 'No basket rows yet'}
         />

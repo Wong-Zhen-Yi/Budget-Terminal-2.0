@@ -1,4 +1,5 @@
 import type { AgentPortfolioProposal } from './agentPortfolio.js'
+import type { AgentWorkspaceState } from './agentWorkspace.js'
 
 export interface AgentImage { name: string; dataUrl: string }
 
@@ -16,7 +17,7 @@ export interface AgentNavigation {
   symbol?: string
 }
 
-export interface AgentsState {
+export interface AgentsState extends AgentWorkspaceState {
   portfolioProposal: AgentPortfolioProposal | null
   model: string | null
   thinking: string | null
@@ -48,5 +49,11 @@ export type AgentsCommand =
   | { type: 'portfolioDecision'; id: string; approve: boolean }
   | { type: 'stop' }
   | { type: 'newChat' }
+  | { type: 'openChat'; id: string }
+  | { type: 'deleteChat'; id: string }
+  | { type: 'readNotifications'; id?: string }
+  | { type: 'deleteNotification'; id: string }
+  | { type: 'trackerEnabled'; id: string; enabled: boolean }
+  | { type: 'deleteTracker'; id: string }
   | { type: 'autonomy'; enabled: boolean; objective?: string; intervalMinutes?: number; runs?: number }
   | { type: 'navigationResult'; id: string; error?: string }

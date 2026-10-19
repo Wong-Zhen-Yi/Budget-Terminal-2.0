@@ -1,6 +1,6 @@
 import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
 import { FRESHNESS } from '@shared/freshness'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import type {
   CalendarMonthPayload,
@@ -19,7 +19,6 @@ import {
   earningsStatus,
   earningsWeekRows,
   filterEarningsRows,
-  monthCells,
   startOfWeek,
   type CalendarTimezoneId,
   type EarningsRangeMode,
@@ -40,26 +39,11 @@ import { Panel, PanelMessage } from '@/components/ui/Panel'
 import { SearchInput } from '@/components/ui/SearchInput'
 import { Select } from '@/components/ui/Select'
 import { useCalendarPage } from '@/stores/calendar'
+import { CalendarMonthGrid, ECONOMIC_COLORS, EconomicReadings } from '@/components/calendar/CalendarMonthGrid'
+import '@/styles/calendar.css'
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
 const EARNINGS_WEEKDAYS = WEEKDAYS.slice(0, 5)
-const STRATEGY_SHORT: Record<string, string> = {
-  Calls: 'C',
-  Puts: 'P',
-  'Covered Call': 'CC',
-  'Cash Secured Put': 'CSP',
-}
-// The month grid now stretches to fill the page, so the per-cell event cap has to
-// follow the measured row height as well as the window width.
-const GRID_HEADER_HEIGHT = 24
-const DAY_NUMBER_HEIGHT = 18
-const EVENT_LINE_HEIGHT = 20
-
-const ECONOMIC_COLORS: Record<string, string> = {
-  'FOMC Decision': '#e040fb',
-  'PCE Inflation': '#7c4dff',
-  'GDP Report': '#69f0ae',
-}
 
 function dateLabel(date: string, year = false): string {
   const value = new Date(`${date}T00:00:00Z`)
@@ -90,7 +74,7 @@ function warningOf(envelope: Envelope<unknown> | undefined): string | undefined 
 function DetailTable({ headers, rows }: { headers: string[]; rows: ReactNode[][] }) {
   return (
     <div className="min-h-0 flex-1 overflow-auto">
-      <table className="w-full table-fixed border-collapse">
+      <table className="w-full table-fixed border-collapse" style={{ minWidth: headers.length * 95 }}>
         <thead className="sticky top-0 z-10 bg-surface-raised">
           <tr>
             {headers.map((header) => (
@@ -128,117 +112,6 @@ function DetailPanel({ title, children }: { title: ReactNode; children: ReactNod
   )
 }
 
-interface GridEvent {
-  label: string
-  suffix: string
-  color: string
-}
-
-function CalendarGrid({
-  year,
-  month,
-  today,
-  payload,
-  options,
-  showEconomic,
-  showCompany,
-  showOptions,
-  showMarketHolidays,
-}: {
-  year: number
-  month: number
-  today: string
-  payload: CalendarMonthPayload | undefined
-  options: OptionPosition[]
-  showEconomic: boolean
-  showCompany: boolean
-  showOptions: boolean
-  showMarketHolidays: boolean
-}) {
-  const gridRef = useRef<HTMLDivElement | null>(null)
-  const [size, setSize] = useState({ width: window.innerWidth, height: 0 })
-  useEffect(() => {
-    const node = gridRef.current
-    if (!node) return
-    const observer = new ResizeObserver(([entry]) => {
-      setSize({ width: entry.contentRect.width, height: entry.contentRect.height })
-    })
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [])
-  const byWidth = size.width < 760 ? 2 : size.width < 900 ? 3 : 5
-  const rowHeight = size.height ? (size.height - GRID_HEADER_HEIGHT) / 6 : 0
-  const byHeight = rowHeight
-    ? Math.floor((rowHeight - DAY_NUMBER_HEIGHT) / EVENT_LINE_HEIGHT)
-    : byWidth
-  const limit = Math.max(1, Math.min(byWidth, byHeight))
-  const prefix = monthPrefix(year, month)
-  const events = useMemo(() => {
-    const byDate = new Map<string, GridEvent[]>()
-    const add = (date: string, event: GridEvent) => {
-      const rows = byDate.get(date) ?? []
-      rows.push(event)
-      byDate.set(date, rows)
-    }
-    if (showMarketHolidays) {
-      for (const event of payload?.marketHolidays ?? []) {
-        if (event.date.startsWith(prefix)) add(event.date, { label: event.cellLabel, suffix: '', color: event.color })
-      }
-    }
-    if (showEconomic) {
-      for (const event of payload?.economicEvents ?? []) {
-        if (event.date.startsWith(prefix)) add(event.date, { label: event.name.split(' ')[0], suffix: '', color: ECONOMIC_COLORS[event.name] ?? '#aab3c2' })
-      }
-    }
-    if (showCompany) {
-      for (const event of payload?.companyEvents ?? []) {
-        if (event.date.startsWith(prefix)) add(event.date, { label: event.ticker, suffix: event.event === 'Earnings' ? 'Earnings' : 'ExDiv', color: event.event === 'Earnings' ? '#ff9800' : '#4fc3f7' })
-      }
-    }
-    if (showOptions) {
-      for (const option of options) {
-        if (!option.expiry.startsWith(prefix) || option.status.toLowerCase() !== 'open') continue
-        add(option.expiry, { label: option.ticker.toUpperCase(), suffix: STRATEGY_SHORT[option.strategy] ?? option.strategy.slice(0, 2), color: '#e91e63' })
-      }
-    }
-    return byDate
-  }, [options, payload, prefix, showCompany, showEconomic, showMarketHolidays, showOptions])
-
-  return (
-    <div
-      ref={gridRef}
-      className="grid h-full min-w-[42rem] grid-cols-7 grid-rows-[auto_repeat(6,minmax(0,1fr))] border-l border-t border-border"
-    >
-      {WEEKDAYS.map((weekday) => (
-        <div key={weekday} className="border-b border-r border-border bg-surface-raised px-1 py-1 text-center text-2xs font-semibold text-text-muted">
-          {weekday}
-        </div>
-      ))}
-      {monthCells(year, month).map((day, index) => {
-        const date = day ? `${prefix}-${String(day).padStart(2, '0')}` : ''
-        const dayEvents = date ? events.get(date) ?? [] : []
-        const isToday = date === today
-        return (
-          <div
-            key={`${index}-${day ?? 'blank'}`}
-            className={`min-h-0 overflow-hidden border-b border-r p-1 ${
-              day ? 'border-border bg-surface' : 'border-border/50 bg-bg'
-            } ${isToday ? 'ring-1 ring-inset ring-warn' : ''}`}
-          >
-            {day ? <div className={`num mb-1 text-2xs font-semibold ${isToday ? 'text-warn' : 'text-text'}`}>{day}</div> : null}
-            {dayEvents.slice(0, limit).map((event, eventIndex) => (
-              <div key={`${event.label}-${event.suffix}-${eventIndex}`} className="truncate text-2xs leading-5" style={{ color: event.color }} title={`${event.label} ${event.suffix}`.trim()}>
-                {event.label} {event.suffix}
-              </div>
-            ))}
-            {dayEvents.length > limit ? <div className="text-2xs text-text-dim">+{dayEvents.length - limit} more</div> : null}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
 function MonthlyCalendar({
   payload,
   envelope,
@@ -261,6 +134,18 @@ function MonthlyCalendar({
   const state = useCalendarPage()
   const today = calendarToday(state.timezone)
   const prefix = monthPrefix(state.year, state.month)
+  const [refreshing, setRefreshing] = useState(false)
+  const refresh = async () => {
+    setRefreshing(true)
+    try {
+      await onRefresh()
+      setNotice('Calendar refreshed.')
+    } catch (error) {
+      setNotice(`Calendar refresh failed: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setRefreshing(false)
+    }
+  }
   const exportMonth = useCallback(async () => {
     const inMonth = (date: string) => date.startsWith(prefix)
     const content = buildCalendarExport({
@@ -286,24 +171,24 @@ function MonthlyCalendar({
 
   const companyRows = useMemo(
     () => (payload?.companyEvents ?? [])
-      .filter((event) => event.date >= today)
+      .filter((event) => event.date.startsWith(prefix))
       .sort((a, b) => a.date.localeCompare(b.date) || a.ticker.localeCompare(b.ticker)),
-    [payload, today],
+    [payload, prefix],
   )
   const economicRows = useMemo(
-    () => (payload?.economicEvents ?? []).filter((event) => event.date >= today),
-    [payload, today],
+    () => (payload?.economicEvents ?? []).filter((event) => event.date.startsWith(prefix)),
+    [payload, prefix],
   )
   const optionRows = useMemo(
     () => options
-      .filter((option) => option.expiry >= today)
+      .filter((option) => option.expiry.startsWith(prefix) && option.status.toLowerCase() === 'open')
       .sort((a, b) => a.expiry.localeCompare(b.expiry) || a.ticker.localeCompare(b.ticker)),
-    [options, today],
+    [options, prefix],
   )
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden p-2">
-      <div className="flex shrink-0 items-center gap-1 border border-border bg-surface px-2 py-1">
+    <div className="calendar-month-page">
+      <div className="calendar-toolbar">
         <h1 className="text-xs font-semibold text-text">Calendar</h1>
         <Button
           onClick={() => state.setDetailsCollapsed(!state.detailsCollapsed)}
@@ -312,7 +197,7 @@ function MonthlyCalendar({
         >
           {state.detailsCollapsed ? 'Show information' : 'Hide information'}
         </Button>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="calendar-toolbar-actions">
           <Button onClick={() => state.changeMonth(-1)} aria-label="Previous month">◀</Button>
           <span className="min-w-32 text-center text-2xs font-semibold text-warn">{monthLabel(state.year, state.month)}</span>
           <Button onClick={() => state.changeMonth(1)} aria-label="Next month">▶</Button>
@@ -324,20 +209,31 @@ function MonthlyCalendar({
             className="w-24"
             aria-label="Calendar reference timezone"
           />
-          <Button variant="accent" disabled={loading} onClick={() => void onRefresh()}>{loading ? 'Refreshing…' : 'Refresh'}</Button>
+          <Button variant="accent" disabled={loading || refreshing} onClick={() => void refresh()}>{loading || refreshing ? 'Refreshing…' : 'Refresh'}</Button>
           <Button onClick={() => void exportMonth()}>Export</Button>
         </div>
       </div>
 
-      {notice ? <div className="shrink-0 border border-border bg-surface-raised px-2 py-1 text-2xs text-text-muted">{notice}</div> : null}
+      <div className="calendar-filter-bar" aria-label="Calendar event categories">
+        <Checkbox checked={state.showEconomic} onChange={checked => state.setCategory('showEconomic', checked)} label={`Economic (${economicRows.length})`} />
+        <Checkbox checked={state.showCompany} onChange={checked => state.setCategory('showCompany', checked)} label={`Company (${companyRows.length})`} />
+        <Checkbox checked={state.showOptions} onChange={checked => state.setCategory('showOptions', checked)} label={`Options (${optionRows.length})`} />
+        <Checkbox checked={state.showMarketHolidays} onChange={checked => state.setCategory('showMarketHolidays', checked)} label="Market holidays" />
+        <span className="calendar-hint">Hover to preview · Click a day to pin</span>
+      </div>
+      <div className="calendar-data-status" role="status">
+        {loading || refreshing ? 'Loading calendar and economic readings…' : `${economicRows.length} economic releases · ${economicRows.filter(event => event.importance === 'high').length} high impact · ${monthLabel(state.year, state.month)}`}
+        {envelope?.meta.failureReason ? <span className="text-warn">Partial data: {envelope.meta.failureReason}</span> : null}
+      </div>
+      {notice ? <div className="shrink-0 border border-border bg-surface-raised px-2 py-1 text-2xs text-text-muted" role="status">{notice}</div> : null}
       {envelope?.meta.freshness === 'failed' && !payload?.generatedAt ? (
         <div className="shrink-0">
           <PanelMessage>{envelope.meta.failureReason || 'Calendar data unavailable.'}</PanelMessage>
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-x-auto">
-        <CalendarGrid
+      <div className="calendar-grid-container">
+        <CalendarMonthGrid
           year={state.year}
           month={state.month}
           today={today}
@@ -353,19 +249,22 @@ function MonthlyCalendar({
       <div
         id="calendar-details"
         hidden={state.detailsCollapsed}
-        className={state.detailsCollapsed ? 'hidden' : 'grid max-h-40 shrink-0 grid-cols-1 gap-2 overflow-auto xl:h-40 xl:max-h-none xl:grid-cols-5 xl:overflow-visible'}
+        className={state.detailsCollapsed ? 'hidden' : 'calendar-details'}
       >
-        <DetailPanel title="Upcoming Earnings & Corporate Events">
+        <DetailPanel title="This Month · Company Events">
           <DetailTable
             headers={['Date', 'Ticker', 'Event', 'Details']}
-            rows={state.showCompany ? companyRows.map((event) => [dateLabel(event.date), event.ticker, <span className={event.event === 'Earnings' ? 'text-[#ff9800]' : 'text-[#4fc3f7]'}>{event.event}</span>, `in ${daysBetween(today, event.date)}d`]) : []}
+            rows={state.showCompany ? companyRows.map((event) => [dateLabel(event.date), event.ticker, <span className={event.event === 'Earnings' ? 'text-[#ff9800]' : 'text-[#4fc3f7]'}>{event.event}</span>, `${daysBetween(today, event.date)}d from today`]) : []}
           />
         </DetailPanel>
-        <DetailPanel title="Upcoming Economic Events">
-          <DetailTable
-            headers={['Date', 'Ticker', 'Event', 'Details']}
-            rows={state.showEconomic ? economicRows.map((event) => [dateLabel(event.date), 'ECON', <span style={{ color: ECONOMIC_COLORS[event.name] ?? '#aab3c2' }}>{event.name}</span>, `in ${daysBetween(today, event.date)}d`]) : []}
-          />
+        <DetailPanel title="This Month · Economic Releases & Readings">
+          <div className="calendar-economic-list">
+            {state.showEconomic && economicRows.length ? economicRows.map(event => <article key={`${event.date}-${event.name}`}>
+              <h3 style={{ color: ECONOMIC_COLORS[event.name] ?? '#aab3c2' }}>{dateLabel(event.date)} · {event.name}</h3>
+              <p className="calendar-source">{event.importance.toUpperCase()} impact</p>
+              <EconomicReadings event={event} />
+            </article>) : <p className="calendar-empty-message">No economic events in the enabled categories.</p>}
+          </div>
         </DetailPanel>
         <DetailPanel title={<>US Market Holidays & Early Closes <span className="text-text-dim">{state.year}</span></>}>
           <DetailTable
@@ -376,16 +275,8 @@ function MonthlyCalendar({
         <DetailPanel title={<>Options Expiration <span className="text-text-dim">{mainName}</span></>}>
           <DetailTable
             headers={['Expiry', 'Ticker', 'Strategy', 'Strike', 'Qty', 'Status', 'Details']}
-            rows={state.showOptions ? optionRows.map((option) => [dateLabel(option.expiry, true), option.ticker, option.strategy, option.strike.toFixed(2), String(option.contracts), <span className={option.status.toLowerCase() === 'open' ? 'text-up' : 'text-text-dim'}>{option.status}</span>, `in ${daysBetween(today, option.expiry)}d`]) : []}
+            rows={state.showOptions ? optionRows.map((option) => [dateLabel(option.expiry, true), option.ticker, option.strategy, option.strike.toFixed(2), String(option.contracts), <span className={option.status.toLowerCase() === 'open' ? 'text-up' : 'text-text-dim'}>{option.status}</span>, `${daysBetween(today, option.expiry)}d from today`]) : []}
           />
-        </DetailPanel>
-        <DetailPanel title="Show on Calendar">
-          <div className="flex min-h-0 flex-col gap-2 overflow-auto p-2">
-            <Checkbox checked={state.showEconomic} onChange={(checked) => state.setCategory('showEconomic', checked)} label="Economic Events" />
-            <Checkbox checked={state.showCompany} onChange={(checked) => state.setCategory('showCompany', checked)} label="Earnings & Corporate Events" />
-            <Checkbox checked={state.showOptions} onChange={(checked) => state.setCategory('showOptions', checked)} label="Options Expirations" />
-            <Checkbox checked={state.showMarketHolidays} onChange={(checked) => state.setCategory('showMarketHolidays', checked)} label="Market Holidays" />
-          </div>
         </DetailPanel>
       </div>
     </div>

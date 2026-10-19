@@ -9,6 +9,7 @@ import type { CodexTransport } from '../electron/services/codexClient.js'
 import type { Operation } from '../mcp/operations.js'
 import { validateAgentImages } from '../electron/services/agentImages.js'
 import { failed, ok } from '../electron/shared/envelope.js'
+import { AGENT_PIE_MAX_LENGTH, parseAgentPie } from '../electron/shared/agentCharts.js'
 
 const directory = await mkdtemp(join(tmpdir(), 'budget-agents-'))
 const previous = { APPDATA: process.env.APPDATA, LOCALAPPDATA: process.env.LOCALAPPDATA }
@@ -25,8 +26,12 @@ let calls: Array<{ method: string; params: any }> = []
 let writes: any[] = []
 let closes = 0
 let authenticated = true
+let starts = 0
+let nextThreadId = 'thread-1'
+let threadError = false
+let threadGate: Promise<void> | null = null
 const client: CodexTransport = {
-  async start() {},
+  async start() { starts++ },
   async request(method, params) {
     calls.push({ method, params })
     if (method === 'account/read') return { account: authenticated ? { type: 'chatgpt' } : null }
@@ -35,7 +40,11 @@ const client: CodexTransport = {
       { model: 'fixture-fast', displayName: 'Fixture Fast', defaultReasoningEffort: 'low', supportedReasoningEfforts: [{ reasoningEffort: 'low', description: 'Quick' }, { reasoningEffort: 'high', description: 'Deeper' }] },
       { model: 'fixture-deep', displayName: 'Fixture Deep', inputModalities: ['text'], defaultReasoningEffort: 'medium', supportedReasoningEfforts: [{ reasoningEffort: 'medium', description: 'Balanced' }] },
     ], nextCursor: null }
-    if (method === 'thread/start') return { thread: { id: 'thread-1' }, model: (params as { model?: string }).model ?? 'fixture-fast', reasoningEffort: null }
+    if (method === 'thread/start') {
+      if (threadGate) await threadGate
+      if (threadError) throw new Error('Fixture thread creation failed')
+      return { thread: { id: nextThreadId }, model: (params as { model?: string }).model ?? 'fixture-fast', reasoningEffort: null }
+    }
     return { turn: { id: 'turn-1' } }
   },
   write(packet) { writes.push(packet) },
@@ -45,9 +54,26 @@ const service = new AgentsService({ executable: 'unused', cwd: directory, routes
 const complete = (status = 'completed') => receiver({ method: 'turn/completed', params: { threadId: 'thread-1', turn: { status } } })
 
 try {
+  const pie = { title: 'Allocation', unit: 'USD', slices: [{ label: 'Stocks', value: 75 }, { label: 'Cash', value: 25 }, { label: 'Empty', value: 0 }], caption: 'Fixture source' }
+  assert.deepEqual(parseAgentPie(JSON.stringify(pie)), pie)
+  assert(parseAgentPie(JSON.stringify({ title: 'One category', slices: [{ label: 'Cash', value: 1 }] })))
+  for (const invalid of [
+    '', '{"title":', 'null', '[]',
+    JSON.stringify({ ...pie, slices: [] }),
+    JSON.stringify({ ...pie, slices: [{ label: '', value: 1 }] }),
+    JSON.stringify({ ...pie, slices: [{ label: 'Debt', value: -1 }] }),
+    JSON.stringify({ ...pie, slices: [{ label: 'Empty', value: 0 }] }),
+    JSON.stringify({ ...pie, slices: [{ label: 'Cash', value: '25' }] }),
+    JSON.stringify({ ...pie, slices: [{ label: 'Cash', value: null }] }),
+    JSON.stringify({ ...pie, slices: Array(31).fill({ label: 'Cash', value: 1 }) }),
+    JSON.stringify({ ...pie, slices: Array(2).fill({ label: 'Overflow', value: 1e308 }) }),
+    JSON.stringify({ ...pie, slices: [{ label: 'Cash', value: 1, color: 'url(https://example.com)' }] }),
+    JSON.stringify(pie) + ' '.repeat(AGENT_PIE_MAX_LENGTH),
+    '{"title":"Overflow","slices":[{"label":"Cash","value":1e999}]}',
+  ]) assert.equal(parseAgentPie(invalid), null, `Reject invalid pie: ${invalid.slice(0, 100)}`)
   assert.equal(service.snapshot().autonomy, false)
   assert.equal(service.snapshot().connected, false)
-  assert.equal(calls.length, 0, 'Startup status never starts Codex or inference')
+  assert.equal(calls.length, 0, 'Constructing a service or reading its snapshot never runs inference; the desktop host starts the connection')
   await assert.rejects(() => service.command({ type: 'send', text: 'hello' }), /Connect Codex/)
   await assert.rejects(() => service.command({ type: 'autonomy', enabled: true, objective: 'test', intervalMinutes: 1 }), /too_small|Too small/)
   await service.command({ type: 'connect' })
@@ -58,6 +84,7 @@ try {
   await assert.rejects(() => service.command({ type: 'configure', model: 'fixture-deep', thinking: 'high' }), /not supported/)
   await service.command({ type: 'configure', model: 'fixture-fast', thinking: 'high' })
   const start = calls.find(call => call.method === 'thread/start')!.params
+  assert(start.baseInstructions.includes('```pie') && start.baseInstructions.includes('native pie charts'), 'Agent must know the native chart format')
   assert.equal(start.ephemeral, true)
   assert.deepEqual(start.environments, [])
   assert.equal(start.config['mcp_servers.unrelated.enabled'], false)
@@ -70,6 +97,7 @@ try {
   await assert.rejects(() => service.command({ type: 'configure', model: 'fixture-fast', thinking: 'low' }), /working/)
   assert(service.snapshot().busy)
   await assert.rejects(() => service.command({ type: 'send', text: 'overlap' }), /working/)
+  await assert.rejects(() => service.command({ type: 'newChat' }), /working/)
   const portfolio = await service.callTool('budget_terminal_portfolio', { request: {} }) as any
   assert.equal(portfolio.meta.freshness, 'partial', 'Keep partial data metadata')
   assert.equal(portfolio.errors[0].reason, 'Fixture missing data')
@@ -121,6 +149,7 @@ try {
   complete()
   assert(service.snapshot().nextRunAt! > Date.now())
   await assert.rejects(() => service.command({ type: 'configure', model: 'fixture-fast', thinking: 'low' }), /autonomous mode/)
+  await assert.rejects(() => service.command({ type: 'newChat' }), /autonomous mode/)
   await service.command({ type: 'autonomy', enabled: false })
   assert.equal(service.snapshot().nextRunAt, null)
   assert.equal(service.snapshot().autonomy, false)
@@ -145,8 +174,44 @@ try {
   await service.command({ type: 'newChat' })
   assert.equal(service.snapshot().messages.length, 0)
   assert.equal(service.snapshot().autonomy, false)
-  service.close()
+  assert.equal(service.snapshot().connected, false, 'New chat while disconnected does not silently reconnect')
   authenticated = true
+  await service.command({ type: 'connect' })
+  await service.command({ type: 'configure', model: 'fixture-fast', thinking: 'high' })
+  const connectionCounts = { starts, closes, accounts: calls.filter(call => call.method === 'account/read').length }
+  threadError = true
+  const previousMessages = service.snapshot().messages
+  await service.command({ type: 'newChat' })
+  assert(service.snapshot().connected)
+  assert(service.snapshot().error.includes('thread creation failed'))
+  assert.deepEqual(service.snapshot().messages, previousMessages, 'Failed new thread retains the old conversation')
+  threadError = false
+  nextThreadId = 'thread-new'
+  await service.command({ type: 'newChat' })
+  assert.equal(service.snapshot().messages.length, 0)
+  assert.equal(service.snapshot().connected, true)
+  assert.equal(service.snapshot().model, 'fixture-fast')
+  assert.equal(service.snapshot().thinking, 'high')
+  assert.deepEqual({ starts, closes, accounts: calls.filter(call => call.method === 'account/read').length }, connectionCounts, 'New chat reuses the signed-in Codex transport')
+  assert.equal(calls.at(-1)!.method, 'thread/start')
+  assert.equal(calls.at(-1)!.params.config.model_reasoning_effort, 'high')
+  assert(calls.at(-1)!.params.dynamicTools.some((tool: any) => tool.name === 'terminal_pages'))
+  receiver({ method: 'item/agentMessage/delta', params: { threadId: 'thread-1', itemId: 'late', delta: 'Old response' } })
+  assert.equal(service.snapshot().messages.length, 0, 'Late output from the old conversation must be ignored')
+  await service.command({ type: 'send', text: 'Fresh conversation' })
+  assert.equal(calls.at(-1)!.params.threadId, 'thread-new')
+  receiver({ method: 'turn/completed', params: { threadId: 'thread-new', turn: { status: 'completed' } } })
+  let releaseThread!: () => void
+  threadGate = new Promise(resolve => { releaseThread = resolve })
+  const resetting = service.command({ type: 'newChat' })
+  assert(service.snapshot().busy)
+  await service.command({ type: 'stop' })
+  releaseThread()
+  await resetting
+  assert.equal(service.snapshot().connected, false, 'Stop during thread creation must not revive the connection')
+  threadGate = null
+  nextThreadId = 'thread-1'
+  service.close()
   const scheduled = new AgentsService({ executable: 'unused', cwd: directory, routes, clientFactory: (receive, ended) => { receiver = receive; disconnected = ended; return client } })
   mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() })
   try {
@@ -219,14 +284,20 @@ try {
     await mutatePortfolios({ type: 'setCash', portfolioId, cashBalance: 999 })
     await assert.rejects(() => imports.command({ type: 'portfolioDecision', id: imports.snapshot().portfolioProposal!.id, approve: true }), /changed after the preview/)
     assert.equal((await readPortfolios()).portfolios[0].holdings.AAPL.shares, 12, 'Stale approval must not partly write')
-    await imports.command({ type: 'portfolioDecision', id: imports.snapshot().portfolioProposal!.id, approve: false })
+    const beforeNewChat = await readPortfolios()
+    const discardedId = imports.snapshot().portfolioProposal!.id
+    await imports.command({ type: 'newChat' })
+    assert(imports.snapshot().connected)
+    assert.equal(imports.snapshot().portfolioProposal, null, 'New chat discards the pending review without applying it')
+    assert.deepEqual(await readPortfolios(), beforeNewChat)
+    await assert.rejects(() => imports.command({ type: 'portfolioDecision', id: discardedId, approve: true }), /no longer/)
     await imports.command({ type: 'autonomy', enabled: true, objective: 'Research only' })
     await assert.rejects(() => imports.callTool('terminal_propose_portfolio_update', proposal), /manual chat/)
     complete()
     console.log('PASS: image validation and transport, reviewed portfolio/option writes, on-disk verification, omitted fields, stale-write protection and autonomous write rejection')
   } finally { imports.close() }
   calls = []; writes = []
-  console.log('PASS: idle startup, full MCP catalog, validated edits, screenshot image results, failed envelopes, read-only autonomy, navigation, streaming, cancellation and reconnect')
+  console.log('PASS: connected New chat, model preservation, thread isolation, failed thread rollback, Stop during reset, full MCP catalog, validated edits, screenshot image results, failed envelopes, read-only autonomy, navigation, streaming, cancellation and reconnect')
 
   if (process.argv.includes('--live')) {
     const executable = process.env.BUDGET_TERMINAL_CODEX_PATH ?? (process.platform === 'win32' ? join(previous.LOCALAPPDATA!, 'Programs/OpenAI/Codex/bin/codex.exe') : 'codex')

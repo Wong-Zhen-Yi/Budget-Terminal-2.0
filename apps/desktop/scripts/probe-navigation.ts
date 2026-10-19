@@ -5,12 +5,17 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createRequire } from 'node:module'
 import { build } from 'esbuild'
-import { startupPages, workspaceFor } from '../electron/shared/navigation.js'
+import { DEFAULT_TAB_ID, startupPages, workspaceFor } from '../electron/shared/navigation.js'
 import { TABS } from '../electron/shared/contract.js'
 
 assert.equal(workspaceFor('dashboard-2')?.id, 'overview')
-assert(TABS.some(tab => tab.id === 'dashboard-2' && tab.label === 'Dashboard 2' && tab.implemented))
-assert(startupPages('dashboard', [], []).includes('dashboard-2'), 'Unvisited Dashboard 2 must load at startup')
+assert.equal(DEFAULT_TAB_ID, 'dashboard-2', 'Dashboard 2.0 must be the default opening page')
+assert(TABS.some(tab => tab.id === DEFAULT_TAB_ID && tab.label === 'Dashboard 2.0' && tab.implemented))
+assert(startupPages('dashboard', [], []).includes('dashboard-2'), 'Unvisited Dashboard 2.0 must load at startup')
+const defaultStartup = startupPages(DEFAULT_TAB_ID, [], [])
+assert.equal(defaultStartup[0], DEFAULT_TAB_ID)
+assert(TABS.filter(tab => tab.implemented).every(tab => defaultStartup.includes(tab.id)),
+  'Opening Dashboard 2.0 must still warm every implemented page')
 assert.equal(workspaceFor('hims')?.id, 'focus')
 assert.equal(workspaceFor('pltr')?.id, 'focus')
 assert(TABS.some(tab => tab.id === 'pltr' && tab.label === 'PLTR' && tab.implemented))

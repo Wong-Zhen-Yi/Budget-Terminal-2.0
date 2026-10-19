@@ -19,6 +19,7 @@
     "typecheck": "npm run typecheck --workspace budget-terminal-desktop",
     "probe": "npm run probe --workspace budget-terminal-desktop",
     "probe:launcher": "node scripts/probe-launcher.cjs",
+    "probe:agent-privacy": "node scripts/probe-agent-privacy.cjs",
     "probe:readiness-ui": "npm run --workspace budget-terminal-desktop probe:readiness-ui --",
     "probe:web": "npm run --workspace budget-terminal-desktop probe:web --",
     "probe:web-ui": "npm run --workspace budget-terminal-desktop probe:web-ui --",

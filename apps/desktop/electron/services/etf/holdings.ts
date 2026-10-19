@@ -1,10 +1,9 @@
 /**
  * ETF holdings, from the issuers' own published files.
  *
- * A port of `EtfHoldingsService` in the PySide6 `etf_holdings.py`, complete: all seven
- * issuer providers in the reference's own order — ARK, iShares, SPDR, Invesco, Vanguard,
- * First Trust, ProShares — with the Yahoo top-holdings fallback underneath them and the
- * same Yahoo enrichment pass over whichever one answered.
+ * Seven full issuer providers support basket consumers. The Explorer routes known
+ * tickers directly, then uses a labelled public snapshot and one cached Yahoo summary
+ * as fallbacks. Yahoo enrichment is optional, not part of a normal Explorer load.
  *
  * The Heatmap page (`services/heatmap.ts`) and the ETF page share this loader, so the
  * three index buttons and a hand-typed ticker resolve through one cache.
@@ -17,6 +16,9 @@
  */
 
 import { normalizeSector } from '../../shared/heatmap.js'
+import { FRESHNESS } from '../../shared/freshness.js'
+import { fetchEtfHtml, getEtfDirectory } from './directory.js'
+import { resolveEtfSnapshot } from './snapshot.js'
 import { cache } from '../cache.js'
 import { paced, yahoo } from '../yahoo/client.js'
 import { decodeCsv, parseCsv, parseCsvRecords } from './csv.js'
@@ -42,6 +44,7 @@ export interface EtfSectorWeight {
 }
 
 export interface EtfHoldingsResult {
+  fetchedAt?: number
   ticker: string
   fundName: string
   issuer: string
@@ -57,8 +60,8 @@ export interface EtfHoldingsResult {
   coverageNote: string
 }
 
-/** `DEFAULT_TIMEOUT = 20`. */
-const TIMEOUT_MS = 20_000
+/** Bound each issuer attempt before falling back to a public snapshot. */
+const TIMEOUT_MS = 12_000
 
 /** The reference's own session header. */
 const HEADERS = {
@@ -71,7 +74,7 @@ const HEADERS = {
  * of the page. Cached far longer than a quote so switching tickers back and forth costs
  * one download, not one per visit.
  */
-const HOLDINGS_TTL_MS = 6 * 60 * 60 * 1000
+const HOLDINGS_TTL_MS = FRESHNESS.etfHoldings
 
 function clean(value: unknown): string {
   return String(value ?? '')
@@ -783,10 +786,10 @@ function sectorWeights(entries: Array<Record<string, unknown>> | undefined): Etf
  * hoisting it behind a named type erases every field back to `{}`.
  */
 function fundSummary(ticker: string) {
-  return paced(() =>
-    yahoo.quoteSummary(ticker, {
+  return resolveEtfSnapshot(`etf-yahoo-summary:v1:${ticker}`, HOLDINGS_TTL_MS, () =>
+    paced(() => yahoo.quoteSummary(ticker, {
       modules: ['topHoldings', 'fundProfile', 'price', 'summaryDetail', 'defaultKeyStatistics'],
-    }),
+    })),
   ).catch(() => null)
 }
 
@@ -893,7 +896,9 @@ function sortByWeight(holdings: EtfHolding[]): void {
 
 async function loadHoldings(symbol: string, enrich: boolean, allowYahooFallback = true): Promise<EtfHoldingsResult> {
   const errors: string[] = []
-  for (const provider of PROVIDERS) {
+  const issuer = preferredEtfIssuer(symbol)
+  const providers = issuer ? PROVIDERS.filter(provider => provider.issuer === issuer) : PROVIDERS
+  for (const provider of providers) {
     let result: EtfHoldingsResult | null = null
     try {
       result = await provider.fetch(symbol)
@@ -923,23 +928,86 @@ async function loadHoldings(symbol: string, enrich: boolean, allowYahooFallback 
 export function getIssuerEtfHoldings(ticker: string, force = false): Promise<EtfHoldingsResult> {
   const symbol = ticker.trim().toUpperCase()
   if (!symbol) return Promise.reject(new Error('Ticker is required.'))
-  return cache.resolveWithStaleFallback(`etf-holdings:issuer-only:${symbol}`, HOLDINGS_TTL_MS,
-    () => loadHoldings(symbol, false, false), { force }).then(result => result.value)
+  return resolveEtfSnapshot(`etf-holdings:issuer-only:${symbol}`, HOLDINGS_TTL_MS,
+    async () => ({ ...await loadHoldings(symbol, false, false), fetchedAt: Date.now() }), { force })
 }
 
-export function getEtfHoldings(
-  ticker: string,
-  force = false,
-  enrich = true,
-): Promise<EtfHoldingsResult> {
+/** Route common funds directly instead of probing seven unrelated issuer websites. */
+export function preferredEtfIssuer(ticker: string): string | undefined {
+  if (ARK_FUNDS[ticker]) return ARK_ISSUER
+  if (['SPY', 'DIA', 'GLD', 'GLDM', 'SPLG', 'SPYM', 'MDY', 'SDY', 'XLB', 'XLC', 'XLE', 'XLF', 'XLI', 'XLK', 'XLP', 'XLRE', 'XLU', 'XLV', 'XLY'].includes(ticker)) return SPDR_ISSUER
+  if (['QQQ', 'QQQM', 'RSP', 'SQQQ'].includes(ticker)) return ticker === 'SQQQ' ? 'ProShares' : INVESCO_ISSUER
+  if (['VOO', 'VTI', 'VT', 'VTV', 'VUG', 'VEA', 'VWO', 'VXUS', 'BND', 'BNDX', 'VNQ', 'VIG', 'VYM', 'VB', 'VO', 'VGT'].includes(ticker)) return VANGUARD_ISSUER
+  return undefined
+}
+
+/** Public top holdings are useful even when an issuer's full download is unavailable. */
+export function parsePublicEtfHoldings(html: string, ticker: string): EtfHoldingsResult {
+  const table = parseTables(html).find(table => table.headers.includes('symbol') && table.headers.some(header => header.includes('weight')))
+  if (!table) throw new Error(`No published holdings table for ${ticker}.`)
+  const symbolIndex = table.headers.indexOf('symbol')
+  const nameIndex = table.headers.indexOf('name')
+  const weightIndex = table.headers.findIndex(header => header.includes('weight'))
+  const holdings: EtfHolding[] = []
+  for (const cells of table.rows) {
+    const symbol = clean(cells[symbolIndex]).toUpperCase()
+    const weight = normalizeWeight(cells[weightIndex], 'percent')
+    if (!/^[A-Z0-9][A-Z0-9.^=-]{0,19}$/.test(symbol) || weight === null || weight < 0) continue
+    holdings.push({ symbol, name: clean(cells[nameIndex]), weight, sector: '' })
+  }
+  if (!holdings.length) throw new Error(`No usable published holdings for ${ticker}.`)
+  sortByWeight(holdings)
+  return {
+    ...blankResult(ticker, 'Stock Analysis'),
+    fundName: headingText(html, ticker).replace(/\s+Holdings(?:\s+(?:List|Information))?\s*$/i, ''),
+    sourceUrl: `https://stockanalysis.com/etf/${ticker.toLowerCase()}/holdings/`,
+    holdings,
+    // The public table can be truncated. Never claim that this is the complete book.
+    isPartial: true,
+    coverageNote: `Public holdings snapshot (${holdings.length} rows); may not include the full fund.`,
+  }
+}
+
+async function loadFundSnapshot(symbol: string, enrich: boolean, force: boolean): Promise<EtfHoldingsResult> {
+  const issuer = preferredEtfIssuer(symbol)
+  const provider = PROVIDERS.find(provider => provider.issuer === issuer)
+  let result: EtfHoldingsResult | null = null
+  if (provider) {
+    // Reuse a full basket already downloaded by Heatmap or the S&P 500 page.
+    // Share the in-flight issuer download as well as its disk cache with other pages.
+    try { result = await getIssuerEtfHoldings(symbol, force) } catch { /* Try the public snapshot next. */ }
+  }
+  if (!result && provider) {
+    const previous = cache.get<EtfHoldingsResult>(`etf-fund:v2:${symbol}:${enrich ? 'enriched' : 'basic'}`, { allowStale: true, observe: false })
+    if (previous && !previous.value.isPartial) throw new Error(`${issuer} is unavailable. Retaining the last complete holdings snapshot.`)
+  }
+  if (!result) {
+    try {
+      result = parsePublicEtfHoldings(await fetchEtfHtml(`https://stockanalysis.com/etf/${symbol.toLowerCase()}/holdings/`), symbol)
+    } catch { /* One cached Yahoo summary is the final fallback, not a universe sweep. */ }
+  }
+  if (!result) result = await fetchYahooFallback(symbol)
+  if (!result) throw new Error(`No holdings available for ${symbol}. The issuer and public snapshot are unavailable; try again later.`)
+  // Directory metadata is optional. It is shared, persisted and costs no Yahoo calls.
+  const directory = await getEtfDirectory().catch(() => null)
+  const entry = directory?.rows.find(row => row.ticker === symbol)
+  if (entry?.name && (!result.fundName || result.fundName === symbol || result.issuer === 'Stock Analysis')) result.fundName = entry.name
+  if (entry?.netAssets && result.netAssets === '--') result.netAssets = formatLargeNumber(entry.netAssets)
+  if (!result.sectorBreakdown.length) {
+    const sectors = new Map<string, number>()
+    for (const holding of result.holdings) {
+      if (holding.sector && holding.weight !== null) sectors.set(holding.sector, (sectors.get(holding.sector) ?? 0) + holding.weight * 100)
+    }
+    result.sectorBreakdown = [...sectors].map(([sector, percent]) => ({ sector, percent })).sort((a, b) => b.percent - a.percent)
+  }
+  if (enrich && !result.isPartial) result = await enrichWithYahoo(result)
+  sortByWeight(result.holdings)
+  return { ...result, fetchedAt: result.fetchedAt ?? Date.now() }
+}
+
+export function getEtfHoldings(ticker: string, force = false, enrich = false): Promise<EtfHoldingsResult> {
   const symbol = ticker.trim().toUpperCase()
-  if (!symbol) return Promise.reject(new Error('Ticker is required.'))
-  return cache
-    .resolveWithStaleFallback(
-      `etf-holdings:${symbol}`,
-      HOLDINGS_TTL_MS,
-      () => loadHoldings(symbol, enrich),
-      { force },
-    )
-    .then((result) => result.value)
+  if (!/^[A-Z0-9][A-Z0-9.-]{0,14}$/.test(symbol)) return Promise.reject(new Error('Enter a valid ETF ticker.'))
+  return resolveEtfSnapshot(`etf-fund:v2:${symbol}:${enrich ? 'enriched' : 'basic'}`, HOLDINGS_TTL_MS,
+    () => loadFundSnapshot(symbol, enrich, force), { force })
 }

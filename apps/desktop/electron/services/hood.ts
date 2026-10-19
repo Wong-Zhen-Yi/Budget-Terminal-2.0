@@ -16,9 +16,12 @@ export const hoodIndexes = {
 async function response(url: string): Promise<Response> {
   const target = new URL(url)
   if (target.protocol !== 'https:' || target.hostname !== 'investors.robinhood.com' || target.username || target.password) throw new Error('Unexpected Robinhood document host.')
-  // The IR site's edge stalls requests with the application agent string. Its public
-  // documents respond to this browser-compatible header through ordinary Node fetch.
-  const result = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', Accept: '*/*' }, signal: AbortSignal.timeout(20_000) })
+  // Robinhood's edge rejects Electron's Node TLS client with HTTP 403 even with
+  // browser headers. Use Chromium in the desktop app; keep Node fetch for CLI probes.
+  const fetchDocument = process.versions.electron
+    ? (await import('electron')).net.fetch
+    : fetch
+  const result = await fetchDocument(url, { headers: { 'User-Agent': 'Mozilla/5.0', Accept: '*/*' }, signal: AbortSignal.timeout(20_000) })
   if (!result.ok) throw new Error(`Robinhood document request failed: HTTP ${result.status}`)
   if (new URL(result.url || url).hostname !== 'investors.robinhood.com') throw new Error('Unexpected Robinhood document redirect.')
   return result

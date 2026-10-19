@@ -21,7 +21,10 @@ const formattedReply = [
   '> Figures depend on the freshness of your saved data.', '',
   '[Open source](https://example.com/research) · [Blocked link](javascript:alert(1))', '',
   '```text', 'Change: -5% · A * B', '```', '',
-  '![Remote image](https://example.com/tracker.png)', '<img src=x onerror="window.unsafeMarkup=true">',
+  '![Remote image](https://example.com/tracker.png)', '<img src=x onerror="window.unsafeMarkup=true">', '',
+  '```pie', JSON.stringify({ title: 'Portfolio allocation', unit: 'USD', slices: [{ label: 'Stocks', value: 750 }, { label: 'Cash', value: 250 }, { label: 'Empty', value: 0 }], caption: 'Fixture values · as of 2026-10-17 · no live data' }), '```', '',
+  '```pie', '{"title":"Incomplete",', '```', '',
+  '```pie', JSON.stringify({ title: 'Cash only', slices: [{ label: '<img src=x onerror=alert(1)>', value: 1 }] }), '```',
 ].join('\n')
 try {
   const bundle = await build({
@@ -35,7 +38,7 @@ try {
       const settle = () => new Promise(resolve => setTimeout(resolve, 120))
       const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } })
       const root = createRoot(document.getElementById('root'))
-      let reads = 0, commands = [], fail = false, portfolioSaves = 0, favorite = false
+      let reads = 0, commands = [], fail = false, portfolioSaves = 0, favorite = false, embedded = false
       const openedLinks = []
       window.api.openExternal = async url => { openedLinks.push(url) }
       const formattedReply = ${JSON.stringify(formattedReply)}
@@ -49,9 +52,18 @@ try {
         { id: 'fixture-fast', name: 'Codex fast', defaultThinking: 'low', thinkingModes: [{ id: 'low', description: 'Quick' }, { id: 'high', description: 'Deeper' }] },
         { id: 'fixture-research', name: 'Codex research', defaultThinking: 'medium', thinkingModes: [{ id: 'medium', description: 'Balanced' }] },
       ]
-      const state = { portfolioProposal: null, model: null, thinking: null, models: [], connected: false, busy: false, autonomy: false, objective: '', intervalMinutes: 15, runsRemaining: 0, nextRunAt: null, messages: [], error: '', navigation: null }
+      const trackerFixture = { id: 'tracker-fixture', title: 'Custom catalyst research', instructions: 'Use fresh research tools to evaluate my custom catalyst conditions. Compare with saved evidence and report unknown if coverage is missing.', intervalMinutes: 15, cooldownMinutes: 60, runLimit: 4, runsRemaining: 4, enabled: false, running: false, createdAt: Date.now(), updatedAt: Date.now(), nextRunAt: null, lastRunAt: null, lastNotifiedAt: null, lastOutcome: null, lastSummary: '', memory: '', error: '' }
+      const state = { currentChatId: 'chat-current', history: [{ id: 'chat-current', title: 'New chat', createdAt: Date.now(), updatedAt: Date.now(), model: null, thinking: null, messageCount: 0 }, { id: 'chat-saved', title: 'Saved research', createdAt: Date.now(), updatedAt: Date.now(), model: 'fixture-fast', thinking: null, messageCount: 2 }], notifications: [{ id: 'notice-1', title: 'Monitoring update', body: 'Synthetic cited evidence · fresh. <img src=x onerror=alert(1)>', at: Date.now(), read: false, eventKey: 'fixture-1', source: 'autonomy', deliveryError: 'OS notifications blocked' }], trackers: [trackerFixture], storageError: '', portfolioProposal: null, model: null, thinking: null, models: [], connected: false, busy: false, autonomy: false, objective: '', intervalMinutes: 15, runsRemaining: 0, nextRunAt: null, messages: [], error: '', navigation: null }
+      const historyMessages = new Map([['chat-saved', [{ id: 'saved-user', role: 'user', text: 'Previous research question', at: Date.now() }, { id: 'saved-answer', role: 'assistant', text: 'Saved answer with source dates', at: Date.now() }]]])
       const envelope = () => ({ data: structuredClone(state), meta: { freshness: 'fresh', source: 'fixture', fetchedAt: Date.now() }, errors: [] })
-      window.api.agentsStatus = async () => { reads++; return envelope() }
+      window.api.agentsStatus = async () => {
+        reads++
+        if (reads === 1) {
+          state.connected = true; state.models = models; state.model = models[0].id
+          state.messages.push({ id: 'startup', role: 'activity', text: 'Codex connected.', at: Date.now() })
+        }
+        return envelope()
+      }
       window.api.agentsCommand = async command => {
         commands.push(command)
         if (fail) throw Error('Fixture connection unavailable')
@@ -66,10 +78,21 @@ try {
         if (command.type === 'portfolioDecision') { if (command.approve) portfolioSaves++; state.portfolioProposal = null }
         if (command.type === 'autonomy') { state.autonomy = command.enabled; state.objective = command.objective || ''; state.runsRemaining = 3; state.nextRunAt = Date.now() + 900000 }
         if (command.type === 'stop') { state.autonomy = false; state.busy = false; state.connected = false; state.nextRunAt = null }
-        if (command.type === 'newChat') { state.messages = []; state.connected = false }
+        if (command.type === 'newChat') {
+          historyMessages.set(state.currentChatId, structuredClone(state.messages))
+          state.currentChatId = 'chat-' + commands.length
+          state.history.push({ id: state.currentChatId, title: 'New chat', createdAt: Date.now(), updatedAt: Date.now(), model: state.model, thinking: state.thinking, messageCount: 0 })
+          state.messages = []; state.portfolioProposal = null; state.error = ''
+        }
+        if (command.type === 'openChat') { state.currentChatId = command.id; state.messages = structuredClone(historyMessages.get(command.id) || []); state.portfolioProposal = null }
+        if (command.type === 'deleteChat') state.history = state.history.filter(chat => chat.id !== command.id)
+        if (command.type === 'readNotifications') state.notifications.forEach(notification => { if (!command.id || command.id === notification.id) notification.read = true })
+        if (command.type === 'deleteNotification') state.notifications = state.notifications.filter(notification => notification.id !== command.id)
+        if (command.type === 'trackerEnabled') { const tracker = state.trackers.find(tracker => tracker.id === command.id); tracker.enabled = command.enabled; tracker.nextRunAt = command.enabled ? Date.now() + 900000 : null }
+        if (command.type === 'deleteTracker') state.trackers = state.trackers.filter(tracker => tracker.id !== command.id)
         return envelope()
       }
-      const render = () => root.render(<QueryClientProvider client={client}><AgentsPage onStatusChange={() => {}} favorite={favorite} onToggleFavorite={() => { favorite = !favorite; render() }} /></QueryClientProvider>)
+      const render = () => root.render(<QueryClientProvider client={client}><AgentsPage embedded={embedded} onStatusChange={() => {}} favorite={favorite} onToggleFavorite={() => { favorite = !favorite; render() }} /></QueryClientProvider>)
       const click = async label => { const button = [...document.querySelectorAll('button')].find(button => button.textContent === label || button.getAttribute('aria-label') === label); check(button && !button.disabled, 'Missing or disabled ' + label); button.click(); await settle() }
       const fill = async (id, value) => { const input = document.getElementById(id); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, value); input.dispatchEvent(new Event('input', { bubbles: true })); await settle() }
       const select = async (id, value) => { const input = document.getElementById(id); input.value = value; input.dispatchEvent(new Event('change', { bubbles: true })); await settle() }
@@ -81,6 +104,13 @@ try {
         await tasks[0].run(client)
         render(); await settle()
         check(reads === 1 && commands.length === 0, 'Opening a warmed Agents page must neither reload nor connect')
+        const suggestions = [...document.querySelectorAll('.agents-suggestions button')]
+        check(suggestions.length === 2, 'Startup connection activity must not hide the two portfolio quick prompts')
+        for (const [index, text] of ['Summarize portfolio news', 'Brief me on my portfolio for the day'].entries()) {
+          check(suggestions[index].textContent.startsWith(text), 'Quick prompt label: ' + text)
+          suggestions[index].click(); await settle()
+          check(document.getElementById('agent-message').value === text && commands.length === 0, 'Quick prompt fills the composer without sending: ' + text)
+        }
         check(document.querySelector('.agents-header').contains(document.getElementById('agent-model')), 'Model settings share the compact toolbar')
         await click('Add page to favorites')
         check(document.querySelector('[aria-label="Remove page from favorites"]').getAttribute('aria-pressed') === 'true', 'Toolbar favorite toggle stays accessible')
@@ -89,10 +119,10 @@ try {
         await click('Controls')
         check(!document.getElementById('agent-controls').hidden, 'Controls can be expanded')
         check(document.querySelector('[role=switch]').getAttribute('aria-checked') === 'false', 'Autonomy starts off')
-        check(document.getElementById('agent-model').disabled && document.getElementById('agent-thinking').disabled, 'Model settings require a connection')
+        check(!document.getElementById('agent-model').disabled && !document.getElementById('agent-thinking').disabled, 'Startup connection makes model settings ready without manual Connect')
         check(!shouldPersistRemoteQuery(client.getQueryCache().find({ queryKey: ['agents'] })), 'Private chat must not persist in renderer cache')
-        await click('Connect Codex')
-        check(document.body.innerText.includes('Connected'), 'Connection status')
+        check(document.querySelector('.agents-status').textContent === 'Connected', 'Startup connection status')
+        check(!commands.some(command => command.type === 'connect'), 'Startup does not require a renderer Connect command')
         check(document.getElementById('agent-model').value === 'fixture-fast', 'Current model is visible')
         check(document.getElementById('agent-thinking').textContent.includes('Default (Low)'), 'Current thinking default is visible')
         await select('agent-thinking', 'high')
@@ -107,13 +137,20 @@ try {
         check(reply.querySelector('h2').textContent === 'Your portfolio at a glance', 'Markdown headings render without hash markers')
         check(reply.querySelector('strong').textContent === 'key things to review' && !reply.textContent.includes('**'), 'Bold markers become emphasis')
         check(reply.querySelectorAll('ul > li').length === 3 && reply.querySelector('ul ul em').textContent === 'source dates', 'Dash and asterisk lists render with nested emphasis')
-        check(reply.querySelectorAll('ol > li').length === 2 && reply.querySelectorAll('tbody tr').length === 2, 'Ordered lists and GFM tables render')
+        check(reply.querySelectorAll('ol > li').length === 2 && reply.querySelectorAll('.agents-prose-table tbody tr').length === 2, 'Ordered lists and GFM tables render')
         check(reply.querySelector('pre code').textContent.includes('-5% · A * B'), 'Literal minus signs and multiplication survive inside code')
         check(document.querySelector('.agents-message.user').textContent.includes('**my text** and -5%'), 'User text stays literal')
         check(!reply.querySelector('img, script, [onerror]') && !window.unsafeMarkup, 'Model output cannot load images or execute HTML')
         check(reply.querySelectorAll('a').length === 1, 'Unsafe URL schemes cannot produce links')
         reply.querySelector('a').click(); await settle()
         check(openedLinks[0] === 'https://example.com/research', 'Response links use the external browser bridge')
+        const pie = reply.querySelector('.agents-pie')
+        check(reply.querySelectorAll('.agents-pie').length === 2 && pie.querySelectorAll('svg path').length === 2, 'Valid pie blocks render native SVG; zero slices have no wedge')
+        check(pie.querySelector('figcaption').textContent === 'Portfolio allocation' && pie.querySelector('svg').getAttribute('role') === 'img', 'Pie has an accessible title')
+        check(pie.querySelector('tbody').textContent.includes('75075%') && pie.querySelector('tfoot').textContent.includes('1,000100%'), 'Pie table shows amounts, percentages and total')
+        check(pie.querySelector('.agents-pie-caption').textContent.includes('no live data'), 'Chart provenance stays visible')
+        check(reply.querySelectorAll('.agents-pie svg circle').length === 1 && reply.textContent.includes('<img src=x onerror=alert(1)>'), 'Single category renders a full circle and labels remain literal')
+        check(reply.querySelector('.agents-pie-error').textContent.includes('incomplete or invalid'), 'Malformed streaming chart falls back without breaking the response')
         check(document.getElementById('agent-message').value === '', 'Successful send clears composer')
         await fill('agent-objective', 'Review portfolio news for meaningful changes')
         await click('Enable autonomous mode')
@@ -130,7 +167,7 @@ try {
         fail = true; await click('Connect Codex')
         check(document.querySelector('[role=alert]').textContent.includes('Fixture connection unavailable'), 'Visible connection failures')
         fail = false; await click('Connect Codex')
-        check(document.querySelectorAll('.agents-message').length === 3, 'Conversation survives disconnect/reconnect')
+        check(document.querySelectorAll('.agents-message').length === 4, 'Conversation survives disconnect/reconnect')
         await paste()
         check(document.querySelectorAll('.agents-image-previews img').length === 1, 'Ctrl+V clipboard image produces a preview')
         await click('×')
@@ -153,10 +190,54 @@ try {
         await click('Send message')
         check(document.documentElement.scrollWidth <= innerWidth, 'No horizontal overflow')
         await click('Dismiss update')
-        state.messages = state.messages.slice(0, 3)
+        const savedMessages = state.messages.filter(message => message.id !== 'startup').slice(0, 3)
+        const beforeNewChat = commands.length
+        await paste(); await fill('agent-message', 'Unsent draft')
+        const selectedModel = document.getElementById('agent-model').value
+        await click('New chat')
+        check(state.connected && document.body.innerText.includes('Connected'), 'New chat stays connected')
+        check(document.querySelectorAll('.agents-message').length === 0 && document.querySelectorAll('.agents-suggestions button').length === 2, 'New chat returns to the quick prompts')
+        check(document.getElementById('agent-model').value === selectedModel && !document.getElementById('agent-thinking').disabled, 'New chat preserves model settings')
+        check(!document.querySelector('.agents-image-previews') && document.getElementById('agent-message').value === '', 'New chat clears unsent draft and images')
+        check(commands.length === beforeNewChat + 1 && commands.at(-1).type === 'newChat', 'New chat never sends a reconnect command')
+        await fill('agent-message', 'Follow-up without reconnecting'); await click('Send message')
+        check(commands.at(-1).type === 'send', 'Can send immediately after New chat')
+        await click('History')
+        check(document.querySelector('[aria-label="Chat history"]').textContent.includes('Saved research'), 'Saved history is visible')
+        await fill('agent-message', 'Unsent before reopening')
+        await click('Saved research')
+        check(document.querySelector('[role=log]').textContent.includes('Saved answer with source dates') && state.connected, 'Opening history restores transcript without disconnect')
+        check(document.getElementById('agent-message').value === '', 'Opening history clears the old draft')
+        const savedArticle = [...document.querySelectorAll('.agents-saved-item')].find(item => item.textContent.includes('Saved research'))
+        check(savedArticle.querySelectorAll('button')[1].disabled, 'Active chat cannot be deleted')
+        await click('History')
+        await click('Notifications')
+        const inbox = document.querySelector('[aria-label="Notification inbox"]')
+        check(inbox.textContent.includes('OS notifications blocked') && !inbox.querySelector('img,script,[onerror]'), 'Notification fallback is visible and body stays literal')
+        await click('Mark all read')
+        check(state.notifications.every(notification => notification.read) && !document.querySelector('.agents-workspace-tabs').textContent.includes('unread'), 'Read state updates the inbox badge')
+        await click('Dismiss notification')
+        check(!state.notifications.length && inbox.textContent.includes('No notifications yet'), 'Notification dismissal works')
+        await click('Trackers')
+        check(document.querySelector('[aria-label="Saved trackers"]').textContent.includes('custom catalyst conditions'), 'Full agent-written tracker instructions are inspectable')
+        await click('Ask Codex to write a tracker')
+        check(document.getElementById('agent-message').value.includes('Save it paused'), 'Tracker creation starts as a reviewable composer prompt')
+        await click('Start tracker')
+        check(state.trackers[0].enabled && document.querySelector('[aria-label="Saved trackers"]').textContent.includes('Scheduled'), 'Explicit tracker start')
+        state.busy = true; client.setQueryData(['agents'], envelope()); await settle()
+        await click('Pause tracker')
+        check(!state.trackers[0].enabled, 'Pause remains available while the chat is busy')
+        state.busy = false; client.setQueryData(['agents'], envelope()); await settle()
+        await click('Delete tracker'); check(state.trackers.length === 1, 'Tracker deletion needs confirmation')
+        await click('Confirm delete tracker'); check(state.trackers.length === 0, 'Confirmed tracker deletion')
+        state.trackers = [{ ...trackerFixture, enabled: false, running: false, nextRunAt: null }]
+        await click('Trackers')
+        state.messages = savedMessages
         client.setQueryData(['agents'], envelope()); await settle()
+        window.setWorkspace = async label => { await click(label) }
+        window.setEmbedded = async value => { embedded = value; render(); await settle() }
         window.setControls = async open => { if (document.getElementById('agent-controls').hidden === open) await click('Controls') }
-        return 'PASS: formatted Markdown, nested lists, tables, code, safe links, literal user text, chat controls, image paste/picker/send, portfolio review, model settings, autonomy, startup readiness and private cache exclusion'
+        return 'PASS: private history reopening, notification inbox/read/dismiss/OS fallback, tracker review/start/pause/delete, automatic startup readiness, connected New chat, preserved model settings, cleared drafts, native pie charts, exact values, percentages, accessible tables, safe malformed chart fallback, formatted Markdown, nested lists, tables, code, safe links, literal user text, chat controls, image paste/picker/send, portfolio review, model settings, autonomy, startup readiness and private cache exclusion'
       }
     ` }, bundle: true, jsx: 'automatic', write: false, format: 'iife', loader: { '.css': 'empty' },
     define: { 'process.env.NODE_ENV': '"production"' }, alias: { '@': join(root, 'src'), '@shared': join(root, 'electron/shared') },
@@ -192,11 +273,22 @@ try {
             if (width === 1600 && sizing.toolbar > 44) throw Error('Desktop Agents toolbar must fit in one compact row: ' + JSON.stringify(sizing))
           }
         }
+        await window.webContents.executeJavaScript('window.setControls(false); window.setEmbedded(true)')
+        window.setSize(420, 900)
+        await new Promise(resolve => setTimeout(resolve, 200))
+        const embedded = await window.webContents.executeJavaScript('({ width: document.documentElement.scrollWidth, viewport: innerWidth, charts: document.querySelectorAll(".agents-embedded .agents-pie").length })')
+        if (embedded.width > embedded.viewport || embedded.charts !== 2) throw Error('Embedded pie layout failed: ' + JSON.stringify(embedded))
+        await window.webContents.executeJavaScript('window.setEmbedded(false)')
         window.setSize(1300, 900)
         await new Promise(resolve => setTimeout(resolve, 200))
         await window.webContents.executeJavaScript('document.querySelector(".agents-transcript").scrollTop = 0')
         mkdirSync(${JSON.stringify(resolve(root, '../../output/playwright'))}, { recursive: true })
         writeFileSync(${JSON.stringify(screenshot)}, (await window.webContents.capturePage()).toPNG())
+        await window.webContents.executeJavaScript('document.querySelector(".agents-pie").scrollIntoView({ block: "start" })')
+        await new Promise(resolve => setTimeout(resolve, 150))
+        writeFileSync(${JSON.stringify(resolve(root, '../../output/playwright/agents-pie.png'))}, (await window.webContents.capturePage()).toPNG())
+        await window.webContents.executeJavaScript('window.setWorkspace("Trackers")')
+        writeFileSync(${JSON.stringify(resolve(root, '../../output/playwright/agents-workspace.png'))}, (await window.webContents.capturePage()).toPNG())
         app.exit(0)
       } catch (error) { console.error(error); app.exit(1) }
     })

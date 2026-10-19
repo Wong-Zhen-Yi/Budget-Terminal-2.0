@@ -9,10 +9,14 @@ import type {
   EarningsCalendarRequest,
   EarningsCalendarRow,
   EconomicCalendarEvent,
+  EconomicPoint,
   EnvelopeError,
 } from '../shared/contract.js'
 import {
   addMonths,
+  CALENDAR_INFLATION_SERIES,
+  calendarEconomicReadings,
+  calendarToday,
   buildMarketHolidays,
   companyEventsFromCalendar,
   dedupeEconomic,
@@ -28,6 +32,7 @@ import {
   parseNasdaqCompanySymbols,
   type EarningsVisualizationDocument,
 } from '../shared/calendar.js'
+import { fetchSeriesCsv } from './fred.js'
 import { cache } from './cache.js'
 import { paced, yahoo } from './yahoo/client.js'
 
@@ -255,6 +260,54 @@ export async function fetchCompanyCalendars(tickers: string[], sources: {
   return { events, errors }
 }
 
+export async function enrichCalendarEconomics(
+  events: EconomicCalendarEvent[],
+  year: number,
+  force: boolean,
+  fetchSeries = fetchSeriesCsv,
+): Promise<{ events: EconomicCalendarEvent[]; errors: EnvelopeError[]; fromCache: boolean; stale: boolean; cacheAgeSeconds: number }> {
+  const series = new Map<string, EconomicPoint[]>()
+  const errors: EnvelopeError[] = []
+  let fromCache = true
+  let stale = false
+  let cacheAgeSeconds = 0
+  await Promise.all(CALENDAR_INFLATION_SERIES.filter(spec => events.some(event => event.name === spec.event)).map(async spec => {
+    const path = join(cacheRoot(), 'readings', `${spec.id}-${year}.json`)
+    const cached = await readCache<EconomicPoint[]>(path, 60 * 60_000)
+    if (!force && cached?.fresh) {
+      series.set(spec.id, cached.value)
+      cacheAgeSeconds = Math.max(cacheAgeSeconds, cached.ageSeconds)
+      return
+    }
+    fromCache = false
+    try {
+      const points = await fetchSeries(spec.id, 15_000, `${year - 2}-01-01`)
+      if (!points.length) throw new Error('No observations returned')
+      series.set(spec.id, points)
+      await writeCache(path, points).catch(() => undefined)
+    } catch (error) {
+      errors.push(sourceError(`FRED ${spec.id}`, error))
+      if (cached) {
+        series.set(spec.id, cached.value)
+        stale = true
+        cacheAgeSeconds = Math.max(cacheAgeSeconds, cached.ageSeconds)
+      }
+    }
+  }))
+  const today = calendarToday('est')
+  return {
+    events: events.map(event => {
+      const readings = calendarEconomicReadings(event, series, today)
+      if (!readings.length) return event
+      return {
+        ...event, readings,
+        readingsNote: `Current revised observations, not release-day vintages. Previous = prior reference month. Consensus forecasts are not supplied.${!event.referencePeriod ? ' Reference month inferred as the month before release; verify delayed releases.' : ''}${event.date > today ? ' Upcoming release: actuals not yet available.' : ''}${errors.length ? ' Some reading sources are unavailable.' : ''}${stale ? ' Using cached readings after a provider failure.' : ''}`,
+      }
+    }),
+    errors, fromCache, stale, cacheAgeSeconds,
+  }
+}
+
 export async function getCalendarMonth(
   request: CalendarMonthRequest,
 ): Promise<CalendarFetchResult<CalendarMonthPayload>> {
@@ -266,18 +319,19 @@ export async function getCalendarMonth(
     companyEvents(request.tickers, Boolean(request.force)),
     ...[...years].map((visibleYear) => economicYear(visibleYear, Boolean(request.force))),
   ])
-  const errors = [...company.errors, ...economic.flatMap((result) => result.errors)]
+  const readings = await enrichCalendarEconomics(dedupeEconomic(economic.flatMap(result => result.payload)), year, Boolean(request.force))
+  const errors = [...company.errors, ...economic.flatMap((result) => result.errors), ...readings.errors]
   return {
     payload: {
       companyEvents: company.payload,
-      economicEvents: dedupeEconomic(economic.flatMap((result) => result.payload)),
+      economicEvents: readings.events,
       marketHolidays: buildMarketHolidays(year),
       generatedAt: Date.now(),
     },
     errors,
-    fromCache: company.fromCache && economic.every((result) => result.fromCache),
-    stale: company.stale || economic.some((result) => result.stale),
-    cacheAgeSeconds: Math.max(company.cacheAgeSeconds, ...economic.map((result) => result.cacheAgeSeconds), 0),
+    fromCache: company.fromCache && readings.fromCache && economic.every((result) => result.fromCache),
+    stale: company.stale || readings.stale || economic.some((result) => result.stale),
+    cacheAgeSeconds: Math.max(company.cacheAgeSeconds, readings.cacheAgeSeconds, ...economic.map((result) => result.cacheAgeSeconds), 0),
   }
 }
 

@@ -33,7 +33,7 @@ function launch({ platform = process.platform, nodeVersion = process.versions.no
     const codex = spawn(codexPath, ['--version'], { cwd: root, env, windowsHide: true, stdio: 'pipe', encoding: 'utf8', timeout: 10_000 })
     if (!codex.error && codex.status === 0 && /^codex(?:-cli)?\s+\d+\.\d+/i.test(codex.stdout?.trim() || '')) {
       env.BUDGET_TERMINAL_CODEX_PATH = codexPath
-      log.log(`Agents runtime ready: ${codex.stdout.trim()}. Autonomous mode starts off; connect from Agents when needed.`)
+      log.log(`Agents runtime ready: ${codex.stdout.trim()}. Codex connects automatically at app startup; New chat keeps the connection. Autonomous mode starts off.`)
     } else {
       log.log('Codex could not run. The app will open; check your Codex installation before connecting from Agents.')
     }
@@ -73,7 +73,7 @@ function launch({ platform = process.platform, nodeVersion = process.versions.no
     return 1
   }
 
-  log.log('Building the latest Budget Terminal source, including Dashboard 2 with a portfolio allocation pie, Agents in the center and a portfolio heatmap on the right instead of live news, analyst targets, sparklines and options, the matching Agents terminal theme, compact toolbar, formatted responses, Budget Terminal MCP access, image paste and reviewed portfolio updates...')
+  log.log('Building the latest Budget Terminal source, including Dashboard 2.0 as the default opening page with a portfolio allocation pie, Agents in the center and a portfolio heatmap on the right instead of live news, analyst targets, sparklines and options, the matching Agents terminal theme, compact toolbar, formatted responses with native inline pie charts, portfolio news and daily briefing quick prompts, automatic Codex connection with connected New chat, private local chat history, notifications and Codex-written trackers, Budget Terminal MCP access, image paste, reviewed portfolio updates repaired HOOD report loading through the browser network stack, and expanded heatmap classification with offline sectors, cached provider lookups and visible coverage, plus the responsive calendar with CPI/PPI/PCE readings and larger, easier-to-read calendar and day-hover text, and PEG ratios in the Portfolio stock table...')
   const build = npm(['run', 'build'])
   if (build.error || build.status !== 0) {
     log.error('Budget Terminal could not build. See the error above.')

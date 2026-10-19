@@ -31,7 +31,7 @@ try {
         const holdings = [
           { symbol: 'AAA', name: 'Alpha', sector: 'Information Technology', weight: 0.5, price: 110, changes: { live: 10, '1d': 10, '1y': 30 } },
           { symbol: 'BBB', name: 'Beta', sector: 'Financials', weight: 0.3, price: 180, changes: { live: -10, '1d': -10, '1y': -20 } },
-          { symbol: 'MISS', name: 'No history', sector: 'Energy', weight: 0.2, price: null, changes: {} },
+          { symbol: 'MISS', name: 'No history', sector: 'Unclassified', weight: 0.2, price: null, changes: {} },
         ]
         const summaries = buildIntervalSummaries(holdings)
         window.api.heatmap = async ({ etf, force }) => {
@@ -53,6 +53,7 @@ try {
           check(calls === 1 && body().includes('Yahoo Finance') && body().includes('2026-10-15'), 'Provider and actual price date')
           check(body().includes('Live') && !body().includes('DefeatBeta'), 'Yahoo provider label and Live control')
           check(body().includes('2/3') && body().includes('MISS has no usable daily history'), 'Partial coverage must stay visible')
+          check(body().includes('Sector coverage: 2/3') && body().includes('Unclassified: MISS'), 'Missing sector classification must stay visible')
           await click('1Y')
           check(calls === 1 && body().includes('1Y Change'), 'Interval changes must reuse loaded history')
           const tile = [...document.querySelectorAll('[title]')].find(element => element.title.startsWith('AAA'))

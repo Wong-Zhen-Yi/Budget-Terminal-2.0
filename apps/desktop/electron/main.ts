@@ -23,6 +23,7 @@ let backupPending: (() => boolean) | null = null
 let flushBackup: (() => Promise<void>) | null = null
 let stopMcp: (() => Promise<void>) | null = null
 let stopWeb: (() => Promise<void>) | null = null
+let flushAgents: (() => Promise<void>) | null = null
 const rendererUrl = isDev && process.env.ELECTRON_RENDERER_URL
   ? process.env.ELECTRON_RENDERER_URL
   : pathToFileURL(join(dirname, '../renderer/index.html')).href
@@ -127,6 +128,11 @@ if (ownsInstance) app.whenReady().then(async () => {
     })
     const { startMcpHost } = await import('./mcp/host.js')
     stopMcp = await startMcpHost()
+    const agents = await import('./services/agentsHost.js')
+    const { startAgents } = agents
+    flushAgents = agents.flushAgents
+    // Connect the signed-in Codex runtime without delaying the window or starting inference.
+    void startAgents().catch(error => console.warn('Codex startup connection failed:', error))
     createWindow()
   } catch (error) {
     dialog.showErrorBox('Budget Terminal could not start', error instanceof Error ? error.message : String(error))
@@ -146,12 +152,12 @@ app.on('window-all-closed', () => {
 let finishingQuit = false
 let drainedQuit = false
 app.on('before-quit', (event) => {
-  if (drainedQuit || (!stopMcp && !stopWeb && !backupPending?.())) return
+  if (drainedQuit || (!stopMcp && !stopWeb && !flushAgents && !backupPending?.())) return
   event.preventDefault()
   if (finishingQuit) return
   finishingQuit = true
   void (async () => {
-    await Promise.all([stopMcp?.(), stopWeb?.()])
+    await Promise.all([stopMcp?.(), stopWeb?.(), flushAgents?.()])
     await flushBackup?.()
   })().catch((error) => console.warn('Shutdown flush failed:', error)).finally(() => {
     drainedQuit = true

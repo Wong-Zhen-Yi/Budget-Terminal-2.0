@@ -13,10 +13,13 @@
  * almost entirely S&P 500 members, so it costs nothing and covers nearly all of them.
  *
  * Not behind `paced()` — Wikipedia is not Yahoo. A failure is not fatal: it returns an
- * empty map and every tile falls back to the issuer's own sector, then Unclassified.
+ * empty map. Resolution still uses the bundled broad sector universe before leaving a
+ * genuinely unknown symbol Unclassified.
  */
 
 import { loadConstituents } from '../sp500Constituents.js'
+import { normalizeSector } from '../../shared/heatmap.js'
+import { gicsSectorFor, toGicsSector } from '../../shared/sectors.js'
 
 export async function getSp500SectorMap(force = false): Promise<Record<string, string>> {
   try {
@@ -25,12 +28,16 @@ export async function getSp500SectorMap(force = false): Promise<Record<string, s
   } catch { return {} }
 }
 
-/** `_resolve_sector`: the issuer's own value wins, then the map, then Unclassified. */
+/** Issuer first, live constituents second, offline GICS fallback last. */
 export function resolveSector(
   symbol: string,
   issuerSector: string,
   sectorMap: Record<string, string>,
 ): string {
-  if (issuerSector) return issuerSector
-  return sectorMap[symbol] ?? sectorMap[symbol.replace(/-/g, '.')] ?? ''
+  const key = symbol.trim().toUpperCase()
+  const sector = normalizeSector(issuerSector)
+    || normalizeSector(sectorMap[key])
+    || normalizeSector(sectorMap[key.replace(/-/g, '.')])
+    || normalizeSector(sectorMap[key.replace(/\./g, '-')])
+  return sector ? toGicsSector(sector) : gicsSectorFor(key)
 }

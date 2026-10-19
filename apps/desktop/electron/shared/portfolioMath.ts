@@ -110,6 +110,7 @@ export function buildPortfolioAllocation(portfolio: Portfolio, quotes: Record<st
 /* ------------------------------------------------------ portfolio page rows */
 
 export interface PositionRow {
+  sector?: string
   unavailableReason?: string
   ticker: string
   shares: number
@@ -128,6 +129,9 @@ export interface PositionRow {
   hasQuote: boolean
   size: number | null
   sizeType: 'marketCap' | 'aum' | null
+  pegRatio: number | null
+  /** True for funds, which have no company earnings-growth ratio. */
+  pegNotApplicable: boolean
   analystTarget: number | null
   /** Percent upside to the analyst target, null when either side is missing. */
   analystUpside: number | null
@@ -180,12 +184,15 @@ export function buildPositionRows(
 
   return priced.map((entry): PositionRow => {
     const facts = fundamentals[entry.ticker]
+    const isFund = Boolean(facts && FUND_QUOTE_TYPES.has(facts.quoteType))
+    const pegRatio = facts?.pegRatio
     const target = facts?.targetMeanPrice ?? null
     const analystUpside =
       target !== null && entry.price !== null && entry.price > 0 ? ((target - entry.price) / entry.price) * 100 : null
 
     return {
       ticker: entry.ticker,
+      sector: entry.quote?.sector,
       shares: entry.holding.shares,
       avgPrice: entry.holding.avgPrice,
       cost: entry.cost,
@@ -204,9 +211,11 @@ export function buildPositionRows(
       unavailableReason: entry.quote ? '' : unavailablePortfolioQuoteReason(entry.ticker, quotes[entry.ticker]),
       size: facts?.size ?? null,
       sizeType: facts?.sizeType ?? null,
+      pegRatio: !isFund && typeof pegRatio === 'number' && Number.isFinite(pegRatio) ? pegRatio : null,
+      pegNotApplicable: isFund,
       analystTarget: target,
       analystUpside,
-      analystNotApplicable: Boolean(facts && FUND_QUOTE_TYPES.has(facts.quoteType)),
+      analystNotApplicable: isFund,
     }
   })
 }

@@ -1,28 +1,14 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
-import type { EtfAumPayload, EtfAumRow } from '@shared/contract'
+import type { EtfAumPayload } from '@shared/contract'
 import { etfAum, filterAumRows } from '@shared/etf'
 import { Button } from '@/components/ui/Button'
-import { DataTable, type Column } from '@/components/ui/DataTable'
 import { SearchInput } from '@/components/ui/SearchInput'
 
-/**
- * `_p13_build_aum_panel`: the left rail ranking every US ETF by net assets.
- *
- * Clicking a row loads that fund on the right, which is `_p13_on_aum_etf_clicked` — and
- * like it, a click while a load is already running only fills the input and says so
- * rather than queueing a second sweep.
- */
-export function AumRail({
-  payload,
-  loading,
-  failureReason,
-  filter,
-  onFilterChange,
-  onSelect,
-  onRefresh,
-  refreshing,
-}: {
+const QUICK_FUNDS = ['SPY', 'QQQ', 'VOO', 'VTI', 'IVV', 'IWM', 'DIA', 'ARKK', 'GLD', 'TLT', 'BND', 'SCHD']
+const PAGE_SIZE = 60
+
+export function AumRail({ payload, loading, failureReason, filter, onFilterChange, onSelect, onRefresh, refreshing, selected }: {
   payload: EtfAumPayload | undefined
   loading: boolean
   failureReason: string
@@ -31,75 +17,51 @@ export function AumRail({
   onSelect: (ticker: string) => void
   onRefresh: () => void
   refreshing: boolean
+  selected: string
 }) {
-  const all = payload?.rows ?? []
-  const rows = useMemo(() => filterAumRows(all, filter), [all, filter])
-
-  const columns: Array<Column<EtfAumRow>> = [
-    {
-      key: 'ticker',
-      header: 'Ticker',
-      cell: (row) => row.ticker,
-      sortValue: (row) => row.ticker,
-    },
-    {
-      key: 'aum',
-      header: 'AUM',
-      align: 'right',
-      numeric: true,
-      cell: (row) => <span className="text-up">{etfAum(row.netAssets)}</span>,
-      sortValue: (row) => row.netAssets,
-    },
-  ]
-
-  /** `_p13_render_aum_table`'s four status lines, in the same order of precedence. */
-  const status = (() => {
-    if (loading && !all.length) return 'Fetching ETF AUM...'
-    if (failureReason) return `ETF AUM unavailable: ${failureReason}`
-    if (!all.length) return 'No US ETF AUM data returned by Yahoo Finance.'
-    if (filter.trim()) return `${rows.length} of ${all.length} US ETFs match "${filter.trim().toUpperCase()}".`
-    if (payload?.missingCount) {
-      return `Loaded AUM for ${all.length}/${payload.totalCount} US ETFs; ${payload.missingCount} unavailable.`
-    }
-    return `Loaded AUM for ${all.length} US ETFs.`
-  })()
+  const [category, setCategory] = useState('All')
+  const [page, setPage] = useState(0)
+  const categories = useMemo(() => ['All', ...new Set(payload?.rows.map(row => row.category).filter((value): value is string => Boolean(value)))], [payload])
+  const rows = useMemo(() => filterAumRows(payload?.rows ?? [], filter)
+    .filter(row => category === 'All' || row.category === category), [payload, filter, category])
+  useEffect(() => setPage(0), [filter, category, payload])
+  const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
+  const safePage = Math.min(page, pages - 1)
 
   return (
-    <div className="flex min-h-0 w-full flex-col gap-2 border-r border-border bg-surface p-2">
-      <h2 className="shrink-0 text-2xs font-semibold tracking-wide text-text uppercase">
-        ETF by AUM
-      </h2>
-      <Button
-        className="shrink-0"
-        onClick={onRefresh}
-        disabled={refreshing || loading}
-        title="Re-fetch the US ETF universe ranked by net assets."
-      >
-        {refreshing || loading ? 'Refreshing...' : 'Refresh AUM'}
-      </Button>
-      <SearchInput
-        className="shrink-0"
-        aria-label="Search the ETF universe by ticker"
-        value={filter}
-        onChange={onFilterChange}
-        placeholder="Search ticker..."
-      />
-      <p className="shrink-0 text-2xs text-text-muted">{status}</p>
-      {/* `_p13_aum_note_lbl`: the caveat is on the panel because the number is wrong for
-          a whole issuer, not because a particular row failed. */}
-      <p className="shrink-0 text-2xs text-warn italic">
-        Note: Vanguard ETFs may show total fund AUM across all share classes, not ETF-only.
-      </p>
-      <div className="flex min-h-0 flex-1 flex-col">
-        <DataTable
-          columns={columns}
-          rows={rows}
-          rowKey={(row) => row.ticker}
-          onRowClick={(row) => onSelect(row.ticker)}
-          defaultSort={{ key: 'aum', direction: 'desc' }}
-          empty={loading ? 'Fetching ETF AUM...' : 'No ETFs to show'}
-        />
+    <aside className="etf-browser" aria-label="ETF fund browser">
+      <header className="etf-browser-heading">
+        <div><span className="etf-eyebrow">Discover</span><h2>Fund browser</h2></div>
+        <Button onClick={onRefresh} disabled={refreshing || loading} title="Refresh the directory. Repeated clicks reuse the cache for at least one minute.">Refresh list</Button>
+      </header>
+      <SearchInput aria-label="Search ETFs" value={filter} onChange={onFilterChange} placeholder="Ticker, fund name or asset class" />
+      <label className="etf-category">Asset class
+        <select aria-label="ETF asset class" value={category} onChange={event => setCategory(event.target.value)}>
+          {categories.map(value => <option key={value}>{value}</option>)}
+        </select>
+      </label>
+      <div className="etf-quick-funds" aria-label="Popular ETFs">
+        {QUICK_FUNDS.map(ticker => <button type="button" key={ticker} aria-pressed={selected === ticker} onClick={() => onSelect(ticker)}>{ticker}</button>)}
       </div>
-    </div>
+      <div className="etf-browser-count"><span>{payload ? `${payload.rows.length.toLocaleString()} funds` : loading ? 'Loading fund directory…' : 'Directory unavailable'}</span><span>Assets ↓</span></div>
+      {failureReason ? <p role="alert" className="etf-warning">{failureReason} {payload ? 'Showing the saved directory.' : 'Popular tickers above still work.'}</p> : null}
+      <div className="etf-fund-list">
+        {rows.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE).map(row => (
+          <button type="button" key={row.ticker} className="etf-fund-row" aria-pressed={selected === row.ticker} onClick={() => onSelect(row.ticker)}>
+            <span className="etf-fund-row-top"><strong>{row.ticker}</strong><span>{etfAum(row.netAssets)}</span></span>
+            <span className="etf-fund-name">{row.name || row.ticker}</span>
+            <span className="etf-fund-category">{row.category || 'ETF'}</span>
+          </button>
+        ))}
+        {!rows.length ? <p className="etf-empty">{loading ? 'Loading the directory independently of holdings…' : payload ? 'No funds match these filters.' : 'Choose a popular fund or enter a ticker to get started.'}</p> : null}
+      </div>
+      <footer className="etf-browser-footer">
+        <div><Button disabled={safePage === 0} onClick={() => setPage(safePage - 1)}>Previous</Button><span>{safePage + 1} / {pages}</span><Button disabled={safePage + 1 >= pages} onClick={() => setPage(safePage + 1)}>Next</Button></div>
+        <p>{rows.length.toLocaleString()} matches · {payload?.source || 'Public fund directory'}</p>
+        <p>{payload ? `Saved ${new Date(payload.fetchedAt).toLocaleString()}` : 'Directory and holdings cached for 24 hours.'}</p>
+        {payload?.missingCount ? <p>{payload.missingCount} funds have no published AUM.</p> : null}
+        <p>Provider AUM may include other share classes.</p>
+      </footer>
+    </aside>
   )
 }

@@ -1,0 +1,116 @@
+.etf-workspace { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; color: var(--color-text); background: var(--color-bg); container-type: inline-size; }
+.etf-workspace button, .etf-workspace input, .etf-workspace select { -webkit-app-region: no-drag; }
+.etf-workspace :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.etf-workspace-header { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 18px 24px; border-bottom: 1px solid var(--color-border); background: linear-gradient(110deg, var(--color-surface), var(--color-bg)); flex: none; }
+.etf-eyebrow { display: block; color: var(--color-text-muted); font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+.etf-workspace-header h1 { font-size: 24px; letter-spacing: -.035em; font-weight: 650; margin: 3px 0; }
+.etf-workspace-header p { font-size: 12px; color: var(--color-text-muted); margin: 0; }
+.etf-cache-badge { font-size: 12px; color: var(--color-text); }
+.etf-cache-badge > span { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: var(--color-up); }
+.etf-cache-badge small { display: block; color: var(--color-text-muted); font-size: 10px; margin-top: 5px; }
+.etf-workspace-body { display: grid; grid-template-columns: 300px minmax(0, 1fr); flex: 1; min-height: 0; }
+.etf-browser { display: flex; flex-direction: column; min-height: 0; gap: 12px; padding: 16px 12px 10px; background: var(--color-surface); border-right: 1px solid var(--color-border); }
+.etf-browser-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.etf-browser-heading h2 { font-size: 16px; font-weight: 600; margin: 3px 0; }
+.etf-browser-heading button { font-size: 10px; height: 28px; }
+.etf-category { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 11px; color: var(--color-text-muted); }
+.etf-category select { width: 165px; border: 1px solid var(--color-border-strong); background: var(--color-bg); color: var(--color-text); padding: 5px; border-radius: 4px; }
+.etf-quick-funds { display: flex; flex-wrap: wrap; gap: 5px; }
+.etf-quick-funds button { flex: 1 0 13%; padding: 5px; font-size: 10px; background: var(--color-surface-raised); color: var(--color-text-muted); border: 1px solid var(--color-border); border-radius: 4px; cursor: pointer; }
+.etf-quick-funds button:hover, .etf-quick-funds button[aria-pressed=true] { color: var(--color-text); border-color: var(--color-accent); background: var(--color-accent-dim); }
+.etf-browser-count { display: flex; justify-content: space-between; color: var(--color-text-muted); font-size: 10px; padding: 2px 6px; }
+.etf-fund-list { flex: 1; min-height: 80px; overflow: auto; margin: -5px -5px 0; }
+.etf-fund-row { display: block; text-align: left; width: calc(100% - 8px); padding: 10px 11px; margin: 2px 4px; border: 1px solid transparent; border-radius: 6px; background: transparent; cursor: pointer; color: var(--color-text); }
+.etf-fund-row:hover { background: var(--color-surface-hover); }
+.etf-fund-row[aria-pressed=true] { border-color: var(--color-border-strong); background: var(--color-surface-raised); box-shadow: inset 3px 0 var(--color-accent); }
+.etf-fund-row-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+.etf-fund-row-top > span { color: var(--color-text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.etf-fund-name { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11px; margin: 4px 0; }
+.etf-fund-category { color: var(--color-text-muted); font-size: 10px; }
+.etf-browser-footer { flex: none; padding: 10px 4px 0; border-top: 1px solid var(--color-border); }
+.etf-browser-footer > div { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 10px; color: var(--color-text-muted); }
+.etf-browser-footer button { height: 26px; font-size: 10px; }
+.etf-browser-footer p { margin: 3px 0; font-size: 9px; color: var(--color-text-muted); }
+.etf-detail { display: flex; flex-direction: column; gap: 12px; padding: 16px 20px 8px; min-width: 0; min-height: 0; overflow: auto; }
+.etf-ticker-form { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; flex: none; }
+.etf-ticker-form label { font-size: 11px; color: var(--color-text-muted); margin-right: 4px; }
+.etf-ticker-form input { width: 155px; padding: 7px 10px; border: 1px solid var(--color-border-strong); background: var(--color-surface); color: var(--color-text); border-radius: 4px; font-size: 12px; }
+.etf-fund-hero { display: flex; gap: 16px; align-items: center; padding: 8px 0; flex: none; }
+.etf-symbol-mark { display: flex; align-items: center; justify-content: center; flex: none; min-width: 64px; height: 64px; padding: 0 8px; border: 1px solid var(--color-border-strong); background: var(--color-accent-dim); border-radius: 10px; font-size: 16px; font-weight: 650; }
+.etf-fund-title { flex: 1; min-width: 0; }
+.etf-fund-title h2 { font-size: clamp(17px, 2cqi, 24px); font-weight: 600; line-height: 1.25; margin: 7px 0; letter-spacing: -.025em; overflow-wrap: anywhere; }
+.etf-fund-title p { font-size: 11px; margin: 0; color: var(--color-text-muted); }
+.etf-fund-tags { display: flex; flex-wrap: wrap; gap: 7px; font-size: 9px; }
+.etf-fund-tags span { padding: 3px 7px; border-radius: 4px; background: var(--color-surface-raised); color: var(--color-text-muted); }
+.etf-fund-tags .etf-partial-tag { color: var(--color-warn); }
+.etf-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid var(--color-border); border-radius: 7px; background: var(--color-surface); flex: none; }
+.etf-metrics > div { padding: 12px; min-width: 0; border-right: 1px solid var(--color-border); }
+.etf-metrics > div:last-child { border: 0; }
+.etf-metrics span { display: block; font-size: 10px; color: var(--color-text-muted); }
+.etf-metrics strong { display: block; margin: 7px 0 5px; font-size: 21px; font-weight: 550; font-variant-numeric: tabular-nums; }
+.etf-metrics small { display: block; color: var(--color-text-muted); font-size: 9px; }
+.etf-warning, .etf-notice { margin: 0; padding: 8px 10px; border-left: 2px solid var(--color-warn); background: var(--color-surface-raised); color: var(--color-warn); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; flex: none; }
+.etf-notice { border-color: var(--color-accent); color: var(--color-text); }
+.etf-content-tabs { display: flex; align-items: center; gap: 15px; border-bottom: 1px solid var(--color-border); flex: none; }
+.etf-content-tabs > button[role=tab] { padding: 9px 0 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--color-text-muted); cursor: pointer; font-size: 12px; }
+.etf-content-tabs > button[aria-selected=true] { color: var(--color-text); border-bottom-color: var(--color-accent); }
+.etf-content-tabs > button span { font-size: 10px; padding: 1px 5px; margin-left: 4px; border-radius: 4px; background: var(--color-surface-raised); }
+.etf-content-tabs > button:last-child { margin-bottom: 6px; }
+.etf-holdings-layout { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 14px; min-height: 260px; flex: 1; }
+.etf-holdings-table { display: flex; flex-direction: column; border: 1px solid var(--color-border); border-radius: 6px; min-width: 0; min-height: 0; overflow: hidden; background: var(--color-surface); }
+.etf-table-tools { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px; border-bottom: 1px solid var(--color-border); flex: none; }
+.etf-table-tools > span { color: var(--color-text-muted); font-size: 10px; white-space: nowrap; }
+.etf-table-note { flex: none; font-size: 9px; color: var(--color-text-muted); padding: 6px 10px; border-top: 1px solid var(--color-border); margin: 0; }
+.etf-weight { display: inline-flex; align-items: center; gap: 8px; }
+.etf-weight-track { display: inline-block; width: 50px; height: 4px; border-radius: 3px; background: var(--color-surface-hover); overflow: hidden; }
+.etf-weight-track > span { display: block; height: 100%; background: var(--color-accent); }
+.etf-allocation-panel { display: flex; flex-direction: column; min-height: 0; overflow: auto; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-surface); }
+.etf-allocation-panel header { padding: 14px 14px 0; }
+.etf-allocation-panel h3 { font-size: 12px; font-weight: 600; margin: 5px 0; }
+.etf-donut { display: flex; flex-direction: column; flex: none; }
+.etf-donut > div { flex-direction: column; flex-wrap: nowrap; gap: 12px; padding: 12px; }
+.etf-donut svg { width: 200px; height: 200px; min-height: 200px; max-height: 200px; flex-shrink: 0; }
+.etf-donut ul { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; }
+.etf-donut li { gap: 4px; }
+.etf-donut li > span { font-size: 10px; }
+.etf-donut li > span:first-child { width: 8px; height: 8px; }
+.etf-donut li > span:nth-child(2) { width: auto; min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.etf-composition-note { padding: 0 14px; margin: 0 0 14px; font-size: 10px; line-height: 1.5; color: var(--color-text-muted); }
+.etf-sectors { padding: 12px 14px; border-top: 1px solid var(--color-border); }
+.etf-sectors p { font-size: 11px; line-height: 1.5; color: var(--color-text-muted); }
+.etf-sector { margin-top: 12px; }
+.etf-sector > div { display: flex; justify-content: space-between; gap: 10px; font-size: 10px; color: var(--color-text-muted); }
+.etf-sector strong { font-weight: 500; color: var(--color-text); }
+.etf-sector-track { display: block; height: 4px; background: var(--color-surface-hover); margin-top: 6px; border-radius: 3px; overflow: hidden; }
+.etf-sector-track > span { display: block; height: 100%; background: var(--color-accent); }
+.etf-basket-view { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 240px; }
+.etf-analysis-note { color: var(--color-text-muted); font-size: 11px; line-height: 1.6; padding: 12px; background: var(--color-surface); border: 1px solid var(--color-border); margin: 0; }
+.etf-policy { flex: none; color: var(--color-text-muted); font-size: 9px; line-height: 1.5; padding-top: 2px; }
+.etf-empty { color: var(--color-text-muted); font-size: 12px; padding: 18px 12px; line-height: 1.7; }
+@container (max-width: 1180px) {
+  .etf-workspace-body { grid-template-columns: 250px minmax(0, 1fr); }
+  .etf-detail { padding: 14px 12px 8px; }
+  .etf-holdings-layout { grid-template-columns: minmax(0, 1fr); flex: none; }
+  .etf-holdings-table { min-height: 310px; max-height: 420px; }
+  .etf-allocation-panel { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(200px, 1fr); overflow: visible; }
+  .etf-allocation-panel header { grid-column: 1; }
+  .etf-donut { grid-column: 1; }
+  .etf-composition-note { grid-column: 1; }
+  .etf-sectors { grid-column: 2; grid-row: 1 / 4; border-top: 0; border-left: 1px solid var(--color-border); }
+  .etf-metrics strong { font-size: 18px; }
+  .etf-metrics > div { padding: 10px 8px; }
+}
+@container (max-width: 800px) {
+  .etf-workspace-body { grid-template-columns: 205px minmax(0, 1fr); }
+  .etf-browser { padding: 12px 8px; }
+  .etf-browser-heading { flex-wrap: wrap; }
+  .etf-category { flex-wrap: wrap; }
+  .etf-category select { width: 100%; }
+  .etf-cache-badge { display: none; }
+  .etf-fund-hero { flex-wrap: wrap; }
+  .etf-symbol-mark { min-width: 50px; height: 50px; font-size: 13px; }
+  .etf-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .etf-allocation-panel { display: flex; }
+  .etf-sectors { border-left: 0; border-top: 1px solid var(--color-border); }
+  .etf-content-tabs { gap: 8px; flex-wrap: wrap; }
+}

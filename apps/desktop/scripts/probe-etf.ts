@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 
 import type { EtfHoldingRow } from '../electron/shared/contract.js'
 import {
@@ -25,6 +28,11 @@ import {
 import { decodeCsv, parseCsv, parseCsvRecords } from '../electron/services/etf/csv.js'
 import { decodeEntities, headingText, parseTables, textOf } from '../electron/services/etf/html.js'
 import { getEtfArbitrage, getEtfAum, getEtfHoldingsPage } from '../electron/services/etfPage.js'
+import { parseEtfAssets, parseEtfDirectory, ETF_DIRECTORY_URL } from '../electron/services/etf/directory.js'
+import { getIssuerEtfHoldings, parsePublicEtfHoldings, preferredEtfIssuer } from '../electron/services/etf/holdings.js'
+import { resolveEtfSnapshot } from '../electron/services/etf/snapshot.js'
+import { TtlCache } from '../electron/services/cache.js'
+import { captureSources, observeSource } from '../electron/services/sourceHealth.js'
 
 /**
  * The ETF page probe, run against `mixins/etf_analyser.py` (page13) side by side.
@@ -248,7 +256,7 @@ function runOffline(): void {
   console.log('Offline checks passed.')
 }
 
-async function runLive(ticker: string, withAum: boolean): Promise<void> {
+async function runLive(ticker: string, withAum: boolean, withArbitrage: boolean): Promise<void> {
   const symbol = ticker.trim().toUpperCase()
   console.log(`\nLoading ${symbol} holdings through the issuer chain...`)
   const started = Date.now()
@@ -282,7 +290,7 @@ async function runLive(ticker: string, withAum: boolean): Promise<void> {
     )
   }
 
-  if (payload.holdings.length) {
+  if (payload.holdings.length && withArbitrage) {
     console.log('\nRefreshing arbitrage over the same basket...')
     const arbStarted = Date.now()
     const arbitrage = await getEtfArbitrage(symbol)
@@ -313,7 +321,7 @@ async function runLive(ticker: string, withAum: boolean): Promise<void> {
   }
 
   if (!withAum) return
-  console.log('\nSweeping the US ETF universe by AUM...')
+  console.log('\nLoading the cached non-Yahoo ETF directory...')
   const aumStarted = Date.now()
   const aum = await getEtfAum()
   console.log(
@@ -329,11 +337,147 @@ async function runLive(ticker: string, withAum: boolean): Promise<void> {
   }
 }
 
+const directoryFixture = '<table><tr><th>Symbol</th><th>Fund Name</th><th>Asset Class</th><th>Assets</th></tr>' +
+  '<tr><td>SPY</td><td>SPDR S&amp;P 500 ETF Trust</td><td>Equity</td><td>640.20B</td></tr>' +
+  '<tr><td>BND</td><td>Vanguard Total Bond Market</td><td>Fixed Income</td><td>-</td></tr></table>'
+
+async function runCacheChecks(): Promise<void> {
+  assert.equal(parseEtfAssets('1.25T'), 1.25e12)
+  assert.equal(parseEtfAssets('72.51M'), 72.51e6)
+  assert.equal(parseEtfAssets('0'), null)
+  assert.equal(parseEtfAssets('-'), null)
+  const directory = parseEtfDirectory(directoryFixture)
+  assert.equal(directory.rows.length, 2)
+  assert.equal(directory.rows[0].name, 'SPDR S&P 500 ETF Trust')
+  assert.equal(directory.rows[1].netAssets, null, 'Missing AUM is not zero and must not drop a fund')
+  assert.equal(directory.missingCount, 1)
+  assert.equal(filterAumRows(directory.rows, 'vanguard').length, 1)
+  assert.equal(filterAumRows(directory.rows, 'fixed income').length, 1)
+  assert.throws(() => parseEtfDirectory('<html>Consent required</html>'), /fund table/)
+  assert.equal(preferredEtfIssuer('SPY'), 'SPDR / State Street')
+  assert.equal(preferredEtfIssuer('VOO'), 'Vanguard')
+  assert.equal(preferredEtfIssuer('QQQ'), 'Invesco')
+  const publicHoldings = parsePublicEtfHoldings('<h1>VOO Holdings</h1><table><tr><th>Symbol</th><th>Name</th><th>% Weight</th></tr><tr><td>MSFT</td><td>Microsoft</td><td>6.20%</td></tr></table>', 'VOO')
+  assert.equal(publicHoldings.isPartial, true)
+  assert.equal(publicHoldings.fundName, 'VOO')
+  assert.equal(publicHoldings.holdings[0].weight, 0.062)
+  assert.throws(() => parsePublicEtfHoldings('<html>Paywall</html>', 'VOO'))
+
+  const scratch = await mkdtemp(join(tmpdir(), 'budget-etf-cache-'))
+  const previousAppData = process.env.APPDATA
+  const previousLocalAppData = process.env.LOCALAPPDATA
+  process.env.APPDATA = scratch
+  process.env.LOCALAPPDATA = scratch
+  const originalNow = Date.now
+  let now = originalNow()
+  Date.now = () => now
+  let store = new TtlCache({ path: join(scratch, 'cache.sqlite') })
+  try {
+    let calls = 0
+    const load = async () => { calls += 1; return { ticker: 'SPY', fetchedAt: now } }
+    const options = { store, force: true }
+    const results = await Promise.all(Array.from({ length: 8 }, () => resolveEtfSnapshot('fund', 24 * 60 * 60_000, load, options)))
+    assert.equal(calls, 1, 'Concurrent forced refreshes coalesce')
+    now += 30_000
+    await resolveEtfSnapshot('fund', 24 * 60 * 60_000, load, options)
+    assert.equal(calls, 1, 'Manual refresh respects minimum age')
+    store.close()
+    store = new TtlCache({ path: join(scratch, 'cache.sqlite') })
+    const restored = await resolveEtfSnapshot('fund', 24 * 60 * 60_000, load, { store })
+    assert.equal(restored.fetchedAt, results[0].fetchedAt)
+    assert.equal(calls, 1, 'Restart must read the disk cache, not the network')
+    now += 31_000
+    let failures = 0
+    const fail = async (): Promise<{ ticker: string; fetchedAt: number }> => { failures++; throw new Error('Provider offline') }
+    const stale = await captureSources(() => resolveEtfSnapshot('fund', 24 * 60 * 60_000, fail, { store, force: true }))
+    assert.equal(stale.value.ticker, 'SPY')
+    assert.equal(stale.snapshot?.stale, true, 'Retained data must be visibly stale')
+    assert.ok(stale.snapshot?.failures.some(reason => reason.includes('Provider offline')))
+    store.close()
+    store = new TtlCache({ path: join(scratch, 'cache.sqlite') })
+    await resolveEtfSnapshot('fund', 24 * 60 * 60_000, fail, { store, force: true })
+    assert.equal(failures, 1, 'Failure backoff must survive restarts and forced refreshes')
+    const ordinaryRead = await captureSources(() => resolveEtfSnapshot('fund', 24 * 60 * 60_000, load, { store }))
+    assert.equal(ordinaryRead.snapshot?.stale, true, 'Normal visits during backoff must not relabel stale data as fresh')
+    now += 5 * 60_000 + 1
+    await resolveEtfSnapshot('fund', 24 * 60 * 60_000, load, { store, force: true })
+    assert.equal(calls, 2, 'Provider can recover after backoff')
+    assert.notEqual(store.get<{ fetchedAt: number }>('fund')?.value.fetchedAt, restored.fetchedAt)
+    await assert.rejects(() => resolveEtfSnapshot('missing', 1000, fail, { store }), /Provider offline/)
+    await assert.rejects(() => resolveEtfSnapshot('missing', 1000, fail, { store, force: true }), /Provider offline/)
+    assert.equal(failures, 2, 'Cold failures must also be backed off')
+    let dependentLoads = 0
+    const dependent = async () => {
+      dependentLoads++
+      observeSource({ fetchedAt: now - 3_600_000, stale: false, fromCache: true, failures: [] })
+      return 'dependent'
+    }
+    await resolveEtfSnapshot('dependent', 86_400_000, dependent, { store, force: true })
+    now += 10_000
+    await resolveEtfSnapshot('dependent', 86_400_000, dependent, { store, force: true })
+    assert.equal(dependentLoads, 1, 'Old source metadata must not bypass the actual refresh cooldown')
+    let quoteCalls = 0
+    const quote = async () => { quoteCalls++; return 100 }
+    await resolveEtfSnapshot('quotes', 120_000, quote, { store, force: true, minimumAgeMs: 120_000 })
+    now += 61_000
+    await resolveEtfSnapshot('quotes', 120_000, quote, { store, force: true, minimumAgeMs: 120_000 })
+    assert.equal(quoteCalls, 1, 'Basket quote cooldown is two minutes, not one')
+    now += 60_000
+    await resolveEtfSnapshot('quotes', 120_000, quote, { store, minimumAgeMs: 120_000 })
+    assert.equal(quoteCalls, 2, 'Expired quotes can be refreshed')
+    now += 86_400_001
+    await resolveEtfSnapshot('fund', 86_400_000, load, { store })
+    assert.equal(calls, 3, 'Expired daily holdings must refresh normally')
+  } finally {
+    if (previousAppData === undefined) delete process.env.APPDATA
+    else process.env.APPDATA = previousAppData
+    if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA
+    else process.env.LOCALAPPDATA = previousLocalAppData
+    Date.now = originalNow
+    store.close()
+    await rm(scratch, { recursive: true, force: true })
+  }
+
+  const originalFetch = globalThis.fetch
+  let downloads = 0
+  const csv = 'date,ticker,company,weight (%),market value ($)\n2026-01-01,TSLA,Tesla,9.50,950\n'
+  globalThis.fetch = async (input) => {
+    const url = String(input)
+    downloads++
+    if (url === ETF_DIRECTORY_URL) return new Response(directoryFixture)
+    assert.ok(url.includes('ARK_INNOVATION_ETF_ARKK_HOLDINGS.csv'), `Unexpected network request: ${url}`)
+    return new Response(csv)
+  }
+  try {
+    const issuerLoad = getIssuerEtfHoldings('ARKK')
+    const funds = await Promise.all([getEtfHoldingsPage('ARKK'), getEtfHoldingsPage('ARKK'), getEtfHoldingsPage('ARKK', true)])
+    await issuerLoad
+    assert.equal(downloads, 2, 'Concurrent issuer-only and page loads share one download plus one non-Yahoo directory request')
+    assert.equal(funds[0].payload.holdings[0].symbol, 'TSLA')
+    assert.equal(funds[0].payload.fetchedAt, funds[2].payload.fetchedAt)
+    await getEtfHoldingsPage('ARKK', true)
+    assert.equal(downloads, 2, 'Repeated force must not redownload or enrich through Yahoo')
+    const clock = Date.now
+    Date.now = () => clock() + 61_000
+    try {
+      globalThis.fetch = async () => { downloads++; throw new Error('Issuer down') }
+      const retained = await captureSources(() => getEtfHoldingsPage('ARKK', true))
+      assert.equal(retained.value.payload.isPartial, false, 'An outage must not replace a full basket with a public top-holdings fallback')
+      assert.equal(retained.value.payload.fetchedAt, funds[0].payload.fetchedAt, 'Last-good issuer timestamp is preserved')
+      assert.equal(retained.snapshot?.stale, true)
+      assert.equal(downloads, 3, 'One failed issuer attempt; no Yahoo or public fan-out during an outage')
+    } finally { Date.now = clock }
+  } finally { globalThis.fetch = originalFetch }
+  console.log('ETF cache checks passed: parsers, direct issuer routing, single-flight, disk restore, refresh cooldown, persistent failure backoff, last-good timestamps and zero Yahoo calls for issuer holdings/directory.')
+}
+
 const args = process.argv.slice(2)
 runOffline()
+if (args.includes('--offline')) await runCacheChecks()
 if (!args.includes('--offline')) {
   await runLive(
     args.find((argument) => !argument.startsWith('--')) ?? 'SPY',
     !args.includes('--no-aum'),
+    !args.includes('--no-arbitrage'),
   )
 }

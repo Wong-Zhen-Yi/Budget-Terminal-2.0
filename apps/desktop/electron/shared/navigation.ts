@@ -1,5 +1,7 @@
 import { TABS } from './contract.js'
 
+export const DEFAULT_TAB_ID = 'dashboard-2'
+
 /** Stable workspace membership; user ordering still applies within each workspace. */
 export const WORKSPACES = [
   { id: 'overview', label: 'Overview', pages: ['dashboard', 'dashboard-2', 'news', 'calendar', 'youtube', 'dictionary'] },

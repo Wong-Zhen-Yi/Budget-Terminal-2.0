@@ -3,6 +3,7 @@ import { create } from 'zustand'
 import { useAgentCommand, useAgents } from '@/api/agentsQueries'
 import { isBrowser } from '@/api/browser'
 import { AgentMarkdown } from '@/components/agents/AgentMarkdown'
+import { AgentWorkspacePanel } from '@/components/agents/AgentWorkspacePanel'
 import type { AgentImage } from '@shared/agents'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import '@/styles/agents.css'
@@ -70,7 +71,11 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
   const perform = async (action: Parameters<typeof command>[0]) => {
     setPending(true)
     setError('')
-    try { await command(action); return true }
+    try {
+      await command(action)
+      if (action.type === 'newChat' || action.type === 'openChat') update({ draft: '', images: [] })
+      return true
+    }
     catch (error) { setError(error instanceof Error ? error.message : String(error)); return false }
     finally { setPending(false) }
   }
@@ -105,28 +110,29 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
         {selectedModel?.thinkingModes.map(mode => <option key={mode.id} value={mode.id} title={mode.description}>{thinkingLabel(mode.id)}</option>)}
       </select></label>
       </div>
-      <div className="agents-actions"><span className={`agents-status ${agent?.busy ? 'working' : agent?.connected ? 'connected' : ''}`}>{agent?.busy ? 'Working…' : agent?.connected ? 'Connected' : 'Disconnected'}</span>
+      <div className="agents-actions"><span className={`agents-status ${agent?.busy ? 'working' : agent?.connected ? 'connected' : ''}`}>{agent?.busy ? agent.connected ? 'Working…' : 'Connecting…' : agent?.connected ? 'Connected' : 'Disconnected'}</span>
         {agent?.autonomy && <span className="agents-monitoring" role="status">Monitoring · {agent.runsRemaining} runs remaining</span>}
         <button disabled={locked || !!agent?.connected} onClick={() => void perform({ type: 'connect' })}>Connect Codex</button>
-        <button disabled={isBrowser || (!agent?.busy && !agent?.autonomy && !pending)} onClick={() => void perform({ type: 'stop' })}>Stop</button>
+        <button disabled={isBrowser || (!agent?.busy && !agent?.autonomy && !agent?.trackers?.some(tracker => tracker.enabled) && !pending)} onClick={() => void perform({ type: 'stop' })}>Stop</button>
         <button disabled={locked || !!agent?.autonomy} onClick={() => void perform({ type: 'newChat' })}>New chat</button>
         <button aria-expanded={showControls} aria-controls={`${idPrefix}-controls`} onClick={() => setShowControls(!showControls)}>Controls</button>
         {onToggleFavorite && <button type="button" disabled={savingFavorite} onClick={onToggleFavorite} aria-pressed={favorite} aria-label={favorite ? 'Remove page from favorites' : 'Add page to favorites'} title={favorite ? 'Remove page from favorites' : 'Add page to favorites'}>{favorite ? '★' : '☆'}</button>}
       </div>
     </header>
     {(error || agent?.error || query.error) && <div role="alert" className="agents-error">{error || agent?.error || String(query.error)}</div>}
+    <AgentWorkspacePanel agent={agent} locked={locked} perform={perform} setDraft={setDraft} />
     <div className={`agents-layout${showControls ? ' with-controls' : ''}`}>
       <section className="agents-chat" aria-label="Chat with Codex">
         <div ref={transcript} className="agents-transcript" role="log" aria-label="Conversation" aria-live="polite">
-          {!agent?.messages.length && <div className="agents-welcome"><div className="agents-mark" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 6h16v11H9l-5 4V6Z" strokeLinejoin="round"/><path d="m8 10 3 2-3 2m5 0h3" strokeLinecap="round" strokeLinejoin="round"/></svg></div><h2>What would you like to explore?</h2><p>Research your watchlist. Understand your portfolio. Find your next question.</p>
-            <div className="agents-suggestions">{['Show me the charts for AAPL', 'Summarize my portfolio and flag missing data', 'Compare NVDA and AMD fundamentals'].map(text => <button key={text} onClick={() => setDraft(text)}>{text} <span>↗</span></button>)}</div>
+          {!agent?.messages.some(message => message.role !== 'activity') && <div className="agents-welcome"><div className="agents-mark" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 6h16v11H9l-5 4V6Z" strokeLinejoin="round"/><path d="m8 10 3 2-3 2m5 0h3" strokeLinecap="round" strokeLinejoin="round"/></svg></div><h2>What would you like to explore?</h2><p>Research your watchlist. Understand your portfolio. Find your next question.</p>
+            <div className="agents-suggestions">{['Summarize portfolio news', 'Brief me on my portfolio for the day'].map(text => <button key={text} onClick={() => setDraft(text)}>{text} <span>↗</span></button>)}</div>
           </div>}
           {agent?.messages.map(message => <article key={message.id} className={`agents-message ${message.role}`} aria-label={message.role === 'assistant' ? 'Codex response' : message.role === 'user' ? 'Your message' : 'Agent activity'}>
             <div className="agents-message-meta">{message.role === 'assistant' ? 'Codex' : message.role === 'user' ? 'You' : 'Activity'} <time dateTime={new Date(message.at).toISOString()}>{new Date(message.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>
             {message.role === 'assistant' ? <AgentMarkdown text={message.text} /> : <p className="agents-plain-message">{message.text}</p>}
             {message.images?.map((name, index) => <span className="agents-image-name" key={index}>Attached image: {name}</span>)}
           </article>)}
-          {agent?.busy && <p className="agents-thinking" role="status">Codex is working. You can switch pages while it runs.</p>}
+          {agent?.busy && <p className="agents-thinking" role="status">{agent.connected ? 'Codex is working. You can switch pages while it runs.' : 'Connecting to Codex… You can switch pages while it loads.'}</p>}
           {agent?.portfolioProposal && <section className="agents-portfolio-review" aria-label="Review portfolio update">
             <h2>Review portfolio update · {agent.portfolioProposal.portfolioName}</h2>
             <p>{agent.portfolioProposal.summary}</p><p>Check tickers, quantities, currencies and costs against your screenshot. Unlisted positions and omitted fields stay unchanged.</p>
@@ -148,8 +154,8 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
           <button role="switch" aria-checked={agent?.autonomy ?? false} aria-label="Autonomous mode" className={agent?.autonomy ? '' : 'agents-primary'} disabled={isBrowser || (!agent?.autonomy && (locked || !agent?.connected || !objective.trim()))} onClick={() => void perform(agent?.autonomy ? { type: 'autonomy', enabled: false } : { type: 'autonomy', enabled: true, objective, intervalMinutes: interval, runs })}>{agent?.autonomy ? 'Turn off autonomous mode' : 'Enable autonomous mode'}</button>
           {agent?.autonomy && <p role="status">{agent.runsRemaining} future runs remaining{agent.nextRunAt ? ` · Next at ${new Date(agent.nextRunAt).toLocaleTimeString()}` : ' · Running now'}</p>}
         </section>
-        <section><h2>Connected to your terminal</h2><ul><li>Use Budget Terminal MCP research and saved-data tools</li><li>Edit saved records and settings when requested</li><li>Capture app screenshots, open pages and select tickers</li><li>Paste portfolio screenshots with Ctrl+V for reviewed updates</li></ul><p>Portfolio screenshot imports require Apply portfolio update. Autonomous monitoring is read only. Conversations and attachments last for this app session. Codex usage follows your signed-in account.</p></section>
-        <section><h2>Get connected</h2><p>Install Codex CLI and sign in using <code>codex login</code>, then select Connect Codex. The desktop Codex installation is detected automatically on Windows.</p>{isBrowser && <p>Use Agents in the desktop app.</p>}</section>
+        <section><h2>Connected to your terminal</h2><ul><li>Use Budget Terminal MCP research and saved-data tools</li><li>Edit saved records and settings when requested</li><li>Capture app screenshots, open pages and select tickers</li><li>Paste portfolio screenshots with Ctrl+V for reviewed updates</li></ul><p>Portfolio screenshot imports require Apply portfolio update. Autonomous monitoring can create notifications, but cannot edit financial records or tracker definitions. Chats, notifications and tracker definitions are saved locally; image attachments are not stored. Review and start trackers in the Trackers panel. Codex usage follows your signed-in account.</p></section>
+        <section><h2>Get connected</h2><p>Codex connects automatically at startup. If connection fails, install Codex CLI and sign in using <code>codex login</code>, then select Connect Codex to retry. New chat keeps the connection and your model settings. The desktop Codex installation is detected automatically on Windows.</p>{isBrowser && <p>Use Agents in the desktop app.</p>}</section>
       </aside>
     </div>
   </div>

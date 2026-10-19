@@ -5,14 +5,14 @@ import { api, queryKeys } from './client'
 import { isBrowser } from './browser'
 
 export const loadAgents = () => isBrowser
-  ? Promise.resolve(ok<AgentsState>({ portfolioProposal: null, model: null, thinking: null, models: [], connected: false, busy: false, autonomy: false, objective: '', intervalMinutes: 15, runsRemaining: 0, nextRunAt: null, messages: [], error: 'Open Agents in the desktop app to connect Codex.', navigation: null }, 'Codex agent'))
+  ? Promise.resolve(ok<AgentsState>({ currentChatId: null, history: [], notifications: [], trackers: [], storageError: '', portfolioProposal: null, model: null, thinking: null, models: [], connected: false, busy: false, autonomy: false, objective: '', intervalMinutes: 15, runsRemaining: 0, nextRunAt: null, messages: [], error: 'Open Agents in the desktop app to connect Codex.', navigation: null }, 'Codex agent'))
   : api.agentsStatus()
 
 export function useAgents(poll = false) {
   return useQuery({ queryKey: queryKeys.agents, queryFn: loadAgents, staleTime: Infinity, retry: false,
     refetchInterval: isBrowser || !poll ? false : query => {
       const agent = query.state.data?.data
-      return agent?.busy ? 700 : agent?.connected || agent?.autonomy ? 3000 : false
+      return agent?.busy || agent?.trackers?.some(tracker => tracker.running) ? 700 : agent?.connected || agent?.autonomy || agent?.trackers?.some(tracker => tracker.enabled) ? 3000 : false
     }, refetchIntervalInBackground: true })
 }
 export function useAgentCommand() {

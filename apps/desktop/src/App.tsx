@@ -5,7 +5,7 @@ import { Sp500Page } from '@/pages/Sp500Page'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { SETTINGS_TAB_ID, TABS } from '@shared/contract'
-import { WORKSPACES } from '@shared/navigation'
+import { DEFAULT_TAB_ID, WORKSPACES } from '@shared/navigation'
 import { useWarmPages } from '@/api/prefetch'
 import { useMcpScreenshot, useScreenshotReady } from '@/api/mcpScreenshot'
 import { useReloadAll } from '@/api/queries'
@@ -79,7 +79,7 @@ const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
 
 export function App() {
   const isMac = window.api.platform === 'darwin'
-  const [selectedTab, setActiveTab] = useState('dashboard')
+  const [selectedTab, setActiveTab] = useState(DEFAULT_TAB_ID)
   const { command: screenshot, complete: completeScreenshot } = useMcpScreenshot()
   const screenshotPage = screenshot?.page ?? null
   const activeTab = screenshotPage ?? selectedTab
@@ -353,6 +353,12 @@ export function App() {
         onToggleObscure={toggleObscure}
       />
 
+      {!screenshotPage && agents.data?.data.notifications?.some(notification => !notification.read) && (
+        <div role="status" className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-surface px-4 py-1 text-2xs text-text-muted">
+          <button onClick={() => handleStocksNavigate('agents')}>Agents · {agents.data.data.notifications.filter(notification => !notification.read).length} unread notifications</button>
+          <button onClick={() => void agentCommand({ type: 'readNotifications' }).catch(error => setNotice(String(error)))}>Mark all read</button>
+        </div>
+      )}
       <div className="terminal-workspace flex min-h-0 flex-1">
         <WorkspaceSidebar
           tabs={visibleTabs} activeTab={activeTab} onSelectTab={setActiveTab} favorites={favorites} recent={recent}

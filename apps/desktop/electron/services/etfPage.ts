@@ -1,14 +1,7 @@
 /**
- * The ETF page's three loads, ported from `mixins/etf_analyser.py` (page13).
- *
- * The reference runs each of them on its own thread and posts the result back to the UI:
- * `_p13_load_etf` for the holdings, `_p13_request_arbitrage_refresh` for the basket
- * comparison and `_p13_fetch_aum_universe` for the left rail. All three are independent
- * here too — a failed AUM screen leaves the holdings on screen and vice versa, which is
- * what the page's two separate status lines already assume.
- *
- * Nothing on this page has a refresh timer. `init_page13` creates none: the only load it
- * fires on build is the AUM rail, and everything else is a button.
+ * Independent ETF snapshots: a daily non-Yahoo directory, daily issuer/public holdings,
+ * and an explicitly requested basket comparison. No timers or universe quote sweeps.
+ * Disk-backed caches, refresh cooldowns and persistent failure backoff protect providers.
  */
 
 import type {
@@ -19,16 +12,17 @@ import type {
   EtfHoldingsPayload,
 } from '../shared/contract.js'
 import { err } from '../shared/envelope.js'
-import { AUM_PAGE_SIZE, buildArbitrage, type EtfQuote } from '../shared/etf.js'
+import { buildArbitrage, type EtfQuote } from '../shared/etf.js'
+import { FRESHNESS } from '../shared/freshness.js'
 import { changesFromCloses } from '../shared/heatmap.js'
-import { cache } from './cache.js'
 import { getEtfHoldings } from './etf/holdings.js'
-import { etfAumScreen } from './yahoo/screener.js'
+import { getEtfDirectory } from './etf/directory.js'
+import { resolveEtfSnapshot } from './etf/snapshot.js'
 import { fetchSparkCloses, yahooSymbol } from './yahoo/spark.js'
 
-export const ETF_HOLDINGS_SOURCE = 'etf holdings'
-export const ETF_ARBITRAGE_SOURCE = 'etf arbitrage'
-export const ETF_AUM_SOURCE = 'etf aum screener'
+export const ETF_HOLDINGS_SOURCE = 'ETF issuer / public holdings'
+export const ETF_ARBITRAGE_SOURCE = 'Yahoo Finance ETF basket quotes'
+export const ETF_AUM_SOURCE = 'Stock Analysis ETF directory'
 
 /* -------------------------------------------------------------- holdings */
 
@@ -109,7 +103,7 @@ export async function getEtfHoldingsPage(
       sourceUrl: result.sourceUrl,
       isPartial: result.isPartial,
       coverageNote: result.coverageNote,
-      fetchedAt: Date.now(),
+      fetchedAt: result.fetchedAt ?? Date.now(),
     },
     errors,
   }
@@ -132,9 +126,9 @@ export interface EtfArbitrageFetchResult {
 }
 
 /** `_QUOTE_CACHE_TTL_SECONDS`, shared with the Heatmap page's own quote window. */
-const ARBITRAGE_TTL_MS = 120_000
+const ARBITRAGE_TTL_MS = FRESHNESS.etfArbitrage
 
-async function fetchArbitrage(symbol: string, force: boolean): Promise<EtfArbitrageFetchResult> {
+async function fetchArbitrage(symbol: string): Promise<EtfArbitrageFetchResult> {
   // The holdings are already cached by ticker, so refreshing arbitrage does not re-fetch
   // the issuer file — exactly as the reference hands `_p13_last_result` to the service.
   const source = await getEtfHoldings(symbol)
@@ -153,7 +147,9 @@ async function fetchArbitrage(symbol: string, force: boolean): Promise<EtfArbitr
     byYahooSymbol.set(key, [...(byYahooSymbol.get(key) ?? []), entry])
   }
 
-  const { series, missing } = await fetchSparkCloses([...byYahooSymbol.keys()], '1y', force)
+  // Reuse the shared constituent cache, including on manual refresh. A refresh must
+  // not invalidate hundreds of still-fresh histories used by other pages.
+  const { series, missing } = await fetchSparkCloses([...byYahooSymbol.keys()], '1y')
   const quotes = new Map<string, EtfQuote>()
   for (const [key, entry] of Object.entries(series)) {
     const quote: EtfQuote = {
@@ -164,7 +160,9 @@ async function fetchArbitrage(symbol: string, force: boolean): Promise<EtfArbitr
   }
 
   const payload = buildArbitrage(symbol, holdings, quotes)
+  if (!payload.quoteCoverage || payload.etfPrice === null) throw new Error('Yahoo basket quotes are unavailable. Last good analysis is retained; retry in five minutes.')
   const errors: EnvelopeError[] = []
+  if (source.isPartial) errors.push(err(source.issuer, source.coverageNote, 'etf_arbitrage', symbol))
   if (missing.length) {
     errors.push(
       err('Yahoo Finance', `${missing.length} basket quote(s) were unavailable.`, 'etf_arbitrage', symbol),
@@ -176,59 +174,13 @@ async function fetchArbitrage(symbol: string, force: boolean): Promise<EtfArbitr
 export function getEtfArbitrage(ticker: string, force = false): Promise<EtfArbitrageFetchResult> {
   const symbol = ticker.trim().toUpperCase()
   if (!symbol) return Promise.reject(new Error('Load an ETF before refreshing arbitrage.'))
-  return cache
-    .resolve(`etf-arbitrage:${symbol}`, ARBITRAGE_TTL_MS, () => fetchArbitrage(symbol, force), { force })
-    .then((result) => result.value)
+  return resolveEtfSnapshot(`etf-basket:v2:${symbol}`, ARBITRAGE_TTL_MS,
+    () => fetchArbitrage(symbol), { force, minimumAgeMs: ARBITRAGE_TTL_MS })
 }
 
 /* ------------------------------------------------------------------- AUM */
 
-/**
- * `_p13_fetch_aum_universe`: page the whole US ETF universe, ranked by net assets.
- *
- * The loop is the reference's, including its two independent stop conditions — Yahoo's
- * own `total` once the offset passes it, and a short page. `total` is only trusted when
- * it is positive: an absent count would otherwise end the sweep after the first page.
- *
- * There is no progress signal here, the same wall the Crypto, Economic and Roll ports
- * hit: an IPC request/response carries no intermediate frames, so the page's rail shows
- * a busy line instead of the reference's running `n/total loaded` counter.
- */
-const AUM_TTL_MS = 6 * 60 * 60 * 1000
-
-async function fetchAum(): Promise<EtfAumPayload> {
-  const rows = new Map<string, number>()
-  let total = 0
-  let offset = 0
-
-  for (;;) {
-    const page = await etfAumScreen(offset, AUM_PAGE_SIZE)
-    if (page.total > 0) total = page.total
-    if (!page.quotes.length) break
-    for (const quote of page.quotes) {
-      const ticker = String(quote.symbol ?? '').trim().toUpperCase()
-      const raw = quote.netAssets ?? quote.fundnetassets
-      const assets = Number(raw)
-      if (ticker && Number.isFinite(assets) && assets > 0) rows.set(ticker, assets)
-    }
-    offset += page.quotes.length
-    if (total && offset >= total) break
-    if (page.quotes.length < AUM_PAGE_SIZE) break
-  }
-
-  const totalCount = Math.max(0, total || rows.size)
-  return {
-    rows: [...rows]
-      .map(([ticker, netAssets]) => ({ ticker, netAssets }))
-      .sort((a, b) => b.netAssets - a.netAssets),
-    totalCount,
-    missingCount: Math.max(0, totalCount - rows.size),
-    fetchedAt: Date.now(),
-  }
-}
-
+/** Kept under the existing IPC name; discovery no longer sweeps Yahoo's screener. */
 export function getEtfAum(force = false): Promise<EtfAumPayload> {
-  return cache
-    .resolveWithStaleFallback('etf-aum', AUM_TTL_MS, fetchAum, { force })
-    .then((result) => result.value)
+  return getEtfDirectory(force)
 }

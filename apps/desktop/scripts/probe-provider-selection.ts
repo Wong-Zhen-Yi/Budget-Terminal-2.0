@@ -18,7 +18,7 @@ const { fetchCompanyCalendars } = await import('../electron/services/calendar.js
 const { yahooProvider } = await import('../electron/services/provider.js')
 
 async function offline() {
-  const original = { chart: yahoo.chart, quote: yahoo.quote, _fetch: yahoo._fetch, rows: defeatBeta.rows, fetch: globalThis.fetch }
+  const original = { chart: yahoo.chart, quote: yahoo.quote, quoteSummary: yahoo.quoteSummary, _fetch: yahoo._fetch, rows: defeatBeta.rows, fetch: globalThis.fetch }
   let otherProviderCalls = 0
   let alternateQuoteCalls = 0
   defeatBeta.rows = async () => { otherProviderCalls += 1; throw new Error('Unselected provider') }
@@ -27,6 +27,7 @@ async function offline() {
     chart: async () => ({ quotes: dates.map((date, index) => ({ date, close: 100 + index, open: 100, high: 102, low: 99, volume: 100 })),
       meta: { regularMarketPrice: 101, regularMarketTime: dates[1], currency: 'USD' } }),
     quote: async () => { alternateQuoteCalls += 1; throw new Error('Do not switch endpoints after failure') },
+    quoteSummary: async () => ({ assetProfile: { sector: 'Technology' }, price: { quoteType: 'EQUITY' } }),
     _fetch: async () => ({ TEST: { symbol: 'TEST', timestamp: dates.map(date => date.getTime() / 1000), close: [100, 101] } }),
   })
   try {
@@ -81,7 +82,7 @@ async function offline() {
     assert.equal(cachedFailure.errors.length, 1, 'Persisted failures must not become successful empty searches')
     console.log('PASS: Yahoo-only quotes/history/spark/statements, no provider or quote endpoint switch, ETF calendars, empty searches and persisted YouTube failures')
   } finally {
-    Object.assign(yahoo, { chart: original.chart, quote: original.quote, _fetch: original._fetch })
+    Object.assign(yahoo, { chart: original.chart, quote: original.quote, quoteSummary: original.quoteSummary, _fetch: original._fetch })
     defeatBeta.rows = original.rows
     globalThis.fetch = original.fetch
     cache.clear()

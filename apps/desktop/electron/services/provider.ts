@@ -314,6 +314,7 @@ import {
   type ValuationFetchResult,
 } from './yahoo/valuation.js'
 import { getQuotes } from './yahoo/quotes.js'
+import { getHoldingSectors } from './sectors.js'
 import { getTargets } from './yahoo/targets.js'
 import { BACKTEST_SOURCE, getBacktest } from './yahoo/backtest.js'
 import {
@@ -679,7 +680,10 @@ function upDownEnvelope(result: UpDownFetchResult): Envelope<UpDownPayload> {
 const providerImplementation: MarketDataProvider = {
   async quotes({ holdings, force }) {
     const macroSymbols = MACRO_SYMBOLS.map((entry) => entry.symbol)
-    const batch = await getQuotes([...macroSymbols, ...holdings], force)
+    const [batch, classifications] = await Promise.all([
+      getQuotes([...macroSymbols, ...holdings], force),
+      getHoldingSectors(holdings),
+    ])
 
     const macro: QuotesPayload['macro'] = {}
     for (const entry of MACRO_SYMBOLS) {
@@ -687,15 +691,21 @@ const providerImplementation: MarketDataProvider = {
       if (quote) macro[entry.label] = quote
     }
     const holdingQuotes: QuotesPayload['holdings'] = {}
-    for (const symbol of holdings.map((s) => s.toUpperCase())) {
+    for (const symbol of holdings.map((s) => s.trim().toUpperCase())) {
       const quote = batch.quotes[symbol]
-      if (quote) holdingQuotes[symbol] = quote
+      if (quote) holdingQuotes[symbol] = { ...quote, sector: classifications.sectors[symbol] }
     }
 
     const payload: QuotesPayload = {
       macro,
       holdings: holdingQuotes,
       missing: batch.missing,
+    }
+    if (classifications.missing.length) {
+      return partial(payload, [
+        ...batch.errors.map(entry => err('yahoo quotes', entry.reason, 'quotes', entry.symbol)),
+        err('Sector classification', `No classification available for: ${classifications.missing.join(', ')}. These holdings remain Unclassified.`, 'holding_sectors'),
+      ], 'yahoo quotes + sectors', `${classifications.missing.length} holding classification(s) unavailable${batch.errors.length ? `; ${batch.errors.length} quote(s) unavailable` : ''}.`)
     }
     if (!batch.errors.length) {
       if (batch.staleCount > 0) {
@@ -1468,7 +1478,7 @@ const providerImplementation: MarketDataProvider = {
         payload,
         errors,
         ETF_ARBITRAGE_SOURCE,
-        `${payload.totalHoldings - payload.quoteCoverage} of ${payload.totalHoldings} basket holdings are unquoted.`,
+        errors.map(error => error.reason).join(' · '),
       )
     } catch (error) {
       return failed(emptyEtfArbitragePayload(symbol), describeError(error), ETF_ARBITRAGE_SOURCE)

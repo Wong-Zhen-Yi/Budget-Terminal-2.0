@@ -9,6 +9,7 @@ import {
   buildEarningsExport,
   buildMarketHolidays,
   calendarToday,
+  calendarEconomicReadings,
   earningsWeekRows,
   earningsStatus,
   mergeEarningsRows,
@@ -22,7 +23,7 @@ import {
   parseNasdaqCompanySymbols,
   startOfWeek,
 } from '../electron/shared/calendar.js'
-import { getCalendarMonth, getEarningsCalendar } from '../electron/services/calendar.js'
+import { enrichCalendarEconomics, getCalendarMonth, getEarningsCalendar } from '../electron/services/calendar.js'
 
 const earningsColumns = [
   'ticker',
@@ -36,7 +37,7 @@ const earningsColumns = [
   'epssurprisepct',
 ].map((id) => ({ id }))
 
-function runOffline(): void {
+async function runOffline(): Promise<void> {
   const cells = monthCells(2026, 8)
   assert.equal(cells.length, 42)
   assert.deepEqual(cells.slice(0, 7), [null, null, null, null, null, 1, 2])
@@ -70,6 +71,61 @@ function runOffline(): void {
   assert.equal(fred[0]?.date, '2026-08-18')
   const census = parseCensusSchedule('<table><tr><td>Advance Monthly Sales for Retail and Food Services</td><td>August 14, 2026</td></tr><tr><td>New Residential Sales</td><td>August 25, 2026</td></tr></table>', 2026)
   assert.deepEqual(census.map((event) => event.name), ['Retail Sales', 'New Home Sales'])
+
+  assert.equal(bls[1].referencePeriod, '2026-07')
+  assert.equal(bea[1].referencePeriod, '2026-07')
+  const observations: Array<[string, number]> = [
+    ['2025-06-01', 100], ['2025-07-01', 101], ['2026-05-01', 102], ['2026-06-01', 103], ['2026-07-01', 104],
+  ]
+  const series = new Map(['CPIAUCSL', 'CPILFESL', 'PPIFIS', 'PCEPI', 'PCEPILFE'].map(id => [id, observations]))
+  const cpiEvent = { date: '2026-08-12', name: 'CPI Release', importance: 'high' }
+  const readings = calendarEconomicReadings(cpiEvent, series, '2026-08-13')
+  assert.equal(readings.length, 4)
+  assert.equal(readings[0].period, '2026-07')
+  assert.equal(readings[0].actual, '1.0%')
+  assert.equal(readings[0].previous, '1.0%')
+  assert.equal(readings[1].actual, '3.0%')
+  assert.equal(readings[1].previous, '3.0%')
+  assert.equal(calendarEconomicReadings(cpiEvent, series, '2026-08-11')[0].actual, null, 'Upcoming releases must never show actuals')
+  assert.equal(calendarEconomicReadings(cpiEvent, new Map(), '2026-08-13')[0].actual, null)
+  assert.equal(calendarEconomicReadings({ ...cpiEvent, referencePeriod: '2026-06' }, series, '2026-08-13')[0].period, '2026-06', 'Explicit delayed reference periods take precedence')
+  assert.equal(calendarEconomicReadings({ ...cpiEvent, date: '2027-01-12' }, series, '2027-01-13')[0].period, '2026-12')
+  assert.equal(calendarEconomicReadings({ ...cpiEvent, name: 'PPI Release' }, series, '2026-08-13')[0].seriesId, 'PPIFIS')
+  assert.equal(calendarEconomicReadings({ ...cpiEvent, name: 'PCE Inflation' }, series, '2026-08-13').length, 4)
+  assert.equal(calendarEconomicReadings({ ...cpiEvent, name: 'Jobs Report' }, series, '2026-08-13').length, 0)
+  const enrichedExport = buildCalendarExport({ year: 2026, month: 8, today: '2026-08-13', includeEconomic: true,
+    includeCompany: false, includeOptions: false, includeMarketHolidays: false,
+    economicEvents: [{ ...cpiEvent, readings }], companyEvents: [], options: [], marketHolidays: [] })
+  assert.match(enrichedExport, /CPI MoM \(SA\): 1.0%/)
+  assert.match(enrichedExport, /current revised data/)
+
+  const probeRoot = await mkdtemp(join(tmpdir(), 'budget-calendar-readings-'))
+  const previousAppData = process.env.APPDATA
+  const previousLocalAppData = process.env.LOCALAPPDATA
+  process.env.APPDATA = probeRoot
+  process.env.LOCALAPPDATA = probeRoot
+  try {
+    let calls = 0
+    const provider = async () => { calls += 1; return observations }
+    const fresh = await enrichCalendarEconomics([cpiEvent], 2026, true, provider)
+    assert.equal(fresh.errors.length, 0)
+    assert.equal(calls, 2)
+    await enrichCalendarEconomics([cpiEvent], 2026, false, async () => { assert.fail('Fresh readings should use disk cache') })
+    const fallback = await enrichCalendarEconomics([cpiEvent], 2026, true, async () => { throw new Error('offline fixture') })
+    assert.equal(fallback.errors.length, 2)
+    assert.equal(fallback.stale, true)
+    assert.equal(fallback.events[0].readings?.length, 4)
+    assert.match(fallback.events[0].readingsNote ?? '', /cached readings/)
+    const missing = await enrichCalendarEconomics([cpiEvent], 2027, true, async () => { throw new Error('offline fixture') })
+    assert.equal(missing.events[0].readings?.[0].actual, null)
+    assert.equal(missing.events[0].readings?.[0].previous, null)
+  } finally {
+    if (previousAppData === undefined) delete process.env.APPDATA
+    else process.env.APPDATA = previousAppData
+    if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA
+    else process.env.LOCALAPPDATA = previousLocalAppData
+    await rm(probeRoot, { recursive: true, force: true })
+  }
 
   const symbols = parseNasdaqCompanySymbols([
     'Nasdaq Traded|Symbol|Security Name|Test Issue|Financial Status|Round Lot Size|ETF|NextShares',
@@ -157,7 +213,9 @@ function runOffline(): void {
 async function runLive(ticker: string): Promise<void> {
   const probeRoot = await mkdtemp(join(tmpdir(), 'budget-terminal-calendar-probe-'))
   const previousAppData = process.env.APPDATA
+  const previousLocalAppData = process.env.LOCALAPPDATA
   process.env.APPDATA = probeRoot
+  process.env.LOCALAPPDATA = probeRoot
   const today = new Date().toISOString().slice(0, 10)
   const year = Number(today.slice(0, 4))
   const month = Number(today.slice(5, 7))
@@ -173,12 +231,17 @@ async function runLive(ticker: string): Promise<void> {
     ])
     assert.ok(calendar.payload.marketHolidays.length > 0)
     assert.ok(calendar.payload.generatedAt > 0)
+    const inflationEvents = calendar.payload.economicEvents.filter(event => event.readings?.length)
+    assert.ok(inflationEvents.length > 0, 'Official schedules should include inflation releases')
+    assert.ok(inflationEvents.some(event => event.readings?.some(reading => reading.actual !== null)), 'Live inflation readings should contain reported values')
     assert.ok(earnings.payload.symbolUniverseCount > 1_000)
     assert.equal(earnings.payload.startDate, startOfWeek(today))
     console.log(JSON.stringify({
       ticker,
       companyEvents: calendar.payload.companyEvents.length,
       economicEvents: calendar.payload.economicEvents.length,
+      inflationEventsWithReadings: inflationEvents.length,
+      exampleInflationReading: inflationEvents.find(event => event.readings?.some(reading => reading.actual !== null)),
       marketHolidays: calendar.payload.marketHolidays.length,
       calendarErrors: calendar.errors.map((error) => `${error.source}: ${error.reason}`),
       earningsRows: earnings.payload.rows.length,
@@ -188,12 +251,14 @@ async function runLive(ticker: string): Promise<void> {
   } finally {
     if (previousAppData === undefined) delete process.env.APPDATA
     else process.env.APPDATA = previousAppData
+    if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA
+    else process.env.LOCALAPPDATA = previousLocalAppData
     await rm(probeRoot, { recursive: true, force: true })
   }
 }
 
 const args = process.argv.slice(2)
-runOffline()
+await runOffline()
 if (!args.includes('--offline')) {
   const ticker = args.find((argument) => !argument.startsWith('--'))?.trim().toUpperCase() || 'AAPL'
   await runLive(ticker)

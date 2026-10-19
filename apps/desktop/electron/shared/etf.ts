@@ -118,13 +118,13 @@ export function filterHoldings<T extends { symbol: string; name: string }>(
 }
 
 /** `_p13_render_aum_table`'s filter, which is ticker-only and case-folded upward. */
-export function filterAumRows<T extends { ticker: string }>(
+export function filterAumRows<T extends { ticker: string; name?: string; category?: string }>(
   rows: ReadonlyArray<T>,
   filter: string,
 ): T[] {
-  const needle = filter.trim().toUpperCase()
+  const needle = filter.trim().toLowerCase()
   if (!needle) return [...rows]
-  return rows.filter((row) => row.ticker.includes(needle))
+  return rows.filter((row) => [row.ticker, row.name, row.category].some(value => value?.toLowerCase().includes(needle)))
 }
 
 /* ------------------------------------------------------------- the donut */

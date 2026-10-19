@@ -29,6 +29,7 @@ try {
       import { isTrustedRendererUrl } from './electron/shared/ipcSecurity'
       import { acquireDataSession } from './electron/services/dataSession'
       import { startMcpHost } from './electron/mcp/host'
+      import { startAgents, closeAgents } from './electron/services/agentsHost'
       import { invokeBridge, runtimePath } from './mcp/runtime'
       app.setPath('userData', ${JSON.stringify(join(directory, 'userData'))})
       const expected = pathToFileURL(${JSON.stringify(trustedPath)}).href
@@ -56,6 +57,32 @@ try {
           assert.equal(agents.data.autonomy, false)
           assert.equal(agents.data.connected, false)
           assert.equal(agents.data.busy, false)
+          const startup = startAgents()
+          assert.equal(startAgents(), startup, 'Desktop startup connection is single-flight')
+          const connected = await trusted.webContents.executeJavaScript('window.api.agentsStatus()')
+          assert.equal(connected.data.connected, true, 'Status readiness waits for startup connection')
+          assert.equal(connected.data.autonomy, false)
+          assert.equal(connected.data.models[0].id, 'fixture-model')
+          assert.equal(globalThis.codexFixture.starts, 1)
+          assert.equal(globalThis.codexFixture.turns, 0, 'Auto-connect never starts inference')
+          const fresh = await trusted.webContents.executeJavaScript("window.api.agentsCommand({ type: 'newChat' })")
+          assert.equal(fresh.data.connected, true)
+          assert.equal(fresh.data.messages.length, 0)
+          assert.equal(globalThis.codexFixture.starts, 1)
+          assert.equal(globalThis.codexFixture.closes, 0, 'New chat retains the process')
+          assert.equal(globalThis.codexFixture.threads, 2, 'New chat creates a fresh ephemeral thread')
+          await trusted.webContents.executeJavaScript("window.api.agentsCommand({ type: 'stop' })")
+          assert.equal((await trusted.webContents.executeJavaScript('window.api.agentsStatus()')).data.connected, false)
+          assert.equal(globalThis.codexFixture.starts, 1, 'Polling after Stop never auto-reconnects')
+          closeAgents()
+          globalThis.codexFixture.authenticated = false
+          await startAgents()
+          const missingLogin = await trusted.webContents.executeJavaScript('window.api.agentsStatus()')
+          assert.equal(missingLogin.meta.freshness, 'failed', 'Startup failure stays visible in readiness')
+          assert.match(missingLogin.data.error, /codex login/)
+          assert.equal(missingLogin.data.busy, false)
+          assert.equal(globalThis.codexFixture.turns, 0)
+          console.log('PASS: automatic Codex startup, single connection attempt, connected New chat, no inference, Stop without reconnect and visible sign-in failure')
           const other = new BrowserWindow(options)
           await other.loadFile(${JSON.stringify(otherPath)})
           await assert.rejects(other.webContents.executeJavaScript('window.api.settings()'), /Untrusted IPC sender/)
@@ -85,6 +112,27 @@ try {
       })
     ` },
     outfile: join(directory, 'main.mjs'), bundle: true, platform: 'node', format: 'esm', packages: 'external',
+    plugins: [{ name: 'fixture-codex-transport', setup(builder) {
+      // Exercise the real host/IPC lifecycle without using the user's Codex account.
+      builder.onLoad({ filter: /[\\/]codexClient\.ts$/ }, () => ({ loader: 'ts', contents: `
+        globalThis.codexFixture = { starts: 0, closes: 0, turns: 0, threads: 0, authenticated: true }
+        export class CodexClient {
+          async start() { globalThis.codexFixture.starts++ }
+          async request(method) {
+            const fixture = globalThis.codexFixture
+            await new Promise(resolve => setTimeout(resolve, 10))
+            if (method === 'account/read') return { account: fixture.authenticated ? {} : null }
+            if (method === 'config/read') return { config: {} }
+            if (method === 'model/list') return { data: [{ model: 'fixture-model', displayName: 'Fixture', defaultReasoningEffort: 'low', supportedReasoningEfforts: [{ reasoningEffort: 'low', description: 'Quick' }] }] }
+            if (method === 'thread/start') return { thread: { id: 'fixture-' + (++fixture.threads) }, model: 'fixture-model' }
+            if (method === 'turn/start') { fixture.turns++; throw Error('Unexpected inference') }
+            throw Error('Unexpected method: ' + method)
+          }
+          write() {}
+          close() { globalThis.codexFixture.closes++ }
+        }
+      ` }))
+    } }],
   })
   // Keep the bridge client and Electron host on this probe's profile, including
   // when the maintenance runner already supplied its own outer scratch path.

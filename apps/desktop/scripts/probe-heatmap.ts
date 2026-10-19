@@ -29,6 +29,11 @@ import {
 import { excelColumnToIndex } from '../electron/services/etf/xlsx.js'
 import { getIssuerEtfHoldings } from '../electron/services/etf/holdings.js'
 import { resolveSector } from '../electron/services/etf/sectorMap.js'
+import { getHoldingSectors, getIndexSectors, sectorFromProfile } from '../electron/services/sectors.js'
+import { sectorFor, gicsSectorFor, normalizeSectorName, normalizeSectorSymbol, SECTOR_DATA } from '../electron/shared/sectors.js'
+import { SECTOR_UNIVERSE } from '../electron/shared/sectorUniverse.js'
+import { buildPositionRows } from '../electron/shared/portfolioMath.js'
+import { yahooProvider } from '../electron/services/provider.js'
 import { fetchHeatmap, getHeatmap, HEATMAP_SOURCE } from '../electron/services/heatmap.js'
 import { cache } from '../electron/services/cache.js'
 import { closeDefeatBetaDecoder } from '../electron/services/defeatbeta/decoder.js'
@@ -88,6 +93,38 @@ function runOffline(): void {
   assert.equal(resolveSector('BRK-B', '', sectorMap), 'Financials')
   assert.equal(resolveSector('NVDA', 'Issuer-provided sector', sectorMap), 'Issuer-provided sector')
   assert.equal(resolveSector('UNKNOWN', '', sectorMap), '', 'Unavailable sectors must not be fabricated')
+
+  // Offline coverage, share classes, taxonomy aliases and intentional themes.
+  assert(Object.values(SECTOR_UNIVERSE).flat().length >= 500)
+  assert(new Set(Object.values(SECTOR_DATA).flat()).size > 700)
+  for (const [symbol, sector] of Object.entries({
+    PLTR: 'Technology', MU: 'Technology', TSM: 'Technology',
+    SOFI: 'Financials', HOOD: 'Financials', RKLB: 'Industrials', HIMS: 'Healthcare',
+    GOOG: 'Communication Services', BTI: 'Consumer Defensive', VST: 'Utilities',
+    IBIT: 'Crypto', COIN: 'Crypto', GLD: 'Metals', TLT: 'Bonds', QQQ: 'Funds', XLK: 'Technology',
+  })) assert.equal(sectorFor(symbol), sector, symbol)
+  assert.equal(sectorFor(' brk.b '), 'Financials')
+  assert.equal(sectorFor('BF-B'), 'Consumer Defensive')
+  assert.equal(normalizeSectorSymbol('brk.b'), 'BRK-B')
+  assert.equal(normalizeSectorSymbol('0700.HK'), '0700.HK')
+  assert.equal(normalizeSectorSymbol('BHP.AX'), 'BHP.AX')
+  assert.equal(normalizeSectorSymbol('VOD.L'), 'VOD.L')
+  assert.equal(sectorFor('NEWTICKER', 'Information Technology'), 'Technology')
+  assert.equal(sectorFor('NEWTICKER', 'financial_services'), 'Financials')
+  assert.equal(sectorFor('COIN', 'Financial Services'), 'Crypto')
+  assert.equal(sectorFor('GLD', 'Basic Materials'), 'Metals')
+  assert.equal(sectorFor('UNKNOWN', 'Unclassified'), 'Unclassified')
+  assert.equal(normalizeSectorName('Health Care'), 'Healthcare')
+  assert.equal(normalizeSectorName('Consumer Discretionary'), 'Consumer Cyclical')
+  assert.equal(normalizeSectorName('Materials'), 'Basic Materials')
+  assert.equal(gicsSectorFor('COIN'), 'Financials', 'Index tiles must not use portfolio themes')
+  assert.equal(resolveSector('MSFT', 'Unclassified', {}), 'Information Technology')
+  assert.equal(resolveSector('brk.b', '-', { 'BRK-B': 'Financial Services' }), 'Financials')
+  assert.equal(resolveSector('ARM', '-', {}), 'Information Technology')
+  assert.equal(resolveSector('MSTR', '', {}), 'Information Technology')
+  assert.equal(sectorFromProfile({ sector: 'Health Care', quoteType: 'EQUITY' }), 'Healthcare')
+  assert.equal(sectorFromProfile({ quoteType: 'ETF' }), 'Funds')
+  assert.equal(sectorFromProfile({ quoteType: 'EQUITY' }), '', 'Do not invent a stock sector')
 
   // `excel_col_to_index`.
   assert.equal(excelColumnToIndex('A'), 0)
@@ -266,6 +303,7 @@ async function runLive(etfArgument: string): Promise<void> {
         asOfDate: payload.asOfDate,
         priceAsOfDate: payload.priceAsOfDate,
         holdingsLoaded: payload.holdingsLoaded,
+        sectorCoverage: payload.holdings.filter(holding => holding.sector !== 'Unclassified').length,
         elapsedSeconds: Number(seconds),
         weightSum: Number(
           payload.holdings.reduce((total, holding) => total + holding.weight, 0).toFixed(4),
@@ -355,6 +393,7 @@ async function runProviderChecks(): Promise<void> {
   assert.equal(result.payload.holdings[3].changes.live, undefined)
   assert.equal(result.payload.weightedDayMove, (0.5 * 10 + 0.3 * -10) / 0.8)
   assert(result.errors[0].reason.includes('OLD, MISS'))
+  assert(result.errors.some(error => error.operation === 'etf_heatmap_sectors'))
   assert.equal(buildHeatmapRows(result.payload, 'SPY', 'live')[0].changeLabel, 'Live Change')
   assert.equal(result.payload.priceSource, 'Yahoo Finance')
   assert.equal(result.payload.publishedAt, undefined)
@@ -379,8 +418,79 @@ async function runProviderChecks(): Promise<void> {
     Object.assign(yahoo, { _fetch: async () => { throw new Error('Yahoo offline') } })
     const unavailable = await fetchHeatmap('SPY', true, { ...deps, prices: fetchSparkCloses })
     assert.equal(unavailable.payload.quoteCoverage, 0)
-    assert(unavailable.errors.every(error => error.source === 'Yahoo Finance'))
+    assert(unavailable.errors.filter(error => error.operation === 'etf_heatmap_quotes').every(error => error.source === 'Yahoo Finance'))
   } finally { Object.assign(yahoo, { _fetch: originalSpark }) }
+
+  // Only symbols outside the bundled map need provider metadata. Keep provider
+  // classification on rows so both Dashboard 2 and Portfolio reuse startup quotes.
+  const requested: string[] = []
+  const classifications = await getHoldingSectors(['PLTR', 'MSTR', 'BRK.B', 'SECTORTEST', 'SECTORTEST', 'BADSECTOR'], async symbol => {
+    requested.push(symbol)
+    if (symbol === 'BADSECTOR') throw new Error('Profile offline')
+    return 'Consumer Staples'
+  })
+  assert.deepEqual(requested, ['SECTORTEST', 'BADSECTOR'])
+  assert.equal(classifications.sectors.SECTORTEST, 'Consumer Defensive')
+  assert.deepEqual(classifications.missing, ['BADSECTOR'])
+  const indexRequested: string[] = []
+  const indexSectors = await getIndexSectors(['COIN', 'CRCL', 'INDEXNEW', 'INDEXFUND', 'INDEXBAD'], async symbol => {
+    indexRequested.push(symbol)
+    if (symbol === 'INDEXBAD') throw new Error('Profile offline')
+    return symbol === 'CRCL' ? 'Financial Services' : symbol === 'INDEXFUND' ? 'Funds' : 'Technology'
+  })
+  assert.deepEqual(indexRequested, ['CRCL', 'INDEXNEW', 'INDEXFUND', 'INDEXBAD'])
+  assert.equal(indexSectors.COIN, 'Financials')
+  assert.equal(indexSectors.CRCL, 'Financials', 'New index constituents must bypass portfolio themes')
+  assert.equal(indexSectors.INDEXNEW, 'Information Technology')
+  assert.equal(indexSectors.INDEXFUND, '', 'Instrument type is not an index sector')
+  assert.equal(indexSectors.INDEXBAD, '')
+  const classifiedIndex = await fetchHeatmap('SPY', true, { ...deps, classifications: async symbols => {
+    assert.deepEqual(symbols, ['OLD', 'MISS'], 'Only unresolved constituents need a profile lookup')
+    return { OLD: 'Information Technology' }
+  } })
+  assert.equal(classifiedIndex.payload.holdings[2].sector, 'Information Technology')
+  assert.equal(classifiedIndex.payload.holdings[3].sector, 'Unclassified')
+  assert(classifiedIndex.errors.some(error => error.operation === 'etf_heatmap_sectors' && error.reason.includes('MISS')))
+
+  const originalSummary = yahoo.quoteSummary
+  const originalChart = yahoo.chart
+  let profileCalls = 0
+  Object.assign(yahoo, {
+    quoteSummary: async (symbol: string) => {
+      profileCalls += 1
+      if (symbol === 'SECTORMISSING') return { price: { quoteType: 'EQUITY' } }
+      if (symbol === 'SECTORBROKEN') throw new Error('Profile offline')
+      return { assetProfile: { sector: 'Information Technology' }, price: { quoteType: 'EQUITY' } }
+    },
+    chart: async () => ({ quotes: [{ date: new Date(day(2)), close: 100 }, { date: new Date(day(1)), close: 110 }] }),
+  })
+  try {
+    const [first, concurrent] = await Promise.all([getHoldingSectors(['SECTORLIVE']), getHoldingSectors(['SECTORLIVE'])])
+    assert.equal(profileCalls, 1, 'Concurrent profile loads must coalesce')
+    assert.equal(first.sectors.SECTORLIVE, 'Technology')
+    assert.deepEqual(first, concurrent)
+    await getHoldingSectors(['SECTORLIVE'])
+    await getIndexSectors(['SECTORLIVE'])
+    assert.equal(profileCalls, 1, 'Portfolio and index loads must share cached classification')
+    const missingProfile = await getHoldingSectors(['SECTORMISSING'])
+    assert.deepEqual(missingProfile.missing, ['SECTORMISSING'])
+    await getHoldingSectors(['SECTORMISSING'])
+    assert.equal(profileCalls, 2, 'Unpublished sectors must be negative-cached')
+    const quotes = await yahooProvider.quotes({ holdings: ['SECTORLIVE', 'PLTR'], force: true })
+    assert.equal(quotes.data.holdings.SECTORLIVE.sector, 'Technology')
+    const portfolio = { id: 'fixture', name: 'Fixture', tickers: ['SECTORLIVE'], holdings: { SECTORLIVE: {
+      ticker: 'SECTORLIVE', shares: 1, avgPrice: 100, includeInWeight: true,
+    } }, cashBalance: 0, marginDebt: 0, options: [], includeCashInWeight: true, readOnly: false }
+    assert.equal(buildPositionRows(portfolio, quotes.data.holdings)[0].sector, 'Technology')
+    const degraded = await yahooProvider.quotes({ holdings: ['SECTORBROKEN'], force: true })
+    assert.equal(degraded.data.holdings.SECTORBROKEN.price, 110, 'A profile outage must not drop usable quotes')
+    assert.equal(degraded.meta.freshness, 'partial')
+    assert(degraded.errors.some(error => error.operation === 'holding_sectors'))
+    cache.set('holding-sector:v1:SECTORSTALE', 'Financials', -1)
+    Object.assign(yahoo, { quoteSummary: async () => ({ price: { quoteType: 'EQUITY' } }) })
+    assert.equal((await getHoldingSectors(['SECTORSTALE'])).sectors.SECTORSTALE, 'Financials')
+    assert.equal((await getHoldingSectors(['SECTORSTALE'])).sectors.SECTORSTALE, 'Financials', 'Negative caching must not hide a last-known classification')
+  } finally { Object.assign(yahoo, { quoteSummary: originalSummary, chart: originalChart }) }
 
   // Issuer outages must never initiate Yahoo enrichment or a top-ten fallback.
   const originalFetch = globalThis.fetch

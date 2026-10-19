@@ -22,6 +22,8 @@ const bundle = await build({
       import { useDashboard } from './src/stores/dashboard'
       import { NEWS_REFRESH_MS } from './src/api/refreshRates'
       import { heatColor } from './src/components/charts/Treemap'
+      import { PositionsTable } from './src/components/portfolio/PositionsTable'
+      import { buildPositionRows } from './electron/shared/portfolioMath'
       const check = (value, message) => { if (!value) throw Error(message) }
       const settle = () => new Promise(resolve => setTimeout(resolve, 150))
       const client = new QueryClient({defaultOptions: {queries: {retry: false}}})
@@ -123,6 +125,7 @@ const bundle = await build({
         check(returnCalls.length === 0, 'Live heatmap must use startup quotes without fetching history on first visit')
         const heatmap = document.querySelector('.dashboard-portfolio-heatmap')
         check(heatmap.querySelector('[title="AAPL  +1.00%"]'), 'Warm quote changes must render as portfolio heatmap tiles')
+        check(heatmap.textContent.includes('Sector coverage: 1/1'), 'Offline classification coverage must be visible')
         check(reported.some(panel => panel.label === 'Agents' && panel.envelope), 'Aggregate Agents health with Dashboard 2 holdings')
         check(!reported.some(panel => ['News', 'Options', 'Targets'].includes(panel.label) || panel.label.endsWith('history')), 'Removed panels must not affect Dashboard 2 health')
         check(agentReads === 0 && agentCommands.length === 0, 'Opening embedded Agents must use its startup cache without connecting automatically')
@@ -161,6 +164,13 @@ const bundle = await build({
         const falling = heatmap.querySelector('[title="MSFT  -2.00%"]')
         const red = document.createElement('div'); red.style.background = heatColor(-2)
         check(falling && falling.style.background === red.style.background, 'Quote updates recolor losing holdings red')
+        client.setQueryData(queryKeys.quotes(['MSFT']), envelope({holdings: {MSFT: {price: 300, change: -2, absChange: -6, sector: 'Financial Services'}}, macro})); await settle()
+        check(heatmap.textContent.includes('Sector: Financials'), 'Provider sectors must reach tiles and normalize aliases without a new request')
+        const unknownBook = {...books[1], tickers: ['UNKNOWNTICKER'], holdings: {UNKNOWNTICKER: {ticker: 'UNKNOWNTICKER', shares: 1, avgPrice: 90, includeInWeight: true}}}
+        client.setQueryData(queryKeys.quotes(['UNKNOWNTICKER']), envelope({holdings: {UNKNOWNTICKER: {price: 100, change: 1, absChange: 1}}, macro}))
+        client.setQueryData(queryKeys.portfolio, envelope({portfolios: [unknownBook], activeId: 'MSFT'})); await settle()
+        check(heatmap.textContent.includes('Sector coverage: 0/1') && heatmap.textContent.includes('Unclassified: UNKNOWNTICKER'), 'Unresolved sectors must stay visible')
+        client.setQueryData(queryKeys.portfolio, envelope({portfolios: books, activeId: 'MSFT'})); await settle()
         client.setQueryData(queryKeys.quotes(['MSFT']), envelope({holdings: {}, macro})); await settle()
         check(!pie.querySelector('svg') && pie.textContent.includes('Allocation unavailable') && pie.textContent.includes('MSFT'), 'Missing prices must not produce a misleading normalized pie')
         check(heatmap.textContent.includes('Market marks missing') && !heatmap.querySelector('[title^="MSFT "]'), 'Heatmap must not hide missing valuation coverage')
@@ -195,10 +205,35 @@ const bundle = await build({
         check(document.body.textContent.includes('History unavailable'), 'Visible failure state')
         root.render(<MacroBar macro={macro} loading={false} charts={MACRO_SYMBOLS.map(entry => ({data: { ...fixture(entry.symbol), data: {candles: [{close: 100}, {close: NaN}, {close: 100}]} }, isLoading: false, isError: false}))} />)
         await settle(); window.checkLayout()
+        const pegTickers = ['PEGHIGH', 'PEGLOW', 'PEGMISSING', 'PEGFUND']
+        const pegBook = {id: 'peg', name: 'PEG', readOnly: false, tickers: pegTickers,
+          holdings: Object.fromEntries(pegTickers.map(ticker => [ticker, {ticker, shares: 1, avgPrice: 90, includeInWeight: true}])),
+          cashBalance: 0, marginDebt: 0, options: [], includeCashInWeight: true}
+        const pegQuotes = Object.fromEntries(pegTickers.map(ticker => [ticker, {symbol: ticker, price: 100, change: 1, absChange: 1}]))
+        const pegFacts = Object.fromEntries(pegTickers.map((ticker, index) => [ticker, {ticker,
+          quoteType: index === 3 ? 'ETF' : 'EQUITY', size: 1e10, sizeType: 'marketCap', targetMeanPrice: 120,
+          pegRatio: [2.345, -0.75, null, null][index]}]))
+        const noop = () => {}
+        root.render(<PositionsTable portfolio={pegBook} rows={buildPositionRows(pegBook, pegQuotes, pegFacts)} loading={false}
+          onSetShares={noop} onSetAvgPrice={noop} onToggleWeight={noop} onRemove={noop} />)
+        await settle()
+        const pegHeader = [...document.querySelectorAll('th')].find(header => header.textContent.includes('PEG Ratio'))
+        check(pegHeader, 'Portfolio stock table must include PEG Ratio')
+        const pegColumn = [...pegHeader.parentElement.children].indexOf(pegHeader)
+        const pegCell = ticker => [...document.querySelectorAll('tbody tr')].find(row => row.textContent.includes(ticker)).children[pegColumn].textContent
+        check(pegCell('PEGHIGH') === '2.35' && pegCell('PEGLOW') === '-0.75', 'Reported PEG ratios must render with two decimals and preserve negatives')
+        check(pegCell('PEGMISSING') === '--' && pegCell('PEGFUND') === 'N/A', 'Missing stock PEG and fund inapplicability must be distinct')
+        check(document.querySelector('[aria-label="PEGHIGH shares"]') && document.querySelector('[aria-label="Remove PEGHIGH"]'), 'PEG column must preserve portfolio editing controls')
+        pegHeader.click(); await settle()
+        check(document.querySelector('tbody tr').textContent.includes('PEGHIGH'), 'PEG sorts numerically descending')
+        check([...document.querySelectorAll('tbody tr')].slice(-2).every(row => /PEGMISSING|PEGFUND/.test(row.textContent)), 'Missing PEG values stay last when sorted descending')
+        pegHeader.click(); await settle()
+        check(document.querySelector('tbody tr').textContent.includes('PEGLOW'), 'PEG sorts numerically ascending')
+        check([...document.querySelectorAll('tbody tr')].slice(-2).every(row => /PEGMISSING|PEGFUND/.test(row.textContent)), 'Missing PEG values stay last in both sort directions')
         root.render(<QueryClientProvider client={client}><Shell /></QueryClientProvider>)
         for (let attempt = 0; attempt < 20 && document.querySelectorAll('svg').length !== 5; attempt++) await settle()
         check(document.querySelectorAll('svg').length === 5, 'Remounted history ready')
-        return 'PASS: five sparklines, startup cache, F5, stale/loading/failure states and flat/invalid history'
+        return 'PASS: portfolio PEG column, formatting, missing/fund values, numeric sorting and editing; five sparklines, startup cache, F5, stale/loading/failure states and flat/invalid history'
       }
     `,
   },
