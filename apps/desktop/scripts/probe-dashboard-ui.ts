@@ -205,14 +205,14 @@ const bundle = await build({
         check(document.body.textContent.includes('History unavailable'), 'Visible failure state')
         root.render(<MacroBar macro={macro} loading={false} charts={MACRO_SYMBOLS.map(entry => ({data: { ...fixture(entry.symbol), data: {candles: [{close: 100}, {close: NaN}, {close: 100}]} }, isLoading: false, isError: false}))} />)
         await settle(); window.checkLayout()
-        const pegTickers = ['PEGHIGH', 'PEGLOW', 'PEGMISSING', 'PEGFUND']
+        const pegTickers = ['PEGHIGH', 'PEGLOW', 'PEGMISSING', 'PEGFUND', 'PEGONE', 'PEGBELOW', 'PEGABOVE', 'PEGZERO']
         const pegBook = {id: 'peg', name: 'PEG', readOnly: false, tickers: pegTickers,
           holdings: Object.fromEntries(pegTickers.map(ticker => [ticker, {ticker, shares: 1, avgPrice: 90, includeInWeight: true}])),
           cashBalance: 0, marginDebt: 0, options: [], includeCashInWeight: true}
         const pegQuotes = Object.fromEntries(pegTickers.map(ticker => [ticker, {symbol: ticker, price: 100, change: 1, absChange: 1}]))
         const pegFacts = Object.fromEntries(pegTickers.map((ticker, index) => [ticker, {ticker,
           quoteType: index === 3 ? 'ETF' : 'EQUITY', size: 1e10, sizeType: 'marketCap', targetMeanPrice: 120,
-          pegRatio: [2.345, -0.75, null, null][index]}]))
+          pegRatio: [2.345, -0.75, null, null, 1, 0.75, 1.01, 0][index]}]))
         const noop = () => {}
         root.render(<PositionsTable portfolio={pegBook} rows={buildPositionRows(pegBook, pegQuotes, pegFacts)} loading={false}
           onSetShares={noop} onSetAvgPrice={noop} onToggleWeight={noop} onRemove={noop} />)
@@ -223,6 +223,12 @@ const bundle = await build({
         const pegCell = ticker => [...document.querySelectorAll('tbody tr')].find(row => row.textContent.includes(ticker)).children[pegColumn].textContent
         check(pegCell('PEGHIGH') === '2.35' && pegCell('PEGLOW') === '-0.75', 'Reported PEG ratios must render with two decimals and preserve negatives')
         check(pegCell('PEGMISSING') === '--' && pegCell('PEGFUND') === 'N/A', 'Missing stock PEG and fund inapplicability must be distinct')
+        const pegValue = ticker => [...document.querySelectorAll('tbody tr')].find(row => row.textContent.includes(ticker)).children[pegColumn].querySelector('span')
+        check(pegValue('PEGONE').classList.contains('text-up'), 'PEG of exactly 1.0 must be green')
+        check(['PEGHIGH', 'PEGABOVE'].every(ticker => pegValue(ticker).classList.contains('text-down')), 'PEG above 1.0 must be red')
+        check(['PEGBELOW', 'PEGZERO', 'PEGLOW'].every(ticker => pegValue(ticker).classList.contains('text-green-300')), 'All PEG values below 1.0 must use brighter green')
+        check(['PEGMISSING', 'PEGFUND'].every(ticker => pegValue(ticker).classList.contains('text-text-dim')), 'Missing and fund PEG values must remain muted')
+        check(getComputedStyle(pegValue('PEGBELOW')).color !== getComputedStyle(pegValue('PEGONE')).color, 'The built stylesheet must render distinct green shades')
         check(document.querySelector('[aria-label="PEGHIGH shares"]') && document.querySelector('[aria-label="Remove PEGHIGH"]'), 'PEG column must preserve portfolio editing controls')
         pegHeader.click(); await settle()
         check(document.querySelector('tbody tr').textContent.includes('PEGHIGH'), 'PEG sorts numerically descending')
@@ -233,7 +239,7 @@ const bundle = await build({
         root.render(<QueryClientProvider client={client}><Shell /></QueryClientProvider>)
         for (let attempt = 0; attempt < 20 && document.querySelectorAll('svg').length !== 5; attempt++) await settle()
         check(document.querySelectorAll('svg').length === 5, 'Remounted history ready')
-        return 'PASS: portfolio PEG column, formatting, missing/fund values, numeric sorting and editing; five sparklines, startup cache, F5, stale/loading/failure states and flat/invalid history'
+        return 'PASS: portfolio PEG column, threshold colours, distinct green shades, formatting, missing/fund values, numeric sorting and editing; five sparklines, startup cache, F5, stale/loading/failure states and flat/invalid history'
       }
     `,
   },

@@ -32,6 +32,12 @@ function sizeTone(value: number | null): string {
   return 'text-down'
 }
 
+function pegTone(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return 'text-text-dim'
+  if (value > 1) return 'text-down'
+  return value < 1 ? 'text-green-300' : 'text-up'
+}
+
 export function PositionsTable({
   portfolio,
   rows,
@@ -182,13 +188,13 @@ export function PositionsTable({
     },
     {
       key: 'pegRatio',
-      header: <span title="Provider-reported price/earnings-to-growth ratio. Negative values may reflect shrinking earnings; unavailable data is shown as --.">PEG Ratio</span>,
+      header: <span title="Provider-reported price/earnings-to-growth ratio. 1.0: green; above 1.0: red; below 1.0: brighter green. Negative values may reflect shrinking earnings; unavailable data is shown as --.">PEG Ratio</span>,
       align: 'right',
       numeric: true,
       sortValue: (row) => row.pegRatio,
       cell: (row) => row.pegNotApplicable
         ? <span className="text-text-dim" title="PEG is not applicable to funds.">N/A</span>
-        : decimals(row.pegRatio, 2),
+        : <span className={pegTone(row.pegRatio)}>{decimals(row.pegRatio, 2)}</span>,
     },
     {
       key: 'analyst',

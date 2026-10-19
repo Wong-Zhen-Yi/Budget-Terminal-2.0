@@ -8,7 +8,7 @@ if errorlevel 1 (
   goto :failed
 )
 
-echo Building and verifying the latest app files, including Dashboard 2.0 as the default opening page with a portfolio pie, Agents with private local chat history, notifications, Codex-written trackers, automatic Codex connection, New chat without disconnecting, native pie charts and portfolio briefing prompts, a portfolio heatmap on the right, repaired HOOD report loading, expanded heatmap sector classification with cached lookups and visible coverage, and the rebuilt cache-first ETF Explorer with a searchable directory and persistent holdings snapshots, plus the responsive calendar with CPI/PPI/PCE readings and larger, easier-to-read calendar and day-hover text, and PEG ratios in the Portfolio stock table...
+echo Building and verifying the latest app files, including Dashboard 2.0 as the default opening page with a portfolio pie, Agents with private local chat history, notifications, Codex-written trackers, automatic Codex connection, New chat without disconnecting, native pie charts and portfolio briefing prompts, a portfolio heatmap on the right, repaired HOOD report loading, expanded heatmap sector classification with cached lookups and visible coverage, and the rebuilt cache-first ETF Explorer with a searchable directory and persistent holdings snapshots, plus the responsive calendar with CPI/PPI/PCE readings and larger, easier-to-read calendar and day-hover text, and colour-coded PEG ratios in the Portfolio stock table with green at 1.0, red above 1.0 and brighter green below 1.0...
 node "%~dp0scripts\launch.cjs"
 if errorlevel 1 goto :failed
 exit /b 0
