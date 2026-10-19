@@ -187,6 +187,26 @@ export function PositionsTable({
       cell: (row) => <span className={sizeTone(row.size)}>{formatSize(row)}</span>,
     },
     {
+      key: 'trailingPe',
+      header: <span title="Provider-reported price/earnings ratio based on trailing-twelve-month earnings. Unavailable data is shown as --.">Current P/E</span>,
+      align: 'right',
+      numeric: true,
+      sortValue: (row) => row.trailingPe,
+      cell: (row) => row.peNotApplicable
+        ? <span className="text-text-dim" title="P/E is not applicable to funds.">N/A</span>
+        : <span className={row.trailingPe === null ? 'text-text-dim' : undefined}>{decimals(row.trailingPe, 2)}</span>,
+    },
+    {
+      key: 'forwardPe',
+      header: <span title="Provider-reported price/earnings ratio based on forecast earnings. Unavailable data is shown as --.">Forward P/E</span>,
+      align: 'right',
+      numeric: true,
+      sortValue: (row) => row.forwardPe,
+      cell: (row) => row.peNotApplicable
+        ? <span className="text-text-dim" title="P/E is not applicable to funds.">N/A</span>
+        : <span className={row.forwardPe === null ? 'text-text-dim' : undefined}>{decimals(row.forwardPe, 2)}</span>,
+    },
+    {
       key: 'pegRatio',
       header: <span title="Provider-reported price/earnings-to-growth ratio. 1.0: green; above 1.0: red; below 1.0: brighter green. Negative values may reflect shrinking earnings; unavailable data is shown as --.">PEG Ratio</span>,
       align: 'right',

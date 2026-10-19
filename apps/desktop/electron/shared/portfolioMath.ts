@@ -129,6 +129,10 @@ export interface PositionRow {
   hasQuote: boolean
   size: number | null
   sizeType: 'marketCap' | 'aum' | null
+  trailingPe: number | null
+  forwardPe: number | null
+  /** True for funds, which have no company earnings ratios. */
+  peNotApplicable: boolean
   pegRatio: number | null
   /** True for funds, which have no company earnings-growth ratio. */
   pegNotApplicable: boolean
@@ -185,6 +189,8 @@ export function buildPositionRows(
   return priced.map((entry): PositionRow => {
     const facts = fundamentals[entry.ticker]
     const isFund = Boolean(facts && FUND_QUOTE_TYPES.has(facts.quoteType))
+    const trailingPe = facts?.trailingPe
+    const forwardPe = facts?.forwardPe
     const pegRatio = facts?.pegRatio
     const target = facts?.targetMeanPrice ?? null
     const analystUpside =
@@ -211,6 +217,9 @@ export function buildPositionRows(
       unavailableReason: entry.quote ? '' : unavailablePortfolioQuoteReason(entry.ticker, quotes[entry.ticker]),
       size: facts?.size ?? null,
       sizeType: facts?.sizeType ?? null,
+      trailingPe: !isFund && typeof trailingPe === 'number' && Number.isFinite(trailingPe) ? trailingPe : null,
+      forwardPe: !isFund && typeof forwardPe === 'number' && Number.isFinite(forwardPe) ? forwardPe : null,
+      peNotApplicable: isFund,
       pegRatio: !isFund && typeof pegRatio === 'number' && Number.isFinite(pegRatio) ? pegRatio : null,
       pegNotApplicable: isFund,
       analystTarget: target,

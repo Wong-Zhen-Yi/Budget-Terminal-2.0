@@ -5,7 +5,7 @@ import { withYahooSummary } from './requests.js'
 
 /**
  * Per-ticker facts the positions table needs: what kind of instrument it is, how big it
- * is, the analyst mean target, and the stock's PEG ratio.
+ * is, the analyst mean target, and the stock's current P/E, forward P/E and PEG ratios.
  *
  * These come from one `quoteSummary` call — the Portfolio page needs size and the
  * Dashboard needs the target, and fetching them separately would double the slowest
@@ -18,6 +18,10 @@ function firstFinite(...values: unknown[]): number | null {
     if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value
   }
   return null
+}
+
+function finiteRatio(...values: unknown[]): number | null {
+  return values.find((value): value is number => typeof value === 'number' && Number.isFinite(value)) ?? null
 }
 
 async function fetchFundamentals(ticker: string): Promise<Fundamentals> {
@@ -45,11 +49,12 @@ async function fetchFundamentals(ticker: string): Promise<Fundamentals> {
   // Keep finite reported PEG values, including negative growth ratios; do not derive
   // PEG from a mismatched P/E and one quarter's earnings growth.
   const statistics = summary?.defaultKeyStatistics
-  const reportedPeg = [statistics?.pegRatio, statistics?.trailingPegRatio, summary?.financialData?.trailingPegRatio]
-    .find((value): value is number => typeof value === 'number' && Number.isFinite(value))
-  const pegRatio = isFund ? null : reportedPeg ?? null
+  const detail = summary?.summaryDetail
+  const trailingPe = isFund ? null : finiteRatio(detail?.trailingPE, statistics?.trailingPE)
+  const forwardPe = isFund ? null : finiteRatio(detail?.forwardPE, statistics?.forwardPE, summary?.financialData?.forwardPE)
+  const pegRatio = isFund ? null : finiteRatio(statistics?.pegRatio, statistics?.trailingPegRatio, summary?.financialData?.trailingPegRatio)
 
-  return { ticker, quoteType, size, sizeType, targetMeanPrice, pegRatio }
+  return { ticker, quoteType, size, sizeType, targetMeanPrice, trailingPe, forwardPe, pegRatio }
 }
 
 export async function getFundamentals(
@@ -60,7 +65,7 @@ export async function getFundamentals(
   const settled = await Promise.allSettled(
     unique.map((ticker) =>
       cache
-        .resolve(`fundamentals:peg-v1:${ticker}`, TTL.targets, () => fetchFundamentals(ticker), { force })
+        .resolve(`fundamentals:pe-peg-v2:${ticker}`, TTL.targets, () => fetchFundamentals(ticker), { force })
         .then((result) => result.value),
     ),
   )
@@ -72,7 +77,7 @@ export async function getFundamentals(
       outcome.status === 'fulfilled'
         ? outcome.value
         : // A refused lookup still gets a row, so the table shows `--` rather than a gap.
-          { ticker, quoteType: '', size: null, sizeType: null, targetMeanPrice: null, pegRatio: null }
+          { ticker, quoteType: '', size: null, sizeType: null, targetMeanPrice: null, trailingPe: null, forwardPe: null, pegRatio: null }
   })
   return facts
 }

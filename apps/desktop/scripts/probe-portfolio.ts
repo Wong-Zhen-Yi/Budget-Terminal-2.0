@@ -5,7 +5,7 @@
  *   npm run probe:portfolio -- --offline --peg-live  # synthetic checks + public PEG quotes
  *
  * Compare against the PySide6 app: the Dashboard panel's Weight/Gain, and the Portfolio
- * page's stock columns (including PEG) and header figures.
+ * page's stock columns (including current P/E, forward P/E and PEG) and header figures.
  *
  * The two Weight columns legitimately disagree. The Dashboard divides by stock market
  * value alone; the Portfolio page divides by stock value plus cash. That is what the
@@ -93,7 +93,7 @@ async function main(): Promise<void> {
     console.log(
       `  ${pad('Symbol', 8, 'left')}${pad('Shares', 10)}${pad('Avg', 10)}${pad('Cost', 13)}` +
         `${pad('Price', 10)}${pad('Day %', 9)}${pad('Mkt Value', 14)}${pad('Weight', 9)}` +
-        `${pad('Gain', 14)}${pad('Growth', 9)}  ${pad('Size', 14, 'left')}${pad('PEG', 9)}  ${pad('Analyst PT', 18, 'left')}`,
+        `${pad('Gain', 14)}${pad('Growth', 9)}  ${pad('Size', 14, 'left')}${pad('Current PE', 12)}${pad('Forward PE', 12)}${pad('PEG', 9)}  ${pad('Analyst PT', 18, 'left')}`,
     )
     for (const row of [...positions].sort((a, b) => (b.marketValue ?? -Infinity) - (a.marketValue ?? -Infinity))) {
       const size =
@@ -120,6 +120,8 @@ async function main(): Promise<void> {
           pad(`${(row.growth ?? 0) >= 0 ? '+' : ''}${row.growth?.toFixed(1) ?? '--'}%`, 9) +
           '  ' +
           pad(size, 14, 'left') +
+          pad(row.peNotApplicable ? 'N/A' : row.trailingPe?.toFixed(2) ?? '--', 12) +
+          pad(row.peNotApplicable ? 'N/A' : row.forwardPe?.toFixed(2) ?? '--', 12) +
           pad(row.pegNotApplicable ? 'N/A' : row.pegRatio === null ? '--' : row.pegRatio.toFixed(2), 9) +
           '  ' + pad(analyst, 18, 'left'),
       )
@@ -477,19 +479,31 @@ async function offlinePeg(): Promise<void> {
     assert.deepEqual(options.modules, ['price', 'summaryDetail', 'financialData', 'defaultKeyStatistics'])
     if (ticker === 'PEGFAIL') throw new Error('Provider unavailable')
     const reported: Record<string, Record<string, unknown>> = {
-      PEGSTOCK: { pegRatio: 1.236 }, PEGNEG: { pegRatio: -0.75 }, PEGZERO: { pegRatio: 0 },
-      PEGTRAIL: { pegRatio: Number.NaN, trailingPegRatio: 2.48 },
-      PEGMISSING: {}, PEGINVALID: { pegRatio: Number.POSITIVE_INFINITY },
-      PEGFUND: { pegRatio: 99 }, PEGMUTUAL: { pegRatio: 99 },
+      PEGSTOCK: { pegRatio: 1.236, trailingPE: 99, forwardPE: 99 },
+      PEGNEG: { pegRatio: -0.75, trailingPE: -12.5, forwardPE: -8.25 },
+      PEGZERO: { pegRatio: 0, trailingPE: 0, forwardPE: 0 },
+      PEGTRAIL: { pegRatio: Number.NaN, trailingPegRatio: 2.48, trailingPE: 24, forwardPE: 18 },
+      PEGMISSING: {}, PEGINVALID: { pegRatio: Number.POSITIVE_INFINITY, trailingPE: Number.NaN, forwardPE: Number.POSITIVE_INFINITY },
+      PEGFUND: { pegRatio: 99, trailingPE: 99, forwardPE: 99 },
+      PEGMUTUAL: { pegRatio: 99, trailingPE: 99, forwardPE: 99 },
     }
     return { price: { quoteType: ticker === 'PEGFUND' ? 'ETF' : ticker === 'PEGMUTUAL' ? 'MUTUALFUND' : 'EQUITY', marketCap: 1e10 },
-      summaryDetail: { totalAssets: 1e9 }, financialData: { targetMeanPrice: 150 },
+      summaryDetail: { totalAssets: 1e9, ...(ticker === 'PEGSTOCK' ? { trailingPE: 30.125, forwardPE: 22.875 }
+        : ticker === 'PEGTRAIL' ? { trailingPE: Number.NaN, forwardPE: Number.POSITIVE_INFINITY } : {}) },
+      financialData: { targetMeanPrice: 150 },
       defaultKeyStatistics: reported[ticker] }
   } })
   const tickers = ['PEGSTOCK', 'PEGNEG', 'PEGZERO', 'PEGTRAIL', 'PEGMISSING', 'PEGINVALID', 'PEGFUND', 'PEGMUTUAL', 'PEGFAIL']
   try {
     const facts = await getFundamentals(tickers, true)
-    assert.equal(calls, tickers.length, 'PEG must reuse the existing summary request, not add one')
+    assert.equal(calls, tickers.length, 'P/E and PEG must reuse the existing summary request, not add one')
+    for (const [ticker, expected] of Object.entries({ PEGSTOCK: [30.125, 22.875], PEGNEG: [-12.5, -8.25], PEGZERO: [0, 0], PEGTRAIL: [24, 18] })) {
+      assert.deepEqual([facts[ticker].trailingPe, facts[ticker].forwardPe], expected)
+    }
+    for (const ticker of ['PEGMISSING', 'PEGINVALID', 'PEGFUND', 'PEGMUTUAL', 'PEGFAIL']) {
+      assert.equal(facts[ticker].trailingPe, null)
+      assert.equal(facts[ticker].forwardPe, null)
+    }
     for (const [ticker, expected] of Object.entries({ PEGSTOCK: 1.236, PEGNEG: -0.75, PEGZERO: 0, PEGTRAIL: 2.48 })) {
       assert.equal(facts[ticker].pegRatio, expected)
     }
@@ -501,6 +515,18 @@ async function offlinePeg(): Promise<void> {
       cashBalance: 0, marginDebt: 0, options: [], includeCashInWeight: true }
     const quotes: Record<string, Quote> = Object.fromEntries(tickers.map(ticker => [ticker, { symbol: ticker, price: 100, change: 1, absChange: 1 }]))
     const rows = buildPositionRows(portfolio, quotes, facts)
+    for (const row of rows) {
+      assert.equal(row.trailingPe, facts[row.ticker].trailingPe)
+      assert.equal(row.forwardPe, facts[row.ticker].forwardPe)
+      assert.equal(row.peNotApplicable, ['PEGFUND', 'PEGMUTUAL'].includes(row.ticker))
+    }
+    const legacyFacts = { ...facts.PEGSTOCK, trailingPe: undefined, forwardPe: undefined }
+    const legacyRows = buildPositionRows(portfolio, quotes, { PEGSTOCK: legacyFacts } as unknown as typeof facts)
+    assert.equal(legacyRows[0].trailingPe, null, 'Older snapshots must safely show -- for P/E')
+    assert.equal(legacyRows[0].forwardPe, null)
+    const invalidRows = buildPositionRows(portfolio, quotes, { PEGSTOCK: { ...facts.PEGSTOCK, trailingPe: NaN, forwardPe: Infinity } })
+    assert.equal(invalidRows[0].trailingPe, null)
+    assert.equal(invalidRows[0].forwardPe, null)
     assert.equal(rows[0].pegRatio, 1.236)
     assert.equal(rows[1].pegRatio, -0.75)
     assert.equal(rows[2].pegRatio, 0)
@@ -510,10 +536,10 @@ async function offlinePeg(): Promise<void> {
     assert.equal(buildPositionRows(portfolio, quotes)[0].pegRatio, null, 'Older snapshots must safely show --')
     assert.equal(rows[0].marketValue, 100)
     assert.equal(rows[0].analystTarget, 150, 'Existing targets must be preserved')
-    console.log('offline: portfolio PEG checks passed: reported/trailing values, negatives, zero, missing/invalid data, funds, cache and unchanged valuation')
+    console.log('offline: portfolio current P/E, forward P/E and PEG checks passed: reported/trailing values, negatives, zero, missing/invalid data, funds, cache and unchanged valuation')
   } finally {
     Object.assign(yahoo, { quoteSummary: originalSummary })
-    for (const ticker of tickers) cache.delete(`fundamentals:peg-v1:${ticker}`)
+    for (const ticker of tickers) cache.delete(`fundamentals:pe-peg-v2:${ticker}`)
   }
 }
 
@@ -527,7 +553,11 @@ try {
       console.log(`live PEG: ${ticker} ${JSON.stringify(facts[ticker])}`)
       assert(facts[ticker].quoteType, `${ticker} provider response unavailable`)
     }
+    assert.equal(facts.SPY.trailingPe, null)
+    assert.equal(facts.SPY.forwardPe, null)
     assert.equal(facts.SPY.pegRatio, null)
+    assert.equal(typeof facts.AAPL.trailingPe, 'number', 'AAPL current P/E must be available')
+    assert.equal(typeof facts.AAPL.forwardPe, 'number', 'AAPL forward P/E must be available')
   }
   if (!process.argv.includes('--offline')) await main()
 } catch (error) {

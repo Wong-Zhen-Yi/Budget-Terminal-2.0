@@ -212,6 +212,8 @@ const bundle = await build({
         const pegQuotes = Object.fromEntries(pegTickers.map(ticker => [ticker, {symbol: ticker, price: 100, change: 1, absChange: 1}]))
         const pegFacts = Object.fromEntries(pegTickers.map((ticker, index) => [ticker, {ticker,
           quoteType: index === 3 ? 'ETF' : 'EQUITY', size: 1e10, sizeType: 'marketCap', targetMeanPrice: 120,
+          trailingPe: [30.125, -12.5, null, 99, 20, 15, 25, 0][index],
+          forwardPe: [22.875, -8.25, null, 99, 18, 10, 20, 0][index],
           pegRatio: [2.345, -0.75, null, null, 1, 0.75, 1.01, 0][index]}]))
         const noop = () => {}
         root.render(<PositionsTable portfolio={pegBook} rows={buildPositionRows(pegBook, pegQuotes, pegFacts)} loading={false}
@@ -220,6 +222,19 @@ const bundle = await build({
         const pegHeader = [...document.querySelectorAll('th')].find(header => header.textContent.includes('PEG Ratio'))
         check(pegHeader, 'Portfolio stock table must include PEG Ratio')
         const pegColumn = [...pegHeader.parentElement.children].indexOf(pegHeader)
+        const headers = [...pegHeader.parentElement.children]
+        check(headers[pegColumn - 2].textContent.includes('Current P/E') && headers[pegColumn - 1].textContent.includes('Forward P/E'), 'Current P/E and Forward P/E must appear immediately before PEG Ratio')
+        for (const [offset, high, low] of [[-2, '30.13', '-12.50'], [-1, '22.88', '-8.25']]) {
+          const cell = ticker => [...document.querySelectorAll('tbody tr')].find(row => row.textContent.includes(ticker)).children[pegColumn + offset].textContent
+          check(cell('PEGHIGH') === high && cell('PEGLOW') === low && cell('PEGZERO') === '0.00', 'P/E values must use two decimals and preserve negatives and zero')
+          check(cell('PEGMISSING') === '--' && cell('PEGFUND') === 'N/A', 'Missing stock P/E and fund inapplicability must be distinct')
+          headers[pegColumn + offset].click(); await settle()
+          check(document.querySelector('tbody tr').textContent.includes('PEGHIGH'), 'P/E sorts numerically descending')
+          check([...document.querySelectorAll('tbody tr')].slice(-2).every(row => /PEGMISSING|PEGFUND/.test(row.textContent)), 'Missing P/E values stay last descending')
+          headers[pegColumn + offset].click(); await settle()
+          check(document.querySelector('tbody tr').textContent.includes('PEGLOW'), 'P/E sorts numerically ascending')
+          check([...document.querySelectorAll('tbody tr')].slice(-2).every(row => /PEGMISSING|PEGFUND/.test(row.textContent)), 'Missing P/E values stay last ascending')
+        }
         const pegCell = ticker => [...document.querySelectorAll('tbody tr')].find(row => row.textContent.includes(ticker)).children[pegColumn].textContent
         check(pegCell('PEGHIGH') === '2.35' && pegCell('PEGLOW') === '-0.75', 'Reported PEG ratios must render with two decimals and preserve negatives')
         check(pegCell('PEGMISSING') === '--' && pegCell('PEGFUND') === 'N/A', 'Missing stock PEG and fund inapplicability must be distinct')
@@ -239,7 +254,7 @@ const bundle = await build({
         root.render(<QueryClientProvider client={client}><Shell /></QueryClientProvider>)
         for (let attempt = 0; attempt < 20 && document.querySelectorAll('svg').length !== 5; attempt++) await settle()
         check(document.querySelectorAll('svg').length === 5, 'Remounted history ready')
-        return 'PASS: portfolio PEG column, threshold colours, distinct green shades, formatting, missing/fund values, numeric sorting and editing; five sparklines, startup cache, F5, stale/loading/failure states and flat/invalid history'
+        return 'PASS: portfolio Current P/E and Forward P/E before PEG, P/E formatting and numeric sorting, PEG column, threshold colours, distinct green shades, formatting, missing/fund values, numeric sorting and editing; five sparklines, startup cache, F5, stale/loading/failure states and flat/invalid history'
       }
     `,
   },

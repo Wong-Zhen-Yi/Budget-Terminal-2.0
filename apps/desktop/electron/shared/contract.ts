@@ -591,6 +591,10 @@ export interface Fundamentals {
   size: number | null
   sizeType: 'marketCap' | 'aum' | null
   targetMeanPrice: number | null
+  /** Provider-reported trailing-twelve-month P/E; null for funds or missing data. */
+  trailingPe: number | null
+  /** Provider-reported forward P/E; null for funds or missing data. */
+  forwardPe: number | null
   /** Provider-reported price/earnings-to-growth ratio; null for funds or missing data. */
   pegRatio: number | null
 }
