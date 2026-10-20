@@ -14,6 +14,7 @@ echo Browser address bar now accepts search terms or website URLs. Searches open
 echo Browser is included: shared Chromium tabs, navigation, page reading and agent access ON by default for each new window. Browser initializes at startup. Disable and Stop revoke access until you re-enable it. No separate browser install is needed.
 echo Startup Yahoo loads are paced at 1 request per second, without bursts, with up to 2 background requests in flight. All pages still preload; foreground requests take priority and rate limits trigger further slowdown.
 echo Temporary data failures retry with backoff. Stuck Yahoo workers restart automatically, and incomplete cached results can recover without waiting for their normal expiry. Startup retry progress and unresolved failures stay visible in Settings.
+echo News reader includes an AI Summary button beside Open Externally. It summarizes the selected article in Agent chat using your connected model, flags limited previews, and preserves unsent drafts.
 echo MCP bundles are updated safely with file-lock retries. Persistent locks will show recovery instructions; no MCP clients are forcibly stopped.
 node "%~dp0scripts\launch.cjs"
 if errorlevel 1 goto :failed

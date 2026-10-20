@@ -20,6 +20,7 @@ import {
   ageText,
   articleTickerSet,
   buildNewsExportText,
+  buildNewsSummaryPrompt,
   extractTickers,
   normalizeTickerUniverse,
   otherFocusTickers,
@@ -116,6 +117,22 @@ function runOffline(): void {
     imageUrl: '',
     summary: '',
   })
+  rule('Selected-story AI summary prompt')
+  const summaryArticle = { ...synth(0, 'NVDA', 10), summary: 'Revenue increased 12%.' }
+  const summaryPreview = { url: summaryArticle.url, text: 'Revenue increased 12% to $5 billion.', origin: 'article' as const, truncated: false }
+  const summaryPrompt = buildNewsSummaryPrompt(summaryArticle, summaryPreview)
+  check(summaryPrompt.includes(summaryPreview.text), 'AI summary includes the selected readable preview')
+  check(summaryPrompt.includes('untrusted source material') && summaryPrompt.includes('Do not run tools'), 'AI summary treats publisher content as untrusted read-only evidence')
+  check(buildNewsSummaryPrompt(summaryArticle).includes('Publisher summary only'), 'Fallback summary discloses limited coverage')
+  check(buildNewsSummaryPrompt({ ...summaryArticle, summary: '' }).includes('Headline only'), 'Missing body is disclosed')
+  check(!buildNewsSummaryPrompt(summaryArticle, { ...summaryPreview, url: 'https://example.test/another', text: 'WRONG STORY' }).includes('WRONG STORY'), 'Mismatched previews cannot leak another story')
+  const boundedPrompt = buildNewsSummaryPrompt(summaryArticle, { ...summaryPreview, text: 'x'.repeat(30_000) })
+  check(boundedPrompt.length < 20_000 && boundedPrompt.includes('truncated'), 'Large article prompts are bounded and disclose truncation')
+  check(buildNewsSummaryPrompt(summaryArticle, { ...summaryPreview, truncated: true }).includes('Partial article'), 'Truncated previews disclose incomplete text')
+  check(buildNewsSummaryPrompt(summaryArticle, { ...summaryPreview, text: '' }).includes('Publisher summary only'), 'Empty extracted text uses honest fallback coverage')
+  check(buildNewsSummaryPrompt({ ...summaryArticle, title: String.fromCharCode(0).repeat(10_000) }, { ...summaryPreview, text: String.fromCharCode(0).repeat(30_000) }).length < 20_000, 'JSON escaping stays within the Agent IPC input limit')
+  console.log('Selected article evidence, coverage, stale-preview isolation and input bounds checked')
+
   const flood = [
     ...Array.from({ length: 40 }, (_, i) => synth(i, 'NVDA', 20 - i)),
     ...Array.from({ length: 12 }, (_, i) => synth(100 + i, 'AAPL', 15)),

@@ -6,6 +6,7 @@ import { NewsTickerBadge } from './NewsTickerBadge'
 import { PanelMessage } from '@/components/ui/Panel'
 import { tagTone } from './NewsCard'
 import { SignalMeter } from './SignalMeter'
+import { NewsSummaryButton } from './NewsSummaryButton'
 
 /**
  * The selected story, with as much of its body as could be scraped.
@@ -93,13 +94,14 @@ export function NewsReader({
             )}
           </div>
 
-          <div className="flex shrink-0 items-center gap-2 border-t border-border pt-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border pt-2">
             <span
-              className="min-w-0 flex-1 truncate text-2xs text-text-dim select-text"
+              className="w-full min-w-0 truncate text-2xs text-text-dim select-text"
               title={article.url}
             >
               {article.url || 'No link'}
             </span>
+            <NewsSummaryButton article={article} preview={preview} loading={loading} />
             <Button
               variant="positive"
               disabled={!article.url}

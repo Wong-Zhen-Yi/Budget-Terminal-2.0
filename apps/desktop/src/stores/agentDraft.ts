@@ -11,6 +11,8 @@ interface AgentDraftState {
   sending: boolean
   readingImages: boolean
   error: string
+  chatAvailable: boolean
+  chatOpenRequested: boolean
   update: (patch: Partial<Omit<AgentDraftState, 'update'>>) => void
 }
 
@@ -19,5 +21,6 @@ interface AgentDraftState {
 export const useAgentDraft = create<AgentDraftState>(set => ({
   draft: '', objective: '', interval: 15, runs: 4, images: [],
   pendingCommands: 0, sending: false, readingImages: false, error: '',
+  chatAvailable: false, chatOpenRequested: false,
   update: patch => set(patch),
 }))

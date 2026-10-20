@@ -10,7 +10,7 @@ const ignorePageStatus = () => {}
 const panelId = 'topbar-agent-chat'
 
 export const TopBarAgent = memo(function TopBarAgent({ available = true }: { available?: boolean }) {
-  const { agent, query, draft, images, update, pending, sending, error, readingImages, send, addImages } = useAgentComposer()
+  const { agent, query, draft, images, update, pending, sending, error, readingImages, send, addImages, chatOpenRequested } = useAgentComposer()
   const activity = topBarAgentActivity(agent, { available, sending, loading: query.isPending, error: !!error, queryError: !!query.error })
   const [open, setOpen] = useState(false)
   const [top, setTop] = useState(48)
@@ -28,7 +28,19 @@ export const TopBarAgent = memo(function TopBarAgent({ available = true }: { ava
     if (focusComposer) requestAnimationFrame(() => panel.current?.querySelector<HTMLTextAreaElement>('#topbar-agent-message')?.focus())
   }
 
-  useEffect(() => { if (!available) setOpen(false) }, [available])
+  useEffect(() => {
+    update({ chatAvailable: available })
+    if (!available) setOpen(false)
+    return () => update({ chatAvailable: false })
+  }, [available, update])
+  useEffect(() => {
+    if (!chatOpenRequested) return
+    update({ chatOpenRequested: false })
+    if (available) {
+      setOpen(true)
+      requestAnimationFrame(() => panel.current?.querySelector<HTMLTextAreaElement>('#topbar-agent-message')?.focus())
+    }
+  }, [chatOpenRequested, available, update])
   useEffect(() => {
     if (!shown) return
     const measure = () => setTop(launcher.current?.closest('.terminal-topbar')?.getBoundingClientRect().bottom ?? 48)

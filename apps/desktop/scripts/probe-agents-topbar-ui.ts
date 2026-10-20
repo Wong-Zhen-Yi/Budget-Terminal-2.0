@@ -16,6 +16,7 @@ try {
       import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
       import { TabBar } from './src/components/chrome/TabBar'
       import { AgentsPage } from './src/pages/AgentsPage'
+      import { NewsReader } from './src/components/news/NewsReader'
       import { useAgentDraft } from './src/stores/agentDraft'
       const check = (value, message) => { if (!value) throw Error(message) }
       const settle = () => new Promise(resolve => setTimeout(resolve, 70))
@@ -49,9 +50,13 @@ try {
         return envelope()
       }
       const status = () => {}
+      let showReader = false, readerLoading = false
+      const story = { id: 'summary-fixture', title: 'Fixture chipmaker reports revenue growth', source: 'Fixture publisher', time: '10:00', url: 'https://example.test/news', ticker: 'NVDA', category: 'portfolio', publishedAt: Date.now(), score: null, signals: [], imageUrl: '', summary: 'Fixture publisher summary.' }
+      const preview = { url: story.url, text: 'Fixture revenue grew 12% to $5 billion. Management left guidance unchanged.', origin: 'article', truncated: false }
       const render = () => root.render(<QueryClientProvider client={client}>
         <TabBar onOpenPicker={() => {}} onReload={() => {}} reloading={false} clockCountry="US" time12h obscured={false} onToggleObscure={() => {}} agentChatAvailable={available} />
-        <main className="flex min-h-0 flex-1 flex-col"><h1 id="underlying-page">{page}</h1><AgentsPage onStatusChange={status} /><div hidden><AgentsPage embedded onStatusChange={status} /></div></main>
+        <main className="flex min-h-0 flex-1 flex-col"><h1 id="underlying-page">{page}</h1><AgentsPage onStatusChange={status} /><div hidden><AgentsPage embedded onStatusChange={status} /></div>
+        {showReader && <div id="news-reader-fixture" style={{ position: 'fixed', right: 12, top: 150, width: 300, height: 550, display: 'flex', flexDirection: 'column' }}><NewsReader article={story} preview={preview} loading={readerLoading} onOpen={() => {}} onClose={() => {}} now={Date.now()} /></div>}</main>
       </QueryClientProvider>)
       const input = () => document.querySelector('input[aria-label="Ask Agent"]')
       const dialog = () => document.getElementById('topbar-agent-chat')
@@ -134,6 +139,33 @@ try {
         check(!dialog() && input().value === 'Next draft typed while sending', 'Restoring availability preserves draft without reopening private chat')
         page = 'Portfolio'; render(); await settle(); await click('Open Agent chat')
         check(document.getElementById('underlying-page').textContent === 'Portfolio' && dialog().textContent.includes('completed while closed'), 'Chat is available on another page with the same conversation')
+        await click('Close Agent chat panel')
+        showReader = true; render(); await settle()
+        const summaryButton = () => [...document.querySelectorAll('#news-reader-fixture button')].find(button => button.textContent === 'AI Summary')
+        check(summaryButton() && !summaryButton().disabled, 'Reader offers AI Summary with a connected Agent')
+        const footer = summaryButton().parentElement.getBoundingClientRect()
+        check(footer.width <= 300 && summaryButton().getBoundingClientRect().right <= footer.right, 'Summary action fits the narrow 300px reader')
+        readerLoading = true; render(); await settle()
+        check(summaryButton().disabled, 'Summary waits for preview loading')
+        readerLoading = false; state.busy = true; await publish(); render(); await settle()
+        check(summaryButton().disabled, 'Summary respects the shared Agent busy lock')
+        state.busy = false; state.connected = false; await publish()
+        check(summaryButton().disabled && summaryButton().title.includes('Connect Codex'), 'Disconnected reader explains how to enable summaries')
+        state.connected = true; await publish(); available = false; render(); await settle()
+        check(summaryButton().disabled && !dialog(), 'Privacy mode disables summary requests')
+        available = true; render(); await settle()
+        const savedDraft = useAgentDraft.getState().draft
+        const savedImages = [{ name: 'Unsent pixel.png', dataUrl: pixel }]
+        useAgentDraft.getState().update({ images: savedImages }); await settle()
+        const beforeSummary = commands.length
+        summaryButton().click(); summaryButton().click(); await settle()
+        check(commands.length === beforeSummary + 1 && commands.at(-1).text.includes(preview.text) && commands.at(-1).text.includes(story.title), 'Reader sends exactly one selected-story summary through the existing Agent')
+        check(dialog() && document.getElementById('underlying-page').textContent === 'Portfolio', 'Summary opens the full chat without navigating')
+        check(useAgentDraft.getState().draft === savedDraft && useAgentDraft.getState().images === savedImages, 'Summary preserves unsent draft and image attachments')
+        await click('Close Agent chat panel')
+        fail = true; summaryButton().click(); await settle()
+        check(dialog().querySelector('[role=alert]').textContent.includes('Fixture send failed'), 'Failed summary is visible in Agent chat')
+        fail = false; useAgentDraft.getState().update({ images: [], error: '' }); showReader = false; render(); await settle()
         const chart = { title: 'Synthetic full-history chart', symbol: 'AAPL', unit: 'USD', caption: 'Synthetic fixture only · not market data' }
         state.activity = 'done'
         state.messages.push({ id: 'chart', role: 'assistant', text: ['## Inline candlestick chart', '', String.fromCharCode(96).repeat(3) + 'candlestick', JSON.stringify(chart), String.fromCharCode(96).repeat(3)].join('\\n'), at: Date.now(), imageArtifacts: [{ id: '11111111-1111-4111-8111-111111111111', name: 'Generated pixel.png', kind: 'generated' }] }); await publish()
@@ -163,7 +195,7 @@ try {
           state.activity = savedActivity; state.busy = false; await publish()
           return 'PASS: top-bar/dropdown layout at ' + innerWidth + (mac ? ' macOS' : ' Windows')
         }
-        return 'PASS: live Thinking/Researching/Writing/Done badges while closed, immediate sending feedback, Error/disconnect/privacy states, narrow badge layouts, shared full Agent chat, no extra startup reads/inference, unique control IDs, top-bar and composer sends, background output, draft retention, Escape/outside dismissal, focus return, safe keyboard/IME handling, failures, global send lock, connection help, portfolio review, privacy and inline charts'
+        return 'PASS: News reader AI Summary sends selected evidence once, preserves drafts/images, respects loading/busy/privacy/disconnect, fits a 300px reader and surfaces failures; live Thinking/Researching/Writing/Done badges while closed, immediate sending feedback, Error/disconnect/privacy states, narrow badge layouts, shared full Agent chat, no extra startup reads/inference, unique control IDs, top-bar and composer sends, background output, draft retention, Escape/outside dismissal, focus return, safe keyboard/IME handling, failures, global send lock, connection help, portfolio review, privacy and inline charts'
       }
     ` }, bundle: true, jsx: 'automatic', write: false, format: 'iife', loader: { '.css': 'empty' },
     define: { 'process.env.NODE_ENV': '"production"' }, alias: { '@': join(root, 'src'), '@shared': join(root, 'electron/shared') },
