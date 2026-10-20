@@ -59,6 +59,7 @@ function launch({ platform = process.platform, nodeVersion = process.versions.no
   }
 
   log.log(`Starting Budget Terminal for ${os}...`)
+  if (platform === 'linux') log.log('Steam Deck/Linux: the window fits the display work area. Use the application launcher in Desktop Mode, or add it to Steam as a non-Steam game with Proton compatibility disabled.')
   log.log('Installing dependencies...')
   const install = npm(['install', '--no-audit', '--no-fund'])
   if (install.error || install.status !== 0) {

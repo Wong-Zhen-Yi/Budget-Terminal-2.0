@@ -14,6 +14,7 @@
     "prepare": "git config core.hooksPath .githooks || exit 0",
     "postinstall": "npm run ensure:electron",
     "ensure:electron": "node scripts/ensure-electron.cjs",
+    "setup:linux": "node scripts/install-linux-launcher.cjs",
     "dev": "npm run dev --workspace budget-terminal-desktop",
     "build": "npm run build --workspace budget-terminal-desktop",
     "typecheck": "npm run typecheck --workspace budget-terminal-desktop",

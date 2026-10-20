@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, Menu, shell } from 'electron'
+import { app, BrowserWindow, dialog, Menu, screen, shell } from 'electron'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -7,6 +7,7 @@ import { loadRenderer } from './services/rendererStartup.js'
 import { isTrustedRendererUrl } from './shared/ipcSecurity.js'
 import { isSafeExternalUrl } from './services/urls.js'
 import { configureBrowserWindow } from './services/browser.js'
+import { desktopWindowSize } from './shared/windowSize.js'
 
 const dirname = fileURLToPath(new URL('.', import.meta.url))
 const isDev = !app.isPackaged
@@ -30,11 +31,9 @@ const rendererUrl = isDev && process.env.ELECTRON_RENDERER_URL
 
 function createWindow(): BrowserWindow {
   const isMac = process.platform === 'darwin'
+  const size = desktopWindowSize(screen.getPrimaryDisplay().workAreaSize)
   const window = new BrowserWindow({
-    width: 1600,
-    height: 1000,
-    minWidth: 1280,
-    minHeight: 720,
+    ...size,
     show: false,
     backgroundColor: '#080b12',
     title: 'Budget Terminal',

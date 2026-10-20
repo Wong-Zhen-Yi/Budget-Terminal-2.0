@@ -103,6 +103,15 @@ Each launcher checks the runtime, installs dependencies, verifies Electron, buil
 the latest source, and opens the production app. Keep its terminal open while using
 Budget Terminal. Build or startup errors stay visible in the launcher window.
 
+On Steam Deck, use Desktop Mode and run `npm run setup:linux` once to add Budget
+Terminal to the application menu. The launcher finds Node in `~/.local/bin` even
+when opened from Dolphin. It builds the latest source on each launch, and the
+window fits the display's available work area, including the Deck's 1280×800 screen.
+For Gaming Mode, add Budget Terminal from the application menu as a non-Steam game
+and leave Proton compatibility disabled. A keyboard and mouse or Steam Input's
+trackpad mouse controls are useful for the research tables. No SteamOS system
+partition changes are required. All implemented pages still load at startup.
+
 The launcher also checks Codex for the **Agents** page and passes the detected
 executable to the app. It detects the Windows Codex desktop installation, native
 CLI installations and native executables behind Windows npm shims. If Codex is
