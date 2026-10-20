@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 
 import type { ApiProviderUsage, ApiUsageSnapshot, Envelope, Freshness } from '@shared/contract'
 import { effectiveFreshness, errorMessage, useSnapshotClock } from '@/api/snapshotHealth'
-import { isBrowser } from '@/api/browser'
 
 export interface PanelStatus {
   label: string
@@ -146,7 +145,7 @@ export function StatusBar({
       <span className={`min-w-0 truncate ${tone}`} title={health}>{health}</span>
       {warming ? <span role="status" className="min-w-0 truncate text-text-muted" title={warming}>{warming}</span> : null}
       <span className="ml-auto min-w-0 truncate text-text-dim" title={sourcePath}>
-        {isBrowser ? 'Saved on your PC' : sourcePath || 'no holdings file'}
+        {sourcePath || 'no holdings file'}
       </span>
       <span className="text-text-dim">|</span>
       <ApiLimitBars />

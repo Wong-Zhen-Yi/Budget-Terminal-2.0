@@ -1,45 +1,28 @@
 import { useEffect, useRef, useState } from 'react'
-import { create } from 'zustand'
-import { useAgentCommand, useAgents } from '@/api/agentsQueries'
-import { isBrowser } from '@/api/browser'
+import { useAgentComposer } from '@/api/agentComposer'
+import { AgentChatImage } from '@/components/agents/AgentChatImage'
 import { AgentMarkdown } from '@/components/agents/AgentMarkdown'
 import { AgentWorkspacePanel } from '@/components/agents/AgentWorkspacePanel'
-import type { AgentImage } from '@shared/agents'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import '@/styles/agents.css'
 
-// Preserve drafts and monitoring choices when the page cache evicts this page.
-const useAgentDraft = create<{
-  draft: string
-  objective: string
-  interval: number
-  runs: number
-  images: AgentImage[]
-  update: (patch: Partial<{ draft: string; objective: string; interval: number; runs: number; images: AgentImage[] }>) => void
-}>(set => ({ draft: '', objective: '', interval: 15, runs: 4, images: [], update: patch => set(patch) }))
-
-export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = false, onToggleFavorite, embedded = false }: {
+export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = false, onToggleFavorite, embedded = false, instanceId }: {
   onStatusChange: (panels: PanelStatus[], path: string) => void
   favorite?: boolean
   savingFavorite?: boolean
   onToggleFavorite?: () => void
   embedded?: boolean
+  instanceId?: string
 }) {
-  const idPrefix = embedded ? 'dashboard-agent' : 'agent'
-  const query = useAgents()
-  const command = useAgentCommand()
-  const agent = query.data?.data
-  const { draft, objective, interval, runs, images, update } = useAgentDraft()
+  const idPrefix = instanceId ?? (embedded ? 'dashboard-agent' : 'agent')
+  const { query, agent, draft, objective, interval, runs, images, update, pending, error, readingImages, perform, send, addImages, attachImage } = useAgentComposer()
   const setDraft = (draft: string) => update({ draft })
   const setObjective = (objective: string) => update({ objective })
   const setInterval = (interval: number) => update({ interval })
   const setRuns = (runs: number) => update({ runs })
-  const [pending, setPending] = useState(false)
-  const [error, setError] = useState('')
   const [showControls, setShowControls] = useState(false)
   const transcript = useRef<HTMLDivElement>(null)
   const imagePicker = useRef<HTMLInputElement>(null)
-  const [readingImages, setReadingImages] = useState(false)
   const lastMessage = agent?.messages.at(-1)
 
   useEffect(() => {
@@ -47,44 +30,7 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
   }, [query.data, query.isPending, query.error, onStatusChange])
   useEffect(() => { transcript.current?.scrollTo({ top: transcript.current.scrollHeight }) }, [lastMessage?.id, lastMessage?.text, agent?.portfolioProposal?.id])
 
-  const addImages = async (files: File[]) => {
-    if (readingImages || pending || agent?.busy || isBrowser) return
-    setError('')
-    setReadingImages(true)
-    try {
-      const current = useAgentDraft.getState().images
-      if (current.length + files.length > 4) throw new Error('Attach up to four images per message.')
-      if (files.some(file => !['image/png', 'image/jpeg', 'image/webp'].includes(file.type))) throw new Error('Use PNG, JPEG or WebP images.')
-      if (files.some(file => file.size > 8 * 1024 * 1024)) throw new Error('Each image must be at most 8 MB.')
-      if (files.reduce((total, file) => total + file.size, current.reduce((total, image) => total + image.dataUrl.length * 3 / 4, 0)) > 20 * 1024 * 1024) throw new Error('Attachments must total at most 20 MB.')
-      const added = await Promise.all(files.map(file => new Promise<AgentImage>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve({ name: file.name || 'Pasted image.png', dataUrl: String(reader.result) })
-        reader.onerror = () => reject(new Error(`Could not read ${file.name || 'pasted image'}.`))
-        reader.readAsDataURL(file)
-      })))
-      update({ images: [...current, ...added] })
-    } catch (error) { setError(error instanceof Error ? error.message : String(error)) }
-    finally { setReadingImages(false) }
-  }
-
-  const perform = async (action: Parameters<typeof command>[0]) => {
-    setPending(true)
-    setError('')
-    try {
-      await command(action)
-      if (action.type === 'newChat' || action.type === 'openChat') update({ draft: '', images: [] })
-      return true
-    }
-    catch (error) { setError(error instanceof Error ? error.message : String(error)); return false }
-    finally { setPending(false) }
-  }
-  const send = async () => {
-    const text = draft.trim()
-    if ((!text && !images.length) || pending || readingImages || agent?.busy || agent?.portfolioProposal || !agent?.connected) return
-    if (await perform({ type: 'send', text, images })) update({ draft: '', images: [] })
-  }
-  const locked = pending || !!agent?.busy || isBrowser
+  const locked = pending || !!agent?.busy
   const models = agent?.models ?? []
   const selectedModel = models.find(model => model.id === agent?.model)
   const settingsLocked = locked || !agent?.connected || !!agent?.autonomy
@@ -113,7 +59,7 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
       <div className="agents-actions"><span className={`agents-status ${agent?.busy ? 'working' : agent?.connected ? 'connected' : ''}`}>{agent?.busy ? agent.connected ? 'Working…' : 'Connecting…' : agent?.connected ? 'Connected' : 'Disconnected'}</span>
         {agent?.autonomy && <span className="agents-monitoring" role="status">Monitoring · {agent.runsRemaining} runs remaining</span>}
         <button disabled={locked || !!agent?.connected} onClick={() => void perform({ type: 'connect' })}>Connect Codex</button>
-        <button disabled={isBrowser || (!agent?.busy && !agent?.autonomy && !agent?.trackers?.some(tracker => tracker.enabled) && !pending)} onClick={() => void perform({ type: 'stop' })}>Stop</button>
+        <button disabled={!agent?.busy && !agent?.autonomy && !agent?.trackers?.some(tracker => tracker.enabled) && !pending} onClick={() => void perform({ type: 'stop' })}>Stop</button>
         <button disabled={locked || !!agent?.autonomy} onClick={() => void perform({ type: 'newChat' })}>New chat</button>
         <button aria-expanded={showControls} aria-controls={`${idPrefix}-controls`} onClick={() => setShowControls(!showControls)}>Controls</button>
         {onToggleFavorite && <button type="button" disabled={savingFavorite} onClick={onToggleFavorite} aria-pressed={favorite} aria-label={favorite ? 'Remove page from favorites' : 'Add page to favorites'} title={favorite ? 'Remove page from favorites' : 'Add page to favorites'}>{favorite ? '★' : '☆'}</button>}
@@ -124,13 +70,17 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
     <div className={`agents-layout${showControls ? ' with-controls' : ''}`}>
       <section className="agents-chat" aria-label="Chat with Codex">
         <div ref={transcript} className="agents-transcript" role="log" aria-label="Conversation" aria-live="polite">
-          {!agent?.messages.some(message => message.role !== 'activity') && <div className="agents-welcome"><div className="agents-mark" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 6h16v11H9l-5 4V6Z" strokeLinejoin="round"/><path d="m8 10 3 2-3 2m5 0h3" strokeLinecap="round" strokeLinejoin="round"/></svg></div><h2>What would you like to explore?</h2><p>Research your watchlist. Understand your portfolio. Find your next question.</p>
+          {!agent?.messages.some(message => message.role !== 'activity') && <div className="agents-welcome"><div className="agents-mark" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 6h16v11H9l-5 4V6Z" strokeLinejoin="round"/><path d="m8 10 3 2-3 2m5 0h3" strokeLinecap="round" strokeLinejoin="round"/></svg></div><h2>What would you like to explore?</h2><p>Research your watchlist. Understand your portfolio. Generate or edit images.</p>
             <div className="agents-suggestions">{['Summarize portfolio news', 'Brief me on my portfolio for the day'].map(text => <button key={text} onClick={() => setDraft(text)}>{text} <span>↗</span></button>)}</div>
           </div>}
           {agent?.messages.map(message => <article key={message.id} className={`agents-message ${message.role}`} aria-label={message.role === 'assistant' ? 'Codex response' : message.role === 'user' ? 'Your message' : 'Agent activity'}>
             <div className="agents-message-meta">{message.role === 'assistant' ? 'Codex' : message.role === 'user' ? 'You' : 'Activity'} <time dateTime={new Date(message.at).toISOString()}>{new Date(message.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>
             {message.role === 'assistant' ? <AgentMarkdown text={message.text} /> : <p className="agents-plain-message">{message.text}</p>}
-            {message.images?.map((name, index) => <span className="agents-image-name" key={index}>Attached image: {name}</span>)}
+            {message.imageStatus === 'generating' && <p className="agents-thinking" role="status">Creating image… This can take a few minutes.</p>}
+            {message.imageArtifacts?.map(artifact => <AgentChatImage key={artifact.id} artifact={artifact} locked={locked || readingImages || images.length >= 4} onUse={image => {
+              if (attachImage(image)) document.getElementById(`${idPrefix}-message`)?.focus()
+            }} />)}
+            {message.images?.filter(name => !message.imageArtifacts?.some(artifact => artifact.name === name)).map((name, index) => <span className="agents-image-name" key={index}>Attached image: {name}</span>)}
           </article>)}
           {agent?.busy && <p className="agents-thinking" role="status">{agent.connected ? 'Codex is working. You can switch pages while it runs.' : 'Connecting to Codex… You can switch pages while it loads.'}</p>}
           {agent?.portfolioProposal && <section className="agents-portfolio-review" aria-label="Review portfolio update">
@@ -151,11 +101,12 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
         <section><div className="agents-section-title"><h2>Autonomous mode</h2><span className={agent?.autonomy ? 'agents-on' : 'agents-off'}>{agent?.autonomy ? 'ON' : 'OFF'}</span></div><p>Run a research objective at an interval while the app stays open. Starts off every time you launch.</p>
           <label htmlFor={`${idPrefix}-objective`}>Monitoring objective</label><textarea id={`${idPrefix}-objective`} placeholder="E.g. Review my portfolio news and flag material changes with sources." value={objective} maxLength={10_000} disabled={!!agent?.autonomy} onChange={event => setObjective(event.target.value)} />
           <div className="agents-monitor-options"><label>Every<select aria-label="Monitoring interval" value={interval} disabled={!!agent?.autonomy} onChange={event => setInterval(Number(event.target.value))}>{[5, 15, 30, 60].map(value => <option key={value} value={value}>{value} min</option>)}</select></label><label>Run limit<select aria-label="Monitoring run limit" value={runs} disabled={!!agent?.autonomy} onChange={event => setRuns(Number(event.target.value))}>{[1, 2, 4, 8, 12].map(value => <option key={value} value={value}>{value} runs</option>)}</select></label></div>
-          <button role="switch" aria-checked={agent?.autonomy ?? false} aria-label="Autonomous mode" className={agent?.autonomy ? '' : 'agents-primary'} disabled={isBrowser || (!agent?.autonomy && (locked || !agent?.connected || !objective.trim()))} onClick={() => void perform(agent?.autonomy ? { type: 'autonomy', enabled: false } : { type: 'autonomy', enabled: true, objective, intervalMinutes: interval, runs })}>{agent?.autonomy ? 'Turn off autonomous mode' : 'Enable autonomous mode'}</button>
+          <button role="switch" aria-checked={agent?.autonomy ?? false} aria-label="Autonomous mode" className={agent?.autonomy ? '' : 'agents-primary'} disabled={!agent?.autonomy && (locked || !agent?.connected || !objective.trim())} onClick={() => void perform(agent?.autonomy ? { type: 'autonomy', enabled: false } : { type: 'autonomy', enabled: true, objective, intervalMinutes: interval, runs })}>{agent?.autonomy ? 'Turn off autonomous mode' : 'Enable autonomous mode'}</button>
           {agent?.autonomy && <p role="status">{agent.runsRemaining} future runs remaining{agent.nextRunAt ? ` · Next at ${new Date(agent.nextRunAt).toLocaleTimeString()}` : ' · Running now'}</p>}
         </section>
-        <section><h2>Connected to your terminal</h2><ul><li>Use Budget Terminal MCP research and saved-data tools</li><li>Edit saved records and settings when requested</li><li>Capture app screenshots, open pages and select tickers</li><li>Paste portfolio screenshots with Ctrl+V for reviewed updates</li></ul><p>Portfolio screenshot imports require Apply portfolio update. Autonomous monitoring can create notifications, but cannot edit financial records or tracker definitions. Chats, notifications and tracker definitions are saved locally; image attachments are not stored. Review and start trackers in the Trackers panel. Codex usage follows your signed-in account.</p></section>
-        <section><h2>Get connected</h2><p>Codex connects automatically at startup. If connection fails, install Codex CLI and sign in using <code>codex login</code>, then select Connect Codex to retry. New chat keeps the connection and your model settings. The desktop Codex installation is detected automatically on Windows.</p>{isBrowser && <p>Use Agents in the desktop app.</p>}</section>
+        <section><h2>Connected to your terminal</h2><ul><li>Use Budget Terminal MCP research and saved-data tools</li><li>Edit saved records and settings when requested</li><li>Capture app screenshots, open pages and select tickers</li><li>Paste portfolio screenshots with Ctrl+V for reviewed updates</li></ul><p>Portfolio screenshot imports require Apply portfolio update. Autonomous monitoring can create notifications, but cannot edit financial records or tracker definitions. Chats, notifications and tracker definitions are saved locally; uploaded and generated images are stored privately with chat references. Review and start trackers in the Trackers panel. Codex usage follows your signed-in account.</p></section>
+        <section><h2>Generate and edit images</h2><p>Ask Codex to generate an image, or attach one and describe the edits. Use for edit on an image card adds its pixels to your next message, including from saved chats. Images use your signed-in Codex account and its image-generation allowance. Native image tools require a compatible Codex runtime/provider. Autonomous monitoring cannot generate images.</p><p>{agent?.imageGeneration === true ? 'Image generation is supported by this provider.' : agent?.imageGeneration === false ? 'This provider does not support image generation. Choose a compatible Codex provider and reconnect.' : 'Image generation availability will be confirmed by the connected runtime when requested.'}</p></section>
+        <section><h2>Get connected</h2><p>Codex connects automatically at startup. If connection fails, install Codex CLI and sign in using <code>codex login</code>, then select Connect Codex to retry. New chat keeps the connection and your model settings. The desktop Codex installation is detected automatically on Windows.</p></section>
       </aside>
     </div>
   </div>

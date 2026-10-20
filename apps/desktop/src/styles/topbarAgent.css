@@ -1,0 +1,45 @@
+.terminal-agent-launcher { display: flex; justify-content: center; flex: 1; min-width: 140px; padding: 0 8px; -webkit-app-region: no-drag; }
+.terminal-agent-input-wrap { display: flex; align-items: center; width: 100%; max-width: 460px; min-width: 0; height: 34px; border: 1px solid var(--color-border-strong); border-radius: 4px; background: var(--color-bg); }
+.terminal-agent-input-wrap:focus-within { border-color: var(--color-accent-hover); }
+.terminal-agent-activity { display: inline-flex; flex-shrink: 0; align-items: center; gap: 5px; margin-right: 5px; padding: 3px 6px; border-radius: 3px; background: var(--color-surface-raised); color: var(--color-text-muted); font-size: 11px; line-height: 16px; white-space: nowrap; }
+.terminal-agent-light { flex-shrink: 0; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.terminal-agent-activity.is-active { color: var(--color-accent-hover); }
+.terminal-agent-activity.is-active .terminal-agent-light { animation: terminal-agent-pulse 1.4s ease-in-out infinite; }
+.terminal-agent-activity.ready, .terminal-agent-activity.done { color: var(--color-up); }
+.terminal-agent-activity.error { color: var(--color-down); }
+.terminal-agent-activity.review { color: var(--color-warn); }
+@keyframes terminal-agent-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .terminal-agent-activity.is-active .terminal-agent-light { animation: none; } }
+.terminal-agent-input-wrap input { min-width: 0; flex: 1; width: 100%; height: 100%; padding: 0 8px; border: 0; outline: none; background: transparent; color: var(--color-text); font: inherit; font-size: 13px; user-select: text; }
+.terminal-agent-input-wrap input::placeholder { color: var(--color-text-muted); }
+.terminal-agent-input-wrap button { flex-shrink: 0; width: 28px; height: 28px; margin-right: 2px; border-radius: 3px; color: var(--color-text-muted); cursor: pointer; }
+.terminal-agent-input-wrap button:hover:enabled { background: var(--color-surface-hover); color: var(--color-text); }
+.terminal-agent-input-wrap button:disabled { opacity: .4; cursor: default; }
+.terminal-agent-input-wrap button:focus-visible, .topbar-agent-heading button:focus-visible { outline: 2px solid var(--color-accent-hover); outline-offset: -2px; }
+.topbar-agent-dropdown { position: fixed; left: 50%; transform: translateX(-50%); z-index: 35; display: flex; flex-direction: column; width: min(1000px, calc(100vw - 24px)); min-height: 0; overflow: hidden; border: 1px solid var(--color-border-strong); border-radius: 6px; background: var(--color-bg); color: var(--color-text); box-shadow: 0 16px 60px #000b; -webkit-app-region: no-drag; }
+.topbar-agent-heading { display: flex; flex-shrink: 0; align-items: center; gap: 12px; padding: 6px 12px; border-bottom: 1px solid var(--color-border); background: var(--color-surface-raised); font-size: 12px; }
+.topbar-agent-heading h2 { margin: 0; font-size: 13px; font-weight: 600; }
+.topbar-agent-heading span { min-width: 0; color: var(--color-text-muted); }
+.topbar-agent-heading button { flex-shrink: 0; margin-left: auto; padding: 4px 8px; border: 1px solid var(--color-border-strong); border-radius: 3px; cursor: pointer; }
+.topbar-agent-heading button:hover { background: var(--color-surface-hover); }
+.topbar-agent-dropdown .agents-embedded .agents-transcript { padding: 16px 24px; }
+.topbar-agent-dropdown .agents-embedded .agents-model-settings { width: auto; flex: 1; }
+.topbar-agent-dropdown .agents-embedded .agents-model-settings label { flex-wrap: nowrap; }
+.topbar-agent-dropdown .agents-embedded .agents-model-settings select { width: auto; max-width: 200px; }
+.topbar-agent-dropdown .agents-embedded .agents-composer { width: calc(100% - 32px); max-width: 800px; margin: 0 auto 12px; }
+@media (max-width: 1400px) {
+  .terminal-topbar .terminal-clock { display: none; }
+}
+@media (max-width: 1100px) {
+  .terminal-topbar .terminal-brand, .terminal-topbar [aria-label^='MCP:'] { display: none; }
+}
+@media (max-width: 800px) {
+  .terminal-topbar [aria-label^='MCP:'] { display: none; }
+  .terminal-topbar .terminal-picker-hint { display: none; }
+  .terminal-topbar .terminal-page-picker { gap: 0; padding: 6px; }
+  .terminal-agent-launcher { min-width: 120px; padding: 0; }
+  .topbar-agent-heading span { display: none; }
+  .topbar-agent-dropdown .agents-embedded .agents-transcript { padding: 12px; }
+  .topbar-agent-dropdown .agents-embedded .agents-model-settings { width: 100%; }
+  .topbar-agent-dropdown .agents-embedded .agents-model-settings select { width: 100%; }
+}

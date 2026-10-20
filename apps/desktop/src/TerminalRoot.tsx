@@ -13,7 +13,6 @@ import {
   queryFreshness,
 } from './api/queryPersistence'
 import { registerSnapshot } from './api/snapshotHealth'
-import { connectBrowserEvents, isBrowser } from './api/browser'
 import './styles/theme.css'
 
 const queryClient = new QueryClient({
@@ -42,36 +41,13 @@ const stopMcpChanges = api.onSavedDataChanged((event) => {
 })
 if (import.meta.hot) import.meta.hot.dispose(stopMcpChanges)
 
-if (isBrowser) {
-  // Resume stale prepared pages too: hidden pages stay ready after reconnection.
-  const resume = () => {
-    void queryClient.invalidateQueries({
-      predicate: (query) => query.isStaleByTime(queryFreshness(query.queryKey)),
-      refetchType: 'all',
-    })
-  }
-  window.addEventListener('budget-browser-resume', resume)
-  const stopEvents = connectBrowserEvents()
-  if (import.meta.hot) import.meta.hot.dispose(() => {
-    stopEvents()
-    window.removeEventListener('budget-browser-resume', resume)
-  })
-}
-
-// Private browser snapshots stay in memory; logout removes the rendered session.
-const browserPersister = {
-  persistClient: async () => {},
-  restoreClient: async () => undefined,
-  removeClient: async () => {},
-}
-
 export default function TerminalRoot() {
   return (
     <StrictMode>
       <PersistQueryClientProvider
         client={queryClient}
         persistOptions={{
-          persister: isBrowser ? browserPersister : rendererQueryPersister,
+          persister: rendererQueryPersister,
           maxAge: RENDERER_CACHE_MAX_AGE_MS,
           buster: RENDERER_CACHE_BUSTER,
           dehydrateOptions: { shouldDehydrateQuery: shouldPersistRemoteQuery },

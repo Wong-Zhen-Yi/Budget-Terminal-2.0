@@ -1,30 +1,9 @@
 /**
- * The IPO page's two loads, ported from `workers/ipo_calendar.py` (`IpoCalendarWorker`
- * and `CompletedIpoWorker`, page21).
- *
- * Both are a GET of one stockanalysis.com page, a table read out of its HTML, and a JSON
- * file on disk that the page paints from before anything touches the network. They are
- * completely independent: the reference launches a worker each and a failure in one leaves
- * the other's table on screen, which is what the page's two status lines assume.
- *
- * stockanalysis.com is not Yahoo, so **none of this goes through `paced()`** — the
- * `fearGreed.ts` precedent. Putting an unrelated host behind the Yahoo gate would let one
- * slow scrape throttle every other page in the app.
- *
- * There is no refresh timer. `init_page21` fires no request at all: it restores both
- * caches and stops, and every network load after that is the Refresh button or F5.
- *
- * Each feed has the reference's own two-source chain: StockAnalysis first, then Yahoo's
- * IPO calendar (`services/yahoo/ipoCalendar.ts`). The fallback is silent by design — the
- * reference logs it at INFO and returns the rows — and the payload's `source` is what
- * tells the page which one answered. Only when *both* fail does the load fall through to
- * the stale disk cache and the warning status line.
- *
- * That matters more here than it does in the reference: stockanalysis.com now sits behind
- * a Cloudflare interactive challenge and answers a plain HTTP client with `403`
- * (`cf-mitigated: challenge`) — the PySide6 app included. Until that changes, the Yahoo
- * fallback is in practice the source, and it is a much thinner one: a listing date, an
- * exchange, sometimes a price and a share count, and nothing else.
+ * Independent, cached IPO feeds loaded during startup and on Refresh.
+ * Upcoming: StockAnalysis calendar, then its unscheduled filings when dates are absent,
+ * then Nasdaq and Yahoo. Empty/unrecognised pages must not disable the fallback chain.
+ * A filing date is never presented as an IPO date: pending deals explicitly display TBD.
+ * Non-Yahoo hosts use public-network HTTP; Yahoo stays behind its shared rate gate.
  */
 
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
@@ -44,6 +23,10 @@ import {
   completedWindow,
   IPO_CALENDAR_TTL_MS,
   IPO_COMPLETED_SOURCE_NAME,
+  IPO_FILINGS_SOURCE_NAME,
+  IPO_FILINGS_SOURCE_URL,
+  IPO_NASDAQ_SOURCE_NAME,
+  IPO_NASDAQ_SOURCE_URL,
   IPO_UPCOMING_SOURCE_NAME,
   IPO_UPCOMING_SOURCE_URL,
   IPO_YAHOO_SOURCE_NAME,
@@ -125,8 +108,15 @@ export async function clearIpoCache(): Promise<void> {
 /* --------------------------------------------------------------------- http */
 
 async function fetchHtml(url: string): Promise<string> {
+  const nasdaq = new URL(url).hostname === 'api.nasdaq.com'
   const response = await httpGet(url, {
-    headers: REQUEST_HEADERS,
+    // Nasdaq drops requests with a custom agent or without its public-site origin.
+    headers: nasdaq ? {
+      'User-Agent': 'Mozilla/5.0',
+      Accept: 'application/json,text/html,*/*',
+      Origin: 'https://www.nasdaq.com',
+      Referer: 'https://www.nasdaq.com/',
+    } : REQUEST_HEADERS,
     timeoutMs: REQUEST_TIMEOUT_MS,
     maxBytes: MAX_RESPONSE_BYTES,
   })
@@ -265,7 +255,8 @@ export function emptyCompletedIpoPayload(year: number): IpoCompletedPayload {
   }
 }
 
-const UPCOMING_CACHE_FILE = 'upcoming.json'
+// Ignore the old empty upcoming cache; completed-year caches remain compatible.
+const UPCOMING_CACHE_FILE = 'upcoming-v2.json'
 
 /** What a live load produced, and which of the two sources produced it. */
 interface LiveRows<T> {
@@ -274,26 +265,109 @@ interface LiveRows<T> {
   sourceUrl: string
 }
 
-/**
- * `IpoCalendarWorker.fetch_live_payload`: StockAnalysis, and on *any* failure Yahoo's
- * calendar. The fallback is not an error — the reference logs it at INFO and returns the
- * rows — so nothing is reported beyond the source name the payload carries.
- */
-async function liveUpcoming(today: string): Promise<LiveRows<UpcomingIpoRow>> {
-  const endDate = upcomingEndDate(today)
-  try {
+/** Pending filings are a separate table, not a calendar with missing dates. */
+export function parseIpoFilingsHtml(html: string, today: string): UpcomingIpoRow[] {
+  const tables = parseTables(html).filter(table => hasHeaders(table.headers, ['filing date', 'symbol']))
+  if (!tables.length) throw new Error('Pending IPO filings table not found')
+  const rows = tables.flatMap(table => table.rows.map(cells => {
+    const row = byHeader(table.headers, cells)
     return {
-      rows: parseUpcomingHtml(await fetchHtml(IPO_UPCOMING_SOURCE_URL), today),
-      source: IPO_UPCOMING_SOURCE_NAME,
-      sourceUrl: IPO_UPCOMING_SOURCE_URL,
+      date: '',
+      dateDisplay: 'TBD',
+      filingDate: pick(row, 'filing date'),
+      symbol: pick(row, 'symbol'),
+      company: pick(row, 'company name', 'company'),
+      priceRange: pick(row, 'price range'),
+      sharesOffered: pick(row, 'shares offered'),
     }
-  } catch {
-    return {
-      rows: normalizeUpcomingRows(await fetchYahooUpcomingIpos(today, endDate), today),
-      source: IPO_YAHOO_SOURCE_NAME,
-      sourceUrl: IPO_YAHOO_SOURCE_URL,
+  }))
+  return normalizeUpcomingRows(rows, today)
+}
+
+/** Nasdaq's upcoming list is market-wide, including listings outside Nasdaq. */
+export function parseNasdaqUpcoming(value: unknown, today: string): UpcomingIpoRow[] {
+  const document = value as {
+    status?: { rCode?: number }
+    data?: {
+      upcoming?: { upcomingTable?: { rows?: Record<string, unknown>[] | null } }
+      filed?: { rows?: Record<string, unknown>[] | null }
+      priced?: { rows?: Record<string, unknown>[] | null }
+      withdrawn?: { rows?: Record<string, unknown>[] | null }
     }
+  } | null
+  if (document?.status?.rCode !== 200 || !document.data?.upcoming?.upcomingTable || !document.data.filed) {
+    throw new Error('Nasdaq IPO calendar response unavailable')
   }
+  const map = (row: Record<string, unknown>, pending: boolean) => ({
+    date: pending ? '' : cleanText(row.expectedPriceDate),
+    ...(pending ? { filingDate: cleanText(row.filedDate) } : {}),
+    symbol: cleanText(row.proposedTickerSymbol),
+    company: cleanText(row.companyName),
+    exchange: cleanText(row.proposedExchange),
+    priceRange: cleanText(row.proposedSharePrice),
+    sharesOffered: cleanText(row.sharesOffered),
+    dealSize: cleanText(row.dollarValueOfSharesOffered),
+  })
+  const scheduled = normalizeUpcomingRows(
+    (document.data.upcoming.upcomingTable.rows ?? []).map(row => map(row, false)), today,
+  )
+  if (scheduled.length) return scheduled
+  // The monthly filed list also contains deals already priced or withdrawn that month.
+  const closed = [...(document.data.priced?.rows ?? []), ...(document.data.withdrawn?.rows ?? [])]
+  const closedSymbols = new Set(closed.map(row => cleanText(row.proposedTickerSymbol).toUpperCase()).filter(Boolean))
+  const closedCompanies = new Set(closed.map(row => cleanText(row.companyName).toLowerCase()).filter(Boolean))
+  const pending = (document.data.filed.rows ?? []).filter(row =>
+    !closedSymbols.has(cleanText(row.proposedTickerSymbol).toUpperCase())
+    && !closedCompanies.has(cleanText(row.companyName).toLowerCase()),
+  )
+  return normalizeUpcomingRows(pending.map(row => map(row, true)), today)
+}
+
+/** Injectable transports let the offline probe exercise the actual fallback chain. */
+export async function liveUpcoming(
+  today: string,
+  load = fetchHtml,
+  yahooUpcoming = fetchYahooUpcomingIpos,
+): Promise<LiveRows<UpcomingIpoRow>> {
+  const failures: string[] = []
+  let empty: LiveRows<UpcomingIpoRow> | undefined
+  try {
+    const html = await load(IPO_UPCOMING_SOURCE_URL)
+    const recognized = parseTables(html).some(table => hasHeaders(table.headers, ['ipo date', 'symbol']))
+      || /There are no upcoming IPOs|There are no IPOs scheduled|No IPOs have been scheduled/i.test(html)
+    if (!recognized) throw new Error('IPO calendar table not found')
+    const rows = parseUpcomingHtml(html, today)
+    if (rows.length) return { rows, source: IPO_UPCOMING_SOURCE_NAME, sourceUrl: IPO_UPCOMING_SOURCE_URL }
+  } catch (error) {
+    failures.push(`StockAnalysis calendar: ${String(error)}`)
+  }
+  // A valid empty calendar is not the end: companies often file before setting a date.
+  try {
+    const rows = parseIpoFilingsHtml(await load(IPO_FILINGS_SOURCE_URL), today)
+    const result = { rows, source: IPO_FILINGS_SOURCE_NAME, sourceUrl: IPO_FILINGS_SOURCE_URL }
+    if (rows.length) return result
+    empty = result
+  } catch (error) {
+    failures.push(`StockAnalysis filings: ${String(error)}`)
+  }
+  try {
+    const url = `https://api.nasdaq.com/api/ipo/calendar?date=${today.slice(0, 7)}`
+    const rows = parseNasdaqUpcoming(JSON.parse(await load(url)), today)
+    const result = { rows, source: IPO_NASDAQ_SOURCE_NAME, sourceUrl: IPO_NASDAQ_SOURCE_URL }
+    if (rows.length) return result
+    empty = result
+  } catch (error) {
+    failures.push(`Nasdaq: ${String(error)}`)
+  }
+  try {
+    const rows = normalizeUpcomingRows(await yahooUpcoming(today, upcomingEndDate(today)), today)
+    if (rows.length) return { rows, source: IPO_YAHOO_SOURCE_NAME, sourceUrl: IPO_YAHOO_SOURCE_URL }
+    failures.push('Yahoo: no upcoming IPO rows returned')
+  } catch (error) {
+    failures.push(`Yahoo: ${String(error)}`)
+  }
+  if (empty) return empty
+  throw new Error(failures.join('; '))
 }
 
 /** `CompletedIpoWorker.fetch_live_payload`, over the target year's own window. */
@@ -328,7 +402,10 @@ function completedCacheFile(year: number): string {
  * only counts when the cache still has rows, because an empty stale cache is no better
  * than the error.
  */
-export async function getUpcomingIpos(force = false): Promise<IpoUpcomingFetchResult> {
+export async function getUpcomingIpos(
+  force = false,
+  fetchUpcoming = liveUpcoming,
+): Promise<IpoUpcomingFetchResult> {
   const today = todayIso()
   const cached = await readDisk<IpoUpcomingPayload>(UPCOMING_CACHE_FILE)
 
@@ -350,7 +427,7 @@ export async function getUpcomingIpos(force = false): Promise<IpoUpcomingFetchRe
   }
 
   try {
-    const live = await liveUpcoming(today)
+    const live = await fetchUpcoming(today)
     const payload: IpoUpcomingPayload = {
       rows: live.rows,
       source: live.source,
@@ -367,7 +444,7 @@ export async function getUpcomingIpos(force = false): Promise<IpoUpcomingFetchRe
     return { payload, errors: [] }
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
-    if (cached && cached.value.rows?.length) {
+    if (cached && fromCache(cached).rows.length) {
       return {
         payload: { ...fromCache(cached), stale: true, warning: reason },
         errors: [err(IPO_UPCOMING_SOURCE, reason, 'ipo-upcoming')],

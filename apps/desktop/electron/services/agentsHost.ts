@@ -102,6 +102,10 @@ export async function agentsCommand(command: AgentsCommand) {
   try { return ok(await agent().command(command), 'Codex agent') }
   catch (error) { return failed(agent().snapshot(), error instanceof Error ? error.message : String(error), 'Codex agent') }
 }
+export async function agentsImage(id: string) {
+  try { return ok(await agent().image(id), 'Private chat image') }
+  catch { return failed(null, 'The saved chat image is unavailable. Reopen its chat or attach the image again.', 'Private chat image') }
+}
 export async function flushAgents() {
   lifecycle++
   service?.close()

@@ -187,9 +187,12 @@ export async function getYahooSeries(
             symbol,
             options.interval,
             options.start,
-            first ? new Date(first.time * 1000) : undefined,
+            // Include an overlap even when the existing first bar is the IPO bar.
+            // An exclusive head ending before listing would return no quotes, not a real outage.
+            first ? new Date(first.time * 1000 + DAY) : undefined,
           )
-          rows = mergeRows(rows, fetched.rows)
+          // Preserve complete existing bars over potentially partial head-edge aggregates.
+          rows = mergeRows(fetched.rows, rows)
           currency = fetched.currency
           longName = fetched.longName
           meta = fetched.meta
@@ -222,6 +225,9 @@ export async function getYahooSeries(
     store.delete(key)
     throw new Error(`Cached history for ${symbol} was incompatible; retry to reload it.`)
   }
+  // A wider request can join a narrower in-flight load under the canonical key.
+  // Backfill after that load settles rather than calling its short window "Max".
+  if (!resolved.stale && document.coveredFrom > startSeconds) return getYahooSeries(options, store, rangeLoader)
   const rows = document.rows.filter((row) => row.time >= startSeconds)
   if (!rows.length) throw new Error(`No history returned for ${symbol}.`)
   return {

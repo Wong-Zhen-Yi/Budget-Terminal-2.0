@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 
 import type { UpcomingIpoRow } from '@shared/contract'
-import { ipoNumericSortValue } from '@shared/ipo'
+import { ipoNumericSortValue, upcomingIpoSortKey } from '@shared/ipo'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 
 /**
@@ -36,21 +36,30 @@ export function UpcomingIpoTable({ rows }: { rows: UpcomingIpoRow[] }) {
         key: 'date',
         header: 'IPO Date',
         align: 'center',
-        width: 'w-[104px]',
-        cell: (row) => row.dateDisplay,
-        sortValue: (row) => row.date,
+        width: '104px',
+        cell: (row) => <span title={row.filingDate ? `Filed ${row.filingDate}; IPO date not scheduled` : 'Estimated IPO date'}>{row.dateDisplay}</span>,
+        sortValue: upcomingIpoSortKey,
+      },
+      {
+        key: 'filingDate',
+        header: 'Filed',
+        align: 'center',
+        width: '104px',
+        cell: (row) => row.filingDate || '--',
+        sortValue: (row) => row.filingDate || '',
       },
       {
         key: 'symbol',
         header: 'Symbol',
         align: 'center',
-        width: 'w-[76px]',
+        width: '76px',
         cell: (row) => row.symbol,
         sortValue: (row) => row.symbol,
       },
       {
         key: 'company',
         header: 'Company',
+        width: '240px',
         cell: (row) => row.company,
         sortValue: (row) => row.company.toLowerCase(),
       },
@@ -58,15 +67,15 @@ export function UpcomingIpoTable({ rows }: { rows: UpcomingIpoRow[] }) {
         key: 'exchange',
         header: 'Exchange',
         align: 'center',
-        width: 'w-[92px]',
+        width: '92px',
         cell: (row) => row.exchange,
         sortValue: (row) => row.exchange.toLowerCase(),
       },
-      money('priceRange', 'Price Range', 'w-[112px]', (row) => row.priceRange),
-      money('shares', 'Shares', 'w-[96px]', (row) => row.sharesOffered),
-      money('dealSize', 'Deal Size', 'w-[96px]', (row) => row.dealSize),
-      money('marketCap', 'Market Cap', 'w-[96px]', (row) => row.marketCap),
-      money('revenue', 'Revenue', 'w-[96px]', (row) => row.revenue),
+      money('priceRange', 'Price Range', '112px', (row) => row.priceRange),
+      money('shares', 'Shares', '96px', (row) => row.sharesOffered),
+      money('dealSize', 'Deal Size', '96px', (row) => row.dealSize),
+      money('marketCap', 'Market Cap', '96px', (row) => row.marketCap),
+      money('revenue', 'Revenue', '96px', (row) => row.revenue),
     ]
   }, [])
 
@@ -76,6 +85,7 @@ export function UpcomingIpoTable({ rows }: { rows: UpcomingIpoRow[] }) {
       rows={rows}
       rowKey={(row, index) => `${row.date}-${row.symbol}-${index}`}
       layout="fixed"
+      minWidth="1220px"
       // `sortItems(0, AscendingOrder)`: the next listing to price is the top row.
       defaultSort={{ key: 'date', direction: 'asc' }}
       empty="No upcoming IPO rows"

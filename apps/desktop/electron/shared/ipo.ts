@@ -20,6 +20,15 @@ export const IPO_CALENDAR_TTL_MS = 24 * 60 * 60_000
 export const IPO_UPCOMING_SOURCE_NAME = 'StockAnalysis IPO Calendar'
 export const IPO_UPCOMING_SOURCE_URL = 'https://stockanalysis.com/ipos/calendar/'
 export const IPO_COMPLETED_SOURCE_NAME = 'StockAnalysis Completed IPOs'
+export const IPO_FILINGS_SOURCE_URL = 'https://stockanalysis.com/ipos/filings/'
+export const IPO_FILINGS_SOURCE_NAME = 'StockAnalysis Pending IPO Filings'
+export const IPO_NASDAQ_SOURCE_NAME = 'Nasdaq IPO Calendar'
+export const IPO_NASDAQ_SOURCE_URL = 'https://www.nasdaq.com/market-activity/ipos'
+
+/** Keep undated filings below scheduled listings, newest filings first. */
+export function upcomingIpoSortKey(row: UpcomingIpoRow): string {
+  return row.date || `9999-${99999999 - Number((row.filingDate ?? '').replaceAll('-', ''))}`
+}
 
 /**
  * The fallback's name and the page a reader should open to check it.
@@ -207,7 +216,7 @@ function dedupe<T extends Identity>(rows: T[], descending: boolean): T[] {
 
 /** `IpoCalendarWorker._dedupe_rows` — oldest first, so the next IPO is the top row. */
 export function dedupeUpcoming(rows: UpcomingIpoRow[]): UpcomingIpoRow[] {
-  return dedupe(rows, false)
+  return dedupe(rows, false).sort((a, b) => upcomingIpoSortKey(a).localeCompare(upcomingIpoSortKey(b)))
 }
 
 /** `CompletedIpoWorker._dedupe_rows` — newest first, the reverse of the upcoming list. */
@@ -243,10 +252,14 @@ export function normalizeUpcomingRows(raw: unknown, today: string): UpcomingIpoR
     if (!entry || typeof entry !== 'object') continue
     const source = entry as Record<string, unknown>
     const isoDate = parseIpoDate(field(source.date) || field(source.dateDisplay))
-    if (isoDate === null || isoDate < today || isoDate > endDate) continue
+    const filingDate = parseIpoDate(source.filingDate)
+    const pending = !field(source.date) && isoDate === null && filingDate !== null && filingDate <= today
+    if (!pending && (isoDate === null || isoDate < today || isoDate > endDate)) continue
+    if (!field(source.symbol) && !field(source.company)) continue
     rows.push({
-      date: isoDate,
-      dateDisplay: field(source.dateDisplay) || formatIpoDate(isoDate),
+      date: pending ? '' : isoDate!,
+      ...(pending ? { filingDate: filingDate! } : {}),
+      dateDisplay: pending ? 'TBD' : field(source.dateDisplay) || formatIpoDate(isoDate!),
       symbol: orDash(field(source.symbol).toUpperCase()),
       company: orDash(field(source.company)),
       exchange: orDash(field(source.exchange)),
@@ -380,6 +393,7 @@ export interface IpoStatus {
 
 export interface IpoStatusInput {
   rowCount: number
+  pendingCount?: number
   source: string
   fetchedAt: number
   fromCache: boolean
@@ -406,7 +420,9 @@ export function upcomingIpoStatus(input: IpoStatusInput, today: string): IpoStat
     }
   }
   const text = statusSuffixes(
-    `${input.rowCount} upcoming IPO(s) through ${yearEnd} from ${source}`,
+    input.pendingCount
+      ? `${input.rowCount - input.pendingCount} scheduled IPO(s) through ${yearEnd}; ${input.pendingCount} pending filing(s), dates TBD, from ${source}`
+      : `${input.rowCount} upcoming IPO(s) through ${yearEnd} from ${source}`,
     input,
   )
   return { text, tone: input.stale ? 'warning' : 'positive' }
@@ -426,6 +442,7 @@ export function completedIpoStatus(input: IpoStatusInput, year: number): IpoStat
 
 const UPCOMING_HEADERS = [
   'IPO Date',
+  'Filed',
   'Symbol',
   'Company',
   'Exchange',
@@ -444,6 +461,7 @@ export function upcomingIpoClipboard(rows: UpcomingIpoRow[]): string {
     lines.push(
       [
         row.dateDisplay,
+        row.filingDate || '--',
         row.symbol,
         row.company,
         row.exchange,

@@ -27,6 +27,7 @@ try {
       import { pathToFileURL } from 'node:url'
       import { registerIpcHandlers } from './electron/ipc/handlers'
       import { isTrustedRendererUrl } from './electron/shared/ipcSecurity'
+      import { CHANNELS } from './electron/shared/contract'
       import { acquireDataSession } from './electron/services/dataSession'
       import { startMcpHost } from './electron/mcp/host'
       import { startAgents, closeAgents } from './electron/services/agentsHost'
@@ -51,6 +52,11 @@ try {
           assert.equal(await trusted.webContents.executeJavaScript('typeof require'), 'undefined')
           assert.equal(await trusted.webContents.executeJavaScript('typeof process'), 'undefined')
           assert.equal(await trusted.webContents.executeJavaScript('window.api.platform'), process.platform)
+          assert.equal(Object.values(CHANNELS).some(channel => channel.startsWith('system:web-')), false, 'Remote IPC channels must be removed')
+          for (const method of ['webStatus', 'configureWebAccess', 'rotateWebPairingCode', 'revokeWebSessions', 'decideWebAccess']) {
+            assert.equal(await trusted.webContents.executeJavaScript('typeof window.api[' + JSON.stringify(method) + ']'), 'undefined', 'Remote methods must not be exposed by preload')
+          }
+          console.log('PASS: desktop-only preload and IPC contract without remote access methods')
           const result = await trusted.webContents.executeJavaScript('window.api.settings()')
           assert.ok(result.data.tabOrder.includes('settings'))
           const agents = await trusted.webContents.executeJavaScript('window.api.agentsStatus()')
@@ -87,6 +93,10 @@ try {
           await other.loadFile(${JSON.stringify(otherPath)})
           await assert.rejects(other.webContents.executeJavaScript('window.api.settings()'), /Untrusted IPC sender/)
           await assert.rejects(other.webContents.executeJavaScript('window.api.agentsStatus()'), /Untrusted IPC sender/)
+          await assert.rejects(other.webContents.executeJavaScript("window.api.agentsImage('11111111-1111-4111-8111-111111111111')"), /Untrusted IPC sender/)
+          const invalidImage = await trusted.webContents.executeJavaScript("window.api.agentsImage('../../private.png')")
+          assert.equal(invalidImage.data, null)
+          assert.equal(invalidImage.meta.freshness, 'failed', 'Image IPC must never expose arbitrary local paths')
           await assert.rejects(other.webContents.executeJavaScript("window.api.agentsCommand({ type: 'connect' })"), /Untrusted IPC sender/)
           const invalidAgent = await trusted.webContents.executeJavaScript("window.api.agentsCommand({ type: 'send', text: '' })")
           assert.equal(invalidAgent.meta.freshness, 'failed')

@@ -15,7 +15,7 @@ const STORE_VERSION = 1
 
 export type ChartsSubtab = 'main' | 'multi' | 'compare' | 'relationship' | 'cheat'
 export type ChartsType = 'candles' | 'line' | 'area'
-export type ChartsIndicator = 'volume' | 'rsi' | 'ma200' | 'avgPrice' | 'supportResistance' | 'fibonacci' | 'cursor'
+export type ChartsIndicator = 'volume' | 'rsi' | 'ma50' | 'ma200' | 'avgPrice' | 'supportResistance' | 'fibonacci' | 'cursor'
 export type DrawingType = 'trend' | 'horizontal' | 'ray' | 'rectangle' | 'text' | 'fib'
 
 export interface DrawingAnchor {
@@ -110,6 +110,7 @@ export const DEFAULT_CHARTS_STATE: ChartsPersistedState = {
   indicators: {
     volume: true,
     rsi: false,
+    ma50: true,
     ma200: true,
     avgPrice: true,
     supportResistance: false,

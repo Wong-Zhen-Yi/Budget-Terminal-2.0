@@ -5,6 +5,7 @@ export interface CodexResult {
   model?: string
   reasoningEffort?: string | null
   data?: { model: string; displayName: string; hidden?: boolean; inputModalities?: string[]; defaultReasoningEffort: string; supportedReasoningEfforts: { reasoningEffort: string; description: string }[] }[]
+  imageGeneration?: boolean
   nextCursor?: string | null
   account?: unknown
   config?: { mcp_servers?: Record<string, unknown> }
@@ -20,7 +21,7 @@ export interface CodexPacket {
     delta?: string
     tool?: string
     arguments?: unknown
-    item?: { id: string; type: string; text?: string }
+    item?: { id: string; type: string; text?: string; status?: string; result?: string; failure?: { type?: string; resetsAt?: number | null } | null }
     turn?: { status: string; error?: { message?: string } }
     error?: { message?: string }
     willRetry?: boolean

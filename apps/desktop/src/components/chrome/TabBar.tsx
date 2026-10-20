@@ -4,9 +4,7 @@ import { CLOCK_COUNTRIES, DEFAULT_CLOCK_COUNTRY } from '@shared/contract'
 import { api } from '@/api/client'
 import { clockTime } from '@/lib/format'
 import { McpActivity } from './McpActivity'
-import { BrowserConnection } from './BrowserConnection'
-import { RemoteConnection } from './RemoteConnection'
-import { isBrowser } from '@/api/browser'
+import { TopBarAgent } from './TopBarAgent'
 
 interface TabBarProps {
   onOpenPicker: () => void
@@ -16,6 +14,7 @@ interface TabBarProps {
   time12h: boolean
   obscured: boolean
   onToggleObscure: () => void
+  agentChatAvailable?: boolean
 }
 
 export function TabBar({
@@ -26,6 +25,7 @@ export function TabBar({
   time12h,
   obscured,
   onToggleObscure,
+  agentChatAvailable = true,
 }: TabBarProps) {
   const isMac = api.platform === 'darwin'
   const zone =
@@ -45,12 +45,11 @@ export function TabBar({
       </span>
 
       <span className={`terminal-brand min-w-0 truncate text-2xs tracking-wide text-text-muted ${isMac ? 'px-1' : 'px-2'}`}>BUDGET TERMINAL</span>
-      {isBrowser ? <BrowserConnection /> : <McpActivity />}
-      {!isBrowser ? <RemoteConnection /> : null}
-      <div className="min-w-0 flex-1" />
+      <McpActivity />
+      <TopBarAgent available={agentChatAvailable} />
       <button type="button" onClick={onOpenPicker}
-        className={`no-drag flex items-center gap-4 border border-border-strong px-3 py-2 text-2xs text-text-muted hover:bg-surface-hover ${isMac ? 'rounded-lg bg-surface-raised' : 'rounded'}`}>
-        Find a page {!isBrowser ? <kbd className="num">{isMac ? '⌘ K' : 'Ctrl K'}</kbd> : null}
+        className={`terminal-page-picker no-drag flex shrink-0 items-center gap-4 border border-border-strong px-3 py-2 text-2xs text-text-muted hover:bg-surface-hover ${isMac ? 'rounded-lg bg-surface-raised' : 'rounded'}`}>
+        Find a page <kbd className="terminal-picker-hint num">{isMac ? '⌘ K' : 'Ctrl K'}</kbd>
       </button>
 
       <span className="terminal-clock num no-drag shrink-0 whitespace-nowrap px-2 text-2xs text-text-muted">
@@ -78,10 +77,10 @@ export function TabBar({
         disabled={reloading}
         className={`no-drag h-9 shrink-0 border border-border-strong bg-surface-raised px-3 text-2xs text-text hover:bg-surface-hover disabled:opacity-50 ${isMac ? 'rounded-lg' : ''}`}
       >
-        {reloading ? 'Reloading...' : isBrowser ? 'Refresh' : `Reload (${isMac ? '⌘ R' : 'F5'})`}
+        {reloading ? 'Reloading...' : `Reload (${isMac ? '⌘ R' : 'F5'})`}
       </button>
 
-      {!isMac && !isBrowser ? <WindowControls /> : null}
+      {!isMac ? <WindowControls /> : null}
     </div>
   )
 }

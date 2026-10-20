@@ -9,10 +9,9 @@ import { forcing } from './queries'
 /**
  * The IPO page's two queries.
  *
- * Neither has a `refetchInterval`. `init_page21` fires no request at all — it restores
- * both disk caches and stops — and the reference's own TTL is 24 hours, so a background
- * refetch would re-scrape a page that changes once a day. Refresh and F5 are the only
- * things that go back to the network.
+ * Both are preloaded at app startup, including when the IPO tab has not been visited.
+ * The service reuses fresh disk caches and fetches on a cache miss. There is no timer;
+ * Refresh and F5 force a network load even while the daily cache is fresh.
  *
  * They are separate keys on purpose: a failed upcoming scrape must not evict the completed
  * rows, which is the same isolation the two envelopes already carry.

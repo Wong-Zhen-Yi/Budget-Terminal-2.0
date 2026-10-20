@@ -87,14 +87,14 @@ try {
       calendar: ['Calendar', 'Earnings'], fundamentals: ['Statements', 'SEC Filings'],
       charts: ['Main', 'Multi Charts', 'Compare', 'Relationship', 'Cheat Sheet'],
       valuation: ['Main', 'Scenarios', 'Peers', 'Risk', 'Trends', 'Notes', 'Sources'],
-      options: ['Chain', 'Options by Top Volume', 'Options by Strike'], quant: ['Screener', 'Pairs'],
+      options: ['Chain', 'Options by Top Volume', 'Options by Strike'], quant: ['Factor screener', 'Pairs lab'],
       economic: ['Overview', 'Inflation', 'Labor', 'Growth', 'Rates'],
       bmnr: ['Table', 'Chart'], gold: ['Table', 'Chart'], oil: ['Table', 'Chart'],
     }
     const coverage = []
     const selectPage = async tab => {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true })); await wait()
-      const choice = [...document.querySelectorAll('[data-result-index]')].find(button => button.textContent.includes(tab.label))
+      const choice = [...document.querySelectorAll('[data-result-index]')].find(button => button.querySelector('span')?.textContent === tab.label)
       check(choice, 'Missing route: ' + tab.id)
       choice.click(); await wait(); await wait()
       check(visiblePage(tab.id), 'Wrong visible selected page: ' + tab.id)
@@ -207,7 +207,7 @@ try {
           check(client.getQueryData(['newsThumbnail', 'https://example.com/fixture.png']), 'Initial News media was not warmed')
           check(client.getQueryData(['youtubeThumbnail', 'fixture1', 'https://example.com/video.png']), 'Selected video media was not warmed')
         }
-        check(client.getQueryData(['webAccessStatus']), 'Desktop web status was not loaded at startup')
+        check(!document.body.innerText.includes('Review access') && !document.body.innerText.includes('Pairing code'), 'Remote controls must not appear in the desktop shell')
         if (agentsOnly) {
           const before = calls.length
           await selectPage(TABS.find(tab => tab.id === 'agents'))
@@ -230,7 +230,7 @@ try {
             check(text.includes('123.45 EUR') && text.includes('-2.50 EUR') && !text.includes('$123.45'), 'Foreign quote header mislabeled: ' + tab.id)
           }
           if (restored && tab.id === 'charts') check(visiblePage(tab.id).innerText.includes('100.00 GBp'), 'Charts did not retain the raw pence unit')
-          const initial = calls.slice(before).filter(call => !['mcpStatus', 'apiUsage', 'webStatus', 'mutateSettings'].includes(call.method))
+          const initial = calls.slice(before).filter(call => !['mcpStatus', 'apiUsage', 'mutateSettings'].includes(call.method))
           check(initial.length === 0, 'First-visit request on ' + scenario + '/' + tab.id + ': ' + JSON.stringify(initial))
           if (scenario === 'populated' && tab.id === 'portfolio') {
             const page = visiblePage(tab.id)
@@ -246,7 +246,7 @@ try {
               check(button, 'Missing Portfolio subtab: ' + label)
               button.click(); await wait(); await paint()
               check(headings().includes(label), 'Portfolio subtab panel missing: ' + label)
-              const subtabRequests = calls.slice(beforeSubtab).filter(call => !['mcpStatus', 'apiUsage', 'webStatus', 'mutateSettings'].includes(call.method))
+              const subtabRequests = calls.slice(beforeSubtab).filter(call => !['mcpStatus', 'apiUsage', 'mutateSettings'].includes(call.method))
               check(subtabRequests.length === 0, 'Portfolio subtab made a first-visit request: ' + label + ': ' + JSON.stringify(subtabRequests))
               const panel = [...page.querySelectorAll('section')].find(panel => panel.querySelector('h2')?.textContent.trim() === label)
               check(panel.getBoundingClientRect().width >= page.getBoundingClientRect().width - 20, 'Portfolio subtab must use the full width: ' + label)
@@ -265,6 +265,10 @@ try {
               }
             }
           }
+          if (tab.id === 'settings') {
+            check(!visiblePage(tab.id).innerText.includes('Remote'), 'Settings must not offer remote access')
+            check(visiblePage(tab.id).innerText.includes('User Data'), 'Desktop data controls must remain available')
+          }
           if (scenario === 'populated' && ['dashboard', 'news', 'youtube', 'settings'].includes(tab.id)) {
             await paint()
             check(visiblePage(tab.id), 'Capture page changed: ' + tab.id)
@@ -275,10 +279,10 @@ try {
           const old = client.getQueryData(['quotes', 'AAPL'])
           client.setQueryData(['quotes', 'AAPL'], { ...old, meta: { ...old.meta, freshness: 'stale', failureReason: 'Synthetic provider outage; previous snapshot preserved', fetchedAt: Date.now() - 120000 } })
           window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true })); await wait()
-          ;[...document.querySelectorAll('[data-result-index]')].find(button => button.textContent.includes('Dashboard')).click()
+          ;[...document.querySelectorAll('[data-result-index]')].find(button => button.querySelector('span')?.textContent === 'Dashboard').click()
           await wait(); await paint()
           check(visiblePage('dashboard'), 'Stale fixture did not select Dashboard')
-          check(document.querySelector('footer').textContent.includes('Synthetic provider outage'), 'Stale fixture did not expose outage status: ' + document.querySelector('footer').textContent)
+          check(visiblePage('dashboard').querySelector('[aria-label="Synthetic provider outage; previous snapshot preserved"]'), 'Stale fixture did not expose the panel outage warning')
           await window.captureFixture('completed-stale-dashboard')
         }
         if (scenario === 'persisted') {
@@ -291,7 +295,7 @@ try {
             for (const label of contexts) {
               let page = visiblePage(tab.id)
               if (label) {
-                const button = [...page.querySelectorAll('button')].find(button => button.textContent.trim() === label || button.textContent.trim().startsWith(label + ' ('))
+                const button = [...page.querySelectorAll('button')].find(button => button.getAttribute('aria-label') === label || button.textContent.trim() === label || button.textContent.trim().startsWith(label + ' ('))
                 check(button, 'Missing subtab ' + tab.id + '/' + label)
                 button.click(); await wait()
                 record.subtabs.push(label); page = visiblePage(tab.id)

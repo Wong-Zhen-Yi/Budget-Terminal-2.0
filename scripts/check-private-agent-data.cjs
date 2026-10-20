@@ -6,6 +6,7 @@ function privateAgentData(file) {
   const normalized = file.replace(/\\/g, '/').toLowerCase()
   const basename = normalized.split('/').pop()
   return normalized.split('/').includes('budgetterminalelectron')
+    || normalized.split('/').includes('agent-images')
     || /^agents\.json(?:\..*)?$/.test(basename)
     || /^(?:agent-history|chat-history).*\.json$/.test(basename)
 }
@@ -30,7 +31,7 @@ function check({ staged = false } = {}) {
   const blocked = files.filter(privateAgentData)
   if (blocked.length) throw new Error('Private Agents data must never be committed or published. Remove these files from the Git index (keep local copies):\n' + blocked.join('\n'))
   if (!staged) {
-    const examples = ['agents.json', 'copies/agents.json.123.tmp', 'exports/chat-history-local.json', 'AppData/Roaming/BudgetTerminalElectron/agents.json']
+    const examples = ['agents.json', 'copies/agents.json.123.tmp', 'exports/chat-history-local.json', 'AppData/Roaming/BudgetTerminalElectron/agents.json', 'copies/agent-images/private.json']
     const ignored = git(['check-ignore', '--no-index', '--stdin'], { input: examples.join('\n') + '\n' }).trim().split(/\r?\n/)
     for (const file of examples) if (!ignored.includes(file)) throw new Error('Private Agents data is not ignored: ' + file)
   }

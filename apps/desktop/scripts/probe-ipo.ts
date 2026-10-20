@@ -1,4 +1,5 @@
 import { mkdtemp, rm } from 'node:fs/promises'
+import { rejects } from 'node:assert/strict'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -21,8 +22,18 @@ import {
   upcomingEndDate,
   upcomingIpoStatus,
   cleanText,
+  todayIso,
+  IPO_UPCOMING_SOURCE_URL,
+  IPO_FILINGS_SOURCE_URL,
+  IPO_FILINGS_SOURCE_NAME,
+  IPO_NASDAQ_SOURCE_NAME,
+  IPO_YAHOO_SOURCE_NAME,
+  upcomingIpoClipboard,
 } from '../electron/shared/ipo.js'
-import { parseCompletedHtml, parseUpcomingHtml } from '../electron/services/ipo.js'
+import {
+  parseCompletedHtml, parseUpcomingHtml, parseIpoFilingsHtml, parseNasdaqUpcoming,
+  liveUpcoming, getUpcomingIpos, clearIpoCache,
+} from '../electron/services/ipo.js'
 
 /**
  * The IPO page's verification story, standing in for
@@ -89,6 +100,25 @@ const COMPLETED_HTML = `
 </table>
 </body></html>
 `
+
+const FILINGS_HTML = `
+<table><thead><tr><th>Filing Date</th><th>Symbol</th><th>Company Name</th><th>Price Range</th><th>Shares Offered</th></tr></thead>
+<tbody>
+<tr><td>Mar 10, 2099</td><td>wait</td><td>Waiting Company</td><td>$10.00</td><td>2,000,000</td></tr>
+<tr><td>Mar 12, 2099</td><td>NEW</td><td>Newest Filing</td><td>-</td><td>-</td></tr>
+<tr><td>Mar 12, 2099</td><td>NEW</td><td>Newest Filing</td><td>-</td><td>-</td></tr>
+<tr><td>Mar 20, 2099</td><td>FUTURE</td><td>Invalid Future Filing</td><td>-</td><td>-</td></tr>
+<tr><td></td><td>INVALID</td><td>No Filing Date</td><td>-</td><td>-</td></tr>
+</tbody></table>`
+
+const EMPTY_CALENDAR_HTML = '<h1>IPO Calendar</h1><p>There are no IPOs scheduled for next week.</p>'
+const NASDAQ_FIXTURE = {
+  status: { rCode: 200 },
+  data: {
+    upcoming: { upcomingTable: { rows: [{ expectedPriceDate: '03/18/2099', proposedTickerSymbol: 'NEXT', companyName: 'Next Listing', proposedExchange: 'NYSE' }] } },
+    filed: { rows: [{ filedDate: '03/12/2099', proposedTickerSymbol: 'WAIT', companyName: 'Waiting Company' }] },
+  },
+}
 
 /* -------------------------------------------------------------------- checks */
 
@@ -297,7 +327,76 @@ function checkParsers(): void {
   )
 }
 
-function runOffline(): void {
+async function checkFallbacksAndCache(): Promise<void> {
+  const today = '2099-03-14'
+  const noYahoo = async () => { throw new Error('Yahoo unavailable') }
+  let yahooCalls = 0
+  const primary = await liveUpcoming(today, async () => UPCOMING_HTML, async () => { yahooCalls++; return [] })
+  equal(primary.rows[0].symbol, 'ABCD', 'scheduled primary rows take precedence')
+  equal(yahooCalls, 0, 'healthy primary avoids Yahoo requests')
+
+  equal(parseIpoFilingsHtml(FILINGS_HTML, today).length, 2, 'filings parser reads the current provider table shape')
+  const filings = await liveUpcoming(today, async url => {
+    if (url === IPO_UPCOMING_SOURCE_URL) return EMPTY_CALENDAR_HTML
+    if (url === IPO_FILINGS_SOURCE_URL) return FILINGS_HTML
+    throw new Error('Unexpected request')
+  }, noYahoo)
+  equal(filings.source, IPO_FILINGS_SOURCE_NAME, 'an empty calendar still loads pending filings')
+  equal(filings.rows.length, 2, 'pending filings dedupe and reject invalid/future filing dates')
+  equal(filings.rows[0].symbol, 'NEW', 'newest pending filing sorts first')
+  equal(filings.rows[0].date, '', 'a filing date never becomes an IPO date')
+  equal(filings.rows[0].dateDisplay, 'TBD', 'pending dates are explicitly TBD')
+  equal(filings.rows[0].filingDate, '2099-03-12', 'filing dates normalize to ISO')
+  equal(normalizeUpcomingRows(filings.rows, today).length, 2, 'TBD rows survive cache normalization')
+  assert(upcomingIpoClipboard(filings.rows).includes('TBD\t2099-03-12'), 'export distinguishes listing and filing dates')
+  assert(upcomingIpoStatus({ rowCount: 2, pendingCount: 2, source: filings.source, fetchedAt: 0, fromCache: false, stale: false }, today).text.includes('0 scheduled IPO(s)'), 'pending filings are not counted as scheduled listings')
+
+  const nasdaq = await liveUpcoming(today, async url => {
+    if (url.includes('api.nasdaq.com')) return JSON.stringify(NASDAQ_FIXTURE)
+    throw new Error('HTTP 403')
+  }, noYahoo)
+  equal(nasdaq.source, IPO_NASDAQ_SOURCE_NAME, 'Nasdaq works when StockAnalysis is blocked')
+  equal(nasdaq.rows[0].date, '2099-03-18', 'Nasdaq listing dates parse correctly')
+  equal(parseNasdaqUpcoming({ ...NASDAQ_FIXTURE, data: { ...NASDAQ_FIXTURE.data, upcoming: { upcomingTable: { rows: null } } } }, today)[0].dateDisplay, 'TBD', 'Nasdaq filings remain visible without scheduled listings')
+
+  equal(parseNasdaqUpcoming({ ...NASDAQ_FIXTURE, data: { ...NASDAQ_FIXTURE.data, upcoming: { upcomingTable: { rows: null } }, withdrawn: { rows: [{ companyName: 'Waiting Company' }] } } }, today).length, 0, 'withdrawn companies must not appear as pending Nasdaq filings')
+  const yahoo = await liveUpcoming(today, async () => '<html>Challenge page, no IPO table</html>', async () => primary.rows)
+  equal(yahoo.source, IPO_YAHOO_SOURCE_NAME, 'HTTP 200 challenge/unrecognised markup triggers fallback')
+  await rejects(() => liveUpcoming(today, async () => '<html>No table</html>', noYahoo), /StockAnalysis calendar:.*Nasdaq:.*Yahoo:/, 'all-source failures report reasons, not an empty success')
+  const empty = await liveUpcoming(today, async url => {
+    if (url.includes('api.nasdaq.com')) return JSON.stringify({ ...NASDAQ_FIXTURE, data: { upcoming: { upcomingTable: { rows: null } }, filed: { rows: null } } })
+    throw new Error('HTTP 403')
+  }, noYahoo)
+  equal(empty.rows.length, 0, 'an authoritative empty response remains valid when no filings exist')
+
+  const temporary = await mkdtemp(join(tmpdir(), 'budget-ipo-offline-'))
+  const previous = { APPDATA: process.env.APPDATA, LOCALAPPDATA: process.env.LOCALAPPDATA }
+  process.env.APPDATA = temporary
+  process.env.LOCALAPPDATA = temporary
+  try {
+    const rows = normalizeUpcomingRows([{ date: '', filingDate: todayIso(), symbol: 'WAIT', company: 'Cache Fixture' }], todayIso())
+    let loads = 0
+    const load = async () => { loads++; return { ...filings, rows } }
+    const first = await getUpcomingIpos(false, load)
+    assert(!first.payload.fromCache, 'initial startup load fetches without a manual Refresh')
+    const second = await getUpcomingIpos(false, load)
+    equal(loads, 1, 'fresh cache avoids a second network load')
+    assert(second.payload.fromCache && second.payload.rows[0].filingDate === todayIso(), 'pending filings survive the actual disk round-trip')
+    await getUpcomingIpos(true, load)
+    equal(loads, 2, 'Refresh bypasses fresh disk cache')
+    const failed = await getUpcomingIpos(true, async () => { throw new Error('Offline fixture') })
+    assert(failed.payload.stale && failed.errors.length === 1 && failed.payload.rows.length === 1, 'refresh failures preserve rows with a visible stale warning')
+    await clearIpoCache()
+  } finally {
+    for (const key of ['APPDATA', 'LOCALAPPDATA'] as const) {
+      if (previous[key] === undefined) delete process.env[key]
+      else process.env[key] = previous[key]
+    }
+    await rm(temporary, { recursive: true, force: true })
+  }
+}
+
+async function runOffline(): Promise<void> {
   checkDates()
   checkWindowsAndDedupe()
   checkYahooFormatters()
@@ -305,9 +404,10 @@ function runOffline(): void {
   checkCacheText()
   checkStatusStrings()
   checkParsers()
+  await checkFallbacksAndCache()
   console.log(
     'offline checks passed: dates, windows, dedupe, Yahoo formatters, sort keys, cache text, ' +
-      'status, parsers',
+      'status, parsers, pending filings, source fallback and isolated disk cache',
   )
 }
 
@@ -329,7 +429,9 @@ async function runLive(year: number): Promise<void> {
   // Never write the real cache: the probe must not change what the app opens on.
   const temporary = await mkdtemp(join(tmpdir(), 'budget-terminal-ipo-'))
   const previousAppData = process.env.APPDATA
+  const previousLocalAppData = process.env.LOCALAPPDATA
   process.env.APPDATA = temporary
+  process.env.LOCALAPPDATA = temporary
   try {
     const { getCompletedIpos, getUpcomingIpos } = await import('../electron/services/ipo.js')
 
@@ -341,9 +443,10 @@ async function runLive(year: number): Promise<void> {
     )
     for (const failure of upcoming.errors) console.log(`! ${failure.source}: ${failure.reason}`)
     table(
-      ['IPO Date', 'Symbol', 'Company', 'Exchange', 'Price Range', 'Shares', 'Deal', 'Mkt Cap', 'Revenue'],
+      ['IPO Date', 'Filed', 'Symbol', 'Company', 'Exchange', 'Price Range', 'Shares', 'Deal', 'Mkt Cap', 'Revenue'],
       upcoming.payload.rows.map((row) => [
         row.dateDisplay,
+        row.filingDate || '--',
         row.symbol,
         row.company,
         row.exchange,
@@ -378,7 +481,7 @@ async function runLive(year: number): Promise<void> {
 
     // Whatever came back has to survive the window and the dedupe unchanged, or the
     // table would shrink the first time the page repainted from its own cache.
-    const today = new Date().toISOString().slice(0, 10)
+    const today = todayIso()
     assert(
       normalizeUpcomingRows(upcoming.payload.rows, today).length === upcoming.payload.rows.length,
       'a live upcoming row must survive the cache normalisation it was written through',
@@ -400,12 +503,14 @@ async function runLive(year: number): Promise<void> {
   } finally {
     if (previousAppData === undefined) delete process.env.APPDATA
     else process.env.APPDATA = previousAppData
+    if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA
+    else process.env.LOCALAPPDATA = previousLocalAppData
     await rm(temporary, { recursive: true, force: true })
   }
 }
 
 const args = process.argv.slice(2)
-runOffline()
+await runOffline()
 if (!args.includes('--offline')) {
   const positional = args.find((argument) => !argument.startsWith('--'))
   await runLive(Number(positional) || new Date().getFullYear())

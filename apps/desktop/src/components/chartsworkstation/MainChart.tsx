@@ -25,6 +25,7 @@ const COLORS = {
   down: '#f0554e',
   accent: '#4f8cff',
   area: 'rgba(79, 140, 255, 0.16)',
+  ma50: '#60c5e8',
   ma200: '#e0a34a',
   rsi: '#9d7ce0',
   rsiMa: '#7d8ea6',
@@ -80,6 +81,7 @@ export function MainChart({
     line: ISeriesApi<'Line'>
     area: ISeriesApi<'Area'>
     volume: ISeriesApi<'Histogram'>
+    ma50: ISeriesApi<'Line'>
     ma200: ISeriesApi<'Line'>
     rsi: ISeriesApi<'Line'>
     rsiMa: ISeriesApi<'Line'>
@@ -131,6 +133,7 @@ export function MainChart({
       lineWidth: 2,
       priceLineVisible: false,
     }, 0)
+    const ma50 = chart.addSeries(LineSeries, { color: COLORS.ma50, lineWidth: 2, priceLineVisible: false, lastValueVisible: false, title: '50-day SMA' }, 0)
     const ma200 = chart.addSeries(LineSeries, { color: COLORS.ma200, lineWidth: 2, priceLineVisible: false, lastValueVisible: false }, 0)
     const volume = chart.addSeries(HistogramSeries, { priceFormat: { type: 'volume' }, priceLineVisible: false }, 1)
     const rsi = chart.addSeries(LineSeries, { color: COLORS.rsi, lineWidth: 2, priceLineVisible: false }, 2)
@@ -148,7 +151,7 @@ export function MainChart({
     })
     chart.timeScale().subscribeVisibleTimeRangeChange(() => setRevision((value) => value + 1))
     chartRef.current = chart
-    seriesRef.current = { candles, line, area, volume, ma200, rsi, rsiMa }
+    seriesRef.current = { candles, line, area, volume, ma50, ma200, rsi, rsiMa }
     const observer = new ResizeObserver(() => setRevision((value) => value + 1))
     observer.observe(container)
     return () => {
@@ -169,6 +172,7 @@ export function MainChart({
     series.line.setData(closeData)
     series.area.setData(closeData)
     series.volume.setData(shownCandles.map((row) => ({ time: row.time as UTCTimestamp, value: row.volume, color: row.close >= row.open ? `${COLORS.up}80` : `${COLORS.down}80` })))
+    series.ma50.setData((payload?.indicators.ma50 ?? []).filter((point) => point.time <= lastShownTime).map(pointData))
     series.ma200.setData((payload?.indicators.ma200 ?? []).filter((point) => point.time <= lastShownTime).map(pointData))
     series.rsi.setData((payload?.indicators.rsi ?? []).filter((point) => point.time <= lastShownTime).map(pointData))
     series.rsiMa.setData((payload?.indicators.rsiMa ?? []).filter((point) => point.time <= lastShownTime).map(pointData))
@@ -184,6 +188,7 @@ export function MainChart({
     series.line.applyOptions({ visible: chartType === 'line' })
     series.area.applyOptions({ visible: chartType === 'area' })
     series.volume.applyOptions({ visible: indicators.volume })
+    series.ma50.applyOptions({ visible: indicators.ma50 })
     series.ma200.applyOptions({ visible: indicators.ma200 })
     series.rsi.applyOptions({ visible: indicators.rsi })
     series.rsiMa.applyOptions({ visible: indicators.rsi })

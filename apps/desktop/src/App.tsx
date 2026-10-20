@@ -73,7 +73,6 @@ import { useOptionsPage } from '@/stores/options'
 import { useStocksPage } from '@/stores/stocks'
 import { useValuationPage } from '@/stores/valuation'
 import { useNavigation } from '@/stores/navigation'
-import { isBrowser } from '@/api/browser'
 
 const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
 
@@ -342,7 +341,7 @@ export function App() {
   }), [statusFor, handleStocksNavigate, activeTab, hideCurrent, favorites, savingFavorite, settings, toggleFavorite])
 
   return (
-    <div className={`terminal-shell flex h-full flex-col bg-bg ${isBrowser ? 'browser-shell' : ''} ${isMac ? 'platform-mac' : ''}`}>
+    <div className={`terminal-shell flex h-full flex-col bg-bg ${isMac ? 'platform-mac' : ''}`}>
       <TabBar
         onOpenPicker={() => setPickerOpen(true)}
         onReload={() => void reload()}
@@ -351,6 +350,7 @@ export function App() {
         time12h={settings?.time12h ?? true}
         obscured={obscured}
         onToggleObscure={toggleObscure}
+        agentChatAvailable={!screenshotPage && !pickerOpen && !(obscured && (settings?.obscuredTabs ?? []).includes('agents'))}
       />
 
       {!screenshotPage && agents.data?.data.notifications?.some(notification => !notification.read) && (
@@ -367,7 +367,7 @@ export function App() {
           saving={savingSidebar || !settings}
         />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {(activeTab !== 'agents' || isBrowser) && <WorkspaceHeader tabs={visibleTabs} activeTab={activeTab} onSelectTab={setActiveTab}
+          {activeTab !== 'agents' && <WorkspaceHeader tabs={visibleTabs} activeTab={activeTab} onSelectTab={setActiveTab}
             isMac={isMac}
             favorite={favorites.includes(activeTab)} onToggleFavorite={() => void toggleFavorite()}
             saving={savingFavorite || !settings} />}

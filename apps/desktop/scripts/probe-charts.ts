@@ -47,6 +47,9 @@ async function runOffline(): Promise<void> {
   assert.deepEqual(JSON.parse(JSON.stringify(normalized.drawingsByContext)), normalized.drawingsByContext)
   assert.equal(DEFAULT_CHARTS_STATE.symbol, 'SPY')
   assert.equal(DEFAULT_CHARTS_STATE.playbackSpeed, '5x')
+  assert.equal(DEFAULT_CHARTS_STATE.indicators.ma50, true)
+  assert.equal(normalizeChartsState({ indicators: { ma200: false } }).indicators.ma50, true, 'Old saved settings enable the new SMA')
+  assert.equal(normalizeChartsState({ indicators: { ma50: false } }).indicators.ma50, false, 'SMA visibility is persisted')
   assert.equal(rangeForInterval('1 Month', '1D'), '5Y')
   assert.equal(rangeForInterval('4 Hours', '6M'), '6M')
 
@@ -65,6 +68,10 @@ async function runOffline(): Promise<void> {
   const rsiAverage = sma(rsiValues, 14)
   assert.equal(toPoints(candles, rsiValues)[0].time, candles[14].time)
   assert.ok(toPoints(candles, rsiAverage).length > 200)
+  assert.deepEqual(toPoints(candles.slice(0, 49), sma(candles.slice(0, 49).map((row) => row.close), 50)), [])
+  const dailyMa50 = toPoints(candles, sma(candles.map((row) => row.close), 50))
+  assert.equal(dailyMa50[0].time, candles[49].time)
+  assert.ok(Math.abs(dailyMa50[0].value - candles.slice(0, 50).reduce((sum, row) => sum + row.close, 0) / 50) < 1e-10)
   const dailyMa = toPoints(candles, sma(candles.map((row) => row.close), 200))
   const intradayTimes = [candles[220].time + 3_600, candles[221].time + 3_600]
   assert.deepEqual(alignBackward(intradayTimes, dailyMa).map((point) => point.value), [dailyMa[21].value, dailyMa[22].value])
@@ -252,6 +259,19 @@ async function runOffline(): Promise<void> {
     assert(!injectedFresh.meta.source.includes('DefeatBeta'))
     assert.equal(injectedFresh.data.candles.length, 240)
     assert.ok(injectedFresh.data.candles.every((row, index, rows) => index === 0 || row.time > rows[index - 1].time))
+    assert.equal(injectedFresh.data.indicators.ma50.length, 191)
+    assert.equal(injectedFresh.data.indicators.ma50[0].value, 125.5)
+    assert.equal(injectedFresh.data.indicators.ma50.at(-1)?.value, 315.5)
+    const maxCalls: Date[] = []
+    chartClient.chart = async (_symbol, options: { period1?: Date } = {}) => {
+      assert(options.period1)
+      maxCalls.push(options.period1)
+      return { quotes: [{ ...fixtureQuotes[0], date: new Date(Date.UTC(1962, 0, 2)) }, ...fixtureQuotes], meta: { currency: 'USD', longName: 'Long History Fixture' } }
+    }
+    const fullHistory = await yahooProvider.chartsHistory({ symbol: 'FULL-HISTORY', interval: '1 Day', range: 'Max', force: true })
+    assert.equal(fullHistory.data.candles.length, 241, 'Max is not a 200-bar sample')
+    assert.equal(new Date(fullHistory.data.candles[0].time * 1000).getUTCFullYear(), 1962, 'Max includes pre-1970 provider data')
+    assert.equal(maxCalls[0].getUTCFullYear(), 1800, 'Max requests all provider coverage, not just the Unix epoch onward')
     const injectedCached = await yahooProvider.chartsHistory({ symbol: 'FIXTURE', interval: '1 Day', range: '1Y' })
     assert.equal(injectedCached.meta.freshness, 'cached')
     chartClient.chart = async () => { throw new Error('injected provider outage') }
@@ -260,6 +280,7 @@ async function runOffline(): Promise<void> {
     assert.equal(injectedStale.data.candles.length, 240)
     const injectedFailed = await yahooProvider.chartsHistory({ symbol: 'NEVER-CACHED', interval: '1 Day', range: '1Y', force: true })
     assert.equal(injectedFailed.meta.freshness, 'failed')
+    assert.deepEqual(injectedFailed.data.indicators.ma50, [])
     assert.equal(publicationCalls, 0, 'Yahoo outages must not switch providers')
     chartClient.chart = async (symbol) => {
       if (symbol === 'FAIL') throw new Error('injected symbol failure')
@@ -269,6 +290,23 @@ async function runOffline(): Promise<void> {
     assert.equal(injectedPartial.meta.freshness, 'partial')
     assert.deepEqual(injectedPartial.data.missing, ['FAIL'])
     assert.ok(injectedPartial.data.series.OK.length > 0)
+
+    // Short and non-daily charts must use warmed-up daily closes, not 50 displayed bars.
+    const dailyQuotes = [...fixtureQuotes].reverse()
+    const lastDaily = dailyQuotes.at(-1)!
+    const dailyTime = Math.floor(lastDaily.date.getTime() / 1000)
+    chartClient.chart = async (_symbol, options: { interval?: string } = {}) => ({
+      quotes: options.interval === '1d' ? fixtureQuotes : [
+        { ...lastDaily, date: new Date((dailyTime - 86_400 + 3_600) * 1000), close: 9_000 },
+        { ...lastDaily, date: new Date((dailyTime + 3_600) * 1000), close: 10_000 },
+      ],
+      meta: { currency: 'USD', longName: 'Daily SMA Fixture' },
+    })
+    const intraday = await yahooProvider.chartsHistory({ symbol: 'DAILY-SMA', interval: '1 Hour', range: '1D', force: true })
+    assert.deepEqual(intraday.data.indicators.ma50.map((point) => point.value), [314.5, 315.5])
+    assert.deepEqual(intraday.data.indicators.ma50.map((point) => point.time), intraday.data.candles.map((row) => row.time))
+    const weekly = await yahooProvider.chartsHistory({ symbol: 'WEEKLY-SMA', interval: '1 Week', range: '1Y', force: true })
+    assert.deepEqual(weekly.data.indicators.ma50.map((point) => point.value), [314.5, 315.5])
 
     const sessionStart = Date.UTC(2026, 8, 25, 13, 30)
     chartClient.chart = async () => ({
@@ -309,13 +347,19 @@ async function runLive(ticker: string): Promise<void> {
     yahooProvider.chartsRelationship({ symbols: [ticker, peer], range: '3M', rollingWindow: 30, force: true }),
   ])
   assert.ok(history.data.candles.length > 20, history.meta.failureReason ?? 'Charts history was empty.')
+  assert.ok(history.data.indicators.ma50.length > 0, 'Live 50-day SMA was empty.')
+  assert.ok(history.data.indicators.ma50.every((point) => Number.isFinite(point.value)), 'Live SMA values must be finite.')
   assert.ok(Object.keys(compare.data.series).length >= 2, compare.meta.failureReason ?? 'Fewer than two comparison series loaded.')
   assert.ok(relationship.data.points.length > 20, relationship.meta.failureReason ?? 'Relationship history was empty.')
+  const fullHistory = await yahooProvider.chartsHistory({ symbol: ticker, interval: '1 Day', range: 'Max', force: true })
+  assert.notEqual(fullHistory.meta.freshness, 'failed', fullHistory.meta.failureReason ?? 'Max history failed')
+  assert.ok(fullHistory.data.candles.length >= history.data.candles.length, 'Max must retain at least the one-year view')
   const cachedHistory = await yahooProvider.chartsHistory({ symbol: ticker, interval: '1 Day', range: '1Y' })
   assert.equal(cachedHistory.meta.freshness, 'cached')
   console.log(JSON.stringify({
     ticker,
-    history: { freshness: history.meta.freshness, candles: history.data.candles.length, interval: history.data.interval },
+    fullHistory: { freshness: fullHistory.meta.freshness, candles: fullHistory.data.candles.length, first: new Date(fullHistory.data.candles[0].time * 1000).toISOString(), last: new Date(fullHistory.data.candles.at(-1)!.time * 1000).toISOString() },
+    history: { freshness: history.meta.freshness, candles: history.data.candles.length, interval: history.data.interval, ma50Points: history.data.indicators.ma50.length, latestMa50: history.data.indicators.ma50.at(-1)?.value },
     compare: { freshness: compare.meta.freshness, healthy: Object.keys(compare.data.series), missing: compare.data.missing },
     relationship: { freshness: relationship.meta.freshness, pair: relationship.data.symbols, observations: relationship.data.stats.observations, beta: relationship.data.stats.beta },
   }, null, 2))

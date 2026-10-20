@@ -78,11 +78,13 @@ for (const result of [{ error: { code: 'ENOENT' }, status: null }, { status: 1 }
 }
 for (const failedCall of [2, 3, 4, 5]) {
   let calls = 0
-  assert.equal(launch({ log, locateCodex: () => null, nodeVersion: '22.23.2', spawn() {
+  const messages = []
+  assert.equal(launch({ log: { log() {}, error: message => messages.push(message) }, locateCodex: () => null, nodeVersion: '22.23.2', spawn() {
     calls++
     return { status: calls === failedCall ? 7 : 0, stdout: '10.9.8' }
   } }), failedCall === 5 ? 7 : 1)
   assert.equal(calls, failedCall, 'Stop after failed install, readiness check, build, or application')
+  if (failedCall === 4) assert(messages.some(message => /bundle remains locked.*disconnect.*MCP/.test(message)), 'Build failures must explain how to recover from a persistent MCP lock')
 }
 
 for (const [platform, environment, expected] of [

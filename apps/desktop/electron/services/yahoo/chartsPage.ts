@@ -57,7 +57,8 @@ export interface ChartsBatchResult<T> extends ChartsServiceResult<T> {
 function startOfRange(range: ChartsRange | ChartsCompareRequest['range'] | ChartsRelationshipRequest['range']): Date {
   const now = new Date()
   if (range === 'YTD') return new Date(Date.UTC(now.getUTCFullYear(), 0, 1))
-  if (range === 'Max') return new Date(Date.UTC(1970, 0, 1))
+  // Max must include provider history before the Unix epoch too.
+  if (range === 'Max') return new Date(Date.UTC(1800, 0, 1))
   const matches = /^(\d+)([DMY])$/.exec(range)
   if (!matches) return new Date(now.getTime() - 365 * DAY)
   const amount = Number(matches[1])
@@ -150,10 +151,15 @@ function fetchCandlesFromSeries(
   return { candles, currency: result.currency, longName: result.longName }
 }
 
-async function dailyMa200(symbol: string, force: boolean): Promise<IndicatorPoint[]> {
-  const start = new Date(Date.now() - 730 * DAY)
+async function dailyMovingAverages(symbol: string, firstTime: number, force: boolean) {
+  // Warm up both daily SMAs before the displayed range, even on short or intraday charts.
+  const start = new Date(Math.max(0, Math.min(Date.now() - 730 * DAY, firstTime * 1000 - 400 * DAY)))
   const raw = await cachedCandles(symbol, start, '1d', force)
-  return toPoints(raw.payload.candles, sma(raw.payload.candles.map((row) => row.close), 200))
+  const closes = raw.payload.candles.map((row) => row.close)
+  return {
+    ma50: toPoints(raw.payload.candles, sma(closes, 50)),
+    ma200: toPoints(raw.payload.candles, sma(closes, 200)),
+  }
 }
 
 function stats(symbol: string, candles: Candle[], currency: string, longName: string): ChartStats {
@@ -185,13 +191,18 @@ export async function getChartsHistory(request: ChartsHistoryRequest): Promise<C
   if (!candles.length) throw new Error(`No chart data returned for ${symbol}.`)
   const closes = candles.map((row) => row.close)
   const rsiValues = rsi(closes, 14)
+  let ma50: IndicatorPoint[] = []
   let ma200: IndicatorPoint[] = []
   try {
-    const daily = await dailyMa200(symbol, Boolean(request.force))
-    ma200 = fetchInterval === '1d'
-      ? daily.filter((point) => point.time >= candles[0].time)
-      : alignBackward(candles.map((row) => row.time), daily, ['1m', '5m', '15m', '1h'].includes(fetchInterval) ? 'exact' : 'day')
+    const daily = await dailyMovingAverages(symbol, candles[0].time, Boolean(request.force))
+    const align = (points: IndicatorPoint[]) => alignBackward(
+      candles.map((row) => row.time), points,
+      ['1m', '5m', '15m', '1h'].includes(fetchInterval) ? 'exact' : 'day',
+    )
+    ma50 = align(daily.ma50)
+    ma200 = align(daily.ma200)
   } catch {
+    ma50 = []
     ma200 = []
   }
   return {
@@ -203,6 +214,7 @@ export async function getChartsHistory(request: ChartsHistoryRequest): Promise<C
       candles,
       stats: stats(symbol, candles, raw.payload.currency, raw.payload.longName),
       indicators: {
+        ma50,
         ma200,
         rsi: toPoints(candles, rsiValues),
         rsiMa: toPoints(candles, sma(rsiValues, 14)),

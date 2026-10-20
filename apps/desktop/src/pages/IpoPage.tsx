@@ -21,19 +21,9 @@ import { Panel } from '@/components/ui/Panel'
 import { useIpoPage } from '@/stores/ipo'
 
 /**
- * The IPO page, ported from `IpoPageMixin.init_page21`.
- *
- * The reference's layout exactly: a toolbar carrying the title, the estimate disclaimer,
- * one status line and one Refresh button, over a splitter with Completed IPOs on the left
- * at stretch 2 and Upcoming IPOs on the right at stretch 3. No charts, no filters, no
- * sub-tabs and no timer — `init_page21` restores both caches and fires nothing, so the
- * only loads are Refresh and F5.
- *
- * Two documented departures from `mixins/ipo_page.py`. There is no render deferral: the
- * reference stashes a payload arriving while the page is hidden and replays it in
- * `_p21_on_show`, because its table paints fifty rows at a time through `run_batched`;
- * React unmounts the page and React Query holds the payload, so there is nothing to defer.
- * And the yfinance fallback behind both feeds is not ported — see `services/ipo.ts`.
+ * Independent completed/upcoming feeds, preloaded with all implemented pages at startup.
+ * Pending filings remain visible when no listing dates are scheduled and are labelled
+ * TBD rather than presenting their filing dates as estimated IPO dates.
  */
 
 const TONE_CLASS: Record<IpoStatusTone, string> = {
@@ -121,6 +111,7 @@ export function IpoPage({
     return upcomingIpoStatus(
       {
         rowCount: upcoming.rows.length,
+        pendingCount: upcoming.rows.filter(row => !row.date && row.filingDate).length,
         source: upcoming.source,
         fetchedAt: upcoming.fetchedAt,
         fromCache: upcoming.fromCache,
@@ -164,18 +155,17 @@ export function IpoPage({
   const busy = upcomingBusy || completedBusy
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-2">
       <div className="flex shrink-0 items-center gap-3 border border-border bg-surface px-3 py-2">
         <div className="min-w-0">
           <h1 className="text-sm font-semibold text-text">IPO</h1>
           <p className="truncate text-2xs text-text-dim">
-            Completed IPOs and upcoming US IPOs through year-end. Dates are estimates and may
-            change.
+            Completed and upcoming US IPOs. Scheduled dates are estimates; pending filings have no IPO date yet.
           </p>
         </div>
         <span
           title={upcoming?.warning || status.text}
-          className={`ml-auto truncate text-right text-2xs ${TONE_CLASS[status.tone]}`}
+          className={`ml-auto min-w-0 flex-1 truncate text-right text-2xs ${TONE_CLASS[status.tone]}`}
         >
           {status.text}
         </span>
@@ -183,7 +173,7 @@ export function IpoPage({
           variant="accent"
           onClick={() => void onRefresh()}
           disabled={busy}
-          title="Re-scrape both StockAnalysis pages."
+          title="Refresh IPO calendars and pending filings, with backup sources."
         >
           {busy ? 'Refreshing...' : 'Refresh'}
         </Button>
@@ -257,8 +247,14 @@ export function IpoPage({
             </>
           }
         >
+          <div className="shrink-0 border-b border-border px-2 py-1 text-2xs text-text-dim">
+            TBD = filed, not scheduled. A filing is not a confirmed IPO or a guarantee it will list.
+          </div>
           <div className="min-h-0 flex-1 overflow-auto">
             <UpcomingIpoTable rows={upcoming?.rows ?? []} />
+          </div>
+          <div className={`shrink-0 border-t border-border px-2 py-1 text-2xs ${TONE_CLASS[status.tone]}`}>
+            {status.text}
           </div>
         </Panel>
       </div>

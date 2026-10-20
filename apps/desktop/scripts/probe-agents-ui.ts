@@ -24,7 +24,15 @@ const formattedReply = [
   '![Remote image](https://example.com/tracker.png)', '<img src=x onerror="window.unsafeMarkup=true">', '',
   '```pie', JSON.stringify({ title: 'Portfolio allocation', unit: 'USD', slices: [{ label: 'Stocks', value: 750 }, { label: 'Cash', value: 250 }, { label: 'Empty', value: 0 }], caption: 'Fixture values · as of 2026-10-17 · no live data' }), '```', '',
   '```pie', '{"title":"Incomplete",', '```', '',
-  '```pie', JSON.stringify({ title: 'Cash only', slices: [{ label: '<img src=x onerror=alert(1)>', value: 1 }] }), '```',
+  '```pie', JSON.stringify({ title: 'Cash only', slices: [{ label: '<img src=x onerror=alert(1)>', value: 1 }] }), '```', '',
+  '```candlestick', JSON.stringify({ title: 'AAPL · daily OHLC', unit: 'USD', candles: [
+    { time: '2026-10-14', open: 210, high: 215, low: 208, close: 214 },
+    { time: '2026-10-15', open: 214, high: 216, low: 209, close: 211 },
+    { time: '2026-10-16', open: 211, high: 213, low: 210, close: 211 },
+  ], caption: 'Synthetic OHLC fixture · daily · as of 2026-10-17 · no live data' }), '```', '',
+  '```candlestick', '{"title":"Streaming",', '```', '',
+  '```candlestick', JSON.stringify({ title: '<img src=x onerror=alert(1)>', candles: [{ time: '2026-10-16', open: 0, high: 0, low: 0, close: 0 }], caption: '<script>alert(1)</script>' }), '```', '',
+  '```candlestick', JSON.stringify({ title: 'Intraday scroll fixture', candles: Array.from({ length: 200 }, (_, index) => ({ time: new Date(Date.UTC(2026, 9, 16, 9, 30 + index)).toISOString(), open: -5, high: -4.9999, low: -5.0001, close: -5.00005 })) }), '```',
 ].join('\n')
 try {
   const bundle = await build({
@@ -39,7 +47,9 @@ try {
       const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } })
       const root = createRoot(document.getElementById('root'))
       let reads = 0, commands = [], fail = false, portfolioSaves = 0, favorite = false, embedded = false
-      const openedLinks = []
+      const openedLinks = [], imageReads = []
+      const generatedId = '11111111-1111-4111-8111-111111111111'
+      const missingId = '22222222-2222-4222-8222-222222222222'
       window.api.openExternal = async url => { openedLinks.push(url) }
       const formattedReply = ${JSON.stringify(formattedReply)}
       const canvas = document.createElement('canvas'); canvas.width = 900; canvas.height = 300
@@ -48,6 +58,12 @@ try {
       drawing.fillText('Ticker      Shares      Average cost (USD)', 30, 120)
       drawing.fillText('AAPL        25          123.45', 30, 180)
       window.portfolioImage = canvas.toDataURL('image/png')
+      window.api.agentsImage = async id => {
+        imageReads.push(id)
+        return id === generatedId
+          ? { data: { name: 'Generated illustration.png', dataUrl: window.portfolioImage }, meta: { freshness: 'fresh', source: 'fixture', fetchedAt: Date.now() }, errors: [] }
+          : { data: null, meta: { freshness: 'failed', source: 'fixture', fetchedAt: Date.now() }, errors: [{ reason: 'Fixture image missing' }] }
+      }
       const models = [
         { id: 'fixture-fast', name: 'Codex fast', defaultThinking: 'low', thinkingModes: [{ id: 'low', description: 'Quick' }, { id: 'high', description: 'Deeper' }] },
         { id: 'fixture-research', name: 'Codex research', defaultThinking: 'medium', thinkingModes: [{ id: 'medium', description: 'Balanced' }] },
@@ -72,7 +88,7 @@ try {
         if (command.type === 'send') {
           state.messages.push({ id: 'user-' + commands.length, role: 'user', text: command.text, images: command.images?.map(image => image.name), at: Date.now() },
             { id: 'activity-' + commands.length, role: 'activity', text: 'Opening Charts · AAPL', at: Date.now() },
-            { id: 'answer-' + commands.length, role: 'assistant', text: formattedReply, at: Date.now() })
+            { id: 'answer-' + commands.length, role: 'assistant', text: formattedReply, at: Date.now(), imageArtifacts: [{ id: generatedId, name: 'Generated illustration.png', kind: 'generated' }, { id: missingId, name: '<img src=x onerror=alert(1)>', kind: 'generated' }], imageStatus: 'ready' })
           if (command.images?.length) state.portfolioProposal = { id: 'review-' + commands.length, portfolioId: 'portfolio_1', portfolioName: 'Screenshot account', summary: 'Update the visible AAPL holding from the screenshot.', changes: [{ field: 'AAPL · Shares', before: '12', after: '25' }, { field: 'AAPL · Average cost', before: '5', after: '123.45' }] }
         }
         if (command.type === 'portfolioDecision') { if (command.approve) portfolioSaves++; state.portfolioProposal = null }
@@ -151,7 +167,38 @@ try {
         check(pie.querySelector('.agents-pie-caption').textContent.includes('no live data'), 'Chart provenance stays visible')
         check(reply.querySelectorAll('.agents-pie svg circle').length === 1 && reply.textContent.includes('<img src=x onerror=alert(1)>'), 'Single category renders a full circle and labels remain literal')
         check(reply.querySelector('.agents-pie-error').textContent.includes('incomplete or invalid'), 'Malformed streaming chart falls back without breaking the response')
+        const candlesticks = reply.querySelectorAll('.agents-candlestick')
+        const daily = candlesticks[0]
+        check(candlesticks.length === 3 && daily.querySelectorAll('.agents-candle').length === 3, 'Candlestick blocks render native SVG candles')
+        check(daily.querySelectorAll('.agents-candle.up').length === 2 && daily.querySelectorAll('.agents-candle.down').length === 1, 'Rising, falling and doji candles render')
+        check(daily.querySelector('figcaption').textContent === 'AAPL · daily OHLC · USD' && daily.querySelector('svg').getAttribute('role') === 'img', 'Candlesticks have an accessible title and unit')
+        const exact = daily.querySelector('details')
+        exact.open = true
+        check(exact.querySelectorAll('tbody tr').length === 3 && exact.querySelector('tbody tr').textContent === '2026-10-14210215208214', 'Exact OHLC values are inspectable')
+        check(daily.querySelector('.agents-candlestick-caption').textContent.includes('no live data'), 'Candlestick source and freshness remain visible')
+        check(candlesticks[1].textContent.includes('<script>alert(1)</script>') && !candlesticks[1].querySelector('script,img'), 'Candlestick titles and captions stay literal')
+        check(candlesticks[2].querySelectorAll('.agents-candle').length === 200 && candlesticks[2].textContent.includes('Times in UTC'), 'Maximum-length intraday data renders with UTC labels')
+        const wick = candlesticks[2].querySelector('.agents-candle line')
+        check(Math.abs(Number(wick.getAttribute('y2')) - Number(wick.getAttribute('y1'))) > 190, 'Tight intraday price ranges use the available chart height')
+        const scroller = candlesticks[2].querySelector('.agents-candlestick-plot')
+        check(scroller.scrollWidth > scroller.clientWidth && scroller.tabIndex === 0, 'Long charts scroll within a keyboard-focusable region')
+        check(![...reply.querySelectorAll('.agents-candlestick svg [x], .agents-candlestick svg [y], .agents-candlestick svg [height]')].some(node => [...node.attributes].some(attribute => /NaN|Infinity/.test(attribute.value))), 'Flat and negative-price geometry stays finite')
+        check(reply.querySelector('.agents-candlestick-error').textContent.includes('incomplete or invalid'), 'Incomplete streaming candlesticks have a visible safe fallback')
         check(document.getElementById('agent-message').value === '', 'Successful send clears composer')
+        const card = document.querySelector('.agents-chat-image')
+        card.scrollIntoView({ block: 'center' }); await settle()
+        check(card.querySelector('img')?.src === window.portfolioImage && card.textContent.includes('AI-generated image'), 'Trusted generated images display inline outside Markdown')
+        check(!shouldPersistRemoteQuery(client.getQueryCache().find({ queryKey: ['agentImages', generatedId] })), 'Private image bytes must not persist in renderer query cache')
+        const missing = document.querySelectorAll('.agents-chat-image')[1]
+        missing.scrollIntoView({ block: 'center' }); await settle()
+        check(missing.textContent.includes('Image unavailable') && !missing.querySelector('img,script,[onerror]'), 'Missing saved images have a visible fallback and literal names')
+        card.querySelector('button').click(); await settle()
+        check(document.querySelector('.agents-image-previews img').src === window.portfolioImage && document.getElementById('agent-message').value === 'Edit this image: ', 'Use for edit reattaches actual image pixels without inference')
+        check(commands.length === 3, 'Using an image for edit must not send or run a tool')
+        card.querySelectorAll('button')[1].click(); await settle()
+        check(card.classList.contains('expanded'), 'Image can expand inline')
+        card.querySelectorAll('button')[1].click(); await settle()
+        await click('×'); await fill('agent-message', '')
         await fill('agent-objective', 'Review portfolio news for meaningful changes')
         await click('Enable autonomous mode')
         check(document.querySelector('[role=switch]').getAttribute('aria-checked') === 'true', 'Explicit autonomy enable')
@@ -237,7 +284,7 @@ try {
         window.setWorkspace = async label => { await click(label) }
         window.setEmbedded = async value => { embedded = value; render(); await settle() }
         window.setControls = async open => { if (document.getElementById('agent-controls').hidden === open) await click('Controls') }
-        return 'PASS: private history reopening, notification inbox/read/dismiss/OS fallback, tracker review/start/pause/delete, automatic startup readiness, connected New chat, preserved model settings, cleared drafts, native pie charts, exact values, percentages, accessible tables, safe malformed chart fallback, formatted Markdown, nested lists, tables, code, safe links, literal user text, chat controls, image paste/picker/send, portfolio review, model settings, autonomy, startup readiness and private cache exclusion'
+        return 'PASS: private history reopening, notification inbox/read/dismiss/OS fallback, tracker review/start/pause/delete, automatic startup readiness, connected New chat, preserved model settings, cleared drafts, private inline image display, image edit attachment, missing-image fallback, inline candlestick charts, OHLC inspection, doji/flat/negative/intraday charts, native pie charts, exact values, percentages, accessible tables, safe malformed chart fallback, formatted Markdown, nested lists, tables, code, safe links, literal user text, chat controls, image paste/picker/send, portfolio review, model settings, autonomy, startup readiness and private cache exclusion'
       }
     ` }, bundle: true, jsx: 'automatic', write: false, format: 'iife', loader: { '.css': 'empty' },
     define: { 'process.env.NODE_ENV': '"production"' }, alias: { '@': join(root, 'src'), '@shared': join(root, 'electron/shared') },
@@ -276,8 +323,8 @@ try {
         await window.webContents.executeJavaScript('window.setControls(false); window.setEmbedded(true)')
         window.setSize(420, 900)
         await new Promise(resolve => setTimeout(resolve, 200))
-        const embedded = await window.webContents.executeJavaScript('({ width: document.documentElement.scrollWidth, viewport: innerWidth, charts: document.querySelectorAll(".agents-embedded .agents-pie").length })')
-        if (embedded.width > embedded.viewport || embedded.charts !== 2) throw Error('Embedded pie layout failed: ' + JSON.stringify(embedded))
+        const embedded = await window.webContents.executeJavaScript('({ width: document.documentElement.scrollWidth, viewport: innerWidth, charts: document.querySelectorAll(".agents-embedded .agents-pie").length, candles: document.querySelectorAll(".agents-embedded .agents-candlestick").length })')
+        if (embedded.width > embedded.viewport || embedded.charts !== 2 || embedded.candles !== 3) throw Error('Embedded chart layout failed: ' + JSON.stringify(embedded))
         await window.webContents.executeJavaScript('window.setEmbedded(false)')
         window.setSize(1300, 900)
         await new Promise(resolve => setTimeout(resolve, 200))
@@ -287,6 +334,12 @@ try {
         await window.webContents.executeJavaScript('document.querySelector(".agents-pie").scrollIntoView({ block: "start" })')
         await new Promise(resolve => setTimeout(resolve, 150))
         writeFileSync(${JSON.stringify(resolve(root, '../../output/playwright/agents-pie.png'))}, (await window.webContents.capturePage()).toPNG())
+        await window.webContents.executeJavaScript('document.querySelector(".agents-candlestick").scrollIntoView({ block: "start" })')
+        await new Promise(resolve => setTimeout(resolve, 150))
+        writeFileSync(${JSON.stringify(resolve(root, '../../output/playwright/agents-candlestick.png'))}, (await window.webContents.capturePage()).toPNG())
+        await window.webContents.executeJavaScript('document.querySelector(".agents-chat-image").scrollIntoView({ block: "center" })')
+        await new Promise(resolve => setTimeout(resolve, 150))
+        writeFileSync(${JSON.stringify(resolve(root, '../../output/playwright/agents-images.png'))}, (await window.webContents.capturePage()).toPNG())
         await window.webContents.executeJavaScript('window.setWorkspace("Trackers")')
         writeFileSync(${JSON.stringify(resolve(root, '../../output/playwright/agents-workspace.png'))}, (await window.webContents.capturePage()).toPNG())
         app.exit(0)

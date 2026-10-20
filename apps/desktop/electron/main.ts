@@ -22,7 +22,6 @@ let closeDefeatBetaDecoder: (() => void) | null = null
 let backupPending: (() => boolean) | null = null
 let flushBackup: (() => Promise<void>) | null = null
 let stopMcp: (() => Promise<void>) | null = null
-let stopWeb: (() => Promise<void>) | null = null
 let flushAgents: (() => Promise<void>) | null = null
 const rendererUrl = isDev && process.env.ELECTRON_RENDERER_URL
   ? process.env.ELECTRON_RENDERER_URL
@@ -118,9 +117,6 @@ if (ownsInstance) app.whenReady().then(async () => {
     closeYahooWorker = (await import('./services/yahoo/client.js')).closeYahooWorker
     closeDefeatBetaDecoder = (await import('./services/defeatbeta/decoder.js')).closeDefeatBetaDecoder
     closeCache = () => cache.close()
-    const web = await import('./web/host.js')
-    await web.initializeWebAccess(join(dirname, '../renderer'), join(process.env.APPDATA!, 'BudgetTerminalElectron'))
-    stopWeb = web.stopWebAccess
     disposeIpc = registerIpcHandlers((event) => {
       const frame = event.senderFrame
       return Boolean(frame && frame === event.sender.mainFrame &&
@@ -152,12 +148,12 @@ app.on('window-all-closed', () => {
 let finishingQuit = false
 let drainedQuit = false
 app.on('before-quit', (event) => {
-  if (drainedQuit || (!stopMcp && !stopWeb && !flushAgents && !backupPending?.())) return
+  if (drainedQuit || (!stopMcp && !flushAgents && !backupPending?.())) return
   event.preventDefault()
   if (finishingQuit) return
   finishingQuit = true
   void (async () => {
-    await Promise.all([stopMcp?.(), stopWeb?.(), flushAgents?.()])
+    await Promise.all([stopMcp?.(), flushAgents?.()])
     await flushBackup?.()
   })().catch((error) => console.warn('Shutdown flush failed:', error)).finally(() => {
     drainedQuit = true

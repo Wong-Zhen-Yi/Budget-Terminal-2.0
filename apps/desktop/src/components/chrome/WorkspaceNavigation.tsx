@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react'
 
 import { SETTINGS_TAB_ID } from '@shared/contract'
 import { WORKSPACES, workspaceFor } from '@shared/navigation'
-import { isBrowser } from '@/api/browser'
 import { NavigationIcon } from './NavigationIcon'
 
 interface NavigationTab {
@@ -110,15 +109,6 @@ export function WorkspaceHeader({ tabs, activeTab, onSelectTab, favorite, onTogg
   const pages = tabs.filter((tab) => workspace?.pages.includes(tab.id))
   return (
     <header className={`workspace-header shrink-0 border-b border-border bg-surface px-4 pt-3 pb-2 ${isMac ? 'px-5 pt-4 pb-3' : ''}`}>
-      {isBrowser ? <label className="browser-page-select mb-2 hidden items-center gap-2 text-2xs text-text-muted">
-        Page
-        <select aria-label="Choose a page" value={activeTab} onChange={(event) => onSelectTab(event.target.value)} className="min-w-0 flex-1 rounded border border-border-strong bg-bg px-2 py-2 text-text">
-          {WORKSPACES.map((group) => <optgroup key={group.id} label={group.label}>
-            {tabs.filter((tab) => tab.implemented && group.pages.includes(tab.id)).map((tab) => <option key={tab.id} value={tab.id}>{tab.label}</option>)}
-          </optgroup>)}
-          <option value={SETTINGS_TAB_ID}>Settings</option>
-        </select>
-      </label> : null}
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-baseline gap-3">
           <span className="text-2xs text-text-muted">{workspace?.label ?? 'Preferences'} /</span>

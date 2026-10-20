@@ -73,10 +73,11 @@ function launch({ platform = process.platform, nodeVersion = process.versions.no
     return 1
   }
 
-  log.log('Building the latest Budget Terminal source, including Dashboard 2.0 as the default opening page with a portfolio allocation pie, Agents in the center and a portfolio heatmap on the right instead of live news, analyst targets, sparklines and options, the matching Agents terminal theme, compact toolbar, formatted responses with native inline pie charts, portfolio news and daily briefing quick prompts, automatic Codex connection with connected New chat, private local chat history, notifications and Codex-written trackers, Budget Terminal MCP access, image paste, reviewed portfolio updates repaired HOOD report loading through the browser network stack, and expanded heatmap classification with offline sectors, cached provider lookups and visible coverage, plus the responsive calendar with CPI/PPI/PCE readings and larger, easier-to-read calendar and day-hover text, and Current P/E and Forward P/E columns before the colour-coded PEG ratios in the Portfolio stock table with green at 1.0, red above 1.0 and brighter green below 1.0...')
+  log.log('Building the latest desktop-only Budget Terminal source. Remote browser access and pairing have been removed; all implemented pages still load at startup. Local Agents, MCP tools and backups remain available. The top-bar Ask Agent box opens a full dropdown chat on any page, sharing the existing conversation and connection, with live Thinking, Researching and Done activity badges. Agents chat supports native image generation, image editing and inline private image cards, plus pie charts and full-history interactive price charts with in-chat ranges, candle intervals, crosshair OHLC, zoom and pan. Restored chat charts preload at startup. Charts includes a toggleable 50-day simple moving average. Quant now includes a redesigned research workspace with larger, more readable fonts across tables, controls and diagnostics, plus scan overview cards, an interactive factor inspector and a pairs lab with spread charts. IPOs now includes pending filings with dates marked TBD and backup calendar sources.')
+  log.log('Updating MCP bundles safely: unchanged files are left alone, changed files are replaced atomically, and temporary Windows file locks are retried. No MCP clients are forcibly stopped.')
   const build = npm(['run', 'build'])
   if (build.error || build.status !== 0) {
-    log.error('Budget Terminal could not build. See the error above.')
+    log.error('Budget Terminal could not build. See the error above. If an MCP bundle remains locked, close Budget Terminal and disconnect its MCP connection in Codex or other MCP clients, then run this launcher again.')
     return 1
   }
 

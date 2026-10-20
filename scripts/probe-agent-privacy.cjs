@@ -6,7 +6,7 @@ const path = require('node:path')
 const { check, checkPush, privateAgentData } = require('./check-private-agent-data.cjs')
 
 console.log(check())
-for (const name of ['agents.json', 'copies/AGENTS.JSON.123.tmp', 'exports/chat-history-private.json', 'any/BudgetTerminalElectron/other.json']) assert(privateAgentData(name), name)
+for (const name of ['agents.json', 'copies/AGENTS.JSON.123.tmp', 'exports/chat-history-private.json', 'any/BudgetTerminalElectron/other.json', 'copies/agent-images/private.json', 'copies/AGENT-IMAGES/photo.png']) assert(privateAgentData(name), name)
 for (const name of ['docs/agents.md', 'apps/desktop/electron/services/agents.ts', 'apps/desktop/electron/shared/agentWorkspace.ts']) assert(!privateAgentData(name), name)
 const root = path.resolve(__dirname, '..')
 const directory = mkdtempSync(path.join(tmpdir(), 'budget-agent-privacy-'))

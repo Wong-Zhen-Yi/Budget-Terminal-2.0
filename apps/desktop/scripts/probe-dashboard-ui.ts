@@ -287,9 +287,8 @@ await writeFile(join(directory, 'main.cjs'), `
       window.setSize(1680, 900)
       await new Promise(resolve => setTimeout(resolve, 150))
       console.log(await window.webContents.executeJavaScript('window.runDashboard2Probe()'))
-      for (const width of [1680, 1100, 700]) {
+      for (const width of [1680, 1440, 1280]) {
         window.setSize(width, 900)
-        await window.webContents.executeJavaScript('document.documentElement.classList.toggle("browser-mode", ' + (width <= 1200) + ')')
         await new Promise(resolve => setTimeout(resolve, 150))
         console.log(await window.webContents.executeJavaScript('window.checkDashboardLayout()'))
         writeFileSync(${JSON.stringify(directory)} + '/dashboard-2-' + width + '.png', (await window.webContents.capturePage()).toPNG())

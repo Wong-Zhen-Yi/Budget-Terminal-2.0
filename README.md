@@ -20,7 +20,6 @@
   <a href="#quick-start">Quick start</a> ·
   <a href="#screenshots">Screenshots</a> ·
   <a href="#explore-the-workspaces">Workspaces</a> ·
-  <a href="docs/web-access.md">Remote access</a> ·
   <a href="#documentation">Documentation</a> ·
   <a href="https://github.com/Wong-Zhen-Yi/Budget-Terminal-2.0/issues">Report an issue</a>
 </p>
@@ -41,7 +40,7 @@ research pages.
 | **📈 Study price action** | Work with charts, technical indicators, options chains, quantitative tools, and backtests. |
 | **💼 Track your money** | Manage portfolios, personal finance, Cards, and projections with local saved records and backups. |
 | **⚡ Open ready pages** | Every implemented page starts loading at launch, with startup progress and failures visible. |
-| **🔗 Extend your workspace** | Access the app from an approved browser or connect local research tools through MCP. |
+| **🔗 Extend your workspace** | Connect local research tools through MCP while keeping the workspace in the desktop app. |
 
 ## Screenshots
 
@@ -162,8 +161,8 @@ single-expiration chain. Hidden pages remain hidden.
 - **Visible data quality.** Supported panels show source, freshness, coverage, and
   partial-data issues. Public feeds can vary in availability; cached results keep
   their limitations visible. See [startup and data freshness](docs/user-guide.md#startup-and-data-freshness).
-- **Browser access.** Use Chrome or Safari on iPad through the desktop app's Remote
-  feature, with Tailscale Serve and browser approval. See the [Remote setup guide](docs/web-access.md).
+- **Desktop-only workspace.** Open Budget Terminal in Electron. Remote browser
+  access, pairing, and the built-in web server are no longer included.
 - **Local MCP tools.** Connect research and saved-record tools to supported local
   clients. Write tools edit local records, not broker orders. See the [MCP setup guide](docs/local-mcp.md).
 
@@ -175,7 +174,6 @@ single-expiration chain. Hidden pages remain hidden.
 | Guide | What's inside |
 | :--- | :--- |
 | [Data, startup & backups](docs/user-guide.md) | All-page readiness, feed health, saved-data locations, migration, and backup behavior. |
-| [Remote access](docs/web-access.md) | Private browser access, pairing, Tailscale configuration, and troubleshooting. |
 | [Local MCP](docs/local-mcp.md) | Client registration, research tools, record edits, screenshots, and bridge security. |
 | [Development](docs/development.md) | Architecture, verification commands, security checks, and data-layer conventions. |
 | [Semiconductors](docs/semiconductors.md) | Semiconductor supply-chain research and data sources. |

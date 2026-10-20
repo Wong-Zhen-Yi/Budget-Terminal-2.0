@@ -1,3 +1,4 @@
+import type { AgentImageArtifact } from './agentImageArtifacts.js'
 import type { AgentPortfolioProposal } from './agentPortfolio.js'
 import type { AgentWorkspaceState } from './agentWorkspace.js'
 
@@ -5,6 +6,8 @@ export interface AgentImage { name: string; dataUrl: string }
 
 export interface AgentMessage {
   images?: string[]
+  imageArtifacts?: AgentImageArtifact[]
+  imageStatus?: 'generating' | 'ready' | 'failed'
   id: string
   role: 'user' | 'assistant' | 'activity'
   text: string
@@ -17,7 +20,11 @@ export interface AgentNavigation {
   symbol?: string
 }
 
+export type AgentActivity = 'idle' | 'connecting' | 'thinking' | 'researching' | 'working' | 'responding' | 'generating' | 'done' | 'stopped' | 'error'
+
 export interface AgentsState extends AgentWorkspaceState {
+  activity?: AgentActivity
+  imageGeneration?: boolean | null
   portfolioProposal: AgentPortfolioProposal | null
   model: string | null
   thinking: string | null

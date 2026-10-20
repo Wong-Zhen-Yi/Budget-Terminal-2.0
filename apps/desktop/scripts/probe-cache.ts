@@ -109,6 +109,32 @@ async function incrementalSeriesChecks(): Promise<void> {
 
   try {
     const start = new Date(now - 30 * 86_400_000)
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    let first = true
+    const gatedLoader: typeof loader = async (...args) => {
+      if (first) { first = false; await gate }
+      return loader(...args)
+    }
+    const short = getYahooSeries({ symbol: 'CONCURRENT', start, interval: '1d' }, store, gatedLoader)
+    const fullStart = new Date(start.getTime() - 400 * 86_400_000)
+    const full = getYahooSeries({ symbol: 'CONCURRENT', start: fullStart, interval: '1d' }, store, gatedLoader)
+    release()
+    await short
+    const concurrentFull = await full
+    assert.equal(concurrentFull.rows[0].time, fullStart.getTime() / 1000, 'Max must backfill when joining a shorter in-flight chart request')
+    assert.ok(concurrentFull.rows.length > 400, 'Concurrent Max loads must not silently inherit a short window')
+    const listing = new Date(now - 20 * 86_400_000)
+    const ipoLoader: typeof loader = async (symbol, interval, requested, end) => {
+      if (end && end <= listing) throw new Error('No quotes exist before listing')
+      const data = await loader(symbol, interval, new Date(Math.max(requested.getTime(), listing.getTime())), end)
+      return end ? { ...data, rows: data.rows.map(value => ({ ...value, close: 999 })) } : data
+    }
+    const listed = await getYahooSeries({ symbol: 'IPO', start, interval: '1d' }, store, ipoLoader)
+    const listedMax = await getYahooSeries({ symbol: 'IPO', start: fullStart, interval: '1d' }, store, ipoLoader)
+    assert.equal(listedMax.stale, false, 'Expanding already-complete IPO history is not a provider outage')
+    assert.equal(listedMax.rows[0].close, listed.rows[0].close, 'Partial head overlaps must not overwrite existing complete OHLC bars')
+    calls.length = 0
     store.set('series:yahoo-only:ohlcv:BAD:1d', { rows: [] }, 60_000)
     const recovered = await getYahooSeries({ symbol: 'BAD', start, interval: '1d' }, store, loader)
     assert.ok(recovered.rows.length >= 30, 'Malformed canonical history is discarded and reloaded')
@@ -161,7 +187,7 @@ function rendererPolicyChecks(): void {
     errors: [],
   })
   client.setQueryData(['portfolio'], { data: { private: true } })
-  client.setQueryData(['webAccessStatus'], { running: true, pairingCode: 'SECRET-PAIRING-CODE' })
+  client.setQueryData(['agents'], { data: { messages: ['Private chat'] } })
   client.setQueryData(['stocks', 'FAIL'], {
     data: {},
     meta: { freshness: 'failed', fetchedAt: Date.now() },

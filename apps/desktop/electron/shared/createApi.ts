@@ -9,11 +9,7 @@ export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS
   return {
     agentsStatus: () => invoke(CHANNELS.agentsStatus),
     agentsCommand: (command) => invoke(CHANNELS.agentsCommand, command),
-    webStatus: () => invoke(CHANNELS.webStatus),
-    configureWebAccess: (enabled) => invoke(CHANNELS.configureWebAccess, enabled),
-    rotateWebPairingCode: () => invoke(CHANNELS.rotateWebPairingCode),
-    revokeWebSessions: () => invoke(CHANNELS.revokeWebSessions),
-    decideWebAccess: (id, approve) => invoke(CHANNELS.decideWebAccess, id, approve),
+    agentsImage: (id) => invoke(CHANNELS.agentsImage, id),
     mcpStatus: () => invoke(CHANNELS.mcpStatus),
     onScreenshotRequested: (listener) => subscribe<ScreenshotCommand>(CHANNELS.screenshotRequested, (payload) => {
       if (payload) listener(payload)

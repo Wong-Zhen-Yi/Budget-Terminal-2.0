@@ -31,12 +31,13 @@ conf/
 **/*.p12
 **/*.pfx
 
-# Saved records, Remote approvals, and local databases.
+# Saved records, legacy browser-access credentials, and local databases.
 **/articles.json
 **/settings.json
 # Private Agents chat history, notification inbox, tracker definitions/state and temp copies.
 **/agents.json
 **/agents.json.*
+**/agent-images/
 **/agent-history*.json
 **/chat-history*.json
 **/remote-sessions.json

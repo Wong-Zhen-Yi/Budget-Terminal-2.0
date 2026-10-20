@@ -33,7 +33,7 @@ import { queryFreshness } from './queryPersistence'
 import { usePortfolio } from './queries'
 import { assertStartupReady, runWarmTasks, StartupLoadError, warmStartupQuery, warmStartupSnapshot } from './warmQueue'
 import { initialNewsImages, initialYouTubeVideo, newsQuoteTickers } from './initialContent'
-import { loadAgents } from './agentsQueries'
+import { warmAgentWorkspace } from './agentsQueries'
 import { errorMessage } from './snapshotHealth'
 import { createProgressReporter } from './progressReporter'
 
@@ -105,7 +105,7 @@ export function buildTasks(
   const { active, every, editable, main, upDown } = holdingsOf(payload)
   const tasks: WarmTask[] = [{
     tab: 'agents', label: 'Agents workspace',
-    run: client => warmStartupQuery(client, { queryKey: queryKeys.agents, queryFn: loadAgents, staleTime: Infinity }),
+    run: (client, backgroundOrder) => warmAgentWorkspace(client, backgroundOrder),
   }, {
     tab: 'articles', label: 'Articles library',
     run: client => warmStartupQuery(client, { queryKey: queryKeys.articles, queryFn: () => api.articles(), staleTime: Infinity }),

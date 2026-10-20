@@ -1,4 +1,4 @@
-import type { AgentsCommand, AgentsState } from './agents.js'
+import type { AgentImage, AgentsCommand, AgentsState } from './agents.js'
 import type { ArticlesPayload, ArticlesMutation } from './articles.js'
 import type { DefeatBetaTerminalRequest, DefeatBetaTerminalPayload } from './defeatbetaTerminal.js'
 export type { DefeatBetaTerminalRequest, DefeatBetaTerminalPayload } from './defeatbetaTerminal.js'
@@ -779,7 +779,7 @@ export interface ChartsHistoryPayload {
   interval: string
   candles: Candle[]
   stats: ChartStats | null
-  indicators: ChartPayload['indicators']
+  indicators: ChartPayload['indicators'] & { ma50: IndicatorPoint[] }
 }
 
 export interface ChartsCompareRequest {
@@ -3289,9 +3289,11 @@ export interface QuantPairRequest {
  * `shared/ipo.ts` owns the windows, the dedupe and the sort keys those strings need.
  */
 export interface UpcomingIpoRow {
-  /** ISO `YYYY-MM-DD`, which is also what the table sorts the date column on. */
+  /** ISO `YYYY-MM-DD`, or empty for a filing with no scheduled IPO date. */
   date: string
-  /** `Mmm DD, YYYY`, the reference's `%b %d, %Y`. */
+  /** ISO filing date for an unscheduled IPO. Never used as its listing date. */
+  filingDate?: string
+  /** Formatted listing date, or `TBD` for an unscheduled filing. */
   dateDisplay: string
   symbol: string
   company: string
@@ -3422,11 +3424,7 @@ export interface PoliticsExportRequest {
 export const CHANNELS = {
   agentsStatus: 'agents:status',
   agentsCommand: 'agents:command',
-  webStatus: 'system:web-status',
-  configureWebAccess: 'system:web-configure',
-  rotateWebPairingCode: 'system:web-pairing-rotate',
-  revokeWebSessions: 'system:web-revoke',
-  decideWebAccess: 'system:web-access-decide',
+  agentsImage: 'agents:image',
   mcpStatus: 'system:mcp-status',
   screenshotRequested: 'mcp:screenshot-requested',
   screenshotReady: 'mcp:screenshot-ready',
@@ -3609,11 +3607,7 @@ export type WindowAction = 'minimize' | 'maximize' | 'close'
 export interface DesktopApi {
   agentsStatus(): Promise<Envelope<AgentsState>>
   agentsCommand(command: AgentsCommand): Promise<Envelope<AgentsState>>
-  webStatus(): Promise<WebAccessStatus>
-  configureWebAccess(enabled: boolean): Promise<WebAccessStatus>
-  rotateWebPairingCode(): Promise<WebAccessStatus>
-  revokeWebSessions(): Promise<WebAccessStatus>
-  decideWebAccess(id: string, approve: boolean): Promise<WebAccessStatus>
+  agentsImage(id: string): Promise<Envelope<AgentImage | null>>
   mcpStatus(): Promise<McpStatus>
   onScreenshotRequested(listener: (command: ScreenshotCommand) => void): () => void
   screenshotReady(result: ScreenshotReady): Promise<void>
@@ -3734,17 +3728,4 @@ export interface DesktopApi {
 export type SavedDataDomain = 'articles' | 'portfolio' | 'cards' | 'personalFinance' | 'settings'
 export interface SavedDataChanged { domains: SavedDataDomain[] }
 
-export interface WebAccessStatus {
-  enabled: boolean
-  running: boolean
-  port: number
-  localUrl: string
-  tailscaleUrl?: string
-  pairingCode?: string
-  pairingExpiresAt?: number
-  sessionCount: number
-  connectionCount?: number
-  accessRequests?: Array<{ id: string; label: string; requestedAt: number; expiresAt: number }>
-  error?: string
-}
 export interface McpStatus { available: boolean; connected?: boolean; active?: boolean; tools?: number; error?: string }

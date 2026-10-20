@@ -12,7 +12,7 @@ export const captureTerminalScreenshot = createScreenshotService(() => BrowserWi
 
 export async function startMcpHost(): Promise<() => Promise<void>> {
   try {
-    // Shared service handlers publish mutations once to both desktop and web clients.
+    // Shared service handlers publish mutations once to the desktop renderer.
     const bridge = await startBridge({ routes: createServiceRoutes(captureTerminalScreenshot), descriptorPath: join(process.env.APPDATA!, 'BudgetTerminalElectron', '.mcp', 'runtime.json'), onChanged: () => {} })
     status = bridge.status
     return async () => { status = { available: false, error: 'MCP is shutting down.' }; await bridge.stop() }

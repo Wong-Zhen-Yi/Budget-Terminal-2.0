@@ -764,7 +764,7 @@ const providerImplementation: MarketDataProvider = {
         interval: '',
         candles: [],
         stats: null,
-        indicators: { ma200: [], rsi: [], rsiMa: [] },
+        indicators: { ma50: [], ma200: [], rsi: [], rsiMa: [] },
       }, describeError(error), 'yahoo chart')
     }
   },

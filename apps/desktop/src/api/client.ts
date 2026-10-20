@@ -59,7 +59,8 @@ export const queryKeys = {
   quotes: (holdings: string[]) => ['quotes', [...holdings].sort().join(',')] as const,
   chart: (symbol: string, timeframe: string) => ['chart', symbol, timeframe] as const,
   chartsHistory: (symbol: string, interval: string, range: string) =>
-    ['chartsHistory', symbol, interval, range] as const,
+    // Invalidate old Max snapshots that only requested history from 1970 onward.
+    ['chartsHistory', symbol, interval, range, range === 'Max' ? 3 : 2] as const,
   chartsCompare: (symbols: string[], interval: string, range: string) =>
     ['chartsCompare', interval, range, [...symbols].sort().join(',')] as const,
   chartsRelationship: (symbols: [string, string], range: string, window: number) =>
@@ -77,7 +78,7 @@ export const queryKeys = {
   economic: ['economic'] as const,
   // Two feeds, two keys: a failed upcoming refresh must not evict the completed rows,
   // and the completed year is part of its key so an older year is its own entry.
-  ipoUpcoming: ['ipoUpcoming'] as const,
+  ipoUpcoming: ['ipoUpcoming', 'pending-v2'] as const,
   ipoCompleted: (year: number) => ['ipoCompleted', year] as const,
   politicsPage: (page: number) => ['politicsPage', page] as const,
   institutionActivity: (quarter: string) => ['institutions', 'activity', quarter || 'latest'] as const,

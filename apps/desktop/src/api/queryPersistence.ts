@@ -11,8 +11,8 @@ const DATABASE = `budget-terminal-renderer-cache-v${CACHE_SCHEMA_VERSION}`
 const STORE = 'clients'
 const CLIENT_KEY = 'remote-query-client'
 
-// Host status contains a short-lived pairing code and must never reach disk.
-const LOCAL_ROOTS = new Set(['agents', 'articles', 'portfolio', 'cards', 'settings', 'personalFinance', 'webAccessStatus'])
+// Local records and private agent state are managed by their own stores.
+const LOCAL_ROOTS = new Set(['agents', 'agentImages', 'articles', 'portfolio', 'cards', 'settings', 'personalFinance'])
 const LARGE_ROOTS = new Set(['newsThumbnail', 'youtubeThumbnail', 'newsPreview'])
 
 export const RENDERER_CACHE_BUSTER = `budget-terminal-renderer-v${CACHE_SCHEMA_VERSION}`

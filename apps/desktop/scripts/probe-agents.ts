@@ -9,7 +9,7 @@ import type { CodexTransport } from '../electron/services/codexClient.js'
 import type { Operation } from '../mcp/operations.js'
 import { validateAgentImages } from '../electron/services/agentImages.js'
 import { failed, ok } from '../electron/shared/envelope.js'
-import { AGENT_PIE_MAX_LENGTH, parseAgentPie } from '../electron/shared/agentCharts.js'
+import { AGENT_CANDLESTICK_MAX_CANDLES, AGENT_CANDLESTICK_MAX_LENGTH, AGENT_PIE_MAX_LENGTH, parseAgentCandlestick, parseAgentPie } from '../electron/shared/agentCharts.js'
 
 const directory = await mkdtemp(join(tmpdir(), 'budget-agents-'))
 const previous = { APPDATA: process.env.APPDATA, LOCALAPPDATA: process.env.LOCALAPPDATA }
@@ -73,6 +73,31 @@ try {
   ]) assert.equal(parseAgentPie(invalid), null, `Reject invalid pie: ${invalid.slice(0, 100)}`)
   assert.equal(service.snapshot().autonomy, false)
   assert.equal(service.snapshot().connected, false)
+  const candle = { time: '2026-10-15', open: 210, high: 215, low: 208, close: 214 }
+  const candlestick = { title: 'AAPL daily', unit: 'USD', candles: [candle, { ...candle, time: '2026-10-16' }], caption: 'Fixture source and as-of date' }
+  assert.deepEqual(parseAgentCandlestick(JSON.stringify(candlestick)), candlestick)
+  for (const candles of [
+    [{ ...candle, open: 0, high: 0, low: 0, close: 0 }],
+    [{ ...candle, open: -5, high: 0, low: -10, close: -2 }],
+    [{ ...candle, time: '2024-02-29' }],
+    [{ ...candle, time: '2026-10-15T09:30:00Z' }, { ...candle, time: '2026-10-15T09:30:00.001Z' }],
+    Array.from({ length: AGENT_CANDLESTICK_MAX_CANDLES }, (_, index) => ({ ...candle, time: new Date(Date.UTC(2026, 0, index + 1)).toISOString() })),
+  ]) assert(parseAgentCandlestick(JSON.stringify({ ...candlestick, candles })), 'Accept flat, negative, leap date, intraday and maximum-length charts')
+  for (const invalid of [
+    '', '{"title":', 'null', '[]',
+    JSON.stringify({ ...candlestick, title: ' ' }),
+    JSON.stringify({ ...candlestick, candles: [] }),
+    JSON.stringify({ ...candlestick, candles: [candle, candle] }),
+    JSON.stringify({ ...candlestick, candles: [...candlestick.candles].reverse() }),
+    JSON.stringify({ ...candlestick, candles: [{ ...candle, time: '2026-10-15T00:00:00Z' }, candle] }),
+    ...['2026-02-29', '2026-13-01', '2026-10-15T25:00:00Z', '2026-10-15T09:30:00', 'yesterday', 1792022400].map(time => JSON.stringify({ ...candlestick, candles: [{ ...candle, time }] })),
+    ...[{ open: 216 }, { close: 207 }, { high: 200 }, { low: 220 }, { open: '210' }, { close: null }, { open: undefined }, { color: 'url(https://example.com)' }].map(fields => JSON.stringify({ ...candlestick, candles: [{ ...candle, ...fields }] })),
+    JSON.stringify({ ...candlestick, candles: Array(AGENT_CANDLESTICK_MAX_CANDLES + 1).fill(candle) }),
+    JSON.stringify({ ...candlestick, script: 'alert(1)' }),
+    JSON.stringify(candlestick) + ' '.repeat(AGENT_CANDLESTICK_MAX_LENGTH),
+    '{"title":"Overflow","candles":[{"time":"2026-10-15","open":1e999,"high":1e999,"low":0,"close":1}]}',
+  ]) assert.equal(parseAgentCandlestick(invalid), null, `Reject invalid candlestick: ${invalid.slice(0, 100)}`)
+  console.log('PASS: native pie and candlestick parsing, OHLC bounds, UTC dates, chronological uniqueness, finite numbers and bounded payloads')
   assert.equal(calls.length, 0, 'Constructing a service or reading its snapshot never runs inference; the desktop host starts the connection')
   await assert.rejects(() => service.command({ type: 'send', text: 'hello' }), /Connect Codex/)
   await assert.rejects(() => service.command({ type: 'autonomy', enabled: true, objective: 'test', intervalMinutes: 1 }), /too_small|Too small/)
@@ -84,7 +109,9 @@ try {
   await assert.rejects(() => service.command({ type: 'configure', model: 'fixture-deep', thinking: 'high' }), /not supported/)
   await service.command({ type: 'configure', model: 'fixture-fast', thinking: 'high' })
   const start = calls.find(call => call.method === 'thread/start')!.params
-  assert(start.baseInstructions.includes('```pie') && start.baseInstructions.includes('native pie charts'), 'Agent must know the native chart format')
+  assert(start.baseInstructions.includes('```pie') && start.baseInstructions.includes('native pie charts'), 'Agent must know the native pie format')
+  assert(start.baseInstructions.includes('```candlestick') && start.baseInstructions.includes('"symbol":"AAPL"')
+    && start.baseInstructions.includes('Never truncate') && start.baseInstructions.includes('do not invent a ticker or prices'), 'Agent must use symbol-backed full-history charts and real evidence, not sampled or fabricated candles')
   assert.equal(start.ephemeral, true)
   assert.deepEqual(start.environments, [])
   assert.equal(start.config['mcp_servers.unrelated.enabled'], false)
@@ -94,6 +121,7 @@ try {
   await service.command({ type: 'send', text: 'Show AAPL and inspect the portfolio' })
   assert.equal(calls.at(-1)!.params.model, 'fixture-fast')
   assert.equal(calls.at(-1)!.params.effort, 'high')
+  assert.equal(service.snapshot().activity, 'thinking', 'New runs begin thinking, not done')
   await assert.rejects(() => service.command({ type: 'configure', model: 'fixture-fast', thinking: 'low' }), /working/)
   assert(service.snapshot().busy)
   await assert.rejects(() => service.command({ type: 'send', text: 'overlap' }), /working/)
@@ -101,6 +129,17 @@ try {
   const portfolio = await service.callTool('budget_terminal_portfolio', { request: {} }) as any
   assert.equal(portfolio.meta.freshness, 'partial', 'Keep partial data metadata')
   assert.equal(portfolio.errors[0].reason, 'Fixture missing data')
+  const originalPortfolio = routes.get('portfolio')!
+  const researchResolvers: Array<(value: unknown) => void> = []
+  routes.set('portfolio', () => new Promise(resolve => researchResolvers.push(resolve)))
+  const firstResearch = service.callTool('budget_terminal_portfolio', { request: {} })
+  const secondResearch = service.callTool('budget_terminal_portfolio', { request: {} })
+  assert.equal(service.snapshot().activity, 'researching', 'Active research tools report real activity')
+  researchResolvers[0](ok({ portfolios: [] }, 'fixture')); await firstResearch
+  assert.equal(service.snapshot().activity, 'researching', 'Parallel research stays active until every tool returns')
+  researchResolvers[1](ok({ portfolios: [] }, 'fixture')); await secondResearch
+  assert.equal(service.snapshot().activity, 'thinking')
+  routes.set('portfolio', originalPortfolio)
   const edit = { type: 'add', title: 'Agent MCP test', content: 'Fixture article', topic: 'Research', status: 'draft' }
   await service.callTool('budget_terminal_mutate_articles', { request: edit })
   assert.deepEqual(mutations, [edit], 'Manual MCP mutations use validated app routes')
@@ -128,10 +167,15 @@ try {
   assert.deepEqual(await navigation, { shown: true })
   receiver({ method: 'item/agentMessage/delta', params: { threadId: 'other', itemId: 'ignored', delta: 'wrong thread' } })
   receiver({ method: 'item/agentMessage/delta', params: { threadId: 'thread-1', itemId: 'answer', delta: 'Opened ' } })
+  assert.equal(service.snapshot().activity, 'responding')
+  receiver({ method: 'item/started', params: { threadId: 'thread-1', item: { id: 'reasoning', type: 'reasoning' } } })
+  assert.equal(service.snapshot().activity, 'thinking', 'New reasoning is not incorrectly labelled writing')
   receiver({ method: 'item/agentMessage/delta', params: { threadId: 'thread-1', itemId: 'answer', delta: 'AAPL.' } })
   receiver({ id: 55, method: 'item/commandExecution/requestApproval', params: {} })
   assert.equal(writes.at(-1).error.code, -32601)
+  assert.equal(service.snapshot().activity, 'responding')
   complete()
+  assert.equal(service.snapshot().activity, 'done', 'Only a successful completed turn is done')
   assert.equal(service.snapshot().messages.find(message => message.id === 'answer')?.text, 'Opened AAPL.')
   assert(!service.snapshot().messages.some(message => message.id === 'ignored'))
   assert.equal(service.snapshot().busy, false)
@@ -153,6 +197,7 @@ try {
   await service.command({ type: 'autonomy', enabled: false })
   assert.equal(service.snapshot().nextRunAt, null)
   assert.equal(service.snapshot().autonomy, false)
+  assert.equal(service.snapshot().activity, 'stopped')
   assert.equal(service.snapshot().connected, false)
   await service.command({ type: 'connect' })
   await service.command({ type: 'autonomy', enabled: true, objective: 'Check news', runs: 1 })
@@ -162,6 +207,7 @@ try {
   complete('failed')
   assert.equal(service.snapshot().autonomy, false)
   assert(service.snapshot().error.includes('failed'))
+  assert.equal(service.snapshot().activity, 'error', 'Failed runs must never report done')
   await service.command({ type: 'send', text: 'Retry' })
   disconnected('Fixture disconnect')
   assert.equal(service.snapshot().connected, false)
@@ -190,6 +236,7 @@ try {
   await service.command({ type: 'newChat' })
   assert.equal(service.snapshot().messages.length, 0)
   assert.equal(service.snapshot().connected, true)
+  assert.equal(service.snapshot().activity, 'idle', 'New chat clears old completion status')
   assert.equal(service.snapshot().model, 'fixture-fast')
   assert.equal(service.snapshot().thinking, 'high')
   assert.deepEqual({ starts, closes, accounts: calls.filter(call => call.method === 'account/read').length }, connectionCounts, 'New chat reuses the signed-in Codex transport')

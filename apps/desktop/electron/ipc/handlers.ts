@@ -10,11 +10,10 @@ import { verifyStoredData, watchPortfolios } from '../services/portfolioStore.js
 import { isSafeExternalUrl } from '../services/urls.js'
 import { registerServiceHandlers } from './serviceHandlers.js'
 import { getMcpStatus } from '../mcp/host.js'
-import { configureWebAccess, decideWebAccess, getWebAccessStatus, revokeWebSessions, rotateWebPairingCode } from '../web/host.js'
 import { publishSavedDataChanged, subscribeSavedDataChanged } from '../services/savedDataEvents.js'
 import { articleFilename } from '../shared/articles.js'
 import { articlePdfRequestSchema, writeArticlePdfs } from '../services/articlePdf.js'
-import { agentsCommand, agentsStatus, closeAgents } from '../services/agentsHost.js'
+import { agentsCommand, agentsImage, agentsStatus, closeAgents } from '../services/agentsHost.js'
 import type { AgentsCommand } from '../shared/agents.js'
 
 export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent) => boolean): () => void {
@@ -27,11 +26,7 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
   const provider = yahooProvider
   handle(CHANNELS.agentsStatus, () => agentsStatus())
   handle(CHANNELS.agentsCommand, (_event, command: AgentsCommand) => agentsCommand(command))
-  handle(CHANNELS.webStatus, () => getWebAccessStatus())
-  handle(CHANNELS.configureWebAccess, (_event, enabled: boolean) => configureWebAccess(enabled))
-  handle(CHANNELS.rotateWebPairingCode, () => rotateWebPairingCode())
-  handle(CHANNELS.revokeWebSessions, () => revokeWebSessions())
-  handle(CHANNELS.decideWebAccess, (_event, id: string, approve: boolean) => decideWebAccess(id, approve))
+  handle(CHANNELS.agentsImage, (_event, id: string) => agentsImage(id))
   handle(CHANNELS.mcpStatus, () => getMcpStatus())
   registerServiceHandlers((channel, run) => {
     handle(channel, (_event, request) => run(request))

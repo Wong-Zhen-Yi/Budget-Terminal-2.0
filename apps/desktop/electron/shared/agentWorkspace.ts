@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { AgentMessage } from './agents.js'
+import { agentImageArtifactSchema } from './agentImageArtifacts.js'
 
 const id = z.string().min(1).max(100)
 const timestamp = z.number().finite().nonnegative()
@@ -30,6 +31,8 @@ export type AgentTrackerReport = z.infer<typeof trackerReportSchema>
 export const agentMessageSchema = z.object({
   id, role: z.enum(['user', 'assistant', 'activity']), text: z.string().max(100_000), at: timestamp,
   images: z.array(z.string().max(255)).max(4).optional(),
+  imageArtifacts: z.array(agentImageArtifactSchema).max(4).optional(),
+  imageStatus: z.enum(['generating', 'ready', 'failed']).optional(),
 }).strict()
 export const conversationSchema = z.object({
   id, title: z.string().max(120), createdAt: timestamp, updatedAt: timestamp,
@@ -74,7 +77,7 @@ export function conversationContext(messages: AgentMessage[]): string {
   let size = 0
   for (const message of [...messages].reverse()) {
     if (message.role === 'activity') continue
-    const text = message.text.slice(0, 20_000)
+    const text = (message.text + (message.imageArtifacts?.length ? `\n[Saved images: ${message.imageArtifacts.map(image => `${image.name} (${image.kind})`).join(', ')}. Pixels are not included; ask the user to Use for edit or attach again for edits.]` : '')).slice(0, 20_000)
     if (size + text.length > 60_000) break
     recent.unshift({ role: message.role, text })
     size += text.length

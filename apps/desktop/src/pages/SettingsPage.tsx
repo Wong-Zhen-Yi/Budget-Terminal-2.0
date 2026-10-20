@@ -17,8 +17,6 @@ import { SettingsSection } from '@/components/settings/SettingsSection'
 import { ShortcutsPanel } from '@/components/settings/ShortcutsPanel'
 import { UserDataPanel } from '@/components/settings/UserDataPanel'
 import { McpPanel } from '@/components/settings/McpPanel'
-import { WebAccessPanel } from '@/components/settings/WebAccessPanel'
-import { isBrowser } from '@/api/browser'
 
 const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
 
@@ -132,14 +130,10 @@ export function SettingsPage({
           </p>
         </header>
 
-        <SettingsSection title="Remote" hint="Private browser access through Tailscale.">
-          <WebAccessPanel />
-        </SettingsSection>
-
         <SettingsSection title="Data" hint="Backups, maintenance and observed feed health.">
-          {!isBrowser ? <McpPanel /> : null}
+          <McpPanel />
           <PageLoadOrderPanel />
-          {!isBrowser ? <UserDataPanel onRun={onRunMaintenance} busy={busy} sourcePath={holdingsPath} lastBackupAt={settings.lastBackupAt} automaticBackup={settings.automaticBackup} /> : null}
+          <UserDataPanel onRun={onRunMaintenance} busy={busy} sourcePath={holdingsPath} lastBackupAt={settings.lastBackupAt} automaticBackup={settings.automaticBackup} />
           <DataHealthPanel onStatus={(text) => setStatus({ text, tone: 'positive' })} />
         </SettingsSection>
 

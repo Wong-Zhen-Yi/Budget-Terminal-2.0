@@ -76,8 +76,13 @@ background throttling are restored afterward. Screenshots preserve privacy blur.
 `npm run build:mcp` also prepares a self-contained local plugin under
 `plugins/budget-terminal`, including its generated `server/server.mjs` bundle.
 Generated bundles are excluded from Git; rebuild before copying or packaging that
-folder. Install either the local plugin or the direct MCP registration to avoid
-duplicate tools. The plugin uses Node from PATH; direct registration can use an
+folder. Builds leave identical bundles untouched and publish changed bundles by
+atomic replacement, retrying temporary Windows file locks for about 10 seconds.
+If a bundle stays locked, close Budget Terminal and disconnect its MCP connection
+in Codex or other MCP clients, then run `Launch Budget Terminal.cmd` again. The
+build does not forcibly stop clients or silently fall back to an outdated bundle.
+Install either the local plugin or the direct MCP registration to avoid duplicate
+tools. The plugin uses Node from PATH; direct registration can use an
 absolute executable path. No account upload or public publication is required.
 
 The Electron bridge listens only on IPv4 loopback and requires a random per-session
