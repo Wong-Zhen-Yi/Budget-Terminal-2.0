@@ -39,7 +39,7 @@ export function PageLoadOrderPanel() {
               </tr>)}</tbody>
             </table>
           </div>
-          <p className="text-2xs text-text-dim">All pages warm in parallel. Opening a page takes priority.</p>
+          <p className="text-2xs text-text-dim">All pages load at startup. Yahoo background requests are paced at 1 per second, with up to 2 in flight, and slow further if rate limited. Foreground requests take priority. Temporary failures retry automatically; unresolved failures remain visible.</p>
         </> : <p className="text-2xs text-text-dim">The page load order will appear when startup begins.</p>}
       </div>
     </Panel>

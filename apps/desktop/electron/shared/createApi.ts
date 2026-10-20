@@ -7,6 +7,10 @@ export type Subscribe = <Payload>(channel: string, listener: (payload?: Payload)
 
 export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS.Platform): DesktopApi {
   return {
+    browserStatus: () => invoke(CHANNELS.browserStatus),
+    browserResearch: (request) => invoke(CHANNELS.browserResearch, request),
+    browserControl: (request) => invoke(CHANNELS.browserControl, request),
+    browserViewport: (viewport) => invoke(CHANNELS.browserViewport, viewport),
     agentsStatus: () => invoke(CHANNELS.agentsStatus),
     agentsCommand: (command) => invoke(CHANNELS.agentsCommand, command),
     agentsImage: (id) => invoke(CHANNELS.agentsImage, id),

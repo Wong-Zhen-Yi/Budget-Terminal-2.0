@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { createYahooWorkerClient } from './workerClient.js'
+import { retryTransientData } from '../../shared/dataRetry.js'
 
 import { rateGate, type Priority } from './rateGate.js'
 import { trackApiRequest } from '../apiUsage.js'
@@ -31,11 +32,11 @@ export function runWithPriority<T>(priority: Priority, fn: () => Promise<T>, bac
 
 export function paced<T>(task: () => Promise<T>): Promise<T> {
   const context = priorityStore.getStore()
-  return rateGate.run(
+  return retryTransientData(() => rateGate.run(
     () => trackApiRequest('yahoo', task),
     context?.priority ?? 'foreground',
     context?.backgroundOrder,
-  )
+  ))
 }
 
 /** Days -> the `period1` timestamp Yahoo's chart endpoint expects. */

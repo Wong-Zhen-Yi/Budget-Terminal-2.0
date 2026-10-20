@@ -98,6 +98,8 @@ export function registerServiceHandlers(register: RegisterService): void {
   const provider = yahooProvider
 
   register(CHANNELS.apiUsage, () => getApiUsageSnapshot())
+  register(CHANNELS.browserStatus, async () => (await import('../services/browser.js')).browserStatus())
+  register(CHANNELS.browserResearch, async (request: unknown) => (await import('../services/browser.js')).browserResearch(request))
 
   /**
    * Register a provider channel in the rate gate lane its request asks for.

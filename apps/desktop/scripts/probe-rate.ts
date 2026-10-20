@@ -7,6 +7,7 @@
 import assert from 'node:assert/strict'
 
 import { ApiUsageTracker } from '../electron/services/apiUsage.js'
+import { isTransientDataError, retryTransientData } from '../electron/shared/dataRetry.js'
 import { getQuote, quoteFromChart } from '../electron/services/yahoo/quotes.js'
 import { RateGate, isRateLimitError, rateGate } from '../electron/services/yahoo/rateGate.js'
 import { paced, runWithPriority } from '../electron/services/yahoo/client.js'
@@ -105,6 +106,8 @@ async function main(): Promise<void> {
   probeQuoteSelection()
   await probeApiUsage()
   await probeParallelPacing()
+  await probeTransientRetries()
+  await probeBackgroundPacing()
   await probeStartupOrdering()
   if (process.argv.includes('--offline')) {
     assert.ok(await probeLanes())
@@ -143,7 +146,7 @@ async function main(): Promise<void> {
 }
 
 async function probeStartupOrdering(): Promise<void> {
-  const gate = new RateGate({ requestsPerSecond: 1_000, burst: 30, maxConcurrency: 2 })
+  const gate = new RateGate({ requestsPerSecond: 1_000, burst: 30, maxConcurrency: 2, backgroundRequestsPerSecond: 1_000 })
   let release!: () => void
   // Occupy the background slot while later requests from multiple pages arrive.
   const blocker = gate.run(() => new Promise<void>((resolve) => { release = resolve }), 'background')
@@ -187,7 +190,7 @@ async function probeStartupOrdering(): Promise<void> {
 
 /** Concurrent page fan-outs share one gate, including across priority lanes. */
 async function probeParallelPacing(): Promise<void> {
-  const gate = new RateGate({ requestsPerSecond: 20, burst: 2, maxConcurrency: 4 })
+  const gate = new RateGate({ requestsPerSecond: 20, burst: 2, maxConcurrency: 4, backgroundRequestsPerSecond: 20 })
   const starts: number[] = []
   const started = Date.now()
   let inFlight = 0
@@ -210,17 +213,120 @@ async function probeParallelPacing(): Promise<void> {
   assert.equal(gate.stats().inFlight, 0)
   assert.deepEqual(gate.stats().waiting, { foreground: 0, background: 0 })
 
-  const adaptive = new RateGate({ requestsPerSecond: 20, burst: 1, cooldownSeconds: 0.15, recoveryStreak: 2 })
+  const adaptive = new RateGate({ requestsPerSecond: 20, burst: 1, backgroundRequestsPerSecond: 20, cooldownSeconds: 0.15, recoveryStreak: 2 })
   await assert.rejects(adaptive.run(async () => { throw Object.assign(new Error('Too many requests'), { status: 429 }) }))
   assert.equal(adaptive.stats().rate, 10)
+  assert.equal(adaptive.stats().backgroundRate, 10, '429 must also halve the background rate')
   assert(adaptive.stats().cooldownMs > 0)
   const failedAt = Date.now()
   await Promise.all(Array.from({ length: 2 }, () => adaptive.run(async () => {
     assert(Date.now() - failedAt >= 140, 'A queued request bypassed the 429 cooldown')
   }, 'background')))
   assert.equal(adaptive.stats().rate, 20)
+  assert.equal(adaptive.stats().backgroundRate, 20, 'Clean responses must restore background pacing too')
   assert.equal(adaptive.stats().inFlight, 0)
   console.log('Parallel provider checks passed: shared pacing, concurrency ceiling, 429 cooldown and rate recovery.')
+}
+
+async function probeTransientRetries(): Promise<void> {
+  for (const error of [new Error('HTTP 503'), new Error('HTTP 429'), new Error('fetch failed'),
+    Object.assign(new Error('socket'), { code: 'ECONNRESET' }),
+    Object.assign(new Error('request failed'), { cause: { code: 'EAI_AGAIN' } }),
+    Object.assign(new Error('Yahoo worker exited (7)'), { code: 'ETIMEDOUT' })]) {
+    assert(isTransientDataError(error), String(error))
+  }
+  for (const error of [new Error('HTTP 404'), new Error('Invalid symbol'), new Error('Sign in required'),
+    new Error('Background page load timed out'), Object.assign(new Error('HTTP 503'), { status: 401 }),
+    Object.assign(new Error('request aborted'), { name: 'AbortError' })]) {
+    assert(!isTransientDataError(error), String(error))
+  }
+  const delays: number[] = []
+  const attempts: number[] = []
+  let calls = 0
+  const options = { random: () => 0, sleep: async (ms: number) => { delays.push(ms) },
+    onRetry: (_error: unknown, attempt: number) => { attempts.push(attempt) } }
+  assert.equal(await retryTransientData(async () => {
+    if (++calls < 3) throw new Error('HTTP 503')
+    return 'recovered'
+  }, options), 'recovered')
+  assert.equal(calls, 3)
+  assert.deepEqual(delays, [1_000, 2_000])
+  assert.deepEqual(attempts, [2, 3])
+  calls = 0
+  await assert.rejects(retryTransientData(async () => { calls++; throw new Error('HTTP 503') }, options), /503/)
+  assert.equal(calls, 3, 'Persistent outages must have a bounded retry budget')
+  calls = 0
+  await assert.rejects(retryTransientData(async () => { calls++; throw new Error('HTTP 404') }, options), /404/)
+  assert.equal(calls, 1, 'Permanent failures must not consume retries')
+  calls = 0
+  let cancelled = false
+  await assert.rejects(retryTransientData(async () => { calls++; throw new Error('fetch failed') }, {
+    isCancelled: () => cancelled, sleep: async () => { cancelled = true },
+  }), /cancelled/)
+  assert.equal(calls, 1, 'Unmount must suppress a queued recovery attempt')
+
+  // Exercise the actual paced() wrapper: every retry must rejoin the same lane/rank,
+  // not bypass the gate or retain a slot during exponential backoff.
+  const originalRun = rateGate.run
+  const ranks: Array<[string | undefined, number | undefined]> = []
+  rateGate.run = async (task, priority, rank) => {
+    ranks.push([priority, rank])
+    return task()
+  }
+  calls = 0
+  try {
+    assert.equal(await runWithPriority('background', () => paced(async () => {
+      if (++calls === 1) throw Object.assign(new Error('Provider busy'), { status: 503 })
+      return 'ready'
+    }), 7), 'ready')
+    assert.deepEqual(ranks, [['background', 7], ['background', 7]])
+  } finally { rateGate.run = originalRun }
+  console.log('Retry checks passed: transient classification, bounded backoff, permanent failures, cancellation and every Yahoo attempt rejoining its original gate lane.')
+}
+
+/** Startup has no burst, keeps a separate concurrency cap and never delays foreground tokens. */
+async function probeBackgroundPacing(): Promise<void> {
+  const gate = new RateGate()
+  assert.equal(gate.stats().backgroundRate, 1)
+  const starts: number[] = []
+  const request = () => gate.run(async () => { starts.push(Date.now()) }, 'background')
+  await Promise.all([request(), request(), request()])
+  for (let index = 1; index < starts.length; index++) {
+    assert(starts[index] - starts[index - 1] >= 990, 'Default startup requests must be spaced one second apart')
+  }
+  // Idle time may refill one background token, never the six-token foreground burst.
+  await new Promise((resolve) => setTimeout(resolve, 1_100))
+  await Promise.all([request(), request()])
+  assert(starts[4] - starts[3] >= 990, 'Idle startup work must not accumulate burst tokens')
+
+  const limited = new RateGate({ requestsPerSecond: 1_000, burst: 20, backgroundRequestsPerSecond: 1_000 })
+  let active = 0
+  let peak = 0
+  const background = Array.from({ length: 8 }, () => limited.run(async () => {
+    active += 1
+    peak = Math.max(peak, active)
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    active -= 1
+  }, 'background'))
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  await limited.run(async () => {
+    assert.equal(active, 2, 'Foreground must run while both background slots are occupied')
+  })
+  await Promise.all(background)
+  assert.equal(peak, 2, 'Startup must use at most two in-flight Yahoo requests')
+
+  const responsive = new RateGate({ requestsPerSecond: 20, burst: 1, backgroundRequestsPerSecond: 2 })
+  await responsive.run(async () => undefined, 'background')
+  const waitingBackground = responsive.run(async () => undefined, 'background')
+  const foregroundAt = Date.now()
+  await responsive.run(async () => undefined)
+  assert(Date.now() - foregroundAt < 300, 'Foreground inherited the slower background wake timer')
+  await waitingBackground
+
+  const serial = new RateGate({ maxConcurrency: 1 })
+  await serial.run(async () => undefined, 'background')
+  assert.equal(serial.stats().inFlight, 0, 'A one-slot gate must not deadlock background work')
+  console.log('Startup pacing checks passed: 1/s without bursts, two background slots, idle refill, foreground responsiveness and one-slot gates.')
 }
 
 /**
@@ -232,7 +338,7 @@ async function probeParallelPacing(): Promise<void> {
  * spending a hundred real requests to measure it would be its own rate-limit problem.
  */
 async function probeLanes(): Promise<boolean> {
-  const gate = new RateGate({ requestsPerSecond: 4, burst: 6, maxConcurrency: 4 })
+  const gate = new RateGate({ requestsPerSecond: 4, burst: 6, maxConcurrency: 4, backgroundRequestsPerSecond: 4 })
   const work = () => new Promise<void>((resolve) => setTimeout(resolve, 20))
 
   const order: string[] = []

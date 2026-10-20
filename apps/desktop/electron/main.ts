@@ -6,6 +6,7 @@ import { acquireDataSession } from './services/dataSession.js'
 import { loadRenderer } from './services/rendererStartup.js'
 import { isTrustedRendererUrl } from './shared/ipcSecurity.js'
 import { isSafeExternalUrl } from './services/urls.js'
+import { configureBrowserWindow } from './services/browser.js'
 
 const dirname = fileURLToPath(new URL('.', import.meta.url))
 const isDev = !app.isPackaged
@@ -49,6 +50,8 @@ function createWindow(): BrowserWindow {
       sandbox: true,
     },
   })
+
+  configureBrowserWindow(window)
 
   // Paint once, rather than showing an empty frame and then the UI.
   window.once('ready-to-show', () => window.show())

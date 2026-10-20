@@ -2,6 +2,7 @@ import { ipcMain, type BrowserWindow } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { CHANNELS, TABS, type Envelope, type EnvelopeError } from '../shared/contract.js'
 import { describeError, failed, partial } from '../shared/envelope.js'
+import { compositeBrowserScreenshot } from '../services/browser.js'
 import type { PageScreenshot, ScreenshotCommand, ScreenshotPayload, ScreenshotReady, ScreenshotRequest } from '../shared/screenshot.js'
 
 const SOURCE = 'Electron page capture'
@@ -70,7 +71,8 @@ export function createScreenshotService(getWindow: () => BrowserWindow | undefin
         }
         try {
           const { id: _requestId, error: _error, ...ready } = await prepare(id)
-          const image = await withTimeout(contents.capturePage(undefined, { stayHidden: true, stayAwake: true }))
+          const shell = await withTimeout(contents.capturePage(undefined, { stayHidden: true, stayAwake: true }))
+          const image = await withTimeout(compositeBrowserScreenshot(window, shell))
           if (image.isEmpty()) throw new Error('Electron returned an empty screenshot.')
           const { width, height } = image.getSize()
           screenshots.push({ ...ready, capturedAt: Date.now(), width, height, mimeType: 'image/png', base64: image.toPNG().toString('base64') })

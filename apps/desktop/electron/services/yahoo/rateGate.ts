@@ -10,13 +10,15 @@
  *
  * It also has two lanes. The startup warm-up in `src/api/prefetch.ts` fans a single task
  * out into a hundred requests at once — Trading Volumes and the Heatmap both do — so a
- * plain FIFO gate makes a page the user opens mid-warm wait out the whole batch at 4/s.
+ * plain FIFO gate makes a page the user opens mid-warm wait out the whole batch.
  * A `background` waiter therefore only takes a token or a slot when no `foreground`
  * waiter is queued, and one concurrency slot is reserved for the foreground lane so
  * background work can never hold every slot. The priority comes from `paced()` in
  * `client.ts`, which reads it off the request that started the fan-out. Background
  * requests use the learned startup page order, so even a later request from a fast
- * page goes ahead of a heavy page's queued batch.
+ * page goes ahead of a heavy page's queued batch. Background work also has its own
+ * single-token budget: startup never spends the foreground burst allowance, even
+ * after an idle period. Its rate follows the same 429 backoff and recovery.
  */
 
 export type Priority = 'foreground' | 'background'
@@ -28,6 +30,10 @@ export interface RateGateOptions {
   burst: number
   /** Hard ceiling on concurrent in-flight requests. */
   maxConcurrency: number
+  /** Background requests per second, without any burst allowance. */
+  backgroundRequestsPerSecond: number
+  /** Background in-flight ceiling, also subject to the foreground reservation. */
+  backgroundMaxConcurrency: number
   /** How long to pause everything after a 429. */
   cooldownSeconds: number
   /** Clean responses needed before the rate recovers a step. */
@@ -38,6 +44,8 @@ export const DEFAULT_RATE_GATE_OPTIONS: RateGateOptions = {
   requestsPerSecond: 4,
   burst: 6,
   maxConcurrency: 4,
+  backgroundRequestsPerSecond: 1,
+  backgroundMaxConcurrency: 2,
   cooldownSeconds: 20,
   recoveryStreak: 12,
 }
@@ -72,6 +80,7 @@ export class RateGate {
   private readonly baseRate: number
   private rate: number
   private tokens: number
+  private backgroundTokens = 1
   private lastRefill: number
   private inFlight = 0
   private backgroundInFlight = 0
@@ -82,6 +91,7 @@ export class RateGate {
   /** Set while waiters are being admitted, so `pump` cannot re-enter itself. */
   private pumping = false
   private timer: ReturnType<typeof setTimeout> | null = null
+  private timerDueAt = 0
 
   constructor(options: Partial<RateGateOptions> = {}) {
     this.options = { ...DEFAULT_RATE_GATE_OPTIONS, ...options }
@@ -94,6 +104,7 @@ export class RateGate {
   /** Snapshot for diagnostics and the rate probe script. */
   stats(): {
     rate: number
+    backgroundRate: number
     inFlight: number
     backgroundInFlight: number
     cooldownMs: number
@@ -102,6 +113,7 @@ export class RateGate {
   } {
     return {
       rate: this.rate,
+      backgroundRate: this.backgroundRate,
       inFlight: this.inFlight,
       backgroundInFlight: this.backgroundInFlight,
       cooldownMs: Math.max(0, this.cooldownUntil - Date.now()),
@@ -128,12 +140,17 @@ export class RateGate {
     }
   }
 
+  private get backgroundRate(): number {
+    return this.options.backgroundRequestsPerSecond * (this.rate / this.baseRate)
+  }
+
   private refill(): void {
     const now = Date.now()
     const elapsedSeconds = (now - this.lastRefill) / 1000
     if (elapsedSeconds <= 0) return
     this.lastRefill = now
     this.tokens = Math.min(this.options.burst, this.tokens + elapsedSeconds * this.rate)
+    this.backgroundTokens = Math.min(1, this.backgroundTokens + elapsedSeconds * this.backgroundRate)
   }
 
   /** Join the lane's queue and wait to be admitted by `pump`. */
@@ -167,7 +184,8 @@ export class RateGate {
     // slot, so a foreground request arriving mid-warm waits for one call, not a hundred.
     const background = this.queues.background[0]
     if (!background) return null
-    if (this.inFlight >= this.options.maxConcurrency - FOREGROUND_RESERVED_SLOTS) return null
+    if (this.inFlight >= Math.max(1, this.options.maxConcurrency - FOREGROUND_RESERVED_SLOTS) ||
+      this.backgroundInFlight >= this.options.backgroundMaxConcurrency) return null
     return background
   }
 
@@ -191,15 +209,20 @@ export class RateGate {
         if (this.inFlight >= this.options.maxConcurrency) return
 
         this.refill()
-        if (this.tokens < 1) {
-          this.wakeLater(Math.max(Math.ceil(((1 - this.tokens) / this.rate) * 1000), 25))
+        const tokenWaitMs = Math.max(0, ((1 - this.tokens) / this.rate) * 1000,
+          waiter.priority === 'background' ? ((1 - this.backgroundTokens) / this.backgroundRate) * 1000 : 0)
+        if (tokenWaitMs > 0) {
+          this.wakeLater(Math.max(Math.ceil(tokenWaitMs), 25))
           return
         }
 
         this.queues[waiter.priority].shift()
         this.tokens -= 1
         this.inFlight += 1
-        if (waiter.priority === 'background') this.backgroundInFlight += 1
+        if (waiter.priority === 'background') {
+          this.backgroundTokens -= 1
+          this.backgroundInFlight += 1
+        }
         waiter.wake()
       }
     } finally {
@@ -216,9 +239,14 @@ export class RateGate {
    * lets them exit in the middle of a queued burst.
    */
   private wakeLater(ms: number): void {
-    if (this.timer) return
+    const dueAt = Date.now() + ms
+    if (this.timer && this.timerDueAt <= dueAt) return
+    // A foreground arrival must not inherit a slower background token's timer.
+    if (this.timer) clearTimeout(this.timer)
+    this.timerDueAt = dueAt
     this.timer = setTimeout(() => {
       this.timer = null
+      this.timerDueAt = 0
       this.pump()
     }, ms)
   }
@@ -244,6 +272,7 @@ export class RateGate {
     this.cleanStreak = 0
     this.rate = Math.max(MIN_RATE, this.rate / 2)
     this.tokens = 0
+    this.backgroundTokens = 0
     this.cooldownUntil = Date.now() + this.options.cooldownSeconds * 1000
   }
 }

@@ -9,6 +9,7 @@
     "npm": ">=10.9.8"
   },
   "scripts": {
+    "probe:browser": "tsx scripts/probe-browser.ts",
     "probe:agents": "tsx scripts/probe-agents.ts",
     "probe:agent-images": "tsx scripts/probe-agent-images.ts",
     "probe:agent-charts": "tsx scripts/probe-agent-charts.ts",

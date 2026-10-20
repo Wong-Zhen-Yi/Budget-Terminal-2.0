@@ -13,6 +13,7 @@ apps/desktop/AppData/
 **/user_data.json
 **/strategies.json
 **/budget-terminal-backup-*.json
+**/budget-terminal-backup.json
 output/playwright/
 output/mockups/
 plugins/budget-terminal/server/
@@ -30,6 +31,42 @@ conf/
 **/*.key
 **/*.p12
 **/*.pfx
+
+# Chromium login/session profiles, including copies accidentally placed in the checkout.
+**/User Data/
+**/userData/
+**/browser-profile/
+**/browser-profiles/
+**/chromium-profile/
+**/chromium-profiles/
+**/Partitions/
+**/partitions/
+**/budget-terminal-research/
+**/Cookies
+**/Cookies-*
+**/Login Data
+**/Login Data-*
+**/Web Data
+**/Web Data-*
+**/History
+**/History-*
+**/Local State
+**/Preferences
+**/Secure Preferences
+**/Local Storage/
+**/Session Storage/
+**/IndexedDB/
+**/Service Worker/
+**/Network/
+**/Sessions/
+**/Cache/
+**/Code Cache/
+**/GPUCache/
+**/DawnCache/
+**/cookies*.json
+**/cookies*.txt
+**/passwords*.csv
+**/credentials*.json
 
 # Saved records, legacy browser-access credentials, and local databases.
 **/articles.json

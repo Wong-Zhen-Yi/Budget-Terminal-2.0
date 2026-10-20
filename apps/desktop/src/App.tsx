@@ -1,4 +1,5 @@
 import { ArticlesPage } from '@/pages/ArticlesPage'
+import { BrowserPage } from '@/pages/BrowserPage'
 import { AgentsPage } from '@/pages/AgentsPage'
 import { useAgents, useAgentCommand } from '@/api/agentsQueries'
 import { Sp500Page } from '@/pages/Sp500Page'
@@ -331,14 +332,14 @@ export function App() {
   const visibleIds = useMemo(() => visibleTabs.map((tab) => tab.id), [visibleTabs])
   const renderCachedPage = useCallback((tabId: string) => renderPage({
     tabId,
-    active: tabId === activeTab && !hideCurrent,
+    active: tabId === activeTab && !hideCurrent && !pickerOpen,
     onStatusChange: statusFor(tabId),
     onNavigate: handleStocksNavigate,
     onSelectTab: setActiveTab,
     agentFavorite: favorites.includes('agents'),
     savingFavorite: savingFavorite || !settings,
     onToggleFavorite: toggleFavorite,
-  }), [statusFor, handleStocksNavigate, activeTab, hideCurrent, favorites, savingFavorite, settings, toggleFavorite])
+  }), [statusFor, handleStocksNavigate, activeTab, hideCurrent, pickerOpen, favorites, savingFavorite, settings, toggleFavorite])
 
   return (
     <div className={`terminal-shell flex h-full flex-col bg-bg ${isMac ? 'platform-mac' : ''}`}>
@@ -400,8 +401,8 @@ export function App() {
         notice={notice}
         warming={
           warm.active
-            ? `Loading pages (${warm.done}/${warm.total} complete): ${warm.label}...${warm.failed ? ` · ${warm.failed} failed` : ''}`
-            : warm.failed ? `${warm.failed} startup load(s) failed. Open Settings for details.` : ''
+            ? `Loading pages (${warm.done}/${warm.total} complete): ${warm.label}...${warm.failed ? ` · ${warm.failed} failed` : ''}${warm.degraded ? ` · ${warm.degraded} incomplete` : ''}`
+            : warm.failed || warm.degraded ? `${warm.failed} startup load(s) failed · ${warm.degraded} incomplete. Open Settings for details.` : ''
         }
       />
 
@@ -456,6 +457,8 @@ function renderPage({
   return (
     tabId === 'agents' ? (
       <AgentsPage onStatusChange={onStatusChange} favorite={agentFavorite} savingFavorite={savingFavorite} onToggleFavorite={onToggleFavorite} />
+    ) : tabId === 'browser' ? (
+      <BrowserPage active={active} onStatusChange={onStatusChange} />
     ) : tabId === 'articles' ? (
       <ArticlesPage onStatusChange={onStatusChange} />
     ) : tabId === 'dashboard' || tabId === 'dashboard-2' ? (

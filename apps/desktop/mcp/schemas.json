@@ -1,4 +1,155 @@
 {
+  "browserStatus": {
+    "$ref": "#/definitions/Input_browserStatus",
+    "definitions": {
+      "Input_browserStatus": {
+        "$ref": "#/definitions/Record%3Cstring%2Cnever%3E"
+      },
+      "Record<string,never>": {
+        "type": "object",
+        "additionalProperties": {
+          "not": {}
+        }
+      }
+    }
+  },
+  "browserResearch": {
+    "$ref": "#/definitions/Input_browserResearch",
+    "definitions": {
+      "Input_browserResearch": {
+        "$ref": "#/definitions/BrowserRequest"
+      },
+      "BrowserRequest": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "open"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "action"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "navigate"
+              },
+              "tabId": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "action",
+              "url"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "search"
+              },
+              "tabId": {
+                "type": "string"
+              },
+              "query": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "action",
+              "query"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "select",
+                  "close",
+                  "back",
+                  "forward",
+                  "reload",
+                  "stop",
+                  "read",
+                  "screenshot"
+                ]
+              },
+              "tabId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "action"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "follow"
+              },
+              "tabId": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "action",
+              "url"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "const": "scroll"
+              },
+              "tabId": {
+                "type": "string"
+              },
+              "direction": {
+                "type": "string",
+                "enum": [
+                  "up",
+                  "down"
+                ]
+              }
+            },
+            "required": [
+              "action",
+              "direction"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    }
+  },
   "apiUsage": {
     "$ref": "#/definitions/Input_apiUsage",
     "definitions": {
@@ -30,6 +181,7 @@
               "all",
               "articles",
               "agents",
+              "browser",
               "dashboard",
               "dashboard-2",
               "portfolio",

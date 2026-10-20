@@ -230,7 +230,9 @@ try {
             check(text.includes('123.45 EUR') && text.includes('-2.50 EUR') && !text.includes('$123.45'), 'Foreign quote header mislabeled: ' + tab.id)
           }
           if (restored && tab.id === 'charts') check(visiblePage(tab.id).innerText.includes('100.00 GBp'), 'Charts did not retain the raw pence unit')
-          const initial = calls.slice(before).filter(call => !['mcpStatus', 'apiUsage', 'mutateSettings'].includes(call.method))
+          // Browser viewport IPC only places/hides its already-initialized native
+          // view. It is not a data load; browserStatus/research/control still count.
+          const initial = calls.slice(before).filter(call => !['mcpStatus', 'apiUsage', 'mutateSettings', 'browserViewport'].includes(call.method))
           check(initial.length === 0, 'First-visit request on ' + scenario + '/' + tab.id + ': ' + JSON.stringify(initial))
           if (scenario === 'populated' && tab.id === 'portfolio') {
             const page = visiblePage(tab.id)

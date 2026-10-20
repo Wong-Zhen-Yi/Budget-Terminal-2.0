@@ -4,9 +4,10 @@ import type { Envelope } from '@shared/contract'
 import { effectiveFreshness, registerSnapshot } from './snapshotHealth'
 
 const REQUEST_TIMEOUT_MS = 90_000
-// All pages join the provider queue together. A cold startup can take several
-// minutes at Yahoo's shared pacing rate, especially when it enters a cooldown.
-const STARTUP_TIMEOUT_MS = 600_000
+// All pages join the provider queue together. Yahoo background requests start at
+// most once a second, so a cold startup with large universes can take many minutes.
+// Include queue time and 429 cooldowns without falsely failing the slower warm-up.
+const STARTUP_TIMEOUT_MS = 1_800_000
 
 export class StartupLoadError extends Error {
   constructor(message: string, readonly state: 'degraded' | 'failed') {
@@ -14,12 +15,18 @@ export class StartupLoadError extends Error {
   }
 }
 
+function startupFailureReason(result: unknown, fallback: string): string {
+  const envelope = result as { meta?: { failureReason?: string }; errors?: Array<{ reason?: string }> } | null
+  return envelope?.meta?.failureReason || (Array.isArray(envelope?.errors)
+    ? envelope.errors.map(error => error.reason).filter(Boolean).join(' · ') : '') || fallback
+}
+
 export function assertStartupReady(result: unknown): void {
   const meta = (result as { meta?: { freshness?: string; failureReason?: string } } | null)?.meta
   if (meta?.freshness === 'partial' || meta?.freshness === 'stale') {
-    throw new StartupLoadError(meta.failureReason || `Startup data is ${meta.freshness}`, 'degraded')
+    throw new StartupLoadError(startupFailureReason(result, `Startup data is ${meta.freshness}`), 'degraded')
   }
-  if (meta?.freshness === 'failed') throw new StartupLoadError(meta.failureReason || 'Startup data failed', 'failed')
+  if (meta?.freshness === 'failed') throw new StartupLoadError(startupFailureReason(result, 'Startup data failed'), 'failed')
 }
 
 /** Fetch dependent snapshots before classifying the complete initial page. */
@@ -75,13 +82,15 @@ export async function warmQuery<T>(client: QueryClient, options: {
 }, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
   const cached = client.getQueryData<Envelope<unknown>>(options.queryKey)
   const lifetime = queryFreshness(options.queryKey)
-  const expired = cached?.meta && effectiveFreshness(cached, Date.now(), lifetime) === 'stale'
+  const freshness = cached?.meta && effectiveFreshness(cached, Date.now(), lifetime)
+  const needsRecovery = freshness === 'stale' || freshness === 'partial' || freshness === 'failed'
   // The outer deadline also covers joining an existing foreground fetch or a query
   // paused by React Query while offline. Never cancel a query another page is using.
   const result = await withDeadline(() => client.fetchQuery({
     ...options,
-    // Hydrated pages are only skipped when they are still fresh by the shared policy.
-    staleTime: expired ? 0 : Math.min(options.staleTime, lifetime),
+    // A recent partial/failed snapshot is not a successful warm-up. Refetch it on
+    // recovery instead of reusing it until its normal (possibly hours-long) TTL.
+    staleTime: needsRecovery ? 0 : Math.min(options.staleTime, lifetime),
     retry: false,
     networkMode: 'always',
     queryFn: () => withDeadline(async () => {
@@ -89,7 +98,7 @@ export async function warmQuery<T>(client: QueryClient, options: {
       const meta = (result as { meta?: { freshness?: string; failureReason?: string } } | null)?.meta
       // A failed envelope is otherwise cached as success forever by Infinity queries.
       // Keep partial/stale payloads, but let a wholly failed page retry on mount.
-      if (meta?.freshness === 'failed') throw new StartupLoadError(meta.failureReason || 'Background page load failed', 'failed')
+      if (meta?.freshness === 'failed') throw new StartupLoadError(startupFailureReason(result, 'Background page load failed'), 'failed')
       registerSnapshot(result, queryFreshness(options.queryKey))
       return result
     }, timeoutMs),

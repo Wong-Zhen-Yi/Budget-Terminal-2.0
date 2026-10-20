@@ -11,6 +11,7 @@ import type { AgentNotification, AgentTracker } from '../shared/agentWorkspace.j
 import { applyAgentPortfolioUpdate, readPortfolios } from './portfolioStore.js'
 import { publishSavedDataChanged } from './savedDataEvents.js'
 import { withAutomaticBackup } from './automaticBackup.js'
+import { browserControl } from './browser.js'
 
 let service: AgentsService | null = null
 let startup: Promise<unknown> | null = null
@@ -99,6 +100,7 @@ export async function agentsStatus() {
   return error ? failed(state, error, 'Codex agent') : ok(state, 'Codex agent')
 }
 export async function agentsCommand(command: AgentsCommand) {
+  if (command?.type === 'stop') await browserControl({ action: 'stop' })
   try { return ok(await agent().command(command), 'Codex agent') }
   catch (error) { return failed(agent().snapshot(), error instanceof Error ? error.message : String(error), 'Codex agent') }
 }

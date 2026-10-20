@@ -24,6 +24,8 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
     })
   }
   const provider = yahooProvider
+  handle(CHANNELS.browserControl, async (_event, request) => (await import('../services/browser.js')).browserControl(request))
+  handle(CHANNELS.browserViewport, async (_event, viewport) => (await import('../services/browser.js')).setBrowserViewport(viewport))
   handle(CHANNELS.agentsStatus, () => agentsStatus())
   handle(CHANNELS.agentsCommand, (_event, command: AgentsCommand) => agentsCommand(command))
   handle(CHANNELS.agentsImage, (_event, id: string) => agentsImage(id))

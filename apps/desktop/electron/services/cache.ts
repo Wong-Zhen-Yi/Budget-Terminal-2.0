@@ -25,6 +25,10 @@ interface Entry<T> {
 
 type RetentionClass = 'snapshot' | 'asset' | 'intraday' | 'history'
 
+// Incomplete derived results must not pin a brief outage for a normal multi-hour
+// TTL. A short negative-cache window still coalesces concurrent failed fan-outs.
+const DEGRADED_RETRY_MS = 10_000
+
 interface CacheOptions {
   path?: string
   maxBytes?: number
@@ -177,7 +181,9 @@ export class TtlCache {
       return null
     }
     const now = Date.now()
-    const expiresAt = Math.min(entry.storedAt + entry.ttlMs, entry.snapshot?.expiresAt ?? Infinity)
+    const degraded = entry.snapshot?.stale || Boolean(entry.snapshot?.failures.length)
+    const expiresAt = Math.min(entry.storedAt + entry.ttlMs, entry.snapshot?.expiresAt ?? Infinity,
+      degraded ? entry.storedAt + DEGRADED_RETRY_MS : Infinity)
     if (now > expiresAt && !allowStale) return null
     try {
       this.touchEntry?.run(now, key)
@@ -200,6 +206,7 @@ export class TtlCache {
   set<T>(key: string, value: T, ttlMs: number, snapshot?: SourceSnapshot): void {
     this.failures.delete(key)
     const storedAt = Date.now()
+    if (snapshot?.stale || snapshot?.failures.length) ttlMs = Math.min(ttlMs, DEGRADED_RETRY_MS)
     this.entries.set(key, { value, storedAt, ttlMs, snapshot })
     if (!this.upsertEntry) return
     try {

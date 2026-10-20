@@ -1,0 +1,46 @@
+.browser-page { display: flex; flex: 1; flex-direction: column; min-height: 0; color: var(--color-text, #e5eaf2); background: #090f19; font-size: 13px; }
+.browser-page button { cursor: pointer; border: 1px solid #28354a; border-radius: 5px; background: #131e2e; color: #cbd7e7; padding: 6px 10px; white-space: nowrap; }
+.browser-page button:hover:not(:disabled) { border-color: #57a9d0; color: #ecfaff; background: #192a3e; }
+.browser-page button:disabled { cursor: default; opacity: .4; }
+.browser-page button:focus-visible, .browser-page input:focus-visible { outline: 2px solid #68c9ef; outline-offset: 2px; }
+.browser-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 20px; border-bottom: 1px solid #233044; background: linear-gradient(110deg, #101e30, #0b1421); }
+.browser-eyebrow { font-size: 10px; letter-spacing: .16em; color: #69b6d3; }
+.browser-heading h1 { margin: 2px 0 0; font-size: 23px; font-weight: 600; letter-spacing: -.03em; }
+.browser-heading h1 span { margin-left: 10px; color: #7e93ac; font-size: 11px; font-weight: 400; letter-spacing: 0; }
+.browser-access { display: flex; gap: 10px; align-items: center; font-size: 12px; color: #92a3ba; }
+.browser-access .browser-agent-on { color: #71d9b4; }
+.browser-access .browser-stop { color: #f2acaa; border-color: #654044; }
+.browser-tabs { display: flex; align-items: center; gap: 5px; padding: 7px 12px 0; background: #0d1623; overflow-x: auto; flex-shrink: 0; }
+.browser-tab { display: flex; min-width: 100px; max-width: 230px; border: 1px solid #263346; border-radius: 6px 6px 0 0; background: #101b2b; }
+.browser-tab.is-active { border-bottom-color: #61c5e5; background: #1a2b40; }
+.browser-tab button { border: 0; background: transparent; font-size: 12px; }
+.browser-tab button[role=tab] { flex: 1; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.browser-tab button:last-child { padding-left: 6px; padding-right: 6px; }
+.browser-toolbar { display: flex; align-items: center; gap: 6px; padding: 9px 12px; border-bottom: 1px solid #233044; background: #0d1623; }
+.browser-address { display: flex; align-items: center; gap: 9px; min-width: 100px; flex: 1; padding: 0 10px; color: #67b7ca; border: 1px solid #2a3b50; border-radius: 5px; background: #070f1a; }
+.browser-address input { min-width: 0; width: 100%; background: transparent; color: #e0eaf7; font-size: 13px; border: 0; padding: 7px 0; }
+.browser-activity { display: flex; gap: 8px; align-items: center; min-height: 30px; padding: 5px 15px; font-size: 11px; color: #92a6bd; border-bottom: 1px solid #1c293b; }
+.browser-activity > span:first-child { color: #5e9b91; font-size: 9px; }
+.browser-activity > span.is-working { color: #e8bd71; }
+.browser-activity-note { margin-left: auto; color: #647a94; }
+.browser-error { background: #321b25; color: #ffb6b9; padding: 8px 14px; overflow-wrap: anywhere; }
+.browser-error button { margin-left: 10px; }
+.browser-content { display: flex; flex: 1; min-height: 0; }
+.browser-viewport { position: relative; min-width: 0; flex: 1; overflow: auto; }
+.browser-placeholder { color: #647a94; padding: 30px; font-size: 12px; }
+.browser-start { max-width: 850px; margin: auto; padding: clamp(25px, 5vh, 65px) 30px 25px; }
+.browser-globe { color: #74c6dd; font-size: 62px; line-height: 1; margin-bottom: 15px; }
+.browser-start h2 { font-size: clamp(27px, 3vw, 42px); font-weight: 500; margin: 8px 0; letter-spacing: -.04em; }
+.browser-start > p { color: #90a4bf; line-height: 1.7; max-width: 580px; font-size: 14px; }
+.browser-sources { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 26px 0; }
+.browser-sources button { text-align: left; white-space: normal; padding: 18px; }
+.browser-sources strong { display: block; color: #c9e2ef; font-size: 14px; font-weight: 500; }
+.browser-sources span { display: block; font-size: 11px; color: #8199b2; margin-top: 7px; line-height: 1.6; }
+.browser-safety { color: #7f96b1; border-left: 2px solid #2c6074; padding: 4px 15px; font-size: 12px; line-height: 1.8; }
+.browser-safety strong { color: #b6ccdd; }
+.browser-reader { width: 360px; max-width: 45%; border-left: 1px solid #2b3c51; padding: 16px; overflow: auto; background: #0e1827; overflow-wrap: anywhere; }
+.browser-reader > div { display: flex; align-items: flex-start; gap: 10px; justify-content: space-between; }
+.browser-reader h2 { font-size: 16px; margin: 0; }
+.browser-reader p, .browser-reader small { color: #8eabc1; font-size: 11px; }
+.browser-reader pre { white-space: pre-wrap; font-family: inherit; font-size: 13px; line-height: 1.8; margin-top: 18px; }
+@media (max-width: 850px) { .browser-activity-note { display: none; } .browser-sources { grid-template-columns: 1fr; } .browser-heading { padding: 10px 12px; } .browser-access { gap: 6px; } }

@@ -5,10 +5,12 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { computeExposure, emptyRiskMetrics } from '../electron/shared/analytics.js'
 import { ok } from '../electron/shared/envelope.js'
 import { MACRO_SYMBOLS, TABS, type AnalyticsPayload, type ChartPayload, type CryptoPayload, type NewsArticle, type OptionPosition, type Portfolio, type SignalsPayload, type SignalsRequest } from '../electron/shared/contract.js'
-import { runWarmTasks, waitForWarmSlot, warmQuery, warmStartupQuery, StartupLoadError } from '../src/api/warmQueue.js'
+import { assertStartupReady, runWarmTasks, waitForWarmSlot, warmQuery, warmStartupQuery, StartupLoadError } from '../src/api/warmQueue.js'
 import { recentPages, startupPages } from '../electron/shared/navigation.js'
 import { recordStartupLoad, restoreStartupLoads, startupPageOrder } from '../electron/shared/startupLoading.js'
 import { createProgressReporter } from '../src/api/progressReporter.js'
+import { retryTransientData } from '../electron/shared/dataRetry.js'
+import { observeSource } from '../electron/services/sourceHealth.js'
 
 let progressValue = 0
 const reportedProgress: number[] = []
@@ -74,7 +76,44 @@ const degradedSnapshot = { ...ok({ price: 100 }, 'fixture'),
 await assert.rejects(warmStartupQuery(expiredClient, { queryKey: ['startupDegraded'], staleTime: 0,
   queryFn: async () => degradedSnapshot }), (error: unknown) => error instanceof StartupLoadError && error.state === 'degraded')
 assert.equal(expiredClient.getQueryData(['startupDegraded']), degradedSnapshot, 'Degraded startup retains usable panels')
+for (const freshness of ['partial', 'stale', 'failed'] as const) {
+  const key = ['startupRecovery', freshness]
+  expiredClient.setQueryData(key, { ...degradedSnapshot, meta: { ...degradedSnapshot.meta, freshness } })
+  let recoveryCalls = 0
+  const recovered = await warmStartupQuery(expiredClient, { queryKey: key, staleTime: Infinity,
+    queryFn: async () => { recoveryCalls++; return ok({ price: 101 }, 'fixture') } })
+  assert.equal(recoveryCalls, 1, 'Recent incomplete cache entries must refetch instead of remaining pinned')
+  assert.equal(recovered.meta.freshness, 'fresh')
+}
+assert.throws(() => assertStartupReady({ ...degradedSnapshot,
+  meta: { ...degradedSnapshot.meta, failureReason: '' }, errors: [{ reason: 'HTTP 503 from upstream' }] }), /HTTP 503 from upstream/,
+  'Partial envelopes without meta.failureReason must retain the actual retryable source error')
+const retryDelays: number[] = []
+let recoveryAttempt = 0
+const recoveryProgress: string[] = []
+await runWarmTasks(['transient', 'permanent'], {
+  isCancelled: () => false,
+  onStart: task => recoveryProgress.push(`start:${task}`),
+  onSettled: (task, result) => recoveryProgress.push(`${result.status}:${task}`),
+  run: task => retryTransientData(async () => {
+    if (task === 'permanent') throw new Error('Invalid symbol')
+    return warmStartupQuery(expiredClient, { queryKey: ['retryPartial'], staleTime: Infinity,
+      queryFn: async () => ++recoveryAttempt === 1
+        ? { ...degradedSnapshot, meta: { ...degradedSnapshot.meta, failureReason: 'HTTP 503' } }
+        : ok({ price: 102 }, 'fixture') })
+  }, { maxAttempts: 2, baseDelayMs: 12_000, random: () => 0,
+    sleep: async ms => { retryDelays.push(ms) },
+    onRetry: (_error, attempt) => recoveryProgress.push(`retry:${task}:${attempt}`),
+  }),
+})
+assert.equal(recoveryAttempt, 2, 'Recovery must not reuse the partial result from the first attempt')
+assert.deepEqual(retryDelays, [12_000], 'Page recovery must outlast the service negative-cache window')
+assert(recoveryProgress.includes('retry:transient:2'), 'Recovery progress must be observable')
+assert.equal(recoveryProgress.filter(entry => entry === 'fulfilled:transient').length, 1)
+assert.equal(recoveryProgress.filter(entry => entry === 'rejected:permanent').length, 1)
+assert.equal(recoveryProgress.filter(entry => entry.startsWith('start:')).length, 2, 'Retries must not double-count startup tasks')
 expiredClient.clear()
+console.log('Startup recovery checks passed: incomplete cached results refetch, transient partial data recovers, retry progress is visible and final failures count once.')
 
 // Build the actual startup task list with a representative portfolio. An added page
 // must receive a task or be explicitly accounted for as local/shared initial state.
@@ -350,6 +389,22 @@ try {
 } finally {
   Date.now = realNow
 }
+// An incomplete derived cache must expire in seconds, not its normal hours-long
+// lifetime, while remaining immediately available to coalesce concurrent reads.
+let derivedCalls = 0
+await local.resolve('degraded-derived', 12 * 60 * 60_000, async () => {
+  derivedCalls++
+  observeSource({ fetchedAt: Date.now(), stale: false, fromCache: false, failures: ['HTTP 503'] })
+  return { usable: true }
+})
+assert(local.get('degraded-derived'), 'Partial content remains usable during the failure-coalescing window')
+try {
+  Date.now = () => afterCooldown
+  assert.equal(local.get('degraded-derived'), null, 'Incomplete cache must not suppress a recovery fetch for hours')
+  assert(local.get('degraded-derived', { allowStale: true }), 'Incomplete content remains available as a stale fallback')
+  await local.resolve('degraded-derived', 12 * 60 * 60_000, async () => { derivedCalls++; return { usable: true } })
+  assert.equal(derivedCalls, 2)
+} finally { Date.now = realNow }
 local.delete('stale')
 await assert.rejects(local.resolve('stale', 1000, fail), /provider unavailable/)
 assert.equal(failures, 3)

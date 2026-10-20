@@ -4,6 +4,7 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { CARD_INTERVALS, MACRO_SYMBOLS, type AppSettings, type PortfolioPayload } from '@shared/contract'
 import { startupPages } from '@shared/navigation'
 import { startupPageOrder } from '@shared/startupLoading'
+import { retryTransientData } from '@shared/dataRetry'
 import { SP500_PARTS } from '@shared/sp500'
 import { marketCapInTier } from '@shared/marketCap'
 import { pickDiscoverySymbol } from '@shared/discovery'
@@ -34,6 +35,7 @@ import { usePortfolio } from './queries'
 import { assertStartupReady, runWarmTasks, StartupLoadError, warmStartupQuery, warmStartupSnapshot } from './warmQueue'
 import { initialNewsImages, initialYouTubeVideo, newsQuoteTickers } from './initialContent'
 import { warmAgentWorkspace } from './agentsQueries'
+import { browserKey, loadBrowser } from './browserQueries'
 import { errorMessage } from './snapshotHealth'
 import { createProgressReporter } from './progressReporter'
 
@@ -104,6 +106,9 @@ export function buildTasks(
 ): WarmTask[] {
   const { active, every, editable, main, upDown } = holdingsOf(payload)
   const tasks: WarmTask[] = [{
+    tab: 'browser', label: 'Browser Chromium session',
+    run: client => warmStartupQuery(client, { queryKey: browserKey, queryFn: loadBrowser, staleTime: Infinity }),
+  }, {
     tab: 'agents', label: 'Agents workspace',
     run: (client, backgroundOrder) => warmAgentWorkspace(client, backgroundOrder),
   }, {
@@ -1106,6 +1111,7 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
       let completed = 0
       const activeLabels = new Set<string>()
       const taskStarts = new Map<WarmTask, number>()
+      const retryReasons = new Map<WarmTask, string>()
       const pages: NonNullable<NonNullable<ReturnType<typeof useDataHealth.getState>['startup']>['pages']> = Object.fromEntries(pageOrder.map((page) => [page, {
         state: tasks.some((task) => task.tab === page) ? 'loading' as const
           : ['options', 'news', 'youtube', 'valuation', 'backtest', 'stocks', 'fundamentals', 'projections'].includes(page) ? 'idle' as const : 'ready' as const,
@@ -1136,7 +1142,19 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
       })
       reporter.flush()
       await runWarmTasks(tasks, {
-        run: (task) => task.run(queryClient, pageRanks.get(task.tab)),
+        run: (task) => retryTransientData(() => task.run(queryClient, pageRanks.get(task.tab)), {
+          maxAttempts: 2,
+          // Outlast the service cache's 10s failure coalescing window. Successful
+          // dependencies stay cached, so recovery only reloads missing pieces.
+          baseDelayMs: 12_000,
+          isCancelled: () => cancelled,
+          onRetry: (error, attempt, delayMs) => {
+            const reason = `Retry ${attempt}/2 in ${Math.ceil(delayMs / 1000)}s: ${errorMessage(error)}`
+            retryReasons.set(task, reason)
+            pages[task.tab] = { state: 'loading', reason }
+            reporter!.schedule()
+          },
+        }),
         isCancelled: () => cancelled,
         onStart: (task) => {
           activeLabels.add(task.label)
@@ -1153,6 +1171,11 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
             console.warn(`[warm-up] ${task.label}:`, reason)
           }
           activeLabels.delete(task.label)
+          retryReasons.delete(task)
+          if (pages[task.tab]?.state === 'loading') {
+            pages[task.tab] = { state: 'loading', reason: tasks.filter(entry => entry.tab === task.tab)
+              .map(entry => retryReasons.get(entry)).find(Boolean) }
+          }
           completed += 1
           timings.push({ tab: task.tab, label: task.label, durationMs: performance.now() - taskStarts.get(task)!, failed, state, reason })
           const pageTimings = timings.filter((entry) => entry.tab === task.tab)

@@ -1,3 +1,5 @@
+import type { BrowserControl, BrowserRequest, BrowserResult, BrowserState, BrowserViewport } from './browser.js'
+export type { BrowserRequest } from './browser.js'
 import type { AgentImage, AgentsCommand, AgentsState } from './agents.js'
 import type { ArticlesPayload, ArticlesMutation } from './articles.js'
 import type { DefeatBetaTerminalRequest, DefeatBetaTerminalPayload } from './defeatbetaTerminal.js'
@@ -1287,6 +1289,7 @@ export const OPTION_BUCKETS: ReadonlyArray<{ key: OptionBucketKey; label: string
 export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boolean }> = [
   { id: 'articles', label: 'Articles', implemented: true },
   { id: 'agents', label: 'Agents', implemented: true },
+  { id: 'browser', label: 'Browser', implemented: true },
   { id: 'dashboard', label: 'Dashboard', implemented: true },
   { id: 'dashboard-2', label: 'Dashboard 2.0', implemented: true },
   { id: 'portfolio', label: 'Portfolio', implemented: true },
@@ -3422,6 +3425,10 @@ export interface PoliticsExportRequest {
 }
 
 export const CHANNELS = {
+  browserStatus: 'browser:status',
+  browserResearch: 'browser:research',
+  browserControl: 'browser:control',
+  browserViewport: 'browser:viewport',
   agentsStatus: 'agents:status',
   agentsCommand: 'agents:command',
   agentsImage: 'agents:image',
@@ -3605,6 +3612,10 @@ export interface FxRequest extends BackgroundRequest {
 export type WindowAction = 'minimize' | 'maximize' | 'close'
 
 export interface DesktopApi {
+  browserStatus(): Promise<Envelope<BrowserState>>
+  browserResearch(request: BrowserRequest): Promise<Envelope<BrowserResult>>
+  browserControl(request: BrowserControl): Promise<Envelope<BrowserResult>>
+  browserViewport(viewport: BrowserViewport): Promise<void>
   agentsStatus(): Promise<Envelope<AgentsState>>
   agentsCommand(command: AgentsCommand): Promise<Envelope<AgentsState>>
   agentsImage(id: string): Promise<Envelope<AgentImage | null>>

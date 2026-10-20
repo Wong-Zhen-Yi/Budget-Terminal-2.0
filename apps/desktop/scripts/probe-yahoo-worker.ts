@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createYahooWorkerClient } from '../electron/services/yahoo/workerClient.js'
-import { isRateLimitError } from '../electron/services/yahoo/rateGate.js'
+import { isRateLimitError, RateGate } from '../electron/services/yahoo/rateGate.js'
 import { ApiUsageTracker } from '../electron/services/apiUsage.js'
 
 // Exercise the production worker transport with deterministic CPU-heavy responses.
@@ -64,11 +64,29 @@ try {
       console.log(`PASS: Electron button interaction completed in ${inputDelay.toFixed(0)}ms during Yahoo processing`)
     } finally { window.destroy() }
   }
+  const timed = createYahooWorkerClient(`data:text/javascript,${encodeURIComponent(fixture)}`, 500)
+  const timedQuote = timed.yahoo.quote as unknown as (symbol: string) => Promise<{ symbol: string; calls: number }>
+  const gate = new RateGate({ requestsPerSecond: 1_000, burst: 6, backgroundRequestsPerSecond: 1_000 })
+  try {
+    await timedQuote('warm')
+    const startedAt = Date.now()
+    const outcomes = await Promise.allSettled([
+      gate.run(() => timedQuote('pending'), 'background'),
+      gate.run(() => timedQuote('pending'), 'background'),
+      gate.run(() => timedQuote('after-timeout'), 'background'),
+    ])
+    assert(outcomes.slice(0, 2).every(outcome => outcome.status === 'rejected' && outcome.reason.code === 'ETIMEDOUT'), 'Watchdog must settle every caller on the stuck worker')
+    assert.equal(outcomes[2].status, 'fulfilled', 'Queued work must continue on a fresh worker')
+    if (outcomes[2].status === 'fulfilled') assert.equal(outcomes[2].value.calls, 1, 'Timed-out session must be replaced')
+    assert(Date.now() - startedAt < 3_000, 'A stuck request held the queue indefinitely')
+    assert.equal(gate.stats().inFlight, 0, 'Timeout must release provider concurrency slots')
+    assert.equal((await timedQuote('still-healthy')).calls, 2, 'Old worker exit must not terminate the replacement')
+  } finally { timed.close() }
   const pending = quote('pending')
   remote.close()
   await assert.rejects(pending, /closed/)
   await assert.rejects(quote('after-close'), /closed/)
-  console.log(`PASS: 400ms Yahoo CPU burst kept main heartbeat at ${heartbeatDelay.toFixed(0)}ms; session reuse, Dates, 429, crash recovery, clone errors and shutdown`)
+  console.log(`PASS: 400ms Yahoo CPU burst kept main heartbeat at ${heartbeatDelay.toFixed(0)}ms; session reuse, Dates, 429, crash/timeout recovery, released gate slots, clone errors and shutdown`)
 } finally {
   remote.close()
 }

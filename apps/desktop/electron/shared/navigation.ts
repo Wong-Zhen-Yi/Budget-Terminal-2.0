@@ -6,7 +6,7 @@ export const DEFAULT_TAB_ID = 'dashboard-2'
 export const WORKSPACES = [
   { id: 'overview', label: 'Overview', pages: ['dashboard', 'dashboard-2', 'news', 'calendar', 'youtube', 'dictionary'] },
   { id: 'markets', label: 'Markets', pages: ['pre-market', 'heatmap', 'up-down', 'trading-volumes', 'beta', 'market-cap', 'price', 'etf', 'sp500', 'forex', 'crypto', 'gold', 'oil'] },
-  { id: 'research', label: 'Research', pages: ['stocks', 'stock-discovery', 'fundamentals', 'defeatbeta', 'valuation', 'institutions'] },
+  { id: 'research', label: 'Research', pages: ['browser', 'stocks', 'stock-discovery', 'fundamentals', 'defeatbeta', 'valuation', 'institutions'] },
   { id: 'focus', label: 'Focus', pages: ['bmnr', 'bitcoin', 'pltr', 'hood', 'hims', 'sofi', 'mu', 'amzn', 'avgo', 'semiconductors', 'vst'] },
   { id: 'trading', label: 'Trading', pages: ['charts', 'options', 'technical-screen', 'quant', 'backtest'] },
   { id: 'macro', label: 'Macro & events', pages: ['global', 'economic', 'bonds', 'money', 'ipo', 'politics'] },

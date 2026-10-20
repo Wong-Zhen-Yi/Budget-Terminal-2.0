@@ -37,6 +37,7 @@ research pages.
 | :--- | :--- |
 | **🌍 Follow the markets** | Explore heatmaps, ETFs, forex, crypto, commodities, news, and economic events. |
 | **🔎 Research companies** | Review fundamentals, valuation, institutional activity, [DefeatBeta Terminal](docs/defeatbeta-terminal.md), and focused company and semiconductor pages. |
+| **🌐 Browse the sources** | Use the embedded [Browser](docs/browser.md) with shared Chromium tabs, source text reading, and agent research access enabled by default with Disable and Stop controls. Login profiles stay outside source/Git, with ignore rules and commit/push checks against accidental publication. |
 | **📈 Study price action** | Work with charts, technical indicators, options chains, quantitative tools, and backtests. |
 | **💼 Track your money** | Manage portfolios, personal finance, Cards, and projections with local saved records and backups. |
 | **⚡ Open ready pages** | Every implemented page starts loading at launch, with startup progress and failures visible. |

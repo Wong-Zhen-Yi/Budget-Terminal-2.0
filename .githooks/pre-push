@@ -1,4 +1,4 @@
 #!/bin/sh
-# Check pushed commit history as well as the current tree; deleting a private file
+# Check pushed history for private Agents/browser data; deleting a private file
 # in a later commit does not remove it from earlier commits sent to GitHub.
 node scripts/check-private-agent-data.cjs --push || exit 1

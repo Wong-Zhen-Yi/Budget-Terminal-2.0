@@ -21,6 +21,10 @@ import {
 
 const scratch = mkdtempSync(join(tmpdir(), 'bt-cache-'))
 const databasePath = join(scratch, 'cache.sqlite')
+const originalAppData = process.env.APPDATA
+const originalLocalAppData = process.env.LOCALAPPDATA
+process.env.APPDATA = join(scratch, 'roaming')
+process.env.LOCALAPPDATA = join(scratch, 'local')
 
 function row(time: number, close: number): YahooSeriesRow {
   return { time, open: close, high: close, low: close, close, adjclose: close, volume: 100 }
@@ -55,6 +59,32 @@ async function persistentCacheChecks(): Promise<void> {
   )
   assert.equal(fallback.stale, true)
   reopened.close()
+
+  const degradedPath = join(scratch, 'degraded.sqlite')
+  const degraded = new TtlCache({ path: degradedPath })
+  const fetchedAt = Date.now()
+  degraded.set('partial', { rows: [1] }, 43_200_000,
+    { fetchedAt, stale: false, fromCache: false, failures: ['HTTP 503'] })
+  degraded.close()
+  // Also cover incomplete entries persisted by an older build with the full TTL.
+  const oldPartial = new DatabaseSync(degradedPath)
+  oldPartial.prepare('UPDATE cache_entries SET ttl_ms = ?').run(43_200_000)
+  oldPartial.close()
+  const recoveredStore = new TtlCache({ path: degradedPath })
+  const originalNow = Date.now
+  try {
+    Date.now = () => fetchedAt + 10_001
+    assert.equal(recoveredStore.get('partial'), null, 'Persisted partial data must not block recovery for hours')
+    assert.deepEqual(recoveredStore.get('partial', { allowStale: true })?.value, { rows: [1] })
+    let loads = 0
+    const refreshed = await recoveredStore.resolve('partial', 43_200_000, async () => { loads++; return { rows: [1, 2] } })
+    assert.equal(loads, 1)
+    assert.deepEqual(refreshed.value.rows, [1, 2])
+    assert.deepEqual(recoveredStore.get('partial')?.snapshot?.failures, [], 'Recovery must clear cached failure provenance')
+  } finally {
+    Date.now = originalNow
+    recoveredStore.close()
+  }
 
   const database = new DatabaseSync(databasePath)
   const sizePlan = database.prepare('EXPLAIN QUERY PLAN SELECT COALESCE(SUM(size_bytes), 0) AS total FROM cache_entries').all()
@@ -224,5 +254,9 @@ try {
   }
   console.log('Cache checks passed: restart persistence, serialization, corruption, pruning, single-flight, stale fallback, incremental ranges, cooperative renderer trimming and cancellation.')
 } finally {
+  if (originalAppData === undefined) delete process.env.APPDATA
+  else process.env.APPDATA = originalAppData
+  if (originalLocalAppData === undefined) delete process.env.LOCALAPPDATA
+  else process.env.LOCALAPPDATA = originalLocalAppData
   rmSync(scratch, { recursive: true, force: true })
 }

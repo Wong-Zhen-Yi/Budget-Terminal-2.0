@@ -26,6 +26,7 @@ try {
         import { createRoot } from 'react-dom/client'
         import { dehydrate, QueryClient, QueryClientProvider } from '@tanstack/react-query'
         import { App } from './src/App'
+        import { PageLoadOrderPanel } from './src/components/settings/PageLoadOrderPanel'
         import { TABS } from './electron/shared/contract'
         import { useDataHealth } from './src/stores/dataHealth'
         import { trimPersistedClientInBackground } from './src/api/queryPersistence'
@@ -70,6 +71,18 @@ try {
           check(useDataHealth.getState().startupLoads.bitcoin?.durationMs >= 100, 'Completed page duration was not learned')
           check(JSON.parse(localStorage.getItem('budget-terminal:data-health')).state.startupLoads.bitcoin?.samples === 1, 'Completed page duration was not persisted')
           check(document.querySelector('footer [role=status]')?.textContent.includes('Loading pages'), 'Startup progress hidden by foreground loading')
+          const pacingHost = document.createElement('div')
+          document.body.append(pacingHost)
+          const pacingRoot = createRoot(pacingHost)
+          pacingRoot.render(<PageLoadOrderPanel />)
+          await settle()
+          check(pacingHost.innerText.includes('Retry 2/2') && pacingHost.innerText.includes('HTTP 503'), 'Transient startup failure did not show its recovery attempt')
+          check(pacingHost.innerText.includes('Yahoo background requests are paced at 1 per second, with up to 2 in flight'), 'Settings does not explain slower startup pacing')
+          check(pacingHost.innerText.includes('slow further if rate limited. Foreground requests take priority.'), 'Settings does not explain backoff and foreground priority')
+          check(pacingHost.innerText.includes('Temporary failures retry automatically; unresolved failures remain visible.'), 'Settings does not explain startup recovery')
+          console.log('PASS: startup pacing explanation renders alongside live page load progress')
+          pacingRoot.unmount()
+          pacingHost.remove()
           for (const key of ['globalMarkets', 'heatmap', 'tradingVolumes', 'money', 'economic', 'sp500', 'technicalScreen']) {
             check(client.getQueryCache().findAll({ queryKey: [key] }).some(query => query.state.fetchStatus === 'fetching'),
               'Startup did not start page in parallel: ' + key)
@@ -78,21 +91,30 @@ try {
             console.log('Checking loading page: ' + tab.id)
             window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))
             await settle()
-            const result = [...document.querySelectorAll('[data-result-index]')].find(button => button.textContent.includes(tab.label))
+            const result = [...document.querySelectorAll('[data-result-index]')].find(button => button.querySelector('span')?.textContent === tab.label)
             check(result, 'Missing picker result for ' + tab.id)
             result.click()
             await settle()
-            check(document.querySelector('h1')?.textContent === tab.label, 'Navigation blocked for ' + tab.id)
+            const activePage = document.querySelector('[data-page-id="' + tab.id + '"]')
+            check(activePage?.getBoundingClientRect().height > 0, 'Navigation blocked for ' + tab.id)
             check(!document.body.innerText.includes('This page could not render'), 'Loading page crashed: ' + tab.id)
             check(!document.querySelector('[role=dialog]'), 'Picker did not close')
           }
           check(client.isFetching() > 0, 'Fixture unexpectedly finished loading')
           const orderTable = document.querySelector('table[aria-label="Startup page load order"]')
           check(orderTable && orderTable.getBoundingClientRect().height > 0, 'Page load order is not visible in Settings')
+          check(document.body.innerText.includes('Yahoo background requests are paced at 1 per second, with up to 2 in flight'), 'Settings does not explain slower startup pacing')
           const orderRows = [...orderTable.querySelectorAll('[data-startup-page]')]
           check(JSON.stringify(orderRows.map(row => row.dataset.startupPage)) === JSON.stringify(pageOrder), 'Settings does not show the actual startup order')
           check(orderRows.at(-1).innerText.includes('90.0s'), 'Saved heavy-page load time is missing')
           check(orderRows.some(row => row.innerText.includes('Not measured')), 'Unmeasured page is presented as timed')
+          const recoveryDeadline = Date.now() + 20_000
+          while (!useDataHealth.getState().startup.timings.some(task => task.label === 'Forex news') && Date.now() < recoveryDeadline) await settle()
+          const recovery = useDataHealth.getState().startup.timings.filter(task => task.label === 'Forex news')
+          check(recovery.length === 1 && recovery[0].state === 'ready', 'Recovered task was failed or counted more than once')
+          check(window.fixtureRequests.filter(entry => entry.method === 'forexNews' && entry.request?.background).length === 2, 'Transient startup data did not retry exactly once')
+          check(!useDataHealth.getState().startup.pages.forex.reason?.includes('Retry'), 'Completed recovery left an obsolete retry warning')
+          console.log('PASS: transient partial startup data retries automatically, displays recovery progress, reuses its background lane and settles ready once')
           check(document.body.innerText.includes('/fixture/Downloads/budget-terminal-backup.json'), 'Automatic backup file is not shown in Settings')
           check(document.body.innerText.includes('Ready · ' + toolCount + ' tools for ChatGPT / Codex'), 'MCP status is not visible in Settings')
           const capabilities = document.querySelector('[aria-label="MCP capabilities"]')
@@ -169,6 +191,12 @@ try {
           window.fixtureRequests.push({ method: 'bitcoin', request });
           await new Promise(resolve => setTimeout(resolve, 300));
           return ok({ stats: null, blocks: [], fees: null, mempool: null });
+        },
+        forexNews: async request => {
+          window.fixtureRequests.push({ method: 'forexNews', request });
+          const calls = window.fixtureRequests.filter(entry => entry.method === 'forexNews').length;
+          return calls === 1 ? { data: [], errors: [{ source: 'fixture', operation: 'fetch', reason: 'HTTP 503' }],
+            meta: { source: 'fixture', freshness: 'partial', fetchedAt: Date.now() } } : ok([]);
         },
         apiUsage: async () => ({ providers: [], sampledAt: Date.now() }),
       }, { get: (target, key) => key in target ? target[key] : request => {

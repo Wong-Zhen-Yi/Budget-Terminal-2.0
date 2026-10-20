@@ -1,9 +1,16 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { Envelope } from '../electron/shared/contract.js'
 import type { ScreenshotPayload } from '../electron/shared/screenshot.js'
+import type { BrowserResult } from '../electron/shared/browser.js'
 import { failed } from './catalog.js'
 
 export function toolResult(name: string, result: unknown): CallToolResult {
+  if (name === 'budget_terminal_browser_research' && (result as Envelope<BrowserResult> | null)?.data?.screenshot) {
+    const capture = result as Envelope<BrowserResult>
+    const { base64, ...image } = capture.data.screenshot!
+    const metadata = { ...capture, data: { ...capture.data, screenshot: image } }
+    return { content: [{ type: 'text', text: JSON.stringify(metadata) }, { type: 'image', data: base64, mimeType: image.mimeType }], structuredContent: metadata, isError: failed(result) }
+  }
   if (name === 'budget_terminal_screenshot' && result && typeof result === 'object' &&
     Array.isArray((result as Envelope<ScreenshotPayload>).data?.screenshots)) {
     const capture = result as Envelope<ScreenshotPayload>

@@ -40,15 +40,18 @@ interface WorkerReply {
 }
 
 /** One Yahoo session/cookie jar off the main event loop; admission stays in paced(). */
-export function createYahooWorkerClient(moduleUrl = import.meta.resolve('yahoo-finance2')) {
+export function createYahooWorkerClient(moduleUrl = import.meta.resolve('yahoo-finance2'), requestTimeoutMs = 90_000) {
   let worker: Worker | undefined
   let sequence = 0
   let closed = false
-  const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>()
+  const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>()
   const fail = (current: Worker, error: Error) => {
     if (worker !== current) return
     worker = undefined
-    for (const request of pending.values()) request.reject(error)
+    for (const request of pending.values()) {
+      clearTimeout(request.timer)
+      request.reject(error)
+    }
     pending.clear()
     void current.terminate()
   }
@@ -63,6 +66,7 @@ export function createYahooWorkerClient(moduleUrl = import.meta.resolve('yahoo-f
       const request = pending.get(reply.id)
       if (!request) return
       pending.delete(reply.id)
+      clearTimeout(request.timer)
       if (reply.error) {
         const error = Object.assign(new Error(reply.error.message), reply.error)
         request.reject(error)
@@ -78,9 +82,17 @@ export function createYahooWorkerClient(moduleUrl = import.meta.resolve('yahoo-f
     if (closed) { reject(new Error('Yahoo worker is closed')); return }
     const current = start()
     const id = ++sequence
-    pending.set(id, { resolve, reject })
+    // Starts only after paced() admits the request: queue time is not a timeout.
+    // Terminate a stuck session, rather than leaving abandoned fetches consuming
+    // worker/library concurrency slots forever. The next attempt starts a new one.
+    const timer = setTimeout(() => fail(current, Object.assign(
+      new Error(`Yahoo ${method} request timed out after ${requestTimeoutMs}ms`),
+      { name: 'TimeoutError', code: 'ETIMEDOUT' },
+    )), requestTimeoutMs)
+    pending.set(id, { resolve, reject, timer })
     current.ref()
     try { current.postMessage({ id, method, args }) } catch (error) {
+      clearTimeout(timer)
       pending.delete(id)
       if (!pending.size) current.unref()
       reject(error)
