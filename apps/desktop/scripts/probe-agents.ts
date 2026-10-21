@@ -116,6 +116,10 @@ try {
   assert.deepEqual(start.environments, [])
   assert.equal(start.config['mcp_servers.unrelated.enabled'], false)
   assert.equal(start.config['features.shell_tool'], false)
+  assert.equal(start.config.web_search, 'disabled', 'Native web search remains disabled')
+  assert(start.baseInstructions.includes('To search for websites, use action search with query'), 'General agent instructions retain browser search')
+  const browserTool = agentTools.find(tool => tool.name === 'budget_terminal_browser_research')!
+  assert.equal(browserTool.description, catalog.find(entry => entry.operation === 'browserResearch')!.tool.description, 'Agent browser tool retains the shared catalog description')
   for (const tool of [...catalog.map(entry => entry.tool), connectionTool]) assert(agentTools.some(entry => entry.name === tool.name), `${tool.name} must be available in Agents`)
   assert(!agentTools.some(tool => /maintenance|openExternal|shell/.test(tool.name)))
   await service.command({ type: 'send', text: 'Show AAPL and inspect the portfolio' })
@@ -126,6 +130,12 @@ try {
   assert(service.snapshot().busy)
   await assert.rejects(() => service.command({ type: 'send', text: 'overlap' }), /working/)
   await assert.rejects(() => service.command({ type: 'newChat' }), /working/)
+  const browserRequests: unknown[] = []
+  routes.set('browserResearch', request => { browserRequests.push(request); return ok({ state: {} }, 'fixture') })
+  await service.callTool('budget_terminal_browser_research', { request: { action: 'search', query: 'portfolio news' } })
+  await service.callTool('budget_terminal_browser_research', { request: { action: 'read' } })
+  assert.deepEqual(browserRequests, [{ action: 'search', query: 'portfolio news' }, { action: 'read' }], 'Browser search and page reading remain available for manual Agent requests')
+  routes.delete('browserResearch')
   const portfolio = await service.callTool('budget_terminal_portfolio', { request: {} }) as any
   assert.equal(portfolio.meta.freshness, 'partial', 'Keep partial data metadata')
   assert.equal(portfolio.errors[0].reason, 'Fixture missing data')
@@ -263,6 +273,27 @@ try {
   mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() })
   try {
     await scheduled.command({ type: 'connect' })
+    await scheduled.command({ type: 'send', text: 'Bound manual research' })
+    mock.timers.tick(9 * 60_000)
+    assert(scheduled.snapshot().connected && scheduled.snapshot().busy, 'Manual research stays active before the ten-minute limit')
+    receiver({ method: 'item/agentMessage/delta', params: { threadId: 'thread-1', itemId: 'partial-answer', delta: 'Research in progress.' } })
+    mock.timers.tick(60_000)
+    assert(!scheduled.snapshot().connected && !scheduled.snapshot().busy, 'Manual research stops at ten minutes even when output is streaming')
+    assert(scheduled.snapshot().error.includes('run reached its 10-minute limit'))
+    receiver({ method: 'item/agentMessage/delta', params: { threadId: 'thread-1', itemId: 'late-answer', delta: 'Ignore after timeout' } })
+    assert(!scheduled.snapshot().messages.some(message => message.id === 'late-answer'), 'Timed-out runs cannot revive from late output')
+    await scheduled.command({ type: 'connect' })
+    await scheduled.command({ type: 'send', text: 'Finish within the deadline' })
+    mock.timers.tick(9 * 60_000)
+    complete()
+    mock.timers.tick(2 * 60_000)
+    assert(scheduled.snapshot().connected && !scheduled.snapshot().busy && scheduled.snapshot().activity === 'done', 'Completed manual runs cancel their deadline')
+    assert.equal(scheduled.snapshot().error, '')
+    await scheduled.command({ type: 'autonomy', enabled: true, objective: 'Bound unattended work', runs: 1 })
+    mock.timers.tick(10 * 60_000)
+    assert(!scheduled.snapshot().connected && !scheduled.snapshot().busy && !scheduled.snapshot().autonomy, 'Unattended monitoring retains its hard deadline')
+    assert(scheduled.snapshot().error.includes('run reached its 10-minute limit'))
+    await scheduled.command({ type: 'connect' })
     await scheduled.command({ type: 'autonomy', enabled: true, objective: 'Repeat twice', intervalMinutes: 5, runs: 2 })
     complete()
     assert.equal(scheduled.snapshot().runsRemaining, 1)
@@ -279,6 +310,15 @@ try {
     mock.timers.tick(10 * 60_000)
     assert.equal(calls.length, before, 'Stop must cancel future scheduled inference')
   } finally { scheduled.close(); mock.timers.reset() }
+  const trackerDeadline = new AgentsService({ executable: 'unused', cwd: directory, routes, trackerId: 'deadline-fixture', clientFactory: (receive, ended) => { receiver = receive; disconnected = ended; return client } })
+  mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() })
+  try {
+    await trackerDeadline.command({ type: 'connect' })
+    await trackerDeadline.command({ type: 'send', text: 'Bound unattended tracker check' })
+    mock.timers.tick(10 * 60_000)
+    assert(!trackerDeadline.snapshot().busy && !trackerDeadline.snapshot().connected, 'Tracker checks retain their hard deadline')
+    assert(trackerDeadline.snapshot().error.includes('run reached its 10-minute limit'))
+  } finally { trackerDeadline.close(); mock.timers.reset() }
   const pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg=='
   const image = { name: 'Portfolio.png', dataUrl: pixel }
   assert.equal(validateAgentImages([image]).length, 1)

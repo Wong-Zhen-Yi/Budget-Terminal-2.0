@@ -36,6 +36,9 @@ queryClient.getQueryCache().subscribe(({ query }) => {
   registerSnapshot(query.state.data, queryFreshness(query.queryKey))
 })
 
+const stopCacheFlush = api.onCacheFlush(() => rendererQueryPersister.flush())
+if (import.meta.hot) import.meta.hot.dispose(stopCacheFlush)
+
 const stopMcpChanges = api.onSavedDataChanged((event) => {
   void refreshSavedData(queryClient, event)
 })

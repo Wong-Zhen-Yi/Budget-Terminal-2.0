@@ -209,7 +209,7 @@ async function incrementalSeriesChecks(): Promise<void> {
   }
 }
 
-function rendererPolicyChecks(): void {
+async function rendererPolicyChecks(): Promise<void> {
   const client = new QueryClient()
   client.setQueryData(['quotes', 'AAPL'], {
     data: { AAPL: 1 },
@@ -228,12 +228,18 @@ function rendererPolicyChecks(): void {
   assert.equal(queryFreshness(['quotes', 'AAPL']), 30_000)
   const persisted = trimPersistedClient({ timestamp: Date.now(), buster: 'fixture', clientState: state })
   assert.equal(persisted.clientState.queries.length, 1)
+  await assert.rejects(client.fetchQuery({ queryKey: ['quotes', 'AAPL'], retry: false,
+    queryFn: async () => { throw new Error('Refresh offline') } }), /Refresh offline/)
+  assert.equal(client.getQueryState(['quotes', 'AAPL'])?.status, 'error')
+  assert.deepEqual(dehydrate(client, { shouldDehydrateQuery: shouldPersistRemoteQuery }).queries.map(query => query.queryKey),
+    [['quotes', 'AAPL']], 'A failed refresh must not erase the last usable disk snapshot')
+  client.clear()
 }
 
 try {
   await persistentCacheChecks()
   await incrementalSeriesChecks()
-  rendererPolicyChecks()
+  await rendererPolicyChecks()
   const rendererClient = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } })
   try {
     for (let index = 0; index < 100; index += 1) {

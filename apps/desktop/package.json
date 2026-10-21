@@ -40,6 +40,7 @@
     "probe:provider-selection": "tsx scripts/probe-provider-selection.ts",
     "probe:store": "tsx scripts/probe-store.ts",
     "probe:cache": "tsx scripts/probe-cache.ts",
+    "probe:cache-ui": "tsx scripts/probe-cache-ui.ts",
     "probe:analytics": "tsx scripts/probe-analytics.ts",
     "probe:finance": "tsx scripts/probe-finance.ts",
     "probe:settings": "tsx scripts/probe-settings.ts",

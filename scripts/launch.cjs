@@ -80,6 +80,7 @@ function launch({ platform = process.platform, nodeVersion = process.versions.no
   log.log('Browser is now included: a shared, isolated Chromium research session with tabs, navigation, page reading and agent access ON by default for each new window. All pages, including Browser, initialize at startup. Disable and Stop revoke agent browser access until you re-enable it. No separate browser installation is needed.')
   log.log('Startup Yahoo loads are paced at 1 request per second, without bursts, with up to 2 background requests in flight. All pages still preload; foreground requests take priority and rate limits trigger further slowdown.')
   log.log('Temporary data failures retry with backoff. Stuck Yahoo workers restart automatically, and incomplete cached results can recover without waiting for their normal expiry. Startup retry progress and unresolved failures stay visible in Settings.')
+  log.log('Data caching now saves remote snapshots incrementally across launches, even while pages poll. Startup restores saved data before warming all pages; fresh data is reused, and only expired or missing data refreshes. Pending cache saves finish before the window closes.')
   log.log('Updating MCP bundles safely: unchanged files are left alone, changed files are replaced atomically, and temporary Windows file locks are retried. No MCP clients are forcibly stopped.')
   const build = npm(['run', 'build'])
   if (build.error || build.status !== 0) {

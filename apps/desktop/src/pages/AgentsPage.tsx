@@ -3,6 +3,7 @@ import { useAgentComposer } from '@/api/agentComposer'
 import { AgentChatImage } from '@/components/agents/AgentChatImage'
 import { AgentMarkdown } from '@/components/agents/AgentMarkdown'
 import { AgentWorkspacePanel } from '@/components/agents/AgentWorkspacePanel'
+import { agentQuickPrompts } from '@/lib/agentPrompts'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import '@/styles/agents.css'
 
@@ -71,7 +72,10 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
       <section className="agents-chat" aria-label="Chat with Codex">
         <div ref={transcript} className="agents-transcript" role="log" aria-label="Conversation" aria-live="polite">
           {!agent?.messages.some(message => message.role !== 'activity') && <div className="agents-welcome"><div className="agents-mark" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 6h16v11H9l-5 4V6Z" strokeLinejoin="round"/><path d="m8 10 3 2-3 2m5 0h3" strokeLinecap="round" strokeLinejoin="round"/></svg></div><h2>What would you like to explore?</h2><p>Research your watchlist. Understand your portfolio. Generate or edit images.</p>
-            <div className="agents-suggestions">{['Summarize portfolio news', 'Brief me on my portfolio for the day'].map(text => <button key={text} onClick={() => setDraft(text)}>{text} <span>↗</span></button>)}</div>
+            <div className="agents-suggestions">{agentQuickPrompts.map(({ label, prompt }) => <button key={label} onClick={() => {
+              setDraft(prompt)
+              document.getElementById(`${idPrefix}-message`)?.focus()
+            }}>{label} <span>↗</span></button>)}</div>
           </div>}
           {agent?.messages.map(message => <article key={message.id} className={`agents-message ${message.role}`} aria-label={message.role === 'assistant' ? 'Codex response' : message.role === 'user' ? 'Your message' : 'Agent activity'}>
             <div className="agents-message-meta">{message.role === 'assistant' ? 'Codex' : message.role === 'user' ? 'You' : 'Activity'} <time dateTime={new Date(message.at).toISOString()}>{new Date(message.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>
@@ -106,7 +110,7 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
         </section>
         <section><h2>Connected to your terminal</h2><ul><li>Use Budget Terminal MCP research and saved-data tools</li><li>Edit saved records and settings when requested</li><li>Capture app screenshots, open pages and select tickers</li><li>Paste portfolio screenshots with Ctrl+V for reviewed updates</li></ul><p>Portfolio screenshot imports require Apply portfolio update. Autonomous monitoring can create notifications, but cannot edit financial records or tracker definitions. Chats, notifications and tracker definitions are saved locally; uploaded and generated images are stored privately with chat references. Review and start trackers in the Trackers panel. Codex usage follows your signed-in account.</p></section>
         <section><h2>Generate and edit images</h2><p>Ask Codex to generate an image, or attach one and describe the edits. Use for edit on an image card adds its pixels to your next message, including from saved chats. Images use your signed-in Codex account and its image-generation allowance. Native image tools require a compatible Codex runtime/provider. Autonomous monitoring cannot generate images.</p><p>{agent?.imageGeneration === true ? 'Image generation is supported by this provider.' : agent?.imageGeneration === false ? 'This provider does not support image generation. Choose a compatible Codex provider and reconnect.' : 'Image generation availability will be confirmed by the connected runtime when requested.'}</p></section>
-        <section><h2>Get connected</h2><p>Codex connects automatically at startup. If connection fails, install Codex CLI and sign in using <code>codex login</code>, then select Connect Codex to retry. New chat keeps the connection and your model settings. The desktop Codex installation is detected automatically on Windows.</p></section>
+        <section><h2>Get connected</h2><p>Each run is limited to ten minutes and 80 tool calls. Use Stop to cancel sooner. Portfolio quick prompts request built-in data and news tools only, without using the browser; browser research remains available for other requests.</p><p>Codex connects automatically at startup. If connection fails, install Codex CLI and sign in using <code>codex login</code>, then select Connect Codex to retry. New chat keeps the connection and your model settings. The desktop Codex installation is detected automatically on Windows.</p></section>
       </aside>
     </div>
   </div>

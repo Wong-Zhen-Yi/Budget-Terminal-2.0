@@ -119,6 +119,12 @@ export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS
     exportArticlesPdf: (request) => invoke(CHANNELS.exportArticlesPdf, request),
     writeClipboard: (contents) => invoke(CHANNELS.writeClipboard, contents),
     windowControl: (action) => invoke(CHANNELS.windowControl, action),
+    onCacheFlush: (listener) => subscribe(CHANNELS.flushRendererCache, () => {
+      void Promise.resolve().then(listener)
+        .catch(error => console.warn('Renderer cache flush failed:', error))
+        .then(() => invoke(CHANNELS.rendererCacheFlushed))
+        .catch(error => console.warn('Renderer cache flush acknowledgement failed:', error))
+    }),
     onPortfolioChanged: (listener) => subscribe(CHANNELS.portfolioChanged, listener),
   }
 }

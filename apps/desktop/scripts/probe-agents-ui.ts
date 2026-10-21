@@ -40,6 +40,7 @@ try {
       import { createRoot } from 'react-dom/client'
       import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
       import { AgentsPage } from './src/pages/AgentsPage'
+      import { agentQuickPrompts } from './src/lib/agentPrompts'
       import { buildTasks } from './src/api/prefetch'
       import { shouldPersistRemoteQuery } from './src/api/queryPersistence'
       const check = (value, message) => { if (!value) throw Error(message) }
@@ -122,11 +123,24 @@ try {
         check(reads === 1 && commands.length === 0, 'Opening a warmed Agents page must neither reload nor connect')
         const suggestions = [...document.querySelectorAll('.agents-suggestions button')]
         check(suggestions.length === 2, 'Startup connection activity must not hide the two portfolio quick prompts')
-        for (const [index, text] of ['Summarize portfolio news', 'Brief me on my portfolio for the day'].entries()) {
-          check(suggestions[index].textContent.startsWith(text), 'Quick prompt label: ' + text)
-          suggestions[index].click(); await settle()
-          check(document.getElementById('agent-message').value === text && commands.length === 0, 'Quick prompt fills the composer without sending: ' + text)
+        check(agentQuickPrompts[0].prompt.includes('72 hours') && agentQuickPrompts[1].prompt.includes('comparison baseline'), 'News and daily briefing have distinct research requirements')
+        for (const embeddedMode of [false, true]) {
+          embedded = embeddedMode; render(); await settle()
+          const buttons = [...document.querySelectorAll('.agents-suggestions button')]
+          const composerId = embeddedMode ? 'dashboard-agent-message' : 'agent-message'
+          for (const [index, { label, prompt }] of agentQuickPrompts.entries()) {
+            check(buttons[index].textContent.startsWith(label), 'Quick prompt label stays compact: ' + label)
+            check(prompt.length > 1500 && prompt.length <= 20000 && prompt.includes('read-only') && prompt.includes('sources'), 'Detailed, bounded, evidence-led research prompt: ' + label)
+            check(prompt.includes('Do not use the browser at all for this task') && prompt.includes('Do not call budget_terminal_browser_status or budget_terminal_browser_research') && prompt.includes('disclose the limitation instead'), 'Preset instructions exclude all browser use without globally blocking tools')
+            check(prompt.includes('10-minute run limit and 80-tool-call budget') && prompt.includes('partial'), 'Presets prioritize timely reports and disclose incomplete coverage')
+            buttons[index].click(); await settle()
+            check(document.getElementById(composerId).value === prompt && commands.length === 0, 'Full quick prompt fills the composer without sending: ' + label)
+            check(document.activeElement.id === composerId, 'Quick prompt focuses the correct composer')
+            await fill(composerId, prompt + '\\nMy additional context.')
+            check(document.getElementById(composerId).value.endsWith('My additional context.') && commands.length === 0, 'Preset remains editable without inference')
+          }
         }
+        embedded = false; render(); await settle()
         check(document.querySelector('.agents-header').contains(document.getElementById('agent-model')), 'Model settings share the compact toolbar')
         await click('Add page to favorites')
         check(document.querySelector('[aria-label="Remove page from favorites"]').getAttribute('aria-pressed') === 'true', 'Toolbar favorite toggle stays accessible')

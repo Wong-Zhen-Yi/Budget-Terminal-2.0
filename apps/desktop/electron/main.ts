@@ -8,6 +8,7 @@ import { isTrustedRendererUrl } from './shared/ipcSecurity.js'
 import { isSafeExternalUrl } from './services/urls.js'
 import { configureBrowserWindow } from './services/browser.js'
 import { desktopWindowSize } from './shared/windowSize.js'
+import { configureRendererCacheShutdown } from './services/rendererCacheShutdown.js'
 
 const dirname = fileURLToPath(new URL('.', import.meta.url))
 const isDev = !app.isPackaged
@@ -51,6 +52,7 @@ function createWindow(): BrowserWindow {
   })
 
   configureBrowserWindow(window)
+  configureRendererCacheShutdown(window)
 
   // Paint once, rather than showing an empty frame and then the UI.
   window.once('ready-to-show', () => window.show())

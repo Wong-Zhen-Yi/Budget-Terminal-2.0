@@ -12,6 +12,22 @@ switching uses the prepared content. Startup progress and provider failures rema
 visible; failed pages are not treated as ready. Background work yields to foreground
 requests and reuses fresh cached results.
 
+Remote page snapshots are saved incrementally in the local Electron profile, even
+while Browser or Agents polling continues. Startup restores them before warming
+**every** implemented page. Fresh snapshots do not need another provider request;
+only missing, expired or incomplete results reload. Existing content stays visible
+while expired data refreshes, and age/failure indicators are not reset to look fresh.
+Refresh and F5 remain available when you want new data explicitly.
+
+The cache keeps up to 64 MB of renderer snapshots for seven days, alongside the
+512 MB main-process market cache (including reusable historical series). A normal
+window close gives pending renderer saves up to three seconds to commit. Failed
+refreshes retain usable previous snapshots. Old cache formats upgrade in place;
+Settings' cache reset still clears saved remote data. A first run, cache reset,
+expired snapshot or budget eviction can still require downloads. Browser sessions,
+Agent conversations/images and local financial/settings records are excluded from
+the remote snapshot cache and remain managed by their separate private stores.
+
 Settings > Data Health shows startup task timings and the latest observed feed
 results. Up to 200 panel records persist in the local renderer profile; older
 records are marked **Previous session** and do not count as current health. Clear

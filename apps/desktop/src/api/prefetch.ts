@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { useIsRestoring, useQueryClient, type QueryClient } from '@tanstack/react-query'
 
 import { CARD_INTERVALS, MACRO_SYMBOLS, type AppSettings, type PortfolioPayload } from '@shared/contract'
 import { startupPages } from '@shared/navigation'
@@ -997,6 +997,7 @@ export function buildTasks(
 
 export function useWarmPages(settings: AppSettings | undefined, settingsSettled: boolean, activeTab: string, recent: string[], settingsError?: unknown): WarmProgress {
   const queryClient = useQueryClient()
+  const isRestoring = useIsRestoring()
   const portfolioQuery = usePortfolio()
 
   const stocksSymbol = useStocksPage((state) => state.symbol)
@@ -1059,7 +1060,7 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
 
   // A failed local read must not prevent unrelated pages from starting their loads.
   const readyRef = useRef(false)
-  readyRef.current ||= settingsSettled && !portfolioQuery.isPending
+  readyRef.current ||= !isRestoring && settingsSettled && !portfolioQuery.isPending
   const ready = readyRef.current
 
   useEffect(() => {

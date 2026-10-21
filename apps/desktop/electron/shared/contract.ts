@@ -3530,6 +3530,8 @@ export const CHANNELS = {
   exportArticlesPdf: 'shell:exportArticlesPdf',
   writeClipboard: 'shell:writeClipboard',
   windowControl: 'window:control',
+  flushRendererCache: 'cache:flush-renderer',
+  rendererCacheFlushed: 'cache:renderer-flushed',
 } as const
 
 export interface QuotesRequest extends BackgroundRequest {
@@ -3733,6 +3735,7 @@ export interface DesktopApi {
   exportArticlesPdf(request: ArticlePdfRequest): Promise<Envelope<ArticlePdfResult>>
   writeClipboard(contents: string): Promise<void>
   windowControl(action: WindowAction): Promise<void>
+  onCacheFlush(listener: () => Promise<void>): () => void
   onPortfolioChanged(listener: () => void): () => void
 }
 

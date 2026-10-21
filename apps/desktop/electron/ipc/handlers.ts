@@ -15,6 +15,7 @@ import { articleFilename } from '../shared/articles.js'
 import { articlePdfRequestSchema, writeArticlePdfs } from '../services/articlePdf.js'
 import { agentsCommand, agentsImage, agentsStatus, closeAgents } from '../services/agentsHost.js'
 import type { AgentsCommand } from '../shared/agents.js'
+import { rendererCacheFlushed } from '../services/rendererCacheShutdown.js'
 
 export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent) => boolean): () => void {
   const handle: typeof ipcMain.handle = (channel, listener) => {
@@ -129,6 +130,8 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
     if (!destination) return ok({ cancelled: true, paths: [], failures: [] }, 'article PDF export')
     return ok(await writeArticlePdfs(request, destination), 'article PDF export')
   })
+
+  handle(CHANNELS.rendererCacheFlushed, event => rendererCacheFlushed(event.sender))
 
   handle(CHANNELS.windowControl, (event, action: WindowAction) => {
     const window = BrowserWindow.fromWebContents(event.sender)

@@ -25,7 +25,9 @@ export function isRemoteQueryKey(queryKey: QueryKey): boolean {
 export function shouldPersistRemoteQuery(query: Query): boolean {
   const root = String(query.queryKey[0] ?? '')
   if (!isRemoteQueryKey(query.queryKey) || LARGE_ROOTS.has(root)) return false
-  if (query.state.status !== 'success') return false
+  // A failed refresh can have perfectly usable previous data. Do not erase that
+  // snapshot from disk just because the latest IPC request failed.
+  if (query.state.data === undefined || query.state.dataUpdatedAt <= 0) return false
   const freshness = (query.state.data as { meta?: { freshness?: string } } | undefined)?.meta?.freshness
   return freshness !== 'failed'
 }
@@ -96,27 +98,50 @@ export function queryFreshness(queryKey: QueryKey): number {
   return 15 * 60_000
 }
 
-function openDatabase(): Promise<IDBDatabase> {
+const SNAPSHOTS = 'queries'
+
+function openDatabase(name: string): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DATABASE, 1)
-    request.onupgradeneeded = () => request.result.createObjectStore(STORE)
-    request.onsuccess = () => resolve(request.result)
+    // Upgrade in place: retain the previous monolithic client until the first
+    // incremental write commits successfully.
+    const request = indexedDB.open(name, 2)
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(STORE)) request.result.createObjectStore(STORE)
+      if (!request.result.objectStoreNames.contains(SNAPSHOTS)) request.result.createObjectStore(SNAPSHOTS)
+    }
+    let blocked = false
+    request.onsuccess = () => {
+      if (blocked) request.result.close()
+      else resolve(request.result)
+    }
     request.onerror = () => reject(request.error)
+    request.onblocked = () => {
+      blocked = true
+      reject(new Error('Another window is blocking the cache upgrade'))
+    }
   })
 }
 
 async function transact<T>(
+  name: string,
   mode: IDBTransactionMode,
-  run: (store: IDBObjectStore) => IDBRequest<T>,
+  run: (transaction: IDBTransaction) => () => T,
 ): Promise<T> {
-  const db = await openDatabase()
+  const db = await openDatabase(name)
   try {
     return await new Promise<T>((resolve, reject) => {
-      const transaction = db.transaction(STORE, mode)
-      const request = run(transaction.objectStore(STORE))
-      request.onsuccess = () => resolve(request.result)
-      request.onerror = () => reject(request.error)
+      const transaction = db.transaction([STORE, SNAPSHOTS], mode)
+      // A request succeeding does NOT mean the transaction committed. Quota or
+      // shutdown errors must not be mistaken for a durable save.
+      transaction.onabort = () => reject(transaction.error ?? new Error('Cache transaction aborted'))
       transaction.onerror = () => reject(transaction.error)
+      try {
+        const result = run(transaction)
+        transaction.oncomplete = () => resolve(result())
+      } catch (error) {
+        transaction.abort()
+        reject(error)
+      }
     })
   } finally {
     db.close()
@@ -200,65 +225,138 @@ function markRestored(client: PersistedClient): PersistedClient {
   return { ...client, clientState: { ...client.clientState, queries } }
 }
 
-let pendingWrite: ReturnType<typeof setTimeout> | undefined
-let latestClient: PersistedClient | undefined
-let writing = false
-let generation = 0
+type SavedQuery = PersistedClient['clientState']['queries'][number]
+type ClientHeader = PersistedClient & { incremental?: boolean }
 
-async function writeLatestClient(): Promise<void> {
-  pendingWrite = undefined
-  if (writing) return
-  const client = latestClient
-  latestClient = undefined
-  if (!client) return
-  writing = true
-  const currentGeneration = generation
-  try {
-    const trimmed = await trimPersistedClientInBackground(client, () => currentGeneration !== generation)
-    if (trimmed && currentGeneration === generation) {
-      await transact('readwrite', (store) => {
-        // Cache clearing can also happen while IndexedDB is opening.
-        if (currentGeneration !== generation) throw new Error('Cache write cancelled')
-        return store.put(trimmed, CLIENT_KEY)
-      })
+/** Independent instances let restart probes use real IndexedDB, never a user's profile. */
+export function createRendererQueryPersister({ database = DATABASE, throttleMs = 1_000 } = {}): Persister & { flush: () => Promise<void> } {
+  let pendingWrite: ReturnType<typeof setTimeout> | undefined
+  let latestClient: PersistedClient | undefined
+  let writing: Promise<void> | undefined
+  let generation = 0
+  let lastWrite = 0
+  let savedQueries = new Map<string, SavedQuery>()
+  let initialized = false
+
+  function schedule(): void {
+    // Throttle, never debounce: Browser/Agent polling can emit cache events faster
+    // than once a second indefinitely. Those events must not postpone disk saves.
+    if (!pendingWrite && !writing) {
+      pendingWrite = setTimeout(() => {
+        pendingWrite = undefined
+        void writeLatestClient()
+      }, Math.max(0, lastWrite + throttleMs - Date.now()))
     }
-  } catch (error) {
-    if (currentGeneration === generation) console.warn('[query-cache] Could not persist renderer data.', error)
-  } finally {
-    writing = false
-    if (latestClient && !pendingWrite) pendingWrite = setTimeout(() => void writeLatestClient(), 1_000)
+  }
+
+  function writeLatestClient(): Promise<void> {
+    if (writing) return writing
+    const client = latestClient
+    latestClient = undefined
+    if (!client) return Promise.resolve()
+    const currentGeneration = generation
+    writing = (async () => {
+      try {
+        const trimmed = await trimPersistedClientInBackground(client, () => currentGeneration !== generation)
+        if (!trimmed || currentGeneration !== generation) return
+        const next = new Map(trimmed.clientState.queries.map(query => [query.queryHash, query]))
+        const changed = [...next.values()].filter(query => {
+          const previous = savedQueries.get(query.queryHash)
+          return !previous || previous.state.data !== query.state.data || previous.state.dataUpdatedAt !== query.state.dataUpdatedAt
+        })
+        const removed = [...savedQueries.keys()].filter(hash => !next.has(hash))
+        // Excluded local polling and fetch-status changes do not rewrite histories.
+        if (initialized && !changed.length && !removed.length) return
+        await transact(database, 'readwrite', transaction => {
+          if (currentGeneration !== generation) throw new Error('Cache write cancelled')
+          const store = transaction.objectStore(SNAPSHOTS)
+          if (!initialized) store.clear()
+          for (const hash of removed) store.delete(hash)
+          for (const query of changed) {
+            store.put({ ...query, state: { ...query.state, status: 'success', fetchStatus: 'idle',
+              isInvalidated: query.state.status === 'error' ? false : query.state.isInvalidated,
+              error: null, fetchFailureCount: 0, fetchFailureReason: null } }, query.queryHash)
+          }
+          // Header and changed snapshots commit atomically; never mix generations.
+          transaction.objectStore(STORE).put({ ...trimmed, incremental: true,
+            clientState: { ...trimmed.clientState, queries: [] } } satisfies ClientHeader, CLIENT_KEY)
+          return () => undefined
+        })
+        if (currentGeneration === generation) {
+          initialized = true
+          savedQueries = next
+        }
+      } catch (error) {
+        if (currentGeneration === generation) console.warn('[query-cache] Could not persist renderer data.', error)
+      } finally {
+        lastWrite = Date.now()
+        writing = undefined
+        if (latestClient) schedule()
+      }
+    })()
+    return writing
+  }
+
+  return {
+    persistClient: client => {
+      latestClient = client
+      schedule()
+    },
+    // Used during orderly shutdown; also drains updates arriving during a save.
+    flush: async () => {
+      do {
+        clearTimeout(pendingWrite)
+        pendingWrite = undefined
+        await (writing ?? writeLatestClient())
+      } while (latestClient || writing)
+    },
+    restoreClient: async () => {
+      const currentGeneration = generation
+      try {
+        const restored = await transact(database, 'readonly', transaction => {
+          const header = transaction.objectStore(STORE).get(CLIENT_KEY)
+          const snapshots = transaction.objectStore(SNAPSHOTS).getAll()
+          return () => {
+            const client = header.result as ClientHeader | undefined
+            if (!client) return undefined
+            return client.incremental ? { ...client, clientState: { ...client.clientState, queries: snapshots.result as SavedQuery[] } } : client
+          }
+        })
+        if (!restored || currentGeneration !== generation) return undefined
+        const marked = markRestored(restored)
+        if (!initialized && restored.incremental) {
+          // Hydration reuses these data references. Unchanged restored histories
+          // should not be serialized and written again on every app launch.
+          savedQueries = new Map(marked.clientState.queries.map(query => [query.queryHash, query]))
+          initialized = true
+        }
+        return marked
+      } catch (error) {
+        console.warn('[query-cache] Could not restore renderer data.', error)
+        return undefined
+      }
+    },
+    removeClient: async () => {
+      generation += 1
+      initialized = false
+      savedQueries.clear()
+      clearTimeout(pendingWrite)
+      pendingWrite = undefined
+      latestClient = undefined
+      try {
+        await transact(database, 'readwrite', transaction => {
+          transaction.objectStore(STORE).delete(CLIENT_KEY)
+          transaction.objectStore(SNAPSHOTS).clear()
+          return () => undefined
+        })
+      } catch (error) {
+        console.warn('[query-cache] Could not clear renderer data.', error)
+      }
+    },
   }
 }
 
-export const rendererQueryPersister: Persister = {
-  persistClient: (client) => {
-    // Coalesce cache events before serialization; large page payloads must not block a
-    // tab switch merely because several queries settled in the same render pass.
-    latestClient = client
-    clearTimeout(pendingWrite)
-    pendingWrite = setTimeout(() => void writeLatestClient(), 1_000)
-  },
-  restoreClient: async () => {
-    try {
-      const restored = await transact('readonly', (store) => store.get(CLIENT_KEY)) as PersistedClient | undefined
-      return restored ? markRestored(restored) : undefined
-    } catch (error) {
-      console.warn('[query-cache] Could not restore renderer data.', error)
-      return undefined
-    }
-  },
-  removeClient: async () => {
-    generation += 1
-    clearTimeout(pendingWrite)
-    pendingWrite = undefined
-    latestClient = undefined
-    try {
-      await transact('readwrite', (store) => store.delete(CLIENT_KEY))
-    } catch (error) {
-      console.warn('[query-cache] Could not clear renderer data.', error)
-    }
-  },
-}
+export const rendererQueryPersister = createRendererQueryPersister()
 
 export function removeRendererCache(): PromiseLike<void> | void {
   return rendererQueryPersister.removeClient()
