@@ -123,16 +123,14 @@ try {
         check(reads === 1 && commands.length === 0, 'Opening a warmed Agents page must neither reload nor connect')
         const suggestions = [...document.querySelectorAll('.agents-suggestions button')]
         check(suggestions.length === 2, 'Startup connection activity must not hide the two portfolio quick prompts')
-        check(agentQuickPrompts[0].prompt.includes('last 24 hours') && agentQuickPrompts[1].prompt.includes('daily change if already available'), 'News and daily briefing retain distinct, limited scopes')
+        check(agentQuickPrompts[0].prompt === 'Summarize portfolio news' && agentQuickPrompts[1].prompt === 'Brief me on my portfolio for the day', 'Quick prompts retain their original one-line text')
         for (const embeddedMode of [false, true]) {
           embedded = embeddedMode; render(); await settle()
           const buttons = [...document.querySelectorAll('.agents-suggestions button')]
           const composerId = embeddedMode ? 'dashboard-agent-message' : 'agent-message'
           for (const [index, { label, prompt }] of agentQuickPrompts.entries()) {
             check(buttons[index].textContent.startsWith(label), 'Quick prompt label stays compact: ' + label)
-            check(prompt.length <= 800 && prompt.trim().split(/\\s+/).length <= 120 && prompt.includes('read-only') && prompt.includes('sources'), 'Short, evidence-led preset stays within the token-saving length budget: ' + label)
-            check(prompt.includes('Do not use the browser or web search'), 'Presets avoid browser use without globally blocking tools')
-            check(prompt.includes('at most 6 tool calls total') && prompt.includes('No retries or extra research') && prompt.includes('within 2 minutes') && prompt.includes('under 150 words') && prompt.includes('partial'), 'Presets cap requested research and output, and allow partial results')
+            check(prompt === label, 'Original quick prompt contains only its label, with no added instructions')
             buttons[index].click(); await settle()
             check(document.getElementById(composerId).value === prompt && commands.length === 0, 'Full quick prompt fills the composer without sending: ' + label)
             check(document.activeElement.id === composerId, 'Quick prompt focuses the correct composer')
