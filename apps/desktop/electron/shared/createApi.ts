@@ -15,6 +15,9 @@ export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS
     agentsCommand: (command) => invoke(CHANNELS.agentsCommand, command),
     agentsImage: (id) => invoke(CHANNELS.agentsImage, id),
     mcpStatus: () => invoke(CHANNELS.mcpStatus),
+    configureMcp: (policy) => invoke(CHANNELS.configureMcp, policy),
+    testMcpConnection: () => invoke(CHANNELS.testMcpConnection),
+    cancelMcpCall: (id) => invoke(CHANNELS.cancelMcpCall, id),
     onScreenshotRequested: (listener) => subscribe<ScreenshotCommand>(CHANNELS.screenshotRequested, (payload) => {
       if (payload) listener(payload)
     }),

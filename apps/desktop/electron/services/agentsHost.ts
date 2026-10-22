@@ -2,7 +2,7 @@ import { app, BrowserWindow, Notification } from 'electron'
 import { existsSync, mkdirSync } from 'node:fs'
 import { delimiter, join } from 'node:path'
 import { createServiceRoutes } from '../mcp/routes.js'
-import { captureTerminalScreenshot, getMcpStatus } from '../mcp/host.js'
+import { captureTerminalScreenshot, getMcpStatus, invokeMcpTool } from '../mcp/host.js'
 import type { AgentsCommand } from '../shared/agents.js'
 import { failed, ok } from '../shared/envelope.js'
 import { AgentsService } from './agents.js'
@@ -35,7 +35,7 @@ function deliverNotification(value: AgentNotification) {
 
 async function checkTracker(tracker: AgentTracker, signal: AbortSignal) {
   const cwd = join(app.getPath('userData'), 'agents')
-  const worker = new AgentsService({ executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), workspace: workspace!, trackerId: tracker.id })
+  const worker = new AgentsService({ executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, workspace: workspace!, trackerId: tracker.id })
   const cancel = () => worker.close()
   signal.addEventListener('abort', cancel, { once: true })
   let timedOut = false
@@ -72,7 +72,7 @@ function agent() {
     const cwd = join(app.getPath('userData'), 'agents')
     mkdirSync(cwd, { recursive: true })
     workspace ??= new AgentWorkspace({ deliver: deliverNotification, check: checkTracker })
-    service = new AgentsService({ workspace, executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), connectionStatus: getMcpStatus, portfolio: {
+    service = new AgentsService({ workspace, executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, connectionStatus: getMcpStatus, portfolio: {
       read: readPortfolios,
       apply: async (before, after) => {
         const result = await withAutomaticBackup(async () => ok(await applyAgentPortfolioUpdate(before, after), 'portfolio store'))

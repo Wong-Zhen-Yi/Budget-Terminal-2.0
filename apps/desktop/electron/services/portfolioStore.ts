@@ -1,3 +1,4 @@
+import { checkRecordRevision } from './mcpContext.js'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { watch, type FSWatcher } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -463,6 +464,10 @@ export async function readPortfolios(): Promise<PortfolioPayload> {
   // A read immediately after a cell blur must include the queued edit.
   await writeChain
   const document = await loadDocument()
+  return portfolioPayload(document)
+}
+
+function portfolioPayload(document: StoredDocument): PortfolioPayload {
   const portfolios = document.order
     .map((id) => document.portfolios[id])
     .filter((entry): entry is StoredPortfolio => Boolean(entry))
@@ -673,6 +678,7 @@ export async function mutatePortfolios(mutation: PortfolioMutation): Promise<Por
   const run = writeChain.then(async () => {
     try {
       const document = structuredClone(await loadDocument())
+      checkRecordRevision(portfolioPayload(document))
       apply(document, mutation)
       normalize(document)
       await persist(document)
@@ -811,6 +817,7 @@ export async function mutatePersonalFinance(
     try {
       const document = structuredClone(await loadDocument())
       document.personalFinance = document.personalFinance ?? emptyFinance()
+      checkRecordRevision({ ...document.personalFinance })
       applyFinance(document.personalFinance, mutation)
       normalize(document)
       await persist(document)

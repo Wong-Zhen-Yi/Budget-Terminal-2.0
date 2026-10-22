@@ -1,3 +1,4 @@
+import { mapMcpWork } from '../mcpContext.js'
 import type { TechnicalScanPayload, TechnicalScanRow } from '../../shared/contract.js'
 import { evaluateTechnicalBars, recentTechnicalListing } from '../../shared/technicalScreen.js'
 import { sourceLiquidUniverse } from './quant.js'
@@ -11,13 +12,13 @@ export async function runTechnicalScan(): Promise<TechnicalScanPayload> {
   const universe = await sourceLiquidUniverse(false)
   if (!universe.candidates.length) throw new Error('No liquid US equities passed the universe filters.')
   const now = Date.now()
-  const outcomes = await Promise.allSettled(universe.candidates.map((candidate) =>
+  const outcomes = await mapMcpWork(universe.candidates, (candidate) =>
     getYahooSeries({
       symbol: candidate.ticker,
       start: new Date(now - HISTORY_DAYS * 86_400_000),
       interval: '1d',
     }),
-  ))
+  )
   const errors: Record<string, string> = {}
   const excluded: Record<string, string> = {}
   const rows: TechnicalScanRow[] = []

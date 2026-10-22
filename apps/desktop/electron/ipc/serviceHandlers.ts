@@ -1,3 +1,4 @@
+import { mcpExecution } from '../services/mcpContext.js'
 import { getArticles, saveArticles } from '../services/articlesStore.js'
 import type { ArticlesMutation } from '../shared/articles.js'
 import { getBitcoin } from '../services/bitcoin.js'
@@ -114,7 +115,8 @@ export function registerServiceHandlers(register: RegisterService): void {
     register(channel, (request: Request) => {
       const domain = changedDomains.get(channel)
       const key = `${channel}:${JSON.stringify(request ?? {})}`
-      if (!domain && pendingReads.has(key)) return pendingReads.get(key)!
+      const ownScan = Boolean(mcpExecution.getStore()) && (channel === CHANNELS.quantScan || channel === CHANNELS.technicalScan)
+      if (!domain && !ownScan && pendingReads.has(key)) return pendingReads.get(key)!
       const result = runWithPriority(
         (request as { background?: boolean } | undefined)?.background
           ? 'background'
@@ -127,6 +129,7 @@ export function registerServiceHandlers(register: RegisterService): void {
         if (envelope?.meta?.freshness !== 'failed') publishSavedDataChanged(domain === 'settings' ? ['settings'] : [domain, 'settings'])
         return value
       })
+      if (ownScan) return result
       pendingReads.set(key, result)
       void result.then(() => pendingReads.delete(key), () => pendingReads.delete(key))
       return result

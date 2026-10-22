@@ -1,3 +1,4 @@
+import { checkRecordRevision } from './mcpContext.js'
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
@@ -133,6 +134,7 @@ export async function mutateCards(
   const run = writeChain.then(async () => {
     try {
       const state = await readCards(targetPath)
+      checkRecordRevision(state)
       applyMutation(state, mutation)
       result = normalizeCardsPayload(state, targetPath)
       await persistCards(result, targetPath)

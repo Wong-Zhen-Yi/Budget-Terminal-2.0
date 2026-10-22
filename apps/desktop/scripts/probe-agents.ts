@@ -151,7 +151,7 @@ try {
   assert.equal(service.snapshot().activity, 'thinking')
   routes.set('portfolio', originalPortfolio)
   const edit = { type: 'add', title: 'Agent MCP test', content: 'Fixture article', topic: 'Research', status: 'draft' }
-  await service.callTool('budget_terminal_mutate_articles', { request: edit })
+  await service.callTool('budget_terminal_mutate_articles', { request: edit, requestId: 'agent-article-edit' })
   assert.deepEqual(mutations, [edit], 'Manual MCP mutations use validated app routes')
   await assert.rejects(() => service.callTool('budget_terminal_mutate_articles', { request: { type: 'invalid' } }), /Invalid tool arguments/)
   assert.equal(mutations.length, 1, 'Invalid edits must never reach the service')

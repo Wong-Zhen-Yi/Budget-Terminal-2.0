@@ -6,18 +6,18 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { catalog, connectionTool, failed, validateCall } from '../../mcp/catalog.js'
 import { BRIDGE_VERSION, runtimePath } from '../../mcp/runtime.js'
-import { mutationDomains, type Operation } from '../../mcp/operations.js'
+import { mutationDomains } from '../../mcp/operations.js'
+import { McpAccessError, type McpDispatcher } from './dispatcher.js'
 import type { McpStatus, SavedDataDomain } from '../shared/contract.js'
 
 export interface BridgeOptions {
-  routes: Map<Operation, (request: unknown) => unknown>
+  dispatcher: McpDispatcher
   onChanged: (domains: SavedDataDomain[]) => void
   descriptorPath?: string
 }
 
 /** This bridge owns no stores; every operation executes in the existing Electron owner. */
-export async function startBridge({ routes, onChanged, descriptorPath = runtimePath() }: BridgeOptions) {
-  for (const entry of catalog) if (!routes.has(entry.operation)) throw new Error(`Missing MCP service route: ${entry.operation}`)
+export async function startBridge({ dispatcher, onChanged, descriptorPath = runtimePath() }: BridgeOptions) {
   const token = randomBytes(32).toString('hex')
   const expected = Buffer.from(`Bearer ${token}`)
   let closing = false
@@ -32,8 +32,20 @@ export async function startBridge({ routes, onChanged, descriptorPath = runtimeP
   }
   const pending = new Set<Promise<void>>()
   const server = createServer((request, response) => {
+    const controller = new AbortController()
+    response.once('close', () => controller.abort())
+    let streaming = false
+    const progress = (completed: number, total?: number) => {
+      if (request.headers.accept !== 'application/x-ndjson' || response.destroyed) return
+      if (!streaming) {
+        streaming = true
+        response.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' })
+      }
+      response.write(`${JSON.stringify({ progress: completed, ...(total === undefined ? {} : { total }) })}\n`)
+    }
     const send = (status: number, value: unknown) => {
       if (!response.destroyed) {
+        if (streaming) { response.end(`${JSON.stringify(status === 200 ? { result: value } : value)}\n`); return }
         response.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
         response.end(JSON.stringify(value))
       }
@@ -76,7 +88,7 @@ export async function startBridge({ routes, onChanged, descriptorPath = runtimeP
       if (call.name === connectionTool.name) {
         if (!call.arguments || typeof call.arguments !== 'object' || Array.isArray(call.arguments) || Object.keys(call.arguments).length) return send(400, { error: 'Connection status takes no arguments.' })
         lastSeen = Date.now()
-        return send(200, { available: true, version: BRIDGE_VERSION, tools: catalog.length + 1 })
+        return send(200, { available: true, version: BRIDGE_VERSION, tools: catalog.length + 1, policy: dispatcher.diagnostics().policy })
       }
       let validated: ReturnType<typeof validateCall>
       try { validated = validateCall(call.name, call.arguments) } catch (error) {
@@ -85,13 +97,13 @@ export async function startBridge({ routes, onChanged, descriptorPath = runtimeP
       lastSeen = Date.now()
       activeCalls += 1
       try {
-        const result = await routes.get(validated.operation)!(validated.request)
+        const result = await dispatcher.invoke(call.name, call.arguments, 'external', controller.signal, progress)
         if (validated.operation in mutationDomains && !failed(result)) {
           const domain = mutationDomains[validated.operation as keyof typeof mutationDomains]
           onChanged(domain === 'settings' ? ['settings'] : [domain, 'settings'])
         }
         send(200, result)
-      } catch { send(500, { error: 'Budget Terminal service failed. Read saved records before repeating a write.' }) }
+      } catch (error) { send(500, { error: error instanceof McpAccessError ? error.message : 'Budget Terminal service failed. Read saved records before repeating a write.' }) }
       finally {
         activeCalls -= 1
         lastSeen = Date.now()
@@ -136,6 +148,7 @@ export async function startBridge({ routes, onChanged, descriptorPath = runtimeP
     stop(): Promise<void> {
       stopped ??= (async () => {
         closing = true
+        dispatcher.close()
         status.available = false
         const closed = new Promise<void>((resolve) => server.close(() => resolve()))
         server.closeIdleConnections()

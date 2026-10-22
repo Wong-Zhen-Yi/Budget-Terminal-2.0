@@ -12,7 +12,7 @@ export function runtimePath(): string {
 
 export interface RuntimeDescriptor { version: number; port: number; token: string; pid: number }
 
-export async function invokeBridge(name: string, args: unknown): Promise<unknown> {
+export async function invokeBridge(name: string, args: unknown, options: { signal?: AbortSignal; progress?: (completed: number, total?: number) => void; timeoutMs?: number } = {}): Promise<unknown> {
   let runtime: RuntimeDescriptor
   try { runtime = JSON.parse(await readFile(runtimePath(), 'utf8')) as RuntimeDescriptor } catch { throw new Error(APP_CLOSED) }
   if (runtime.version !== BRIDGE_VERSION) throw new Error('Budget Terminal MCP version mismatch. Rebuild the app and MCP server.')
@@ -20,8 +20,8 @@ export async function invokeBridge(name: string, args: unknown): Promise<unknown
   let response: Response
   try {
     response = await fetch(`http://127.0.0.1:${runtime.port}/invoke`, {
-      method: 'POST', headers: { Authorization: `Bearer ${runtime.token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, arguments: args }), signal: AbortSignal.timeout(180_000), redirect: 'error',
+      method: 'POST', headers: { Authorization: `Bearer ${runtime.token}`, 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },
+      body: JSON.stringify({ name, arguments: args }), signal: AbortSignal.any([AbortSignal.timeout(options.timeoutMs ?? (name === 'budget_terminal_connection_status' ? 5000 : 600_000)), ...(options.signal ? [options.signal] : [])]), redirect: 'error',
     })
   } catch (error) {
     const cause = (error as { cause?: { code?: string } }).cause?.code
@@ -29,9 +29,30 @@ export async function invokeBridge(name: string, args: unknown): Promise<unknown
     throw new Error('Budget Terminal connection interrupted. A write may have completed; read the saved record before trying again.')
   }
   let payload: unknown
-  try { payload = await response.json() } catch {
+  try {
+    if (response.headers.get('content-type')?.includes('application/x-ndjson') && response.body) {
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let received = false
+      while (true) {
+        const { value, done } = await reader.read()
+        buffer += decoder.decode(value, { stream: !done })
+        let end: number
+        while ((end = buffer.indexOf('\n')) >= 0) {
+          const event = JSON.parse(buffer.slice(0, end)) as { progress?: number; total?: number; result?: unknown; error?: string }
+          buffer = buffer.slice(end + 1)
+          if (event.progress !== undefined) options.progress?.(event.progress, event.total)
+          if ('result' in event) { payload = event.result; received = true }
+          if (event.error) { payload = { error: event.error }; received = true }
+        }
+        if (done) break
+      }
+      if (!received) throw new Error('Incomplete bridge stream')
+    } else payload = await response.json()
+  } catch {
     throw new Error('Budget Terminal response interrupted. A write may have completed; read the saved record before trying again.')
   }
-  if (!response.ok) throw new Error((payload as { error?: string }).error ?? `Budget Terminal request failed (${response.status}).`)
+  if (!response.ok || (payload && typeof payload === 'object' && 'error' in payload)) throw new Error((payload as { error?: string }).error ?? `Budget Terminal request failed (${response.status}).`)
   return payload
 }

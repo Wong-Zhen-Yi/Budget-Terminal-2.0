@@ -1,3 +1,4 @@
+import { checkRecordRevision } from './mcpContext.js'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
@@ -276,6 +277,7 @@ export async function mutateSettings(mutation: AppSettingsMutation): Promise<App
   const run = writeChain.then(async () => {
     try {
       const settings = await loadSettings()
+      checkRecordRevision(toPayload(settings))
       apply(settings, mutation)
       cached = normalize(settings)
       await persist(cached)

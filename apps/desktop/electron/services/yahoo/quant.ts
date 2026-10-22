@@ -1,3 +1,4 @@
+import { checkMcpCancellation, mapMcpWork } from '../mcpContext.js'
 import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
@@ -209,12 +210,11 @@ export async function runQuantScan(
     fetchHistory: (symbol, force = false) => fetchDaily(symbol, 740, 'history', force),
   },
 ): Promise<QuantScanPayload> {
+  checkMcpCancellation()
   const startedAt = new Date().toISOString()
   const universe = await dependencies.sourceUniverse(forceUniverseRefresh)
   if (!universe.candidates.length) throw new Error('No liquid US equities passed the automatic universe filters')
-  const outcomes = await Promise.allSettled(
-    universe.candidates.map((candidate) => dependencies.fetchHistory(candidate.ticker, forceUniverseRefresh)),
-  )
+  const outcomes = await mapMcpWork(universe.candidates, candidate => dependencies.fetchHistory(candidate.ticker, forceUniverseRefresh))
   const errors: Record<string, string> = {}
   const histories: Record<string, QuantBar[]> = {}
   const rows: QuantScreenRow[] = []

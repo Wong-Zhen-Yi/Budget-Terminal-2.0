@@ -6,9 +6,12 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { QueryClient } from '@tanstack/react-query'
 import { catalog, failed, validateCall } from '../mcp/catalog.js'
-import { operations, toolName, type Operation } from '../mcp/operations.js'
+import { mutationDomains, operations, toolName, type Operation } from '../mcp/operations.js'
 import { APP_CLOSED, invokeBridge, runtimePath } from '../mcp/runtime.js'
 import { startBridge } from '../electron/mcp/bridge.js'
+import { McpDispatcher } from '../electron/mcp/dispatcher.js'
+import { randomUUID } from 'node:crypto'
+import { mcpExecution, mcpProgress } from '../electron/services/mcpContext.js'
 import { refreshSavedData } from '../src/api/mcpChanges.js'
 import type { DesktopApi, SavedDataDomain } from '../electron/shared/contract.js'
 import { TABS } from '../electron/shared/contract.js'
@@ -49,6 +52,7 @@ interface Schema {
 }
 function example(schema: unknown, root: unknown): unknown {
   const value = schema as Schema
+  if ((value as { pattern?: string }).pattern === '^[a-f0-9]{64}$') return 'a'.repeat(64)
   if (value.$ref) {
     const target = value.$ref.slice(2).split('/').reduce<unknown>((item, key) => (item as Record<string, unknown>)[decodeURIComponent(key.replace(/~1/g, '/').replace(/~0/g, '~'))], root)
     return example(target, root)
@@ -90,7 +94,7 @@ try {
   const events: SavedDataDomain[][] = []
   const routes = new Map<Operation, (request: unknown) => unknown>()
   for (const entry of catalog) routes.set(entry.operation, (request) => ({ data: { operation: entry.operation, request }, meta: { freshness: 'cached', source: 'probe', fetchedAt: 123 }, errors: [] }))
-  bridge = await startBridge({ routes, onChanged: (domains) => events.push(domains) })
+  bridge = await startBridge({ dispatcher: new McpDispatcher({ routes, policy: { readOnly: false, requireApproval: false } }), onChanged: (domains) => events.push(domains) })
   assert.equal(bridge.status.connected, false)
   assert.equal(bridge.status.active, false)
   await new Promise((done) => setTimeout(done, 5_500))
@@ -120,7 +124,7 @@ try {
     if (entry.operation.startsWith('mutate')) {
       const root = entry.tool.inputSchema as unknown as Schema
       for (const branch of branches(root.properties!.request, root)) {
-        validateCall(entry.tool.name, { request: example(branch, root) })
+        validateCall(entry.tool.name, { request: example(branch, root), requestId: randomUUID(), ...(entry.operation === 'mutateArticles' ? {} : { expectedRevision: 'a'.repeat(64) }) })
         mutationVariants += 1
       }
     }
@@ -163,6 +167,33 @@ try {
   const partial = await client.callTool({ name: toolName('stocks'), arguments: { request: { symbol: 'TEST' } } })
   assert.equal(partial.isError, false, JSON.stringify(partial))
 
+  // Progress crosses Electron HTTP streaming and stdio MCP notifications.
+  routes.set('stocks', async () => {
+    mcpProgress(1, 2)
+    await new Promise(resolve => setTimeout(resolve, 15))
+    mcpProgress(2, 2)
+    return { data: { ready: true }, meta: { freshness: 'fresh', source: 'fixture' }, errors: [] }
+  })
+  const progress: number[] = []
+  await client.callTool({ name: toolName('stocks'), arguments: { request: { symbol: 'TEST' } } }, undefined, { onprogress: value => progress.push(value.progress) })
+  assert(progress.includes(1) && progress.includes(2), 'MCP progress notifications were lost')
+  let readStarted!: () => void
+  let readStopped!: () => void
+  const startedRead = new Promise<void>(resolve => { readStarted = resolve })
+  const stoppedRead = new Promise<void>(resolve => { readStopped = resolve })
+  routes.set('stocks', async () => {
+    const signal = mcpExecution.getStore()!.signal!
+    readStarted()
+    await new Promise<void>(resolve => signal.addEventListener('abort', () => { readStopped(); resolve() }, { once: true }))
+    return { data: {}, meta: { freshness: 'fresh' }, errors: [] }
+  })
+  const cancellation = new AbortController()
+  const cancelled = client.callTool({ name: toolName('stocks'), arguments: { request: { symbol: 'TEST' } } }, undefined, { signal: cancellation.signal })
+  await startedRead
+  cancellation.abort()
+  await assert.rejects(cancelled)
+  await Promise.race([stoppedRead, new Promise<never>((_resolve, reject) => { const timer = setTimeout(() => reject(new Error('MCP cancellation did not reach Electron')), 3000); timer.unref() })])
+
   const runtime = JSON.parse(await readFile(descriptorPath, 'utf8'))
   const url = `http://127.0.0.1:${runtime.port}/invoke`
   const send = (body: string, headers: Record<string, string> = {}) => fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${runtime.token}`, 'Content-Type': 'application/json', ...headers }, body })
@@ -177,7 +208,7 @@ try {
   await bridge.stop()
   await assert.rejects(readFile(descriptorPath), /ENOENT/)
   assert.equal((await client.callTool({ name: toolName('portfolio'), arguments: { request: {} } })).isError, true)
-  bridge = await startBridge({ routes, onChanged: () => {} })
+  bridge = await startBridge({ dispatcher: new McpDispatcher({ routes, policy: { readOnly: false, requireApproval: false } }), onChanged: () => {} })
   assert.equal((await client.callTool({ name: toolName('portfolio'), arguments: { request: {} } })).isError, false)
   await bridge.stop()
 
@@ -191,9 +222,11 @@ try {
   const { createServiceRoutes } = await import('../electron/mcp/routes.js')
   const { cache } = await import('../electron/services/cache.js')
   closeCache = () => cache.close()
-  bridge = await startBridge({ routes: createServiceRoutes(), onChanged: (domains) => events.push(domains) })
+  bridge = await startBridge({ dispatcher: new McpDispatcher({ routes: createServiceRoutes(), policy: { readOnly: false, requireApproval: false } }), onChanged: (domains) => events.push(domains) })
   async function call<Key extends Exclude<Operation, 'screenshot'>>(operation: Key, request: unknown = {}): Promise<Awaited<ReturnType<DesktopApi[Key]>>> {
-    const result = await invokeBridge(toolName(operation), { request })
+    const domain = mutationDomains[operation as keyof typeof mutationDomains]
+    const current = domain && domain !== 'articles' ? await invokeBridge(toolName(domain), { request: {} }) as { meta: { revision: string } } : undefined
+    const result = await invokeBridge(toolName(operation), { request, ...(domain ? { requestId: randomUUID(), ...(current ? { expectedRevision: current.meta.revision } : {}) } : {}) })
     assert.equal(failed(result), false, JSON.stringify(result))
     return result as Awaited<ReturnType<DesktopApi[Key]>>
   }
@@ -210,7 +243,14 @@ try {
   await call('mutatePersonalFinance', { type: 'setEntry', category: 'cash', id: entryId, amount: 456 })
   await call('mutateCards', { type: 'add', name: 'MCP Card', symbols: ['TEST'], weighting: 'equal', weights: {} })
   await call('mutateSettings', { type: 'setClockCountry', code: 'SG' })
-  await Promise.all(Array.from({ length: 5 }, (_, index) => call('mutatePortfolio', { type: 'setCash', portfolioId, cashBalance: index })))
+  const stale = await invokeBridge(toolName('portfolio'), { request: {} }) as { meta: { revision: string } }
+  await call('mutatePortfolio', { type: 'setCash', portfolioId, cashBalance: 100 })
+  const staleWrite = await client.callTool({ name: toolName('mutatePortfolio'), arguments: {
+    request: { type: 'setCash', portfolioId, cashBalance: 999 }, requestId: randomUUID(), expectedRevision: stale.meta.revision,
+  } })
+  assert.equal(staleWrite.isError, true, 'Stale revisions must surface as MCP errors, not successful partial edits')
+  assert.equal((await call('portfolio')).data.portfolios.find(portfolio => portfolio.id === portfolioId)?.cashBalance, 100)
+  for (let index = 0; index < 5; index++) await call('mutatePortfolio', { type: 'setCash', portfolioId, cashBalance: index })
   // HTTP arrival order is not guaranteed for concurrent clients. Set the final
   // expected balance after the contention exercise has drained.
   await call('mutatePortfolio', { type: 'setCash', portfolioId, cashBalance: 4 })
@@ -238,8 +278,8 @@ try {
   let startedWrite!: () => void
   const started = new Promise<void>((resolveStarted) => { startedWrite = resolveStarted })
   routes.set('mutateSettings', async () => { startedWrite(); await new Promise<void>((done) => { finishWrite = done }); return { data: {}, meta: { freshness: 'fresh' }, errors: [] } })
-  bridge = await startBridge({ routes, onChanged: () => {} })
-  const writing = invokeBridge(toolName('mutateSettings'), { request: { type: 'setTime12h', value: true } })
+  bridge = await startBridge({ dispatcher: new McpDispatcher({ routes, policy: { readOnly: false, requireApproval: false } }), onChanged: () => {} })
+  const writing = invokeBridge(toolName('mutateSettings'), { request: { type: 'setTime12h', value: true }, requestId: randomUUID(), expectedRevision: 'a'.repeat(64) })
   await started
   assert.equal(bridge.status.active, true, 'Pending tool calls must light the activity indicator')
   assert.equal(bridge.status.connected, true)

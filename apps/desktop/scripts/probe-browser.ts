@@ -147,11 +147,11 @@ try {
   await writeFile(join(directory, 'index.html'), '<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="browser.css"><style>html,body,#root{height:100%;margin:0}#root{display:flex;font-family:Arial,sans-serif}*{box-sizing:border-box}</style></head><body><div id="root"></div><script src="renderer.js"></script></body></html>')
   await writeFile(join(directory, 'preload.cjs'), `const { contextBridge, ipcRenderer } = require('electron'); contextBridge.exposeInMainWorld('api', { platform: process.platform, browserStatus: () => ipcRenderer.invoke('probe:status'), browserResearch: request => ipcRenderer.invoke('probe:research', request), browserControl: request => ipcRenderer.invoke('probe:control', request), browserViewport: viewport => ipcRenderer.invoke('probe:viewport', viewport) })`)
   const main = await build({ stdin: { resolveDir: root, contents: `
-    import { app, BrowserWindow, ipcMain, session } from 'electron'
+    import { app, BrowserWindow, dialog, ipcMain, session } from 'electron'
     import assert from 'node:assert/strict'
     import { mkdirSync, writeFileSync } from 'node:fs'
     import { assertPrivateBrowserStorage } from './electron/services/browserStorage'
-    import { browserStatus, browserResearch, browserControl, browserUrl, configureBrowserWindow, setBrowserViewport, compositeBrowserScreenshot } from './electron/services/browser'
+    import { browserStatus, browserResearch, browserControl, browserUrl, configureBrowserWindow, setBrowserPrivacy, setBrowserViewport, authorizeBrowserScreenshot, compositeBrowserScreenshot } from './electron/services/browser'
     app.setPath('userData', ${JSON.stringify(join(directory, 'userData'))})
     app.whenReady().then(async () => {
       const window = new BrowserWindow({ show: false, width: 1400, height: 950, webPreferences: { preload: ${JSON.stringify(join(directory, 'preload.cjs'))}, contextIsolation: true, sandbox: true, backgroundThrottling: false } })
@@ -222,6 +222,38 @@ try {
         result = await browserResearch({ action: 'screenshot', tabId })
         assert.equal(result.errors.length, 0, JSON.stringify(result.errors))
         assert(result.data.screenshot.base64.length > 100)
+        const originalDialog = dialog.showMessageBox
+        let approvalCalls = 0
+        dialog.showMessageBox = async (_window, options) => { approvalCalls++; assert.equal(options.defaultId, 0); return { response: 0, checkboxChecked: false } }
+        setBrowserPrivacy(true)
+        const deniedRead = await browserResearch({ action: 'read' })
+        assert.equal(deniedRead.meta.freshness, 'failed')
+        assert(!deniedRead.data.page, 'Denied content must not be returned')
+        assert.equal((await browserResearch({ action: 'screenshot' })).meta.freshness, 'failed')
+        await assert.rejects(compositeBrowserScreenshot(window, await window.webContents.capturePage()), /denied/)
+        await window.webContents.executeJavaScript('window.openDialog()')
+        assert.equal(native.getVisible(), false)
+        await assert.rejects(authorizeBrowserScreenshot(window), /denied/, 'DOM reader content must require approval even with the native view hidden')
+        await window.webContents.executeJavaScript('window.closeDialog()')
+        assert.equal(approvalCalls, 4, 'Browser content guard must cover reads, captures and composite app screenshots')
+        const manualRead = await browserControl({ action: 'read' })
+        assert(manualRead.data.page, 'Manual reads remain available')
+        assert.equal(approvalCalls, 4)
+        dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false })
+        assert((await browserResearch({ action: 'read' })).data.page, 'Approved read succeeds')
+        const permit = await authorizeBrowserScreenshot(window)
+        await browserControl({ action: 'agentAccess', enabled: false })
+        await assert.rejects(compositeBrowserScreenshot(window, await window.webContents.capturePage(), permit), /stopped/)
+        await browserControl({ action: 'agentAccess', enabled: true })
+        dialog.showMessageBox = (_window, options) => new Promise(resolve => options.signal.addEventListener('abort', () => resolve({ response: 0 }), { once: true }))
+        const waitingRead = browserResearch({ action: 'read' })
+        await pause()
+        await browserControl({ action: 'stop' })
+        assert.equal((await waitingRead).meta.freshness, 'failed', 'Stop cancels content approval')
+        setBrowserPrivacy(false)
+        dialog.showMessageBox = originalDialog
+        await browserControl({ action: 'agentAccess', enabled: true })
+        console.log('Browser content privacy: denied/approved reads, native captures, composite screenshots, manual reads and Stop during approval passed.')
         const output = ${JSON.stringify(resolve(root, '../../output/playwright'))}
         mkdirSync(output, { recursive: true })
         writeFileSync(output + '/browser-website.png', Buffer.from(result.data.screenshot.base64, 'base64'))

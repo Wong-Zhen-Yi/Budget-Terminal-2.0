@@ -29,5 +29,10 @@ export function toolResult(name: string, result: unknown): CallToolResult {
   }
   const structuredContent = result && typeof result === 'object' && !Array.isArray(result)
     ? result as Record<string, unknown> : { data: result }
-  return { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent, isError: failed(result) }
+  const serialized = JSON.stringify(result)
+  const text = serialized.length <= 8192 ? serialized : JSON.stringify({
+    message: 'Research is available in structuredContent. Use response fields, pagination or summary for a smaller result.',
+    meta: structuredContent.meta, errors: structuredContent.errors, response: structuredContent.response,
+  })
+  return { content: [{ type: 'text', text }], structuredContent, isError: failed(result) }
 }

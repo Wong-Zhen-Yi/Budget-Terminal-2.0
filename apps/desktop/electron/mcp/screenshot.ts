@@ -1,19 +1,20 @@
+import { checkMcpCancellation, mcpExecution, mcpProgress } from '../services/mcpContext.js'
 import { ipcMain, type BrowserWindow } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { CHANNELS, TABS, type Envelope, type EnvelopeError } from '../shared/contract.js'
 import { describeError, failed, partial } from '../shared/envelope.js'
-import { compositeBrowserScreenshot } from '../services/browser.js'
+import { authorizeBrowserScreenshot, compositeBrowserScreenshot } from '../services/browser.js'
 import type { PageScreenshot, ScreenshotCommand, ScreenshotPayload, ScreenshotReady, ScreenshotRequest } from '../shared/screenshot.js'
 
 const SOURCE = 'Electron page capture'
 const TIMEOUT_MS = 5_000
 class ScreenshotTimeoutError extends Error {}
 
-async function withTimeout<T>(work: Promise<T>): Promise<T> {
+async function withTimeout<T>(work: Promise<T>, timeout = TIMEOUT_MS): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
     return await Promise.race([work, new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => reject(new ScreenshotTimeoutError('Page capture timed out. Wait for the app to finish starting and retry.')), TIMEOUT_MS)
+      timer = setTimeout(() => reject(new ScreenshotTimeoutError('Page capture timed out. Wait for the app to finish starting and retry.')), timeout)
     })])
   } finally { clearTimeout(timer) }
 }
@@ -22,12 +23,14 @@ async function withTimeout<T>(work: Promise<T>): Promise<T> {
 export function createScreenshotService(getWindow: () => BrowserWindow | undefined) {
   let pending: Promise<unknown> = Promise.resolve()
   return (request: ScreenshotRequest): Promise<Envelope<ScreenshotPayload>> => {
-    const work = pending.then(() => capture(request))
+    const context = mcpExecution.getStore()
+    const work = pending.then(() => mcpExecution.run(context ?? {}, () => capture(request)))
     pending = work.catch(() => {})
     return work
   }
 
   async function capture(request: ScreenshotRequest): Promise<Envelope<ScreenshotPayload>> {
+    checkMcpCancellation()
     const window = getWindow()
     if (!window || window.isDestroyed() || window.webContents.isDestroyed()) {
       return failed({ screenshots: [] }, 'Open a Budget Terminal window to take screenshots.', SOURCE)
@@ -65,14 +68,19 @@ export function createScreenshotService(getWindow: () => BrowserWindow | undefin
       // Render even when occluded/minimized; never show, restore or focus the window.
       contents.setBackgroundThrottling(false)
       for (const id of page === 'all' ? tabs.map((tab) => tab.id) : [page === 'current' ? null : page]) {
+        checkMcpCancellation()
+        mcpProgress(screenshots.length, page === 'all' ? tabs.length : 1)
         if (Date.now() >= deadline) {
           errors.push({ source: SOURCE, reason: 'The all-pages capture deadline was reached; some pages were not captured.', operation: 'screenshot' })
           break
         }
         try {
           const { id: _requestId, error: _error, ...ready } = await prepare(id)
+          checkMcpCancellation()
+          const permit = ready.pageId === 'browser' && !ready.obscured ? await authorizeBrowserScreenshot(window) : undefined
+          checkMcpCancellation()
           const shell = await withTimeout(contents.capturePage(undefined, { stayHidden: true, stayAwake: true }))
-          const image = await withTimeout(compositeBrowserScreenshot(window, shell))
+          const image = ready.obscured ? shell : await withTimeout(compositeBrowserScreenshot(window, shell, permit), 65_000)
           if (image.isEmpty()) throw new Error('Electron returned an empty screenshot.')
           const { width, height } = image.getSize()
           screenshots.push({ ...ready, capturedAt: Date.now(), width, height, mimeType: 'image/png', base64: image.toPNG().toString('base64') })
@@ -95,6 +103,8 @@ export function createScreenshotService(getWindow: () => BrowserWindow | undefin
         }
       } finally { ipcMain.removeHandler(CHANNELS.screenshotReady) }
     }
+    checkMcpCancellation()
+    mcpProgress(screenshots.length, page === 'all' ? tabs.length : 1)
     const result = partial({ screenshots }, errors, SOURCE)
     if (!screenshots.length) result.meta = { ...result.meta, freshness: 'failed', failureReason: errors.map((error) => error.reason).join(' · ') }
     return result

@@ -1,3 +1,4 @@
+import { RecordRevisionError } from './mcpContext.js'
 import { getMoney, clearMoneyCache } from './money.js'
 import { withSourceEnvelope } from './sourceHealth.js'
 import { getHims } from './hims.js'
@@ -1106,6 +1107,7 @@ const providerImplementation: MarketDataProvider = {
         // throwing across the IPC boundary.
         const reason = describeError(error)
         const current = await readPortfolios().catch(() => emptyPortfolio)
+        if (error instanceof RecordRevisionError) return failed(current, reason, 'portfolio store')
         return partial(
           current,
           [err('portfolio store', reason, mutation.type)],
@@ -1131,6 +1133,7 @@ const providerImplementation: MarketDataProvider = {
       } catch (error) {
         const reason = describeError(error)
         const current = await readCards().catch(() => emptyCards)
+        if (error instanceof RecordRevisionError) return failed(current, reason, 'cards store')
         return partial(current, [err('cards store', reason, mutation.type)], 'cards store', reason)
       }
     })
@@ -1169,6 +1172,7 @@ const providerImplementation: MarketDataProvider = {
         // section comes back with the reason attached.
         const reason = describeError(error)
         const current = await readPersonalFinance().catch(() => emptyFinance)
+        if (error instanceof RecordRevisionError) return failed(current, reason, 'portfolio store')
         return partial(
           current,
           [err('portfolio store', reason, mutation.type)],
@@ -1917,6 +1921,7 @@ const providerImplementation: MarketDataProvider = {
         // the end of the list, comes back as the unchanged document plus a reason.
         const reason = describeError(error)
         const current = await readSettings().catch(() => emptySettings)
+        if (error instanceof RecordRevisionError) return failed(current, reason, SETTINGS_SOURCE)
         return partial(current, [err(SETTINGS_SOURCE, reason, mutation.type)], SETTINGS_SOURCE, reason)
       }
     })

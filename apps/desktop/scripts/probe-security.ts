@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises'
@@ -47,6 +48,7 @@ try {
 } finally { await development.close() }
 await mkdir(join(root, 'out'), { recursive: true })
 const directory = await mkdtemp(join(root, 'out', 'security-'))
+const dataDirectory = await mkdtemp(join(tmpdir(), 'budget-security-data-'))
 try {
   const trustedPath = join(directory, 'trusted.html')
   const otherPath = join(directory, 'other.html')
@@ -61,6 +63,7 @@ try {
       import assert from 'node:assert/strict'
       import { app, BrowserWindow } from 'electron'
       import { pathToFileURL } from 'node:url'
+      import { readFile } from 'node:fs/promises'
       import { registerIpcHandlers } from './electron/ipc/handlers'
       import { isTrustedRendererUrl } from './electron/shared/ipcSecurity'
       import { CHANNELS } from './electron/shared/contract'
@@ -68,12 +71,12 @@ try {
       import { startMcpHost } from './electron/mcp/host'
       import { startAgents, closeAgents } from './electron/services/agentsHost'
       import { invokeBridge, runtimePath } from './mcp/runtime'
-      app.setPath('userData', ${JSON.stringify(join(directory, 'userData'))})
+      app.setPath('userData', ${JSON.stringify(join(dataDirectory, 'userData'))})
       const expected = pathToFileURL(${JSON.stringify(trustedPath)}).href
       app.whenReady().then(async () => {
         let dispose, release
         try {
-          assert.equal(runtimePath(), ${JSON.stringify(join(directory, 'BudgetTerminalElectron', '.mcp', 'runtime.json'))})
+          assert.equal(runtimePath(), ${JSON.stringify(join(dataDirectory, 'BudgetTerminalElectron', '.mcp', 'runtime.json'))})
           release = acquireDataSession()
           dispose = registerIpcHandlers(event => {
             const frame = event.senderFrame
@@ -165,16 +168,35 @@ try {
           const stopMcp = await startMcpHost()
           assert.equal((await trusted.webContents.executeJavaScript('window.api.mcpStatus()')).available, true)
           await assert.rejects(other.webContents.executeJavaScript('window.api.mcpStatus()'), /Untrusted IPC sender/)
+          await assert.rejects(other.webContents.executeJavaScript('window.api.configureMcp({ readOnly: false, requireApproval: false })'), /Untrusted IPC sender/)
+          await assert.rejects(other.webContents.executeJavaScript('window.api.testMcpConnection()'), /Untrusted IPC sender/)
+          await assert.rejects(other.webContents.executeJavaScript('window.api.cancelMcpCall(1)'), /Untrusted IPC sender/)
+          await assert.rejects(trusted.webContents.executeJavaScript('window.api.configureMcp({ readOnly: false })'))
+          const tested = await trusted.webContents.executeJavaScript('window.api.testMcpConnection()')
+          assert.equal(tested.diagnostics.policy.readOnly, true)
+          assert.equal(tested.setup.valid, true)
+          const descriptor = JSON.parse(await readFile(runtimePath(), 'utf8'))
+          assert(!tested.setup.configuration.includes(descriptor.token))
+          assert(tested.setup.configuration.includes('BUDGET_TERMINAL_DATA_DIR'))
+          assert.equal(tested.diagnostics.activity.length, 0, 'Connection tests and heartbeats do not create activity records')
+          await assert.rejects(invokeBridge('budget_terminal_mutate_settings', { request: { type: 'setTime12h', value: false }, requestId: 'blocked', expectedRevision: (await invokeBridge('budget_terminal_settings', { request: {} })).meta.revision }), /read only/)
+          await trusted.webContents.executeJavaScript('window.api.configureMcp({ readOnly: false, requireApproval: false })')
           await trusted.webContents.executeJavaScript('window.savedChanges = []; window.stopSavedChanges = window.api.onSavedDataChanged(event => window.savedChanges.push(event)); true')
-          await invokeBridge('budget_terminal_mutate_settings', { request: { type: 'setTime12h', value: false } })
+          await invokeBridge('budget_terminal_mutate_settings', { request: { type: 'setTime12h', value: false }, requestId: 'time-false', expectedRevision: (await invokeBridge('budget_terminal_settings', { request: {} })).meta.revision })
           await new Promise(resolve => setTimeout(resolve, 100))
           assert.deepEqual(await trusted.webContents.executeJavaScript('window.savedChanges'), [{ domains: ['settings'] }])
           assert.equal((await trusted.webContents.executeJavaScript('window.api.settings()')).data.time12h, false)
           await trusted.webContents.executeJavaScript('window.stopSavedChanges()')
-          await invokeBridge('budget_terminal_mutate_settings', { request: { type: 'setTime12h', value: true } })
+          await invokeBridge('budget_terminal_mutate_settings', { request: { type: 'setTime12h', value: true }, requestId: 'time-true', expectedRevision: (await invokeBridge('budget_terminal_settings', { request: {} })).meta.revision })
           await new Promise(resolve => setTimeout(resolve, 100))
           assert.equal(await trusted.webContents.executeJavaScript('window.savedChanges.length'), 1)
+          const diagnostics = (await trusted.webContents.executeJavaScript('window.api.mcpStatus()')).diagnostics
+          assert.equal(diagnostics.activity.at(-1).state, 'success')
+          assert.equal('arguments' in diagnostics.activity.at(-1), false)
           await stopMcp()
+          const stopRestartedMcp = await startMcpHost()
+          assert.equal((await trusted.webContents.executeJavaScript('window.api.mcpStatus()')).diagnostics.policy.readOnly, false, 'Locally saved permissions survive restart')
+          await stopRestartedMcp()
           console.log('PASS: Electron MCP host, status IPC, real mutation notification and unsubscribe through sandboxed preload')
           console.log('PASS: real sandboxed preload, isolated renderer, trusted IPC, rejected foreign document and maintenance action')
           dispose(); release(); app.exit(0)
@@ -206,8 +228,8 @@ try {
   })
   // Keep the bridge client and Electron host on this probe's profile, including
   // when the maintenance runner already supplied its own outer scratch path.
-  const env: NodeJS.ProcessEnv = { ...process.env, APPDATA: directory, LOCALAPPDATA: directory,
-    BUDGET_TERMINAL_DATA_DIR: join(directory, 'BudgetTerminalElectron') }
+  const env: NodeJS.ProcessEnv = { ...process.env, APPDATA: dataDirectory, LOCALAPPDATA: dataDirectory,
+    BUDGET_TERMINAL_DATA_DIR: join(dataDirectory, 'BudgetTerminalElectron') }
   delete env.ELECTRON_RUN_AS_NODE
   const result = await new Promise<{ code: number | null; output: string }>((resolveRun, reject) => {
     const child = spawn(createRequire(import.meta.url)('electron') as string, [join(directory, 'main.mjs')], {
@@ -225,4 +247,5 @@ try {
   console.log(result.output.split(/\r?\n/).filter((line) => line.startsWith('PASS:')).join('\n'))
 } finally {
   await rm(directory, { recursive: true, force: true })
+  await rm(dataDirectory, { recursive: true, force: true })
 }

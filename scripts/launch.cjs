@@ -81,6 +81,8 @@ function launch({ platform = process.platform, nodeVersion = process.versions.no
   log.log('Startup Yahoo loads are paced at 1 request per second, without bursts, with up to 2 background requests in flight. All pages still preload; foreground requests take priority and rate limits trigger further slowdown.')
   log.log('Temporary data failures retry with backoff. Stuck Yahoo workers restart automatically, and incomplete cached results can recover without waiting for their normal expiry. Startup retry progress and unresolved failures stay visible in Settings.')
   log.log('Data caching now saves remote snapshots incrementally across launches, even while pages poll. Startup restores saved data before warming all pages; fresh data is reused, and only expired or missing data refreshes. Pending cache saves finish before the window closes.')
+  log.log('MCP research now supports summaries, field selection and pagination; scans and captures report progress and accept cancellation. Settings includes token-free client setup, data-folder validation and optional website-content approval. Portfolio, Cards, finance and settings writes require current revisions to protect concurrent edits.')
+  log.log('MCP defaults to read-only, with optional native approval for saved-record edits, privacy-safe activity and a connection test in Settings > Data > Local MCP. Mutation request IDs protect exact same-session retries; read saved records before retrying after an app restart.')
   log.log('Updating MCP bundles safely: unchanged files are left alone, changed files are replaced atomically, and temporary Windows file locks are retried. No MCP clients are forcibly stopped.')
   const build = npm(['run', 'build'])
   if (build.error || build.status !== 0) {

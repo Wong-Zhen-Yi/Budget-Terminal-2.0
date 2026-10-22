@@ -1,4 +1,5 @@
 import type { BrowserControl, BrowserRequest, BrowserResult, BrowserState, BrowserViewport } from './browser.js'
+import type { McpDiagnostics, McpPolicy } from './mcpAccess.js'
 export type { BrowserRequest } from './browser.js'
 import type { AgentImage, AgentsCommand, AgentsState } from './agents.js'
 import type { ArticlesPayload, ArticlesMutation } from './articles.js'
@@ -42,6 +43,8 @@ import type { ForexRequest, ForexPairRequest, ForexHistoryRequest, ForexQuotesPa
 export type Freshness = 'fresh' | 'cached' | 'stale' | 'partial' | 'failed'
 
 export interface EnvelopeMeta {
+  /** MCP saved-domain revision for compare-and-swap edits; omitted on ordinary research. */
+  revision?: string
   source: string
   freshness: Freshness
   fetchedAt: number
@@ -3433,6 +3436,9 @@ export const CHANNELS = {
   agentsCommand: 'agents:command',
   agentsImage: 'agents:image',
   mcpStatus: 'system:mcp-status',
+  configureMcp: 'system:mcp-configure',
+  testMcpConnection: 'system:mcp-test',
+  cancelMcpCall: 'system:mcp-cancel',
   screenshotRequested: 'mcp:screenshot-requested',
   screenshotReady: 'mcp:screenshot-ready',
   savedDataChanged: 'user-data:changed',
@@ -3622,6 +3628,9 @@ export interface DesktopApi {
   agentsCommand(command: AgentsCommand): Promise<Envelope<AgentsState>>
   agentsImage(id: string): Promise<Envelope<AgentImage | null>>
   mcpStatus(): Promise<McpStatus>
+  configureMcp(policy: McpPolicy): Promise<McpStatus>
+  testMcpConnection(): Promise<McpStatus>
+  cancelMcpCall(id: number): Promise<McpStatus>
   onScreenshotRequested(listener: (command: ScreenshotCommand) => void): () => void
   screenshotReady(result: ScreenshotReady): Promise<void>
   onSavedDataChanged(listener: (event: SavedDataChanged) => void): () => void
@@ -3742,4 +3751,4 @@ export interface DesktopApi {
 export type SavedDataDomain = 'articles' | 'portfolio' | 'cards' | 'personalFinance' | 'settings'
 export interface SavedDataChanged { domains: SavedDataDomain[] }
 
-export interface McpStatus { available: boolean; connected?: boolean; active?: boolean; tools?: number; error?: string }
+export interface McpStatus { available: boolean; connected?: boolean; active?: boolean; tools?: number; error?: string; diagnostics?: McpDiagnostics; setup?: { valid: boolean; message: string; configuration?: string; descriptorPath?: string } }

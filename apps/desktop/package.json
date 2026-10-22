@@ -114,7 +114,7 @@
     "probe:sp500": "tsx scripts/probe-sp500.ts",
     "generate:mcp": "tsx mcp/generate-schemas.ts",
     "build:mcp": "npm run generate:mcp && tsx mcp/build.ts",
-    "probe:mcp": "tsx scripts/probe-mcp-build.ts && tsx mcp/generate-schemas.ts --check && tsx scripts/probe-mcp.ts",
+    "probe:mcp": "tsx scripts/probe-mcp-build.ts && tsx mcp/generate-schemas.ts --check && tsx scripts/probe-mcp-access.ts && tsx scripts/probe-mcp.ts",
     "probe:amzn": "tsx scripts/probe-amzn.ts",
     "probe:amzn-ui": "tsx scripts/probe-amzn-ui.ts",
     "probe:vst": "tsx scripts/probe-vst.ts",

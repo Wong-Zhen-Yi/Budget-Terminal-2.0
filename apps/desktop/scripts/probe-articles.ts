@@ -35,7 +35,7 @@ try {
   await assert.rejects(mutateArticles({ type: 'add', ...fields, title: ' ' }))
   const routes = createServiceRoutes()
   assert(routes.has('articles') && routes.has('mutateArticles'))
-  assert.equal(validateCall('budget_terminal_mutate_articles', { request: { type: 'add', ...fields } }).operation, 'mutateArticles')
+  assert.equal(validateCall('budget_terminal_mutate_articles', { request: { type: 'add', ...fields }, requestId: 'article-add' }).operation, 'mutateArticles')
   configureAutomaticBackup(join(directory, 'downloads'))
   const saved = await saveArticles({ type: 'update', ...fields, id: created.id, revision: 2, status: 'finished' })
   assert.notEqual(saved.meta.freshness, 'failed')

@@ -9,7 +9,7 @@ import { yahooProvider } from '../services/provider.js'
 import { verifyStoredData, watchPortfolios } from '../services/portfolioStore.js'
 import { isSafeExternalUrl } from '../services/urls.js'
 import { registerServiceHandlers } from './serviceHandlers.js'
-import { getMcpStatus } from '../mcp/host.js'
+import { cancelMcpCall, configureMcp, getMcpStatus, testMcpConnection } from '../mcp/host.js'
 import { publishSavedDataChanged, subscribeSavedDataChanged } from '../services/savedDataEvents.js'
 import { articleFilename } from '../shared/articles.js'
 import { articlePdfRequestSchema, writeArticlePdfs } from '../services/articlePdf.js'
@@ -31,6 +31,9 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
   handle(CHANNELS.agentsCommand, (_event, command: AgentsCommand) => agentsCommand(command))
   handle(CHANNELS.agentsImage, (_event, id: string) => agentsImage(id))
   handle(CHANNELS.mcpStatus, () => getMcpStatus())
+  handle(CHANNELS.configureMcp, (_event, policy: unknown) => configureMcp(policy))
+  handle(CHANNELS.testMcpConnection, () => testMcpConnection())
+  handle(CHANNELS.cancelMcpCall, (_event, id: number) => cancelMcpCall(id))
   registerServiceHandlers((channel, run) => {
     handle(channel, (_event, request) => run(request))
   })

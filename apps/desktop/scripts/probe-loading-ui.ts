@@ -127,6 +127,40 @@ try {
           await settle()
           check(edits.querySelectorAll('[data-mcp-capability]').length === ${Object.keys(mutationDomains).length}, 'Saved-record edit list is incomplete')
           check(edits.querySelector('[data-mcp-capability="budget_terminal_mutate_portfolio"]').getBoundingClientRect().height > 0, 'Expanded capability list is not visible')
+          client.setQueryData(['mcpStatus'], await window.api.mcpStatus())
+          await settle()
+          const readOnlyControl = [...document.querySelectorAll('label')].find(label => label.textContent.includes('Read-only MCP')).querySelector('input')
+          check(readOnlyControl.checked, 'MCP must default to read-only')
+          readOnlyControl.click()
+          await settle()
+          check(!window.fixtureMcp.policy.readOnly && !readOnlyControl.checked, 'MCP read-only control did not save')
+          const approvalControl = [...document.querySelectorAll('label')].find(label => label.textContent.includes('Require local approval')).querySelector('input')
+          check(approvalControl.checked, 'Local approval must default on')
+          approvalControl.click()
+          await settle()
+          check(!window.fixtureMcp.policy.requireApproval, 'MCP approval control did not save')
+          ;[...document.querySelectorAll('button')].find(button => button.textContent === 'Test MCP connection').click()
+          await settle()
+          check(document.body.innerText.includes('Connection test passed'), 'MCP connection test result is missing')
+          const activityTable = document.querySelector('table[aria-label="Recent MCP activity"]')
+          check(activityTable?.textContent.includes('budget_terminal_stocks') && activityTable.textContent.includes('partial'), 'Privacy-safe MCP activity did not render')
+          check(activityTable.textContent.includes('23 ms'), 'MCP call duration is missing')
+          const privacy = [...document.querySelectorAll('label')].find(label => label.textContent.includes('Ask before agents')).querySelector('input')
+          privacy.click()
+          await settle()
+          check(window.fixtureMcp.policy.browserRequireApproval, 'Browser content approval option did not save')
+          const setup = [...document.querySelectorAll('details')].find(item => item.querySelector('summary')?.textContent === 'Client setup')
+          setup.open = true
+          ;[...setup.querySelectorAll('button')].find(button => button.textContent === 'Copy client configuration').click()
+          await settle()
+          check(window.fixtureClipboard.includes('mcpServers') && setup.textContent.includes('configuration copied'), 'Token-free configuration copy failed')
+          window.fixtureMcp.activity.push({ id: 2, tool: 'budget_terminal_quant_scan', source: 'external', startedAt: Date.now(), state: 'running' })
+          client.setQueryData(['mcpStatus'], await window.api.mcpStatus())
+          await settle()
+          ;[...document.querySelectorAll('button')].find(button => button.textContent === 'Cancel request').click()
+          await settle()
+          check(window.fixtureMcp.activity.at(-1).state === 'cancelled', 'Local request cancellation failed')
+          console.log('PASS: MCP permissions, browser content approval, token-free setup/copy, cancellation, authenticated connection-test UI and metadata-only activity table')
           client.setQueryData(['mcpStatus'], { available: false, error: 'Fixture MCP startup failure' })
           await settle()
           check(document.body.innerText.includes('Fixture MCP startup failure'), 'MCP startup failure is not visible')
@@ -179,12 +213,18 @@ try {
         },
       }, version: 0 }));
       window.fixtureRequests = [];
+      window.fixtureMcp = { policy: { readOnly: true, requireApproval: true }, writeReceipts: 0, writeReceiptLimit: 500,
+        activity: [{ id: 1, tool: 'budget_terminal_stocks', source: 'external', startedAt: Date.now(), durationMs: 23, state: 'partial' }] };
       window.api = new Proxy({
         platform: 'win32',
         onScreenshotRequested: listener => window.captureApi.onScreenshotRequested(listener),
         screenshotReady: result => window.captureApi.screenshotReady(result),
         onPortfolioChanged: () => () => {},
-        mcpStatus: async () => ({ available: true, tools: ${toolCount} }),
+        mcpStatus: async () => ({ available: true, tools: ${toolCount}, diagnostics: structuredClone(window.fixtureMcp), setup: { valid: true, message: 'Fixture data folder validated', configuration: '{"mcpServers":{"fixture":{"command":"node"}}}' } }),
+        configureMcp: async policy => { window.fixtureMcp.policy = policy; return window.api.mcpStatus(); },
+        testMcpConnection: async () => window.api.mcpStatus(),
+        writeClipboard: async text => { window.fixtureClipboard = text; },
+        cancelMcpCall: async id => { const entry = window.fixtureMcp.activity.find(entry => entry.id === id); entry.state = 'cancelled'; entry.durationMs = 12; return window.api.mcpStatus(); },
         settings: async () => ok(window.fixtureSettings),
         portfolio: async () => ok({ portfolios: [], activeId: 'main', mainId: 'main', sourcePath: '' }),
         bitcoin: async request => {
@@ -206,7 +246,7 @@ try {
     </script><script src="renderer.js"></script></body></html>
   `)
   await build({
-    entryPoints: [join(root, 'electron/mcp/screenshot.ts')], outfile: join(directory, 'capture.cjs'),
+    stdin: { resolveDir: root, contents: `export { createScreenshotService } from './electron/mcp/screenshot'; export { mcpExecution } from './electron/services/mcpContext'` }, outfile: join(directory, 'capture.cjs'),
     bundle: true, platform: 'node', format: 'cjs', external: ['electron'],
   })
   await build({
@@ -226,7 +266,7 @@ try {
   await writeFile(join(directory, 'main.cjs'), `
     const { app, BrowserWindow, nativeImage } = require('electron');
     const assert = require('node:assert/strict');
-    const { createScreenshotService } = require('./capture.cjs');
+    const { createScreenshotService, mcpExecution } = require('./capture.cjs');
     const fs = require('fs');
     app.setPath('userData', ${JSON.stringify(join(directory, 'userData'))});
     app.whenReady().then(async () => {
@@ -265,6 +305,12 @@ try {
         const concurrent = await Promise.all([capture({ page: 'charts' }), capture({ page: 'dictionary' })]);
         assert.deepEqual(concurrent.map(result => result.data.screenshots[0]?.pageId), ['charts', 'dictionary']);
         assert.equal(await snapshot(), original);
+        const cancellation = new AbortController();
+        await assert.rejects(mcpExecution.run({ signal: cancellation.signal, progress: completed => { if (completed >= 1) cancellation.abort(); } }, () => capture({ page: 'all' })));
+        assert.equal(await snapshot(), original, 'Cancelled capture did not restore navigation');
+        assert.equal(window.webContents.getBackgroundThrottling(), true, 'Cancelled capture did not restore throttling');
+        assert.equal((await capture({ page: 'dictionary' })).meta.freshness, 'fresh', 'Cancelled capture left stale IPC handlers');
+        console.log('PASS: cancelled multi-page capture restores navigation, background throttle and capture queue');
         const invalid = await capture({ page: 'unknown' });
         assert.equal(invalid.meta.freshness, 'failed');
         assert.equal((await createScreenshotService(() => undefined)({})).meta.freshness, 'failed');

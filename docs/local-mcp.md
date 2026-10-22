@@ -16,6 +16,141 @@ rotates its session token and port; existing MCP clients recover on their next
 call. Do not retry a write after a timeout or interrupted response until you have
 read the saved record to check whether it completed.
 
+## Permissions, approval and diagnostics
+
+MCP defaults to **read-only**, including upgrades without a saved MCP policy.
+Settings > Data > Local MCP lets you disable read-only and choose whether every
+saved-record edit requires local approval (on by default). Read-only also blocks
+Browser research actions because they change the shared interactive browser session;
+ordinary research APIs and browser status inspection remain available. These rules
+are enforced for both external clients and embedded agent catalog tools. Autonomous
+agents retain their additional read-only restrictions. Manual UI edits and the
+existing user-reviewed portfolio-import flow are unchanged.
+
+Approvals use a native desktop dialog showing the exact requested edit, default to
+Deny, and expire after 60 seconds. An edit too large to display safely is refused,
+not silently truncated. Only one approval can be pending; other edits are refused.
+Changing permissions, stopping an embedded agent, disconnecting the bridge request,
+or closing the app cancels pending approval. An edit already executing may still
+complete; a cancelled request is not a rollback. Denied/expired IDs cannot be
+reused to force another attempt; inspect records and make a new user-requested edit.
+
+Permissions are stored locally in the restricted `.mcp/access.json` file, separately
+from agent-editable settings and exported backups. Agents cannot change their own
+MCP permissions. An unreadable or invalid policy falls back to read-only with a
+visible warning. Saving a policy must succeed before it takes effect.
+
+The panel includes an authenticated connection test and the last 100 calls for the
+current session: tool name, caller category, time, duration and outcome. Active calls
+and pending approvals remain visible. Arguments, results, URLs, client-supplied IDs
+and error details are never included in this activity log. Heartbeats are excluded.
+The log is not persisted or exported. Caller categories distinguish external tools
+from embedded tools; they do not identify individual external clients.
+
+## Safe saved-record retries
+
+Every mutation now requires a `requestId` alongside `request`. Reload your client's
+MCP connection after rebuilding so it discovers the updated input schemas. Use a
+fresh UUID for each intended edit and reuse it only for an exact retry:
+
+```json
+{
+  "requestId": "example-time-format-edit-001",
+  "expectedRevision": "<meta.revision from budget_terminal_settings>",
+  "request": { "type": "setTime12h", "value": false }
+}
+```
+
+Read `budget_terminal_settings` first and replace the example revision placeholder
+with its actual 64-character `meta.revision`. For `budget_terminal_mutate_settings`,
+this records one intended edit. Concurrent
+or later calls using the same tool, ID and arguments share/replay the original
+outcome without another edit or approval. Reusing an ID with different arguments
+is refused. Failed or uncertain attempts are not automatically executed again.
+Large results replay a small receipt instructing the client to read saved records.
+A session retains up to 500 write receipts; it refuses new IDs at capacity rather
+than evicting IDs and risking duplicate edits.
+
+**Receipts are in-memory and do not survive app restart.** They are not an
+exactly-once guarantee across sessions. After restart, always read saved records
+before retrying an interrupted write, even if you still have its request ID. Read
+tools do not accept `requestId`. Source, freshness and partial-data errors remain
+part of tool output.
+
+
+## Concurrent edit protection
+
+Portfolio, Cards, personal-finance and settings mutations require `expectedRevision`
+outside `request`, alongside `requestId`. Read the corresponding domain first and
+copy its `meta.revision`. Stores compare this token inside their write queue before
+applying changes, including changes made in the UI while approval was pending. A
+stale revision returns a failed envelope without editing or updating the backup.
+Re-read and review the intended edit before submitting a new ID and revision.
+Article edits continue to use their per-article revision numbers. Incidental paths
+and backup timestamps do not invalidate saved-record revisions. These checks apply
+to MCP edits; manual editing retains the existing UI contract.
+
+## Research response controls
+
+Ordinary read tools accept an optional `response` object outside `request`:
+
+```json
+{
+  "request": { "latestOnly": true },
+  "response": {
+    "collection": "rows",
+    "fields": ["ticker", "rank", "composite"],
+    "offset": 0,
+    "limit": 25,
+    "maxBytes": 65536
+  }
+}
+```
+
+This example reads a saved Quant scan. Inspect the result schema before choosing
+collection/fields: `collection` is a dot path inside `data`; `fields` are top-level
+row fields (or fields of `data` when no collection is selected). Pagination reports
+total, offset, limit and nextOffset under `response.page`. It slices returned data,
+so it does not reduce provider work. An invalid collection is rejected.
+
+`response.mode: "summary"` samples up to three entries per array and shortens long
+text; it is a deterministic preview, not an analytical conclusion. Omission/sampling
+flags always accompany shaped results. The JSON data budget defaults to 256 KiB,
+configurable from 4 KiB to 1 MiB. Oversized data is replaced with an explicit omission
+notice; request smaller pages or fields. Envelope metadata and errors remain intact.
+Selected-away source/timestamp/coverage details are retained separately in provenance,
+bounded to 100 entries/32 KiB with an explicit provenanceOmitted flag. Large results
+are carried once in structuredContent with a compact text notice. Native screenshot
+images keep their existing MCP image blocks and are outside this JSON data budget.
+
+## Progress, cancellation and setup
+
+Clients that request MCP progress receive numeric completion updates for Quant and
+technical scans and multi-page screenshots. The adapter streams progress from Electron
+and forwards MCP cancellation to the bridge. Settings also exposes Cancel request for
+active calls. Scan cancellation stops new history work; shared cached/provider reads
+already in flight may finish. Capture cancellation restores the selected page,
+background throttling and IPC handler. Other shared reads may finish cache work before
+cancellation settles. The bridge transport allows up to ten minutes for tool work and
+uses a five-second connection-test timeout. Client-side deadlines can be shorter.
+An executing edit is allowed to finish: cancellation never means rollback. Inspect
+records and use the same-session receipt before considering another write.
+
+Settings > Data > Local MCP includes copyable stdio client JSON and a connection test.
+The test verifies the data folder is readable/writable and outside source/Git folders,
+then authenticates against the running bridge. Configuration points to the built Node
+adapter and selects the local data folder. The adapter reads the runtime descriptor on
+every call; no session token or session port is copied into client configuration.
+Node.js must be on the client's PATH. Reconnect clients after rebuilding to refresh schemas.
+
+The optional **Ask before agents read or capture website content** switch applies to
+website text, link extraction, browser screenshots and website pixels in app screenshots.
+It defaults off for compatibility with the existing Browser access switch. Each content
+action requests a native Allow once/Deny decision, defaults to Deny and expires after
+60 seconds. Stop, disabling access, policy changes, cancellation and page changes
+invalidate pending consent. Manual browser reading stays available. Signed-in content
+is only exposed after the applicable access controls and approval succeed.
+
 Build and verify from the repository root:
 
 ```bash

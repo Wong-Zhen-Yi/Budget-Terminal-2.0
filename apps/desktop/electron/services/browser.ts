@@ -1,4 +1,5 @@
-import { app, BrowserWindow, WebContentsView, nativeImage, session, type NativeImage, type Session, type WebContents } from 'electron'
+import { checkMcpCancellation, mcpExecution } from './mcpContext.js'
+import { app, BrowserWindow, dialog, WebContentsView, nativeImage, session, type NativeImage, type Session, type WebContents } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import type { Envelope } from '../shared/contract.js'
@@ -25,6 +26,39 @@ let viewport: BrowserViewport = { visible: false, x: 0, y: 0, width: 0, height: 
 let initialized: Promise<void> | null = null
 let queue: Promise<unknown> = Promise.resolve()
 let generation = 0
+let contentApproval = false
+const contentApprovals = new Set<AbortController>()
+export function setBrowserPrivacy(required: boolean) {
+  contentApproval = required
+  generation++
+  for (const controller of contentApprovals) controller.abort()
+}
+
+/** Gate every agent content read, including Browser pixels in whole-app screenshots. */
+async function approveContent(tab: Tab, action: string, signal?: AbortSignal) {
+  if (!agentEnabled) throw new Error('Agent browser access is off. Enable it locally in Browser.')
+  if (!contentApproval) return
+  const window = owner
+  if (!window || window.isDestroyed()) throw new Error('Browser approval requires an open window.')
+  const contents = tab.view.webContents
+  const url = contents.getURL()
+  const token = generation
+  const controller = new AbortController()
+  const cancel = () => controller.abort()
+  if (signal?.aborted) controller.abort()
+  signal?.addEventListener('abort', cancel, { once: true })
+  contentApprovals.add(controller)
+  const timer = setTimeout(cancel, 60_000)
+  try {
+    const result = await dialog.showMessageBox(window, {
+      type: 'question', title: 'Approve Browser content access', message: 'Allow the agent to ' + action + ' this website?',
+      detail: url + '\n\nThis may include signed-in content. Approval applies only to this action and expires after 60 seconds.',
+      buttons: ['Deny', 'Allow once'], defaultId: 0, cancelId: 0, noLink: true, signal: controller.signal,
+    })
+    if (controller.signal.aborted || result.response !== 1 || token !== generation || !agentEnabled || contents.isDestroyed() || contents.getURL() !== url) throw new Error('Browser content access was denied, stopped, expired or the page changed.')
+    return url
+  } finally { clearTimeout(timer); contentApprovals.delete(controller); signal?.removeEventListener('abort', cancel) }
+}
 
 export function browserUrl(value: string): string {
   const trimmed = value.trim()
@@ -90,6 +124,7 @@ export function configureBrowserWindow(window: BrowserWindow) {
   window.on('resize', layout)
   window.once('closed', () => {
     generation++
+    for (const controller of contentApprovals) controller.abort()
     agentEnabled = false
     for (const tab of tabs) if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close()
     tabs = []
@@ -186,14 +221,43 @@ async function captureWebsite(contents: WebContents): Promise<NativeImage> {
   } finally { if (!contents.isDestroyed()) contents.setBackgroundThrottling(throttled) }
 }
 
+interface BrowserCapturePermit { tabId: string; url: string; generation: number }
+
+function validateCapturePermit(window: BrowserWindow, permit?: BrowserCapturePermit) {
+  if (!permit) return
+  const tab = tabs.find(tab => tab.id === activeTabId)
+  if (window !== owner || !agentEnabled || !tab || tab.view.webContents.isDestroyed() || permit.tabId !== tab.id ||
+    permit.url !== tab.view.webContents.getURL() || permit.generation !== generation) throw new Error('Browser capture was stopped or the page changed.')
+}
+
+/** Also covers website text in the DOM page reader when the native view is hidden. */
+export async function authorizeBrowserScreenshot(window: BrowserWindow): Promise<BrowserCapturePermit | undefined> {
+  if (window !== owner) return
+  const tab = tabs.find(tab => tab.id === activeTabId)
+  if (!tab) return
+  const token = generation
+  const url = tab.view.webContents.getURL()
+  await approveContent(tab, 'capture', mcpExecution.getStore()?.signal)
+  if (token !== generation || tab.view.webContents.getURL() !== url) throw new Error('Browser page changed during approval.')
+  return { tabId: tab.id, url, generation: token }
+}
+
 /** Shell capturePage does not include native child views. Composite their pixels explicitly. */
-export async function compositeBrowserScreenshot(window: BrowserWindow, shell: NativeImage): Promise<NativeImage> {
+export async function compositeBrowserScreenshot(window: BrowserWindow, shell: NativeImage, permit?: BrowserCapturePermit): Promise<NativeImage> {
+  validateCapturePermit(window, permit)
   if (window !== owner || !viewport.visible) return shell
   const tab = tabs.find(tab => tab.id === activeTabId)
   if (!tab || !tab.view.getVisible()) return shell
   const contents = tab.view.webContents
   if (!/^https?:/.test(contents.getURL())) return shell
+  const token = generation
+  if (permit && (permit.tabId !== tab.id || permit.url !== contents.getURL() || permit.generation !== generation)) throw new Error('Browser page changed during capture.')
+  const approvedUrl = permit?.url ?? await approveContent(tab, 'capture', mcpExecution.getStore()?.signal)
   const website = await captureWebsite(contents)
+  checkMcpCancellation()
+  validateCapturePermit(window, permit)
+  if (!agentEnabled || token !== generation) throw new Error('Browser capture was stopped or permissions changed.')
+  if (approvedUrl && contents.getURL() !== approvedUrl) throw new Error('Browser page changed during capture.')
   if (window !== owner || !viewport.visible || activeTabId !== tab.id || !tab.view.getVisible()) return shell
   if (website.isEmpty()) throw new Error('Browser screenshot was empty. Show the Browser page and retry.')
   const bounds = tab.view.getBounds()
@@ -258,6 +322,7 @@ async function execute(request: BrowserRequest, agent: boolean, token: number): 
   try {
     await initialize()
     if (agent && (!agentEnabled || token !== generation)) throw new Error('Agent browser access is off or this action was stopped. Ask the user to enable Agent access on Browser.')
+    checkMcpCancellation()
     activity = `${agent ? 'Agent' : 'You'} · ${request.action}`
     let tab = tabs.find(tab => tab.id === ('tabId' in request ? request.tabId : undefined) || (!('tabId' in request && request.tabId) && tab.id === activeTabId))
     if (request.action === 'open') {
@@ -288,12 +353,18 @@ async function execute(request: BrowserRequest, agent: boolean, token: number): 
         case 'reload': contents.reload(); break
         case 'stop': contents.stop(); break
         case 'read': {
+          const approvedUrl = agent ? await approveContent(tab, 'read', mcpExecution.getStore()?.signal) : undefined
           const page = await read(tab)
+          checkMcpCancellation()
+          if (approvedUrl && page.url !== approvedUrl) throw new Error('Browser page changed during read.')
           if (agent && (!agentEnabled || token !== generation)) throw new Error('Browser action was stopped.')
           return ok({ state: snapshot(), page }, SOURCE)
         }
         case 'follow': {
+          const approvedUrl = agent ? await approveContent(tab, 'read links from', mcpExecution.getStore()?.signal) : undefined
           const page = await read(tab)
+          checkMcpCancellation()
+          if (approvedUrl && page.url !== approvedUrl) throw new Error('Browser page changed during read.')
           if (agent && (!agentEnabled || token !== generation)) throw new Error('Browser action was stopped.')
           if (!page.links.some(link => link.url === request.url)) throw new Error('Follow only links returned by a fresh read of this page.')
           await navigate(tab, request.url)
@@ -301,8 +372,11 @@ async function execute(request: BrowserRequest, agent: boolean, token: number): 
         }
         case 'scroll': await contents.executeJavaScriptInIsolatedWorld(999, [{ code: `window.scrollBy(0, ${request.direction === 'down' ? '1' : '-1'} * innerHeight * 0.8)` }]); break
         case 'screenshot': {
+          const approvedUrl = agent ? await approveContent(tab, 'capture', mcpExecution.getStore()?.signal) : undefined
           if (!viewport.visible || activeTabId !== tab.id) throw new Error('Show this tab on the Browser page before capturing it. Obscured or hidden browser pages cannot be captured.')
           const image = await captureWebsite(contents)
+          checkMcpCancellation()
+          if (approvedUrl && contents.getURL() !== approvedUrl) throw new Error('Browser page changed during capture.')
           if (!viewport.visible || activeTabId !== tab.id || (agent && (!agentEnabled || token !== generation))) throw new Error('Browser capture was hidden or stopped.')
           if (image.isEmpty()) throw new Error('Chromium returned an empty screenshot. Show the Browser page and retry.')
           return ok({ state: snapshot(), screenshot: { base64: image.resize({ width: Math.min(image.getSize().width, 1600) }).toPNG().toString('base64'), mimeType: 'image/png', url: contents.getURL() } }, SOURCE)
@@ -328,6 +402,7 @@ export async function browserControl(value: BrowserControl): Promise<Envelope<Br
     const parsed = accessSchema.parse(value)
     agentEnabled = parsed.enabled
     generation++
+    for (const controller of contentApprovals) controller.abort()
     if (!agentEnabled) for (const tab of tabs) tab.view.webContents.stop()
     activity = agentEnabled ? 'Agent access enabled · manual research only' : 'Agent access off · queued agent actions cancelled'
     return ok({ state: snapshot() }, SOURCE)
@@ -336,6 +411,7 @@ export async function browserControl(value: BrowserControl): Promise<Envelope<Br
   // Stop must interrupt a current navigation, never sit behind it in the queue.
   if (parsed.action === 'stop') {
     generation++
+    for (const controller of contentApprovals) controller.abort()
     agentEnabled = false
     for (const tab of tabs) tab.view.webContents.stop()
     activity = 'Stopped · agent access off'
