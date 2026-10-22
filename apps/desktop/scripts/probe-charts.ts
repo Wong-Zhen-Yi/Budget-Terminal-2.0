@@ -305,8 +305,17 @@ async function runOffline(): Promise<void> {
     const intraday = await yahooProvider.chartsHistory({ symbol: 'DAILY-SMA', interval: '1 Hour', range: '1D', force: true })
     assert.deepEqual(intraday.data.indicators.ma50.map((point) => point.value), [314.5, 315.5])
     assert.deepEqual(intraday.data.indicators.ma50.map((point) => point.time), intraday.data.candles.map((row) => row.time))
+    // Distinct weeks are required: consecutive days may collapse into one weekly bar.
+    chartClient.chart = async (_symbol, options: { interval?: string } = {}) => ({
+      quotes: options.interval === '1d' ? fixtureQuotes : [
+        { ...lastDaily, date: new Date((dailyTime - 7 * 86_400 + 3_600) * 1000), close: 9_000 },
+        { ...lastDaily, date: new Date((dailyTime + 3_600) * 1000), close: 10_000 },
+      ],
+      meta: { currency: 'USD', longName: 'Weekly SMA Fixture' },
+    })
     const weekly = await yahooProvider.chartsHistory({ symbol: 'WEEKLY-SMA', interval: '1 Week', range: '1Y', force: true })
-    assert.deepEqual(weekly.data.indicators.ma50.map((point) => point.value), [314.5, 315.5])
+    assert.equal(weekly.data.candles.length, 2)
+    assert.deepEqual(weekly.data.indicators.ma50.map((point) => point.value), [308.5, 315.5])
 
     const sessionStart = Date.UTC(2026, 8, 25, 13, 30)
     chartClient.chart = async () => ({

@@ -1,10 +1,20 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { createRequire } from 'node:module'
 import { build } from 'esbuild'
+import { createServer } from 'vite'
+import { loadConfigFromFile } from 'electron-vite'
 import { isTrustedRendererUrl } from '../electron/shared/ipcSecurity.js'
+import { isSafeExternalUrl } from '../electron/services/urls.js'
+
+for (const value of [undefined, null, {}, ['https://example.com'], 'javascript:alert(1)', 'file:///private',
+  'https://user:password@example.com', 'https://example.com/\nunsafe', 'https://example.com/\u0000', 'https://example.com/' + 'x'.repeat(8192)]) {
+  assert.equal(isSafeExternalUrl(value), false, 'Unsafe external links must not reach the operating system')
+}
+assert.equal(isSafeExternalUrl('https://example.com/article?q=hello%20world#source'), true)
+assert.equal(isSafeExternalUrl('http://example.com/'), true)
 
 assert.equal(isTrustedRendererUrl('http://localhost:5173/', 'http://localhost:5173'), true)
 assert.equal(isTrustedRendererUrl('http://localhost:5173/other', 'http://localhost:5173/'), false)
@@ -13,12 +23,38 @@ assert.equal(isTrustedRendererUrl('file:///app/index.html#chart', 'file:///app/i
 assert.equal(isTrustedRendererUrl('file:///app/other.html', 'file:///app/index.html'), false)
 
 const root = resolve(import.meta.dirname, '..')
+const { config } = await loadConfigFromFile({ command: 'serve', mode: 'development' }, join(root, 'electron.vite.config.ts'), root)
+const development = await createServer({ ...config.renderer, configFile: false, logLevel: 'silent',
+  server: { ...config.renderer?.server, port: 0 }, optimizeDeps: { noDiscovery: true } })
+try {
+  await development.listen()
+  const address = development.httpServer?.address()
+  assert.ok(address && typeof address !== 'string')
+  assert.equal(address.address, '127.0.0.1', 'Development server must bind only to loopback')
+  const origin = `http://127.0.0.1:${address.port}`
+  const html = await (await fetch(origin)).text()
+  assert(html.includes("connect-src 'self' ws://localhost:* ws://127.0.0.1:*"), 'Development retains HMR websocket access')
+  const fsUrl = (file: string) => `${origin}/@fs/${file.replaceAll('\\', '/')}`
+  for (const file of [join(root, '../../package.json'), join(root, 'electron/services/agentWorkspace.ts')]) {
+    const response = await fetch(fsUrl(file))
+    assert.equal(response.status, 403, 'Development cannot serve main-process files or unrelated workspace data')
+    await response.text()
+  }
+  const shared = await fetch(fsUrl(join(root, 'electron/shared/ipcSecurity.ts')))
+  assert.equal(shared.status, 200, 'Shared renderer modules remain accessible')
+  await shared.text()
+  console.log('PASS: real Vite server binds to loopback, retains HMR and rejects files outside renderer/shared/dependency directories')
+} finally { await development.close() }
 await mkdir(join(root, 'out'), { recursive: true })
 const directory = await mkdtemp(join(root, 'out', 'security-'))
 try {
   const trustedPath = join(directory, 'trusted.html')
   const otherPath = join(directory, 'other.html')
-  await writeFile(trustedPath, '<h1>Trusted shell</h1>')
+  const sourceHtml = await readFile(join(root, 'src/index.html'), 'utf8')
+  const policy = sourceHtml.match(/content="(default-src[^"\n]+)"/)?.[1]
+  assert.ok(policy)
+  assert(!/localhost|127\.0\.0\.1|ws:/.test(policy), 'Production shell must not allow connections to local services')
+  await writeFile(trustedPath, `<head><meta http-equiv="Content-Security-Policy" content="${policy}"></head><body><h1>Trusted shell</h1></body>`)
   await writeFile(otherPath, '<h1>Another document</h1>')
   await build({
     stdin: { resolveDir: root, loader: 'ts', contents: `
@@ -52,6 +88,26 @@ try {
           assert.equal(await trusted.webContents.executeJavaScript('typeof require'), 'undefined')
           assert.equal(await trusted.webContents.executeJavaScript('typeof process'), 'undefined')
           assert.equal(await trusted.webContents.executeJavaScript('window.api.platform'), process.platform)
+          const contentPolicy = await trusted.webContents.executeJavaScript(\`(async () => {
+            const violations = []
+            document.addEventListener('securitypolicyviolation', event => violations.push(event.effectiveDirective))
+            const base = document.createElement('base')
+            base.href = 'https://example.com/'
+            document.head.append(base)
+            const script = document.createElement('script')
+            script.textContent = 'window.injectedScriptRan = true'
+            document.body.append(script)
+            let connected = false
+            try { await fetch('http://127.0.0.1:9/'); connected = true } catch {}
+            await new Promise(resolve => setTimeout(resolve, 50))
+            return { base: document.baseURI, injected: Boolean(window.injectedScriptRan), connected, violations }
+          })()\`)
+          assert.equal(contentPolicy.base, expected, 'Injected base elements cannot redirect shell resources')
+          assert.equal(contentPolicy.injected, false, 'Inline script injection is blocked')
+          assert.equal(contentPolicy.connected, false, 'Shell cannot connect to local services')
+          assert(contentPolicy.violations.includes('connect-src'), 'Connection must be rejected by CSP before a socket opens')
+          assert(contentPolicy.violations.includes('base-uri'), 'CSP rejects injected base elements')
+          console.log('PASS: production content policy blocks base changes, inline script and local-service connections')
           assert.equal(Object.values(CHANNELS).some(channel => channel.startsWith('system:web-')), false, 'Remote IPC channels must be removed')
           for (const method of ['webStatus', 'configureWebAccess', 'rotateWebPairingCode', 'revokeWebSessions', 'decideWebAccess']) {
             assert.equal(await trusted.webContents.executeJavaScript('typeof window.api[' + JSON.stringify(method) + ']'), 'undefined', 'Remote methods must not be exposed by preload')

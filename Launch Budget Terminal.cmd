@@ -1,5 +1,6 @@
 @echo off
 title Budget Terminal
+rem Security refresh: patched dependencies, restricted shell connections and WebRTC privacy.
 cd /d "%~dp0" || exit /b 1
 
 where node >nul 2>nul
@@ -15,6 +16,7 @@ echo Browser is included: shared Chromium tabs, navigation, page reading and age
 echo Startup Yahoo loads are paced at 1 request per second, without bursts, with up to 2 background requests in flight. All pages still preload; foreground requests take priority and rate limits trigger further slowdown.
 echo Temporary data failures retry with backoff. Stuck Yahoo workers restart automatically, and incomplete cached results can recover without waiting for their normal expiry. Startup retry progress and unresolved failures stay visible in Settings.
 echo All Agent runs keep the ten-minute and 80-tool-call limit.
+echo Security updates installed: Electron 44.9.3 and current compatible dependencies. The shell blocks local-service connections, forms and embedded frames; research tabs restrict direct WebRTC UDP.
 echo Agents quick prompts are restored to their original one-line text, with no extra instructions. Selecting one fills the editable composer without sending.
 echo News reader includes an AI Summary button beside Open Externally. It summarizes the selected article in Agent chat using your connected model, flags limited previews, and preserves unsent drafts.
 echo Data caching now saves remote snapshots incrementally across launches, even while pages poll. Startup restores saved data before warming all pages; fresh data is reused, and only expired or missing data refreshes. Pending cache saves finish before the window closes.

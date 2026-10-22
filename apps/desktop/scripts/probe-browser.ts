@@ -201,6 +201,7 @@ try {
         const tabId = result.data.state.activeTabId
         const native = window.contentView.children.find(view => view.webContents && view.webContents.getURL().includes('/research'))
         assert(native, 'Research renders in a native WebContentsView')
+        assert.equal(native.webContents.getWebRTCIPHandlingPolicy(), 'disable_non_proxied_udp', 'Research pages cannot use direct WebRTC UDP outside HTTP request guards')
         const isolation = await native.webContents.executeJavaScript('({ api: typeof window.api, require: typeof require, process: typeof process })')
         assert.deepEqual(isolation, { api: 'undefined', require: 'undefined', process: 'undefined' })
         assert.notEqual(native.webContents.session, window.webContents.session, 'Browser profile isolated from privileged shell')

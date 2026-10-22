@@ -1,15 +1,9 @@
-/**
- * One definition of "a URL that may leave the app".
- *
- * It used to live inside `ipc/handlers.ts` for the news panel's open-external handler
- * alone. The News page added two more outbound fetches — the article preview and the
- * thumbnail proxy — both of which take a URL that arrived in a feed, so all three now
- * check the same predicate rather than each growing its own.
- */
-export function isSafeExternalUrl(url: string): boolean {
+/** Validate links before handing them to the operating system's browser. */
+export function isSafeExternalUrl(url: unknown): url is string {
+  if (typeof url !== 'string' || url.length > 8192 || /[\u0000-\u0020\u007f]/.test(url)) return false
   try {
     const parsed = new URL(url)
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:'
+    return (parsed.protocol === 'https:' || parsed.protocol === 'http:') && !parsed.username && !parsed.password
   } catch {
     return false
   }

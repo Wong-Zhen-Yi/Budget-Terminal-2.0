@@ -143,6 +143,8 @@ function newTab(): Tab {
   tabs.push(tab)
   activeTabId = tab.id
   const contents = view.webContents
+  // WebRTC UDP bypasses HTTP request guards and can reveal local interface addresses.
+  contents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp')
   contents.setWindowOpenHandler(({ url }) => {
     // Convert normal target=_blank links into shared tabs, never privileged windows.
     try {

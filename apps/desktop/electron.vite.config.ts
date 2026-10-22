@@ -32,7 +32,21 @@ export default defineConfig({
   },
   renderer: {
     root: resolve(root, 'src'),
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), {
+      name: 'development-websocket-policy',
+      apply: 'serve',
+      // Only the dev server needs HMR sockets. Shipped HTML cannot contact local services.
+      transformIndexHtml: html => html.replace("connect-src 'self'", "connect-src 'self' ws://localhost:* ws://127.0.0.1:*"),
+    }],
+    server: {
+      host: '127.0.0.1',
+      fs: {
+        strict: true,
+        allow: [resolve(root, 'src'), resolve(root, 'electron/shared'), resolve(root, '../../node_modules')],
+        deny: ['.env', '.env.*', '*.{crt,pem,key,p12,pfx}', '**/.git/**', '**/.mcp/**'],
+      },
+    },
+    preview: { host: '127.0.0.1' },
     resolve: {
       alias: {
         '@': resolve(root, 'src'),
