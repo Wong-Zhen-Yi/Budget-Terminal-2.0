@@ -9,6 +9,7 @@ import { isSafeExternalUrl } from './services/urls.js'
 import { configureBrowserWindow } from './services/browser.js'
 import { desktopWindowSize } from './shared/windowSize.js'
 import { configureRendererCacheShutdown } from './services/rendererCacheShutdown.js'
+import { assertDesktopCertificateSecurity } from './shared/certificateSecurity.js'
 
 const dirname = fileURLToPath(new URL('.', import.meta.url))
 const isDev = !app.isPackaged
@@ -97,6 +98,7 @@ if (ownsInstance) {
 
 if (ownsInstance) app.whenReady().then(async () => {
   try {
+    assertDesktopCertificateSecurity(process.versions.electron, process.env, name => app.commandLine.hasSwitch(name))
     if (process.platform === 'darwin') {
       Menu.setApplicationMenu(Menu.buildFromTemplate([
         { role: 'appMenu' },

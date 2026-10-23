@@ -62,6 +62,7 @@ try {
     stdin: { resolveDir: root, loader: 'ts', contents: `
       import assert from 'node:assert/strict'
       import { app, BrowserWindow } from 'electron'
+      import { assertDesktopCertificateSecurity } from './electron/shared/certificateSecurity'
       import { pathToFileURL } from 'node:url'
       import { readFile } from 'node:fs/promises'
       import { registerIpcHandlers } from './electron/ipc/handlers'
@@ -76,6 +77,7 @@ try {
       app.whenReady().then(async () => {
         let dispose, release
         try {
+          assertDesktopCertificateSecurity(process.versions.electron, process.env, name => app.commandLine.hasSwitch(name))
           assert.equal(runtimePath(), ${JSON.stringify(join(dataDirectory, 'BudgetTerminalElectron', '.mcp', 'runtime.json'))})
           release = acquireDataSession()
           dispose = registerIpcHandlers(event => {

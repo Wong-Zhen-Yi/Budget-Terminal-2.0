@@ -2,6 +2,11 @@ import { resolve } from 'node:path'
 import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { createRequire } from 'node:module'
+
+const { supportedNodeVersion, assertCertificateEnvironment } = createRequire(import.meta.url)('../../scripts/runtime.cjs')
+if (!supportedNodeVersion(process.versions.node)) throw new Error('Install Node.js 22.23.4+, 24.22.1+, or 26.12.1+ (eMudhra certificate security update).')
+assertCertificateEnvironment()
 
 // Direct npm dev/preview commands must launch the desktop runtime too.
 for (const key of Object.keys(process.env)) {

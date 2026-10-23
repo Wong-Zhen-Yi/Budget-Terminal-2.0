@@ -1,6 +1,6 @@
 const { spawnSync } = require('node:child_process')
 const path = require('node:path')
-const { supportedNodeVersion, supportedNpmVersion, runtimeEnvironment } = require('./runtime.cjs')
+const { supportedNodeVersion, supportedNpmVersion, runtimeEnvironment, assertCertificateEnvironment } = require('./runtime.cjs')
 const { engines } = require('../package.json')
 const { findCodex } = require('./codex-runtime.cjs')
 const { verifyDesktopBuild } = require('./verify-desktop-build.cjs')
@@ -27,6 +27,10 @@ function launch({ platform = process.platform, nodeVersion = process.versions.no
   }
 
   const env = runtimeEnvironment(environment)
+  try { assertCertificateEnvironment(env) } catch (error) {
+    log.error(error.message)
+    return 1
+  }
   log.log('Checking Codex for the Agents page...')
   const codexPath = locateCodex({ platform, environment: env })
   if (codexPath) {
@@ -61,7 +65,7 @@ function launch({ platform = process.platform, nodeVersion = process.versions.no
   log.log(`Starting Budget Terminal for ${os}...`)
   if (platform === 'linux') log.log('Steam Deck/Linux: the window fits the display work area. Use the application launcher in Desktop Mode, or add it to Steam as a non-Steam game with Proton compatibility disabled.')
   log.log('Installing dependencies...')
-  const install = npm(['install', '--no-audit', '--no-fund'])
+  const install = npm(['install', '--no-audit', '--no-fund', '--strict-ssl=true'])
   if (install.error || install.status !== 0) {
     log.error('Dependency installation failed. See the npm error above.')
     return 1
@@ -73,6 +77,8 @@ function launch({ platform = process.platform, nodeVersion = process.versions.no
     log.error('Electron runtime could not start. See the error above.')
     return 1
   }
+
+  log.log('Certificate protection: patched Node.js required; Electron 44.9.3+ blocks compromised eMudhra keys in Node and Chromium. Certificate verification bypasses are rejected.')
 
   log.log('Building the latest desktop-only Budget Terminal source. Remote browser access and pairing have been removed; all implemented pages still load at startup. Local Agents, MCP tools and backups remain available. The top-bar Ask Agent box opens a full dropdown chat on any page, sharing the existing conversation and connection, with live Thinking, Researching and Done activity badges. Agents chat supports native image generation, image editing and inline private image cards, plus pie charts and full-history interactive price charts with in-chat ranges, candle intervals, crosshair OHLC, zoom and pan. Restored chat charts preload at startup. Charts includes a toggleable 50-day simple moving average. Quant now includes a redesigned research workspace with larger, more readable fonts across tables, controls and diagnostics, plus scan overview cards, an interactive factor inspector and a pairs lab with spread charts. IPOs now includes pending filings with dates marked TBD and backup calendar sources.')
   log.log('Browser login privacy: Chromium profiles must stay outside application source and Git repositories. Cookies and login/session files are excluded by Git ignore rules and checked by local commit/push hooks. Browser profiles are not included in app backups.')

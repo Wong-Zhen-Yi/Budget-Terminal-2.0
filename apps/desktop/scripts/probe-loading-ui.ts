@@ -10,6 +10,7 @@ import { TABS } from '../electron/shared/contract'
 
 const require = createRequire(import.meta.url)
 const root = resolve(import.meta.dirname, '..')
+const statusBarOnly = process.argv.includes('--status-bar-only')
 const toolCount = Object.keys(operations).length + 1
 const implementedPages = TABS.filter(tab => tab.implemented).map(tab => tab.id)
 const directory = await mkdtemp(join(tmpdir(), 'budget-loading-ui-'))
@@ -238,7 +239,10 @@ try {
           return calls === 1 ? { data: [], errors: [{ source: 'fixture', operation: 'fetch', reason: 'HTTP 503' }],
             meta: { source: 'fixture', freshness: 'partial', fetchedAt: Date.now() } } : ok([]);
         },
-        apiUsage: async () => ({ providers: [], sampledAt: Date.now() }),
+        apiUsage: async () => ({ providers: ['Yahoo', 'CoinGecko', 'Alt.me', 'DefeatBeta'].map((label, index) => ({
+          id: label, label, percent: index ? 0 : 100, requestCount: index ? 0 : 100,
+          softLimit: 100, windowSeconds: 60, inFlight: 0, throttled: false, cooldownMs: 0, updatedAt: Date.now(),
+        })), sampledAt: Date.now() }),
       }, { get: (target, key) => key in target ? target[key] : request => {
         window.fixtureRequests.push({ method: key, request });
         return new Promise(() => {});
@@ -275,6 +279,7 @@ try {
       try {
         await window.loadFile(${JSON.stringify(join(directory, 'index.html'))});
         console.log(await window.webContents.executeJavaScript('window.runProbe()'));
+        if (!${statusBarOnly}) {
         const capture = createScreenshotService(() => window);
         const snapshot = () => window.webContents.executeJavaScript('JSON.stringify({ page: document.querySelector("h1")?.textContent, navigation: localStorage.getItem("budget-terminal:navigation"), scroll: document.querySelector("[data-startup-order-scroll]")?.scrollTop })');
         const original = await snapshot();
@@ -349,9 +354,32 @@ try {
         console.log('PASS: all ${implementedPages.length} page screenshots, hidden/obscured pages, background throttle restoration, concurrent captures, timeout recovery, hidden/minimized/covered windows, native PNG pixels and navigation/scroll restoration');
         await new Promise(resolve => setTimeout(resolve, 350));
         fs.writeFileSync(${JSON.stringify(screenshot)}, (await window.webContents.capturePage()).toPNG());
-        window.setSize(1000, 800);
-        await new Promise(resolve => setTimeout(resolve, 250));
-        if (!await window.webContents.executeJavaScript('(() => { const footer = document.querySelector("footer").getBoundingClientRect(); return footer.bottom <= innerHeight && footer.right <= innerWidth })()')) throw Error('Startup status overflows the window');
+        }
+        for (const width of [1920, 1280, 1000, 800]) {
+          window.setSize(width, 800);
+          await new Promise(resolve => setTimeout(resolve, 250));
+          await window.webContents.executeJavaScript(\`(() => {
+            const footer = document.querySelector('footer');
+            const bounds = footer.getBoundingClientRect();
+            const check = (ok, message) => { if (!ok) throw Error(message + ' at width ' + innerWidth) };
+            check(bounds.height === 32, 'Status bar changed height');
+            check(bounds.bottom <= innerHeight && bounds.right <= innerWidth, 'Status bar overflows window');
+            const meters = footer.querySelector('[aria-label="API request pressure"]');
+            check(meters.children.length === 5, 'API meters did not load');
+            const meterTop = meters.firstElementChild.getBoundingClientRect().top;
+            check([...meters.children].every(child => Math.abs(child.getBoundingClientRect().top - meterTop) <= 2), 'API meters wrapped');
+            const status = footer.querySelector('[role="status"]');
+            const health = footer.firstElementChild;
+            const top = health.getBoundingClientRect().top;
+            for (const message of ['', 'Loading pages: 12 of 60 complete', '0 startup load(s) failed · 9 incomplete. Open Settings for details.']) {
+              status.textContent = message;
+              check(footer.getBoundingClientRect().height === bounds.height, 'Startup progress changed footer height');
+              check(health.getBoundingClientRect().top === top, 'Startup progress moved footer content');
+            }
+          })()\`);
+        }
+        fs.writeFileSync(${JSON.stringify(join(root, 'out', 'status-bar-smoke.png'))}, (await window.webContents.capturePage()).toPNG());
+        console.log('PASS: status bar stays on one 32px line with API meters and changing progress at 800, 1000, 1280 and 1920px');
         app.exit(0);
       } catch (error) { console.error(error); app.exit(1); }
     });
@@ -369,7 +397,7 @@ try {
   })
   assert.equal(result.code, 0, result.output)
   console.log(result.output.trim())
-  console.log('Screenshot: ' + screenshot)
+  console.log('Screenshot: ' + (statusBarOnly ? join(root, 'out', 'status-bar-smoke.png') : screenshot))
 } finally {
   assert.ok(!relative(tmpdir(), directory).startsWith('..'))
   await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })

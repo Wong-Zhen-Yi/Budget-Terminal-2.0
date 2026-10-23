@@ -4,13 +4,14 @@
   "private": true,
   "description": "Budget Terminal - Electron rebuild",
   "engines": {
-    "node": "^22.20.0 || ^24.12.0 || ^26.0.0",
+    "node": "^22.23.4 || ^24.22.1 || ^26.12.1",
     "npm": ">=10.9.8"
   },
   "workspaces": [
     "apps/desktop"
   ],
   "scripts": {
+    "preinstall": "node scripts/runtime.cjs",
     "prepare": "git config core.hooksPath .githooks || exit 0",
     "postinstall": "npm run ensure:electron",
     "ensure:electron": "node scripts/ensure-electron.cjs",
@@ -20,6 +21,7 @@
     "typecheck": "npm run typecheck --workspace budget-terminal-desktop",
     "probe": "npm run probe --workspace budget-terminal-desktop",
     "probe:launcher": "node scripts/probe-launcher.cjs",
+    "probe:certificates": "npm run --workspace budget-terminal-desktop probe:certificates --",
     "probe:agent-privacy": "node scripts/probe-agent-privacy.cjs",
     "probe:readiness-ui": "npm run --workspace budget-terminal-desktop probe:readiness-ui --",
     "probe:maintenance": "npm run --workspace budget-terminal-desktop probe:maintenance --",

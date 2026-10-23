@@ -8,7 +8,7 @@
 const { spawnSync } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
-const { runtimeEnvironment } = require('./runtime.cjs')
+const { runtimeEnvironment, supportedNodeVersion, assertCertificateEnvironment } = require('./runtime.cjs')
 
 const electronDir = path.dirname(require.resolve('electron/package.json'))
 const { version } = require('electron/package.json')
@@ -80,6 +80,15 @@ function ensureElectron({ spawn = spawnSync, environment = process.env, log = co
   return 1
 }
 
-if (require.main === module) process.exitCode = ensureElectron()
+if (require.main === module) {
+  try {
+    if (!supportedNodeVersion(process.versions.node)) throw new Error('Install Node.js 22.23.4+, 24.22.1+, or 26.12.1+ before downloading Electron (eMudhra certificate security update).')
+    assertCertificateEnvironment()
+    process.exitCode = ensureElectron()
+  } catch (error) {
+    console.error(error.message)
+    process.exitCode = 1
+  }
+}
 
 module.exports = { ensureElectron, tryRun }

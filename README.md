@@ -85,7 +85,7 @@ cd Budget-Terminal-2.0
 ### 2. Install and launch
 
 Use **Node.js 24 LTS and npm 11** for a new installation. Supported versions are
-Node.js **22.20+, 24.12+, or 26.x**, with **npm 10.9.8+**, as defined in
+Node.js **22.23.4+, 24.22.1+, or 26.12.1+**, with **npm 10.9.8+**, as defined in
 [package.json](package.json).
 
 ```bash
@@ -102,6 +102,15 @@ Prefer a launcher? Open the file for your operating system from the checkout:
 Each launcher checks the runtime, installs dependencies, verifies Electron, builds
 the latest source, and opens the production app. Keep its terminal open while using
 Budget Terminal. Build or startup errors stay visible in the launcher window.
+
+These Node minimums include the October 2026 eMudhra certificate compromise fix.
+Electron **44.9.3** already includes the corresponding native SPKI blocklist for
+both Node TLS (including Yahoo workers) and Chromium research tabs. Electron's
+embedded Node version is separate from the system Node installation; keep both
+runtimes patched and fully restart the app after updating. Startup rejects
+certificate-verification bypasses, and the launcher forces npm certificate checks.
+See the [certificate security notes](docs/certificate-security.md) for verification
+and guidance for separate Python environments.
 
 On Steam Deck, use Desktop Mode and run `npm run setup:linux` once to add Budget
 Terminal to the application menu. The launcher finds Node in `~/.local/bin` even

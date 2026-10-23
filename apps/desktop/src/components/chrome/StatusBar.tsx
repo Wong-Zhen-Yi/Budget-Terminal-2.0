@@ -53,7 +53,7 @@ function ApiLimitBars() {
 
   return (
     <div
-      className="flex min-w-0 max-w-[48vw] shrink-0 flex-wrap items-center justify-end gap-2"
+      className="flex min-w-0 max-w-[48vw] shrink-0 flex-nowrap items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       aria-label="API request pressure"
     >
       <span className="shrink-0 tracking-wide text-text-dim">API LIMITS</span>
@@ -102,7 +102,7 @@ export function StatusBar({
    */
   notice?: string
   /**
-   * The startup warm-up's progress. It sits below the current page's own loading line:
+   * The startup warm-up's progress. It sits beside the current page's own loading line:
    * what is on screen matters more than what is being loaded for later.
    */
   warming?: string
@@ -141,7 +141,7 @@ export function StatusBar({
   }
 
   return (
-    <footer className="flex min-h-8 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-border bg-surface px-2 py-1 text-2xs">
+    <footer className="flex h-8 min-w-0 shrink-0 flex-nowrap items-center gap-x-3 overflow-hidden whitespace-nowrap border-t border-border bg-surface px-2 py-1 text-2xs">
       <span className={`min-w-0 truncate ${tone}`} title={health}>{health}</span>
       {warming ? <span role="status" className="min-w-0 truncate text-text-muted" title={warming}>{warming}</span> : null}
       <span className="ml-auto min-w-0 truncate text-text-dim" title={sourcePath}>

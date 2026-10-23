@@ -8,22 +8,29 @@ const { verifyDesktopBuild } = require('./verify-desktop-build.cjs')
 const launch = options => runLaunch({ verifyBuild() {}, ...options })
 const { findCodex } = require('./codex-runtime.cjs')
 const { tryRun, ensureElectron } = require('./ensure-electron.cjs')
-const { supportedNodeVersion, supportedNpmVersion, runtimeEnvironment } = require('./runtime.cjs')
+const { supportedNodeVersion, supportedNpmVersion, runtimeEnvironment, assertCertificateEnvironment } = require('./runtime.cjs')
 const { version: electronVersion } = require('electron/package.json')
 
 const log = { log() {}, error() {} }
-for (const version of ['22.20.0', '22.23.2', '24.12.0', '24.21.0', '26.0.0']) assert(supportedNodeVersion(version), version)
-for (const version of ['20.19.0', '22.19.9', '23.0.0', '24.11.9', '25.0.0', '27.0.0', '26.0.0-rc.1', 'invalid']) assert(!supportedNodeVersion(version), version)
+for (const version of ['22.23.4', '22.24.0', '24.22.1', '24.23.0', '26.12.1', '26.13.0']) assert(supportedNodeVersion(version), version)
+for (const version of ['20.19.0', '22.20.0', '22.23.2', '22.23.3', '23.0.0', '24.12.0', '24.22.0', '25.0.0', '26.0.0', '26.12.0', '27.0.0', '26.12.1-rc.1', 'invalid']) assert(!supportedNodeVersion(version), version)
 for (const version of ['10.9.8', '10.10.0', '11.0.0', '12.2.0']) assert(supportedNpmVersion(version), version)
 for (const version of ['9.9.9', '10.8.9', '10.9.7', '11.0.0-beta.1', 'invalid']) assert(!supportedNpmVersion(version), version)
 
 const environment = { PATH: 'unchanged', ELECTRON_RUN_AS_NODE: '1', electron_run_as_node: '1' }
 assert.deepEqual(runtimeEnvironment(environment), { PATH: 'unchanged' })
 assert.equal(environment.ELECTRON_RUN_AS_NODE, '1', 'Do not change the parent environment')
+for (const key of ['NODE_TLS_REJECT_UNAUTHORIZED', 'node_tls_reject_unauthorized']) {
+  assert.throws(() => assertCertificateEnvironment({ [key]: '0' }), /verification is disabled/)
+  assert.equal(launch({ nodeVersion: '22.23.4', environment: { [key]: '0' }, log,
+    spawn() { assert.fail('Disabled TLS verification must stop before any child process') },
+  }), 1)
+}
+assertCertificateEnvironment({ NODE_TLS_REJECT_UNAUTHORIZED: '1' })
 
 for (const platform of ['win32', 'darwin', 'linux']) {
   const calls = []
-  const status = launch({ platform, nodeVersion: '22.23.2', environment, locateCodex: () => null, log, spawn(command, args, options) {
+  const status = launch({ platform, nodeVersion: '22.23.4', environment, locateCodex: () => null, log, spawn(command, args, options) {
     calls.push({ command, args, options })
     return { status: 0, stdout: calls.length === 1 ? '10.9.8\n' : '' }
   } })
@@ -32,6 +39,7 @@ for (const platform of ['win32', 'darwin', 'linux']) {
   assert.equal(calls[0].command, platform === 'win32' ? 'cmd.exe' : 'npm')
   assert.equal(calls[0].options.stdio, 'pipe', 'Capture npm version before installation')
   assert(calls[1].args.join(' ').includes('install --no-audit --no-fund'))
+  assert(calls[1].args.includes('--strict-ssl=true') || calls[1].args.join(' ').includes('--strict-ssl=true'), 'Dependency installs must override insecure npm SSL configuration')
   assert(calls[2].args.join(' ').includes('run ensure:electron'))
   assert(calls[3].args.join(' ').includes('run build'))
   assert(calls[4].args.join(' ').includes('run preview --workspace budget-terminal-desktop'))
@@ -53,7 +61,7 @@ try {
   assert.throws(() => verifyDesktopBuild(directory), /desktop build is incomplete/)
   let calls = 0
   const messages = []
-  assert.equal(launch({ nodeVersion: '22.23.2', locateCodex: () => null,
+  assert.equal(launch({ nodeVersion: '22.23.4', locateCodex: () => null,
     log: { log() {}, error: message => messages.push(message) },
     verifyBuild: () => verifyDesktopBuild(directory),
     spawn() { calls++; return { status: 0, stdout: '10.9.8' } },
@@ -68,18 +76,18 @@ try {
   rmSync(buildDirectory, { recursive: true, force: true })
 }
 
-for (const configuration of [{ platform: 'freebsd' }, { nodeVersion: '22.19.9' }]) {
+for (const configuration of [{ platform: 'freebsd' }, { nodeVersion: '22.23.3' }, { nodeVersion: '24.22.0' }, { nodeVersion: '26.12.0' }]) {
   assert.equal(launch({ log, ...configuration, spawn() { assert.fail('Unsupported platform/runtime must stop before spawning npm') } }), 1)
 }
 for (const result of [{ error: { code: 'ENOENT' }, status: null }, { status: 1 }, { status: 0, stdout: '10.9.7' }, { status: 0, stdout: '' }]) {
   let calls = 0
-  assert.equal(launch({ log, locateCodex: () => null, nodeVersion: '22.23.2', spawn() { calls++; return result } }), 1)
+  assert.equal(launch({ log, locateCodex: () => null, nodeVersion: '22.23.4', spawn() { calls++; return result } }), 1)
   assert.equal(calls, 1, 'No installation after missing/unsupported npm')
 }
 for (const failedCall of [2, 3, 4, 5]) {
   let calls = 0
   const messages = []
-  assert.equal(launch({ log: { log() {}, error: message => messages.push(message) }, locateCodex: () => null, nodeVersion: '22.23.2', spawn() {
+  assert.equal(launch({ log: { log() {}, error: message => messages.push(message) }, locateCodex: () => null, nodeVersion: '22.23.4', spawn() {
     calls++
     return { status: calls === failedCall ? 7 : 0, stdout: '10.9.8' }
   } }), failedCall === 5 ? 7 : 1)
@@ -102,7 +110,7 @@ for (const ready of [true, false]) {
   const calls = []
   const messages = []
   const codexPath = 'C:\\Codex with spaces\\codex.exe'
-  const status = launch({ platform: 'win32', nodeVersion: '22.23.2', environment,
+  const status = launch({ platform: 'win32', nodeVersion: '22.23.4', environment,
     locateCodex: () => codexPath, log: { log: message => messages.push(message), error: message => messages.push(message) },
     spawn(command, args, options) {
       calls.push({ command, args, options: { ...options, env: { ...options.env } } })

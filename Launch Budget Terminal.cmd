@@ -23,6 +23,8 @@ echo Data caching now saves remote snapshots incrementally across launches, even
 echo MCP research includes summaries, pagination and field selection. Settings adds token-free client setup, data-folder validation, optional website-content approval and request cancellation. Saved-record edits check current revisions.
 echo MCP now defaults to read-only, offers local approval for saved-record edits, shows privacy-safe activity in Settings and protects same-session write retries with request IDs.
 echo MCP bundles are updated safely with file-lock retries. Persistent locks will show recovery instructions; no MCP clients are forcibly stopped.
+echo Bottom status bar stays on one fixed-height line when resizing or updating startup progress. Long messages show their full text on hover; API meters scroll horizontally when needed.
+echo Certificate protection requires Node.js 22.23.4+, 24.22.1+, or 26.12.1+. Electron blocks compromised eMudhra keys in both Node and Chromium. TLS verification bypasses are rejected.
 node "%~dp0scripts\launch.cjs"
 if errorlevel 1 goto :failed
 exit /b 0
