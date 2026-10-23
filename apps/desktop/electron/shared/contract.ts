@@ -2,6 +2,7 @@ import type { BrowserControl, BrowserRequest, BrowserResult, BrowserState, Brows
 import type { McpDiagnostics, McpPolicy } from './mcpAccess.js'
 export type { BrowserRequest } from './browser.js'
 import type { AgentImage, AgentsCommand, AgentsState } from './agents.js'
+import type { NotificationCommand, NotificationsState } from './notifications.js'
 import type { ArticlesPayload, ArticlesMutation } from './articles.js'
 import type { DefeatBetaTerminalRequest, DefeatBetaTerminalPayload } from './defeatbetaTerminal.js'
 export type { DefeatBetaTerminalRequest, DefeatBetaTerminalPayload } from './defeatbetaTerminal.js'
@@ -1292,6 +1293,8 @@ export const OPTION_BUCKETS: ReadonlyArray<{ key: OptionBucketKey; label: string
 export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boolean }> = [
   { id: 'articles', label: 'Articles', implemented: true },
   { id: 'agents', label: 'Agents', implemented: true },
+  { id: 'movement', label: 'Movement', implemented: true },
+  { id: 'notifications', label: 'Notifications', implemented: true },
   { id: 'browser', label: 'Browser', implemented: true },
   { id: 'dashboard', label: 'Dashboard', implemented: true },
   { id: 'dashboard-2', label: 'Dashboard 2.0', implemented: true },
@@ -3433,6 +3436,9 @@ export const CHANNELS = {
   browserControl: 'browser:control',
   browserViewport: 'browser:viewport',
   agentsStatus: 'agents:status',
+  notificationsStatus: 'notifications:status',
+  notificationsCommand: 'notifications:command',
+  notificationClicked: 'notifications:clicked',
   agentsCommand: 'agents:command',
   agentsImage: 'agents:image',
   mcpStatus: 'system:mcp-status',
@@ -3625,6 +3631,9 @@ export interface DesktopApi {
   browserControl(request: BrowserControl): Promise<Envelope<BrowserResult>>
   browserViewport(viewport: BrowserViewport): Promise<void>
   agentsStatus(): Promise<Envelope<AgentsState>>
+  notificationsStatus(): Promise<Envelope<NotificationsState>>
+  notificationsCommand(command: NotificationCommand): Promise<Envelope<NotificationsState>>
+  onNotificationClicked(listener: () => void): () => void
   agentsCommand(command: AgentsCommand): Promise<Envelope<AgentsState>>
   agentsImage(id: string): Promise<Envelope<AgentImage | null>>
   mcpStatus(): Promise<McpStatus>

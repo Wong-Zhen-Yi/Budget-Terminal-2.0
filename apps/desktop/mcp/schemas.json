@@ -181,6 +181,8 @@
               "all",
               "articles",
               "agents",
+              "movement",
+              "notifications",
               "browser",
               "dashboard",
               "dashboard-2",

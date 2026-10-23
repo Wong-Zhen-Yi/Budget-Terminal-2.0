@@ -270,13 +270,7 @@ try {
         const savedArticle = [...document.querySelectorAll('.agents-saved-item')].find(item => item.textContent.includes('Saved research'))
         check(savedArticle.querySelectorAll('button')[1].disabled, 'Active chat cannot be deleted')
         await click('History')
-        await click('Notifications')
-        const inbox = document.querySelector('[aria-label="Notification inbox"]')
-        check(inbox.textContent.includes('OS notifications blocked') && !inbox.querySelector('img,script,[onerror]'), 'Notification fallback is visible and body stays literal')
-        await click('Mark all read')
-        check(state.notifications.every(notification => notification.read) && !document.querySelector('.agents-workspace-tabs').textContent.includes('unread'), 'Read state updates the inbox badge')
-        await click('Dismiss notification')
-        check(!state.notifications.length && inbox.textContent.includes('No notifications yet'), 'Notification dismissal works')
+        check(!document.querySelector('.agents-workspace-tabs [aria-label=Notifications]'), 'Notifications must live in their own page')
         await click('Trackers')
         check(document.querySelector('[aria-label="Saved trackers"]').textContent.includes('custom catalyst conditions'), 'Full agent-written tracker instructions are inspectable')
         await click('Ask Codex to write a tracker')
@@ -296,7 +290,7 @@ try {
         window.setWorkspace = async label => { await click(label) }
         window.setEmbedded = async value => { embedded = value; render(); await settle() }
         window.setControls = async open => { if (document.getElementById('agent-controls').hidden === open) await click('Controls') }
-        return 'PASS: private history reopening, notification inbox/read/dismiss/OS fallback, tracker review/start/pause/delete, automatic startup readiness, connected New chat, preserved model settings, cleared drafts, private inline image display, image edit attachment, missing-image fallback, inline candlestick charts, OHLC inspection, doji/flat/negative/intraday charts, native pie charts, exact values, percentages, accessible tables, safe malformed chart fallback, formatted Markdown, nested lists, tables, code, safe links, literal user text, chat controls, image paste/picker/send, portfolio review, model settings, autonomy, startup readiness and private cache exclusion'
+        return 'PASS: private history reopening, independent notification page, tracker review/start/pause/delete, automatic startup readiness, connected New chat, preserved model settings, cleared drafts, private inline image display, image edit attachment, missing-image fallback, inline candlestick charts, OHLC inspection, doji/flat/negative/intraday charts, native pie charts, exact values, percentages, accessible tables, safe malformed chart fallback, formatted Markdown, nested lists, tables, code, safe links, literal user text, chat controls, image paste/picker/send, portfolio review, model settings, autonomy, startup readiness and private cache exclusion'
       }
     ` }, bundle: true, jsx: 'automatic', write: false, format: 'iife', loader: { '.css': 'empty' },
     define: { 'process.env.NODE_ENV': '"production"' }, alias: { '@': join(root, 'src'), '@shared': join(root, 'electron/shared') },

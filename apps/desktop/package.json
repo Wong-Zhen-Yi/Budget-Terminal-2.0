@@ -9,6 +9,9 @@
     "npm": ">=10.9.8"
   },
   "scripts": {
+    "probe:notifications": "tsx scripts/probe-notifications.ts",
+    "probe:notifications-native": "tsx scripts/probe-notifications-native.ts",
+    "probe:notifications-ui": "tsx scripts/probe-notifications-ui.ts",
     "probe:browser": "tsx scripts/probe-browser.ts",
     "probe:agents": "tsx scripts/probe-agents.ts",
     "probe:agent-images": "tsx scripts/probe-agent-images.ts",

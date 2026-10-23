@@ -1,13 +1,7 @@
 @echo off
 title Budget Terminal
-rem Security refresh: patched dependencies, restricted shell connections and WebRTC privacy.
+rem Startup recovery: find a supported Node.js or install a verified private runtime.
 cd /d "%~dp0" || exit /b 1
-
-where node >nul 2>nul
-if errorlevel 1 (
-  echo Node.js is required. Install the latest Node.js 24 LTS, then run this launcher again.
-  goto :failed
-)
 
 echo Building and verifying the latest desktop-only app. Remote browser access and pairing have been removed. All implemented pages still load at startup; local Agents, MCP tools and backups remain available. The top-bar Ask Agent box opens a full dropdown chat on any page and shows live Thinking, Researching and Done activity. Agents chat can generate, edit and display images inline, plus full-history interactive price charts with in-chat timeframes, zoom and pan. Saved chat charts preload at startup. Charts includes a toggleable 50-day simple moving average. Quant now includes a redesigned research workspace, factor inspector and pairs lab with larger, more readable fonts. IPOs now includes pending filings with dates marked TBD and backup calendar sources.
 echo Browser login profiles stay outside source and Git repositories. Cookies and session files are ignored and checked by commit/push hooks, and excluded from app backups.
@@ -25,7 +19,9 @@ echo MCP now defaults to read-only, offers local approval for saved-record edits
 echo MCP bundles are updated safely with file-lock retries. Persistent locks will show recovery instructions; no MCP clients are forcibly stopped.
 echo Bottom status bar stays on one fixed-height line when resizing or updating startup progress. Long messages show their full text on hover; API meters scroll horizontally when needed.
 echo Certificate protection requires Node.js 22.23.4+, 24.22.1+, or 26.12.1+. Electron blocks compromised eMudhra keys in both Node and Chromium. TLS verification bypasses are rejected.
-node "%~dp0scripts\launch.cjs"
+echo Startup checks all installed Node.js candidates and installs a checksum-verified private Node.js runtime if needed.
+echo Movement adds random 30-45 minute desktop reminders. Notifications now has its own inbox for Agents, reminders and test popups. Windows desktop notification registration is refreshed on startup.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\launch-windows.ps1"
 if errorlevel 1 goto :failed
 exit /b 0
 

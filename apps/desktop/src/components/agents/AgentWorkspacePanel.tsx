@@ -7,11 +7,9 @@ export function AgentWorkspacePanel({ agent, locked, perform, setDraft }: {
   perform: (command: AgentsCommand) => Promise<boolean>
   setDraft: (text: string) => void
 }) {
-  const [tab, setTab] = useState<'history' | 'notifications' | 'trackers' | null>(null)
+  const [tab, setTab] = useState<'history' | 'trackers' | null>(null)
   const [confirm, setConfirm] = useState('')
-  const notifications = agent?.notifications ?? []
   const trackers = agent?.trackers ?? []
-  const unread = notifications.filter(notification => !notification.read).length
   const date = (at: number) => new Date(at).toLocaleString()
   const switchTab = (value: typeof tab) => { setTab(tab === value ? null : value); setConfirm('') }
   const remove = (type: 'deleteChat' | 'deleteTracker', id: string) => {
@@ -22,11 +20,10 @@ export function AgentWorkspacePanel({ agent, locked, perform, setDraft }: {
   return <section className="agents-workspace" aria-label="Saved Agents workspace">
     <div className="agents-workspace-tabs">
       <button type="button" aria-expanded={tab === 'history'} onClick={() => switchTab('history')}>History</button>
-      <button type="button" aria-label="Notifications" aria-expanded={tab === 'notifications'} onClick={() => switchTab('notifications')}>Notifications{unread > 0 ? ` (${unread} unread)` : ''}</button>
       <button type="button" aria-label="Trackers" aria-expanded={tab === 'trackers'} onClick={() => switchTab('trackers')}>Trackers{trackers.some(tracker => tracker.enabled) ? ` (${trackers.filter(tracker => tracker.enabled).length} active)` : ''}</button>
       {agent?.storageError && <span role="alert">{agent.storageError}</span>}
     </div>
-    {tab && <div className="agents-workspace-content" aria-label={tab === 'history' ? 'Chat history' : tab === 'notifications' ? 'Notification inbox' : 'Saved trackers'}>
+    {tab && <div className="agents-workspace-content" aria-label={tab === 'history' ? 'Chat history' : 'Saved trackers'}>
       {tab === 'history' && <>
         <p>Chats are saved locally across app restarts. Open one to continue with recent transcript context. Images are not stored. Up to 100 chats; each retains its latest 300 messages.</p>
         {!agent?.history?.length && <p>No saved chats yet.</p>}
@@ -34,16 +31,6 @@ export function AgentWorkspacePanel({ agent, locked, perform, setDraft }: {
           <div className="agents-saved-heading"><button disabled={locked || !!agent.autonomy || chat.id === agent.currentChatId} aria-current={chat.id === agent.currentChatId ? 'true' : undefined} onClick={() => void perform({ type: 'openChat', id: chat.id })}>{chat.title || 'New chat'}{chat.id === agent.currentChatId ? ' · Current' : ''}</button>
             <button disabled={locked || chat.id === agent.currentChatId} title={chat.id === agent.currentChatId ? 'Open a different chat before deleting this one' : 'Delete saved chat'} onClick={() => remove('deleteChat', chat.id)}>{confirm === chat.id ? 'Confirm delete chat' : 'Delete chat'}</button>
           </div><small>{date(chat.updatedAt)} · {chat.messageCount} messages{chat.model ? ` · ${chat.model}` : ''}</small>
-        </article>)}
-      </>}
-      {tab === 'notifications' && <>
-        <div className="agents-saved-heading"><p>Notifications from chat, autonomous monitoring and trackers. Desktop delivery depends on OS permissions.</p><button disabled={!unread} onClick={() => void perform({ type: 'readNotifications' })}>Mark all read</button></div>
-        {!notifications.length && <p>No notifications yet. Ask Codex to notify you when your monitoring objective finds something important.</p>}
-        {notifications.map(notification => <article key={notification.id} className={`agents-saved-item${notification.read ? '' : ' unread'}`}>
-          <div className="agents-saved-heading"><h3>{notification.title}</h3><small>{notification.read ? 'Read' : 'Unread'} · {date(notification.at)} · {notification.source}</small></div>
-          <p className="agents-saved-text">{notification.body}</p>
-          {notification.deliveryError && <p className="agents-saved-warning">Desktop popup unavailable: {notification.deliveryError}. Saved in this inbox.</p>}
-          <div className="agents-saved-actions">{!notification.read && <button onClick={() => void perform({ type: 'readNotifications', id: notification.id })}>Mark read</button>}<button onClick={() => void perform({ type: 'deleteNotification', id: notification.id })}>Dismiss notification</button></div>
         </article>)}
       </>}
       {tab === 'trackers' && <>

@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import type { AgentMessage } from './agents.js'
 import { agentImageArtifactSchema } from './agentImageArtifacts.js'
+import { notificationInputSchema } from './notifications.js'
+export { notificationInputSchema } from './notifications.js'
 
 const id = z.string().min(1).max(100)
 const timestamp = z.number().finite().nonnegative()
@@ -14,11 +16,6 @@ export const trackerDefinitionSchema = z.object({
 }).strict()
 export type AgentTrackerDefinition = z.infer<typeof trackerDefinitionSchema>
 
-export const notificationInputSchema = z.object({
-  title: z.string().trim().min(1).max(160),
-  body: z.string().trim().min(1).max(4000),
-  eventKey: z.string().trim().min(1).max(160),
-}).strict()
 export type AgentNotificationInput = z.infer<typeof notificationInputSchema>
 export const trackerReportSchema = z.object({
   outcome: z.enum(['triggered', 'quiet', 'unknown']),

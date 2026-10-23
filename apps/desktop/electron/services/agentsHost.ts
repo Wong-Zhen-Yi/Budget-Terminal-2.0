@@ -1,4 +1,5 @@
-import { app, BrowserWindow, Notification } from 'electron'
+import { app } from 'electron'
+import { notificationCenter } from './notificationsHost.js'
 import { existsSync, mkdirSync } from 'node:fs'
 import { delimiter, join } from 'node:path'
 import { createServiceRoutes } from '../mcp/routes.js'
@@ -7,7 +8,7 @@ import type { AgentsCommand } from '../shared/agents.js'
 import { failed, ok } from '../shared/envelope.js'
 import { AgentsService } from './agents.js'
 import { AgentWorkspace } from './agentWorkspace.js'
-import type { AgentNotification, AgentTracker } from '../shared/agentWorkspace.js'
+import type { AgentTracker } from '../shared/agentWorkspace.js'
 import { applyAgentPortfolioUpdate, readPortfolios } from './portfolioStore.js'
 import { publishSavedDataChanged } from './savedDataEvents.js'
 import { withAutomaticBackup } from './automaticBackup.js'
@@ -17,22 +18,6 @@ let service: AgentsService | null = null
 let startup: Promise<unknown> | null = null
 let workspace: AgentWorkspace | null = null
 let lifecycle = 0
-const desktopNotifications = new Set<Notification>()
-
-function deliverNotification(value: AgentNotification) {
-  if (!Notification.isSupported()) throw new Error('Desktop notifications are not supported. The notification is saved in the in-app inbox.')
-  return new Promise<void>((resolve, reject) => {
-    const notification = new Notification({ title: value.title, body: value.body, silent: false })
-    desktopNotifications.add(notification)
-    const timer = setTimeout(() => { desktopNotifications.delete(notification); reject(new Error('Desktop notification delivery was not confirmed; check OS notification permissions.')) }, 5000)
-    notification.once('show', () => { clearTimeout(timer); resolve() })
-    notification.once('failed', (_event, error) => { clearTimeout(timer); desktopNotifications.delete(notification); reject(new Error(error)) })
-    notification.once('close', () => desktopNotifications.delete(notification))
-    notification.once('click', () => { const window = BrowserWindow.getAllWindows()[0]; if (window) { if (window.isMinimized()) window.restore(); window.show(); window.focus() } })
-    notification.show()
-  })
-}
-
 async function checkTracker(tracker: AgentTracker, signal: AbortSignal) {
   const cwd = join(app.getPath('userData'), 'agents')
   const worker = new AgentsService({ executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, workspace: workspace!, trackerId: tracker.id })
@@ -71,7 +56,7 @@ function agent() {
   if (!service) {
     const cwd = join(app.getPath('userData'), 'agents')
     mkdirSync(cwd, { recursive: true })
-    workspace ??= new AgentWorkspace({ deliver: deliverNotification, check: checkTracker })
+    workspace ??= new AgentWorkspace({ notifications: notificationCenter, check: checkTracker })
     service = new AgentsService({ workspace, executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, connectionStatus: getMcpStatus, portfolio: {
       read: readPortfolios,
       apply: async (before, after) => {
@@ -118,6 +103,4 @@ export function closeAgents() {
   service?.close(); service = null; startup = null
   const closing = workspace; workspace = null
   void closing?.close().catch(error => console.warn('Agents could not save on close:', error))
-  for (const notification of desktopNotifications) notification.close()
-  desktopNotifications.clear()
 }

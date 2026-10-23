@@ -27,6 +27,7 @@ let backupPending: (() => boolean) | null = null
 let flushBackup: (() => Promise<void>) | null = null
 let stopMcp: (() => Promise<void>) | null = null
 let flushAgents: (() => Promise<void>) | null = null
+let flushNotifications: (() => Promise<void>) | null = null
 const rendererUrl = isDev && process.env.ELECTRON_RENDERER_URL
   ? process.env.ELECTRON_RENDERER_URL
   : pathToFileURL(join(dirname, '../renderer/index.html')).href
@@ -111,6 +112,10 @@ if (ownsInstance) app.whenReady().then(async () => {
       ]))
     }
     releaseDataSession = acquireDataSession(app.getAppPath())
+    const notifications = await import('./services/notificationsHost.js')
+    notifications.configureDesktopNotifications()
+    flushNotifications = notifications.closeNotifications
+    void notifications.notificationCenter.initialize().catch(error => console.warn('Notifications startup failed:', error))
     const backup = await import('./services/automaticBackup.js')
     backup.configureAutomaticBackup(app.getPath('downloads'))
     backupPending = backup.automaticBackupPending
@@ -154,12 +159,13 @@ app.on('window-all-closed', () => {
 let finishingQuit = false
 let drainedQuit = false
 app.on('before-quit', (event) => {
-  if (drainedQuit || (!stopMcp && !flushAgents && !backupPending?.())) return
+  if (drainedQuit || (!stopMcp && !flushAgents && !flushNotifications && !backupPending?.())) return
   event.preventDefault()
   if (finishingQuit) return
   finishingQuit = true
   void (async () => {
     await Promise.all([stopMcp?.(), flushAgents?.()])
+    await flushNotifications?.()
     await flushBackup?.()
   })().catch((error) => console.warn('Shutdown flush failed:', error)).finally(() => {
     drainedQuit = true

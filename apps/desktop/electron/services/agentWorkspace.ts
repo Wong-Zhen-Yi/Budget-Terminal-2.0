@@ -4,12 +4,14 @@ import { dirname, join } from 'node:path'
 import { agentWorkspaceSchema, notificationInputSchema, trackerDefinitionSchema, trackerReportSchema } from '../shared/agentWorkspace.js'
 import type { AgentConversation, AgentNotification, AgentNotificationInput, AgentTracker, AgentTrackerDefinition, AgentTrackerReport, AgentWorkspaceData, AgentWorkspaceState } from '../shared/agentWorkspace.js'
 import type { AgentMessage } from '../shared/agents.js'
+import type { NotificationCenter } from './notifications.js'
 
 const MAX_BYTES = 50 * 1024 * 1024
 export function agentWorkspacePath() {
   return join(process.env.APPDATA ?? join(process.env.USERPROFILE ?? '', 'AppData', 'Roaming'), 'BudgetTerminalElectron', 'agents.json')
 }
 interface Options {
+  notifications?: NotificationCenter
   path?: string
   deliver?: (notification: AgentNotification) => Promise<void> | void
   check?: (tracker: AgentTracker, signal: AbortSignal) => Promise<AgentTrackerReport>
@@ -54,12 +56,23 @@ export class AgentWorkspace {
         throw new Error(this.storageError)
       }
     }
+    if (this.options.notifications) {
+      await this.options.notifications.initialize()
+      if (this.data.notifications.length) {
+        await this.options.notifications.importLegacy(this.data.notifications)
+        this.data.notifications = []
+        this.changed()
+        await this.flush()
+      }
+    }
   }
   snapshot(): AgentWorkspaceState {
     return structuredClone({
       currentChatId: this.data.currentChatId,
       history: this.data.conversations.map(({ messages, ...chat }) => ({ ...chat, messageCount: messages.filter(message => message.role !== 'activity').length })).sort((a, b) => b.updatedAt - a.updatedAt),
-      notifications: [...this.data.notifications].reverse(), trackers: this.data.trackers, storageError: this.storageError,
+      notifications: this.options.notifications
+        ? this.options.notifications.snapshot().notifications.filter((item): item is AgentNotification => ['chat', 'autonomy', 'tracker'].includes(item.source))
+        : [...this.data.notifications].reverse(), trackers: this.data.trackers, storageError: this.storageError,
     })
   }
   conversation(id = this.data.currentChatId) { return structuredClone(this.data.conversations.find(chat => chat.id === id) ?? null) }
@@ -123,6 +136,7 @@ export class AgentWorkspace {
     return run
   }
   async notify(input: AgentNotificationInput, source: AgentNotification['source'], trackerId?: string) {
+    if (this.options.notifications) return this.options.notifications.notify(input, source, trackerId)
     const value = notificationInputSchema.parse(input)
     const duplicate = this.data.notifications.find(notification => notification.eventKey === value.eventKey && notification.trackerId === trackerId && Date.now() - notification.at < 24 * 60 * 60_000)
     if (duplicate) return { created: false, duplicate: true, id: duplicate.id }
@@ -136,10 +150,12 @@ export class AgentWorkspace {
     return { created: true, id: notification.id, desktopError: notification.deliveryError }
   }
   markNotifications(id?: string) {
+    if (this.options.notifications) return this.options.notifications.command({ type: 'read', id })
     for (const notification of this.data.notifications) if (!id || notification.id === id) notification.read = true
     this.changed()
   }
   deleteNotification(id: string) {
+    if (this.options.notifications) return this.options.notifications.command({ type: 'dismiss', id })
     this.data.notifications = this.data.notifications.filter(notification => notification.id !== id)
     this.changed()
   }

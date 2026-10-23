@@ -185,8 +185,8 @@ export class AgentsService {
     if (command.type === 'readNotifications' || command.type === 'deleteNotification' || command.type === 'trackerEnabled' || command.type === 'deleteTracker') {
       const workspace = this.options.workspace
       if (!workspace) throw new Error('The Agents workspace is unavailable.')
-      if (command.type === 'readNotifications') workspace.markNotifications(command.id)
-      if (command.type === 'deleteNotification') workspace.deleteNotification(command.id)
+      if (command.type === 'readNotifications') await workspace.markNotifications(command.id)
+      if (command.type === 'deleteNotification') await workspace.deleteNotification(command.id)
       if (command.type === 'trackerEnabled') await workspace.setTrackerEnabled(command.id, command.enabled)
       if (command.type === 'deleteTracker') await workspace.removeTracker(command.id)
       await workspace.flush()

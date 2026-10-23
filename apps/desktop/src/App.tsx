@@ -1,4 +1,6 @@
 import { ArticlesPage } from '@/pages/ArticlesPage'
+import { RemindersPage } from '@/pages/RemindersPage'
+import { useNotifications, useNotificationCommand } from '@/api/notificationsQueries'
 import { BrowserPage } from '@/pages/BrowserPage'
 import { AgentsPage } from '@/pages/AgentsPage'
 import { useAgents, useAgentCommand } from '@/api/agentsQueries'
@@ -216,6 +218,9 @@ export function App() {
 
   // Keep agent navigation active even when its page is not mounted.
   const agents = useAgents(true)
+  const notifications = useNotifications()
+  const notificationCommand = useNotificationCommand()
+  useEffect(() => window.api.onNotificationClicked(() => handleStocksNavigate('notifications')), [handleStocksNavigate])
   const agentCommand = useAgentCommand()
   const handledNavigation = useRef('')
   useEffect(() => {
@@ -354,10 +359,10 @@ export function App() {
         agentChatAvailable={!screenshotPage && !pickerOpen && !(obscured && (settings?.obscuredTabs ?? []).includes('agents'))}
       />
 
-      {!screenshotPage && agents.data?.data.notifications?.some(notification => !notification.read) && (
+      {!screenshotPage && notifications.data?.data.notifications.some(notification => !notification.read) && (
         <div role="status" className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-surface px-4 py-1 text-2xs text-text-muted">
-          <button onClick={() => handleStocksNavigate('agents')}>Agents · {agents.data.data.notifications.filter(notification => !notification.read).length} unread notifications</button>
-          <button onClick={() => void agentCommand({ type: 'readNotifications' }).catch(error => setNotice(String(error)))}>Mark all read</button>
+          <button onClick={() => handleStocksNavigate('notifications')}>Notifications · {notifications.data.data.notifications.filter(notification => !notification.read).length} unread</button>
+          <button onClick={() => void notificationCommand({ type: 'read' }).catch(error => setNotice(String(error)))}>Mark all read</button>
         </div>
       )}
       <div className="terminal-workspace flex min-h-0 flex-1">
@@ -457,6 +462,8 @@ function renderPage({
   return (
     tabId === 'agents' ? (
       <AgentsPage onStatusChange={onStatusChange} favorite={agentFavorite} savingFavorite={savingFavorite} onToggleFavorite={onToggleFavorite} />
+    ) : tabId === 'movement' || tabId === 'notifications' ? (
+      <RemindersPage inbox={tabId === 'notifications'} onNavigate={onNavigate} onStatusChange={onStatusChange} />
     ) : tabId === 'browser' ? (
       <BrowserPage active={active} onStatusChange={onStatusChange} />
     ) : tabId === 'articles' ? (

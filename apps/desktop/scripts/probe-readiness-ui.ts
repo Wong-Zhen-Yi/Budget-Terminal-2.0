@@ -218,8 +218,16 @@ try {
           await wait(); await wait()
           check(visiblePage('charts') && useChartsStore.getState().symbol === 'MSFT', 'Agent navigation must select Charts/MSFT while another page is active')
           check(calls.some(call => call.method === 'agentsCommand' && call.request.type === 'navigationResult' && call.request.id === 'fixture-navigation'), 'App must acknowledge agent navigation')
+          check(client.getQueryData(['notifications']), 'Reminder and inbox state must preload without visiting either page')
+          for (const id of ['movement', 'notifications']) {
+            await selectPage(TABS.find(tab => tab.id === id))
+            check(visiblePage(id).querySelector('h1'), 'New reminder page did not render: ' + id)
+            check(!visiblePage(id).textContent.includes('Loading reminders'), 'New reminder page showed a first-visit load')
+            await paint(); await window.captureFixture('completed-' + id)
+            await paint(); await window.captureFixture('completed-' + id)
+          }
           rendered.unmount(); client.clear()
-          return 'PASS: all pages ready at startup, Agents first visit without loading or inference, autonomy off and global agent navigation to Charts/MSFT'
+          return 'PASS: all pages ready at startup, Agents and both reminder pages ready on first visit, autonomy off and global agent navigation to Charts/MSFT'
         }
         for (const tab of TABS.filter(tab => tab.implemented)) {
           const before = calls.length
@@ -232,7 +240,9 @@ try {
           if (restored && tab.id === 'charts') check(visiblePage(tab.id).innerText.includes('100.00 GBp'), 'Charts did not retain the raw pence unit')
           // Browser viewport IPC only places/hides its already-initialized native
           // view. It is not a data load; browserStatus/research/control still count.
-          const initial = calls.slice(before).filter(call => !['mcpStatus', 'apiUsage', 'mutateSettings', 'browserViewport'].includes(call.method))
+          // Shared notification polling continues independently of page navigation.
+          if (['movement', 'notifications'].includes(tab.id)) check(client.getQueryData(['notifications']), 'Notification data was not warmed')
+          const initial = calls.slice(before).filter(call => !['mcpStatus', 'apiUsage', 'mutateSettings', 'browserViewport', 'notificationsStatus'].includes(call.method))
           check(initial.length === 0, 'First-visit request on ' + scenario + '/' + tab.id + ': ' + JSON.stringify(initial))
           if (scenario === 'populated' && tab.id === 'portfolio') {
             const page = visiblePage(tab.id)

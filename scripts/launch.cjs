@@ -104,6 +104,7 @@ function launch({ platform = process.platform, nodeVersion = process.versions.no
     return 1
   }
 
+  log.log('Movement reminders and the shared Notifications inbox are ready. Use Send test notification to check native desktop popups; reminders run every random 30-45 minutes while the app is open.')
   log.log('Opening Budget Terminal in Electron. Keep this terminal open while using the app.')
   const app = npm(['run', 'preview', '--workspace', 'budget-terminal-desktop'])
   if (app.error || app.status !== 0) {

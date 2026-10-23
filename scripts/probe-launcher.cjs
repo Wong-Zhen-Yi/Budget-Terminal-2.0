@@ -152,4 +152,11 @@ const configCheck = spawnSync(process.execPath, [require.resolve('tsx/cli'), '-e
   "import './apps/desktop/electron.vite.config.ts'; if (process.env.ELECTRON_RUN_AS_NODE !== undefined) throw new Error('Direct dev/preview retained Node mode')",
 ], { cwd: resolve(__dirname, '..'), env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, encoding: 'utf8', timeout: 30_000 })
 assert.equal(configCheck.status, 0, configCheck.stderr || configCheck.error?.message)
+if (process.platform === 'win32') {
+  const windowsCheck = spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+    join(__dirname, 'probe-windows-launcher.ps1'), '-NodePath', process.execPath,
+  ], { encoding: 'utf8', timeout: 30_000 })
+  assert.equal(windowsCheck.status, 0, windowsCheck.stdout + windowsCheck.stderr || windowsCheck.error?.message)
+  console.log(windowsCheck.stdout.trim())
+}
 console.log('Launcher checks passed: supported toolchains, platform commands, inherited environment, Codex discovery and handoff, optional Agents runtime, failure paths, complete renderer/asset verification, exact Electron version and transient locks.')

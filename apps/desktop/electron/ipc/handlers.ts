@@ -16,6 +16,8 @@ import { articlePdfRequestSchema, writeArticlePdfs } from '../services/articlePd
 import { agentsCommand, agentsImage, agentsStatus, closeAgents } from '../services/agentsHost.js'
 import type { AgentsCommand } from '../shared/agents.js'
 import { rendererCacheFlushed } from '../services/rendererCacheShutdown.js'
+import { notificationsStatus, notificationsCommand, onNotificationClick } from '../services/notificationsHost.js'
+import type { NotificationCommand } from '../shared/notifications.js'
 
 export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent) => boolean): () => void {
   const handle: typeof ipcMain.handle = (channel, listener) => {
@@ -28,6 +30,11 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
   handle(CHANNELS.browserControl, async (_event, request) => (await import('../services/browser.js')).browserControl(request))
   handle(CHANNELS.browserViewport, async (_event, viewport) => (await import('../services/browser.js')).setBrowserViewport(viewport))
   handle(CHANNELS.agentsStatus, () => agentsStatus())
+  handle(CHANNELS.notificationsStatus, () => notificationsStatus())
+  handle(CHANNELS.notificationsCommand, (_event, command: NotificationCommand) => notificationsCommand(command))
+  onNotificationClick(() => {
+    for (const window of BrowserWindow.getAllWindows()) window.webContents.send(CHANNELS.notificationClicked)
+  })
   handle(CHANNELS.agentsCommand, (_event, command: AgentsCommand) => agentsCommand(command))
   handle(CHANNELS.agentsImage, (_event, id: string) => agentsImage(id))
   handle(CHANNELS.mcpStatus, () => getMcpStatus())
@@ -157,6 +164,7 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
   })
 
   return () => {
+    onNotificationClick(null)
     closeAgents()
     stopWatching()
     stopSavedData()

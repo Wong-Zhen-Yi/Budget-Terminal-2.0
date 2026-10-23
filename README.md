@@ -103,6 +103,14 @@ Each launcher checks the runtime, installs dependencies, verifies Electron, buil
 the latest source, and opens the production app. Keep its terminal open while using
 Budget Terminal. Build or startup errors stay visible in the launcher window.
 
+On Windows, the double-click launcher finds a supported Node.js installation even
+when an older version comes first on PATH. If none is available, it downloads
+Node.js 24.22.1 from nodejs.org, checks the pinned SHA-256 checksum, and installs it
+under `%LOCALAPPDATA%\BudgetTerminal\runtimes`. This needs no administrator access
+and keeps the runtime outside the checkout. Internet access is required for the
+first download; subsequent launches reuse it. Command-line `npm` commands still
+use the Node.js installation configured in your shell.
+
 These Node minimums include the October 2026 eMudhra certificate compromise fix.
 Electron **44.9.3** already includes the corresponding native SPKI blocklist for
 both Node TLS (including Yahoo workers) and Chromium research tabs. Electron's
@@ -150,7 +158,7 @@ application updates are not configured.
 
 ## Explore the workspaces
 
-The current navigation includes **50 implemented pages**, including Settings.
+The current navigation includes **57 implemented pages**, including Settings.
 
 | Workspace | Pages |
 | :--- | :--- |
@@ -162,11 +170,21 @@ The current navigation includes **50 implemented pages**, including Settings.
 | **Macro & events** | Global, Economic, Bonds, Money, IPO, Politics |
 | **My money** | Portfolio, Personal Finance, Cards, Projections |
 | **Articles** | Articles |
+| **Reminders** | Movement, Notifications |
 | **Settings** | Settings |
 
 Star pages to pin Favorites. Use **Ctrl+K** or **backtick** to open page search;
 recent pages appear first. Settings controls page visibility, ordering, favorites,
 privacy, and the market clock.
+
+Open **Reminders → Movement** and select **Start reminders** for a native desktop
+notification at a fresh random interval between 30 and 45 minutes. The countdown,
+pause control, and **Send test notification** button are available on the page.
+Reminders run while the app is open, including when minimized; enabled reminders
+restart with a fresh interval after relaunch. **Notifications** is the shared local
+inbox for movement reminders, Agent alerts, and tests. Existing Agent alerts migrate
+automatically. Windows notification settings and Do not disturb control whether
+banners appear; delivery failures remain visible in the inbox.
 
 The Research bar transfers a ticker to Stocks, Fundamentals, Charts, Options, or
 Valuation. Clicking a portfolio ticker opens Stocks; options handoffs open a
