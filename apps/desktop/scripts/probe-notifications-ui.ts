@@ -14,12 +14,13 @@ try {
     import { createRoot } from 'react-dom/client'
     import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
     let RemindersPage
-    const state = { version: 1, notifications: [], movement: { enabled: false, nextAt: null, lastAt: null }, supported: true, storageError: '', setupError: '' }
+    const state = { version: 1, notifications: [], movement: { enabled: false, nextAt: null, lastAt: null }, marketOpen: { enabled: false, nextAt: null, lastAt: null }, supported: true, storageError: '', setupError: '' }
     let failDelivery = false, failCommand = false, selected = '', inbox = false, sequence = 0
     const envelope = () => ({ data: structuredClone(state), meta: { source: 'Fixture', freshness: 'fresh', fetchedAt: Date.now() }, errors: [] })
     window.api = { notificationsStatus: async () => envelope(), notificationsCommand: async command => {
       if (failCommand) throw Error('Fixture disk full')
       if (command.type === 'movement') state.movement = { ...state.movement, enabled: command.enabled, nextAt: command.enabled ? Date.now() + 35 * 60000 : null }
+      if (command.type === 'marketOpen') state.marketOpen = { ...state.marketOpen, enabled: command.enabled, nextAt: command.enabled ? Date.parse('2026-11-02T14:30:00Z') : null }
       if (command.type === 'test') state.notifications.unshift({ id: String(++sequence), source: 'test', title: 'Test notification', body: 'Safe text <img src=x onerror=alert(1)>', at: Date.now(), read: false, desktopStatus: failDelivery ? 'failed' : 'shown', ...(failDelivery ? { deliveryError: 'OS blocked banners' } : {}) })
       if (command.type === 'read') state.notifications.forEach(item => { if (!command.id || command.id === item.id) item.read = true })
       if (command.type === 'dismiss') state.notifications = state.notifications.filter(item => item.id !== command.id)
@@ -36,6 +37,10 @@ try {
       RemindersPage = (await import('./src/pages/RemindersPage')).RemindersPage
       render(); await settle()
       check(document.body.textContent.includes('30 and 45 minutes'), 'Interval missing')
+      await click('Enable market-open reminder')
+      check(state.marketOpen.enabled && document.querySelector('.market-open-reminder').textContent.includes('10:30 pm'), 'Market toggle or Singapore winter opening time missing')
+      check(!state.movement.enabled, 'Market toggle must not start movement reminders')
+      await click('Disable market-open reminder'); check(!state.marketOpen.enabled && state.marketOpen.nextAt === null, 'Market pause failed')
       await click('Start reminders'); check(state.movement.enabled && document.body.textContent.includes('Scheduled for'), 'Start failed')
       check(/34:|35:/.test(document.querySelector('.movement-clock strong').textContent), 'Countdown missing')
       await click('Pause reminders'); check(!state.movement.enabled && state.movement.nextAt === null, 'Pause failed')

@@ -208,7 +208,6 @@ export function buildMarketHolidays(year: number): MarketHolidayEvent[] {
   const easter = parseIsoDate(easterSunday(year))!
   easter.setUTCDate(easter.getUTCDate() - 2)
   const holidays: Array<[string, string]> = [
-    [observedFixed(year, 1, 1), "New Year's Day"],
     [nthWeekday(year, 1, 1, 3), 'Martin Luther King Jr. Day'],
     [nthWeekday(year, 2, 1, 3), 'Presidents Day'],
     [easter.toISOString().slice(0, 10), 'Good Friday'],
@@ -219,8 +218,9 @@ export function buildMarketHolidays(year: number): MarketHolidayEvent[] {
     [observedFixed(year, 12, 25), 'Christmas Day'],
   ]
   if (year >= 2022) holidays.push([observedFixed(year, 6, 19), 'Juneteenth'])
-  const nextNewYear = observedFixed(year + 1, 1, 1)
-  if (nextNewYear.startsWith(`${year}-`)) holidays.push([nextNewYear, "New Year's Day"])
+  // NYSE does not observe a Saturday New Year's Day on the preceding Friday.
+  // https://www.nyse.com/markets/hours-calendars (2028 calendar footnote)
+  if (new Date(Date.UTC(year, 0, 1)).getUTCDay() !== 6) holidays.push([observedFixed(year, 1, 1), "New Year's Day"])
 
   const byDate = new Map(
     holidays

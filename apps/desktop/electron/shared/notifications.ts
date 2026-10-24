@@ -7,7 +7,7 @@ export const notificationInputSchema = z.object({
 }).strict()
 export const notificationSchema = notificationInputSchema.extend({
   id: z.string().min(1).max(100), at: z.number().finite().nonnegative(), read: z.boolean(),
-  source: z.enum(['chat', 'autonomy', 'tracker', 'movement', 'test']),
+  source: z.enum(['chat', 'autonomy', 'tracker', 'movement', 'market-open', 'test']),
   trackerId: z.string().max(100).optional(), deliveryError: z.string().optional(),
   desktopStatus: z.enum(['pending', 'shown', 'failed']).optional(),
 }).strict()
@@ -16,6 +16,7 @@ export type NotificationInput = z.infer<typeof notificationInputSchema>
 export const notificationStoreSchema = z.object({
   version: z.literal(1), notifications: z.array(notificationSchema).max(500),
   movement: z.object({ enabled: z.boolean(), nextAt: z.number().finite().nonnegative().nullable(), lastAt: z.number().finite().nonnegative().nullable() }).strict(),
+  marketOpen: z.object({ enabled: z.boolean(), nextAt: z.number().finite().nonnegative().nullable(), lastAt: z.number().finite().nonnegative().nullable() }).strict().default({ enabled: false, nextAt: null, lastAt: null }),
 }).strict()
 export type NotificationData = z.infer<typeof notificationStoreSchema>
 export interface NotificationsState extends NotificationData {
@@ -25,6 +26,7 @@ export interface NotificationsState extends NotificationData {
 }
 export const notificationCommandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('movement'), enabled: z.boolean() }).strict(),
+  z.object({ type: z.literal('marketOpen'), enabled: z.boolean() }).strict(),
   z.object({ type: z.literal('test') }).strict(),
   z.object({ type: z.literal('read'), id: z.string().min(1).max(100).optional() }).strict(),
   z.object({ type: z.literal('dismiss'), id: z.string().min(1).max(100) }).strict(),

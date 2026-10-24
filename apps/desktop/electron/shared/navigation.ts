@@ -13,7 +13,7 @@ export const WORKSPACES = [
   { id: 'money', label: 'My money', pages: ['portfolio', 'personal-finance', 'cards', 'projections'] },
   { id: 'articles', label: 'Articles', pages: ['articles'] },
   { id: 'agents', label: 'Agents', pages: ['agents'] },
-  { id: 'reminders', label: 'Reminders', pages: ['movement', 'notifications'] },
+  { id: 'reminders', label: 'Notifications', pages: ['movement', 'notifications'] },
 ]
 
 export const DEFAULT_FAVORITE_TABS = ['dashboard', 'portfolio', 'charts']

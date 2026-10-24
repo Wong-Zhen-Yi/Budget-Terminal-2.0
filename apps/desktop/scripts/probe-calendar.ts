@@ -55,6 +55,7 @@ async function runOffline(): Promise<void> {
   assert.equal(earningsStatus({ ...staleToday, date: '2026-10-07' }, calendarToday('sgt', boundary)), 'Past date')
 
   const holidays = buildMarketHolidays(2026)
+  assert(!buildMarketHolidays(2027).some(item => item.date === '2027-12-31' && item.detail === 'Closed all day'), 'Saturday New Year must not close the previous Friday')
   assert.ok(holidays.some((event) => event.date === '2026-11-26' && event.event === 'Thanksgiving'))
   assert.ok(holidays.some((event) => event.date === '2026-11-27' && event.detail === '1:00 PM ET close'))
   assert.ok(holidays.some((event) => event.date === '2026-07-03' && event.event.includes('observed')))

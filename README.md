@@ -170,14 +170,14 @@ The current navigation includes **57 implemented pages**, including Settings.
 | **Macro & events** | Global, Economic, Bonds, Money, IPO, Politics |
 | **My money** | Portfolio, Personal Finance, Cards, Projections |
 | **Articles** | Articles |
-| **Reminders** | Movement, Notifications |
+| **Notifications** | Movement, Notifications |
 | **Settings** | Settings |
 
 Star pages to pin Favorites. Use **Ctrl+K** or **backtick** to open page search;
 recent pages appear first. Settings controls page visibility, ordering, favorites,
 privacy, and the market clock.
 
-Open **Reminders → Movement** and select **Start reminders** for a native desktop
+Open **Notifications → Movement** and select **Start reminders** for a native desktop
 notification at a fresh random interval between 30 and 45 minutes. The countdown,
 pause control, and **Send test notification** button are available on the page.
 Reminders run while the app is open, including when minimized; enabled reminders
@@ -185,6 +185,12 @@ restart with a fresh interval after relaunch. **Notifications** is the shared lo
 inbox for movement reminders, Agent alerts, and tests. Existing Agent alerts migrate
 automatically. Windows notification settings and Do not disturb control whether
 banners appear; delivery failures remain visible in the inbox.
+
+The same page offers **Enable market-open reminder** for a desktop alert at the
+regular U.S. equity opening, 9:30 AM New York time. The next alert is displayed in
+Singapore time, with daylight saving adjustments, weekends, and scheduled exchange
+holidays handled automatically. The setting survives relaunch; old missed openings
+are skipped. Keep the app open for delivery.
 
 The Research bar transfers a ticker to Stocks, Fundamentals, Charts, Options, or
 Valuation. Clicking a portfolio ticker opens Stocks; options handoffs open a

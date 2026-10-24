@@ -20,6 +20,7 @@ echo MCP bundles are updated safely with file-lock retries. Persistent locks wil
 echo Bottom status bar stays on one fixed-height line when resizing or updating startup progress. Long messages show their full text on hover; API meters scroll horizontally when needed.
 echo Certificate protection requires Node.js 22.23.4+, 24.22.1+, or 26.12.1+. Electron blocks compromised eMudhra keys in both Node and Chromium. TLS verification bypasses are rejected.
 echo Startup checks all installed Node.js candidates and installs a checksum-verified private Node.js runtime if needed.
+echo The Notifications workspace also offers a U.S. market-open alert at 9:30 AM New York time, skipping weekends and scheduled exchange holidays.
 echo Movement adds random 30-45 minute desktop reminders. Notifications now has its own inbox for Agents, reminders and test popups. Windows desktop notification registration is refreshed on startup.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\launch-windows.ps1"
 if errorlevel 1 goto :failed

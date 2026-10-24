@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { movementDelay, notificationCommandSchema, notificationInputSchema, notificationSchema, notificationStoreSchema } from '../shared/notifications.js'
 import type { AppNotification, NotificationCommand, NotificationData, NotificationInput, NotificationsState } from '../shared/notifications.js'
+import { nextMarketOpen } from '../shared/marketOpenReminder.js'
 
 interface Options {
   path?: string
@@ -14,7 +15,7 @@ interface Options {
 
 /** Shared durable inbox and main-process scheduler, independent of Agent connections and page mounts. */
 export class NotificationCenter {
-  private data: NotificationData = { version: 1, notifications: [], movement: { enabled: false, nextAt: null, lastAt: null } }
+  private data: NotificationData = { version: 1, notifications: [], movement: { enabled: false, nextAt: null, lastAt: null }, marketOpen: { enabled: false, nextAt: null, lastAt: null } }
   private initialized: Promise<void> | null = null
   private queue: Promise<unknown> = Promise.resolve()
   private timer: NodeJS.Timeout | null = null
@@ -42,6 +43,7 @@ export class NotificationCenter {
     }
     // Start a fresh interval after relaunch; never replay missed reminders.
     if (this.data.movement.enabled) { this.data.movement.nextAt = this.nextAt(); await this.save() }
+    if (this.data.marketOpen.enabled) { this.data.marketOpen.nextAt = nextMarketOpen(this.now()); await this.save() }
     this.schedule()
   }
   snapshot(): NotificationsState {
@@ -104,6 +106,12 @@ export class NotificationCenter {
         this.data.movement.nextAt = command.enabled ? this.nextAt() : null
         try { await this.save() } catch (error) { this.data.movement = before; throw error }
         this.schedule()
+      } else if (command.type === 'marketOpen') {
+        const before = { ...this.data.marketOpen }
+        this.data.marketOpen.enabled = command.enabled
+        this.data.marketOpen.nextAt = command.enabled ? nextMarketOpen(this.now()) : null
+        try { await this.save() } catch (error) { this.data.marketOpen = before; throw error }
+        this.schedule()
       } else if (command.type === 'test') {
         await this.create({ title: 'Budget Terminal · Test notification', body: 'Desktop notifications are working. Movement reminders use this same notification system.', eventKey: randomUUID() }, 'test')
       } else {
@@ -118,6 +126,16 @@ export class NotificationCenter {
   /** One overdue reminder after sleep, followed by a fresh interval, without catch-up bursts. */
   tick() {
     return this.enqueue(async () => {
+      const market = this.data.marketOpen
+      if (market.enabled && market.nextAt !== null && market.nextAt <= this.now()) {
+        const opening = market.nextAt
+        market.nextAt = nextMarketOpen(this.now())
+        const timely = this.now() - opening <= 5 * 60_000
+        if (timely) market.lastAt = opening
+        await this.save()
+        // Do not announce an old opening after a long sleep or closed-app period.
+        if (timely) await this.create({ title: 'U.S. stock market is open', body: 'The regular U.S. stock market session is scheduled to open now — 9:30 AM New York time.', eventKey: `market-open-${opening}` }, 'market-open')
+      }
       const movement = this.data.movement
       if (!movement.enabled || movement.nextAt === null || movement.nextAt > this.now()) return
       movement.lastAt = this.now()
@@ -129,8 +147,9 @@ export class NotificationCenter {
   private schedule() {
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
-    if (this.closed || !this.data.movement.enabled || this.data.movement.nextAt === null) return
-    this.timer = setTimeout(() => { this.timer = null; void this.tick().catch(() => {}) }, Math.min(15_000, Math.max(0, this.data.movement.nextAt - this.now())))
+    const due = [this.data.movement, this.data.marketOpen].filter(reminder => reminder.enabled && reminder.nextAt !== null).map(reminder => reminder.nextAt!)
+    if (this.closed || !due.length) return
+    this.timer = setTimeout(() => { this.timer = null; void this.tick().catch(() => {}) }, Math.min(15_000, Math.max(0, Math.min(...due) - this.now())))
     this.timer.unref()
   }
   async close() {
