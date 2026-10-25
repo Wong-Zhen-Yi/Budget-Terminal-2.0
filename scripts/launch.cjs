@@ -123,7 +123,7 @@ function launch({ development = false, platform = process.platform, nodeVersion 
     return 1
   }
 
-  log.log('The Notifications workspace includes movement reminders, U.S. market-open alerts and the shared inbox. Use Send test notification to check native desktop popups; reminders run every random 30-45 minutes while the app is open.')
+  log.log('The Notifications workspace includes U.S. market-open alerts and the shared Agent inbox. Use Send test notification to check native desktop popups.')
   log.log('Opening Budget Terminal in Electron. Keep this terminal open while using the app.')
   const app = npm(['run', 'preview', '--workspace', 'budget-terminal-desktop'])
   if (app.error || app.status !== 0) {

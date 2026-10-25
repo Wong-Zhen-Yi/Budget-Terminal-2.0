@@ -1,6 +1,5 @@
 // Compact, monochrome symbols drawn on the same grid for the workspace rail.
 export const pageIconPaths: Record<string, string> = {
-  movement: 'M14 4a2 2 0 1 0 0 .01 M8 12l4-5 4 4 4 1 M12 7l-2 8 4 3 1 4 M10 15l-5 6H2 M8 12l-5 2',
   notifications: 'M5 17h14l-2-4V8a5 5 0 0 0-10 0v5z M10 21h4 M12 1v2',
   browser: 'M3 4h18v16H3z M3 8h18 M6 6h.01 M9 6h.01 M7 12l-2 2 2 2 M17 12l2 2-2 2',
   agents: 'M5 7h14v13H5z M12 3v4 M9 12h.01 M15 12h.01 M9 16h6 M2 10v7 M22 10v7',

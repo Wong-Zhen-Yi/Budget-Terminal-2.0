@@ -1,4 +1,5 @@
 #!/bin/sh
+echo "Notifications contains the shared Agent inbox and U.S. market-open alerts."
 
 cd "$(dirname "$0")" || exit 1
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"

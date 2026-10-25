@@ -13,13 +13,12 @@ try {
     import React from 'react'
     import { createRoot } from 'react-dom/client'
     import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-    let RemindersPage
-    const state = { version: 1, notifications: [], movement: { enabled: false, nextAt: null, lastAt: null }, marketOpen: { enabled: false, nextAt: null, lastAt: null }, supported: true, storageError: '', setupError: '' }
-    let failDelivery = false, failCommand = false, selected = '', inbox = false, sequence = 0
+    let NotificationsPage
+    const state = { version: 2, notifications: [], marketOpen: { enabled: false, nextAt: null, lastAt: null }, supported: true, storageError: '', setupError: '' }
+    let failDelivery = false, failCommand = false, sequence = 0
     const envelope = () => ({ data: structuredClone(state), meta: { source: 'Fixture', freshness: 'fresh', fetchedAt: Date.now() }, errors: [] })
     window.api = { notificationsStatus: async () => envelope(), notificationsCommand: async command => {
       if (failCommand) throw Error('Fixture disk full')
-      if (command.type === 'movement') state.movement = { ...state.movement, enabled: command.enabled, nextAt: command.enabled ? Date.now() + 35 * 60000 : null }
       if (command.type === 'marketOpen') state.marketOpen = { ...state.marketOpen, enabled: command.enabled, nextAt: command.enabled ? Date.parse('2026-11-02T14:30:00Z') : null }
       if (command.type === 'test') state.notifications.unshift({ id: String(++sequence), source: 'test', title: 'Test notification', body: 'Safe text <img src=x onerror=alert(1)>', at: Date.now(), read: false, desktopStatus: failDelivery ? 'failed' : 'shown', ...(failDelivery ? { deliveryError: 'OS blocked banners' } : {}) })
       if (command.type === 'read') state.notifications.forEach(item => { if (!command.id || command.id === item.id) item.read = true })
@@ -29,25 +28,18 @@ try {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     const root = createRoot(document.getElementById('root'))
     const onStatusChange = () => {}
-    const render = () => root.render(<QueryClientProvider client={client}><RemindersPage inbox={inbox} onNavigate={id => selected = id} onStatusChange={onStatusChange}/></QueryClientProvider>)
+    const render = () => root.render(<QueryClientProvider client={client}><NotificationsPage onStatusChange={onStatusChange}/></QueryClientProvider>)
     const settle = () => new Promise(resolve => setTimeout(resolve, 100))
     const check = (condition, message) => { if (!condition) throw Error(message) }
     const click = async text => { const button = [...document.querySelectorAll('button')].find(item => item.textContent === text); check(button && !button.disabled, 'Missing button: ' + text); button.click(); await settle() }
     window.runProbe = async () => {
-      RemindersPage = (await import('./src/pages/RemindersPage')).RemindersPage
+      NotificationsPage = (await import('./src/pages/NotificationsPage')).NotificationsPage
       render(); await settle()
-      check(document.body.textContent.includes('30 and 45 minutes'), 'Interval missing')
+      check(!document.querySelector('.movement-hero') && ![...document.querySelectorAll('button')].some(item => item.textContent === 'Start reminders'), 'Retired reminder controls remain')
       await click('Enable market-open reminder')
       check(state.marketOpen.enabled && document.querySelector('.market-open-reminder').textContent.includes('10:30 pm'), 'Market toggle or Singapore winter opening time missing')
-      check(!state.movement.enabled, 'Market toggle must not start movement reminders')
       await click('Disable market-open reminder'); check(!state.marketOpen.enabled && state.marketOpen.nextAt === null, 'Market pause failed')
-      await click('Start reminders'); check(state.movement.enabled && document.body.textContent.includes('Scheduled for'), 'Start failed')
-      check(/34:|35:/.test(document.querySelector('.movement-clock strong').textContent), 'Countdown missing')
-      await click('Pause reminders'); check(!state.movement.enabled && state.movement.nextAt === null, 'Pause failed')
       await click('Send test notification'); check(document.querySelector('[role=status]').textContent.includes('sent to your desktop'), 'Test success missing')
-      check(!state.movement.enabled, 'Test started reminders')
-      await click('Open notifications (1) →'); check(selected === 'notifications', 'Inbox link failed')
-      inbox = true; render(); await settle()
       const item = document.querySelector('.reminders-item')
       check(item.textContent.includes('<img') && !item.querySelector('img,script'), 'Unsafe notification rendering')
       await click('Mark read'); check(state.notifications[0].read, 'Read failed')
@@ -55,12 +47,11 @@ try {
       failDelivery = true; await click('Send test notification')
       check(document.body.textContent.includes('OS blocked banners') && state.notifications.length === 1, 'OS failure fallback missing')
       await click('Mark all read'); check(state.notifications.every(item => item.read), 'Mark all failed')
-      const filter = document.querySelector('select'); filter.value = 'movement'; filter.dispatchEvent(new Event('change', { bubbles: true })); await settle()
+      const filter = document.querySelector('select'); filter.value = 'market-open'; filter.dispatchEvent(new Event('change', { bubbles: true })); await settle()
       check(!document.querySelector('.reminders-item'), 'Source filter failed')
       failCommand = true; await click('Send test notification'); check(document.body.textContent.includes('Fixture disk full'), 'Write failure hidden')
-      failCommand = false; inbox = false; render(); await settle()
-      await click('Start reminders')
-      return 'PASS: reminder start/pause/countdown, test without starting scheduler, inbox navigation, safe notification text, read/dismiss/filter, OS failure fallback and storage failure visibility'
+      failCommand = false; render(); await settle()
+      return 'PASS: market controls, test delivery, safe notification text, read/dismiss/filter, OS failure fallback and storage failure visibility'
     }
     window.verifyWidth = () => { const main = document.querySelector('main'); check(main.scrollWidth <= main.clientWidth + 1, 'Horizontal overflow'); return 'PASS: responsive page without horizontal overflow' }
   ` }, bundle: true, jsx: 'automatic', platform: 'browser', format: 'iife', outfile: join(directory, 'renderer.js'),
@@ -77,11 +68,11 @@ try {
         console.log(await window.webContents.executeJavaScript('window.runProbe().catch(error => { console.error(error.stack); throw error })'))
         console.log(await window.webContents.executeJavaScript('window.verifyWidth()'))
         await window.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
-        require('node:fs').writeFileSync(${JSON.stringify(join(tmpdir(), 'budget-movement-desktop.png'))}, (await window.webContents.capturePage()).toPNG())
+        require('node:fs').writeFileSync(${JSON.stringify(join(tmpdir(), 'budget-notifications-desktop.png'))}, (await window.webContents.capturePage()).toPNG())
         window.setSize(520, 760)
         await new Promise(resolve => setTimeout(resolve, 150))
         console.log(await window.webContents.executeJavaScript('window.verifyWidth()'))
-        require('node:fs').writeFileSync(${JSON.stringify(join(tmpdir(), 'budget-movement-narrow.png'))}, (await window.webContents.capturePage()).toPNG())
+        require('node:fs').writeFileSync(${JSON.stringify(join(tmpdir(), 'budget-notifications-narrow.png'))}, (await window.webContents.capturePage()).toPNG())
         app.exit(0)
       } catch(error) { console.error(error); app.exit(1) }
     })

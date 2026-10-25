@@ -1,5 +1,5 @@
 import { ArticlesPage } from '@/pages/ArticlesPage'
-import { RemindersPage } from '@/pages/RemindersPage'
+import { NotificationsPage } from '@/pages/NotificationsPage'
 import { useNotifications, useNotificationCommand } from '@/api/notificationsQueries'
 import { BrowserPage } from '@/pages/BrowserPage'
 import { AgentsPage } from '@/pages/AgentsPage'
@@ -462,8 +462,8 @@ function renderPage({
   return (
     tabId === 'agents' ? (
       <AgentsPage onStatusChange={onStatusChange} favorite={agentFavorite} savingFavorite={savingFavorite} onToggleFavorite={onToggleFavorite} />
-    ) : tabId === 'movement' || tabId === 'notifications' ? (
-      <RemindersPage inbox={tabId === 'notifications'} onNavigate={onNavigate} onStatusChange={onStatusChange} />
+    ) : tabId === 'notifications' ? (
+      <NotificationsPage onStatusChange={onStatusChange} />
     ) : tabId === 'browser' ? (
       <BrowserPage active={active} onStatusChange={onStatusChange} />
     ) : tabId === 'articles' ? (

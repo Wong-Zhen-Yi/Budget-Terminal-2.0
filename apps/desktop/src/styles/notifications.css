@@ -5,29 +5,17 @@
 .reminders-page button:focus-visible, .reminders-page select:focus-visible { outline: 2px solid #7dd3ad; outline-offset: 3px; }
 .reminders-heading, .reminders-delivery, .reminders-inbox-heading { display: flex; justify-content: space-between; align-items: center; gap: 24px; }
 .reminders-heading h1 { font-size: clamp(26px, 3vw, 38px); font-weight: 600; letter-spacing: -.04em; margin: 7px 0; }
-.reminders-heading p, .reminders-delivery p, .movement-copy p, .movement-clock p { color: var(--color-text-muted); line-height: 1.7; }
+.reminders-heading p, .reminders-delivery p { color: var(--color-text-muted); line-height: 1.7; }
 .reminders-eyebrow { font-size: 10px; letter-spacing: .16em; color: #7dd3ad !important; }
-.movement-hero { display: grid; grid-template-columns: 100px minmax(220px, 1fr) 220px; align-items: center; gap: 32px; margin: 32px 0 24px; padding: 38px; border: 1px solid #7dd3ad35; border-radius: 16px; background: linear-gradient(120deg, #7dd3ad0c, transparent 65%), var(--color-surface); }
-.movement-orbit { border: 1px solid #7dd3ad45; border-radius: 50%; padding: 12px; color: #7dd3ad; }
-.movement-orbit svg { width: 100%; }
 .reminders-badge { display: inline-block; color: var(--color-text-muted); font-size: 10px; letter-spacing: .09em; padding: 5px 8px; border-radius: 4px; background: var(--color-surface-raised); }
 .reminders-badge.is-on { color: #7dd3ad; background: #7dd3ad16; }
-.movement-copy h2 { font-size: 24px; margin: 16px 0 8px; font-weight: 500; letter-spacing: -.03em; }
-.movement-copy p { max-width: 500px; }
 .reminders-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
-.reminders-page .reminders-primary { background: #a4e7c5; color: #10241b; border-color: #a4e7c5; font-weight: 600; }
-.movement-clock { border-left: 1px solid var(--color-border); padding-left: 28px; }
-.movement-clock > span { font-size: 10px; letter-spacing: .12em; color: var(--color-text-muted); }
-.movement-clock strong { display: block; font-size: 48px; font-variant-numeric: tabular-nums; letter-spacing: -.04em; font-weight: 400; margin: 14px 0; }
-.movement-clock p { font-size: 12px; }
 .reminders-delivery { padding: 24px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; margin: 24px 0; }
 .reminders-delivery h2, .reminders-inbox h2 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
 .reminders-delivery p { max-width: 850px; font-size: 12px; margin-top: 6px; }
 .reminders-delivery > button { flex-shrink: 0; }
 .reminders-warning, .reminders-message { padding: 12px; border: 1px solid #e9b76c55; background: #e9b76c0b; border-radius: 6px; overflow-wrap: anywhere; }
 .reminders-warning { color: #e9b76c; }
-.reminders-footnote { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 32px; }
-.reminders-footnote small { display: inline-block; color: var(--color-text-muted); font-size: 11px; margin-top: 8px; }
 .reminders-inbox-heading .reminders-actions { margin: 0; }
 .reminders-inbox h2 span { font-size: 12px; color: var(--color-text-muted); margin-left: 8px; font-weight: 400; }
 .reminders-empty { text-align: center; padding: 56px 20px; color: var(--color-text-muted); }
@@ -39,5 +27,5 @@
 .reminders-item h3 { font-size: 16px; font-weight: 600; margin: 12px 0 6px; }
 .reminders-item > p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
 .reminders-item > small { display: block; margin-top: 10px; color: var(--color-text-muted); }
-@media (max-width: 1100px) { .movement-hero { grid-template-columns: 1fr 190px; padding: 24px; gap: 20px; } .movement-orbit { display: none; } }
-@media (max-width: 760px) { .movement-hero, .reminders-footnote { grid-template-columns: 1fr; } .movement-clock { border-left: 0; border-top: 1px solid var(--color-border); padding: 20px 0 0; } .reminders-heading, .reminders-delivery, .reminders-inbox-heading { align-items: flex-start; flex-direction: column; gap: 16px; } }
+
+@media (max-width: 760px) { .reminders-heading, .reminders-delivery, .reminders-inbox-heading { align-items: flex-start; flex-direction: column; gap: 16px; } }

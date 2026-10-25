@@ -1,4 +1,5 @@
 @echo off
+echo Notifications contains the shared Agent inbox and U.S. market-open alerts.
 title Budget Terminal
 rem Startup recovery: find a supported Node.js or install a verified private runtime.
 cd /d "%~dp0" || exit /b 1
@@ -27,7 +28,7 @@ echo Bottom status bar stays on one fixed-height line when resizing or updating 
 echo Certificate protection requires Node.js 22.23.4+, 24.22.1+, or 26.12.1+. Electron blocks compromised eMudhra keys in both Node and Chromium. TLS verification bypasses are rejected.
 echo Startup checks all installed Node.js candidates and installs a checksum-verified private Node.js runtime if needed.
 echo The Notifications workspace also offers a U.S. market-open alert at 9:30 AM New York time, skipping weekends and scheduled exchange holidays.
-echo Movement adds random 30-45 minute desktop reminders. Notifications now has its own inbox for Agents, reminders and test popups. Windows desktop notification registration is refreshed on startup.
+echo Notifications includes Agent alerts, U.S. market-open reminders and test popups. Windows desktop notification registration is refreshed on startup.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\launch-windows.ps1"
 if errorlevel 1 goto :failed
 exit /b 0

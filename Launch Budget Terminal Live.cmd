@@ -1,4 +1,5 @@
 @echo off
+echo Notifications contains the shared Agent inbox and U.S. market-open alerts.
 title Budget Terminal - Live Development
 cd /d "%~dp0" || exit /b 1
 echo Starting live development with a supported Node.js runtime.

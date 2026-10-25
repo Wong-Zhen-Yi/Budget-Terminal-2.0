@@ -112,10 +112,10 @@ export function buildTasks(
   }, {
     tab: 'agents', label: 'Agents workspace',
     run: (client, backgroundOrder) => warmAgentWorkspace(client, backgroundOrder),
-  }, ...['movement', 'notifications'].map(tab => ({
-    tab, label: tab === 'movement' ? 'Movement reminders' : 'Notification inbox',
-    run: (client: QueryClient) => warmStartupQuery(client, { queryKey: notificationsKey, queryFn: loadNotifications, staleTime: Infinity }),
-  })), {
+  }, {
+    tab: 'notifications', label: 'Notification inbox',
+    run: client => warmStartupQuery(client, { queryKey: notificationsKey, queryFn: loadNotifications, staleTime: Infinity }),
+  }, {
     tab: 'articles', label: 'Articles library',
     run: client => warmStartupQuery(client, { queryKey: queryKeys.articles, queryFn: () => api.articles(), staleTime: Infinity }),
   }]

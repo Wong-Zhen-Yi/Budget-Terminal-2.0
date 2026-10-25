@@ -1293,7 +1293,6 @@ export const OPTION_BUCKETS: ReadonlyArray<{ key: OptionBucketKey; label: string
 export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boolean }> = [
   { id: 'articles', label: 'Articles', implemented: true },
   { id: 'agents', label: 'Agents', implemented: true },
-  { id: 'movement', label: 'Movement', implemented: true },
   { id: 'notifications', label: 'Notifications', implemented: true },
   { id: 'browser', label: 'Browser', implemented: true },
   { id: 'dashboard', label: 'Dashboard', implemented: true },

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { movementDelay, notificationCommandSchema, notificationInputSchema, notificationSchema, notificationStoreSchema } from '../shared/notifications.js'
+import { parseNotificationStore, notificationCommandSchema, notificationInputSchema, notificationSchema, notificationStoreSchema } from '../shared/notifications.js'
 import type { AppNotification, NotificationCommand, NotificationData, NotificationInput, NotificationsState } from '../shared/notifications.js'
 import { nextMarketOpen } from '../shared/marketOpenReminder.js'
 
@@ -10,12 +10,11 @@ interface Options {
   deliver: (notification: AppNotification) => Promise<void>
   supported: () => boolean
   now?: () => number
-  random?: () => number
 }
 
 /** Shared durable inbox and main-process scheduler, independent of Agent connections and page mounts. */
 export class NotificationCenter {
-  private data: NotificationData = { version: 1, notifications: [], movement: { enabled: false, nextAt: null, lastAt: null }, marketOpen: { enabled: false, nextAt: null, lastAt: null } }
+  private data: NotificationData = { version: 2, notifications: [], marketOpen: { enabled: false, nextAt: null, lastAt: null } }
   private initialized: Promise<void> | null = null
   private queue: Promise<unknown> = Promise.resolve()
   private timer: NodeJS.Timeout | null = null
@@ -24,16 +23,18 @@ export class NotificationCenter {
   setupError = ''
   constructor(private options: Options) {}
   private now() { return this.options.now?.() ?? Date.now() }
-  private nextAt() { return this.now() + movementDelay(this.options.random) }
   private path() { return this.options.path ?? join(process.env.APPDATA ?? join(process.env.USERPROFILE ?? '', 'AppData', 'Roaming'), 'BudgetTerminalElectron', 'notifications.json') }
   initialize() {
     return this.initialized ??= this.load().catch(error => { this.initialized = null; throw error })
   }
   private async load() {
+    let migrated = false
     try {
       const raw = await readFile(this.path())
       if (raw.length > 16 * 1024 * 1024) throw new Error('Notification store exceeds 16 MB.')
-      this.data = notificationStoreSchema.parse(JSON.parse(raw.toString('utf8')))
+      const input: unknown = JSON.parse(raw.toString('utf8'))
+      this.data = parseNotificationStore(input)
+      migrated = !!input && typeof input === 'object' && 'version' in input && input.version === 1
       if (new Set(this.data.notifications.map(item => item.id)).size !== this.data.notifications.length) throw new Error('Duplicate notification IDs.')
     } catch (error) {
       if (!(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT')) {
@@ -41,9 +42,8 @@ export class NotificationCenter {
         throw new Error(this.storageError)
       }
     }
-    // Start a fresh interval after relaunch; never replay missed reminders.
-    if (this.data.movement.enabled) { this.data.movement.nextAt = this.nextAt(); await this.save() }
-    if (this.data.marketOpen.enabled) { this.data.marketOpen.nextAt = nextMarketOpen(this.now()); await this.save() }
+    if (this.data.marketOpen.enabled) this.data.marketOpen.nextAt = nextMarketOpen(this.now())
+    if (migrated || this.data.marketOpen.enabled) await this.save()
     this.schedule()
   }
   snapshot(): NotificationsState {
@@ -100,20 +100,14 @@ export class NotificationCenter {
   command(input: NotificationCommand) {
     const command = notificationCommandSchema.parse(input)
     return this.enqueue(async () => {
-      if (command.type === 'movement') {
-        const before = { ...this.data.movement }
-        this.data.movement.enabled = command.enabled
-        this.data.movement.nextAt = command.enabled ? this.nextAt() : null
-        try { await this.save() } catch (error) { this.data.movement = before; throw error }
-        this.schedule()
-      } else if (command.type === 'marketOpen') {
+      if (command.type === 'marketOpen') {
         const before = { ...this.data.marketOpen }
         this.data.marketOpen.enabled = command.enabled
         this.data.marketOpen.nextAt = command.enabled ? nextMarketOpen(this.now()) : null
         try { await this.save() } catch (error) { this.data.marketOpen = before; throw error }
         this.schedule()
       } else if (command.type === 'test') {
-        await this.create({ title: 'Budget Terminal · Test notification', body: 'Desktop notifications are working. Movement reminders use this same notification system.', eventKey: randomUUID() }, 'test')
+        await this.create({ title: 'Budget Terminal · Test notification', body: 'Desktop notifications are working. Agent alerts and market-open reminders use this same notification system.', eventKey: randomUUID() }, 'test')
       } else {
         const before = structuredClone(this.data.notifications)
         if (command.type === 'read') for (const item of this.data.notifications) { if (!command.id || item.id === command.id) item.read = true }
@@ -123,7 +117,7 @@ export class NotificationCenter {
       return this.snapshot()
     })
   }
-  /** One overdue reminder after sleep, followed by a fresh interval, without catch-up bursts. */
+  /** Deliver timely market openings without catch-up bursts after sleep. */
   tick() {
     return this.enqueue(async () => {
       const market = this.data.marketOpen
@@ -136,18 +130,12 @@ export class NotificationCenter {
         // Do not announce an old opening after a long sleep or closed-app period.
         if (timely) await this.create({ title: 'U.S. stock market is open', body: 'The regular U.S. stock market session is scheduled to open now — 9:30 AM New York time.', eventKey: `market-open-${opening}` }, 'market-open')
       }
-      const movement = this.data.movement
-      if (!movement.enabled || movement.nextAt === null || movement.nextAt > this.now()) return
-      movement.lastAt = this.now()
-      movement.nextAt = this.nextAt()
-      await this.save()
-      await this.create({ title: 'Time to move', body: 'Stand up, stretch, or take a short walk. Your next reminder will arrive in 30–45 minutes.', eventKey: randomUUID() }, 'movement')
     }).finally(() => this.schedule())
   }
   private schedule() {
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
-    const due = [this.data.movement, this.data.marketOpen].filter(reminder => reminder.enabled && reminder.nextAt !== null).map(reminder => reminder.nextAt!)
+    const due = [this.data.marketOpen].filter(reminder => reminder.enabled && reminder.nextAt !== null).map(reminder => reminder.nextAt!)
     if (this.closed || !due.length) return
     this.timer = setTimeout(() => { this.timer = null; void this.tick().catch(() => {}) }, Math.min(15_000, Math.max(0, Math.min(...due) - this.now())))
     this.timer.unref()
