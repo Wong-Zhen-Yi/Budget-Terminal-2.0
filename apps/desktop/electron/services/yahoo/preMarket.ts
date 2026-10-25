@@ -11,6 +11,7 @@ import { PRE_MARKET_FUTURES } from '../../shared/contract.js'
 import { dxyTrend, futuresDirection, rollingMean, vixRegime } from '../../shared/preMarket.js'
 import { cache, TTL } from '../cache.js'
 import { getFearGreed } from '../fearGreed.js'
+import { captureSources, observeSource } from '../sourceHealth.js'
 import { localDateStamper } from './globalMarkets.js'
 import { fetchCloses } from './history.js'
 import { getYahooSeries } from './series.js'
@@ -25,8 +26,8 @@ import { getYahooSeries } from './series.js'
  * identical, and the range buttons get their data without a second round trip.
  */
 
-// Pre-v2 aggregates may contain missing panels produced by the repaired history-cache decoder.
-const CACHE_KEY = 'pre-market:data:v2'
+// Older aggregates retain failed hourly-refresh provenance even when daily history is healthy.
+const CACHE_KEY = 'pre-market:data:v3'
 const SOURCE = 'yahoo chart'
 
 /** Futures trade nearly around the clock, so sessions are ET days, as yfinance indexes them. */
@@ -48,28 +49,53 @@ interface Bar {
 }
 
 /**
- * Hourly bars for one contract, falling back to daily.
+ * Prefer fresh hourly bars, then fresh daily bars, then retained stale data.
+ * Capture each attempt separately so an unused hourly failure does not degrade a
+ * healthy daily fallback (or keep the aggregate retrying a failed hourly cache).
  *
  * `dropSyntheticQuoteBar` is deliberately *not* applied: on a futures series the trailing
  * live bar is the pre-market price, which is the whole point of the panel. The
  * prior-close rule below keeps it out of the comparison instead.
  */
-async function fetchFuturesBars(symbol: string, force: boolean): Promise<Bar[]> {
-  const start = daysAgo(5)
+export async function fetchFuturesBars(
+  symbol: string,
+  force: boolean,
+  loadSeries: typeof getYahooSeries = getYahooSeries,
+): Promise<Bar[]> {
+  // Include two sessions even around long holiday weekends.
+  const start = daysAgo(10)
   const stamp = localDateStamper(FUTURES_ZONE)
-  const read = async (interval: '1h' | '1d'): Promise<Bar[]> => {
-    const result = await getYahooSeries({ symbol, start, interval, force })
-    const bars: Bar[] = []
-    for (const row of result.rows) {
-      const close = row.close
-      if (close === null) continue
-      bars.push({ session: stamp(new Date(row.time * 1000)), close })
+  const failures: string[] = []
+  const read = async (interval: '1h' | '1d') => {
+    try {
+      return await captureSources(async () => {
+        const result = await loadSeries({ symbol, start, interval, force })
+        const bars: Bar[] = []
+        for (const row of result.rows) {
+          const close = row.close
+          if (close === null || !Number.isFinite(close)) continue
+          bars.push({ session: stamp(new Date(row.time * 1000)), close })
+        }
+        if (futuresPriorClose(bars) === null) {
+          throw new Error(`No prior session returned for ${symbol} (${interval}).`)
+        }
+        return { bars, stale: result.stale }
+      })
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error))
+      return null
     }
-    return bars
   }
   const hourly = await read('1h')
-  if (hourly.length) return hourly
-  return read('1d')
+  const daily = !hourly || hourly.value.stale ? await read('1d') : null
+  const selected = daily && !daily.value.stale ? daily : hourly ?? daily
+  if (!selected) {
+    const reason = `${symbol}: ${failures.join(' · ')}`
+    observeSource({ fetchedAt: Date.now(), stale: false, fromCache: false, failures: [reason] })
+    throw new Error(reason)
+  }
+  if (selected.snapshot) observeSource(selected.snapshot)
+  return selected.value.bars
 }
 
 /**
@@ -77,13 +103,14 @@ async function fetchFuturesBars(symbol: string, force: boolean): Promise<Bar[]> 
  * bar. On an hourly series those are three-quarters of a day apart, and using the bar
  * before would report an hour's move as the day's change.
  */
-function priorClose(bars: Bar[]): number | null {
+export function futuresPriorClose(bars: Bar[]): number | null {
   if (bars.length < 2) return null
   const lastSession = bars[bars.length - 1].session
   for (let index = bars.length - 1; index >= 0; index -= 1) {
     if (bars[index].session < lastSession) return bars[index].close
   }
-  return bars[bars.length - 2].close
+  // Never describe an intraday move within the only session as a daily change.
+  return null
 }
 
 async function fetchFutures(force: boolean): Promise<FuturesRow[]> {
@@ -92,7 +119,7 @@ async function fetchFutures(force: boolean): Promise<FuturesRow[]> {
       const bars = await fetchFuturesBars(symbol, force)
       if (bars.length < 2) return null
       const price = bars[bars.length - 1].close
-      const prior = priorClose(bars)
+      const prior = futuresPriorClose(bars)
       if (prior === null || !prior) return null
       const changePct = ((price - prior) / prior) * 100
       return { symbol, name, price, changePct, direction: futuresDirection(changePct) }

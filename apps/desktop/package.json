@@ -52,6 +52,7 @@
     "probe:global": "tsx scripts/probe-global.ts",
     "probe:pre-market": "tsx scripts/probe-pre-market.ts",
     "probe:trading-volumes": "tsx scripts/probe-trading-volumes.ts",
+    "probe:trading-volumes-ui": "tsx scripts/probe-trading-volumes-ui.ts",
     "probe:market-cap": "tsx scripts/probe-market-cap.ts",
     "probe:price": "tsx scripts/probe-price.ts",
     "probe:signals": "tsx scripts/probe-signals.ts",

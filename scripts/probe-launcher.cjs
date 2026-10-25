@@ -4,6 +4,7 @@ const { join, resolve } = require('node:path')
 const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { launch: runLaunch } = require('./launch.cjs')
+const { dev } = require('./dev.cjs')
 const { verifyDesktopBuild } = require('./verify-desktop-build.cjs')
 const launch = options => runLaunch({ verifyBuild() {}, ...options })
 const { findCodex } = require('./codex-runtime.cjs')
@@ -12,6 +13,11 @@ const { supportedNodeVersion, supportedNpmVersion, runtimeEnvironment, assertCer
 const { version: electronVersion } = require('electron/package.json')
 
 const log = { log() {}, error() {} }
+function assertCurrentStartupMessages(messages) {
+  assert(messages.some(message => message.includes('3 requests per second') && message.includes('up to 3 background requests') && message.includes('All pages still preload')), 'Every launch mode must describe current Yahoo startup pacing and all-page loading')
+  assert(messages.some(message => message.includes('API USAGE footer') && message.includes('not a provider-reported quota or loading progress')), 'Explain API usage without implying a provider quota')
+  assert(messages.some(message => message.includes('Trading Volumes circles') && message.includes('median dollar volume')), 'Every launch mode must announce current Trading Volumes and Beta behavior')
+}
 for (const version of ['22.23.4', '22.24.0', '24.22.1', '24.23.0', '26.12.1', '26.13.0']) assert(supportedNodeVersion(version), version)
 for (const version of ['20.19.0', '22.20.0', '22.23.2', '22.23.3', '23.0.0', '24.12.0', '24.22.0', '25.0.0', '26.0.0', '26.12.0', '27.0.0', '26.12.1-rc.1', 'invalid']) assert(!supportedNodeVersion(version), version)
 for (const version of ['10.9.8', '10.10.0', '11.0.0', '12.2.0']) assert(supportedNpmVersion(version), version)
@@ -30,11 +36,14 @@ assertCertificateEnvironment({ NODE_TLS_REJECT_UNAUTHORIZED: '1' })
 
 for (const platform of ['win32', 'darwin', 'linux']) {
   const calls = []
-  const status = launch({ platform, nodeVersion: '22.23.4', environment, locateCodex: () => null, log, spawn(command, args, options) {
+  const messages = []
+  const status = launch({ platform, nodeVersion: '22.23.4', environment, locateCodex: () => null,
+    log: { ...log, log: message => messages.push(message) }, spawn(command, args, options) {
     calls.push({ command, args, options })
     return { status: 0, stdout: calls.length === 1 ? '10.9.8\n' : '' }
   } })
   assert.equal(status, 0)
+  assertCurrentStartupMessages(messages)
   assert.equal(calls.length, 5)
   assert.equal(calls[0].command, platform === 'win32' ? 'cmd.exe' : 'npm')
   assert.equal(calls[0].options.stdio, 'pipe', 'Capture npm version before installation')
@@ -45,6 +54,57 @@ for (const platform of ['win32', 'darwin', 'linux']) {
   assert(calls[4].args.join(' ').includes('run preview --workspace budget-terminal-desktop'))
   for (const call of calls) assert.deepEqual(call.options.env, { PATH: 'unchanged' })
 }
+
+for (const platform of ['win32', 'darwin', 'linux']) {
+  const calls = []
+  const messages = []
+  assert.equal(launch({ platform, development: true, nodeVersion: '24.22.1', environment, locateCodex: () => null,
+    log: { ...log, log: message => messages.push(message) },
+    verifyBuild() { assert.fail('Live mode must not verify production renderer assets') },
+    spawn(command, args, options) {
+      calls.push({ command, args, options })
+      return { status: 0, stdout: '11.0.0' }
+    },
+  }), 0)
+  assertCurrentStartupMessages(messages)
+  assert.equal(calls.length, 5)
+  assert(calls[3].args.join(' ').includes('run build:mcp'))
+  assert(calls[4].args.join(' ').includes('run dev --workspace budget-terminal-desktop'))
+  assert(!calls.some(call => call.args.join(' ').includes('preview')))
+}
+for (const failedCall of [2, 3, 4, 5]) {
+  let calls = 0
+  assert.equal(launch({ development: true, nodeVersion: '24.22.1', locateCodex: () => null, log, spawn() {
+    calls++
+    return { status: calls === failedCall ? 7 : 0, stdout: '11.0.0' }
+  } }), failedCall === 5 ? 7 : 1)
+  assert.equal(calls, failedCall, 'Live mode must stop after failed dependency/runtime/MCP/app startup')
+}
+for (const result of [{ status: 0 }, { status: 7 }, { status: null, error: { message: 'missing PowerShell' } }]) {
+  assert.equal(dev({ platform: 'win32', environment, log, runLaunch() { assert.fail('Windows dev must select a supported runtime first') },
+    spawn(command, args, options) {
+      assert.equal(command, 'powershell.exe')
+      assert.equal(args.at(-1), '-Dev')
+      assert.equal(args.at(-2), join(__dirname, 'launch-windows.ps1'))
+      assert.deepEqual(options.env, { PATH: 'unchanged' })
+      return result
+    },
+  }), result.status ?? 1)
+}
+for (const platform of ['darwin', 'linux']) {
+  assert.equal(dev({ platform, environment, log, spawn() { assert.fail('No PowerShell on macOS/Linux') },
+    runLaunch(options) {
+      assert.equal(options.platform, platform)
+      assert.equal(options.development, true)
+      assert.deepEqual(options.environment, { PATH: 'unchanged' })
+      return 7
+    },
+  }), 7)
+}
+assert.equal(dev({ environment: { NODE_TLS_REJECT_UNAUTHORIZED: '0' }, log,
+  spawn() { assert.fail('Dev must reject disabled TLS before runtime recovery') },
+  runLaunch() { assert.fail('Dev must reject disabled TLS before launching') },
+}), 1)
 
 const buildDirectory = mkdtempSync(join(tmpdir(), 'budget-launcher-build-'))
 try {
@@ -159,4 +219,4 @@ if (process.platform === 'win32') {
   assert.equal(windowsCheck.status, 0, windowsCheck.stdout + windowsCheck.stderr || windowsCheck.error?.message)
   console.log(windowsCheck.stdout.trim())
 }
-console.log('Launcher checks passed: supported toolchains, platform commands, inherited environment, Codex discovery and handoff, optional Agents runtime, failure paths, complete renderer/asset verification, exact Electron version and transient locks.')
+console.log('Launcher checks passed: supported toolchains, production and live platform commands, dev runtime recovery, inherited environment, Codex discovery and handoff, optional Agents runtime, failure paths, complete renderer/asset verification, exact Electron version and transient locks.')

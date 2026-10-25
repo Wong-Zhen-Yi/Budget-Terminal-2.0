@@ -108,8 +108,19 @@ when an older version comes first on PATH. If none is available, it downloads
 Node.js 24.22.1 from nodejs.org, checks the pinned SHA-256 checksum, and installs it
 under `%LOCALAPPDATA%\BudgetTerminal\runtimes`. This needs no administrator access
 and keeps the runtime outside the checkout. Internet access is required for the
-first download; subsequent launches reuse it. Command-line `npm` commands still
-use the Node.js installation configured in your shell.
+first download; subsequent launches reuse it. On Windows, the root `npm run dev`
+command uses this same runtime recovery, even if your shell has an older Node.js.
+Other command-line `npm` commands still use the Node.js installation configured in
+your shell.
+
+For live code updates on Windows, double-click
+[Launch Budget Terminal Live.cmd](Launch%20Budget%20Terminal%20Live.cmd) or run
+`npm run dev` from the repository root. Close any existing Budget Terminal window
+first (the app allows only one running instance). Live mode checks dependencies,
+verifies Electron and builds MCP tools before starting `electron-vite dev --watch`.
+UI edits update automatically; Electron main/preload edits trigger rebuilds and
+restarts or reloads. Keep the terminal open. The normal launcher still builds and
+opens a fixed production snapshot; it does not watch source changes.
 
 These Node minimums include the October 2026 eMudhra certificate compromise fix.
 Electron **44.9.3** already includes the corresponding native SPKI blocklist for

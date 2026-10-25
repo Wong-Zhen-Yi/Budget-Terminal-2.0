@@ -19,11 +19,11 @@ import { httpGet } from './http.js'
  */
 
 /**
- * Per-image ceiling. Publishers routinely serve a 300KB hero image where a card wants a
- * thumbnail, and an earlier 192KB cap rejected three of every five, so the real bound is
- * the budget below rather than this.
+ * Per-image download ceiling. Yahoo/RSS sometimes provides only a full-size publisher
+ * image; the previous 640KB cap rejected otherwise valid PNG thumbnails. Allow up to
+ * 4MB while retaining the streaming cutoff, timeout and 24MB aggregate cache budget.
  */
-const MAX_IMAGE_BYTES = 640 * 1024
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024
 /**
  * Total raw bytes held across every cached image, oldest evicted first.
  *

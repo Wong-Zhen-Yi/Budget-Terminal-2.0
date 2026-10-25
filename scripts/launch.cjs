@@ -14,7 +14,7 @@ function platformName(platform) {
   return null
 }
 
-function launch({ platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
+function launch({ development = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
   const os = platformName(platform)
   if (!os) {
     log.error(`Budget Terminal supports Windows, macOS, and Linux; found ${platform}.`)
@@ -80,11 +80,30 @@ function launch({ platform = process.platform, nodeVersion = process.versions.no
 
   log.log('Certificate protection: patched Node.js required; Electron 44.9.3+ blocks compromised eMudhra keys in Node and Chromium. Certificate verification bypasses are rejected.')
 
+  log.log('Startup Yahoo pacing is now 3 requests per second (up from 1), without bursts, with up to 3 background requests in flight and a reserved foreground slot. All pages still preload; foreground requests take priority and rate limits trigger automatic backoff. The API USAGE footer shows Yahoo rolling request counts, active requests and queued work; its tooltip explains the current pacing budget, not a provider-reported quota or loading progress.')
+  log.log('Pre-Market futures now try daily history when hourly refresh fails or returns stale data. Healthy daily fallbacks clear old degradation; retained stale prices keep their warnings. All pages still preload at startup.')
+  log.log('Trading Volumes circles the matching dot and shows its ticker label when you hover over a ticker in the volume table. Beta centers the ticker cluster horizontally using median dollar volume, keeping all outliers visible and the log scale fixed during replay.')
+
+  if (development) {
+    log.log('Building local MCP tools before starting live development...')
+    const mcp = npm(['run', 'build:mcp'])
+    if (mcp.error || mcp.status !== 0) {
+      log.error('MCP tools could not build. See the error above.')
+      return 1
+    }
+    log.log('Opening live development mode. UI edits update automatically; Electron main/preload edits rebuild and restart or reload the app. Keep this terminal open. Close any existing Budget Terminal window first.')
+    const app = npm(['run', 'dev', '--workspace', 'budget-terminal-desktop'])
+    if (app.error || app.status !== 0) {
+      log.error('Budget Terminal development stopped with an error. See the output above.')
+      return app.status || 1
+    }
+    return 0
+  }
+
   log.log('Building the latest desktop-only Budget Terminal source. Remote browser access and pairing have been removed; all implemented pages still load at startup. Local Agents, MCP tools and backups remain available. The top-bar Ask Agent box opens a full dropdown chat on any page, sharing the existing conversation and connection, with live Thinking, Researching and Done activity badges. Agents chat supports native image generation, image editing and inline private image cards, plus pie charts and full-history interactive price charts with in-chat ranges, candle intervals, crosshair OHLC, zoom and pan. Restored chat charts preload at startup. Charts includes a toggleable 50-day simple moving average. Quant now includes a redesigned research workspace with larger, more readable fonts across tables, controls and diagnostics, plus scan overview cards, an interactive factor inspector and a pairs lab with spread charts. IPOs now includes pending filings with dates marked TBD and backup calendar sources.')
   log.log('Browser login privacy: Chromium profiles must stay outside application source and Git repositories. Cookies and login/session files are excluded by Git ignore rules and checked by local commit/push hooks. Browser profiles are not included in app backups.')
   log.log('Browser search is ready: type search terms or a website URL in the address bar. Searches open DuckDuckGo, and agent tools can search the web too.')
   log.log('Browser is now included: a shared, isolated Chromium research session with tabs, navigation, page reading and agent access ON by default for each new window. All pages, including Browser, initialize at startup. Disable and Stop revoke agent browser access until you re-enable it. No separate browser installation is needed.')
-  log.log('Startup Yahoo loads are paced at 1 request per second, without bursts, with up to 2 background requests in flight. All pages still preload; foreground requests take priority and rate limits trigger further slowdown.')
   log.log('Temporary data failures retry with backoff. Stuck Yahoo workers restart automatically, and incomplete cached results can recover without waiting for their normal expiry. Startup retry progress and unresolved failures stay visible in Settings.')
   log.log('Data caching now saves remote snapshots incrementally across launches, even while pages poll. Startup restores saved data before warming all pages; fresh data is reused, and only expired or missing data refreshes. Pending cache saves finish before the window closes.')
   log.log('MCP research now supports summaries, field selection and pagination; scans and captures report progress and accept cancellation. Settings includes token-free client setup, data-folder validation and optional website-content approval. Portfolio, Cards, finance and settings writes require current revisions to protect concurrent edits.')
@@ -114,6 +133,6 @@ function launch({ platform = process.platform, nodeVersion = process.versions.no
   return 0
 }
 
-if (require.main === module) process.exitCode = launch()
+if (require.main === module) process.exitCode = launch({ development: process.argv.includes('--dev') })
 
 module.exports = { launch, platformName }

@@ -6,6 +6,9 @@ import type { LookupFunction } from 'node:net'
 import { PassThrough } from 'node:stream'
 import { mock } from 'node:test'
 import { httpGet } from '../electron/services/news/http.js'
+import { getNewsThumbnail } from '../electron/services/news/images.js'
+import { captureSources } from '../electron/services/sourceHealth.js'
+import { cache } from '../electron/services/cache.js'
 import { createPublicLookup, isPublicAddress, publicNewsUrl } from '../electron/services/news/publicNetwork.js'
 
 export async function runNewsSecurityChecks(): Promise<void> {
@@ -70,7 +73,7 @@ export async function runNewsSecurityChecks(): Promise<void> {
   // A mock publisher response exercises the real redirect loop and body handling,
   // without exposing a local server as a permitted public destination.
   let destinations: string[] = []
-  let responseFor: (url: URL) => { status: number; location?: string; body?: string } = () => ({ status: 200, body: 'publisher fixture' })
+  let responseFor: (url: URL) => { status: number; location?: string; body?: string; contentType?: string } = () => ({ status: 200, body: 'publisher fixture' })
   const send = ((target: URL, requestOptions: http.RequestOptions, onResponse: (response: http.IncomingMessage) => void) => {
     destinations.push(target.href)
     assert.equal(requestOptions.agent, false)
@@ -85,7 +88,7 @@ export async function runNewsSecurityChecks(): Promise<void> {
         const stream = new PassThrough()
         const response = stream as unknown as http.IncomingMessage
         response.statusCode = fixture.status
-        response.headers = { 'content-type': 'text/plain', ...(fixture.location ? { location: fixture.location } : {}) }
+        response.headers = { 'content-type': fixture.contentType ?? 'text/plain', ...(fixture.location ? { location: fixture.location } : {}) }
         onResponse(response)
         stream.end(fixture.body ?? '')
       })
@@ -115,6 +118,26 @@ export async function runNewsSecurityChecks(): Promise<void> {
     const capped = await httpGet('http://publisher.example/article', options)
     assert.equal(capped.body.length, options.maxBytes)
     assert.equal(capped.truncated, true)
+
+    const imageUrl = 'http://publisher.example/valid-hero.png'
+    responseFor = () => ({ status: 200, contentType: 'image/png', body: 'x'.repeat(900 * 1024) })
+    const image = await captureSources(() => getNewsThumbnail(imageUrl))
+    assert.equal(image.value.payload.bytes, 900 * 1024, 'Ordinary publisher images above the old 640KB cap must load')
+    assert(image.value.payload.dataUri.startsWith('data:image/png;base64,'))
+    assert.deepEqual(image.value.errors, [])
+    assert.deepEqual(image.snapshot?.failures, [], 'A usable thumbnail must not degrade News startup')
+    const requests = destinations.length
+    await getNewsThumbnail(imageUrl)
+    assert.equal(destinations.length, requests, 'Loaded thumbnails should be reused')
+    responseFor = () => ({ status: 200, contentType: 'image/png', body: 'x'.repeat(4 * 1024 * 1024 + 1) })
+    const oversized = await getNewsThumbnail('http://publisher.example/oversized.png')
+    assert.equal(oversized.payload.dataUri, '')
+    assert(oversized.errors.some(error => error.reason.includes('size cap')), 'The bounded download ceiling must remain enforced')
+    responseFor = () => ({ status: 200, contentType: 'text/html', body: '<html>not an image</html>' })
+    assert((await getNewsThumbnail('http://publisher.example/not-image')).errors.some(error => error.reason.includes('Not an image')))
+    responseFor = () => ({ status: 503 })
+    assert((await getNewsThumbnail('http://publisher.example/image-outage')).errors.some(error => error.reason.includes('503')), 'Publisher failures must stay visible')
+    for (const name of ['valid-hero.png', 'oversized.png', 'not-image', 'image-outage']) cache.delete('news-image:http://publisher.example/' + name)
   } finally { mock.restoreAll(); syncBuiltinESMExports() }
-  console.log('PASS: news public-address validation, DNS rebinding/mixed answers, real loopback blocking, redirects and byte limits')
+  console.log('PASS: news public-address validation, DNS rebinding/mixed answers, real loopback blocking, redirects, publisher images, caching and byte limits')
 }

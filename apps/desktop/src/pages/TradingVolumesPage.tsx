@@ -52,6 +52,7 @@ export function TradingVolumesPage({
   const setInterval = useTradingVolumesPage((state) => state.setInterval)
   const setTableWidth = useTradingVolumesPage((state) => state.setTableWidth)
 
+  const [hoveredTicker, setHoveredTicker] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [outliersToRemove, setOutliersToRemove] = useState(0)
   const [outliersHovered, setOutliersHovered] = useState(false)
@@ -72,6 +73,8 @@ export function TradingVolumesPage({
     () => removeLowerOutliers(ranked, interval, removedCount),
     [ranked, interval, removedCount],
   )
+
+  useEffect(() => setHoveredTicker(null), [rows, interval])
 
   // Replay animates the visible rows over the active interval, so it re-plans whenever
   // either changes — and stops itself when it does.
@@ -202,7 +205,12 @@ export function TradingVolumesPage({
           className="flex min-h-0 flex-col overflow-hidden border border-border bg-surface"
           style={{ width: tableWidth }}
         >
-          <VolumeTable rows={rows} interval={interval} loading={query.isLoading} />
+          <VolumeTable
+            rows={rows}
+            interval={interval}
+            loading={query.isLoading}
+            onTickerHover={setHoveredTicker}
+          />
         </div>
 
         <Splitter onDrag={onDrag} />
@@ -266,6 +274,7 @@ export function TradingVolumesPage({
             frame={replay.frame}
             plan={replay.plan}
             highlightedTickers={(outliersHovered || outliersFocused) ? outlierTickers : undefined}
+            activeTicker={hoveredTicker}
           />
         </div>
       </div>

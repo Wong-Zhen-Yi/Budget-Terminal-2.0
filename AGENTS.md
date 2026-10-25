@@ -37,5 +37,5 @@ Tests are standalone `tsx` probes using Node assertions or explicit checks; no c
 Use concise, imperative commit subjects, matching history: `Improve charts load status & refresh behavior`. Keep commits focused. PRs should describe the problem, resulting behavior, validation commands and outcomes, related issues when applicable, and screenshots for UI changes. Preserve unrelated working-tree edits and exclude generated bundles, credentials, and personal data.
 
 ## User notes
-update double click launcher everytime a change is made
+update all double click launchers everytime a change is made
 This is a public repo make sure that there are no private information like passwords, emails and API keys especially for the browser page

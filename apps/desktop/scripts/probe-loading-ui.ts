@@ -50,6 +50,18 @@ try {
         window.runProbe = async () => {
           createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><App /></QueryClientProvider>)
           await settle()
+          const meters = () => document.querySelector('footer [aria-label="API request pressure"]')
+          await new Promise(resolve => setTimeout(resolve, 1100))
+          check(meters()?.textContent.includes('API USAGE'), 'Footer must describe usage, not provider quota')
+          check(meters()?.textContent.includes('60/240 · 1 active · 120 queued'), 'Yahoo request counts and queue are missing')
+          check(meters()?.querySelector('[title*="Startup paced at 1 requests/s"]'), 'Yahoo plateau explanation is missing')
+          window.fixtureYahooUsage.queued = 80
+          await new Promise(resolve => setTimeout(resolve, 1100))
+          check(meters()?.textContent.includes('25%') && meters()?.textContent.includes('80 queued'), 'Yahoo queue must update even when rolling usage stays at 25%')
+          Object.assign(window.fixtureYahooUsage, { percent: 0, requestCount: 0, inFlight: 0, queued: 0 })
+          await new Promise(resolve => setTimeout(resolve, 1100))
+          check(meters()?.textContent.includes('0/240 · 0 active · 0 queued'), 'Yahoo idle state did not update')
+          console.log('PASS: Yahoo steady 25% usage shows a live queue and updates to idle')
           const light = name => document.querySelector('[data-mcp-light="' + name + '"]')
           check(light('active')?.dataset.state === 'off', 'Idle MCP activity light should be off')
           check(light('connected')?.dataset.state === 'off', 'MCP readiness alone must not imply a connected client')
@@ -78,10 +90,43 @@ try {
           pacingRoot.render(<PageLoadOrderPanel />)
           await settle()
           check(pacingHost.innerText.includes('Retry 2/2') && pacingHost.innerText.includes('HTTP 503'), 'Transient startup failure did not show its recovery attempt')
-          check(pacingHost.innerText.includes('Yahoo background requests are paced at 1 per second, with up to 2 in flight'), 'Settings does not explain slower startup pacing')
+          check(pacingHost.innerText.includes('Yahoo background requests are paced at 3 per second, with up to 3 in flight'), 'Settings does not explain startup pacing')
           check(pacingHost.innerText.includes('slow further if rate limited. Foreground requests take priority.'), 'Settings does not explain backoff and foreground priority')
           check(pacingHost.innerText.includes('Temporary failures retry automatically; unresolved failures remain visible.'), 'Settings does not explain startup recovery')
-          console.log('PASS: startup pacing explanation renders alongside live page load progress')
+          const exportButton = () => [...pacingHost.querySelectorAll('button')].find(button => button.textContent === 'Export for AI')
+          check(exportButton() && !exportButton().disabled, 'Page load Export for AI button is missing or disabled')
+          exportButton().click()
+          await settle()
+          check(window.fixtureExport.name.startsWith('BudgetTerminal_PageLoadOrder_') && window.fixtureExport.name.endsWith('.txt'), 'Page load report filename is incorrect')
+          const report = window.fixtureExport.text
+          check(report.includes('Budget Terminal — Page Load Order') && report.includes('Startup tasks completed:'), 'Export is missing its diagnostic summary')
+          check(report.includes('90.0s') && report.includes('Not measured'), 'Export omits saved or unmeasured page times')
+          check(report.includes('Retry 2/2') && report.includes('HTTP 503'), 'Export omits startup retry and failure reasons')
+          check(report.includes('Completed startup task timings:') && report.includes('Bitcoin'), 'Export omits completed task timings')
+          let previous = -1
+          for (const [index, page] of pageOrder.entries()) {
+            const position = report.indexOf((index + 1) + ' | ' + TABS.find(tab => tab.id === page).label + ' (' + page + ') | ')
+            check(position > previous, 'Export changed or omitted page order: ' + page)
+            previous = position
+          }
+          check(!report.includes('/fixture/') && !report.includes('mcpServers'), 'Export leaked unrelated settings')
+          check(pacingHost.innerText.includes('Page load report exported.'), 'Export success is not visible')
+          window.fixtureExportMode = 'cancel'
+          exportButton().click()
+          await settle()
+          check(pacingHost.innerText.includes('Export cancelled.'), 'Cancelled export was reported as successful')
+          window.fixtureExportMode = 'error'
+          exportButton().click()
+          await settle()
+          check(pacingHost.querySelector('[role=alert]')?.textContent.includes('Unable to export'), 'Export failure is not visible')
+          window.fixtureExportMode = null
+          const startupSnapshot = useDataHealth.getState().startup
+          useDataHealth.getState().setStartup(null)
+          await settle()
+          check(exportButton().disabled, 'Export must be disabled before startup has a page order')
+          useDataHealth.getState().setStartup(startupSnapshot)
+          await settle()
+          console.log('PASS: startup pacing and Export for AI cover page order, timings, retries, cancellation, errors and empty startup')
           pacingRoot.unmount()
           pacingHost.remove()
           for (const key of ['globalMarkets', 'heatmap', 'tradingVolumes', 'money', 'economic', 'sp500', 'technicalScreen']) {
@@ -104,7 +149,7 @@ try {
           check(client.isFetching() > 0, 'Fixture unexpectedly finished loading')
           const orderTable = document.querySelector('table[aria-label="Startup page load order"]')
           check(orderTable && orderTable.getBoundingClientRect().height > 0, 'Page load order is not visible in Settings')
-          check(document.body.innerText.includes('Yahoo background requests are paced at 1 per second, with up to 2 in flight'), 'Settings does not explain slower startup pacing')
+          check(document.body.innerText.includes('Yahoo background requests are paced at 3 per second, with up to 3 in flight'), 'Settings does not explain startup pacing')
           const orderRows = [...orderTable.querySelectorAll('[data-startup-page]')]
           check(JSON.stringify(orderRows.map(row => row.dataset.startupPage)) === JSON.stringify(pageOrder), 'Settings does not show the actual startup order')
           check(orderRows.at(-1).innerText.includes('90.0s'), 'Saved heavy-page load time is missing')
@@ -221,10 +266,16 @@ try {
         onScreenshotRequested: listener => window.captureApi.onScreenshotRequested(listener),
         screenshotReady: result => window.captureApi.screenshotReady(result),
         onPortfolioChanged: () => () => {},
+        onNotificationClicked: () => () => {},
         mcpStatus: async () => ({ available: true, tools: ${toolCount}, diagnostics: structuredClone(window.fixtureMcp), setup: { valid: true, message: 'Fixture data folder validated', configuration: '{"mcpServers":{"fixture":{"command":"node"}}}' } }),
         configureMcp: async policy => { window.fixtureMcp.policy = policy; return window.api.mcpStatus(); },
         testMcpConnection: async () => window.api.mcpStatus(),
         writeClipboard: async text => { window.fixtureClipboard = text; },
+        saveText: async (name, text) => {
+          window.fixtureExport = { name, text };
+          if (window.fixtureExportMode === 'error') throw Error('Fixture save failure');
+          return window.fixtureExportMode === 'cancel' ? null : '/fixture/Downloads/' + name;
+        },
         cancelMcpCall: async id => { const entry = window.fixtureMcp.activity.find(entry => entry.id === id); entry.state = 'cancelled'; entry.durationMs = 12; return window.api.mcpStatus(); },
         settings: async () => ok(window.fixtureSettings),
         portfolio: async () => ok({ portfolios: [], activeId: 'main', mainId: 'main', sourcePath: '' }),
@@ -240,8 +291,10 @@ try {
             meta: { source: 'fixture', freshness: 'partial', fetchedAt: Date.now() } } : ok([]);
         },
         apiUsage: async () => ({ providers: ['Yahoo', 'CoinGecko', 'Alt.me', 'DefeatBeta'].map((label, index) => ({
-          id: label, label, percent: index ? 0 : 100, requestCount: index ? 0 : 100,
+          id: label.toLowerCase(), label, percent: 0, requestCount: 0,
           softLimit: 100, windowSeconds: 60, inFlight: 0, throttled: false, cooldownMs: 0, updatedAt: Date.now(),
+          ...(index === 0 ? (window.fixtureYahooUsage ??= { percent: 25, requestCount: 60, softLimit: 240,
+            inFlight: 1, queued: 120, backgroundRequestsPerSecond: 1 }) : {}),
         })), sampledAt: Date.now() }),
       }, { get: (target, key) => key in target ? target[key] : request => {
         window.fixtureRequests.push({ method: key, request });

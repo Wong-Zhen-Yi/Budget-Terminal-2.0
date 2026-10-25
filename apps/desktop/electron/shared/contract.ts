@@ -3410,6 +3410,10 @@ export interface ApiProviderUsage {
   softLimit: number
   windowSeconds: number
   inFlight: number
+  /** Requests waiting for the app's pacing gate, not yet sent upstream. */
+  queued?: number
+  /** Configured startup pace, adjusted for rate-limit backoff. */
+  backgroundRequestsPerSecond?: number
   throttled: boolean
   cooldownMs: number
   updatedAt: number

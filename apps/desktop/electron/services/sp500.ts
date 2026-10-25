@@ -3,6 +3,7 @@ import { failed, ok, partial, describeError } from '../shared/envelope.js'
 import { addBreadth, emptyBreadth, SP500_SECTORS, symbolKey, type Sp500Data, type Sp500Request,
   type Sp500Point, type Sp500Value, type Sp500Breadth, type Sp500BreadthRequest } from '../shared/sp500.js'
 import { cache } from './cache.js'
+import { captureSources, observeSource } from './sourceHealth.js'
 import { getEtfHoldings } from './etf/holdings.js'
 import { textOf } from './etf/html.js'
 import { loadConstituents, CONSTITUENTS_URL } from './sp500Constituents.js'
@@ -86,13 +87,15 @@ export async function getSp500(request: Sp500Request): Promise<Envelope<Sp500Dat
       data.asOf = result.value.asOf
       if (result.stale) data.warnings.push('Wikipedia refresh failed; showing stale constituents.')
     } else if (part === 'holdings') {
-      const result = await getEtfHoldings('SPY', force, false)
+      const { value: result, snapshot } = await captureSources(() => getEtfHoldings('SPY', force, false))
+      if (snapshot) observeSource(snapshot)
       data.holdings = { rows: result.holdings, partial: result.isPartial }
       data.asOf = result.asOfDate
       data.source = result.sourceUrl || SPY_URL
       if (result.isPartial) data.warnings.push(result.coverageNote || 'Only partial holdings are available.')
-      const cached = cache.get('etf-holdings:SPY', { allowStale: true, observe: true })
-      if (cached && cached.ageSeconds * 1000 > HOURS6) data.warnings.push('Holdings refresh failed; showing stale holdings.')
+      // Use the actual load's provenance, including a failed refresh with stale fallback.
+      // A retired cache key or a six-hour age test cannot describe today's daily snapshot.
+      if (snapshot?.stale) data.warnings.push('Holdings refresh failed; showing stale holdings.')
     } else if (part === 'market') {
       const result = await cache.resolveWithStaleFallback('sp500:market', 60_000, async () => {
         const quotes = await paced(() => yahoo.quote(['^GSPC', '^VIX']))

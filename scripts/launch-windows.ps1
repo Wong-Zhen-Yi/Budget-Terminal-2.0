@@ -1,4 +1,4 @@
-param([switch]$RuntimeOnly)
+param([switch]$RuntimeOnly, [switch]$Dev)
 
 $ErrorActionPreference = 'Stop'
 $runtimeCheck = Join-Path $PSScriptRoot 'runtime.cjs'
@@ -86,7 +86,9 @@ function Start-BudgetTerminal {
     $env:PATH = (Split-Path -Parent $node) + [IO.Path]::PathSeparator + $env:PATH
     if ($RuntimeOnly) { Write-Output $node; return }
     Write-Host "Using Node.js $(& $node --version)."
-    & $node (Join-Path $PSScriptRoot 'launch.cjs')
+    $launchArguments = @()
+    if ($Dev) { $launchArguments += '--dev' }
+    & $node (Join-Path $PSScriptRoot 'launch.cjs') @launchArguments
     exit $LASTEXITCODE
   } catch {
     Write-Host "Budget Terminal startup failed: $($_.Exception.Message)" -ForegroundColor Red

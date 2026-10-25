@@ -25,7 +25,13 @@ export function BetaDotPlot({ rows, interval }: { rows: RankedTradingVolumeRow[]
     const values = series.flatMap((s) => [...s.history.values()])
     const low = Math.min(0, ...values)
     const high = Math.max(1, ...values)
-    return { timeline, series, low: low - (high - low) * 0.1, high: high + (high - low) * 0.1 }
+    // Center the ticker cluster, not the extremes: a few high-volume outliers
+    // otherwise push most names to the left. Keep the log scale and every outlier.
+    const volumes = series.flatMap((s) => s.history.size && s.volume !== null && Number.isFinite(s.volume) && s.volume > 0 ? [Math.log10(s.volume)] : []).sort((a, b) => a - b)
+    const middle = Math.floor(volumes.length / 2)
+    const center = volumes.length ? (volumes[middle] + volumes[Math.floor((volumes.length - 1) / 2)]) / 2 : 0.5
+    const radius = volumes.length ? Math.max(center - volumes[0], volumes[volumes.length - 1] - center) + 0.1 : 0.5
+    return { timeline, series, low: low - (high - low) * 0.1, high: high + (high - low) * 0.1, xmin: center - radius, xmax: center + radius }
   }, [rows, metric, interval])
   const [index, setIndex] = useState<number | null>(null)
   const [playing, setPlaying] = useState(false)
@@ -43,11 +49,9 @@ export function BetaDotPlot({ rows, interval }: { rows: RankedTradingVolumeRow[]
   const date = data.timeline[current]
   const points = data.series.flatMap((s) => {
     const beta = s.history.get(date)
-    return beta !== undefined && s.volume !== null && s.volume > 0 ? [{ ticker: s.ticker, beta, volume: s.volume }] : []
+    return beta !== undefined && s.volume !== null && Number.isFinite(s.volume) && s.volume > 0 ? [{ ticker: s.ticker, beta, volume: s.volume }] : []
   })
-  const volumes = data.series.flatMap((s) => s.volume !== null && s.volume > 0 ? [Math.log10(s.volume)] : [])
-  const xmin = volumes.length ? Math.min(...volumes) - 0.1 : 0
-  const xmax = volumes.length ? Math.max(...volumes) + 0.1 : 1
+  const { xmin, xmax } = data
   const x = (value: number) => 65 + (value - xmin) / (xmax - xmin) * (right - 65)
   const y = (value: number) => bottom - (value - data.low) / (data.high - data.low) * (bottom - 25)
   return <div className="flex min-h-0 flex-1 flex-col">
@@ -65,7 +69,7 @@ export function BetaDotPlot({ rows, interval }: { rows: RankedTradingVolumeRow[]
         <text x={58} y={y(1) + 4} textAnchor="end" fill="var(--color-warn)" fontSize={11}>1.0</text>
         {Array.from({ length: 5 }, (_, i) => xmin + (xmax - xmin) * i / 4).map((tick) => <text key={tick} x={x(tick)} y={bottom + 19} textAnchor="middle" fill="var(--color-text-muted)" fontSize={11}>{compactCurrency(10 ** tick)}</text>)}
         {points.map((p) => <g key={p.ticker}><circle cx={x(Math.log10(p.volume))} cy={y(p.beta)} r={4} fill={p.beta < 1 ? 'var(--color-down)' : 'var(--color-up)'}><title>{p.ticker} | {date} | β {p.beta.toFixed(3)} | {metric.label} ADV {compactCurrency(p.volume)}</title></circle><text x={x(Math.log10(p.volume))} y={y(p.beta) - 7} textAnchor="middle" fill={p.beta < 1 ? 'var(--color-down)' : 'var(--color-up)'} fontSize={9}>{p.ticker}</text></g>)}
-        <text x={(65 + right) / 2} y={size.height - 7} textAnchor="middle" fill="var(--color-text-muted)" fontSize={12}>{metric.axisLabel} • fixed during replay</text>
+        <text x={(65 + right) / 2} y={size.height - 7} textAnchor="middle" fill="var(--color-text-muted)" fontSize={12}>{metric.axisLabel} • median-centered log scale • fixed during replay</text>
         <text transform={`translate(16 ${bottom / 2}) rotate(-90)`} textAnchor="middle" fill="var(--color-text-muted)" fontSize={12}>Beta (β) vs S&P 500</text>
       </svg>}
   </div>

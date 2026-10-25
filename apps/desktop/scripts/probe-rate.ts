@@ -6,7 +6,7 @@
  */
 import assert from 'node:assert/strict'
 
-import { ApiUsageTracker } from '../electron/services/apiUsage.js'
+import { ApiUsageTracker, getApiUsageSnapshot } from '../electron/services/apiUsage.js'
 import { isTransientDataError, retryTransientData } from '../electron/shared/dataRetry.js'
 import { getQuote, quoteFromChart } from '../electron/services/yahoo/quotes.js'
 import { RateGate, isRateLimitError, rateGate } from '../electron/services/yahoo/rateGate.js'
@@ -99,7 +99,25 @@ async function probeApiUsage(): Promise<void> {
   provider = tracker.snapshot().providers[0]
   assert.equal(provider.throttled, false)
   assert.equal(provider.percent, 10)
-  console.log('API usage rolling-window and throttle checks passed')
+  // A slowed-down 1/s pace legitimately plateaus at 25% of the 240/min budget.
+  // Counts must still roll forward and return to zero after activity stops.
+  const yahooTracker = new ApiUsageTracker(undefined, () => now)
+  for (let index = 0; index < 120; index += 1) {
+    await yahooTracker.track('yahoo', async () => undefined)
+    if (index >= 59) {
+      const yahoo = yahooTracker.snapshot().providers[0]
+      assert.equal(yahoo.requestCount, 60)
+      assert.equal(yahoo.percent, 25)
+    }
+    now += 1_000
+  }
+  now += 60_000
+  assert.equal(yahooTracker.snapshot().providers[0].percent, 0)
+  const yahoo = getApiUsageSnapshot().providers.find(provider => provider.id === 'yahoo')!
+  const gate = rateGate.stats()
+  assert.equal(yahoo.queued, gate.waiting.foreground + gate.waiting.background)
+  assert.equal(yahoo.backgroundRequestsPerSecond, gate.backgroundRate)
+  console.log('API usage rolling-window, steady startup pace, idle decay and throttle checks passed')
 }
 
 async function main(): Promise<void> {
@@ -120,7 +138,8 @@ async function main(): Promise<void> {
   }, 10)
 
   // Fired all at once on purpose: without the gate this is exactly the burst Yahoo 429s.
-  const settled = await Promise.allSettled(SYMBOLS.map((symbol) => getQuote(symbol, true)))
+  const settled = await runWithPriority('background', () =>
+    Promise.allSettled(SYMBOLS.map((symbol) => getQuote(symbol, true))))
   clearInterval(sampler)
 
   const failures = settled.filter((outcome) => outcome.status === 'rejected')
@@ -287,33 +306,49 @@ async function probeTransientRetries(): Promise<void> {
 /** Startup has no burst, keeps a separate concurrency cap and never delays foreground tokens. */
 async function probeBackgroundPacing(): Promise<void> {
   const gate = new RateGate()
-  assert.equal(gate.stats().backgroundRate, 1)
+  assert.equal(gate.stats().backgroundRate, 3)
   const starts: number[] = []
+  const baselineStarts: number[] = []
+  const baseline = new RateGate({ backgroundRequestsPerSecond: 1, backgroundMaxConcurrency: 2 })
   const request = () => gate.run(async () => { starts.push(Date.now()) }, 'background')
-  await Promise.all([request(), request(), request()])
+  await Promise.all([
+    ...Array.from({ length: 9 }, request),
+    ...Array.from({ length: 9 }, () => baseline.run(async () => { baselineStarts.push(Date.now()) }, 'background')),
+  ])
+  const duration = starts[8] - starts[0]
+  const baselineDuration = baselineStarts[8] - baselineStarts[0]
+  assert(duration < baselineDuration * 0.6, 'Faster startup must drain a cold queue materially faster than the old 1/s cap')
   for (let index = 1; index < starts.length; index++) {
-    assert(starts[index] - starts[index - 1] >= 990, 'Default startup requests must be spaced one second apart')
+    assert(starts[index] - starts[index - 1] >= 323, 'Default startup requests must remain spaced at 3/s without bursts')
   }
   // Idle time may refill one background token, never the six-token foreground burst.
   await new Promise((resolve) => setTimeout(resolve, 1_100))
   await Promise.all([request(), request()])
-  assert(starts[4] - starts[3] >= 990, 'Idle startup work must not accumulate burst tokens')
+  assert(starts[10] - starts[9] >= 323, 'Idle startup work must not accumulate burst tokens')
+  console.log(`Cold queue benchmark: 9 requests in ${duration}ms vs ${baselineDuration}ms at the old startup pace`)
 
   const limited = new RateGate({ requestsPerSecond: 1_000, burst: 20, backgroundRequestsPerSecond: 1_000 })
   let active = 0
   let peak = 0
+  let release!: () => void
+  let occupied!: () => void
+  const hold = new Promise<void>(resolve => { release = resolve })
+  const full = new Promise<void>(resolve => { occupied = resolve })
   const background = Array.from({ length: 8 }, () => limited.run(async () => {
     active += 1
     peak = Math.max(peak, active)
-    await new Promise((resolve) => setTimeout(resolve, 30))
+    if (active === 3) occupied()
+    await hold
     active -= 1
   }, 'background'))
-  await new Promise((resolve) => setTimeout(resolve, 10))
-  await limited.run(async () => {
-    assert.equal(active, 2, 'Foreground must run while both background slots are occupied')
-  })
+  await full
+  try {
+    await limited.run(async () => {
+      assert.equal(active, 3, 'Foreground must run while all three background slots are occupied')
+    })
+  } finally { release() }
   await Promise.all(background)
-  assert.equal(peak, 2, 'Startup must use at most two in-flight Yahoo requests')
+  assert.equal(peak, 3, 'Startup must use at most three in-flight Yahoo requests')
 
   const responsive = new RateGate({ requestsPerSecond: 20, burst: 1, backgroundRequestsPerSecond: 2 })
   await responsive.run(async () => undefined, 'background')
@@ -326,7 +361,7 @@ async function probeBackgroundPacing(): Promise<void> {
   const serial = new RateGate({ maxConcurrency: 1 })
   await serial.run(async () => undefined, 'background')
   assert.equal(serial.stats().inFlight, 0, 'A one-slot gate must not deadlock background work')
-  console.log('Startup pacing checks passed: 1/s without bursts, two background slots, idle refill, foreground responsiveness and one-slot gates.')
+  console.log('Startup pacing checks passed: 3/s without bursts, three background slots, faster cold queue, idle refill, foreground responsiveness and one-slot gates.')
 }
 
 /**

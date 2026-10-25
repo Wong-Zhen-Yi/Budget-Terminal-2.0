@@ -1,4 +1,5 @@
 import type { ApiProviderUsage, ApiUsageSnapshot } from '../shared/contract.js'
+import { rateGate } from './yahoo/rateGate.js'
 
 interface ProviderDefinition {
   label: string
@@ -152,5 +153,12 @@ export function trackApiRequest<T>(providerId: string, task: () => Promise<T>): 
 }
 
 export function getApiUsageSnapshot(): ApiUsageSnapshot {
-  return apiUsageTracker.snapshot()
+  const snapshot = apiUsageTracker.snapshot()
+  const yahoo = snapshot.providers.find(provider => provider.id === 'yahoo')
+  if (yahoo) {
+    const gate = rateGate.stats()
+    yahoo.queued = gate.waiting.foreground + gate.waiting.background
+    yahoo.backgroundRequestsPerSecond = gate.backgroundRate
+  }
+  return snapshot
 }

@@ -56,19 +56,30 @@ function ApiLimitBars() {
       className="flex min-w-0 max-w-[48vw] shrink-0 flex-nowrap items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       aria-label="API request pressure"
     >
-      <span className="shrink-0 tracking-wide text-text-dim">API LIMITS</span>
+      <span className="shrink-0 tracking-wide text-text-dim">API USAGE</span>
       {usage.providers.length ? usage.providers.map((provider) => {
-        const title = provider.throttled
-          ? `${provider.label} rate limited; cooldown ${Math.ceil(provider.cooldownMs / 1000)}s`
-          : `${provider.label}: ${provider.requestCount}/${provider.softLimit} requests in ${provider.windowSeconds}s${provider.inFlight ? ` · ${provider.inFlight} active` : ''}`
+        const title = [
+          `${provider.label}: ${provider.requestCount}/${provider.softLimit} requests in the last ${provider.windowSeconds}s`,
+          `${provider.inFlight} active`,
+          ...(provider.queued !== undefined ? [`${provider.queued} queued (not yet sent)`] : []),
+          ...(provider.throttled ? [`Rate limited; cooldown ${Math.ceil(provider.cooldownMs / 1000)}s`] : []),
+          ...(provider.backgroundRequestsPerSecond !== undefined ? [
+            `Startup paced at ${provider.backgroundRequestsPerSecond} requests/s (~${Math.round(provider.backgroundRequestsPerSecond * provider.windowSeconds / provider.softLimit * 100)}% of the app budget when busy)`,
+          ] : []),
+        ].join(' · ')
         return (
           <div
             key={provider.id}
             className="flex shrink-0 items-center gap-1"
-            title={`${title}. Soft app-side budget, not a provider-reported quota.`}
+            title={`${title}. Rolling app-side usage, not a provider-reported quota or loading progress. It falls as requests leave the time window.`}
           >
             <span className="text-text-muted">{provider.label.toUpperCase()}</span>
             <span className="num w-8 text-right text-text-muted">{provider.percent}%</span>
+            {provider.queued !== undefined ? (
+              <span className="num text-text-muted">
+                {provider.requestCount}/{provider.softLimit} · {provider.inFlight} active · {provider.queued} queued
+              </span>
+            ) : null}
             <span className="h-2 w-12 border border-border-strong bg-bg" aria-hidden="true">
               <span
                 className={`block h-full transition-[width] duration-300 ${usageTone(provider)}`}

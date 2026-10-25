@@ -66,7 +66,7 @@ try {
   }
   const timed = createYahooWorkerClient(`data:text/javascript,${encodeURIComponent(fixture)}`, 500)
   const timedQuote = timed.yahoo.quote as unknown as (symbol: string) => Promise<{ symbol: string; calls: number }>
-  const gate = new RateGate({ requestsPerSecond: 1_000, burst: 6, backgroundRequestsPerSecond: 1_000 })
+  const gate = new RateGate({ requestsPerSecond: 1_000, burst: 6, backgroundRequestsPerSecond: 1_000, backgroundMaxConcurrency: 2 })
   try {
     await timedQuote('warm')
     const startedAt = Date.now()

@@ -22,7 +22,8 @@ import {
   shiftIsoYears,
   summarizeOilSeries,
 } from '../electron/shared/oil.js'
-import { getOil, oilTesting } from '../electron/services/oil.js'
+import { oilTesting } from '../electron/services/oil.js'
+import { yahooProvider } from '../electron/services/provider.js'
 import { captureSources, withSourceEnvelope } from '../electron/services/sourceHealth.js'
 import { TtlCache } from '../electron/services/cache.js'
 import { ok } from '../electron/shared/envelope.js'
@@ -149,10 +150,17 @@ function offline(): void {
   const contracts = oilContractSymbols(new Date(Date.UTC(2026, 8, 2)), 4)
   assert.deepEqual(
     contracts.map((entry) => entry.symbol),
-    ['CLV26.NYM', 'CLX26.NYM', 'CLZ26.NYM', 'CLF27.NYM'],
+    ['CLX26.NYM', 'CLZ26.NYM', 'CLF27.NYM', 'CLG27.NYM'],
   )
-  assert.equal(contracts[3].label, 'Jan 27', 'the strip must roll the year, not the month code alone')
-  assert.equal(contracts[0].monthsOut, 1, 'the strip starts one month out; CL=F supplies the front')
+  assert.equal(contracts[3].label, 'Feb 27', 'the strip must roll the year, not the month code alone')
+  assert.equal(contracts[0].monthsOut, 1, 'Deferred months are measured from the actual front delivery month')
+  assert.equal(oilContractSymbols(new Date('2026-10-20T18:29:00Z'), 1)[0].symbol, 'CLZ26.NYM', 'Before expiry, November is front and December is deferred')
+  assert.equal(oilContractSymbols(new Date('2026-10-20T18:30:00Z'), 1)[0].symbol, 'CLF27.NYM', 'Roll at the New York termination time, not midnight UTC')
+  assert.deepEqual(oilContractSymbols(new Date('2026-10-24T23:22:39Z'), 3).map(row => row.symbol),
+    ['CLF27.NYM', 'CLG27.NYM', 'CLH27.NYM'], 'The reported expired November contract must never be requested')
+  assert.equal(oilContractSymbols(new Date('2022-11-21T19:29:00Z'), 1)[0].symbol, 'CLF23.NYM')
+  assert.equal(oilContractSymbols(new Date('2022-11-21T19:30:00Z'), 1)[0].symbol, 'CLG23.NYM', 'Thanksgiving is not an expiry business day')
+  assert.equal(oilContractSymbols(new Date('2026-12-21T19:30:00Z'), 1)[0].symbol, 'CLH27.NYM', 'Christmas shifts the January expiry and the year rolls correctly')
 
   assert.equal(oilCurveShape(90, 72), 'backwardation')
   assert.equal(oilCurveShape(72, 90), 'contango')
@@ -267,8 +275,9 @@ function offline(): void {
 /* ---------------------------------------------------------------------- live */
 
 async function live(): Promise<void> {
-  const { payload, errors } = await getOil(true)
+  const { data: payload, errors, meta } = await yahooProvider.oil({ force: true })
   console.log('\n=== Oil live ===')
+  console.log(`freshness: ${meta.freshness}${meta.failureReason ? ` · ${meta.failureReason}` : ''}`)
   console.log(`lanes: ${JSON.stringify(payload.progress)}`)
   console.log(`WTI ${payload.market.wtiPrice.value ?? 'unavailable'} · Brent ${payload.market.brentPrice.value ?? 'unavailable'}`)
   console.log(`Brent-WTI ${payload.derived.brentWtiSpread.value?.toFixed(2) ?? 'unavailable'} · crack ${payload.derived.crackSpread321.value?.toFixed(2) ?? 'unavailable'}`)
@@ -322,6 +331,18 @@ async function live(): Promise<void> {
 async function serviceChecks(): Promise<void> {
   const originalFetch = globalThis.fetch
   try {
+    const contracts = oilContractSymbols(new Date('2026-10-24T23:22:39Z'), 13)
+    const requested: string[] = []
+    const curve = await withSourceEnvelope(async () => ok(await oilTesting.fetchCurve(false, 'fixture', 90, contracts, async symbol => {
+      requested.push(symbol)
+      assert.notEqual(symbol, 'CLX26.NYM', 'Expired symbols must not reach Yahoo')
+      return { symbol, price: 89 - requested.length / 10, change: 0, absChange: 0 }
+    }), 'Yahoo Finance'))
+    assert.equal(requested.length, 13)
+    assert.equal(curve.data.points.length, 14)
+    assert.equal(curve.meta.freshness, 'fresh')
+    assert.equal(curve.data.points[1].monthsOut, 1)
+    await assert.rejects(oilTesting.fetchCurve(false, 'fixture', 90, contracts, async () => { throw new Error('Provider offline') }), /Fewer than two/)
     let requests = 0
     globalThis.fetch = async () => new Response(++requests === 1 ? 'Unavailable' : eiaFixture, { status: requests === 1 ? 503 : 200 })
     assert.equal(await oilTesting.fetchText('https://example.test/eia'), eiaFixture)

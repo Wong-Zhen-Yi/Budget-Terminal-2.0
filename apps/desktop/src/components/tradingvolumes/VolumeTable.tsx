@@ -21,6 +21,7 @@ interface VolumeTableProps {
   rows: RankedTradingVolumeRow[]
   interval: TradingVolumeInterval
   loading: boolean
+  onTickerHover: (ticker: string | null) => void
 }
 
 /** `_p20_format_dollar_volume_m`: the value over a million, no decimals, no unit. */
@@ -28,7 +29,7 @@ function millions(value: number | null): string {
   return value === null ? '' : integer(value / 1e6)
 }
 
-export function VolumeTable({ rows, interval, loading }: VolumeTableProps) {
+export function VolumeTable({ rows, interval, loading, onTickerHover }: VolumeTableProps) {
   const columns = useMemo<Array<Column<RankedTradingVolumeRow>>>(() => {
     const advColumns = TRADING_VOLUME_INTERVALS.map((key) => {
       const metric = TRADING_VOLUME_METRICS[key]
@@ -59,7 +60,15 @@ export function VolumeTable({ rows, interval, loading }: VolumeTableProps) {
         key: 'ticker',
         header: 'Ticker',
         width: '76px',
-        cell: (row) => <span className="text-text">{row.ticker}</span>,
+        cell: (row) => (
+          <span
+            className="block text-text"
+            onMouseEnter={() => onTickerHover(row.ticker)}
+            onMouseLeave={() => onTickerHover(null)}
+          >
+            {row.ticker}
+          </span>
+        ),
         sortValue: (row) => row.ticker,
       },
       {
@@ -85,7 +94,7 @@ export function VolumeTable({ rows, interval, loading }: VolumeTableProps) {
       },
       ...advColumns,
     ]
-  }, [])
+  }, [onTickerHover])
 
   return (
     <DataTable

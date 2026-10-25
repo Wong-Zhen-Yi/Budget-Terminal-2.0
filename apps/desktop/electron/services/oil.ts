@@ -14,6 +14,7 @@ import {
   OIL_FLOW_SPECS,
   OIL_MARKET_SOURCE,
   OIL_STOCK_SPECS,
+  type OilContract,
   type OilCurveQuote,
   type OilSeriesSpec,
   buildOilCurve,
@@ -215,9 +216,14 @@ async function fetchMarket(force: boolean, fetchedAt: string): Promise<OilMarket
  * that does not answer is dropped rather than failing the curve, because the shape is read
  * from whatever contiguous strip came back.
  */
-async function fetchCurve(force: boolean, fetchedAt: string, front: number | null): Promise<OilCurve> {
-  const contracts = oilContractSymbols(new Date(), CURVE_MONTHS)
-  const quoted = await Promise.allSettled(contracts.map((contract) => getQuote(contract.symbol, force)))
+async function fetchCurve(
+  force: boolean,
+  fetchedAt: string,
+  front: number | null,
+  contracts: OilContract[],
+  loadQuote: typeof getQuote = getQuote,
+): Promise<OilCurve> {
+  const quoted = await Promise.allSettled(contracts.map((contract) => loadQuote(contract.symbol, force)))
   const strip: OilCurveQuote[] = contracts.map((contract, index) => {
     const result = quoted[index]
     return {
@@ -249,8 +255,11 @@ export async function getOil(force = false): Promise<OilFetchResult> {
     lane('oil:flows', TTL.oilEia, force, () => fetchEiaBlock(OIL_FLOW_SPECS)),
     lane('oil:benchmarks', TTL.oilOpec, force, fetchBenchmarks),
   ])
-  const curve = await lane('oil:curve', TTL.oilCurve, force, () =>
-    fetchCurve(force, fetchedAt, market.value?.wtiPrice.value ?? null),
+  const contracts = oilContractSymbols(new Date(), CURVE_MONTHS)
+  // Expiry rolls invalidate the old strip immediately, including persisted snapshots
+  // that captured a now-expired contract failure under the legacy oil:curve key.
+  const curve = await lane(`oil:curve:v2:${contracts[0].symbol}`, TTL.oilCurve, force, () =>
+    fetchCurve(force, fetchedAt, market.value?.wtiPrice.value ?? null, contracts),
   )
 
   const errors: EnvelopeError[] = []
@@ -280,6 +289,7 @@ export async function getOil(force = false): Promise<OilFetchResult> {
 export const oilTesting = {
   fetchText,
   fetchEiaBlock,
+  fetchCurve,
   CURVE_MONTHS,
   EIA_CONCURRENCY,
   EIA_SERIES_URL,

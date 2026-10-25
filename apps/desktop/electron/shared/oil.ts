@@ -20,6 +20,7 @@ import type {
   OilValue,
 } from './contract.js'
 import { OIL_BENCHMARK_KEYS, OIL_FLOW_KEYS, OIL_STOCK_KEYS } from './contract.js'
+import { buildMarketHolidays } from './calendar.js'
 
 export const OIL_EIA_SOURCE = 'U.S. Energy Information Administration'
 export const OIL_OPEC_SOURCE = 'OPEC Secretariat'
@@ -398,22 +399,37 @@ export interface OilContract {
 }
 
 /**
- * The NYMEX light-sweet contract months to quote, starting one month out.
- *
- * `CL=F` already resolves to the front contract, so the strip starts at the next delivery
- * month and the front is taken from the continuous symbol — asking Yahoo for both the
- * continuous quote and its own underlying month would spend a request to learn the same
- * price twice.
+ * WTI trading ends at 14:30 New York time, three business days before the 25th
+ * of the month preceding delivery (or before the business day preceding a closed
+ * 25th). Do not request expired months or duplicate CL=F's front delivery month.
+ * https://www.cmegroup.com/markets/energy/crude-oil/light-sweet-crude.contractSpecs.html
  */
 export function oilContractSymbols(from: Date, count: number): OilContract[] {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(from).map(part => [part.type, part.value]))
+  const year = Number(parts.year)
+  const monthIndex = Number(parts.month) - 1
+  const holidays = new Set(buildMarketHolidays(year).filter(day => day.detail === 'Closed all day').map(day => day.date))
+  const isBusinessDay = (date: Date) => ![0, 6].includes(date.getUTCDay()) && !holidays.has(date.toISOString().slice(0, 10))
+  const expiry = new Date(Date.UTC(year, monthIndex, 25))
+  while (!isBusinessDay(expiry)) expiry.setUTCDate(expiry.getUTCDate() - 1)
+  for (let left = 3; left > 0;) {
+    expiry.setUTCDate(expiry.getUTCDate() - 1)
+    if (isBusinessDay(expiry)) left--
+  }
+  const day = Number(parts.day)
+  const rolled = day > expiry.getUTCDate() || (day === expiry.getUTCDate() && Number(parts.hour) * 60 + Number(parts.minute) >= 14 * 60 + 30)
+  const frontMonth = monthIndex + (rolled ? 2 : 1)
   const contracts: OilContract[] = []
   for (let step = 1; step <= count; step += 1) {
-    const month = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + step, 1))
-    const year = month.getUTCFullYear()
+    const month = new Date(Date.UTC(year, frontMonth + step, 1))
+    const deliveryYear = String(month.getUTCFullYear() % 100).padStart(2, '0')
     const index = month.getUTCMonth()
     contracts.push({
-      symbol: `CL${MONTH_CODES[index]}${String(year % 100).padStart(2, '0')}.NYM`,
-      label: `${MONTH_NAMES[index]} ${String(year % 100).padStart(2, '0')}`,
+      symbol: `CL${MONTH_CODES[index]}${deliveryYear}.NYM`,
+      label: `${MONTH_NAMES[index]} ${deliveryYear}`,
       monthsOut: step,
     })
   }

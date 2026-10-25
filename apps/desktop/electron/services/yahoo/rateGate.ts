@@ -44,8 +44,8 @@ export const DEFAULT_RATE_GATE_OPTIONS: RateGateOptions = {
   requestsPerSecond: 4,
   burst: 6,
   maxConcurrency: 4,
-  backgroundRequestsPerSecond: 1,
-  backgroundMaxConcurrency: 2,
+  backgroundRequestsPerSecond: 3,
+  backgroundMaxConcurrency: 3,
   cooldownSeconds: 20,
   recoveryStreak: 12,
 }

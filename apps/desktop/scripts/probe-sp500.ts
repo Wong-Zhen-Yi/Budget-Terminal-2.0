@@ -4,7 +4,9 @@ import { parseConstituents } from '../electron/services/sp500Constituents.js'
 import { completedPoints, getSp500, parseSp500Valuation, Sp500BreadthScanner } from '../electron/services/sp500.js'
 import { addBreadth, alignedComparison, diversification, emptyBreadth, movingAverage, newestFirst, riskStats, windowPoints,
   type Sp500Constituent } from '../electron/shared/sp500.js'
-import { TtlCache, cache } from '../electron/services/cache.js'
+import { TtlCache, cache, TTL } from '../electron/services/cache.js'
+import type { EtfHoldingsResult } from '../electron/services/etf/holdings.js'
+import { withSourceEnvelope } from '../electron/services/sourceHealth.js'
 
 const fixture = `<table id='constituents'><tr>${['Symbol', 'Security', 'GICS Sector', 'GICS Sub-Industry', 'Headquarters Location', 'Date added', 'CIK', 'Founded'].map((x) => `<th>${x}</th>`).join('')}</tr>
 <tr><td>BRK.B</td><td>Berkshire &amp; Company<sup>[2]</sup></td><td>Financials</td><td>Insurance</td><td>Omaha</td><td>2010-02-16</td><td>0001067983</td><td>1839 (1955)</td></tr>
@@ -103,13 +105,37 @@ cache.set('sp500:valuation', valuation, 10000)
 assert.equal((await getSp500({ part: 'constituents' })).data.constituents?.length, 3)
 assert.equal((await getSp500({ part: 'valuation' })).data.valuation?.[2].value, 1.09)
 const realFetch = globalThis.fetch
+const realNow = Date.now
 try {
+  const fund: EtfHoldingsResult = {
+    ticker: 'SPY', fundName: 'SPDR S&P 500 ETF Trust', issuer: 'SPDR / State Street',
+    asOfDate: '2026-10-23', expenseRatio: '--', netAssets: '--', sourceUrl: 'https://www.ssga.com/',
+    holdings, sectorBreakdown: [], isPartial: false, coverageNote: '',
+  }
+  Date.now = () => realNow() - 8 * 60 * 60_000
+  cache.set('etf-holdings:SPY', fund, TTL.etfHoldings)
+  cache.set('etf-fund:v2:SPY:basic', fund, TTL.etfHoldings)
+  Date.now = realNow
+  const freshHoldings = await withSourceEnvelope(() => getSp500({ part: 'holdings' }))
+  assert.equal(freshHoldings.meta.freshness, 'cached', 'Eight-hour holdings are fresh within the shared daily TTL')
+  assert.deepEqual(freshHoldings.data.warnings, [], 'An obsolete cache entry must not degrade the current holdings')
+  assert.equal(freshHoldings.data.holdings?.rows.length, holdings.length)
+  cache.set('etf-fund:v2:SPY:basic', { ...fund, isPartial: true, coverageNote: 'Only top holdings available.' }, TTL.etfHoldings)
+  assert.equal((await getSp500({ part: 'holdings' })).meta.freshness, 'partial', 'Genuine partial coverage must remain visible')
+  Date.now = () => realNow() - 8 * 60 * 60_000
+  cache.set('etf-fund:v2:SPY:basic', fund, TTL.etfHoldings)
+  Date.now = realNow
   globalThis.fetch = async () => { throw new Error('Fixture provider outage') }
+  const staleHoldings = await withSourceEnvelope(() => getSp500({ part: 'holdings', force: true }))
+  assert.equal(staleHoldings.meta.freshness, 'stale', 'An actual refresh outage must still degrade holdings')
+  assert(staleHoldings.data.warnings.includes('Holdings refresh failed; showing stale holdings.'))
+  assert.equal(staleHoldings.data.holdings?.rows.length, holdings.length, 'Retain the complete last-good basket')
+  assert(staleHoldings.meta.failureReason?.includes('Retaining the last complete holdings snapshot'))
   assert.equal((await getSp500({ part: 'valuation', force: true })).meta.freshness, 'partial')
   cache.delete('sp500:valuation')
   assert.equal((await getSp500({ part: 'valuation', force: true })).meta.freshness, 'failed')
   assert.equal((await getSp500({ part: 'constituents' })).data.constituents?.length, 3)
-} finally { globalThis.fetch = realFetch }
+} finally { globalThis.fetch = realFetch; Date.now = realNow }
 cache.clear()
 console.log('PASS: S&P500 parsing, dates, weights, risk, alignment, completed sessions, breadth coverage, cache, scan deduplication/cancellation/failure')
 if (process.argv.includes('--live')) {

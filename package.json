@@ -16,7 +16,7 @@
     "postinstall": "npm run ensure:electron",
     "ensure:electron": "node scripts/ensure-electron.cjs",
     "setup:linux": "node scripts/install-linux-launcher.cjs",
-    "dev": "npm run dev --workspace budget-terminal-desktop",
+    "dev": "node scripts/dev.cjs",
     "build": "npm run build --workspace budget-terminal-desktop",
     "typecheck": "npm run typecheck --workspace budget-terminal-desktop",
     "probe": "npm run probe --workspace budget-terminal-desktop",
