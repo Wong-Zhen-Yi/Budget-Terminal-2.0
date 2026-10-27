@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { defaultRangeExtractor, observeElementRect, useVirtualizer } from '@tanstack/react-virtual'
 
 export interface Column<T> {
   key: string
@@ -49,6 +50,8 @@ interface DataTableProps<T> {
   minWidth?: string
   /** Initial sort; the header stays clickable from there. */
   defaultSort?: SortState
+  /** Automatic above 200 rows; false is reserved for deliberately unbounded layouts. */
+  virtualize?: boolean
 }
 
 const alignClass = {
@@ -74,6 +77,7 @@ export function DataTable<T>({
   layout = 'auto',
   minWidth,
   defaultSort,
+  virtualize = true,
 }: DataTableProps<T>) {
   // One wrapping column makes every row variable-height, so the short cells have to
   // align to the top or they float in the middle of a tall row.
@@ -85,7 +89,14 @@ export function DataTable<T>({
   // let it settle once focus leaves — the same deferral the reference app applies while
   // one of its editors is open.
   const [frozen, setFrozen] = useState(false)
+  const [focusedKey, setFocusedKey] = useState<string | null>(null)
   const orderRef = useRef<string[]>([])
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const headerRef = useRef<HTMLTableSectionElement>(null)
+  const [headerHeight, setHeaderHeight] = useState(25)
+  const [autoWidths, setAutoWidths] = useState<number[]>([])
+  const lastSort = useRef(sort)
+  const columnSignature = columns.map(column => `${column.key}:${column.width ?? ''}`).join('|')
 
   const sorted = useMemo(() => {
     if (frozen && orderRef.current.length) {
@@ -119,8 +130,68 @@ export function DataTable<T>({
     return ordered
   }, [rows, columns, sort, frozen, rowKey])
 
+  const virtual = virtualize && rows.length >= 200
+  const focusedIndex = focusedKey === null ? -1 : sorted.findIndex((row, index) => rowKey(row, index) === focusedKey)
+  const virtualizer = useVirtualizer<HTMLDivElement, HTMLTableRowElement>({
+    count: sorted.length,
+    enabled: virtual,
+    getScrollElement: () => scrollRef.current,
+    observeElementRect: (instance, callback) => observeElementRect(instance, rect => {
+      if (rect.height > 0 && rect.width > 0) callback(rect)
+    }),
+    estimateSize: () => hasWrap ? 48 : 25,
+    // Activity hides whole page trees. A hidden row's zero-height observation is
+    // not a new row size; retaining its measurement prevents range expansion.
+    measureElement: (element, _entry, instance) => element.getBoundingClientRect().height
+      || instance.measurementsCache[Number(element.dataset.index)]?.size || (hasWrap ? 48 : 25),
+    getItemKey: index => rowKey(sorted[index], index),
+    overscan: 8,
+    paddingStart: headerHeight,
+    rangeExtractor: range => {
+      const indices = defaultRangeExtractor(range)
+      return focusedIndex < 0 ? indices : [...new Set([...indices, focusedIndex])].sort((a, b) => a - b)
+    },
+  })
+  useEffect(() => {
+    if (!virtual || !headerRef.current) return
+    const observer = new ResizeObserver(() => {
+      const height = headerRef.current?.getBoundingClientRect().height
+      if (height) setHeaderHeight(height)
+    })
+    observer.observe(headerRef.current)
+    return () => observer.disconnect()
+  }, [virtual])
+  useLayoutEffect(() => {
+    if (lastSort.current === sort) return
+    lastSort.current = sort
+    if (virtual) virtualizer.scrollToOffset(0)
+  }, [sort])
+  useEffect(() => {
+    setAutoWidths([])
+    if (!virtual || layout !== 'auto' || !headerRef.current) return
+    // Lock the initial viewport's natural column proportions. Otherwise an auto
+    // table changes column widths whenever a wider offscreen cell mounts.
+    let locked = false
+    const measure = () => {
+      if (locked || !headerRef.current?.getBoundingClientRect().width) return
+      const widths = [...headerRef.current.rows[0].cells].map(cell => cell.getBoundingClientRect().width)
+      if (widths.some(width => width <= 0)) return
+      locked = true
+      const total = widths.reduce((sum, width) => sum + width, 0)
+      setAutoWidths(widths.map(width => width / total * 100))
+    }
+    const frame = requestAnimationFrame(measure)
+    const observer = new ResizeObserver(measure)
+    observer.observe(headerRef.current)
+    return () => { cancelAnimationFrame(frame); observer.disconnect() }
+  }, [virtual, layout, columnSignature, showIndex])
+  const items = virtual ? virtualizer.getVirtualItems() : sorted.map((_row, index) => ({ index, start: 0, end: 0 }))
+  const columnCount = columns.length + (showIndex ? 1 : 0)
+  const spacer = (height: number) => height > 0 ? <tr aria-hidden="true"><td colSpan={columnCount} style={{ height, padding: 0, border: 0 }} /></tr> : null
+
   const toggleSort = (column: Column<T>) => {
     if (!column.sortValue) return
+    if (scrollRef.current) scrollRef.current.scrollTop = 0
     setSort((current) =>
       current?.key === column.key
         ? { key: column.key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
@@ -138,18 +209,28 @@ export function DataTable<T>({
 
   return (
     <div
+      ref={scrollRef}
       className="min-h-0 flex-1 overflow-auto"
-      onFocusCapture={() => setFrozen(true)}
+      style={virtual ? { maxHeight: 'min(70vh, 720px)', overflowAnchor: 'none' } : undefined}
+      onFocusCapture={event => {
+        setFrozen(true)
+        setFocusedKey((event.target as HTMLElement).closest<HTMLTableRowElement>('tr[data-row-key]')?.dataset.rowKey ?? null)
+      }}
       onBlurCapture={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFrozen(false)
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) { setFrozen(false); setFocusedKey(null) }
       }}
     >
       <table
+        aria-rowcount={sorted.length + 1}
         style={minWidth ? { minWidth } : undefined}
-        className={`w-full border-collapse ${layout === 'fixed' ? 'table-fixed' : ''}`}
+        className={`w-full border-collapse ${layout === 'fixed' || (virtual && autoWidths.length) ? 'table-fixed' : ''}`}
       >
-        <thead className="sticky top-0 z-10">
-          <tr className="bg-surface-raised">
+        {virtual && layout === 'auto' && autoWidths.length ? <colgroup>
+          {showIndex ? <col style={{ width: '40px' }} /> : null}
+          {columns.map((column, index) => <col key={column.key} style={{ width: column.width ?? `${autoWidths[index + (showIndex ? 1 : 0)]}%` }} />)}
+        </colgroup> : null}
+        <thead ref={headerRef} className="sticky top-0 z-10">
+          <tr className="bg-surface-raised" aria-rowindex={1}>
             {showIndex ? (
               <th className="w-10 border-b border-border px-1 py-1 text-right text-2xs font-medium text-text-dim" />
             ) : null}
@@ -176,42 +257,53 @@ export function DataTable<T>({
           </tr>
         </thead>
         <tbody>
-          {sorted.map((row, index) => (
-            <tr
-              key={rowKey(row, index)}
-              onClick={onRowClick ? () => onRowClick(row, index) : undefined}
-              onDoubleClick={
-                onRowDoubleClick ? () => onRowDoubleClick(row, index) : undefined
-              }
-              className={`border-b border-border/40 ${
-                onRowClick || onRowDoubleClick ? 'cursor-pointer hover:bg-surface-hover' : ''
-              } ${rowClassName?.(row, index) ?? ''}`}
-            >
-              {showIndex ? (
-                <td
-                  className={`num px-1 py-[3px] text-right text-2xs text-text-dim ${
-                    hasWrap ? 'align-top' : ''
-                  }`}
+          {items.map((item, itemIndex) => {
+            const { index } = item
+            const row = sorted[index]
+            return (
+              <Fragment key={rowKey(row, index)}>
+                {virtual ? spacer(item.start - (itemIndex ? items[itemIndex - 1].end : headerHeight)) : null}
+                <tr
+                  ref={virtual ? virtualizer.measureElement : undefined}
+                  data-index={index}
+                  data-row-key={rowKey(row, index)}
+                  aria-rowindex={index + 2}
+                  onClick={onRowClick ? () => onRowClick(row, index) : undefined}
+                  onDoubleClick={
+                    onRowDoubleClick ? () => onRowDoubleClick(row, index) : undefined
+                  }
+                  className={`border-b border-border/40 ${
+                    onRowClick || onRowDoubleClick ? 'cursor-pointer hover:bg-surface-hover' : ''
+                  } ${rowClassName?.(row, index) ?? ''}`}
                 >
-                  {index + 1}
-                </td>
-              ) : null}
-              {columns.map((column) => (
-                <td
-                  key={column.key}
-                  className={`px-2 py-[3px] text-2xs ${
-                    column.wrap
-                      ? 'break-words whitespace-normal'
-                      : 'overflow-hidden text-ellipsis whitespace-nowrap'
-                  } ${hasWrap ? 'align-top' : ''} ${alignClass[column.align ?? 'left']} ${
-                    column.numeric ? 'num' : ''
-                  }`}
-                >
-                  {column.cell(row, index)}
-                </td>
-              ))}
-            </tr>
-          ))}
+                  {showIndex ? (
+                    <td
+                      className={`num px-1 py-[3px] text-right text-2xs text-text-dim ${
+                        hasWrap ? 'align-top' : ''
+                      }`}
+                    >
+                      {index + 1}
+                    </td>
+                  ) : null}
+                  {columns.map((column) => (
+                    <td
+                      key={column.key}
+                      className={`px-2 py-[3px] text-2xs ${
+                        column.wrap
+                          ? 'break-words whitespace-normal'
+                          : 'overflow-hidden text-ellipsis whitespace-nowrap'
+                      } ${hasWrap ? 'align-top' : ''} ${alignClass[column.align ?? 'left']} ${
+                        column.numeric ? 'num' : ''
+                      }`}
+                    >
+                      {column.cell(row, index)}
+                    </td>
+                  ))}
+                </tr>
+              </Fragment>
+            )
+          })}
+          {virtual ? spacer(virtualizer.getTotalSize() - (items.at(-1)?.end ?? headerHeight)) : null}
         </tbody>
       </table>
     </div>

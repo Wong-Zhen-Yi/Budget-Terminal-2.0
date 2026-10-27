@@ -70,6 +70,7 @@ try {
     import { useValuationPage } from './src/stores/valuation'
     import { useProjectionsPage } from './src/stores/projections'
     import { registerSnapshot } from './src/api/snapshotHealth'
+    import { manageQueryMemory, QUERY_IDLE_MS } from './src/api/queryMemory'
     import { queryFreshness } from './src/api/queryPersistence'
     import { MACRO_SYMBOLS, TABS } from './electron/shared/contract'
     import { DEFAULT_BACKTEST_PAGE_SETTINGS } from './electron/shared/backtest'
@@ -153,6 +154,14 @@ try {
       if (method === 'chart') { data.symbol = request.symbol; data.timeframe = request.timeframe }
       if (method === 'chartsHistory') { data.intervalLabel = request.interval; data.range = request.range }
       if (method === 'fundamentalsPage') { data.displayCurrency = 'USD'; data.currencyVersion = 2; data.generatedAt = Date.now() }
+      if (method === 'upDown') {
+        data.source = request.source; data.interval = request.interval; data.forceTargets = false
+        data.rows = Array.from({ length: 25 }, (_, i) => ({ ticker: 'FIX' + i, name: 'Target fixture', lastClose: 100,
+          intervalReturn: 1, tradingDays: 1, daysUp: 1, daysDown: 0, flatDays: 0 }))
+      }
+      if (method === 'upDownTargets') {
+        data.targets = Object.fromEntries(request.tickers.map(ticker => [ticker, 120])); data.resolved = request.tickers.length; data.available = request.tickers.length
+      }
       if (method === 'newsPage') {
         data.articles = [{ id: 'fixture-news', ticker: 'MSFT', title: 'Synthetic readiness headline', source: 'Fixture', summary: 'Synthetic story', publishedAt: Date.now(), time: '', url: 'https://example.com/fixture', imageUrl: 'https://example.com/fixture.png', signals: [], score: 5, category: 'market' }]
       }
@@ -190,7 +199,8 @@ try {
         useIpoPage.setState({ completedYear: restored ? 2025 : 2026 })
         useOptionsPage.setState({ symbol: scenario === 'persisted' ? 'AAPL' : '', expiry: '', loaded: scenario === 'persisted' })
         useEtfPage.setState({ ticker: scenario === 'persisted' ? 'SPY' : '' })
-        const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnMount: false, refetchOnWindowFocus: false, gcTime: Infinity } } })
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnMount: false, refetchOnWindowFocus: false, gcTime: QUERY_IDLE_MS } } })
+        const memory = manageQueryMemory(client, { deferUntilStartup: true, maxBytes: 8192, maxQueries: 20 })
         client.getQueryCache().subscribe(({query}) => registerSnapshot(query.state.data, queryFreshness(query.queryKey)))
         const rendered = createRoot(element)
         rendered.render(<QueryClientProvider client={client}><App /></QueryClientProvider>)
@@ -200,6 +210,9 @@ try {
         const startup = useDataHealth.getState().startup
         check(startup && startup.timings.length === startup.planned, 'Startup failed to complete: ' + scenario)
         check(Object.keys(startup.pages).length === TABS.filter(tab => tab.implemented).length, 'Startup omitted a page state')
+        for (let extra = 0; extra < 2000; extra++) client.setQueryData(['history', 'memory-stress-' + extra], { values: Array(100).fill(extra) })
+        await memory.sweep()
+        check(client.getQueryCache().findAll({ queryKey: ['history'] }).length <= 20, 'Extra memory did not converge before page visits')
         check(!startup.timings.some(task => task.state !== 'ready'), 'Fixture startup failed: ' + JSON.stringify(startup.timings.filter(task => task.state !== 'ready')))
         if (!populated) check(client.getQueryData(['quotes', ''])?.data.macro[MACRO_SYMBOLS[0].label]?.price === 100, 'Empty portfolio macro quotes missing')
         if (populated) {
@@ -241,6 +254,7 @@ try {
           // Browser viewport IPC only places/hides its already-initialized native
           // view. It is not a data load; browserStatus/research/control still count.
           // Shared notification polling continues independently of page navigation.
+          if (tab.id === 'up-down') check(!visiblePage('up-down').innerText.includes('loading price targets'), 'Targets were deferred until first visit')
           if (tab.id === 'notifications') check(client.getQueryData(['notifications']), 'Notification data was not warmed')
           const initial = calls.slice(before).filter(call => !['mcpStatus', 'apiUsage', 'mutateSettings', 'browserViewport', 'notificationsStatus'].includes(call.method))
           check(initial.length === 0, 'First-visit request on ' + scenario + '/' + tab.id + ': ' + JSON.stringify(initial))
@@ -372,10 +386,10 @@ try {
           coverage.find(row => row.page === 'portfolio').tickerHandoff = 'Research AAPL → Stocks/AAPL'
           await window.reportFixture(coverage)
         }
-        rendered.unmount(); client.clear(); useDataHealth.setState({ startup: null }); calls = []
+        memory.stop(); rendered.unmount(); client.clear(); useDataHealth.setState({ startup: null }); calls = []
         await wait()
       }
-      return 'PASS: all 49 routes after completed startup, empty and populated portfolios, persisted Options/ETF/video selections, initial News/video media and no first-visit loads; visible subtab/select/filter/sort sweep recorded separately'
+      return 'PASS: all ' + TABS.filter(tab => tab.implemented).length + ' routes after completed startup, empty and populated portfolios, persisted Options/ETF/video selections, initial News/video media and no first-visit loads; visible subtab/select/filter/sort sweep recorded separately'
     }
   ` }, bundle: true, jsx: 'automatic', write: false, format: 'iife', loader: { '.png': 'dataurl', '.css': 'empty' },
     alias: { '@': join(root, 'src'), '@shared': join(root, 'electron/shared') }, define: { 'process.env.NODE_ENV': '"production"' } })

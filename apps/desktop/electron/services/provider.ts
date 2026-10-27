@@ -1983,7 +1983,7 @@ const providerImplementation: MarketDataProvider = {
         const rollback = await clearUserData()
         await clearCards()
         // Cached market data outlives the book it was fetched for, so drop it too.
-        cache.clear()
+        await cache.clear()
         await clearLatestSignals()
         await clearLatestQuant()
         await clearCalendarCaches()
@@ -2015,7 +2015,7 @@ const providerImplementation: MarketDataProvider = {
 
   async resetCache() {
     try {
-      cache.clear()
+      await cache.clear()
       await clearLatestSignals()
       await clearLatestQuant()
       await clearCalendarCaches()

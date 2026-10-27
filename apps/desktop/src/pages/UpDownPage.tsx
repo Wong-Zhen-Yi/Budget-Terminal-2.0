@@ -1,102 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import type { UpDownRow, UpDownTargetsPayload } from '@shared/contract'
+import type { UpDownRow } from '@shared/contract'
 import {
   UP_DOWN_INTERVALS,
   UP_DOWN_SOURCES,
   analystTargetDisplay,
   normalizeUpDownSymbols,
 } from '@shared/upDown'
-import { api } from '@/api/client'
 import { usePortfolio } from '@/api/queries'
+import { useUpDownTargets } from '@/api/upDownTargetsQueries'
 import { useRefreshUpDown, useUpDown } from '@/api/upDownQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { Button } from '@/components/ui/Button'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { currency, percent } from '@/lib/format'
 import { useUpDownPage } from '@/stores/upDown'
-
-const TARGET_BATCH_SIZE = 12
-const TARGET_WORKERS = 8
-
-interface TargetProgress {
-  targets: Record<string, number | null>
-  resolved: number
-  available: number
-  loading: boolean
-  failures: number
-}
-
-function useProgressiveTargets(
-  rows: UpDownRow[],
-  force: boolean,
-  requestKey: number,
-): TargetProgress {
-  const signature = rows.map((row) => `${row.ticker}:${row.lastClose ?? ''}`).join('|')
-  const [progress, setProgress] = useState<TargetProgress>({
-    targets: {},
-    resolved: 0,
-    available: 0,
-    loading: false,
-    failures: 0,
-  })
-
-  useEffect(() => {
-    const tickers = rows.map((row) => row.ticker)
-    if (!tickers.length) {
-      setProgress({ targets: {}, resolved: 0, available: 0, loading: false, failures: 0 })
-      return
-    }
-
-    let cancelled = false
-    let next = 0
-    const batches = Array.from(
-      { length: Math.ceil(tickers.length / TARGET_BATCH_SIZE) },
-      (_, index) => tickers.slice(index * TARGET_BATCH_SIZE, (index + 1) * TARGET_BATCH_SIZE),
-    )
-    setProgress({ targets: {}, resolved: 0, available: 0, loading: true, failures: 0 })
-
-    const worker = async () => {
-      while (!cancelled) {
-        const index = next
-        next += 1
-        const batch = batches[index]
-        if (!batch) return
-        let payload: UpDownTargetsPayload = { targets: {}, resolved: 0, available: 0 }
-        let failed = false
-        try {
-          const envelope = await api.upDownTargets({ tickers: batch, force })
-          payload = envelope.data
-          failed = envelope.meta.freshness === 'failed'
-        } catch {
-          failed = true
-        }
-        if (cancelled) return
-        const targets = Object.fromEntries(
-          batch.map((ticker) => [ticker, payload.targets[ticker] ?? null]),
-        )
-        setProgress((current) => ({
-          targets: { ...current.targets, ...targets },
-          resolved: current.resolved + batch.length,
-          available: current.available + Object.values(targets).filter((value) => value !== null).length,
-          loading: true,
-          failures: current.failures + (failed ? 1 : 0),
-        }))
-      }
-    }
-
-    void Promise.all(
-      Array.from({ length: Math.min(TARGET_WORKERS, batches.length) }, () => worker()),
-    ).then(() => {
-      if (!cancelled) setProgress((current) => ({ ...current, loading: false }))
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [signature, force, requestKey])
-
-  return progress
-}
 
 function metric(value: number | null, formatter: (entry: number) => string): string {
   return typeof value === 'number' && Number.isFinite(value) ? formatter(value) : 'N/A'
@@ -143,7 +61,7 @@ export function UpDownPage({
   const [refreshing, setRefreshing] = useState(false)
   const payload = query.data?.data
   const rows = payload?.source === activeSource && payload.interval === interval ? payload.rows : []
-  const targetProgress = useProgressiveTargets(
+  const targetProgress = useUpDownTargets(
     rows,
     Boolean(payload?.forceTargets),
     query.data?.meta.fetchedAt ?? 0,
@@ -153,6 +71,8 @@ export function UpDownPage({
     onStatusChange(
       [
         { label: 'Up/Down', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching },
+        { label: 'Price Targets', envelope: query.data, enabled: rows.length > 0, loading: targetProgress.loading,
+          error: targetProgress.failures ? new Error(`${targetProgress.failures} price-target batch(es) failed`) : undefined },
         { label: 'Portfolio', envelope: portfolio.data, error: portfolio.error, enabled: portfolio.isEnabled, loading: portfolio.isFetching },
       ],
       activeSource === 'portfolio' ? portfolioPayload?.sourcePath ?? '' : '',
@@ -165,6 +85,9 @@ export function UpDownPage({
     portfolioPayload?.sourcePath,
     query.data,
     query.isFetching,
+    rows.length,
+    targetProgress.loading,
+    targetProgress.failures,
   ])
 
   const columns = useMemo<Array<Column<UpDownRow>>>(() => [

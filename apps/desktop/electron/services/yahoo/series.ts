@@ -144,9 +144,9 @@ export async function getYahooSeries(
   const ttl = ['1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h'].includes(options.interval)
     ? TTL.chartIntraday
     : TTL.chartDaily
-  const candidate = store.get<unknown>(key, { allowStale: true })
+  const candidate = await store.get<unknown>(key, { allowStale: true })
   const previous = candidate && usableSeriesDocument(candidate.value) ? candidate as CachedResult<SeriesDocument> : null
-  if (candidate && !previous) store.delete(key)
+  if (candidate && !previous) await store.delete(key)
   const needsEarlierCoverage = Boolean(previous && startSeconds < previous.value.coveredFrom)
   const now = Date.now()
   const needsReconcile = Boolean(
@@ -222,7 +222,7 @@ export async function getYahooSeries(
 
   const document = resolved.value
   if (!usableSeriesDocument(document)) {
-    store.delete(key)
+    await store.delete(key)
     throw new Error(`Cached history for ${symbol} was incompatible; retry to reload it.`)
   }
   // A wider request can join a narrower in-flight load under the canonical key.

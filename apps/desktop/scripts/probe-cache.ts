@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { serialize } from 'node:v8'
 import { dehydrate, QueryClient } from '@tanstack/react-query'
 
+import { createWorkerRpc, serviceWorker } from '../electron/services/workerRpc.js'
 import { TtlCache } from '../electron/services/cache.js'
 import {
   getYahooSeries,
@@ -33,11 +34,11 @@ function row(time: number, close: number): YahooSeriesRow {
 async function persistentCacheChecks(): Promise<void> {
   const first = new TtlCache({ path: databasePath, maxBytes: 4_096 })
   const saved = { when: new Date('2026-01-02T00:00:00Z'), bytes: Buffer.from('cache'), value: 7 }
-  first.set('snapshot:fixture', saved, 60_000)
-  first.close()
+  await first.set('snapshot:fixture', saved, 60_000)
+  await first.close()
 
   const reopened = new TtlCache({ path: databasePath, maxBytes: 4_096 })
-  const restored = reopened.get<typeof saved>('snapshot:fixture')
+  const restored = (await reopened.get<typeof saved>('snapshot:fixture'))
   assert.equal(restored?.fromCache, true)
   assert.equal(restored?.value.when.toISOString(), saved.when.toISOString())
   assert.equal(restored?.value.bytes.toString(), 'cache')
@@ -50,7 +51,7 @@ async function persistentCacheChecks(): Promise<void> {
   assert.equal(calls, 1)
   assert.equal(left.value, right.value)
 
-  reopened.set('stale', { usable: true }, -1)
+  await reopened.set('stale', { usable: true }, -1)
   const fallback = await reopened.resolveWithStaleFallback(
     'stale',
     -1,
@@ -58,14 +59,14 @@ async function persistentCacheChecks(): Promise<void> {
     { force: true },
   )
   assert.equal(fallback.stale, true)
-  reopened.close()
+  await reopened.close()
 
   const degradedPath = join(scratch, 'degraded.sqlite')
   const degraded = new TtlCache({ path: degradedPath })
   const fetchedAt = Date.now()
-  degraded.set('partial', { rows: [1] }, 43_200_000,
+  await degraded.set('partial', { rows: [1] }, 43_200_000,
     { fetchedAt, stale: false, fromCache: false, failures: ['HTTP 503'] })
-  degraded.close()
+  await degraded.close()
   // Also cover incomplete entries persisted by an older build with the full TTL.
   const oldPartial = new DatabaseSync(degradedPath)
   oldPartial.prepare('UPDATE cache_entries SET ttl_ms = ?').run(43_200_000)
@@ -74,16 +75,16 @@ async function persistentCacheChecks(): Promise<void> {
   const originalNow = Date.now
   try {
     Date.now = () => fetchedAt + 10_001
-    assert.equal(recoveredStore.get('partial'), null, 'Persisted partial data must not block recovery for hours')
-    assert.deepEqual(recoveredStore.get('partial', { allowStale: true })?.value, { rows: [1] })
+    assert.equal((await recoveredStore.get('partial')), null, 'Persisted partial data must not block recovery for hours')
+    assert.deepEqual((await recoveredStore.get('partial', { allowStale: true }))?.value, { rows: [1] })
     let loads = 0
     const refreshed = await recoveredStore.resolve('partial', 43_200_000, async () => { loads++; return { rows: [1, 2] } })
     assert.equal(loads, 1)
     assert.deepEqual(refreshed.value.rows, [1, 2])
-    assert.deepEqual(recoveredStore.get('partial')?.snapshot?.failures, [], 'Recovery must clear cached failure provenance')
+    assert.deepEqual((await recoveredStore.get('partial'))?.snapshot?.failures, [], 'Recovery must clear cached failure provenance')
   } finally {
     Date.now = originalNow
-    recoveredStore.close()
+    await recoveredStore.close()
   }
 
   const database = new DatabaseSync(databasePath)
@@ -93,31 +94,126 @@ async function persistentCacheChecks(): Promise<void> {
   database.prepare('UPDATE cache_entries SET value = ? WHERE key = ?').run(serialize({ rows: [], coveredFrom: 1 }), 'snapshot:fixture')
   database.close()
   const legacy = new TtlCache({ path: databasePath, maxBytes: 4_096 })
-  const barePayload = legacy.get('snapshot:fixture', { allowStale: true })
-  const validWrapped = legacy.get<number>('single-flight')?.value
-  legacy.set('snapshot:fixture', saved, 60_000)
-  legacy.set('malformed-wrapper', 1, 60_000)
-  legacy.close()
+  const barePayload = (await legacy.get('snapshot:fixture', { allowStale: true }))
+  const validWrapped = (await legacy.get<number>('single-flight'))?.value
+  await legacy.set('snapshot:fixture', saved, 60_000)
+  await legacy.set('malformed-wrapper', 1, 60_000)
+  await legacy.close()
   assert.equal(barePayload, null, 'A bare legacy payload is not a usable wrapped cache entry')
   assert.equal(validWrapped, 1, 'Valid wrapped entries remain available')
   const malformed = new DatabaseSync(databasePath)
   malformed.prepare('UPDATE cache_entries SET value = ? WHERE key = ?').run(serialize({ value: undefined, snapshot: undefined }), 'malformed-wrapper')
   malformed.close()
   const invalid = new TtlCache({ path: databasePath, maxBytes: 4_096 })
-  const undefinedPayload = invalid.get('malformed-wrapper')
-  invalid.close()
+  const undefinedPayload = (await invalid.get('malformed-wrapper'))
+  await invalid.close()
   assert.equal(undefinedPayload, null, 'An undefined decoded payload must trigger reload, not a truthy cache hit')
   const broken = new DatabaseSync(databasePath)
   broken.prepare('UPDATE cache_entries SET value = ? WHERE key = ?').run(Buffer.from([0, 1, 2]), 'snapshot:fixture')
   broken.close()
   const corrupt = new TtlCache({ path: databasePath, maxBytes: 4_096 })
-  assert.equal(corrupt.get('snapshot:fixture', { allowStale: true }), null)
-  for (let index = 0; index < 8; index += 1) corrupt.set(`snapshot:${index}`, 'x'.repeat(900), 60_000)
-  corrupt.close()
+  assert.equal((await corrupt.get('snapshot:fixture', { allowStale: true })), null)
+  for (let index = 0; index < 8; index += 1) await corrupt.set(`snapshot:${index}`, 'x'.repeat(900), 60_000)
+  await corrupt.close()
   const pruned = new DatabaseSync(databasePath)
   const size = pruned.prepare('SELECT COALESCE(SUM(size_bytes), 0) AS total FROM cache_entries').get() as { total: number }
   assert.ok(size.total <= 4_096)
   pruned.close()
+}
+
+
+async function workerFailureChecks(): Promise<void> {
+  const blocked = join(scratch, 'blocked-directory')
+  writeFileSync(blocked, 'fixture')
+  const path = join(blocked, 'cache.sqlite')
+  const store = new TtlCache({ path })
+  const warn = console.warn
+  let warnings = 0
+  console.warn = () => { warnings++ }
+  try {
+    await store.set('memory', 1, 60_000)
+    assert.equal((await store.get<number>('memory'))?.value, 1, 'Persistence failure must retain successful memory data')
+    assert.ok(warnings > 0, 'Persistence failure must remain diagnosable')
+    rmSync(blocked)
+    await store.set('recovered', 2, 60_000)
+    await store.close()
+    const reopened = new TtlCache({ path, memoryMaxBytes: 0 })
+    try { assert.equal((await reopened.get<number>('recovered'))?.value, 2, 'The next operation must restart a failed worker') }
+    finally { await reopened.close() }
+  } finally { console.warn = warn; await store.close() }
+}
+
+async function batchingChecks(): Promise<void> {
+  const rpc = createWorkerRpc(() => serviceWorker('cacheWorker', { path: join(scratch, 'batches.sqlite'), maxBytes: 1_000_000 }))
+  try {
+    await Promise.all(Array.from({ length: 100 }, (_, index) => rpc.call({ kind: 'set', key: `row:${index}`,
+      value: serialize({ value: index, snapshot: undefined }), storedAt: Date.now(), ttlMs: 60_000, retention: 'snapshot' })))
+    const before = await rpc.call<{ transactions: number; pruningRuns: number; accessWrites: number }>({ kind: 'stats' })
+    assert.ok(before.transactions < 10, 'Cache writes must share transactions')
+    assert.equal(before.pruningRuns, 0, 'Under-budget writes must not scan pruning candidates')
+    await Promise.all(Array.from({ length: 100 }, () => rpc.call({ kind: 'touch', key: 'row:1', now: Date.now() })))
+    const touched = await rpc.call<typeof before>({ kind: 'stats' })
+    assert.equal(touched.transactions, before.transactions, 'Cache hits must not immediately write access timestamps')
+    await rpc.call({ kind: 'flush' })
+    const after = await rpc.call<typeof before>({ kind: 'stats' })
+    assert.equal(after.accessWrites, 1, 'Repeated touches must coalesce by key')
+    await rpc.call({ kind: 'close' })
+  } finally { rpc.close() }
+}
+
+async function memoryAndOrderingChecks(): Promise<void> {
+  const path = join(scratch, 'bounded.sqlite')
+  const store = new TtlCache({ path, maxBytes: 64 * 1024 * 1024, memoryMaxBytes: 512, memoryMaxEntries: 2 })
+  try {
+    for (const key of ['a', 'b', 'c']) await store.set(key, 'x'.repeat(150), 60_000)
+    assert.ok(store.memoryUsage.bytes <= 512 && store.memoryUsage.entries <= 2)
+    assert.equal((await store.get<string>('a'))?.value, 'x'.repeat(150), 'Memory eviction must retain disk snapshots')
+    const writes = Array.from({ length: 100 }, (_, i) => store.set(`batch:${i}`, i, 60_000))
+    await Promise.all(writes)
+    await store.flush()
+    assert.equal((await store.get<number>('batch:99'))?.value, 99)
+    const big = 'x'.repeat(5 * 1024 * 1024)
+    const older = store.set('older', big, 60_000)
+    const waiting = store.set('waiting', big, 60_000)
+    assert.ok(store.memoryUsage.pendingBytes <= 8 * 1024 * 1024)
+    const clear = store.clear()
+    const latest = store.set('latest', 'survives', 60_000)
+    await Promise.all([older, waiting, clear, latest])
+    assert.equal(await store.get('older'), null)
+    assert.equal(await store.get('waiting'), null)
+    assert.equal((await store.get<string>('latest'))?.value, 'survives')
+    let release!: (value: number) => void
+    let started!: () => void
+    const began = new Promise<void>(resolve => { started = resolve })
+    const loading = store.resolve('cleared-loader', 60_000, async () => {
+      started()
+      return new Promise<number>(resolve => { release = resolve })
+    })
+    await began
+    await store.clear()
+    release(42)
+    await loading
+    assert.equal(await store.get('cleared-loader'), null, 'Clear must invalidate an older provider load')
+    const pending = store.set('shutdown', big, 60_000)
+    const blocked = store.set('shutdown-waiting', big, 60_000)
+    await store.close()
+    await Promise.all([pending, blocked])
+  } finally { await store.close() }
+  const reopened = new TtlCache({ path, memoryMaxBytes: 0 })
+  try {
+    assert.equal((await reopened.get<string>('shutdown-waiting'))?.value.length, 5 * 1024 * 1024)
+    const pending = reopened.set('deleted', 1, 60_000)
+    const removed = reopened.delete('deleted')
+    await Promise.all([pending, removed])
+    assert.equal(await reopened.get('deleted'), null)
+  } finally { await reopened.close() }
+  const volatile = new TtlCache({ memoryMaxBytes: 0 })
+  const resolved = await volatile.resolve('oversized', 60_000, async () => {
+    return { successful: true }
+  })
+  assert.equal(resolved.value.successful, true)
+  assert.equal(resolved.snapshot?.fromCache, false)
+  await volatile.close()
 }
 
 async function incrementalSeriesChecks(): Promise<void> {
@@ -165,7 +261,7 @@ async function incrementalSeriesChecks(): Promise<void> {
     assert.equal(listedMax.stale, false, 'Expanding already-complete IPO history is not a provider outage')
     assert.equal(listedMax.rows[0].close, listed.rows[0].close, 'Partial head overlaps must not overwrite existing complete OHLC bars')
     calls.length = 0
-    store.set('series:yahoo-only:ohlcv:BAD:1d', { rows: [] }, 60_000)
+    await store.set('series:yahoo-only:ohlcv:BAD:1d', { rows: [] }, 60_000)
     const recovered = await getYahooSeries({ symbol: 'BAD', start, interval: '1d' }, store, loader)
     assert.ok(recovered.rows.length >= 30, 'Malformed canonical history is discarded and reloaded')
     calls.length = 0
@@ -238,6 +334,9 @@ async function rendererPolicyChecks(): Promise<void> {
 
 try {
   await persistentCacheChecks()
+  await memoryAndOrderingChecks()
+  await batchingChecks()
+  await workerFailureChecks()
   await incrementalSeriesChecks()
   await rendererPolicyChecks()
   const rendererClient = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } })
@@ -258,7 +357,7 @@ try {
   } finally {
     rendererClient.clear()
   }
-  console.log('Cache checks passed: restart persistence, serialization, corruption, pruning, single-flight, stale fallback, incremental ranges, cooperative renderer trimming and cancellation.')
+  console.log('Cache checks passed: restart persistence, serialization, corruption, pruning, single-flight, stale fallback, incremental ranges, bounded memory, batching/touches, worker recovery, clear ordering, shutdown backpressure and cooperative renderer trimming.')
 } finally {
   if (originalAppData === undefined) delete process.env.APPDATA
   else process.env.APPDATA = originalAppData

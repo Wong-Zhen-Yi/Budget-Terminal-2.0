@@ -63,7 +63,10 @@ function launch({ development = false, platform = process.platform, nodeVersion 
   }
 
   log.log(`Starting Budget Terminal for ${os}...`)
+  log.log('Agent reading: highlighting keeps streamed replies steady. Clear the selection to catch up; scroll to the bottom to follow new text.')
   if (platform === 'linux') log.log('Steam Deck/Linux: the window fits the display work area. Use the application launcher in Desktop Mode, or add it to Steam as a non-Steam game with Proton compatibility disabled.')
+  log.log('Performance updates: Quant pair calculations and SQLite persistence run in workers. Extra query memory is bounded, prepared startup pages stay available, and large tables render visible rows.')
+  log.log('Startup dependency fixes: Up/Down price targets preload before page readiness; Cards warms every interval after a partial result; News splits multi-ticker article labels into valid quote requests.')
   log.log('Installing dependencies...')
   const install = npm(['install', '--no-audit', '--no-fund', '--strict-ssl=true'])
   if (install.error || install.status !== 0) {

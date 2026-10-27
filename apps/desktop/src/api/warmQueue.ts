@@ -1,4 +1,5 @@
 import type { QueryClient, QueryKey } from '@tanstack/react-query'
+import { pinStartupQuery } from './queryMemory'
 import { queryFreshness } from './queryPersistence'
 import type { Envelope } from '@shared/contract'
 import { effectiveFreshness, registerSnapshot } from './snapshotHealth'
@@ -31,7 +32,8 @@ export function assertStartupReady(result: unknown): void {
 
 /** Fetch dependent snapshots before classifying the complete initial page. */
 export function warmStartupSnapshot<T>(client: QueryClient, options: Parameters<typeof warmQuery<T>>[1]): Promise<T> {
-  return warmQuery(client, options, STARTUP_TIMEOUT_MS)
+  pinStartupQuery(client, options.queryKey)
+  return warmQuery(client, { ...options, gcTime: Infinity }, STARTUP_TIMEOUT_MS)
 }
 
 export async function warmStartupQuery<T>(client: QueryClient, options: Parameters<typeof warmQuery<T>>[1]): Promise<T> {
@@ -79,6 +81,7 @@ export async function warmQuery<T>(client: QueryClient, options: {
   queryKey: QueryKey
   queryFn: () => Promise<T>
   staleTime: number
+  gcTime?: number
 }, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
   const cached = client.getQueryData<Envelope<unknown>>(options.queryKey)
   const lifetime = queryFreshness(options.queryKey)

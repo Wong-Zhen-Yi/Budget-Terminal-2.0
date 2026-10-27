@@ -110,7 +110,7 @@ const buildDirectory = mkdtempSync(join(tmpdir(), 'budget-launcher-build-'))
 try {
   const directory = join(buildDirectory, 'desktop with spaces # %')
   assert.throws(() => verifyDesktopBuild(directory), /desktop build is incomplete/)
-  for (const file of ['out/main/main.js', 'out/preload/preload.cjs', 'out/renderer/assets/entry.js', 'out/renderer/assets/theme.css']) {
+  for (const file of ['out/main/main.js', 'out/main/quantWorker.js', 'out/main/cacheWorker.js', 'out/preload/preload.cjs', 'out/renderer/assets/entry.js', 'out/renderer/assets/theme.css']) {
     mkdirSync(resolve(directory, file, '..'), { recursive: true })
     writeFileSync(join(directory, file), 'fixture')
   }

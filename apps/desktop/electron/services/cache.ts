@@ -2,14 +2,13 @@
  * Process-wide TTL cache with single-flight coalescing and optional persistence.
  * Tests construct an in-memory cache; the application singleton uses SQLite.
  */
-import { mkdirSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { deserialize, serialize } from 'node:v8'
-import { DatabaseSync, type StatementSync } from 'node:sqlite'
+import { createWorkerRpc, serviceWorker } from './workerRpc.js'
+import type { CacheWork } from '../workers/cacheWorker.js'
 import { captureSources, observeSource, type SourceSnapshot } from './sourceHealth.js'
 
 import {
-  CACHE_SCHEMA_VERSION,
   FRESHNESS,
   SERVICE_CACHE_MAX_BYTES,
 } from '../shared/freshness.js'
@@ -21,6 +20,7 @@ interface Entry<T> {
   storedAt: number
   ttlMs: number
   snapshot?: SourceSnapshot
+  sizeBytes: number
 }
 
 type RetentionClass = 'snapshot' | 'asset' | 'intraday' | 'history'
@@ -32,6 +32,8 @@ const DEGRADED_RETRY_MS = 10_000
 interface CacheOptions {
   path?: string
   maxBytes?: number
+  memoryMaxBytes?: number
+  memoryMaxEntries?: number
 }
 
 interface DiskRow {
@@ -90,94 +92,97 @@ function retentionClass(key: string): RetentionClass {
 
 export class TtlCache {
   private readonly entries = new Map<string, Entry<unknown>>()
-  private readonly inFlight = new Map<string, Promise<unknown>>()
+  private readonly inFlight = new Map<string, Promise<CachedResult<unknown>>>()
   private readonly failures = new Map<string, { error: unknown; retryAt: number }>()
-  private readonly maxBytes: number
-  private db: DatabaseSync | null = null
-  private selectEntry: StatementSync | null = null
-  private touchEntry: StatementSync | null = null
-  private upsertEntry: StatementSync | null = null
-  private deleteEntry: StatementSync | null = null
+  private readonly disk
+  private readonly memoryMaxBytes: number
+  private readonly memoryMaxEntries: number
+  private memoryBytes = 0
+  private pendingBytes = 0
+  private readonly pending = new Set<Promise<unknown>>()
+  private epoch = 0
+  private readonly reads = new Map<string, { revision: number; count: number }>()
+  private readonly versions = new Map<string, object>()
+  private closed = false
+  private closing?: Promise<void>
+  private readonly writes = new Set<Promise<void>>()
+  private readonly loads = new Map<string, object>()
 
   constructor(options: CacheOptions = {}) {
-    this.maxBytes = options.maxBytes ?? SERVICE_CACHE_MAX_BYTES
-    if (options.path) this.open(options.path)
+    this.memoryMaxBytes = options.memoryMaxBytes ?? 128 * 1024 * 1024
+    this.memoryMaxEntries = options.memoryMaxEntries ?? 5_000
+    this.disk = options.path ? createWorkerRpc(() => serviceWorker('cacheWorker', {
+      path: options.path, maxBytes: options.maxBytes ?? SERVICE_CACHE_MAX_BYTES,
+    })) : undefined
   }
 
-  private open(path: string): void {
-    try {
-      mkdirSync(dirname(path), { recursive: true })
-      const db = new DatabaseSync(path)
-      db.exec('PRAGMA journal_mode = WAL')
-      db.exec('PRAGMA synchronous = NORMAL')
-      db.exec('PRAGMA auto_vacuum = INCREMENTAL')
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS cache_entries (
-          key TEXT PRIMARY KEY,
-          value BLOB NOT NULL,
-          stored_at INTEGER NOT NULL,
-          ttl_ms INTEGER NOT NULL,
-          last_accessed INTEGER NOT NULL,
-          size_bytes INTEGER NOT NULL,
-          retention TEXT NOT NULL,
-          schema_version INTEGER NOT NULL
-        )
-      `)
-      db.exec(`DELETE FROM cache_entries WHERE schema_version != ${CACHE_SCHEMA_VERSION}`)
-      // Pruning runs on every write. Sum the small index instead of walking the
-      // table's large payload pages and blocking Electron during startup bursts.
-      db.exec('CREATE INDEX IF NOT EXISTS cache_entries_size_bytes ON cache_entries(size_bytes)')
-      this.db = db
-      this.selectEntry = db.prepare(
-        'SELECT value, stored_at, ttl_ms FROM cache_entries WHERE key = ? AND schema_version = ?',
-      )
-      this.touchEntry = db.prepare('UPDATE cache_entries SET last_accessed = ? WHERE key = ?')
-      this.upsertEntry = db.prepare(`
-        INSERT INTO cache_entries
-          (key, value, stored_at, ttl_ms, last_accessed, size_bytes, retention, schema_version)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(key) DO UPDATE SET
-          value = excluded.value,
-          stored_at = excluded.stored_at,
-          ttl_ms = excluded.ttl_ms,
-          last_accessed = excluded.last_accessed,
-          size_bytes = excluded.size_bytes,
-          retention = excluded.retention,
-          schema_version = excluded.schema_version
-      `)
-      this.deleteEntry = db.prepare('DELETE FROM cache_entries WHERE key = ?')
-      this.prune()
-    } catch (error) {
-      console.warn('[cache] Persistent cache unavailable; using memory only.', error)
-      this.close()
+  get memoryUsage(): { bytes: number; entries: number; pendingBytes: number } {
+    return { bytes: this.memoryBytes, entries: this.entries.size, pendingBytes: this.pendingBytes }
+  }
+
+  private remember(key: string, entry: Entry<unknown>): void {
+    this.forget(key)
+    if (entry.sizeBytes > this.memoryMaxBytes || this.memoryMaxEntries <= 0) return
+    this.entries.set(key, entry)
+    this.memoryBytes += entry.sizeBytes
+    while (this.memoryBytes > this.memoryMaxBytes || this.entries.size > this.memoryMaxEntries) {
+      this.forget(this.entries.keys().next().value!)
     }
   }
 
-  get<T>(key: string, { allowStale = false, observe = !allowStale }: { allowStale?: boolean; observe?: boolean } = {}): CachedResult<T> | null {
+  private forget(key: string): void {
+    this.memoryBytes -= this.entries.get(key)?.sizeBytes ?? 0
+    this.entries.delete(key)
+  }
+
+  private persist(request: CacheWork): Promise<void> {
+    if (!this.disk || this.closed) return Promise.resolve()
+    const pending = this.disk.call<void>(request).catch(error => {
+      console.warn('[cache] Persistence unavailable; cached memory remains usable.', error)
+    })
+    this.pending.add(pending)
+    void pending.finally(() => this.pending.delete(pending))
+    return pending
+  }
+
+  async get<T>(key: string, { allowStale = false, observe = !allowStale }: { allowStale?: boolean; observe?: boolean } = {}): Promise<CachedResult<T> | null> {
     let entry = this.entries.get(key) as Entry<T> | undefined
-    if (!entry && this.selectEntry) {
+    if (!entry && this.disk && !this.closed) {
+      const reads = this.reads.get(key) ?? { revision: 0, count: 0 }
+      this.reads.set(key, reads)
+      reads.count += 1
+      const revision = reads.revision
       try {
-        const row = this.selectEntry.get(key, CACHE_SCHEMA_VERSION) as unknown as DiskRow | undefined
+        const row = await this.disk.call<DiskRow | undefined>({ kind: 'get', key })
+        if (revision !== reads.revision) return this.get<T>(key, { allowStale, observe })
         if (row) {
-          const document: unknown = deserialize(Buffer.from(row.value))
-          if (!usableDiskDocument(document)) { this.delete(key); return null }
+          let document: unknown
+          try { document = deserialize(Buffer.from(row.value)) } catch {
+            await this.delete(key)
+            return null
+          }
+          if (!usableDiskDocument(document)) { await this.delete(key); return null }
           entry = {
             value: document.value as T,
             snapshot: document.snapshot,
             storedAt: row.stored_at,
             ttlMs: row.ttl_ms,
+            sizeBytes: row.value.byteLength,
           }
-          this.entries.set(key, entry)
+          this.remember(key, entry)
         }
-      } catch {
-        this.delete(key)
+      } catch (error) {
+        console.warn('[cache] Could not restore cached data.', error)
         return null
+      } finally {
+        reads.count -= 1
+        if (!reads.count) this.reads.delete(key)
       }
     }
     if (!entry) return null
     if (entry.value === undefined || (entry.snapshot !== undefined
       && (!usableSnapshot(entry.snapshot) || entry.snapshot.failures.some(repairedSeriesCacheFailure)))) {
-      this.delete(key)
+      await this.delete(key)
       return null
     }
     const now = Date.now()
@@ -185,11 +190,11 @@ export class TtlCache {
     const expiresAt = Math.min(entry.storedAt + entry.ttlMs, entry.snapshot?.expiresAt ?? Infinity,
       degraded ? entry.storedAt + DEGRADED_RETRY_MS : Infinity)
     if (now > expiresAt && !allowStale) return null
-    try {
-      this.touchEntry?.run(now, key)
-    } catch {
-      // Access timestamps are advisory; the value remains usable if touching fails.
+    if (this.entries.has(key)) {
+      this.entries.delete(key)
+      this.entries.set(key, entry)
     }
+    void this.persist({ kind: 'touch', key, now })
     const snapshot: SourceSnapshot = {
       fetchedAt: Math.min(entry.storedAt, entry.snapshot?.fetchedAt ?? entry.storedAt),
       asOf: entry.snapshot?.asOf,
@@ -203,98 +208,86 @@ export class TtlCache {
     return { value: entry.value, ageSeconds: Math.max(0, now - snapshot.fetchedAt) / 1000, fromCache: true, snapshot }
   }
 
-  set<T>(key: string, value: T, ttlMs: number, snapshot?: SourceSnapshot): void {
+  set<T>(key: string, value: T, ttlMs: number, snapshot?: SourceSnapshot): Promise<void> {
+    if (this.closed || this.closing) return Promise.resolve()
+    const operation = this.write(key, value, ttlMs, snapshot)
+    this.writes.add(operation)
+    void operation.finally(() => this.writes.delete(operation))
+    return operation
+  }
+
+  private async write<T>(key: string, value: T, ttlMs: number, snapshot?: SourceSnapshot): Promise<void> {
     this.failures.delete(key)
     const storedAt = Date.now()
     if (snapshot?.stale || snapshot?.failures.length) ttlMs = Math.min(ttlMs, DEGRADED_RETRY_MS)
-    this.entries.set(key, { value, storedAt, ttlMs, snapshot })
-    if (!this.upsertEntry) return
-    try {
-      const encoded = serialize({ value, snapshot })
-      this.upsertEntry.run(
-        key,
-        encoded,
-        storedAt,
-        ttlMs,
-        storedAt,
-        encoded.byteLength,
-        retentionClass(key),
-        CACHE_SCHEMA_VERSION,
-      )
-      this.prune()
-    } catch (error) {
-      // Persistence must never turn a successful provider response into an app failure.
-      console.warn(`[cache] Could not persist ${key}.`, error)
+    const version = {}
+    this.versions.set(key, version)
+    const reading = this.reads.get(key)
+    if (reading) reading.revision += 1
+    const epoch = this.epoch
+    // One encoding supplies both payload accounting and the compatible disk blob.
+    let encoded: Buffer
+    try { encoded = serialize({ value, snapshot }) } catch (error) {
+      this.remember(key, { value, storedAt, ttlMs, snapshot, sizeBytes: this.memoryMaxBytes })
+      console.warn('[cache] Could not encode cache entry.', error)
+      this.versions.delete(key)
+      return
     }
-  }
-
-  delete(key: string): void {
-    this.entries.delete(key)
-    this.failures.delete(key)
+    this.remember(key, { value, storedAt, ttlMs, snapshot, sizeBytes: encoded.byteLength })
     try {
-      this.deleteEntry?.run(key)
-    } catch {
-      // Deleting an already-unavailable cache is equivalent to a miss.
-    }
-  }
-
-  clear(): void {
-    this.entries.clear()
-    this.failures.clear()
-    try {
-      this.db?.exec('DELETE FROM cache_entries; PRAGMA incremental_vacuum')
-    } catch (error) {
-      console.warn('[cache] Could not clear persistent cache.', error)
-    }
-  }
-
-  close(): void {
-    this.selectEntry = null
-    this.touchEntry = null
-    this.upsertEntry = null
-    this.deleteEntry = null
-    try {
-      this.db?.close()
-    } finally {
-      this.db = null
-    }
-  }
-
-  private prune(): void {
-    if (!this.db) return
-    const row = this.db.prepare('SELECT COALESCE(SUM(size_bytes), 0) AS total FROM cache_entries').get() as {
-      total: number
-    }
-    if (row.total <= this.maxBytes) return
-    const target = Math.floor(this.maxBytes * 0.9)
-    const candidates = this.db.prepare(`
-      SELECT key, size_bytes FROM cache_entries
-      ORDER BY
-        CASE
-          WHEN stored_at + ttl_ms < ? AND retention = 'snapshot' THEN 0
-          WHEN retention = 'intraday' THEN 1
-          WHEN retention = 'asset' THEN 2
-          WHEN retention = 'snapshot' THEN 3
-          ELSE 4
-        END,
-        last_accessed ASC
-    `).all(Date.now()) as unknown as Array<{ key: string; size_bytes: number }>
-    let total = row.total
-    const remove = this.db.prepare('DELETE FROM cache_entries WHERE key = ?')
-    this.db.exec('BEGIN IMMEDIATE')
-    try {
-      for (const candidate of candidates) {
-        if (total <= target) break
-        remove.run(candidate.key)
-        this.entries.delete(candidate.key)
-        total -= candidate.size_bytes
+      const sizeBytes = encoded.byteLength
+      const waiting = this.pendingBytes > 0 && this.pendingBytes + sizeBytes > 8 * 1024 * 1024
+      if (waiting) encoded = Buffer.alloc(0)
+      while (this.pendingBytes > 0 && this.pendingBytes + sizeBytes > 8 * 1024 * 1024) {
+        await Promise.race(this.pending)
       }
-      this.db.exec('COMMIT')
-      this.db.exec('PRAGMA incremental_vacuum')
+      if (this.epoch !== epoch || this.versions.get(key) !== version) return
+      if (waiting) encoded = serialize({ value, snapshot })
+      this.pendingBytes += encoded.byteLength
+      try { await this.persist({ kind: 'set', key, value: encoded, storedAt, ttlMs, retention: retentionClass(key) }) }
+      finally { this.pendingBytes -= encoded.byteLength }
     } catch (error) {
-      this.db.exec('ROLLBACK')
-      throw error
+      console.warn('[cache] Could not encode pending cache entry.', error)
+    } finally {
+      if (this.versions.get(key) === version) this.versions.delete(key)
     }
+  }
+
+  async delete(key: string): Promise<void> {
+    this.forget(key)
+    this.loads.delete(key)
+    this.failures.delete(key)
+    const reading = this.reads.get(key)
+    if (reading) reading.revision += 1
+    this.versions.delete(key)
+    await this.persist({ kind: 'delete', key })
+  }
+
+  async clear(): Promise<void> {
+    this.epoch += 1
+    for (const reading of this.reads.values()) reading.revision += 1
+    this.entries.clear()
+    this.memoryBytes = 0
+    this.failures.clear()
+    this.versions.clear()
+    this.loads.clear()
+    await this.persist({ kind: 'clear' })
+  }
+
+  async flush(): Promise<void> {
+    while (this.writes.size || this.pending.size) await Promise.all([...this.writes, ...this.pending])
+    await this.persist({ kind: 'flush' })
+  }
+
+  close(): Promise<void> {
+    if (this.closing) return this.closing
+    this.closing = (async () => {
+      await this.flush()
+      await this.persist({ kind: 'close' })
+      this.closed = true
+      this.disk?.close()
+    })()
+    return this.closing
   }
 
   async resolve<T>(
@@ -304,16 +297,14 @@ export class TtlCache {
     { force = false } = {},
   ): Promise<CachedResult<T>> {
     if (!force) {
-      const hit = this.get<T>(key)
+      const hit = await this.get<T>(key)
       if (hit) { if (hit.snapshot) observeSource(hit.snapshot); return hit }
     }
-    const existing = this.inFlight.get(key) as Promise<T> | undefined
+    const existing = this.inFlight.get(key) as Promise<CachedResult<T>> | undefined
     if (existing) {
-      const value = await existing
-      const result = this.get<T>(key, { allowStale: true })
-      const snapshot = result?.snapshot ? { ...result.snapshot, fromCache: false } : undefined
-      if (snapshot) observeSource(snapshot)
-      return result ? { ...result, snapshot, fromCache: false } : { value, ageSeconds: 0, fromCache: false }
+      const result = await existing
+      if (result.snapshot) observeSource(result.snapshot)
+      return result
     }
 
     const failure = this.failures.get(key)
@@ -324,10 +315,18 @@ export class TtlCache {
     }
     this.failures.delete(key)
 
+    const token = {}
+    this.loads.set(key, token)
     const pending = captureSources(loader)
-      .then(({ value, snapshot }) => {
-        this.set(key, value, ttlMs, snapshot)
-        return value
+      .then(async ({ value, snapshot }) => {
+        const storedAt = Date.now()
+        if (this.loads.get(key) === token) await this.set(key, value, ttlMs, snapshot)
+        const fetchedAt = Math.min(storedAt, snapshot?.fetchedAt ?? storedAt)
+        return { value, ageSeconds: Math.max(0, Date.now() - fetchedAt) / 1000, fromCache: false,
+          snapshot: { ...snapshot, fetchedAt, fromCache: false, stale: snapshot?.stale ?? false,
+            expiresAt: ttlMs > 0 ? Math.min(storedAt + ttlMs, snapshot?.expiresAt ?? Infinity,
+              snapshot?.stale || snapshot?.failures.length ? storedAt + DEGRADED_RETRY_MS : Infinity) : snapshot?.expiresAt,
+            failures: snapshot?.failures ?? [] } }
       })
       .catch((error: unknown) => {
         observeSource({ fetchedAt: Date.now(), stale: false, fromCache: false,
@@ -338,15 +337,12 @@ export class TtlCache {
       })
       .finally(() => {
         this.inFlight.delete(key)
+        if (this.loads.get(key) === token) this.loads.delete(key)
       })
     this.inFlight.set(key, pending)
-    const value = await pending
-    const saved = this.get<T>(key, { allowStale: true })
-    const snapshot: SourceSnapshot = saved?.snapshot
-      ? { ...saved.snapshot, fromCache: false }
-      : { fetchedAt: Date.now(), stale: false, fromCache: false, failures: [] }
-    observeSource(snapshot)
-    return { value, ageSeconds: Math.max(0, Date.now() - snapshot.fetchedAt) / 1000, fromCache: false, snapshot }
+    const result = await pending
+    if (result.snapshot) observeSource(result.snapshot)
+    return result
   }
 
   async resolveWithStaleFallback<T>(
@@ -359,7 +355,7 @@ export class TtlCache {
       const result = await this.resolve(key, ttlMs, loader, { force })
       return { ...result, stale: result.snapshot?.stale ?? false }
     } catch (error) {
-      const stale = this.get<T>(key, { allowStale: true })
+      const stale = await this.get<T>(key, { allowStale: true })
       if (stale) {
         const reason = error instanceof Error ? error.message : String(error)
         const snapshot: SourceSnapshot = { ...stale.snapshot!, stale: true,

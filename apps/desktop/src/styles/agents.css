@@ -69,7 +69,7 @@
 .agents-layout { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1; min-height: 0; }
 .agents-layout.with-controls { grid-template-columns: minmax(0, 1fr) 290px; }
 .agents-chat { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
-.agents-transcript { flex: 1; overflow: auto; padding: 32px max(28px, calc((100% - 790px) / 2)); scrollbar-gutter: stable; }
+.agents-transcript { flex: 1; overflow: auto; padding: 32px max(28px, calc((100% - 790px) / 2)); scrollbar-gutter: stable; user-select: text; }
 .agents-welcome { max-width: 680px; margin: 9vh auto 30px; text-align: center; }
 .agents-mark { display: inline-flex; align-items: center; justify-content: center; width: 58px; height: 58px; border: 1px solid var(--agents-border); background: var(--color-surface); border-radius: 4px; color: var(--color-accent-hover); margin-bottom: 22px; }
 .agents-welcome h2 { font-size: 28px; font-weight: 600; letter-spacing: -.8px; margin-bottom: 12px; }

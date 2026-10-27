@@ -83,12 +83,12 @@ async function offlineChecks(): Promise<void> {
   try {
     const later = now() + 11_000
     Date.now = () => later
-    assert.ok(store.get('futures'))
+    assert.ok((await store.get('futures')))
     await store.resolve('futures', 300_000, () => fetchFuturesBars('ES=F', false, loader))
     assert.equal(calls, 2)
   } finally {
     Date.now = now
-    store.close()
+    await store.close()
   }
   console.log('PASS: futures hourly/daily fallback, session comparisons, retained outage warnings and healthy fallback caching')
 }

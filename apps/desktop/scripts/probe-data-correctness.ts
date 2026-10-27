@@ -134,20 +134,20 @@ try {
   const path = join(scratch, 'provenance.sqlite')
   const first = new TtlCache({ path })
   opened.push(first)
-  first.set('base', 7, 1000)
+  await first.set('base', 7, 1000)
   now += 60_000
   const initial = await withSourceEnvelope(async () => ok((await first.resolve('derived', 100_000,
     async () => (await first.resolveWithStaleFallback('base', 1000, async () => { throw new Error('fixture offline') })).value)).value))
   assert.equal(initial.meta.freshness, 'stale')
   assert.equal(initial.meta.cacheAgeSeconds, 60)
   assert.match(initial.meta.failureReason!, /fixture offline/)
-  first.set('derived:repaired-fault', 41, 12 * 3600_000, { fetchedAt: now, stale: false,
+  await first.set('derived:repaired-fault', 41, 12 * 3600_000, { fetchedAt: now, stale: false,
     fromCache: false, failures: ["signals:liquidity-v5:NVDA:1d:90: Cannot read properties of undefined (reading 'coveredFrom')"] })
-  first.close()
+  await first.close()
   now += 1000
   const reopened = new TtlCache({ path })
   opened.push(reopened)
-  assert.equal(reopened.get('derived:repaired-fault'), null, 'Repaired software faults must not persist as valid derived degradation after restart')
+  assert.equal(await reopened.get('derived:repaired-fault'), null, 'Repaired software faults must not persist as valid derived degradation after restart')
   const recoveredFault = await withSourceEnvelope(async () => ok((await reopened.resolve('derived:repaired-fault', 12 * 3600_000, async () => 42)).value))
   assert.equal(recoveredFault.data, 42)
   assert.equal(recoveredFault.meta.freshness, 'fresh')
@@ -163,7 +163,7 @@ try {
     const { ok } = await import(${JSON.stringify(new URL('../electron/shared/envelope.ts', import.meta.url).href)});
     const store = new TtlCache({ path: ${JSON.stringify(path)} });
     const envelope = await withSourceEnvelope(async () => ok((await store.resolveWithStaleFallback('derived', 100000, async () => { throw new Error('restart offline'); })).value));
-    console.log(JSON.stringify(envelope)); store.close(); cache.close();
+    console.log(JSON.stringify(envelope)); await store.close(); await cache.close();
   `
   const restarted = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', childScript], { encoding: 'utf8', timeout: 10_000 })
   assert.equal(restarted.status, 0, restarted.stderr)
@@ -196,18 +196,18 @@ try {
   assert.equal(freshCached.meta.fetchedAt, fresh.meta.fetchedAt)
   assert.equal(freshCached.meta.cacheAgeSeconds, 5)
   assert.equal(freshCached.meta.freshness, 'cached')
-  reopened.set('short-source', 10, 1000)
+  await reopened.set('short-source', 10, 1000)
   const derived = await withSourceEnvelope(async () => ok((await reopened.resolve('long-derived', 12 * 3600_000,
     async () => (await reopened.resolve('short-source', 1000, async () => 10)).value)).value))
   assert.equal(derived.meta.expiresAt, now + 1000)
   now += 2000
-  assert.equal(reopened.get('long-derived'), null, 'A long derived TTL cannot extend its quote dependency')
+  assert.equal(await reopened.get('long-derived'), null, 'A long derived TTL cannot extend its quote dependency')
   const refreshed = await withSourceEnvelope(async () => ok((await reopened.resolve('long-derived', 12 * 3600_000,
     async () => (await reopened.resolve('short-source', 1000, async () => 11)).value)).value))
   assert.equal(refreshed.data, 11)
   assert.equal(refreshed.meta.freshness, 'fresh')
   const explicitStale = await withSourceEnvelope(async () => {
-    reopened.get('short-source')
+    await reopened.get('short-source')
     return ok(11, 'fixture', { freshness: 'stale' })
   })
   assert.equal(explicitStale.meta.freshness, 'stale', 'Explicit service staleness is never downgraded')
@@ -219,9 +219,9 @@ try {
   assert.equal(isolated[0].meta.freshness, 'fresh')
   assert.equal(isolated[0].errors.length, 0)
   assert.equal(isolated[1].meta.freshness, 'stale')
-  reopened.close()
+  await reopened.close()
 
-  FOREX_PAIRS.forEach(pair => cache.set(`quote:${pair.symbol}`, { symbol: pair.symbol, price: 1.25, change: 0, absChange: 0 }, TTL.quotes,
+  FOREX_PAIRS.forEach(pair => cache.set(`quote:yahoo-only:${pair.symbol}`, { symbol: pair.symbol, price: 1.25, change: 0, absChange: 0 }, TTL.quotes,
     { fetchedAt: now, asOf: now - 60_000, expiresAt: now + TTL.quotes, stale: false, fromCache: false, failures: [] }))
   const forexQuotes = await getForexQuotes()
   assert.equal(forexQuotes.meta.expiresAt, now + TTL.quotes, 'Forex aggregate cannot extend 30-second quote dependencies to its own 60-second TTL')
@@ -250,7 +250,7 @@ try {
   assert.ok(Math.abs(currentSession.change - (-1.87 / 779.09 * 100)) < 1e-10,
     'Current quotes compare against the previous historical close, independently from the chart candle-to-candle change')
   cache.clear()
-  cache.set('quote:SGD=X', { symbol: 'SGD=X', price: 1.25, change: 0, absChange: 0 }, TTL.quotes)
+  cache.set('quote:yahoo-only:SGD=X', { symbol: 'SGD=X', price: 1.25, change: 0, absChange: 0 }, TTL.quotes)
   const rateFetchedAt = now
   now += 3600_000
   Reflect.set(yahoo, 'chart', async () => { throw new Error('fixture offline') })
@@ -261,7 +261,7 @@ try {
   const day = 24 * 3600_000
   const seriesRows = [3, 2, 1].map((ago, index) => ({ time: Math.floor((now - ago * day) / 1000), open: 100 + index,
     high: 100 + index, low: 100 + index, close: 100 + index, adjclose: 100 + index, volume: 100 }))
-  cache.set('series:yahoo:ohlcv:FIX:1d', { rows: seriesRows, coveredFrom: Math.floor((now - 60 * day) / 1000),
+  cache.set('series:yahoo-only:adjusted:FIX:1d', { rows: seriesRows, coveredFrom: Math.floor((now - 60 * day) / 1000),
     refreshedAt: now, fullSyncAt: now, currency: 'USD', longName: 'Fixture' }, TTL.chartDaily)
   now += 3600_000
   const returns = await yahooProvider.returns({ tickers: ['FIX'], window: '1mo', force: true })
@@ -308,8 +308,8 @@ try {
   Reflect.set(yahoo, 'chart', chart)
   Reflect.set(yahoo, 'options', options)
   Reflect.set(yahoo, '_fetch', yahooFetch)
-  cache.close()
-  for (const store of opened) store.close()
+  await cache.close()
+  for (const store of opened) await store.close()
   for (const key of ['APPDATA', 'LOCALAPPDATA'] as const) {
     if (prior[key] === undefined) delete process.env[key]
     else process.env[key] = prior[key]

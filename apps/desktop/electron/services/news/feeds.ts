@@ -138,7 +138,7 @@ export async function loadFeed(
   }
 
   try {
-    const previous = cache.get<FeedBody>(`news-feed:${feed.url}`, { allowStale: true })
+    const previous = await cache.get<FeedBody>(`news-feed:${feed.url}`, { allowStale: true })
     const hit = await cache.resolveWithStaleFallback<FeedBody>(
       `news-feed:${feed.url}`,
       TTL.newsFeed,

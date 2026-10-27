@@ -3,7 +3,7 @@ const { resolve } = require('node:path')
 
 /** Never open Electron onto a partial or missing production build. */
 function verifyDesktopBuild(directory = resolve(__dirname, '../apps/desktop')) {
-  const required = ['out/main/main.js', 'out/preload/preload.cjs', 'out/renderer/index.html']
+  const required = ['out/main/main.js', 'out/main/quantWorker.js', 'out/main/cacheWorker.js', 'out/preload/preload.cjs', 'out/renderer/index.html']
   const htmlPath = resolve(directory, 'out/renderer/index.html')
   try {
     const html = readFileSync(htmlPath, 'utf8')

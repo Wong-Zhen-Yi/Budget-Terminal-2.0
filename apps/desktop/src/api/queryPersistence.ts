@@ -5,6 +5,7 @@ import {
   CACHE_SCHEMA_VERSION,
   FRESHNESS,
   RENDERER_CACHE_MAX_BYTES,
+  RENDERER_CACHE_MAX_AGE_MS,
 } from '@shared/freshness'
 
 const DATABASE = `budget-terminal-renderer-cache-v${CACHE_SCHEMA_VERSION}`
@@ -83,6 +84,7 @@ export function queryFreshness(queryKey: QueryKey): number {
   if (root === 'etfArbitrage') return FRESHNESS.etfArbitrage
   if (root === 'heatmap') return FRESHNESS.heatmap
   if (root === 'upDown') return FRESHNESS.upDown
+  if (root === 'upDownTargets') return 24 * 60 * 60_000
   if (root === 'marketCap' || root === 'marketCapSales') return FRESHNESS.marketCap
   if (root === 'sp500') {
     const part = String(queryKey[1] ?? '')
@@ -226,6 +228,14 @@ function markRestored(client: PersistedClient): PersistedClient {
 }
 
 type SavedQuery = PersistedClient['clientState']['queries'][number]
+interface SavedMetadata { reference?: WeakRef<object>; updatedAt: number; size: number }
+
+function savedMetadata(query: SavedQuery): SavedMetadata {
+  const data = query.state.data
+  return { reference: data && typeof data === 'object' ? new WeakRef(data) : undefined,
+    updatedAt: query.state.dataUpdatedAt, size: jsonBytes(query) }
+}
+
 type ClientHeader = PersistedClient & { incremental?: boolean }
 
 /** Independent instances let restart probes use real IndexedDB, never a user's profile. */
@@ -235,7 +245,7 @@ export function createRendererQueryPersister({ database = DATABASE, throttleMs =
   let writing: Promise<void> | undefined
   let generation = 0
   let lastWrite = 0
-  let savedQueries = new Map<string, SavedQuery>()
+  let savedQueries = new Map<string, SavedMetadata>()
   let initialized = false
 
   function schedule(): void {
@@ -259,11 +269,22 @@ export function createRendererQueryPersister({ database = DATABASE, throttleMs =
       try {
         const trimmed = await trimPersistedClientInBackground(client, () => currentGeneration !== generation)
         if (!trimmed || currentGeneration !== generation) return
-        const next = new Map(trimmed.clientState.queries.map(query => [query.queryHash, query]))
-        const changed = [...next.values()].filter(query => {
+        // Memory GC is independent of disk retention. Only hold weak identities and
+        // scalar bookkeeping here, never full snapshots that defeat memory eviction.
+        const next = new Map(savedQueries)
+        const changed: SavedQuery[] = []
+        for (const query of trimmed.clientState.queries) {
           const previous = savedQueries.get(query.queryHash)
-          return !previous || previous.state.data !== query.state.data || previous.state.dataUpdatedAt !== query.state.dataUpdatedAt
-        })
+          if (!previous || previous.reference?.deref() !== query.state.data || previous.updatedAt !== query.state.dataUpdatedAt) {
+            changed.push(query)
+            next.set(query.queryHash, savedMetadata(query))
+          }
+        }
+        let used = jsonBytes({ ...trimmed, clientState: { ...trimmed.clientState, queries: [] } })
+        for (const [hash, entry] of [...next].sort((a, b) => b[1].updatedAt - a[1].updatedAt)) {
+          if (Date.now() - entry.updatedAt > RENDERER_CACHE_MAX_AGE_MS || used + entry.size > RENDERER_CACHE_MAX_BYTES) next.delete(hash)
+          else used += entry.size
+        }
         const removed = [...savedQueries.keys()].filter(hash => !next.has(hash))
         // Excluded local polling and fetch-status changes do not rewrite histories.
         if (initialized && !changed.length && !removed.length) return
@@ -273,6 +294,7 @@ export function createRendererQueryPersister({ database = DATABASE, throttleMs =
           if (!initialized) store.clear()
           for (const hash of removed) store.delete(hash)
           for (const query of changed) {
+            if (!next.has(query.queryHash)) continue
             store.put({ ...query, state: { ...query.state, status: 'success', fetchStatus: 'idle',
               isInvalidated: query.state.status === 'error' ? false : query.state.isInvalidated,
               error: null, fetchFailureCount: 0, fetchFailureReason: null } }, query.queryHash)
@@ -323,11 +345,13 @@ export function createRendererQueryPersister({ database = DATABASE, throttleMs =
           }
         })
         if (!restored || currentGeneration !== generation) return undefined
-        const marked = markRestored(restored)
+        const marked = markRestored({ ...restored, clientState: { ...restored.clientState, queries: restored.clientState.queries.filter(query => Date.now() - query.state.dataUpdatedAt <= RENDERER_CACHE_MAX_AGE_MS) } })
         if (!initialized && restored.incremental) {
-          // Hydration reuses these data references. Unchanged restored histories
-          // should not be serialized and written again on every app launch.
-          savedQueries = new Map(marked.clientState.queries.map(query => [query.queryHash, query]))
+          // Hydration reuses the weak data identities without retaining evicted histories.
+          savedQueries = new Map([
+            ...restored.clientState.queries.filter(query => Date.now() - query.state.dataUpdatedAt > RENDERER_CACHE_MAX_AGE_MS),
+            ...marked.clientState.queries,
+          ].map(query => [query.queryHash, savedMetadata(query)]))
           initialized = true
         }
         return marked

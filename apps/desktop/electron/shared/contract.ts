@@ -2899,7 +2899,7 @@ export interface UpDownRequest extends BackgroundRequest {
   force?: boolean
 }
 
-export interface UpDownTargetsRequest {
+export interface UpDownTargetsRequest extends BackgroundRequest {
   tickers: string[]
   force?: boolean
 }

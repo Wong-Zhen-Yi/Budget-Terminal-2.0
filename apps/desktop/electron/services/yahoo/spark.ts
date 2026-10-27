@@ -113,11 +113,13 @@ export interface SparkBatch {
 export async function fetchSparkCloses(symbols: string[], range = '1y', force = false): Promise<SparkBatch> {
   const unique = [...new Set(symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean))].sort()
   const series: Record<string, SparkSeries> = {}
-  const needed = unique.filter((symbol) => {
-    const hit = force ? null : cache.get<SparkSeries>(`spark:yahoo-v4:${range}:${symbol}`, { observe: true })
+  const needed: string[] = []
+  await Promise.all(unique.map(async (symbol) => {
+    const hit = force ? null : await cache.get<SparkSeries>(`spark:yahoo-v4:${range}:${symbol}`, { observe: true })
     if (hit) series[symbol] = hit.value
-    return !hit
-  })
+    if (!hit) needed.push(symbol)
+  }))
+  needed.sort()
   const chunks: string[][] = []
   for (let index = 0; index < needed.length; index += SPARK_BATCH_SIZE) {
     chunks.push(needed.slice(index, index + SPARK_BATCH_SIZE))
@@ -128,13 +130,13 @@ export async function fetchSparkCloses(symbols: string[], range = '1y', force = 
   const settled = await Promise.allSettled(chunks.map(async (chunk) => {
     const result = await cache.resolve(`spark-batch:${range}:${chunk.join(',')}`, 0, async () => {
       const rows = await fetchChunk(chunk, range)
-      for (const [symbol, value] of Object.entries(rows)) {
+      await Promise.all(Object.entries(rows).map(async ([symbol, value]) => {
         const fetchedAt = Date.now()
         const snapshot: SourceSnapshot = { fetchedAt, asOf: value.asOf, expiresAt: fetchedAt + 120_000,
           stale: false, fromCache: false, failures: [] }
-        cache.set(`spark:yahoo-v4:${range}:${symbol}`, value, 120_000, snapshot)
+        await cache.set(`spark:yahoo-v4:${range}:${symbol}`, value, 120_000, snapshot)
         observeSource(snapshot)
-      }
+      }))
       return rows
     }, { force: true })
     return result.value

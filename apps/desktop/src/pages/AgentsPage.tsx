@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { AgentImage } from '@shared/agents'
 import { useAgentComposer } from '@/api/agentComposer'
-import { AgentChatImage } from '@/components/agents/AgentChatImage'
-import { AgentMarkdown } from '@/components/agents/AgentMarkdown'
+import { AgentMessages } from '@/components/agents/AgentMessages'
 import { AgentWorkspacePanel } from '@/components/agents/AgentWorkspacePanel'
+import { useAgentTranscript } from '@/components/agents/useAgentTranscript'
 import { agentQuickPrompts } from '@/lib/agentPrompts'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import '@/styles/agents.css'
@@ -22,14 +23,15 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
   const setInterval = (interval: number) => update({ interval })
   const setRuns = (runs: number) => update({ runs })
   const [showControls, setShowControls] = useState(false)
-  const transcript = useRef<HTMLDivElement>(null)
+  const { transcript, visibleMessages, readingSelection } = useAgentTranscript(agent?.messages, agent?.currentChatId, agent?.portfolioProposal?.id)
   const imagePicker = useRef<HTMLInputElement>(null)
-  const lastMessage = agent?.messages.at(-1)
+  const onUseImage = useCallback((image: AgentImage) => {
+    if (attachImage(image)) document.getElementById(`${idPrefix}-message`)?.focus()
+  }, [attachImage, idPrefix])
 
   useEffect(() => {
     onStatusChange([{ label: 'Agents', envelope: query.data, loading: query.isPending, error: query.error }], '')
   }, [query.data, query.isPending, query.error, onStatusChange])
-  useEffect(() => { transcript.current?.scrollTo({ top: transcript.current.scrollHeight }) }, [lastMessage?.id, lastMessage?.text, agent?.portfolioProposal?.id])
 
   const locked = pending || !!agent?.busy
   const models = agent?.models ?? []
@@ -77,15 +79,8 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
               document.getElementById(`${idPrefix}-message`)?.focus()
             }}>{label} <span>↗</span></button>)}</div>
           </div>}
-          {agent?.messages.map(message => <article key={message.id} className={`agents-message ${message.role}`} aria-label={message.role === 'assistant' ? 'Codex response' : message.role === 'user' ? 'Your message' : 'Agent activity'}>
-            <div className="agents-message-meta">{message.role === 'assistant' ? 'Codex' : message.role === 'user' ? 'You' : 'Activity'} <time dateTime={new Date(message.at).toISOString()}>{new Date(message.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>
-            {message.role === 'assistant' ? <AgentMarkdown text={message.text} /> : <p className="agents-plain-message">{message.text}</p>}
-            {message.imageStatus === 'generating' && <p className="agents-thinking" role="status">Creating image… This can take a few minutes.</p>}
-            {message.imageArtifacts?.map(artifact => <AgentChatImage key={artifact.id} artifact={artifact} locked={locked || readingImages || images.length >= 4} onUse={image => {
-              if (attachImage(image)) document.getElementById(`${idPrefix}-message`)?.focus()
-            }} />)}
-            {message.images?.filter(name => !message.imageArtifacts?.some(artifact => artifact.name === name)).map((name, index) => <span className="agents-image-name" key={index}>Attached image: {name}</span>)}
-          </article>)}
+          <AgentMessages messages={visibleMessages} imagesLocked={locked || readingImages || images.length >= 4} onUseImage={onUseImage} />
+          {readingSelection && agent?.busy && <p className="agents-thinking" role="status">Reply display paused while highlighting. Clear the selection to show the latest reply.</p>}
           {agent?.busy && <p className="agents-thinking" role="status">{agent.connected ? 'Codex is working. You can switch pages while it runs.' : 'Connecting to Codex… You can switch pages while it loads.'}</p>}
           {agent?.portfolioProposal && <section className="agents-portfolio-review" aria-label="Review portfolio update">
             <h2>Review portfolio update · {agent.portfolioProposal.portfolioName}</h2>

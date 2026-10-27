@@ -30,12 +30,12 @@ async function loadProfile(symbol: string): Promise<SectorProfile> {
 
 async function cachedProfileSector(symbol: string): Promise<string> {
   const key = `holding-sector:v1:${symbol}`
-  if (cache.get<boolean>(`${key}:missing`)) return cache.get<string>(key, { allowStale: true })?.value ?? ''
+  if (await cache.get<boolean>(`${key}:missing`)) return (await cache.get<string>(key, { allowStale: true }))?.value ?? ''
   const result = await cache.resolveWithStaleFallback(key, SECTOR_TTL_MS, async () => {
     const sector = sectorFromProfile(await loadProfile(symbol))
     // An unresolved symbol gets a short negative cache, not a week-long success.
     if (!sector) {
-      cache.set(`${key}:missing`, true, 60 * 60_000)
+      await cache.set(`${key}:missing`, true, 60 * 60_000)
       throw new Error(`No sector or instrument classification published for ${symbol}.`)
     }
     return sector

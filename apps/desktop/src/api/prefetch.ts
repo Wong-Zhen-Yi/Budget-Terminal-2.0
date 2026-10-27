@@ -30,6 +30,8 @@ import { api, queryKeys } from './client'
 import { priceScreenKey } from './priceQueries'
 import { backtestKey } from './backtestQueries'
 import { cardsPerformanceKey } from './cardsQueries'
+import { loadUpDownTargets, upDownTargetBatches, upDownTargetsKey } from './upDownTargetsQueries'
+import { completeStartupRegistration } from './queryMemory'
 import { queryFreshness } from './queryPersistence'
 import { usePortfolio } from './queries'
 import { assertStartupReady, runWarmTasks, StartupLoadError, warmStartupQuery, warmStartupSnapshot } from './warmQueue'
@@ -312,7 +314,7 @@ export function buildTasks(
       })
       const models = buildCardModels(cards.data, payload?.portfolios ?? [])
       if (!models.length) return
-      for (const interval of CARD_INTERVALS) {
+      const outcomes = await Promise.allSettled(CARD_INTERVALS.map(async interval => {
         const request = {
           interval,
           cards: models.map(({ id, symbols, weighting, weights, shares, cashBalance }) => ({
@@ -324,7 +326,10 @@ export function buildTasks(
           queryFn: () => api.cardsPerformance({ ...request, background: true, backgroundOrder }),
           staleTime: queryFreshness(cardsPerformanceKey(request)),
         })
-      }
+      }))
+      const failure = outcomes.find(entry => entry.status === 'rejected' && !(entry.reason instanceof StartupLoadError && entry.reason.state === 'degraded'))
+        ?? outcomes.find(entry => entry.status === 'rejected')
+      if (failure?.status === 'rejected') throw failure.reason
     },
   })
 
@@ -388,14 +393,26 @@ export function buildTasks(
     : upDownPage.activeSource === 'custom' ? upDownPage.customSymbols : []
   tasks.push({
     tab: 'up-down', label: 'Up/Down',
-    run: (client, backgroundOrder) => warmStartupQuery(client, {
-      queryKey: queryKeys.upDown(upDownPage.activeSource, upDownPage.interval, upDownSymbols),
-      queryFn: () => api.upDown({
-        source: upDownPage.activeSource, interval: upDownPage.interval,
-        symbols: upDownSymbols, background: true, backgroundOrder,
-      }),
-      staleTime: queryFreshness(queryKeys.upDown(upDownPage.activeSource, upDownPage.interval, upDownSymbols)),
-    }),
+    run: async (client, backgroundOrder) => {
+      const result = await warmStartupSnapshot(client, {
+        queryKey: queryKeys.upDown(upDownPage.activeSource, upDownPage.interval, upDownSymbols),
+        queryFn: () => api.upDown({
+          source: upDownPage.activeSource, interval: upDownPage.interval,
+          symbols: upDownSymbols, background: true, backgroundOrder,
+        }),
+        staleTime: queryFreshness(queryKeys.upDown(upDownPage.activeSource, upDownPage.interval, upDownSymbols)),
+      })
+      const outcomes = await Promise.allSettled(upDownTargetBatches(result.data.rows).map(tickers => {
+        const queryKey = upDownTargetsKey(tickers)
+        return warmStartupQuery(client, { queryKey, staleTime: queryFreshness(queryKey),
+          queryFn: () => loadUpDownTargets({ tickers, background: true, backgroundOrder }) })
+      }))
+      const failure = outcomes.find(entry => entry.status === 'rejected' && !(entry.reason instanceof StartupLoadError && entry.reason.state === 'degraded'))
+        ?? outcomes.find(entry => entry.status === 'rejected')
+      if (failure?.status === 'rejected') throw failure.reason
+      assertStartupReady(result)
+      return result
+    },
   })
 
   tasks.push({
@@ -1097,6 +1114,7 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
     })
 
     if (!tasks.length) {
+      completeStartupRegistration(queryClient)
       useDataHealth.getState().setStartup({ durationMs: 0, planned: 0, timings: [] })
       return
     }
@@ -1201,6 +1219,7 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
           else reporter!.schedule()
         },
       })
+      if (!cancelled) completeStartupRegistration(queryClient)
     }
     const timer = setTimeout(() => void run(), 250)
 

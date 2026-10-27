@@ -103,7 +103,7 @@ async function lane<T>(key: string, ttlMs: number, force: boolean, load: () => P
     const result = await cache.resolve(key, ttlMs, load, { force })
     return { value: result.value, warning: null }
   } catch (error) {
-    const stale = cache.get<T>(key, { allowStale: true, observe: true })
+    const stale = await cache.get<T>(key, { allowStale: true, observe: true })
     return { value: stale?.value ?? null, warning: error }
   }
 }

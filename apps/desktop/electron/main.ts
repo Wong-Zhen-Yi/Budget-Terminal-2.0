@@ -20,7 +20,8 @@ if (!ownsInstance) app.quit()
 
 let disposeIpc: (() => void) | null = null
 let releaseDataSession: (() => void) | null = null
-let closeCache: (() => void) | null = null
+let closeCache: (() => Promise<void>) | null = null
+let closeQuantWorker: (() => void) | null = null
 let closeYahooWorker: (() => void) | null = null
 let closeDefeatBetaDecoder: (() => void) | null = null
 let backupPending: (() => boolean) | null = null
@@ -128,6 +129,7 @@ if (ownsInstance) app.whenReady().then(async () => {
     closeYahooWorker = (await import('./services/yahoo/client.js')).closeYahooWorker
     closeDefeatBetaDecoder = (await import('./services/defeatbeta/decoder.js')).closeDefeatBetaDecoder
     closeCache = () => cache.close()
+    closeQuantWorker = (await import('./services/quantWorker.js')).closeQuantWorker
     disposeIpc = registerIpcHandlers((event) => {
       const frame = event.senderFrame
       return Boolean(frame && frame === event.sender.mainFrame &&
@@ -159,14 +161,18 @@ app.on('window-all-closed', () => {
 let finishingQuit = false
 let drainedQuit = false
 app.on('before-quit', (event) => {
-  if (drainedQuit || (!stopMcp && !flushAgents && !flushNotifications && !backupPending?.())) return
+  if (drainedQuit || (!stopMcp && !flushAgents && !flushNotifications && !closeCache && !backupPending?.())) return
   event.preventDefault()
   if (finishingQuit) return
   finishingQuit = true
   void (async () => {
-    await Promise.all([stopMcp?.(), flushAgents?.()])
-    await flushNotifications?.()
-    await flushBackup?.()
+    try {
+      await Promise.all([stopMcp?.(), flushAgents?.()])
+      await flushNotifications?.()
+      await flushBackup?.()
+    } finally {
+      await closeCache?.()
+    }
   })().catch((error) => console.warn('Shutdown flush failed:', error)).finally(() => {
     drainedQuit = true
     app.quit()
@@ -176,7 +182,8 @@ app.on('before-quit', (event) => {
 app.on('will-quit', () => {
   disposeIpc?.()
   disposeIpc = null
-  closeCache?.()
+  void closeCache?.()
+  closeQuantWorker?.()
   closeYahooWorker?.()
   closeDefeatBetaDecoder?.()
 })

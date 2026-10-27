@@ -125,7 +125,10 @@
     "probe:vst": "tsx scripts/probe-vst.ts",
     "probe:vst-ui": "tsx scripts/probe-vst-ui.ts",
     "probe:articles": "tsx scripts/probe-articles.ts",
-    "probe:articles-ui": "tsx scripts/probe-articles-ui.ts"
+    "probe:articles-ui": "tsx scripts/probe-articles-ui.ts",
+    "probe:quant-performance": "tsx scripts/probe-quant-performance.ts",
+    "probe:performance-ui": "tsx scripts/probe-performance-ui.ts",
+    "probe:workers-build": "tsx scripts/probe-workers-build.ts"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -146,6 +149,7 @@
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@tanstack/react-query": "^5.104.5",
     "@tanstack/react-query-persist-client": "^5.104.5",
+    "@tanstack/react-virtual": "3.13.12",
     "ajv": "^8.20.0",
     "hyparquet": "^1.31.5",
     "hyparquet-compressors": "^1.1.2",

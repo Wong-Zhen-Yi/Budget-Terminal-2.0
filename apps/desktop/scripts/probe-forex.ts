@@ -38,7 +38,7 @@ if (process.argv.includes('--offline')) {
   assert.equal(unavailable.data, null)
   assert.equal(unavailable.meta.freshness, 'failed')
   // Seed the underlying quote cache: one invalid pair must not blank the other nine.
-  FOREX_PAIRS.forEach((pair, index) => cache.set(`quote:${pair.symbol}`, { ...quote, symbol: pair.symbol, price: index ? 1.26 : 0 }, 60_000))
+  FOREX_PAIRS.forEach((pair, index) => cache.set(`quote:yahoo-only:${pair.symbol}`, { ...quote, symbol: pair.symbol, price: index ? 1.26 : 0 }, 60_000))
   const partial = await getForexQuotes()
   assert.equal(partial.meta.freshness, 'partial')
   assert.equal(partial.data.rows.filter((row) => row.quote).length, 9)

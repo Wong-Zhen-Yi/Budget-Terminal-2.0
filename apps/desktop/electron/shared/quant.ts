@@ -206,6 +206,10 @@ export function buildPairSpread(leftInput: QuantBar[], rightInput: QuantBar[], z
   const dates = [...leftMap.keys()].filter((date) => rightMap.has(date)).sort()
   const left = dates.map((date) => leftMap.get(date)!)
   const right = dates.map((date) => rightMap.get(date)!)
+  return alignedPairSpread(dates, left, right, zWindow)
+}
+
+function alignedPairSpread(dates: string[], left: number[], right: number[], zWindow = 60): PairSpread {
   const empty = {
     dates,
     left,
@@ -370,17 +374,39 @@ export function discoverPairs(
   histories: Record<string, QuantBar[]>,
   options: { prescreenLimit?: number; resultLimit?: number } = {},
 ): QuantPairRow[] {
-  const tickers = Object.keys(histories).filter((ticker) => cleanBars(histories[ticker]).length >= MIN_PAIR_OBSERVATIONS)
+  const prepared = new Map(Object.entries(histories).map(([ticker, bars]) => [ticker, cleanBars(bars)]))
+  const tickers = [...prepared.keys()].filter(ticker => prepared.get(ticker)!.length >= MIN_PAIR_OBSERVATIONS)
+  const indexes = new Map(tickers.map(ticker => [ticker, new Map(prepared.get(ticker)!.map(bar => [bar.date, bar.close]))]))
+  const align = (leftTicker: string, rightTicker: string) => {
+    const leftMap = indexes.get(leftTicker)!
+    const rightMap = indexes.get(rightTicker)!
+    const dates = [...leftMap.keys()].filter(date => rightMap.has(date))
+    return { dates, left: dates.map(date => leftMap.get(date)!), right: dates.map(date => rightMap.get(date)!) }
+  }
   const prescreened: Array<{ left: string; right: string; correlation: number }> = []
   for (let leftIndex = 0; leftIndex < tickers.length; leftIndex += 1) {
     for (let rightIndex = leftIndex + 1; rightIndex < tickers.length; rightIndex += 1) {
-      const spread = buildPairSpread(histories[tickers[leftIndex]], histories[tickers[rightIndex]])
-      if (spread.correlation !== null) prescreened.push({ left: tickers[leftIndex], right: tickers[rightIndex], correlation: spread.correlation })
+      const leftTicker = tickers[leftIndex]
+      const rightTicker = tickers[rightIndex]
+      const { dates, left, right } = align(leftTicker, rightTicker)
+      if (dates.length < MIN_PAIR_OBSERVATIONS) continue
+      // Match OLS eligibility without fitting residuals or computing rolling Z scores
+      // for all 780 candidates. Returns must be computed AFTER date alignment.
+      const xMean = mean(right)
+      const yMean = mean(left)
+      const denominator = right.reduce((sum, x) => sum + (x - xMean) ** 2, 0)
+      if (!Number.isFinite(denominator) || denominator <= 0) continue
+      const beta = right.reduce((sum, x, index) => sum + (x - xMean) * (left[index] - yMean), 0) / denominator
+      if (!Number.isFinite(beta) || !Number.isFinite(yMean - beta * xMean)) continue
+      const value = correlation(left.slice(1).map((price, index) => price / left[index] - 1),
+        right.slice(1).map((price, index) => price / right[index] - 1))
+      if (value !== null) prescreened.push({ left: leftTicker, right: rightTicker, correlation: value })
     }
   }
   prescreened.sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation) || a.left.localeCompare(b.left) || a.right.localeCompare(b.right))
   const rows = prescreened.slice(0, options.prescreenLimit ?? 150).flatMap(({ left, right }) => {
-    const spread = buildPairSpread(histories[left], histories[right])
+    const aligned = align(left, right)
+    const spread = alignedPairSpread(aligned.dates, aligned.left, aligned.right)
     if (!spread.spread.length) return []
     const reversion = meanReversionStats(spread.spread)
     const hurst = hurstExponent(spread.spread)

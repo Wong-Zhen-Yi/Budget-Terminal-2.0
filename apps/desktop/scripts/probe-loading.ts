@@ -313,6 +313,62 @@ for (const freshness of ['partial', 'stale', 'failed'] as const) {
   himsClient.clear()
 }
 
+// Real partial dependencies must not leave hidden intervals or target columns unwarmed.
+const { defaultCardsPayload } = await import('../electron/shared/cards.js')
+const { newsQuoteTickers } = await import('../src/api/initialContent.js')
+const { upDownTargetBatches, upDownTargetsKey, useUpDownTargets } = await import('../src/api/upDownTargetsQueries.js')
+assert.deepEqual(newsQuoteTickers([{ ticker: 'META, AMD' }, { ticker: 'NVDA, META' }, { ticker: 'OTHER' }] as NewsArticle[]), ['AMD', 'META', 'NVDA'])
+const cardIntervals: string[] = []
+Object.assign(window.api, {
+  cards: async () => ok(defaultCardsPayload(), 'fixture'),
+  cardsPerformance: async (request: import('../electron/shared/contract.js').CardsPerformanceRequest) => {
+    cardIntervals.push(request.interval)
+    const result = ok({ interval: request.interval, results: {} }, 'fixture')
+    return request.interval === '1d' ? { ...result, meta: { ...result.meta, freshness: 'partial', failureReason: 'Fixture intraday history unavailable' } } : result
+  },
+})
+const dependencyTasks = buildTasks(portfolio, undefined, { stocks: 'AAPL', fundamentals: 'AAPL' },
+  { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 })
+const cardClient = new QueryClient()
+await assert.rejects(dependencyTasks.find(task => task.label === 'Card performance')!.run(cardClient), /Fixture intraday/)
+assert.deepEqual(cardIntervals.sort(), ['1d', '1y', '30d'].sort(), 'A partial 1D card must not skip 30D and 1Y')
+assert.equal(cardClient.getQueryCache().findAll({ queryKey: ['cardsPerformance'] }).length, 3)
+cardClient.clear()
+const targetRows = Array.from({ length: 121 }, (_, i) => ({ ticker: `FIX${i}`, name: 'Fixture', lastClose: 100,
+  intervalReturn: 1, tradingDays: 1, daysUp: 1, daysDown: 0, flatDays: 0 }))
+let activeTargets = 0
+let peakTargets = 0
+let targetReads = 0
+Object.assign(window.api, {
+  upDown: async (request: import('../electron/shared/contract.js').UpDownRequest) => ({ ...ok({ source: request.source,
+    interval: request.interval, rows: targetRows, missing: ['MISSING'], asOf: '', dataSource: 'fixture', holdingsSource: '', forceTargets: false }, 'fixture'),
+    meta: { source: 'fixture', fetchedAt: Date.now(), freshness: 'partial', failureReason: 'Fixture missing ticker' } }),
+  upDownTargets: async (request: import('../electron/shared/contract.js').UpDownTargetsRequest) => {
+    assert.equal(request.background, true)
+    targetReads++
+    activeTargets++
+    peakTargets = Math.max(peakTargets, activeTargets)
+    await new Promise(resolve => setTimeout(resolve, 5))
+    activeTargets--
+    return ok({ targets: Object.fromEntries(request.tickers.map(ticker => [ticker, 120])), resolved: request.tickers.length, available: request.tickers.length }, 'fixture')
+  },
+})
+const targetClient = new QueryClient({ defaultOptions: { queries: { refetchOnMount: false, retry: false } } })
+await assert.rejects(dependencyTasks.find(task => task.tab === 'up-down')!.run(targetClient, 4), /Fixture missing ticker/)
+const targetBatches = upDownTargetBatches(targetRows)
+assert.equal(targetReads, targetBatches.length, 'Targets must warm even if the base histories are partial')
+assert(peakTargets <= 8, 'Startup target concurrency must remain bounded')
+for (const batch of targetBatches) assert(targetClient.getQueryData(upDownTargetsKey(batch)))
+function PreparedTargets() {
+  const progress = useUpDownTargets(targetRows, false, 0)
+  return createElement('span', null, `${progress.resolved}:${progress.available}:${progress.loading}`)
+}
+const targetHtml = renderToStaticMarkup(createElement(QueryClientProvider, { client: targetClient }, createElement(PreparedTargets)))
+assert(targetHtml.includes('121:121:false'), 'First render must show all prepared target values')
+assert.equal(targetReads, targetBatches.length, 'Opening Up/Down must not start target requests')
+targetClient.clear()
+console.log('Dependent startup checks passed: partial Cards warm all intervals, multi-ticker News requests split correctly, and Up/Down targets are prepared with bounded concurrency before first visit.')
+
 // Every task must start while the slow first task is still pending. A failure
 // must remain visible and must not stop other pages from finishing.
 const parallelTasks = Array.from({ length: 12 }, (_, index) => index)
@@ -373,7 +429,7 @@ assert.equal(calls, 2)
 
 let failures = 0
 const fail = async () => { failures += 1; throw new Error('provider unavailable') }
-local.set('stale', 7, -1)
+await local.set('stale', 7, -1)
 for (let index = 0; index < 5; index += 1) {
   const fallback = await local.resolveWithStaleFallback('stale', 1000, fail, { force: true })
   assert.equal(fallback.value, 7)
@@ -397,18 +453,18 @@ await local.resolve('degraded-derived', 12 * 60 * 60_000, async () => {
   observeSource({ fetchedAt: Date.now(), stale: false, fromCache: false, failures: ['HTTP 503'] })
   return { usable: true }
 })
-assert(local.get('degraded-derived'), 'Partial content remains usable during the failure-coalescing window')
+assert(await local.get('degraded-derived'), 'Partial content remains usable during the failure-coalescing window')
 try {
   Date.now = () => afterCooldown
-  assert.equal(local.get('degraded-derived'), null, 'Incomplete cache must not suppress a recovery fetch for hours')
-  assert(local.get('degraded-derived', { allowStale: true }), 'Incomplete content remains available as a stale fallback')
+  assert.equal(await local.get('degraded-derived'), null, 'Incomplete cache must not suppress a recovery fetch for hours')
+  assert(await local.get('degraded-derived', { allowStale: true }), 'Incomplete content remains available as a stale fallback')
   await local.resolve('degraded-derived', 12 * 60 * 60_000, async () => { derivedCalls++; return { usable: true } })
   assert.equal(derivedCalls, 2)
 } finally { Date.now = realNow }
-local.delete('stale')
+await local.delete('stale')
 await assert.rejects(local.resolve('stale', 1000, fail), /provider unavailable/)
 assert.equal(failures, 3)
-local.set('stale', 9, 1000)
+await local.set('stale', 9, 1000)
 assert.equal((await local.resolve('stale', 1000, loader)).value, 9)
 
 const originalFetch = yahoo._fetch

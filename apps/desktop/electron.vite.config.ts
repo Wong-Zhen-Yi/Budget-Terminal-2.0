@@ -19,7 +19,12 @@ export default defineConfig({
   main: {
     build: {
       outDir: 'out/main',
-      lib: { entry: resolve(root, 'electron/main.ts') },
+      lib: { entry: {
+        main: resolve(root, 'electron/main.ts'),
+        quantWorker: resolve(root, 'electron/workers/quantWorker.ts'),
+        cacheWorker: resolve(root, 'electron/workers/cacheWorker.ts'),
+      } },
+      rollupOptions: { output: { entryFileNames: '[name].js' } },
     },
     resolve: {
       alias: { '@shared': resolve(root, 'electron/shared') },

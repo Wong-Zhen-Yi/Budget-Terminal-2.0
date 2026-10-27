@@ -285,12 +285,100 @@ try {
         await click('Confirm delete tracker'); check(state.trackers.length === 0, 'Confirmed tracker deletion')
         state.trackers = [{ ...trackerFixture, enabled: false, running: false, nextRunAt: null }]
         await click('Trackers')
+        // A streamed response must not reparse selected Markdown or pull the reader down.
+        if (!document.getElementById('agent-controls').hidden) await click('Controls')
+        for (const embeddedMode of [false, true]) {
+          embedded = embeddedMode
+          state.currentChatId = 'reading-chat-' + embeddedMode
+          state.messages = [{ id: 'reading-fixture', role: 'assistant', at: Date.now(), text: Array.from({ length: 60 }, (_, index) => 'Reading paragraph ' + index + ': highlight these words while a reply streams.').join('\\n\\n') }]
+          state.busy = true
+          client.setQueryData(['agents'], envelope()); render(); await settle()
+          const transcript = document.querySelector('.agents-transcript')
+          check(transcript.scrollTop > 0, 'New replies follow the bottom before the reader scrolls away: ' + JSON.stringify({ embeddedMode, top: transcript.scrollTop, height: transcript.scrollHeight, client: transcript.clientHeight, paragraphs: transcript.querySelectorAll('p').length, parent: transcript.parentElement.getBoundingClientRect().height }))
+          const paragraph = transcript.querySelector('.agents-prose p')
+          paragraph.scrollIntoView({ block: 'start' }); await settle()
+          const position = transcript.scrollTop
+          paragraph.dispatchEvent(new PointerEvent('pointerdown', { button: 0, bubbles: true }))
+          await settle()
+          // Polling can arrive before the first selectionchange during a native drag.
+          state.messages[0].text += '\\n\\nUpdate during pointer drag'
+          client.setQueryData(['agents'], envelope()); await settle()
+          check(!transcript.textContent.includes('Update during pointer drag'), 'Pointerdown protects text before the first selection range is created')
+          const selected = document.getSelection()
+          const range = document.createRange()
+          range.setStart(paragraph.firstChild, 0); range.setEnd(paragraph.firstChild, 17)
+          selected.removeAllRanges(); selected.addRange(range)
+          document.dispatchEvent(new Event('selectionchange')); await settle()
+          const highlighted = selected.toString()
+          document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true })); await settle()
+          let mutations = 0
+          const observer = new MutationObserver(records => { mutations += records.length })
+          observer.observe(transcript.querySelector('.agents-message'), { childList: true, subtree: true, characterData: true })
+          for (let index = 0; index < 8; index++) {
+            state.messages[0].text += '\\n\\nStreamed update ' + index
+            client.setQueryData(['agents'], envelope()); await settle()
+          }
+          check(selected.toString() === highlighted && highlighted.length > 0, 'Highlight survives streamed updates')
+          check(mutations === 0 && !transcript.textContent.includes('Streamed update 7'), 'Selected message DOM stays unchanged across repeated streamed polls')
+          check(Math.abs(transcript.scrollTop - position) < 2, 'Highlighting earlier text must not jump to the latest reply')
+          check(transcript.textContent.includes('Reply display paused while highlighting'), 'Paused display explains how to resume while Agent keeps working')
+          selected.removeAllRanges(); document.dispatchEvent(new Event('selectionchange')); await settle()
+          check(transcript.textContent.includes('Streamed update 7'), 'Clearing the selection catches up to the latest reply')
+          check(Math.abs(transcript.scrollTop - position) < 2, 'Catching up preserves the earlier reading position')
+          observer.disconnect()
+          state.messages[0].text += '\\n\\nUpdate while reading above the bottom'
+          client.setQueryData(['agents'], envelope()); await settle()
+          check(Math.abs(transcript.scrollTop - position) < 2, 'Scrolling away disables forced following even without a selection')
+          transcript.scrollTop = transcript.scrollHeight
+          transcript.dispatchEvent(new Event('scroll')); await settle()
+          state.messages[0].text += '\\n\\nFollow the newest reply again'
+          client.setQueryData(['agents'], envelope()); await settle()
+          check(transcript.scrollHeight - transcript.clientHeight - transcript.scrollTop < 2, 'Scrolling back to the bottom resumes following')
+          // Keyboard selection also pauses updates; changing chats must discard its snapshot.
+          const text = transcript.querySelector('.agents-prose p').firstChild
+          const keyboardRange = document.createRange(); keyboardRange.setStart(text, 0); keyboardRange.setEnd(text, 7)
+          selected.addRange(keyboardRange); document.dispatchEvent(new Event('selectionchange')); await settle()
+          state.currentChatId += '-next'
+          state.messages = [{ id: 'next-chat', role: 'assistant', at: Date.now(), text: 'Different chat is ready.' }]
+          client.setQueryData(['agents'], envelope()); await settle()
+          check(transcript.textContent.includes('Different chat is ready.') && !transcript.textContent.includes('Reading paragraph'), 'Chat changes cannot retain a selected snapshot of the previous conversation')
+          selected.removeAllRanges(); document.dispatchEvent(new Event('selectionchange')); await settle()
+        }
+        embedded = false; state.busy = false
         state.messages = savedMessages
-        client.setQueryData(['agents'], envelope()); await settle()
+        client.setQueryData(['agents'], envelope()); render(); await settle()
         window.setWorkspace = async label => { await click(label) }
         window.setEmbedded = async value => { embedded = value; render(); await settle() }
         window.setControls = async open => { if (document.getElementById('agent-controls').hidden === open) await click('Controls') }
-        return 'PASS: private history reopening, independent notification page, tracker review/start/pause/delete, automatic startup readiness, connected New chat, preserved model settings, cleared drafts, private inline image display, image edit attachment, missing-image fallback, inline candlestick charts, OHLC inspection, doji/flat/negative/intraday charts, native pie charts, exact values, percentages, accessible tables, safe malformed chart fallback, formatted Markdown, nested lists, tables, code, safe links, literal user text, chat controls, image paste/picker/send, portfolio review, model settings, autonomy, startup readiness and private cache exclusion'
+        window.prepareNativeSelection = async () => {
+          state.currentChatId = 'native-selection-chat'; state.busy = true
+          state.messages = [{ id: 'native-selection', role: 'assistant', at: Date.now(), text: Array.from({ length: 40 }, () => 'Highlight these words to read at your own pace while Codex continues working.').join('\\n\\n') }]
+          client.setQueryData(['agents'], envelope()); await settle()
+          const paragraph = document.querySelector('.agents-prose p')
+          // Keep the drag away from the top edge, where Chromium selection autoscrolls.
+          document.querySelector('.agents-transcript').scrollTop = 0; await settle()
+          const range = document.createRange(); range.setStart(paragraph.firstChild, 0); range.setEnd(paragraph.firstChild, 35)
+          const box = range.getBoundingClientRect()
+          return { x: Math.round(box.left + 1), y: Math.round(box.top + box.height / 2) }
+        }
+        window.nativeStreamUpdate = async () => {
+          state.messages[0].text += '\\n\\nNative drag streamed update'
+          client.setQueryData(['agents'], envelope()); await settle()
+          check(!document.querySelector('.agents-prose').textContent.includes('Native drag streamed update'), 'Real mouse drag pauses streamed Markdown')
+        }
+        window.checkNativeSelection = async () => {
+          const highlighted = document.getSelection().toString()
+          check(highlighted.length > 12 && highlighted.includes('these words'), 'Real click and drag selects readable reply text: ' + JSON.stringify(highlighted))
+          await window.nativeStreamUpdate()
+          return 'PASS: real mouse drag highlights reply text and retains it through streamed updates'
+        }
+        window.finishNativeSelection = async () => {
+          document.getSelection().removeAllRanges(); document.dispatchEvent(new Event('selectionchange')); await settle()
+          check(document.querySelector('.agents-prose').textContent.includes('Native drag streamed update'), 'Real mouse selection release catches up after clearing')
+          state.currentChatId = 'restored-chat'; state.messages = savedMessages; state.busy = false
+          client.setQueryData(['agents'], envelope()); await settle()
+        }
+        return 'PASS: selection stability during streaming in page and embedded chats, pointer-drag and keyboard highlights, unchanged selected DOM, reading scroll position, follow resumption, chat-switch selection reset, private history reopening, independent notification page, tracker review/start/pause/delete, automatic startup readiness, connected New chat, preserved model settings, cleared drafts, private inline image display, image edit attachment, missing-image fallback, inline candlestick charts, OHLC inspection, doji/flat/negative/intraday charts, native pie charts, exact values, percentages, accessible tables, safe malformed chart fallback, formatted Markdown, nested lists, tables, code, safe links, literal user text, chat controls, image paste/picker/send, portfolio review, model settings, autonomy, startup readiness and private cache exclusion'
       }
     ` }, bundle: true, jsx: 'automatic', write: false, format: 'iife', loader: { '.css': 'empty' },
     define: { 'process.env.NODE_ENV': '"production"' }, alias: { '@': join(root, 'src'), '@shared': join(root, 'electron/shared') },
@@ -307,13 +395,26 @@ try {
     app.disableHardwareAcceleration()
     app.setPath('userData', ${JSON.stringify(join(directory, 'userData'))})
     app.whenReady().then(async () => {
-      const window = new BrowserWindow({ show: false, width: 1300, height: 900, webPreferences: { backgroundThrottling: false, offscreen: true } })
+      const window = new BrowserWindow({ show: false, frame: false, width: 1300, height: 900, webPreferences: { backgroundThrottling: false, offscreen: true } })
       try {
         await window.loadFile(${JSON.stringify(join(directory, 'index.html'))})
         mkdirSync(${JSON.stringify(resolve(root, '../../output/playwright'))}, { recursive: true })
         const fixture = await window.webContents.executeJavaScript('window.portfolioImage')
         writeFileSync(${JSON.stringify(resolve(root, '../../output/playwright/agent-portfolio-fixture.png'))}, Buffer.from(fixture.split(',')[1], 'base64'))
         console.log(await window.webContents.executeJavaScript('window.runProbe()'))
+        const drag = await window.webContents.executeJavaScript('window.prepareNativeSelection()')
+        window.webContents.sendInputEvent({ type: 'mouseMove', x: drag.x, y: drag.y })
+        window.webContents.sendInputEvent({ type: 'mouseDown', x: drag.x, y: drag.y, button: 'left', clickCount: 1 })
+        for (const offset of [20, 60, 120, 180, 240]) {
+          window.webContents.sendInputEvent({ type: 'mouseMove', x: drag.x + offset, y: drag.y, modifiers: ['leftButtonDown'] })
+          await new Promise(resolve => setTimeout(resolve, 30))
+          if (offset === 120) await window.webContents.executeJavaScript('window.nativeStreamUpdate()')
+        }
+        window.webContents.sendInputEvent({ type: 'mouseUp', x: drag.x + 240, y: drag.y, button: 'left', clickCount: 1 })
+        await new Promise(resolve => setTimeout(resolve, 100))
+        writeFileSync(${JSON.stringify(resolve(root, '../../output/playwright/agents-selection.png'))}, (await window.webContents.capturePage()).toPNG())
+        console.log(await window.webContents.executeJavaScript('window.checkNativeSelection()'))
+        await window.webContents.executeJavaScript('window.finishNativeSelection()')
         const errors = await window.webContents.executeJavaScript('window.probeErrors')
         if (errors.length) throw Error(errors.join('; '))
         for (const width of [900, 1600, 600]) {

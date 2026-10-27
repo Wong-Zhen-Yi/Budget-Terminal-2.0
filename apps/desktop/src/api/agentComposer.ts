@@ -1,3 +1,4 @@
+import { useCallback } from 'react'
 import type { AgentImage } from '@shared/agents'
 import { useAgentDraft } from '@/stores/agentDraft'
 import { useAgentCommand, useAgents } from './agentsQueries'
@@ -59,7 +60,7 @@ export function useAgentComposer() {
     finally { update({ readingImages: false }) }
   }
 
-  const attachImage = (image: AgentImage) => {
+  const attachImage = useCallback((image: AgentImage) => {
     const current = useAgentDraft.getState()
     if (current.pendingCommands || current.readingImages || agent?.busy) return false
     if (current.images.length >= 4 || image.dataUrl.length * 3 / 4 > 8 * 1024 * 1024
@@ -69,7 +70,7 @@ export function useAgentComposer() {
     }
     update({ images: [...current.images, image], draft: current.draft || 'Edit this image: ', error: '' })
     return true
-  }
+  }, [agent?.busy, update])
 
   return { ...state, pending: state.pendingCommands > 0, query, agent, perform, send, addImages, attachImage }
 }

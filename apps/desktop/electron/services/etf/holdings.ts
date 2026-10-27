@@ -978,7 +978,7 @@ async function loadFundSnapshot(symbol: string, enrich: boolean, force: boolean)
     try { result = await getIssuerEtfHoldings(symbol, force) } catch { /* Try the public snapshot next. */ }
   }
   if (!result && provider) {
-    const previous = cache.get<EtfHoldingsResult>(`etf-fund:v2:${symbol}:${enrich ? 'enriched' : 'basic'}`, { allowStale: true, observe: false })
+    const previous = await cache.get<EtfHoldingsResult>(`etf-fund:v2:${symbol}:${enrich ? 'enriched' : 'basic'}`, { allowStale: true, observe: false })
     if (previous && !previous.value.isPartial) throw new Error(`${issuer} is unavailable. Retaining the last complete holdings snapshot.`)
   }
   if (!result) {

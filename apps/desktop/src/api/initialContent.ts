@@ -1,10 +1,9 @@
 import type { NewsArticle, YouTubeVideo } from '@shared/contract'
-import { splitNewsGroups, type NewsFilter, type NewsSort } from '@shared/news'
+import { articleTickerSet, splitNewsGroups, type NewsFilter, type NewsSort } from '@shared/news'
 import { normalizeYouTubePageSettings, sortYouTubeVideos } from '@shared/youtube'
 
 export function newsQuoteTickers(articles: readonly NewsArticle[]): string[] {
-  return [...new Set(articles.map((article) => article.ticker?.trim().toUpperCase())
-    .filter((ticker): ticker is string => Boolean(ticker) && ticker !== 'OTHER'))].sort()
+  return [...new Set(articles.flatMap(article => [...articleTickerSet(article)]))].sort()
 }
 
 export function newsHero(articles: NewsArticle[], now = Date.now()): NewsArticle | null {

@@ -381,7 +381,7 @@ async function runCacheChecks(): Promise<void> {
     now += 30_000
     await resolveEtfSnapshot('fund', 24 * 60 * 60_000, load, options)
     assert.equal(calls, 1, 'Manual refresh respects minimum age')
-    store.close()
+    await store.close()
     store = new TtlCache({ path: join(scratch, 'cache.sqlite') })
     const restored = await resolveEtfSnapshot('fund', 24 * 60 * 60_000, load, { store })
     assert.equal(restored.fetchedAt, results[0].fetchedAt)
@@ -393,7 +393,7 @@ async function runCacheChecks(): Promise<void> {
     assert.equal(stale.value.ticker, 'SPY')
     assert.equal(stale.snapshot?.stale, true, 'Retained data must be visibly stale')
     assert.ok(stale.snapshot?.failures.some(reason => reason.includes('Provider offline')))
-    store.close()
+    await store.close()
     store = new TtlCache({ path: join(scratch, 'cache.sqlite') })
     await resolveEtfSnapshot('fund', 24 * 60 * 60_000, fail, { store, force: true })
     assert.equal(failures, 1, 'Failure backoff must survive restarts and forced refreshes')
@@ -402,7 +402,7 @@ async function runCacheChecks(): Promise<void> {
     now += 5 * 60_000 + 1
     await resolveEtfSnapshot('fund', 24 * 60 * 60_000, load, { store, force: true })
     assert.equal(calls, 2, 'Provider can recover after backoff')
-    assert.notEqual(store.get<{ fetchedAt: number }>('fund')?.value.fetchedAt, restored.fetchedAt)
+    assert.notEqual((await store.get<{ fetchedAt: number }>('fund'))?.value.fetchedAt, restored.fetchedAt)
     await assert.rejects(() => resolveEtfSnapshot('missing', 1000, fail, { store }), /Provider offline/)
     await assert.rejects(() => resolveEtfSnapshot('missing', 1000, fail, { store, force: true }), /Provider offline/)
     assert.equal(failures, 2, 'Cold failures must also be backed off')
@@ -434,7 +434,7 @@ async function runCacheChecks(): Promise<void> {
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA
     else process.env.LOCALAPPDATA = previousLocalAppData
     Date.now = originalNow
-    store.close()
+    await store.close()
     await rm(scratch, { recursive: true, force: true })
   }
 

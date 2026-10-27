@@ -8,7 +8,7 @@ export function useHims() {
   return useQuery({ queryKey: queryKeys.hims, queryFn: () => api.hims({ force: forcing() }),
     // Startup refreshes expired snapshots; opening the page reuses that result.
     // Retain it even while the page's query observer is suspended or unmounted.
-    staleTime: queryFreshness(queryKeys.hims), gcTime: Infinity,
+    staleTime: queryFreshness(queryKeys.hims),
     refetchOnMount: false, refetchOnWindowFocus: false, refetchOnReconnect: false,
     refetchInterval: false, placeholderData: previous => previous })
 }

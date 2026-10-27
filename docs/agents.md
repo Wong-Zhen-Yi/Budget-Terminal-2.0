@@ -26,6 +26,8 @@ All Agent runs, including manual chat, research and image generation, are bounde
 
 Assistant replies render Markdown as formatted headings, emphasis, lists, tables, quotes and code instead of showing raw formatting markers. User messages preserve their original text. Web links open through the desktop browser bridge; raw HTML and automatic remote images are disabled. The chat uses a centered reading column, user message bubbles and a rounded composer. Select **Controls** to open monitoring and connection help; active monitoring remains visible in the header when controls are closed.
 
+Highlight text to read at your own pace. While dragging or keeping text selected, the displayed conversation stays steady so streamed Markdown cannot replace the highlighted words. Codex continues working; clearing the selection displays the latest reply. Scrolling up keeps your reading position, and scrolling back to the bottom resumes following new text. This works in Agents, Dashboard 2 and the top-bar chat. Completed messages also avoid repeat rendering during composer edits and status updates.
+
 Ask “Show my portfolio allocation as a pie chart” to render a native chart directly in the reply, both on Agents and in Dashboard 2's Agents pane. Charts include a color legend, values, calculated percentages, total, and optional source/freshness caption. Hover a slice for its value and share; the accompanying table also makes every category readable without relying on color. No external image service or chart generation runtime is used.
 
 The agent emits a fenced `pie` block containing JSON, which the app validates before rendering:

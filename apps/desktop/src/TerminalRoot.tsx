@@ -12,6 +12,7 @@ import {
   shouldPersistRemoteQuery,
   queryFreshness,
 } from './api/queryPersistence'
+import { manageQueryMemory, QUERY_IDLE_MS } from './api/queryMemory'
 import { registerSnapshot } from './api/snapshotHealth'
 import './styles/theme.css'
 
@@ -25,12 +26,14 @@ const queryClient = new QueryClient({
       // Startup refreshes stale page entries. A later first visit should paint that
       // prepared snapshot without immediately starting another request.
       refetchOnMount: false,
-      // Hidden Activity trees suspend their query observers. Keep their data, together
-      // with startup-warmed pages, available until the renderer session ends.
-      gcTime: Infinity,
+      // Startup helpers explicitly pin prepared page snapshots for this session.
+      gcTime: QUERY_IDLE_MS,
     },
   },
 })
+
+const memory = manageQueryMemory(queryClient, { deferUntilStartup: true })
+if (import.meta.hot) import.meta.hot.dispose(memory.stop)
 
 queryClient.getQueryCache().subscribe(({ query }) => {
   registerSnapshot(query.state.data, queryFreshness(query.queryKey))

@@ -72,7 +72,7 @@ export async function getForexNews(request: ForexPairRequest): Promise<Envelope<
   let pair
   try { pair = forexPair(request.pair) } catch (error) { return failed({ pair: request.pair, articles: [] }, describeError(error), SOURCE) }
   const key = `forex:news:${pair.id}`
-  const cached = request.force ? null : cache.get<Envelope<ForexNewsPayload>>(key)
+  const cached = request.force ? null : await cache.get<Envelope<ForexNewsPayload>>(key)
   if (cached) return { ...cached.value, meta: { ...cached.value.meta, freshness: 'cached', cacheAgeSeconds: (Date.now() - cached.value.meta.fetchedAt) / 1000 } }
   // Currency feeds augment the cross's own feed without replacing relevance filtering.
   const symbols = [...new Set([pair.symbol, ...pair.id.split('/').map((currency) => ({ EUR: 'EURUSD=X', USD: 'DX-Y.NYB', GBP: 'GBPUSD=X', JPY: 'JPY=X', CHF: 'CHF=X', AUD: 'AUDUSD=X', CAD: 'CAD=X', NZD: 'NZDUSD=X', SGD: 'SGD=X' })[currency]!).filter(Boolean)])]
@@ -82,7 +82,7 @@ export async function getForexNews(request: ForexPairRequest): Promise<Envelope<
   envelope.meta.fetchedAt = Math.min(...lanes.map((lane) => lane.meta.fetchedAt))
   envelope.meta.freshness = lanes.every((lane) => lane.meta.freshness === 'failed') ? 'failed' : envelope.errors.length ? 'partial' : lanes.every((lane) => lane.meta.freshness === 'cached') ? 'cached' : 'fresh'
   // A pair assembled from cached currency feeds must not extend those feeds' lifetime.
-  if (!envelope.errors.length) cache.set(key, envelope, Math.max(0, FOREX_NEWS_MS - (Date.now() - envelope.meta.fetchedAt)), sourceSnapshot())
+  if (!envelope.errors.length) await cache.set(key, envelope, Math.max(0, FOREX_NEWS_MS - (Date.now() - envelope.meta.fetchedAt)), sourceSnapshot())
   return envelope
   })
 }

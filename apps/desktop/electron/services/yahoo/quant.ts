@@ -8,8 +8,6 @@ import type {
   QuantScreenRow,
 } from '../../shared/contract.js'
 import {
-  buildPairDetail,
-  discoverPairs,
   rankScreenRows,
   screenMetrics,
   type QuantBar,
@@ -21,6 +19,7 @@ import {
   type SignalQuoteLike,
 } from '../../shared/signals.js'
 import { cache } from '../cache.js'
+import { discoverPairsInWorker, pairDetailInWorker } from '../quantWorker.js'
 import { equitySignalsScreen } from './screener.js'
 import { getYahooSeries } from './series.js'
 
@@ -250,7 +249,7 @@ export async function runQuantScan(
   const pairHistories = Object.fromEntries(pairTickers.flatMap((ticker) => histories[ticker] ? [[ticker, histories[ticker]]] : []))
   const payload: QuantScanPayload = {
     rows: ranked,
-    pairs: discoverPairs(pairHistories),
+    pairs: await discoverPairsInWorker(pairHistories),
     source: QUANT_SOURCE,
     sourcedAt: universe.sourcedAt,
     startedAt,
@@ -280,10 +279,7 @@ export async function analyzeQuantPair(leftInput: string, rightInput: string, fo
       : 'no daily history returned'
     throw new Error(`Could not load history for ${missing.join(', ')}: ${detail}`)
   }
-  return buildPairDetail(
-    left,
-    right,
-    (outcomes[0] as PromiseFulfilledResult<QuantBar[]>).value,
-    (outcomes[1] as PromiseFulfilledResult<QuantBar[]>).value,
-  )
+  return pairDetailInWorker({ left, right,
+    leftBars: (outcomes[0] as PromiseFulfilledResult<QuantBar[]>).value,
+    rightBars: (outcomes[1] as PromiseFulfilledResult<QuantBar[]>).value })
 }
