@@ -1,4 +1,13 @@
 import assert from 'node:assert/strict'
+import { mock } from 'node:test'
+import type { Envelope, OptionQuotesPayload, OptionsChainPayload, OptionsExpirationsPayload, OptionsPayload } from '../electron/shared/contract.js'
+import { catalog } from '../mcp/catalog.js'
+import type { Operation } from '../mcp/operations.js'
+import { McpDispatcher } from '../electron/mcp/dispatcher.js'
+import { shapeResponse } from '../mcp/response.js'
+import { cache } from '../electron/services/cache.js'
+import { yahoo } from '../electron/services/yahoo/client.js'
+import { yahooProvider } from '../electron/services/provider.js'
 
 import type { OptionsChainRow, OptionsRawRow } from '../electron/shared/optionsPage.js'
 import {
@@ -6,6 +15,7 @@ import {
   bestStrategySummary,
   buildChainExport,
   buildExpirationOrder,
+  buildOptionsVolumeRanking,
   buildTopVolumeExport,
   calculateGreeks,
   collectStrikes,
@@ -174,6 +184,21 @@ function runOffline(): void {
     [100, 95],
   )
   assert.equal(topVolumeRecords(chain, 'both', 2).length, 2)
+  const lateLeader = row({ expiration: '2025-02-21', type: 'Put', volume: 10_000 })
+  const manyRows = Array.from({ length: 80 }, (_, index) => row({ strike: index + 1, volume: index + 1, openInterest: 100_000 - index }))
+  const volumeRanking = buildOptionsVolumeRanking([
+    { expiry: '2025-01-17', daysOut: 0, rows: [...manyRows, row({ volume: NaN }), row({ volume: -1 }), row({ volume: 0 })] },
+    { expiry: '2025-02-21', daysOut: 35, rows: [lateLeader] },
+    { expiry: '2025-03-21', daysOut: 63, rows: [row({ volume: 999_999 })] },
+  ], ['2025-03-21'])
+  assert.equal(volumeRanking.rows.length, 50, 'Research rankings must be bounded after examining every loaded contract')
+  assert.equal(volumeRanking.rows[0], lateLeader, 'A later expiration must outrank earlier rows on its actual volume')
+  assert.equal(volumeRanking.rows[1].volume, 80, 'Sorting must happen before sampling/limiting, using volume rather than open interest')
+  assert.equal(volumeRanking.totalContracts, 84)
+  assert.equal(volumeRanking.contractsWithVolume, 81)
+  assert.equal(volumeRanking.expirationsLoaded, 2)
+  assert.deepEqual(volumeRanking.failedExpirations, ['2025-03-21'])
+  assert.equal(manyRows[0].volume, 1, 'Ranking must not reorder source data')
 
   // `prepare_strike_records`: calls before puts at one strike.
   assert.deepEqual(
@@ -306,7 +331,7 @@ function row(patch: Partial<OptionsRawRow>): OptionsRawRow {
 
 async function runLive(symbol: string): Promise<void> {
   console.log(`\n=== Chain: ${symbol} ===`)
-  const chain = await getOptionsChain(symbol, '', false)
+  const chain = await getOptionsChain(symbol, '', true)
   const payload = chain.payload
   console.log(
     `expiries=${payload.expiries.length} selected=${payload.expiry} spot=${payload.spotPrice.toFixed(2)}`,
@@ -334,12 +359,16 @@ async function runLive(symbol: string): Promise<void> {
   }
 
   console.log(`\n=== Every expiration: ${symbol} ===`)
-  const sweep = await getOptionsExpirations(symbol, false)
+  const sweep = await getOptionsExpirations(symbol, true)
   console.log(
     `expirations=${sweep.payload.buckets.length} strikes=${sweep.payload.strikes.length}` +
       ` rows=${sweep.payload.buckets.reduce((sum, bucket) => sum + bucket.rows.length, 0)}`,
   )
   for (const failure of sweep.failures) console.log(`  ! ${failure.block}: ${failure.reason}`)
+  const ranking = sweep.payload.topVolume!
+  assert(ranking.rows.every((entry, index) => index === 0 || entry.volume <= ranking.rows[index - 1].volume))
+  assert.equal(ranking.expirationsRequested, sweep.payload.buckets.length)
+  console.log(`Volume ranking: ${ranking.rows.length} leaders from ${ranking.totalContracts} contracts; ${ranking.expirationsLoaded}/${ranking.expirationsRequested} expirations loaded`)
   for (const bucket of sweep.payload.buckets.slice(0, 6)) {
     const top = topVolumeRecords(bucket.rows, 'both')
     const head = top[0]
@@ -361,12 +390,75 @@ async function runLive(symbol: string): Promise<void> {
   }
 }
 
+/** Confirm forced MCP refresh reaches listing/chain/mark caches, not just the envelope. */
+async function runRefreshChecks(): Promise<void> {
+  cache.clear()
+  const dates = [7, 21, 35, 70].map(days => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10))
+  let edition = 1, missingExpiry = '', reads = 0
+  const provider = mock.method(yahoo, 'options', async (_symbol: string, request?: { date?: string }) => {
+    reads++
+    const expiry = request?.date ?? dates[0]
+    if (expiry === missingExpiry) return { options: [] }
+    const calls = Array.from({ length: 80 }, (_, index) => ({ strike: index + 90, lastPrice: edition, bid: edition - 0.1, ask: edition + 0.1, volume: (index + 1) * edition, openInterest: 100_000 - index, impliedVolatility: 0.3, lastTradeDate: new Date() }))
+    const puts = [{ ...calls[0], strike: 100, volume: expiry === dates[3] ? edition * 10_000 : edition * 100 }]
+    return { expirationDates: dates.map(date => new Date(date + 'T00:00:00Z')), quote: { regularMarketPrice: 100, regularMarketTime: new Date() }, options: [{ calls, puts }] }
+  })
+  const quote = mock.method(yahoo, 'quote', async () => ({ regularMarketPrice: 4 }))
+  const summary = mock.method(yahoo, 'quoteSummary', async () => ({ summaryDetail: { dividendYield: 0.01 } }))
+  const routes = new Map<Operation, (request: unknown) => unknown>(catalog.map(entry => [entry.operation, () => { throw new Error('Unexpected fixture route') }]))
+  for (const operation of ['options', 'optionsChain', 'optionsExpirations', 'optionQuotes'] as const) {
+    routes.set(operation, request => (yahooProvider[operation] as (request: unknown) => unknown)(request))
+  }
+  const dispatcher = new McpDispatcher({ routes })
+  const position = { rowId: 'fixture', ticker: 'TEST', expiry: dates[0], strike: 100, strategy: 'Calls' }
+  try {
+    await yahooProvider.options({ symbol: 'TEST' })
+    await yahooProvider.optionsExpirations({ symbol: 'TEST' })
+    await yahooProvider.optionsChain({ symbol: 'TEST', expiry: dates[0] })
+    await yahooProvider.optionQuotes({ positions: [position] })
+    edition = 2
+    const previousReads = reads
+    const cached = await yahooProvider.optionsExpirations({ symbol: 'TEST' })
+    assert.equal(cached.data.topVolume!.rows[0].volume, 10_000, 'Fixture must start from an unexpired old chain')
+    const dashboard = await dispatcher.invoke('budget_terminal_options', { request: { symbol: 'TEST', force: false } }) as Envelope<OptionsPayload>
+    assert(dashboard.data.buckets.flatMap(bucket => bucket.rows).every(entry => entry.lastPrice === 2), 'Dashboard option buckets must refresh')
+    const chain = await dispatcher.invoke('budget_terminal_options_chain', { request: { symbol: 'TEST', expiry: dates[0] } }, 'agent') as Envelope<OptionsChainPayload>
+    assert(chain.data.rows.length > 0 && chain.data.rows.every(entry => entry.lastPrice === 2), 'Chain analysis must refresh underlying rows')
+    const marks = await dispatcher.invoke('budget_terminal_option_quotes', { request: { positions: [position], force: false } }) as Envelope<OptionQuotesPayload>
+    assert.equal(marks.data.quotes.fixture.currentPrice, 2, 'Recorded contract marks must refresh too')
+    const projection = { mode: 'full' as const, fields: ['symbol', 'marketDate', 'topVolume', 'generatedAt'] }
+    const result = await dispatcher.invoke('budget_terminal_options_expirations', { request: { symbol: 'TEST', force: false }, response: projection }, 'agent') as Envelope<OptionsExpirationsPayload>
+    const ranking = result.data.topVolume!
+    assert.equal(ranking.rows[0].expiration, dates[3], 'The leader can be outside the three dashboard expirations')
+    assert.equal(ranking.rows[0].volume, 20_000, 'The ranking must use refreshed volumes')
+    assert.equal(ranking.totalContracts, 324)
+    assert.equal(ranking.expirationsLoaded, 4)
+    assert.equal(ranking.rows.length, 50)
+    assert(!('buckets' in result.data), 'A compact research response must omit raw chains without sampling its ranking')
+    assert(reads > previousReads, 'Refreshed MCP calls must reach the provider')
+    missingExpiry = dates[3]
+    const partial = await dispatcher.invoke('budget_terminal_options_expirations', { request: { symbol: 'TEST' }, response: projection }) as Envelope<OptionsExpirationsPayload>
+    assert.equal(partial.meta.freshness, 'partial', 'A missing returned chain must not be treated as complete coverage')
+    assert.deepEqual(partial.data.topVolume!.failedExpirations, [dates[3]])
+    assert.equal(partial.data.topVolume!.expirationsLoaded, 3)
+    assert(partial.errors.length > 0)
+    const large = { data: { ...cached.data, buckets: cached.data.buckets.map(bucket => ({ ...bucket, rows: Array.from({ length: 3000 }, () => bucket.rows[0]) })) }, meta: cached.meta, errors: [] }
+    assert((shapeResponse(large) as { data: { omitted: boolean } }).data.omitted, 'The fixture must exceed the normal MCP data budget')
+    const compact = shapeResponse(large, projection) as Envelope<OptionsExpirationsPayload>
+    assert.equal(compact.data.topVolume!.rows.length, 50, 'Volume leaders must remain accessible when full chains exceed the data budget')
+    console.log('PASS: MCP options refresh listing/chain/mark caches, rank all expirations before projection, fit response budgets and disclose missing-chain coverage')
+  } finally {
+    dispatcher.close(); provider.mock.restore(); quote.mock.restore(); summary.mock.restore(); cache.clear()
+  }
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2)
   const offlineOnly = args.includes('--offline')
   const symbol = (args.find((arg) => !arg.startsWith('--')) ?? 'AAPL').toUpperCase()
 
   runOffline()
+  await runRefreshChecks()
   if (offlineOnly) return
   await runLive(symbol)
 }

@@ -6,7 +6,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { QueryClient } from '@tanstack/react-query'
 import { catalog, failed, validateCall } from '../mcp/catalog.js'
-import { mutationDomains, operations, toolName, type Operation } from '../mcp/operations.js'
+import { mutationDomains, newsRefreshOperations, optionsRefreshOperations, operations, toolName, type Operation } from '../mcp/operations.js'
 import { APP_CLOSED, invokeBridge, runtimePath } from '../mcp/runtime.js'
 import { startBridge } from '../electron/mcp/bridge.js'
 import { McpDispatcher } from '../electron/mcp/dispatcher.js'
@@ -120,6 +120,7 @@ try {
     assert.equal(result.isError, false, entry.operation)
     const structured = result.structuredContent as Record<string, unknown>
     assert.equal((structured.data as { operation: string }).operation, entry.operation)
+    if (newsRefreshOperations.has(entry.operation) || optionsRefreshOperations.has(entry.operation)) assert.equal((structured.data as { request: { force?: boolean } }).request.force, true, 'External stdio news/options calls must refresh before reaching services')
     assert.equal((structured.meta as { freshness: string }).freshness, 'cached')
     if (entry.operation.startsWith('mutate')) {
       const root = entry.tool.inputSchema as unknown as Schema

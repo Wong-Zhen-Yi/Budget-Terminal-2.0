@@ -15,21 +15,31 @@ interface DipFinderPanelProps {
   visible: boolean
 }
 
-/** Per-holding return over the window — the biggest dips sort to the right. */
+/** Per-holding return over a window or since entry — biggest dips sort to the right. */
 export function DipFinderPanel({ rows, visible }: DipFinderPanelProps) {
-  const [timeframe, setTimeframe] = useState<ReturnTimeframe>('1mo')
-  const tickers = useMemo(
-    () => rows.filter((row) => row.includeInWeight && row.shares > 0).map((row) => row.ticker),
+  const [timeframe, setTimeframe] = useState<ReturnTimeframe | 'entry'>('1mo')
+  const entryRows = useMemo(
+    () => rows.filter((row) => row.includeInWeight && row.shares > 0),
     [rows],
   )
-  const query = useReturns(tickers, timeframe, visible)
+  const tickers = useMemo(() => entryRows.map((row) => row.ticker), [entryRows])
+  const query = useReturns(tickers, timeframe === 'entry' ? '1mo' : timeframe, visible && timeframe !== 'entry')
+  const unavailableEntryRows = entryRows.filter(
+    (row) => !Number.isFinite(row.avgPrice) || row.avgPrice <= 0 || row.growth === null || !Number.isFinite(row.growth),
+  )
 
   const bars: Bar[] = useMemo(() => {
+    if (timeframe === 'entry') {
+      return entryRows
+        .filter((row) => Number.isFinite(row.avgPrice) && row.avgPrice > 0 && row.growth !== null && Number.isFinite(row.growth))
+        .map((row) => ({ label: row.ticker, value: row.growth! }))
+        .sort((a, b) => b.value - a.value)
+    }
     const returns = query.data?.data.returns ?? {}
     return Object.entries(returns)
       .sort((a, b) => b[1] - a[1])
       .map(([label, value]) => ({ label, value }))
-  }, [query.data])
+  }, [entryRows, query.data, timeframe])
 
   return (
     <Panel
@@ -37,6 +47,15 @@ export function DipFinderPanel({ rows, visible }: DipFinderPanelProps) {
       className="min-h-40 flex-1"
       actions={
         <div className="flex items-center gap-1">
+          <Button
+            variant="toggle"
+            active={timeframe === 'entry'}
+            onClick={() => setTimeframe('entry')}
+            title="Gain or loss versus your average purchase price"
+            className="h-6"
+          >
+            Entry
+          </Button>
           {RETURN_TIMEFRAMES.map((entry) => (
             <Button
               key={entry.key}
@@ -51,10 +70,18 @@ export function DipFinderPanel({ rows, visible }: DipFinderPanelProps) {
         </div>
       }
     >
+      {timeframe === 'entry' ? (
+        <div className="shrink-0 px-2 py-1 text-2xs text-text-muted">
+          Gain/loss vs. average purchase price: (current price / average price − 1) × 100%.
+          {unavailableEntryRows.length > 0 ? (
+            <span className="text-down"> Unavailable (quote missing or average price invalid): {unavailableEntryRows.map((row) => row.ticker).join(', ')}.</span>
+          ) : null}
+        </div>
+      ) : null}
       <BarChart
         bars={bars}
         format={(value) => percent(value, 1)}
-        empty={query.isFetching ? 'Loading returns...' : 'No return data'}
+        empty={timeframe === 'entry' ? 'No positions with a quote and positive average price' : query.isFetching ? 'Loading returns...' : 'No return data'}
         minBarWidth={48}
       />
     </Panel>

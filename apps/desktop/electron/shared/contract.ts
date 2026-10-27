@@ -2971,6 +2971,8 @@ export interface OptionsExpirationsPayload {
   buckets: import('./optionsPage.js').OptionsExpirationBucket[]
   /** The sorted union of every strike quoted across those chains. */
   strikes: number[]
+  /** Present on refreshed sweeps; older persisted snapshots may lack this ranking. */
+  topVolume?: import('./optionsPage.js').OptionsVolumeRanking
   generatedAt: number
 }
 

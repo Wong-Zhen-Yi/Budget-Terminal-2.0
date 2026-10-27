@@ -9,7 +9,7 @@ export const operations = {
   chartsHistory: 'Get chart candles and technical indicators for a symbol; larger than chart and suitable for technical research.',
   chartsCompare: 'Compare normalized historical series across supplied symbols; use chart for a single raw price series.',
   chartsRelationship: 'Analyze the relationship between two price series.',
-  options: 'Get dashboard options information for a symbol.',
+  options: 'Get the dashboard top-volume options for three selected expiration buckets. This is a limited subset; use optionsExpirations for volume leaders across all live expirations.',
   targets: 'Get analyst price targets for tickers.',
   news: 'Get portfolio-related headlines for supplied tickers; use newsPage for the broader feed and newsArticle to inspect a selected public source.',
   newsPage: 'Get the full multi-ticker news feed with source links; can be large, so use response summaries or paginate its item collection.',
@@ -80,7 +80,7 @@ export const operations = {
   discoveryUniverse: 'List the provider securities universe available to discovery; use discovery to apply research criteria. Universe coverage is not all listed securities.',
   discovery: 'Discover securities matching research criteria.',
   optionsChain: 'Get option contracts for a symbol and expiration; use optionsExpirations to choose a date first. Chains may be large; paginate the desired collection.',
-  optionsExpirations: 'List options expiration dates.',
+  optionsExpirations: 'Fetch every live expiration and its full options chain for one symbol. For top options by volume, use response.fields ["symbol", "marketDate", "topVolume", "generatedAt"] with full response mode: topVolume.rows ranks up to 50 positive-volume contracts across all successfully fetched expirations by volume, then open interest. topVolume includes contract and expiration coverage and failed expirations. This covers the requested symbol, not the whole market. Generic summary mode samples rows and cannot establish volume leaders.',
   projections: 'Calculate financial projections.',
   backtest: 'Run a historical strategy backtest.',
   quantScan: 'Scan a sourced liquid equity universe for quantitative factors and pairs. Long operation; use latestOnly for the saved scan, forceUniverseRefresh only when needed. Progress reports completed histories; cancellation stops new histories and lets in-flight cached reads finish.',
@@ -92,6 +92,11 @@ export const operations = {
 } as const
 
 export type Operation = keyof typeof operations
+/** News summaries must revalidate sources instead of reusing the app's TTL snapshots. */
+export const newsRefreshOperations: ReadonlySet<Operation> = new Set(['news', 'newsPage', 'newsTickerSearch', 'newsArticle', 'forexNews'])
+export const optionsRefreshOperations: ReadonlySet<Operation> = new Set(['options', 'optionsChain', 'optionsExpirations', 'optionQuotes'])
+export const optionsResearchInstructions = 'Before analyzing current options activity, fetch the relevant options tool again in the current turn. MCP options tools automatically refresh listings, chains and contract marks even when force is omitted or false. For top options by volume, use optionsExpirations with response.fields ["symbol", "marketDate", "topVolume", "generatedAt"] in full response mode. topVolume.rows is ranked before response projection across all successfully fetched live expirations for the requested symbol. Report the ticker, call/put, strike, expiration, volume, open interest, bid/ask and last trade date where provided, plus retrieval time and failed-expiration coverage. Compare volume as volume, not open interest; volume alone does not establish bullish/bearish intent or opening trades. The dashboard options tool covers only three selected expirations, and a summary sample or a single chain is not a complete ranking. Do not claim market-wide leaders from one ticker or the entire chain when some expirations failed. A new fetch does not guarantee real-time quotes or recent trades: retain provider delay, stale-mark and refresh-failure warnings.'
+export const newsResearchInstructions = 'Before summarizing current news, call the relevant news tool again in the current turn; never rely only on earlier tool results, saved conversation text or cached news inside a broader company snapshot. News tools automatically refresh their underlying sources before returning, even if force is omitted or false. When using MCP to summarize a selected article, refresh its contents with newsArticle. Check each article\'s publishedAt against the requested time window; fetchedAt is the retrieval time, not the publication date. Include source links and publication dates, distinguish older context from new developments, and say when no recent news was found. If refresh fails or returns stale/partial data or a fallback preview, disclose the limitation and do not present it as verified current news. For requests explicitly limited to supplied article evidence without tools, preserve its original dates and coverage limitations and never claim a live news refresh.'
 export const mutationDomains = {
   mutateArticles: 'articles',
   mutatePortfolio: 'portfolio',

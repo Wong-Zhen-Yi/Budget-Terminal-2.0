@@ -1,4 +1,7 @@
 @echo off
+echo Agent options: MCP refreshes expirations, chains and contract marks. Top-volume research ranks all loaded live expirations and reports missing coverage.
+echo Portfolio Dip Finder: Entry shows percentage gain or loss versus your average purchase price.
+echo Agent news: MCP news tools refresh sources before returning. Summaries check publication dates and report stale data or refresh failures.
 echo Agent reading: highlighting keeps streamed replies steady. Clear the selection to catch up; scroll to the bottom to follow new text.
 echo Performance updates: Quant pair calculations and SQLite persistence run in workers. Extra query memory is bounded, prepared startup pages stay available, and large tables render visible rows.
 echo Startup dependency fixes: Up/Down price targets preload before page readiness; Cards warms every interval after a partial result; News splits multi-ticker article labels into valid quote requests.

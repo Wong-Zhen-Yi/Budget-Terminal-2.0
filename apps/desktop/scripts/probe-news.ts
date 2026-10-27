@@ -14,7 +14,14 @@
  * eyeball get printed on purpose — the diversity round-robin that decides which 36 of 80
  * candidates survive, and the per-lane count of timestamps that failed to parse.
  */
-import type { NewsArticle } from '../electron/shared/contract.js'
+import assert from 'node:assert/strict'
+import { mock } from 'node:test'
+import type { Envelope, NewsArticle, NewsPagePayload, NewsPageRequest, NewsPayload, NewsRequest, NewsTickerSearchPayload, NewsTickerSearchRequest } from '../electron/shared/contract.js'
+import { catalog } from '../mcp/catalog.js'
+import type { Operation } from '../mcp/operations.js'
+import { McpDispatcher } from '../electron/mcp/dispatcher.js'
+import { cache } from '../electron/services/cache.js'
+import { yahoo } from '../electron/services/yahoo/client.js'
 import {
   OTHER_NEWS_LIMIT,
   ageText,
@@ -390,6 +397,55 @@ async function runImages(articles: NewsArticle[]): Promise<void> {
 
 /* --------------------------------------------------------------------- main */
 
+/** Exercise the real service/cache chain with deterministic provider responses. */
+async function runRefreshChecks(): Promise<void> {
+  cache.clear()
+  let edition = 1, offline = false, searches = 0, feeds = 0
+  const publishedAt = Date.now() - 7 * 86_400_000
+  const search = mock.method(yahoo, 'search', async (symbol: string) => {
+    searches++
+    if (offline) throw new Error('Fixture publisher unavailable')
+    return { news: [{ uuid: `edition-${edition}`, relatedTickers: [symbol], title: `Headline edition ${edition}`, publisher: 'Fixture publisher', providerPublishTime: new Date(publishedAt), link: `https://example.com/edition-${edition}` }] }
+  })
+  const feed = mock.method(globalThis, 'fetch', async () => {
+    feeds++
+    if (offline) throw new Error('Fixture publisher unavailable')
+    return new Response(`<rss><channel><item><title>Fed market headline edition ${edition}</title><link>https://example.com/feed-${edition}</link><pubDate>${new Date(publishedAt).toUTCString()}</pubDate><description>Fixture market evidence</description></item></channel></rss>`, { headers: { 'content-type': 'application/rss+xml' } })
+  })
+  const routes = new Map<Operation, (request: unknown) => unknown>(catalog.map(entry => [entry.operation, () => { throw new Error('Unexpected fixture route') }]))
+  routes.set('news', request => yahooProvider.news(request as NewsRequest))
+  routes.set('newsTickerSearch', request => yahooProvider.newsTickerSearch(request as NewsTickerSearchRequest))
+  routes.set('newsPage', request => yahooProvider.newsPage(request as NewsPageRequest))
+  const dispatcher = new McpDispatcher({ routes })
+  try {
+    await yahooProvider.news({ tickers: ['TEST'] })
+    await yahooProvider.newsPage({ tickers: ['TEST'] })
+    const previousSearches = searches, previousFeeds = feeds
+    edition = 2
+    const cached = await yahooProvider.newsTickerSearch({ tickers: ['TEST'] })
+    assert(cached.data.articles.every(article => article.title.includes('edition 1')), 'Fixture must begin with a usable, unexpired old snapshot')
+    const news = await dispatcher.invoke('budget_terminal_news', { request: { tickers: ['TEST'], force: false } }) as Envelope<NewsPayload>
+    assert(news.data.items.every(article => article.title.includes('edition 2')) && news.data.items.length > 0, 'MCP news must bypass the dashboard news cache')
+    const ticker = await dispatcher.invoke('budget_terminal_news_ticker_search', { request: { tickers: ['TEST'] } }, 'agent') as Envelope<NewsTickerSearchPayload>
+    assert(ticker.data.articles.every(article => article.title.includes('edition 2')) && ticker.data.articles.length > 0, 'Agent ticker news must bypass the shared portfolio-news cache')
+    const page = await dispatcher.invoke('budget_terminal_news_page', { request: { tickers: ['TEST'], force: false } }, 'agent') as Envelope<NewsPagePayload>
+    assert(page.data.articles.length > 0 && page.data.articles.every(article => article.title.includes('edition 2')), 'Refresh must reach both outer news lists and underlying Yahoo/RSS caches')
+    assert(searches > previousSearches && feeds > previousFeeds, 'A news read must actually contact the provider fixtures')
+    assert(page.data.articles.every(article => article.publishedAt === publishedAt || Math.abs(article.publishedAt - publishedAt) < 1000), 'Fresh retrieval must retain old publication dates rather than relabel old stories as new')
+    assert.equal(page.meta.freshness, 'fresh')
+    offline = true
+    const fallback = await dispatcher.invoke('budget_terminal_news_page', { request: { tickers: ['TEST'] } }) as Envelope<NewsPagePayload>
+    assert(fallback.data.articles.length > 0, 'A failed refresh may retain clearly labelled fallback evidence')
+    assert(['stale', 'partial'].includes(fallback.meta.freshness) && fallback.errors.length > 0, 'Failed refresh must not label cached headlines fresh')
+    assert(fallback.data.lanes.some(lane => lane.stale.length > 0), 'Per-source stale coverage must remain visible')
+    const empty = await dispatcher.invoke('budget_terminal_news_ticker_search', { request: { tickers: ['MISSING'] } }) as Envelope<NewsTickerSearchPayload>
+    assert(empty.errors.length > 0 && empty.meta.freshness !== 'fresh', 'Unavailable news is a refresh failure, not evidence of no new stories')
+    console.log('PASS: MCP/Agent news bypasses unexpired list and source caches, retains publication dates, and reports failed refresh/stale fallback')
+  } finally {
+    dispatcher.close(); search.mock.restore(); feed.mock.restore(); cache.clear()
+  }
+}
+
 async function main(): Promise<void> {
   const argv = process.argv.slice(2)
   const flag = (name: string) => argv.includes(name)
@@ -400,6 +456,7 @@ async function main(): Promise<void> {
 
   if (flag('--offline')) {
     await runNewsSecurityChecks()
+    await runRefreshChecks()
     runOffline()
     return report()
   }

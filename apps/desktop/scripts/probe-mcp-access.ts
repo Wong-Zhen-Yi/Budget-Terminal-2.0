@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { mock } from 'node:test'
 import { catalog, validateCall } from '../mcp/catalog.js'
-import type { Operation } from '../mcp/operations.js'
+import { newsRefreshOperations, optionsRefreshOperations, toolName, type Operation } from '../mcp/operations.js'
 import { McpDispatcher } from '../electron/mcp/dispatcher.js'
 import { ok, failed } from '../electron/shared/envelope.js'
 import { checkRecordRevision, mapMcpWork, mcpExecution, recordRevision } from '../electron/services/mcpContext.js'
@@ -30,6 +30,33 @@ const writable = { readOnly: false, requireApproval: false }
 try {
   const access = create()
   assert.deepEqual(access.diagnostics().policy, { readOnly: true, requireApproval: true })
+  const newsRequests: Partial<Record<Operation, object>> = {
+    news: { tickers: ['AAPL'] }, newsPage: { tickers: ['AAPL'] }, newsTickerSearch: { tickers: ['AAPL'] },
+    newsArticle: { url: 'https://example.com/story', title: 'Fixture headline', summary: 'Fixture preview' },
+    forexNews: { pair: 'EUR/USD' },
+    options: { symbol: 'AAPL' }, optionsChain: { symbol: 'AAPL' }, optionsExpirations: { symbol: 'AAPL' },
+    optionQuotes: { positions: [{ rowId: 'option-fixture', ticker: 'AAPL', expiry: '2099-01-16', strike: 100, strategy: 'Calls' }] },
+  }
+  for (const operation of [...newsRefreshOperations, ...optionsRefreshOperations]) {
+    const original = routes.get(operation)!
+    let refreshes = 0
+    routes.set(operation, request => {
+      assert.equal((request as { force: boolean }).force, true, `${operation} must refresh before returning research`)
+      refreshes++
+      return ok({ refreshed: true }, 'fixture')
+    })
+    for (const source of ['external', 'agent'] as const) {
+      for (const force of [undefined, false, true]) {
+        const request = { ...newsRequests[operation], ...(force === undefined ? {} : { force }) }
+        await access.invoke(toolName(operation), { request }, source)
+        assert.equal(request.force, force, 'Freshness enforcement must not mutate caller-owned arguments')
+      }
+    }
+    assert.equal(refreshes, 6, 'Every news/options call refreshes, including repeated requests in one session')
+    const description = catalog.find(entry => entry.operation === operation)!.tool.description!
+    assert(description.includes('Always refreshes') && !description.includes('Prefer cached data'))
+    routes.set(operation, original)
+  }
   await access.invoke('budget_terminal_portfolio', { request: {} })
   for (const source of ['external', 'agent'] as const) {
     await assert.rejects(access.invoke(name, args(`blocked-${source}`), source), /read only/)
@@ -182,6 +209,9 @@ try {
   assert.deepEqual(shaped.meta, research.meta)
   assert.deepEqual(shaped.errors, research.errors)
   assert(JSON.stringify(shaped.response.provenance).includes('fixture source'))
+  const news = { data: { articles: [{ title: 'Earlier event', source: 'Fixture publisher', url: 'https://example.com/story', publishedAt: 123 }] }, meta: { freshness: 'fresh', fetchedAt: 456 }, errors: [] }
+  const projectedNews = shapeResponse(news, { collection: 'articles', fields: ['title'] }) as { response: { provenance: unknown[] } }
+  assert(projectedNews.response.provenance.some(row => (row as { publishedAt?: number }).publishedAt === 123), 'News publication dates must survive projection separately from retrieval time')
   const bounded = shapeResponse(research, { maxBytes: 4096 }) as { data: { omitted: boolean } }
   assert.equal(bounded.data.omitted, true)
   const summary = shapeResponse(research, { mode: 'summary' }) as typeof research

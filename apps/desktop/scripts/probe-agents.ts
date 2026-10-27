@@ -118,6 +118,12 @@ try {
   assert.equal(start.config['features.shell_tool'], false)
   assert.equal(start.config.web_search, 'disabled', 'Native web search remains disabled')
   assert(start.baseInstructions.includes('To search for websites, use action search with query'), 'General agent instructions retain browser search')
+  assert(start.baseInstructions.includes('call the relevant news tool again in the current turn')
+    && start.baseInstructions.includes('fetchedAt is the retrieval time, not the publication date')
+    && start.baseInstructions.includes('do not present it as verified current news'), 'Agents must refresh news before summaries and distinguish older stories and failed refreshes')
+  assert(start.baseInstructions.includes('MCP options tools automatically refresh')
+    && start.baseInstructions.includes('topVolume.rows is ranked before response projection')
+    && start.baseInstructions.includes('Do not claim market-wide leaders from one ticker'), 'Agents must use refreshed, complete options rankings and disclose scope')
   const browserTool = agentTools.find(tool => tool.name === 'budget_terminal_browser_research')!
   assert.equal(browserTool.description, catalog.find(entry => entry.operation === 'browserResearch')!.tool.description, 'Agent browser tool retains the shared catalog description')
   for (const tool of [...catalog.map(entry => entry.tool), connectionTool]) assert(agentTools.some(entry => entry.name === tool.name), `${tool.name} must be available in Agents`)
@@ -136,6 +142,18 @@ try {
   await service.callTool('budget_terminal_browser_research', { request: { action: 'read' } })
   assert.deepEqual(browserRequests, [{ action: 'search', query: 'portfolio news' }, { action: 'read' }], 'Browser search and page reading remain available for manual Agent requests')
   routes.delete('browserResearch')
+  const newsRequests: unknown[] = []
+  routes.set('newsTickerSearch', request => { newsRequests.push(request); return ok({ articles: [] }, 'fixture') })
+  await service.callTool('budget_terminal_news_ticker_search', { request: { tickers: ['AAPL'] } })
+  await service.callTool('budget_terminal_news_ticker_search', { request: { tickers: ['AAPL'], force: false } })
+  assert.deepEqual(newsRequests, [{ tickers: ['AAPL'], force: true }, { tickers: ['AAPL'], force: true }], 'Embedded agent fallback routing must enforce refresh on every news request')
+  routes.delete('newsTickerSearch')
+  const optionRequests: unknown[] = []
+  routes.set('optionsExpirations', request => { optionRequests.push(request); return ok({ buckets: [] }, 'fixture') })
+  await service.callTool('budget_terminal_options_expirations', { request: { symbol: 'AAPL' } })
+  await service.callTool('budget_terminal_options_expirations', { request: { symbol: 'AAPL', force: false } })
+  assert.deepEqual(optionRequests, [{ symbol: 'AAPL', force: true }, { symbol: 'AAPL', force: true }], 'Embedded options analysis must refresh even without the central dispatcher')
+  routes.delete('optionsExpirations')
   const portfolio = await service.callTool('budget_terminal_portfolio', { request: {} }) as any
   assert.equal(portfolio.meta.freshness, 'partial', 'Keep partial data metadata')
   assert.equal(portfolio.errors[0].reason, 'Fixture missing data')

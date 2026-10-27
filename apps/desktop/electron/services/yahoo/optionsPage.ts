@@ -6,6 +6,7 @@ import type {
 import type { OptionsExpirationBucket, OptionsRawRow } from '../../shared/optionsPage.js'
 import {
   buildExpirationOrder,
+  buildOptionsVolumeRanking,
   collectStrikes,
   DEFAULT_RISK_FREE_RATE,
   enrichChain,
@@ -102,7 +103,7 @@ async function fetchChain(symbol: string, expiration: string): Promise<ChainFetc
   const result = await paced(() => yahoo.options(symbol, { date: expiration }))
   const chain = result.options?.[0]
   const spot = Number(result.quote?.regularMarketPrice) || 0
-  if (!chain) return { rows: [], spot }
+  if (!chain) throw new Error(`No options chain returned for ${symbol} ${expiration}.`)
   return {
     rows: toRows(symbol, expiration, {
       calls: (chain.calls ?? []) as Array<Record<string, unknown>>,
@@ -279,6 +280,7 @@ export async function getOptionsExpirations(
         marketDate: listing.marketDate,
         buckets: [],
         strikes: [],
+        topVolume: buildOptionsVolumeRanking([]),
         generatedAt: Date.now(),
       },
       failures,
@@ -311,6 +313,7 @@ export async function getOptionsExpirations(
       marketDate: listing.marketDate,
       buckets,
       strikes: collectStrikes(buckets),
+      topVolume: buildOptionsVolumeRanking(buckets, failures.map(failure => failure.block)),
       generatedAt: Date.now(),
     },
     failures,

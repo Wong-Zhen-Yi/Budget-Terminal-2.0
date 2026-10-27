@@ -9,6 +9,31 @@ settings through the existing stores and automatic backup. These are local recor
 edits, not broker orders. Bulk import/export, clear-all, cache reset and shell
 operations remain in the desktop UI.
 
+News reads (`news`, `newsPage`, `newsTickerSearch`, `newsArticle`, `forexNews`)
+always request a source refresh before returning, including when `request.force`
+is omitted or false. This applies to external clients and embedded manual,
+autonomous and tracker agents. Refreshes keep the shared provider rate gate and
+source failure warnings; stale fallback evidence is never verified current news.
+Check each article's publication date separately from the retrieval timestamp,
+cite its link and say when no recent stories were found. Publication dates remain
+in response provenance when fields are projected out. Regular page reads keep
+their existing caches and startup preloading behavior.
+
+Options reads (`options`, `optionsChain`, `optionsExpirations`, `optionQuotes`)
+also force a refresh when `force` is omitted or false. For highest-volume contracts
+across a ticker's live expirations, call `budget_terminal_options_expirations`
+with `request: { "symbol": "AAPL" }` and
+`response: { "mode": "full", "fields": ["symbol", "marketDate", "topVolume", "generatedAt"] }`.
+`topVolume.rows` contains up to 50 positive-volume contracts ranked across every
+successfully loaded expiration by volume, with open interest breaking ties. It
+includes prices, bid/ask, open interest and last-trade dates where supplied.
+The accompanying counts and `failedExpirations` describe coverage; envelope errors
+remain visible. Ranking precedes projection, so large raw chains can be omitted
+without losing the actual leaders. Generic summary mode samples rows and should
+not be used to establish the ranking. Results cover the requested ticker, not a
+market-wide universe. A fresh request does not guarantee live exchange data or
+recent option trades. Ordinary page caching and startup loading are unchanged.
+
 The bridge starts automatically when Budget Terminal opens. Settings > Data >
 Local MCP reports readiness or startup failures. MCP discovery works while the
 app is closed; service calls then say to open Budget Terminal. Restarting the app

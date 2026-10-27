@@ -49,6 +49,17 @@ export interface OptionsExpirationBucket {
   rows: OptionsRawRow[]
 }
 
+/** Compact research ranking computed from the complete sweep before MCP projection. */
+export interface OptionsVolumeRanking {
+  rows: OptionsRawRow[]
+  limit: number
+  totalContracts: number
+  contractsWithVolume: number
+  expirationsRequested: number
+  expirationsLoaded: number
+  failedExpirations: string[]
+}
+
 export type OptionsTypeFilter = 'both' | 'calls' | 'puts'
 export type OptionsStrategy = 'None' | 'Covered Call' | 'Cash Secured Put'
 
@@ -517,6 +528,20 @@ export function topVolumeRecords(
   return filtered
     .sort((a, b) => b.volume - a.volume || b.openInterest - a.openInterest)
     .slice(0, limit)
+}
+
+export function buildOptionsVolumeRanking(buckets: readonly OptionsExpirationBucket[], failedExpirations: readonly string[] = []): OptionsVolumeRanking {
+  const failed = [...new Set(failedExpirations)]
+  const contracts = buckets.filter(bucket => !failed.includes(bucket.expiry)).flatMap(bucket => bucket.rows)
+  const withVolume = contracts.filter(row => Number.isFinite(row.volume) && row.volume > 0)
+  const limit = 50
+  return {
+    rows: topVolumeRecords(withVolume, 'both', limit), limit,
+    totalContracts: contracts.length, contractsWithVolume: withVolume.length,
+    expirationsRequested: buckets.length,
+    expirationsLoaded: buckets.filter(bucket => !failed.includes(bucket.expiry)).length,
+    failedExpirations: failed,
+  }
 }
 
 /**
