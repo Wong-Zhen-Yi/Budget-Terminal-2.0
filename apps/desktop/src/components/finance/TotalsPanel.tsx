@@ -4,6 +4,7 @@ import { Donut } from '@/components/charts/Donut'
 import { Button } from '@/components/ui/Button'
 import { Panel } from '@/components/ui/Panel'
 import { Select } from '@/components/ui/Select'
+import { useNumberPrivacy } from '@/components/ui/NumberPrivacy'
 import { moneyRounded } from '@/lib/format'
 
 const CURRENCIES: ReadonlyArray<{ value: FinanceCurrency; label: string }> = [
@@ -29,7 +30,7 @@ interface TotalsPanelProps {
 }
 
 /** `FX: 1 USD = 1.2693 SGD at 03:22:03`, four decimals and a local clock time. */
-function fxLabel(fx: FxPayload | undefined, loading: boolean, error: string): string {
+function fxLabel(fx: FxPayload | undefined, loading: boolean, error: string, maskNumbers: boolean): string {
   if (loading && !fx?.usdSgd) return 'FX: loading USD/SGD; converted values pending'
   if (!fx?.usdSgd) {
     return `FX: USD/SGD unavailable; converted values hidden${error ? ` (${error})` : ''}`
@@ -42,7 +43,7 @@ function fxLabel(fx: FxPayload | undefined, loading: boolean, error: string): st
         hour12: false,
       })
     : ''
-  return `FX: 1 USD = ${fx.usdSgd.toFixed(4)} SGD${collected ? ` at ${collected}` : ''}`
+  return `FX: 1 USD = ${maskNumbers ? '****' : fx.usdSgd.toFixed(4)} SGD${collected ? ` at ${collected}` : ''}`
 }
 
 export function TotalsPanel({
@@ -59,6 +60,7 @@ export function TotalsPanel({
   animationProgress,
   className = '',
 }: TotalsPanelProps) {
+  const maskNumbers = useNumberPrivacy()
   return (
     <Panel title="Totals" className={className}>
       {/* The controls sit in the body rather than the header strip, as the reference
@@ -77,7 +79,7 @@ export function TotalsPanel({
         </Button>
       </div>
       <div className="shrink-0 px-2 pt-1 text-2xs text-text-muted">
-        {fxLabel(fx, fxLoading, fxError)}
+        {fxLabel(fx, fxLoading, fxError, maskNumbers)}
       </div>
       <p className="shrink-0 px-2 pt-1 text-2xs text-text-muted">
         Cash and debt are SGD. Investments and brokerage accounts are USD.

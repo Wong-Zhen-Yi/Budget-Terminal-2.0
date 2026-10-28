@@ -19,6 +19,7 @@ import { PositionsTable } from '@/components/portfolio/PositionsTable'
 import { RemovePositionsDialog } from '@/components/portfolio/RemovePositionsDialog'
 import { SummaryBar } from '@/components/portfolio/SummaryBar'
 import { Button } from '@/components/ui/Button'
+import { PrivateNumber } from '@/components/ui/NumberPrivacy'
 import { Panel } from '@/components/ui/Panel'
 import { currency, decimals, percent, plainPercent } from '@/lib/format'
 
@@ -463,7 +464,7 @@ export function PortfolioPage({
           className="min-h-0 flex-1"
           actions={
             <span className="num text-2xs text-text-muted">
-              {summary.complete ? 'Included subtotal' : 'Known subtotal'}: {currency(allocation.total)} USD
+              {summary.complete ? 'Included subtotal' : 'Known subtotal'}: <PrivateNumber>{currency(allocation.total)} USD</PrivateNumber>
             </span>
           }
         >

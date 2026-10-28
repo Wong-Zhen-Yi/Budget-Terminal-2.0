@@ -11,6 +11,7 @@ import { Treemap, type TreemapTile } from '@/components/charts/Treemap'
 import { Button } from '@/components/ui/Button'
 import { DataFreshness } from '@/components/ui/DataFreshness'
 import { FRESHNESS } from '@shared/freshness'
+import { PrivateNumber, useNumberPrivacy } from '@/components/ui/NumberPrivacy'
 import { currency, percent, plainPercent } from '@/lib/format'
 
 interface HeatmapTabProps {
@@ -22,6 +23,7 @@ interface HeatmapTabProps {
 }
 
 export function HeatmapTab({ portfolio, rows, visible, compact = false, onStatusChange }: HeatmapTabProps) {
+  const maskNumbers = useNumberPrivacy()
   const [interval, setInterval] = useState<HeatmapInterval>('live')
   const [hovered, setHovered] = useState<TreemapTile | null>(null)
 
@@ -83,7 +85,7 @@ export function HeatmapTab({ portfolio, rows, visible, compact = false, onStatus
       {rows.some(row => row.includeInWeight && row.marketValue === null) && <p className="px-2 text-2xs text-warn">Market marks missing; allocation unavailable.</p>}
       {historical && included.length > 0 && <DataFreshness envelope={returnsQuery.data} loading={returnsQuery.isFetching}
         error={returnsQuery.error} freshnessMs={FRESHNESS.chartDaily}
-        coverage={`${Object.keys(returnsQuery.data?.data.returns ?? {}).length}/${included.length} holdings`} />}
+        coverage={`${maskNumbers ? '****' : `${Object.keys(returnsQuery.data?.data.returns ?? {}).length}/${included.length}`} holdings`} />}
       <div className={`${compact ? 'grid grid-cols-2' : 'flex flex-wrap'} shrink-0 border border-border bg-surface`}>
         <Stat label="Holdings" value={String(holdings.length)} />
         {!compact ? <Stat label="Priced holdings" value={`${included.length}/${holdings.length}`} /> : null}
@@ -95,16 +97,18 @@ export function HeatmapTab({ portfolio, rows, visible, compact = false, onStatus
         <Stat label="Weighted Move" value={percent(move)} tone={(move ?? 0) >= 0 ? 'text-up' : 'text-down'} />
         {!compact ? (
           <>
-            <Stat label="Largest" value={largest ? `${largest.label} ${plainPercent(largest.weight)}` : '--'} />
+            <Stat label="Largest" prefix={largest?.label} value={largest ? plainPercent(largest.weight) : '--'} />
             <Stat
               label="Strongest"
-              value={ranked[0] ? `${ranked[0].label} ${percent(ranked[0].changePct)}` : '--'}
+              prefix={ranked[0]?.label}
+              value={ranked[0] ? percent(ranked[0].changePct) : '--'}
               tone="text-up"
             />
             <Stat
               label="Weakest"
+              prefix={ranked.at(-1)?.label}
               value={
-                ranked.length ? `${ranked[ranked.length - 1].label} ${percent(ranked[ranked.length - 1].changePct)}` : '--'
+                ranked.length ? percent(ranked[ranked.length - 1].changePct) : '--'
               }
               tone="text-down"
             />
@@ -114,7 +118,7 @@ export function HeatmapTab({ portfolio, rows, visible, compact = false, onStatus
 
       {holdings.length > 0 ? (
         <p className={`px-2 text-2xs ${unclassified.length ? 'text-warn' : 'text-text-muted'}`}>
-          Sector coverage: {holdings.length - unclassified.length}/{holdings.length}
+          Sector coverage: <PrivateNumber>{holdings.length - unclassified.length}/{holdings.length}</PrivateNumber>
           {unclassified.length ? ` — Unclassified: ${unclassified.map(row => row.ticker).join(', ')}` : ''}
         </p>
       ) : null}
@@ -146,16 +150,16 @@ export function HeatmapTab({ portfolio, rows, visible, compact = false, onStatus
             <span className="font-semibold text-text">{detail.label}</span>
             <span className="text-text-muted">Sector: {detail.group}</span>
             <span className="text-text-muted">
-              Weight: <span className="num text-text">{plainPercent(detail.weight, 2)}</span>
+              Weight: <span className="num text-text"><PrivateNumber>{plainPercent(detail.weight, 2)}</PrivateNumber></span>
             </span>
             <span className="text-text-muted">
-              Price: <span className="num text-text">{currency(detailRow.price)}</span>
+              Price: <span className="num text-text"><PrivateNumber>{currency(detailRow.price)}</PrivateNumber></span>
             </span>
             <span className="text-text-muted">
-              Market Value: <span className="num text-text">{currency(detailRow.marketValue)}</span>
+              Market Value: <span className="num text-text"><PrivateNumber>{currency(detailRow.marketValue)}</PrivateNumber></span>
             </span>
             <span className={(detail.changePct ?? 0) >= 0 ? 'text-up' : 'text-down'}>
-              Change: {percent(detail.changePct)}
+              Change: <PrivateNumber>{percent(detail.changePct)}</PrivateNumber>
             </span>
           </>
         ) : (
@@ -166,11 +170,11 @@ export function HeatmapTab({ portfolio, rows, visible, compact = false, onStatus
   )
 }
 
-function Stat({ label, value, tone = 'text-text' }: { label: string; value: string; tone?: string }) {
+function Stat({ label, value, prefix, tone = 'text-text' }: { label: string; value: string; prefix?: string; tone?: string }) {
   return (
     <div className="flex min-w-32 flex-1 flex-col items-center border-r border-border px-3 py-1 last:border-r-0">
       <span className="text-2xs text-text-muted">{label}</span>
-      <span className={`num text-2xs font-semibold ${tone}`}>{value}</span>
+      <span className={`num text-2xs font-semibold ${tone}`}>{prefix ? `${prefix} ` : ''}<PrivateNumber>{value}</PrivateNumber></span>
     </div>
   )
 }

@@ -63,6 +63,7 @@ function launch({ development = false, platform = process.platform, nodeVersion 
   }
 
   log.log(`Starting Budget Terminal for ${os}...`)
+  log.log('Portfolio and Personal Finance privacy: Obscure replaces numbers with **** while labels, controls and charts stay visible. Reveal restores values and numeric editing.')
   log.log('Agent options: MCP refreshes expirations, chains and contract marks. Top-volume research ranks all loaded live expirations and reports missing coverage.')
   log.log('Portfolio Dip Finder: Entry shows percentage gain or loss versus your average purchase price.')
   log.log('Agent news: MCP news tools refresh sources before returning. Summaries check publication dates and report stale data or refresh failures.')

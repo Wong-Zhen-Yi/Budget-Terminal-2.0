@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import type { PositionRow } from '@shared/portfolioMath'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
+import { PrivateNumber } from '@/components/ui/NumberPrivacy'
 import { currency, decimals } from '@/lib/format'
 
 interface RemovePositionsDialogProps {
@@ -108,10 +109,10 @@ export function RemovePositionsDialog({ rows, onClose, onSubmit }: RemovePositio
                   />
                   <span className="num w-20 shrink-0 text-2xs text-text">{row.ticker}</span>
                   <span className="num flex-1 text-right text-2xs text-text-muted">
-                    {decimals(row.shares, row.shares % 1 === 0 ? 0 : 4)} sh
+                    <PrivateNumber>{decimals(row.shares, row.shares % 1 === 0 ? 0 : 4)}</PrivateNumber> sh
                   </span>
                   <span className="num w-28 shrink-0 text-right text-2xs text-text-muted">
-                    {currency(row.marketValue)}
+                    <PrivateNumber>{currency(row.marketValue)}</PrivateNumber>
                   </span>
                 </label>
               </li>

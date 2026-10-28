@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { PrivateNumber } from '@/components/ui/NumberPrivacy'
 
 export interface LineSeries {
   /** `null` breaks the line rather than plotting a point, keeping the x alignment. */
@@ -164,7 +165,7 @@ export function LineChart({
                 fill="var(--color-text-muted)"
                 fontSize={11}
               >
-                {format(value)}
+                <PrivateNumber>{format(value)}</PrivateNumber>
               </text>
             ) : null}
           </g>

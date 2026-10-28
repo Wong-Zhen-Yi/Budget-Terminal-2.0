@@ -1,6 +1,7 @@
 import type { Portfolio } from '@shared/contract'
 import type { PortfolioSummary } from '@shared/portfolioMath'
 import { NumberInput } from '@/components/ui/NumberInput'
+import { PrivateNumber } from '@/components/ui/NumberPrivacy'
 import { currency, integer, plainPercent, signedCurrency } from '@/lib/format'
 
 interface SummaryBarProps {
@@ -78,7 +79,7 @@ export function SummaryBar({
             className={`num text-2xs ${marginTone(summary.marginUtilization)}`}
             title="Margin used = margin debt / (stock market value + cash)"
           >
-            {plainPercent(summary.marginUtilization)}
+            <PrivateNumber>{plainPercent(summary.marginUtilization)}</PrivateNumber>
           </span>
         ) : null}
       </Chip>
@@ -125,7 +126,7 @@ function Metric({
   return (
     <div className="flex items-center gap-2 border border-border bg-surface px-2 py-1">
       <span className="text-2xs tracking-wide text-text-muted uppercase">{label}</span>
-      <span className={`num text-2xs font-semibold ${tone}`}>{children}</span>
+      <span className={`num text-2xs font-semibold ${tone}`}><PrivateNumber>{children}</PrivateNumber></span>
     </div>
   )
 }

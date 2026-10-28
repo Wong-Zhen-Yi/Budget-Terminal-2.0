@@ -1,3 +1,5 @@
+import { PrivateNumber } from '@/components/ui/NumberPrivacy'
+
 export interface BarSegment {
   value: number
   color: string
@@ -132,7 +134,7 @@ export function BarChart({
                     color: fallback,
                   }}
                 >
-                  {format(bar.value)}
+                  <PrivateNumber>{format(bar.value)}</PrivateNumber>
                 </span>
               </div>
             </div>

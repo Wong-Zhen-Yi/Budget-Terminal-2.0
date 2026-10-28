@@ -1,4 +1,5 @@
 @echo off
+echo Portfolio and Personal Finance privacy: Obscure replaces numbers with **** while labels, controls and charts stay visible. Reveal restores values and numeric editing.
 echo Agent options: MCP refreshes expirations, chains and contract marks. Top-volume research ranks all loaded live expirations and reports missing coverage.
 echo Portfolio Dip Finder: Entry shows percentage gain or loss versus your average purchase price.
 echo Agent news: MCP news tools refresh sources before returning. Summaries check publication dates and report stale data or refresh failures.

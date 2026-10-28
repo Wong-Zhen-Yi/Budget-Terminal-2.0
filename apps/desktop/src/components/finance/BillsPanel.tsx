@@ -6,6 +6,7 @@ import type { BillTotals } from '@shared/financeMath'
 import { Button } from '@/components/ui/Button'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { NumberInput } from '@/components/ui/NumberInput'
+import { PrivateNumber } from '@/components/ui/NumberPrivacy'
 import { Panel } from '@/components/ui/Panel'
 import { Select } from '@/components/ui/Select'
 import { TextInput } from '@/components/ui/TextInput'
@@ -152,10 +153,10 @@ export function BillsPanel({
       />
       <div className="flex h-8 shrink-0 items-center justify-end gap-4 border-t border-border px-2 text-2xs font-semibold text-text">
         <span>
-          Monthly total ({display}): <span className="num">{monthly}</span>
+          Monthly total ({display}): <span className="num"><PrivateNumber>{monthly}</PrivateNumber></span>
         </span>
         <span>
-          Annual total ({display}): <span className="num">{annual}</span>
+          Annual total ({display}): <span className="num"><PrivateNumber>{annual}</PrivateNumber></span>
         </span>
       </div>
     </Panel>

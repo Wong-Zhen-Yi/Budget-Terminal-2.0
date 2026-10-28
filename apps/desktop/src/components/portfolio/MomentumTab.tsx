@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button'
 import { percent } from '@/lib/format'
 import { DataFreshness } from '@/components/ui/DataFreshness'
 import { FRESHNESS } from '@shared/freshness'
+import { useNumberPrivacy } from '@/components/ui/NumberPrivacy'
 
 interface MomentumTabProps {
   positions: PositionInput[]
@@ -18,6 +19,7 @@ interface MomentumTabProps {
 
 /** Portfolio return since the start of the window, against its own EMA. */
 export function MomentumTab({ positions, cashAmount, visible, valuationComplete }: MomentumTabProps) {
+  const maskNumbers = useNumberPrivacy()
   const [timeframe, setTimeframe] = useState<ReturnTimeframe>('1mo')
   const query = useMomentum(positions, cashAmount, timeframe, visible)
   const data = query.data?.data
@@ -33,8 +35,8 @@ export function MomentumTab({ positions, cashAmount, visible, valuationComplete 
     const holdingCount = data.includedTickers.filter(ticker => ticker !== 'CASH').length
     const parts = [
       `Since ${data.startDate}`,
-      `Portfolio ${percent(last, 1)}`,
-      `${holdingCount} included holding${holdingCount === 1 ? '' : 's'}${data.includedTickers.includes('CASH') ? ' · cash included' : ''}`,
+      `Portfolio ${maskNumbers ? '****' : percent(last, 1)}`,
+      `${maskNumbers ? '****' : holdingCount} included holding${holdingCount === 1 ? '' : 's'}${data.includedTickers.includes('CASH') ? ' · cash included' : ''}`,
     ]
     if (last !== null && lastEma !== null) {
       parts.push(`${last >= lastEma ? 'Above' : 'Below'} ${data.emaPeriod}-day EMA`)
@@ -46,7 +48,7 @@ export function MomentumTab({ positions, cashAmount, visible, valuationComplete 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
       <DataFreshness envelope={query.data} loading={query.isFetching} error={query.error} freshnessMs={FRESHNESS.chartDaily}
-        coverage={data ? `${data.includedTickers.filter(ticker => ticker !== 'CASH').length}/${positions.length} holdings in history` : undefined} />
+        coverage={data ? `${maskNumbers ? '****' : `${data.includedTickers.filter(ticker => ticker !== 'CASH').length}/${positions.length}`} holdings in history` : undefined} />
       <div className="flex shrink-0 items-center gap-1">
         {RETURN_TIMEFRAMES.map((entry) => (
           <Button

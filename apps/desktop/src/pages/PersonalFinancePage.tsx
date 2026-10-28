@@ -31,6 +31,7 @@ import { GoalPanel } from '@/components/finance/GoalPanel'
 import { SilosPanel } from '@/components/finance/SilosPanel'
 import { TotalsPanel } from '@/components/finance/TotalsPanel'
 import { Button } from '@/components/ui/Button'
+import { PrivateNumber } from '@/components/ui/NumberPrivacy'
 import { money, moneyExplicit } from '@/lib/format'
 import { easeOutCubic, useAnimatedProgress } from '@/lib/useAnimatedProgress'
 
@@ -47,13 +48,13 @@ const emptyBook: PersonalFinancePayload = {
 }
 
 /** `_p6_update_debt_total`: the footer folds in brokerage margin, which is USD. */
-function debtFooter(debtTotal: number, margin: number, rate: number | null): string {
-  if (margin <= 0) return `Debt total: ${money(debtTotal, 'SGD')}`
+function debtFooter(debtTotal: number, margin: number, rate: number | null) {
+  if (margin <= 0) return <>Debt total: <PrivateNumber>{money(debtTotal, 'SGD')}</PrivateNumber></>
   if (!validRate(rate)) {
-    return `Debt total: ${money(debtTotal, 'SGD')} + ${moneyExplicit(margin, 'USD')} margin`
+    return <>Debt total: <PrivateNumber>{money(debtTotal, 'SGD')}</PrivateNumber> + <PrivateNumber>{moneyExplicit(margin, 'USD')}</PrivateNumber> margin</>
   }
   const combined = debtTotal + margin * rate
-  return `Debt total: ${money(combined, 'SGD')} (incl. ${moneyExplicit(margin, 'USD')} margin)`
+  return <>Debt total: <PrivateNumber>{money(combined, 'SGD')}</PrivateNumber> (incl. <PrivateNumber>{moneyExplicit(margin, 'USD')}</PrivateNumber> margin)</>
 }
 
 export function PersonalFinancePage({
@@ -271,7 +272,7 @@ export function PersonalFinancePage({
           className="min-h-0 flex-[62] min-w-[16rem]"
           rows={finance.cash}
           addVariant="positive"
-          footer={`Cash total: ${money(cashTotal, 'SGD')}`}
+          footer={<>Cash total: <PrivateNumber>{money(cashTotal, 'SGD')}</PrivateNumber></>}
           onAdd={() => void send({ type: 'addEntry', category: 'cash' })}
           onRemove={(id) => void send({ type: 'removeEntry', category: 'cash', id })}
           onSetDesc={(id, desc) => void send({ type: 'setEntry', category: 'cash', id, desc })}

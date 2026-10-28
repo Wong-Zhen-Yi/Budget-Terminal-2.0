@@ -14,6 +14,7 @@ import { useMcpScreenshot, useScreenshotReady } from '@/api/mcpScreenshot'
 import { useReloadAll } from '@/api/queries'
 import { useSettings, useSettingsMutation } from '@/api/settingsQueries'
 import { PageCache } from '@/components/chrome/PageCache'
+import { NumberPrivacy } from '@/components/ui/NumberPrivacy'
 import { StatusBar, type PanelStatus } from '@/components/chrome/StatusBar'
 import { TabBar } from '@/components/chrome/TabBar'
 import { TabPicker } from '@/components/chrome/TabPicker'
@@ -132,6 +133,7 @@ export function App() {
   const warm = useWarmPages(settings, !settingsQuery.isPending, selectedTab, recent,
     settingsQuery.error ?? (settingsQuery.data?.meta.freshness === 'failed' ? settingsQuery.data.meta.failureReason || 'Settings could not load' : undefined))
   const hideCurrent = obscured && (settings?.obscuredTabs ?? []).includes(activeTab)
+  const blurCurrent = hideCurrent && activeTab !== 'portfolio' && activeTab !== 'personal-finance'
   useScreenshotReady(screenshot, activeTab, hideCurrent, warm.active, completeScreenshot)
   const setFundamentalsSymbol = useFundamentalsStore((state) => state.setSymbol)
   const setOptionsSymbol = useOptionsPage((state) => state.setSymbol)
@@ -344,7 +346,8 @@ export function App() {
     agentFavorite: favorites.includes('agents'),
     savingFavorite: savingFavorite || !settings,
     onToggleFavorite: toggleFavorite,
-  }), [statusFor, handleStocksNavigate, activeTab, hideCurrent, pickerOpen, favorites, savingFavorite, settings, toggleFavorite])
+    maskNumbers: obscured && (settings?.obscuredTabs ?? []).includes(tabId),
+  }), [statusFor, handleStocksNavigate, activeTab, hideCurrent, pickerOpen, favorites, savingFavorite, settings, toggleFavorite, obscured])
 
   return (
     <div className={`terminal-shell flex h-full flex-col bg-bg ${isMac ? 'platform-mac' : ''}`}>
@@ -378,17 +381,17 @@ export function App() {
             favorite={favorites.includes(activeTab)} onToggleFavorite={() => void toggleFavorite()}
             saving={savingFavorite || !settings} />}
           <div className="relative flex min-h-0 flex-1 flex-col">
-            {/* Blurred and inert, matching the reference's blur effect plus `setEnabled(False)`. */}
+            {/* Finance pages keep their controls usable and mask numbers in their own subtrees. */}
             <div
-              aria-hidden={hideCurrent}
+              aria-hidden={blurCurrent}
               className={`flex min-h-0 flex-1 flex-col ${
-                hideCurrent ? 'pointer-events-none blur-md select-none' : ''
+                blurCurrent ? 'pointer-events-none blur-md select-none' : ''
               }`}
             >
               <PageCache activeTab={activeTab} retainedTab={screenshotPage ? selectedTab : undefined} visibleIds={visibleIds} renderPage={renderCachedPage} />
             </div>
 
-            {hideCurrent ? (
+            {blurCurrent ? (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <p className="border border-border-strong bg-surface px-3 py-2 text-2xs text-text-muted">
                   This page is obscured. Press {isMac ? '⌘⇧H' : 'Ctrl+Shift+H'} to reveal it.
@@ -449,6 +452,7 @@ function renderPage({
   agentFavorite,
   savingFavorite,
   onToggleFavorite,
+  maskNumbers,
 }: {
   tabId: string
   active: boolean
@@ -458,6 +462,7 @@ function renderPage({
   agentFavorite: boolean
   savingFavorite: boolean
   onToggleFavorite: () => void
+  maskNumbers: boolean
 }) {
   return (
     tabId === 'agents' ? (
@@ -473,11 +478,15 @@ function renderPage({
     ) : tabId === 'global' ? (
       <GlobalPage onStatusChange={onStatusChange} />
     ) : tabId === 'portfolio' ? (
-      <PortfolioPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
+      <NumberPrivacy value={maskNumbers}>
+        <PortfolioPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
+      </NumberPrivacy>
     ) : tabId === 'cards' ? (
       <CardsPage onStatusChange={onStatusChange} onNavigate={onSelectTab} />
     ) : tabId === 'personal-finance' ? (
-      <PersonalFinancePage onStatusChange={onStatusChange} />
+      <NumberPrivacy value={maskNumbers}>
+        <PersonalFinancePage onStatusChange={onStatusChange} />
+      </NumberPrivacy>
     ) : tabId === 'pre-market' ? (
       <PreMarketPage onStatusChange={onStatusChange} />
     ) : tabId === 'up-down' ? (

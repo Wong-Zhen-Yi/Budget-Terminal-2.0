@@ -27,6 +27,7 @@
     "probe:maintenance": "tsx scripts/probe-maintenance.ts",
     "probe:maintenance-live": "tsx scripts/probe-maintenance-live.ts",
     "probe:portfolio": "tsx scripts/probe-portfolio.ts",
+    "probe:portfolio-privacy-ui": "tsx scripts/probe-portfolio-privacy-ui.ts",
     "probe:dip-finder-ui": "tsx scripts/probe-dip-finder-ui.ts",
     "probe:rate": "tsx scripts/probe-rate.ts",
     "probe:yahoo-worker-ui": "tsx scripts/probe-yahoo-worker-ui.ts",

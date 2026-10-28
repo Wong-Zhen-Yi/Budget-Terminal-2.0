@@ -1,3 +1,5 @@
+import { PrivateNumber } from '@/components/ui/NumberPrivacy'
+
 const SIZE = 200
 const RADIUS = 84
 const STROKE = 9
@@ -70,7 +72,7 @@ export function GoalRing({
         className="num fill-text"
         style={{ fontSize: 24, fontWeight: 600 }}
       >
-        {centerText}
+        <PrivateNumber>{centerText}</PrivateNumber>
       </text>
       <text
         x={SIZE / 2}

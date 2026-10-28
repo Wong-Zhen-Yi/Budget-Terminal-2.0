@@ -4,7 +4,7 @@ import { Panel } from '@/components/ui/Panel'
 import type { NavigationTab } from '@/components/settings/NavigationPanel'
 
 /**
- * `_build_settings_privacy_box`: which pages the Obscure button blurs and locks.
+ * Pages protected by Obscure. Finance pages mask numbers; other pages blur and lock.
  *
  * An empty selection is allowed — the reference says so explicitly, and Obscure then
  * reports that nothing is configured rather than refusing to turn on.
@@ -24,7 +24,7 @@ export function PrivacyPanel({
       <div className="flex flex-col gap-2 p-2">
         <SectionHeader
           title="Obscured Pages"
-          hint="Choose which main pages the Obscure button blurs and locks. An empty selection is allowed."
+          hint="Choose which main pages Obscure protects. Portfolio and Personal Finance replace numbers with ****; other pages blur and lock. An empty selection is allowed."
         />
         <ul className="grid max-h-72 grid-cols-2 gap-x-4 gap-y-0.5 overflow-y-auto border border-border bg-bg p-2">
           {tabs.map((tab) => (

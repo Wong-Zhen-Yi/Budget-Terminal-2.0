@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNumberPrivacy } from './NumberPrivacy'
 
 interface NumberInputProps {
   value: number
@@ -37,6 +38,7 @@ export function NumberInput({
   className = '',
   'aria-label': ariaLabel,
 }: NumberInputProps) {
+  const maskNumbers = useNumberPrivacy()
   const display = decimals === undefined ? String(value) : value.toFixed(decimals)
   const [draft, setDraft] = useState(display)
   const [editing, setEditing] = useState(false)
@@ -47,6 +49,7 @@ export function NumberInput({
 
   const commit = () => {
     setEditing(false)
+    if (maskNumbers) return
     const parsed = Number(draft.replace(/[$,\s]/g, ''))
     if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
       setDraft(display)
@@ -54,6 +57,10 @@ export function NumberInput({
     }
     setDraft(display)
     if (parsed !== value) onCommit(parsed)
+  }
+
+  if (maskNumbers) {
+    return <span aria-label={ariaLabel} className={`num inline-block px-1 text-right text-2xs text-text ${className}`}>****</span>
   }
 
   return (

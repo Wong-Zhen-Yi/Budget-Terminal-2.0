@@ -3,6 +3,7 @@ import { MAX_GOAL_TITLE } from '@shared/contract'
 import { goalProgress } from '@shared/financeMath'
 import { GoalRing } from '@/components/finance/GoalRing'
 import { NumberInput } from '@/components/ui/NumberInput'
+import { useNumberPrivacy } from '@/components/ui/NumberPrivacy'
 import { Panel } from '@/components/ui/Panel'
 import { Select } from '@/components/ui/Select'
 import { TextInput } from '@/components/ui/TextInput'
@@ -32,13 +33,14 @@ function statusText(
   target: number,
   currency: FinanceCurrency,
   available: boolean,
+  maskNumbers: boolean,
 ): string {
   if (!available) return 'FX required to value mixed currencies'
   if (target <= 0) return 'Set a target to start tracking'
   const remaining = target - current
   if (remaining <= 0) return 'Goal reached'
   const progress = Math.max(0, Math.min(100, (current / target) * 100))
-  return `${moneyRounded(remaining, currency)} remaining | ${progress.toFixed(1)}% complete`
+  return `${maskNumbers ? '****' : moneyRounded(remaining, currency)} remaining | ${maskNumbers ? '****' : `${progress.toFixed(1)}%`} complete`
 }
 
 export function GoalPanel({
@@ -52,6 +54,7 @@ export function GoalPanel({
   animationProgress,
   className = '',
 }: GoalPanelProps) {
+  const maskNumbers = useNumberPrivacy()
   const progress = goalProgress(current, goal.targetAmount, available)
 
   return (
@@ -97,7 +100,7 @@ export function GoalPanel({
           centerText={available ? moneyRounded(current, goal.currency) : 'Unavailable'}
           subtext={
             goal.targetAmount > 0
-              ? `of ${moneyRounded(goal.targetAmount, goal.currency)} ${goal.currency}`
+              ? `of ${maskNumbers ? '****' : moneyRounded(goal.targetAmount, goal.currency)} ${goal.currency}`
               : `${goal.currency} target`
           }
         />
@@ -106,7 +109,7 @@ export function GoalPanel({
       {/* The status line is a whole sentence, so it wraps rather than clipping in a
           panel this narrow. */}
       <div className="flex min-h-8 shrink-0 items-center justify-center border-t border-border px-2 py-1 text-center text-2xs leading-tight text-text-muted">
-        {!available && unavailableReason ? unavailableReason : statusText(current, goal.targetAmount, goal.currency, available)}
+        {!available && unavailableReason ? unavailableReason : statusText(current, goal.targetAmount, goal.currency, available, maskNumbers)}
       </div>
     </Panel>
   )

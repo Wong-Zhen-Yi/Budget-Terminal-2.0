@@ -1,3 +1,5 @@
+import { PrivateNumber, useNumberPrivacy } from '@/components/ui/NumberPrivacy'
+
 export interface Slice {
   label: string
   /** Any positive magnitude; the legend shows each one's share of the total. */
@@ -77,6 +79,7 @@ export function Donut({
   startAngle = 0,
   compact = false,
 }: DonutProps) {
+  const maskNumbers = useNumberPrivacy()
   const positive = slices.filter((slice) => slice.value > 0)
   const total = positive.reduce((sum, slice) => sum + slice.value, 0)
   if (!positive.length || total <= 0) {
@@ -121,7 +124,7 @@ export function Donut({
         {wedges.map((wedge, index) =>
           wedge.path ? (
             <path key={index} d={wedge.path} fill={wedge.color}>
-              <title>{`${wedge.label} ${wedge.percent.toFixed(1)}%`}</title>
+              <title>{`${wedge.label} ${maskNumbers ? '****' : `${wedge.percent.toFixed(1)}%`}`}</title>
             </path>
           ) : null,
         )}
@@ -133,7 +136,7 @@ export function Donut({
             className="num fill-text"
             style={{ fontSize: 26, fontWeight: 600 }}
           >
-            {centerText}
+            <PrivateNumber>{centerText}</PrivateNumber>
           </text>
         ) : null}
         {centerSubtext ? (
@@ -171,7 +174,7 @@ export function Donut({
               {wedge.label}
             </span>
             <span className={`num shrink-0 text-text-muted ${compact ? 'text-[10px]' : 'text-2xs'}`}>
-              {wedge.percent.toFixed(1)}%
+              <PrivateNumber>{wedge.percent.toFixed(1)}%</PrivateNumber>
             </span>
           </li>
         ))}

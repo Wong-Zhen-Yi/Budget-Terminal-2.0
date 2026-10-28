@@ -6,6 +6,7 @@ import { useAnalytics } from '@/api/portfolioQueries'
 import { Button } from '@/components/ui/Button'
 import { DataFreshness } from '@/components/ui/DataFreshness'
 import { FRESHNESS } from '@shared/freshness'
+import { PrivateNumber, useNumberPrivacy } from '@/components/ui/NumberPrivacy'
 import { currency, decimals, integer, percent, plainPercent } from '@/lib/format'
 
 interface MetricsTabProps {
@@ -83,6 +84,7 @@ const CARDS: Array<{
 ]
 
 export function MetricsTab({ positions, cashAmount, currentValues, visible, valuationComplete }: MetricsTabProps) {
+  const maskNumbers = useNumberPrivacy()
   const [benchmark, setBenchmark] = useState('SPY')
   const [benchmarkDraft, setBenchmarkDraft] = useState('SPY')
   const [lookback, setLookback] = useState<MetricsLookback>('1y')
@@ -135,7 +137,7 @@ export function MetricsTab({ positions, cashAmount, currentValues, visible, valu
             : data?.reason
               ? data.reason
               : data
-                ? `${includedHoldings} included holdings${countsCash ? ' · cash included' : ''} | ${integer(data.historyPoints)} daily points | ` +
+                ? `${maskNumbers ? '****' : includedHoldings} included holdings${countsCash ? ' · cash included' : ''} | ${integer(data.historyPoints)} daily points | ` +
                   `${data.startDate} to ${data.endDate} | Benchmark ${data.benchmarkSymbol} | ${lookback.toUpperCase()}`
                 : 'No metrics yet'}
         </p>
@@ -144,7 +146,7 @@ export function MetricsTab({ positions, cashAmount, currentValues, visible, valu
       </section>
 
       <DataFreshness envelope={query.data} loading={query.isFetching} error={query.error} freshnessMs={FRESHNESS.chartDaily}
-        coverage={data ? `${includedHoldings}/${positions.length} holdings in history` : undefined} />
+        coverage={data ? `${maskNumbers ? '****' : `${includedHoldings}/${positions.length}`} holdings in history` : undefined} />
       {(!valuationComplete || data?.excludedTickers.length) ? <p className="text-2xs text-warn">
         Portfolio metrics unavailable: {!valuationComplete ? 'market marks are incomplete.' : `history missing for ${data?.excludedTickers.join(', ')}.`}
       </p> : null}
@@ -158,7 +160,7 @@ export function MetricsTab({ positions, cashAmount, currentValues, visible, valu
             <article key={card.key} className="border border-border bg-surface p-2">
               <h4 className="text-2xs font-semibold text-text">{card.title}</h4>
               <p className={`num py-1 text-sm font-semibold ${tone}`}>
-                {value === null ? '--' : card.format(value)}
+                <PrivateNumber>{value === null ? '--' : card.format(value)}</PrivateNumber>
               </p>
               <p className="text-2xs text-text-dim">{card.description}</p>
             </article>
@@ -178,7 +180,7 @@ export function MetricsTab({ positions, cashAmount, currentValues, visible, valu
           </Group>
 
           <Group title="Concentration">
-            <Row label="Largest Position" value={exposure?.largestPositionTicker ?? '--'} />
+            <Row label="Largest Position" value={exposure?.largestPositionTicker ?? '--'} numeric={false} />
             <Row label="Largest Value" value={currency(exposure?.largestPositionValue)} />
             <Row label="Largest Weight" value={plainPercent(exposure?.topPositionWeight)} />
             <Row label="Top 3 Weight" value={plainPercent(exposure?.top3Weight)} />
@@ -230,11 +232,11 @@ function Group({
   )
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value, numeric = true }: { label: string; value: string; numeric?: boolean }) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-[2px]">
       <dt className="text-2xs text-text-muted">{label}</dt>
-      <dd className="num text-2xs text-text">{value}</dd>
+      <dd className="num text-2xs text-text">{numeric ? <PrivateNumber>{value}</PrivateNumber> : value}</dd>
     </div>
   )
 }

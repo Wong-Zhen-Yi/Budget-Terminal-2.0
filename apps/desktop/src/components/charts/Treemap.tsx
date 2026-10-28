@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { PrivateNumber, useNumberPrivacy } from '@/components/ui/NumberPrivacy'
 
 export interface TreemapTile {
   key: string
@@ -103,6 +104,7 @@ interface TreemapProps {
 
 /** Sector groups laid out first, then the holdings inside each group. */
 export function Treemap({ tiles, onHover, format, empty = 'No holdings to map' }: TreemapProps) {
+  const maskNumbers = useNumberPrivacy()
   const groups = useMemo(() => {
     const byGroup = new Map<string, TreemapTile[]>()
     for (const tile of tiles) {
@@ -152,14 +154,14 @@ export function Treemap({ tiles, onHover, format, empty = 'No holdings to map' }
             }}
           >
             <div className="flex h-5 items-center bg-surface-raised px-1 text-2xs whitespace-nowrap text-text-muted">
-              {group.group} {group.weight.toFixed(1)}%
+              {group.group} <PrivateNumber>{group.weight.toFixed(1)}%</PrivateNumber>
             </div>
             <div className="relative" style={{ height: `calc(100% - ${header}px)` }}>
               {group.members.map((member, index) => (
                 <div
                   key={member.key}
                   onMouseEnter={() => onHover?.(member)}
-                  title={`${member.label}  ${format(member.changePct)}`}
+                  title={`${member.label}  ${maskNumbers ? '****' : format(member.changePct)}`}
                   className="absolute overflow-hidden border border-bg/60 p-1"
                   style={{
                     left: `${inner[index].x}%`,
@@ -172,7 +174,7 @@ export function Treemap({ tiles, onHover, format, empty = 'No holdings to map' }
                   {/* Tiles carry their own saturated background, so they need their
                       own text colours rather than the panel palette. */}
                   <div className="text-2xs font-semibold text-white">{member.label}</div>
-                  <div className="num text-2xs text-white/75">{member.subtitle}</div>
+                  <div className="num text-2xs text-white/75"><PrivateNumber>{member.subtitle}</PrivateNumber></div>
                 </div>
               ))}
             </div>

@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { defaultRangeExtractor, observeElementRect, useVirtualizer } from '@tanstack/react-virtual'
+import { useNumberPrivacy } from './NumberPrivacy'
 
 export interface Column<T> {
   key: string
@@ -79,6 +80,7 @@ export function DataTable<T>({
   defaultSort,
   virtualize = true,
 }: DataTableProps<T>) {
+  const maskNumbers = useNumberPrivacy()
   // One wrapping column makes every row variable-height, so the short cells have to
   // align to the top or they float in the middle of a tall row.
   const hasWrap = columns.some((column) => column.wrap)
@@ -282,7 +284,7 @@ export function DataTable<T>({
                         hasWrap ? 'align-top' : ''
                       }`}
                     >
-                      {index + 1}
+                      {maskNumbers ? '****' : index + 1}
                     </td>
                   ) : null}
                   {columns.map((column) => (
@@ -296,7 +298,7 @@ export function DataTable<T>({
                         column.numeric ? 'num' : ''
                       }`}
                     >
-                      {column.cell(row, index)}
+                      {maskNumbers && column.numeric ? '****' : column.cell(row, index)}
                     </td>
                   ))}
                 </tr>
