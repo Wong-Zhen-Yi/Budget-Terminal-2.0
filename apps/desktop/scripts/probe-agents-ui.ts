@@ -86,6 +86,8 @@ try {
         if (fail) throw Error('Fixture connection unavailable')
         if (command.type === 'connect') { state.connected = true; state.models = models; state.model ||= models[0].id }
         if (command.type === 'configure') { state.model = command.model; state.thinking = command.thinking }
+        if (command.type === 'configureRun') state.runLimitMinutes = command.minutes
+        if (command.type === 'continueResearch') { state.connected = true; state.busy = true; state.error = ''; state.messages.find(message => message.run?.id === command.runId).run.status = 'running' }
         if (command.type === 'send') {
           state.messages.push({ id: 'user-' + commands.length, role: 'user', text: command.text, images: command.images?.map(image => image.name), at: Date.now() },
             { id: 'activity-' + commands.length, role: 'activity', text: 'Opening Charts · AAPL', at: Date.now() },
@@ -147,6 +149,8 @@ try {
         await click('Controls')
         check(!document.getElementById('agent-controls').hidden, 'Controls can be expanded')
         check(document.querySelector('[role=switch]').getAttribute('aria-checked') === 'false', 'Autonomy starts off')
+        await select('agent-run-limit', '20')
+        check(commands.at(-1).type === 'configureRun' && commands.at(-1).minutes === 20 && document.getElementById('agent-run-limit').value === '20', 'Manual research budget is configurable')
         check(!document.getElementById('agent-model').disabled && !document.getElementById('agent-thinking').disabled, 'Startup connection makes model settings ready without manual Connect')
         check(!shouldPersistRemoteQuery(client.getQueryCache().find({ queryKey: ['agents'] })), 'Private chat must not persist in renderer cache')
         check(document.querySelector('.agents-status').textContent === 'Connected', 'Startup connection status')
@@ -204,9 +208,10 @@ try {
         const missing = document.querySelectorAll('.agents-chat-image')[1]
         missing.scrollIntoView({ block: 'center' }); await settle()
         check(missing.textContent.includes('Image unavailable') && !missing.querySelector('img,script,[onerror]'), 'Missing saved images have a visible fallback and literal names')
+        const beforeImageEdit = commands.length
         card.querySelector('button').click(); await settle()
         check(document.querySelector('.agents-image-previews img').src === window.portfolioImage && document.getElementById('agent-message').value === 'Edit this image: ', 'Use for edit reattaches actual image pixels without inference')
-        check(commands.length === 3, 'Using an image for edit must not send or run a tool')
+        check(commands.length === beforeImageEdit, 'Using an image for edit must not send or run a tool')
         card.querySelectorAll('button')[1].click(); await settle()
         check(card.classList.contains('expanded'), 'Image can expand inline')
         card.querySelectorAll('button')[1].click(); await settle()
@@ -347,6 +352,27 @@ try {
         embedded = false; state.busy = false
         state.messages = savedMessages
         client.setQueryData(['agents'], envelope()); render(); await settle()
+        window.showRecovery = async () => {
+          embedded = false; state.busy = false; state.connected = false; state.error = ''
+          state.messages = [
+            { id: 'recovery-request', role: 'user', at: Date.now() - 80000, text: 'Summarize portfolio news' },
+            { id: 'recovery-diagnostic', role: 'activity', at: Date.now() - 80000, text: 'Research could not finish.', run: { id: 'recovery-run', startedAt: Date.now() - 80000, endedAt: Date.now(), status: 'failed', limitMinutes: 20, wrappingUp: false, runtimeRetries: 1, error: 'The connection was interrupted.', tools: [
+              { name: 'budget_terminal_portfolio', startedAt: Date.now() - 79000, durationMs: 1000, attempts: 1, status: 'succeeded' },
+              { name: 'budget_terminal_news', startedAt: Date.now() - 78000, durationMs: 60000, attempts: 3, status: 'timedOut', error: 'The research request timed out.' },
+            ] } },
+            { id: 'recovery-partial', role: 'assistant', at: Date.now(), text: 'Research is incomplete. Portfolio data was retrieved, but the current news feed did not return. Continue research to retry with the saved evidence.' },
+          ]
+          client.setQueryData(['agents'], envelope()); render(); await settle()
+          document.querySelector('.agents-run summary').click(); await settle()
+          document.querySelector('.agents-transcript').scrollTop = 0
+        }
+        await window.showRecovery()
+        check(document.querySelector('.agents-run').textContent.includes('3 attempts') && document.querySelector('.agents-run').textContent.includes('timed out'), 'Run details retain retry counts and failed-source timing')
+        await click('Continue research')
+        check(commands.at(-1).type === 'continueResearch' && commands.at(-1).runId === 'recovery-run' && state.busy, 'Recovery works from a disconnected session without asking for another Connect')
+        check(document.getElementById('agent-run-limit').disabled, 'Research budget is locked during recovery')
+        state.busy = false; state.connected = true; state.messages = savedMessages
+        client.setQueryData(['agents'], envelope()); render(); await settle()
         window.setWorkspace = async label => { await click(label) }
         window.setEmbedded = async value => { embedded = value; render(); await settle() }
         window.setControls = async open => { if (document.getElementById('agent-controls').hidden === open) await click('Controls') }
@@ -402,6 +428,7 @@ try {
         const fixture = await window.webContents.executeJavaScript('window.portfolioImage')
         writeFileSync(${JSON.stringify(resolve(root, '../../output/playwright/agent-portfolio-fixture.png'))}, Buffer.from(fixture.split(',')[1], 'base64'))
         console.log(await window.webContents.executeJavaScript('window.runProbe()'))
+        console.log('PASS: configurable run limits, saved diagnostic details and disconnected research continuation UI')
         const drag = await window.webContents.executeJavaScript('window.prepareNativeSelection()')
         window.webContents.sendInputEvent({ type: 'mouseMove', x: drag.x, y: drag.y })
         window.webContents.sendInputEvent({ type: 'mouseDown', x: drag.x, y: drag.y, button: 'left', clickCount: 1 })
@@ -449,6 +476,15 @@ try {
         writeFileSync(${JSON.stringify(resolve(root, '../../output/playwright/agents-images.png'))}, (await window.webContents.capturePage()).toPNG())
         await window.webContents.executeJavaScript('window.setWorkspace("Trackers")')
         writeFileSync(${JSON.stringify(resolve(root, '../../output/playwright/agents-workspace.png'))}, (await window.webContents.capturePage()).toPNG())
+        await window.webContents.executeJavaScript('window.setWorkspace("Trackers"); window.showRecovery()')
+        await new Promise(resolve => setTimeout(resolve, 150))
+        writeFileSync(${JSON.stringify(resolve(root, '../../output/playwright/agents-recovery.png'))}, (await window.webContents.capturePage()).toPNG())
+        window.setSize(420, 900)
+        await window.webContents.executeJavaScript('window.setEmbedded(true)')
+        await new Promise(resolve => setTimeout(resolve, 150))
+        const recoverySize = await window.webContents.executeJavaScript('({ width: document.documentElement.scrollWidth, viewport: innerWidth, details: document.querySelector(".agents-run").getBoundingClientRect().width, transcript: document.querySelector(".agents-transcript").clientWidth })')
+        if (recoverySize.width > recoverySize.viewport || recoverySize.details > recoverySize.transcript) throw Error('Recovery layout overflow: ' + JSON.stringify(recoverySize))
+        writeFileSync(${JSON.stringify(resolve(root, '../../output/playwright/agents-recovery-embedded.png'))}, (await window.webContents.capturePage()).toPNG())
         app.exit(0)
       } catch (error) { console.error(error); app.exit(1) }
     })

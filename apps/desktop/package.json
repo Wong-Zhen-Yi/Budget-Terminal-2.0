@@ -14,6 +14,7 @@
     "probe:notifications-ui": "tsx scripts/probe-notifications-ui.ts",
     "probe:browser": "tsx scripts/probe-browser.ts",
     "probe:agents": "tsx scripts/probe-agents.ts",
+    "probe:agent-recovery": "tsx scripts/probe-agent-recovery.ts",
     "probe:agent-images": "tsx scripts/probe-agent-images.ts",
     "probe:agent-charts": "tsx scripts/probe-agent-charts.ts",
     "probe:agents-workspace": "tsx scripts/probe-agents-workspace.ts",
@@ -27,6 +28,8 @@
     "probe:maintenance": "tsx scripts/probe-maintenance.ts",
     "probe:maintenance-live": "tsx scripts/probe-maintenance-live.ts",
     "probe:portfolio": "tsx scripts/probe-portfolio.ts",
+    "probe:scorecard": "tsx scripts/probe-scorecard.ts",
+    "probe:scorecard-ui": "tsx scripts/probe-scorecard-ui.ts",
     "probe:portfolio-privacy-ui": "tsx scripts/probe-portfolio-privacy-ui.ts",
     "probe:dip-finder-ui": "tsx scripts/probe-dip-finder-ui.ts",
     "probe:rate": "tsx scripts/probe-rate.ts",
@@ -134,11 +137,11 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
-    "electron": "^44.9.3",
+    "electron": "^45.1.0",
     "electron-vite": "^6.0.0",
     "esbuild": "^0.28.2",
     "tailwindcss": "^4.3.3",
@@ -148,12 +151,12 @@
     "vite": "^8.3.5"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.32.1",
-    "@tanstack/react-query": "^5.104.5",
-    "@tanstack/react-query-persist-client": "^5.104.5",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@tanstack/react-query": "^5.105.0",
+    "@tanstack/react-query-persist-client": "^5.105.0",
     "@tanstack/react-virtual": "3.13.12",
     "ajv": "^8.20.0",
-    "hyparquet": "^1.31.5",
+    "hyparquet": "^1.32.0",
     "hyparquet-compressors": "^1.1.2",
     "lightweight-charts": "^5.2.1",
     "pdfjs-dist": "^6.4.299",
@@ -165,6 +168,6 @@
     "unified": "^11.0.5",
     "yahoo-finance2": "^4.0.5",
     "zod": "^4.6.7",
-    "zustand": "^5.0.15"
+    "zustand": "^5.0.16"
   }
 }

@@ -10,6 +10,8 @@ export function AgentWorkspacePanel({ agent, locked, perform, setDraft }: {
   const [tab, setTab] = useState<'history' | 'trackers' | null>(null)
   const [confirm, setConfirm] = useState('')
   const trackers = agent?.trackers ?? []
+  const latestRun = [...agent?.messages ?? []].reverse().find(message => message.run)?.run
+  const recoverable = latestRun && ['failed', 'partial', 'stopped'].includes(latestRun.status)
   const date = (at: number) => new Date(at).toLocaleString()
   const switchTab = (value: typeof tab) => { setTab(tab === value ? null : value); setConfirm('') }
   const remove = (type: 'deleteChat' | 'deleteTracker', id: string) => {
@@ -19,13 +21,14 @@ export function AgentWorkspacePanel({ agent, locked, perform, setDraft }: {
 
   return <section className="agents-workspace" aria-label="Saved Agents workspace">
     <div className="agents-workspace-tabs">
+      {recoverable && <button type="button" disabled={locked || !!agent?.autonomy || !!agent?.portfolioProposal} title="Reconnect if needed and continue with saved research evidence. Saved-data edits and image generation are disabled." onClick={() => void perform({ type: 'continueResearch', runId: latestRun.id })}>Continue research</button>}
       <button type="button" aria-expanded={tab === 'history'} onClick={() => switchTab('history')}>History</button>
       <button type="button" aria-label="Trackers" aria-expanded={tab === 'trackers'} onClick={() => switchTab('trackers')}>Trackers{trackers.some(tracker => tracker.enabled) ? ` (${trackers.filter(tracker => tracker.enabled).length} active)` : ''}</button>
       {agent?.storageError && <span role="alert">{agent.storageError}</span>}
     </div>
     {tab && <div className="agents-workspace-content" aria-label={tab === 'history' ? 'Chat history' : 'Saved trackers'}>
       {tab === 'history' && <>
-        <p>Chats are saved locally across app restarts. Open one to continue with recent transcript context. Images are not stored. Up to 100 chats; each retains its latest 300 messages.</p>
+        <p>Chats and run diagnostics are saved locally across app restarts. Continue research recovers bounded saved evidence with edits disabled. Up to 100 chats; each retains its latest 300 messages.</p>
         {!agent?.history?.length && <p>No saved chats yet.</p>}
         {agent?.history?.map(chat => <article key={chat.id} className="agents-saved-item">
           <div className="agents-saved-heading"><button disabled={locked || !!agent.autonomy || chat.id === agent.currentChatId} aria-current={chat.id === agent.currentChatId ? 'true' : undefined} onClick={() => void perform({ type: 'openChat', id: chat.id })}>{chat.title || 'New chat'}{chat.id === agent.currentChatId ? ' · Current' : ''}</button>

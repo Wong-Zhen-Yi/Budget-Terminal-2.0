@@ -1,10 +1,12 @@
 import type { AgentImageArtifact } from './agentImageArtifacts.js'
 import type { AgentPortfolioProposal } from './agentPortfolio.js'
 import type { AgentWorkspaceState } from './agentWorkspace.js'
+import type { AgentRun } from './agentRuns.js'
 
 export interface AgentImage { name: string; dataUrl: string }
 
 export interface AgentMessage {
+  run?: AgentRun
   images?: string[]
   imageArtifacts?: AgentImageArtifact[]
   imageStatus?: 'generating' | 'ready' | 'failed'
@@ -23,6 +25,7 @@ export interface AgentNavigation {
 export type AgentActivity = 'idle' | 'connecting' | 'thinking' | 'researching' | 'working' | 'responding' | 'generating' | 'done' | 'stopped' | 'error'
 
 export interface AgentsState extends AgentWorkspaceState {
+  runLimitMinutes?: number
   activity?: AgentActivity
   imageGeneration?: boolean | null
   portfolioProposal: AgentPortfolioProposal | null
@@ -50,6 +53,8 @@ export interface AgentModel {
 }
 
 export type AgentsCommand =
+  | { type: 'continueResearch'; runId: string }
+  | { type: 'configureRun'; minutes: number }
   | { type: 'configure'; model: string; thinking: string | null }
   | { type: 'connect' }
   | { type: 'send'; text: string; images?: AgentImage[] }

@@ -1,4 +1,7 @@
 #!/bin/sh
+echo "Dependencies updated: Electron 45.1.0, query caching, MCP and Parquet readers. Virtual tables retain their tested version."
+echo "Agent recovery: saved run details, temporary read retries, partial answers and Continue research. Manual run limits are configurable in Controls."
+echo "Scorecard: compare 3-6 companies with saved comparisons, selectable metrics, fiscal-year labels and source details. The current comparison loads at startup."
 echo "Portfolio and Personal Finance privacy: Obscure replaces numbers with **** while labels, controls and charts stay visible. Reveal restores values and numeric editing."
 echo "Agent options: MCP refreshes expirations, chains and contract marks. Top-volume research ranks all loaded live expirations and reports missing coverage."
 echo "Portfolio Dip Finder: Entry shows percentage gain or loss versus your average purchase price."

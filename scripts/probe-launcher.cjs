@@ -14,6 +14,7 @@ const { version: electronVersion } = require('electron/package.json')
 
 const log = { log() {}, error() {} }
 function assertCurrentStartupMessages(messages) {
+  assert(messages.some(message => message.includes('Agent recovery:') && message.includes('Continue research')), 'All launch modes announce current agent recovery behavior')
   assert(messages.some(message => message.includes('3 requests per second') && message.includes('up to 3 background requests') && message.includes('All pages still preload')), 'Every launch mode must describe current Yahoo startup pacing and all-page loading')
   assert(messages.some(message => message.includes('API USAGE footer') && message.includes('not a provider-reported quota or loading progress')), 'Explain API usage without implying a provider quota')
   assert(messages.some(message => message.includes('Trading Volumes circles') && message.includes('median dollar volume')), 'Every launch mode must announce current Trading Volumes and Beta behavior')

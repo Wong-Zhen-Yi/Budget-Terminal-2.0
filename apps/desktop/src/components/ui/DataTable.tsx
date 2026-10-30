@@ -215,8 +215,11 @@ export function DataTable<T>({
       className="min-h-0 flex-1 overflow-auto"
       style={virtual ? { maxHeight: 'min(70vh, 720px)', overflowAnchor: 'none' } : undefined}
       onFocusCapture={event => {
-        setFrozen(true)
-        setFocusedKey((event.target as HTMLElement).closest<HTMLTableRowElement>('tr[data-row-key]')?.dataset.rowKey ?? null)
+        const key = (event.target as HTMLElement).closest<HTMLTableRowElement>('tr[data-row-key]')?.dataset.rowKey ?? null
+        // Header buttons must be able to sort from the keyboard. Only focused
+        // body rows freeze their order to protect an in-progress edit.
+        setFrozen(key !== null)
+        setFocusedKey(key)
       }}
       onBlurCapture={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) { setFrozen(false); setFocusedKey(null) }

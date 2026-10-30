@@ -406,8 +406,13 @@ try {
         assert.equal(await snapshot(), original);
         console.log('PASS: all ${implementedPages.length} page screenshots, hidden/obscured pages, background throttle restoration, concurrent captures, timeout recovery, hidden/minimized/covered windows, native PNG pixels and navigation/scroll restoration');
         await new Promise(resolve => setTimeout(resolve, 350));
-        fs.writeFileSync(${JSON.stringify(screenshot)}, (await window.webContents.capturePage()).toPNG());
+        // Reuse the image whose native pixels were checked above. Electron can
+        // wait indefinitely for a new frame after a previously shown window hides.
+        fs.writeFileSync(${JSON.stringify(screenshot)}, coveredImage.toPNG());
         }
+        // Hidden/minimized capture behavior is verified above. Resume visible
+        // painting for the separate responsive-footer checks after hide/show.
+        window.showInactive();
         for (const width of [1920, 1280, 1000, 800]) {
           window.setSize(width, 800);
           await new Promise(resolve => setTimeout(resolve, 250));
@@ -431,7 +436,7 @@ try {
             }
           })()\`);
         }
-        fs.writeFileSync(${JSON.stringify(join(root, 'out', 'status-bar-smoke.png'))}, (await window.webContents.capturePage()).toPNG());
+        fs.writeFileSync(${JSON.stringify(join(root, 'out', 'status-bar-smoke.png'))}, (await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG());
         console.log('PASS: status bar stays on one 32px line with API meters and changing progress at 800, 1000, 1280 and 1920px');
         app.exit(0);
       } catch (error) { console.error(error); app.exit(1); }

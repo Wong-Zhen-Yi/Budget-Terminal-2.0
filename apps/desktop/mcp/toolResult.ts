@@ -36,3 +36,12 @@ export function toolResult(name: string, result: unknown): CallToolResult {
   })
   return { content: [{ type: 'text', text }], structuredContent, isError: failed(result) }
 }
+
+/** Dynamic app-server tools have no structuredContent field: send the evidence as inputText. */
+export function dynamicToolResult(name: string, result: unknown) {
+  const formatted = toolResult(name, result)
+  const contentItems = formatted.content.flatMap<{ type: 'inputText'; text: string } | { type: 'inputImage'; imageUrl: string }>((content, index) => content.type === 'text'
+    ? [{ type: 'inputText', text: index === 0 && formatted.structuredContent ? JSON.stringify(formatted.structuredContent) : content.text }]
+    : content.type === 'image' ? [{ type: 'inputImage', imageUrl: `data:${content.mimeType};base64,${content.data}` }] : [])
+  return { contentItems, success: !formatted.isError && !(result && typeof result === 'object' && 'error' in result) }
+}

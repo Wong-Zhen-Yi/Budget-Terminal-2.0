@@ -17,12 +17,13 @@ export interface CodexPacket {
   method?: string
   params?: {
     threadId?: string
+    turnId?: string
     itemId?: string
     delta?: string
     tool?: string
     arguments?: unknown
-    item?: { id: string; type: string; text?: string; status?: string; result?: string; failure?: { type?: string; resetsAt?: number | null } | null }
-    turn?: { status: string; error?: { message?: string } }
+    item?: { id: string; type: string; phase?: 'commentary' | 'final_answer'; text?: string; status?: string; result?: string; failure?: { type?: string; resetsAt?: number | null } | null }
+    turn?: { id?: string; status: string; error?: { message?: string } }
     error?: { message?: string }
     willRetry?: boolean
   }
@@ -67,14 +68,14 @@ export class CodexClient {
         } else this.receive(packet)
       } catch { /* Ignore non-protocol diagnostic lines. */ }
     })
-    const ended = () => {
+    const ended = (message: string) => {
       if (this.process !== child) return
       this.close()
-      this.disconnected('Codex disconnected. Check the installation and sign-in, then reconnect.')
+      this.disconnected(message)
     }
-    child.on('error', ended)
-    child.on('exit', ended)
-    child.stdin.on('error', ended)
+    child.on('error', error => ended((error as NodeJS.ErrnoException).code === 'ENOENT' ? 'Codex executable was not found. Check the installation and reconnect.' : 'Codex could not start. Check the installation and reconnect.'))
+    child.on('exit', (code, signal) => ended(`Codex process exited (code ${code ?? 'unknown'}, signal ${signal ?? 'none'}). Continue research to recover.`))
+    child.stdin.on('error', () => ended('Codex connection was interrupted. Continue research to recover.'))
     await this.request('initialize', { clientInfo: { name: 'budget_terminal', title: 'Budget Terminal', version: '0.1.0' }, capabilities: { experimentalApi: true } })
     this.write({ method: 'initialized', params: {} })
   }

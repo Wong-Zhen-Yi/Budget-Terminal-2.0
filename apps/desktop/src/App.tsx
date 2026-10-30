@@ -44,6 +44,7 @@ import { OilPage } from '@/pages/OilPage'
 import { CryptoPage } from '@/pages/CryptoPage'
 import { DictionaryPage } from '@/pages/DictionaryPage'
 import { FundamentalsPage } from '@/pages/FundamentalsPage'
+import { ScorecardPage } from '@/pages/ScorecardPage'
 import { DefeatBetaPage } from '@/pages/DefeatBetaPage'
 import { EtfPage } from '@/pages/EtfPage'
 import { HeatmapPage } from '@/pages/HeatmapPage'
@@ -553,6 +554,8 @@ function renderPage({
       <StockDiscoveryPage active={active} onStatusChange={onStatusChange} />
     ) : tabId === 'fundamentals' ? (
       <FundamentalsPage onStatusChange={onStatusChange} />
+    ) : tabId === 'scorecard' ? (
+      <ScorecardPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'defeatbeta' ? (
       <DefeatBetaPage active={active} onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'valuation' ? (

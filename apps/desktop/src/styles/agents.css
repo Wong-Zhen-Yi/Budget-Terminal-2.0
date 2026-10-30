@@ -1,3 +1,11 @@
+.agents-run { padding: 8px 12px; border: 1px solid var(--agents-border); border-radius: 8px; overflow-wrap: anywhere; }
+.agents-run p { margin: 4px 0; }
+.agents-run details { margin-top: 8px; }
+.agents-run summary { cursor: pointer; }
+.agents-run ol { padding-left: 20px; max-height: 240px; overflow: auto; }
+.agents-run li { margin: 6px 0; }
+.agents-run li span { display: block; }
+.agents-run.failed, .agents-run.partial { border-color: var(--color-warning, #b58136); }
 .agents-page {
   --agents-bg: var(--color-bg);
   --agents-surface: var(--color-surface-raised);

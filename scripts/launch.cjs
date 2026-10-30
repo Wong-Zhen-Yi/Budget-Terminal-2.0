@@ -63,6 +63,8 @@ function launch({ development = false, platform = process.platform, nodeVersion 
   }
 
   log.log(`Starting Budget Terminal for ${os}...`)
+  log.log('Dependencies updated: Electron 45.1.0, query caching, MCP and Parquet readers. Virtual tables retain their tested version.')
+  log.log('Agent recovery: saved run details, temporary read retries, partial answers and Continue research. Manual run limits are configurable in Controls.')
   log.log('Portfolio and Personal Finance privacy: Obscure replaces numbers with **** while labels, controls and charts stay visible. Reveal restores values and numeric editing.')
   log.log('Agent options: MCP refreshes expirations, chains and contract marks. Top-volume research ranks all loaded live expirations and reports missing coverage.')
   log.log('Portfolio Dip Finder: Entry shows percentage gain or loss versus your average purchase price.')

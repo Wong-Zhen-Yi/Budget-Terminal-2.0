@@ -51,7 +51,10 @@ const client: CodexTransport = {
   close() { closes++ },
 }
 const service = new AgentsService({ executable: 'unused', cwd: directory, routes, clientFactory: (receive, ended) => { receiver = receive; disconnected = ended; return client } })
-const complete = (status = 'completed') => receiver({ method: 'turn/completed', params: { threadId: 'thread-1', turn: { status } } })
+const complete = (status = 'completed') => {
+  if (status === 'completed') receiver({ method: 'item/completed', params: { threadId: 'thread-1', item: { id: 'fixture-answer-' + calls.length, type: 'agentMessage', text: 'Fixture completed response.' } } })
+  receiver({ method: 'turn/completed', params: { threadId: 'thread-1', turn: { status } } })
+}
 
 try {
   const pie = { title: 'Allocation', unit: 'USD', slices: [{ label: 'Stocks', value: 75 }, { label: 'Cash', value: 25 }, { label: 'Empty', value: 0 }], caption: 'Fixture source' }
@@ -360,7 +363,7 @@ try {
     await imports.command({ type: 'configure', model: 'fixture-fast', thinking: null })
     await imports.command({ type: 'send', text: '', images: [image] })
     assert.deepEqual(calls.at(-1)!.params.input[1], { type: 'image', url: pixel })
-    assert.deepEqual(imports.snapshot().messages.at(-1)?.images, ['Portfolio.png'])
+    assert.deepEqual(imports.snapshot().messages.findLast(message => message.role === 'user')?.images, ['Portfolio.png'])
     assert(!JSON.stringify(imports.snapshot()).includes('base64'), 'Image bytes must not be copied into polled chat snapshots')
     const proposal = { portfolioId, summary: 'Screenshot fixture', positions: [{ ticker: 'AAPL', shares: 12 }, { ticker: 'TEST', shares: 4, avgPrice: 20 }], cashBalance: 250,
       options: [{ ticker: 'AAPL', strategy: 'Calls', expiry: '2026-12-18', strike: 100, contracts: 1, premium: 2.5, status: 'Open', openDate: '2026-10-17' }] }
@@ -431,6 +434,30 @@ try {
       assert(shown, 'Real Codex must invoke the page navigation tool')
       assert(live.snapshot().messages.some(message => message.role === 'assistant'))
       console.log('PASS: real Codex chat, tool calls, navigation and completed response')
+      const portfolioRoute = liveRoutes.get('portfolio')!
+      liveRoutes.set('portfolio', () => ok({ portfolios: [], context: 'Synthetic evidence. '.repeat(800), evidenceTail: 'LARGE_RESEARCH_EVIDENCE_7429' }, 'synthetic fixture'))
+      try {
+        await live.command({ type: 'send', text: 'Integration evidence test: call budget_terminal_portfolio with request {}. Return only the exact evidenceTail field from that tool response. Do not fetch market data, navigate or edit anything.' })
+        const deadline = Date.now() + 90_000
+        while (live.snapshot().busy && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100))
+        assert.equal(live.snapshot().error, '')
+        assert.equal(live.snapshot().busy, false, 'Live large-evidence test timed out')
+        assert(live.snapshot().messages.some(message => message.role === 'assistant' && message.text.includes('LARGE_RESEARCH_EVIDENCE_7429')), 'The live model must receive evidence beyond the external MCP text preview')
+        console.log('PASS: real Codex receives full structured evidence larger than 8 KiB')
+        let newsAttempts = 0
+        liveRoutes.set('news', () => { newsAttempts++; return failed(null, '403 synthetic news provider denied access', 'fixture news') })
+        const oldMessageIds = new Set(live.snapshot().messages.map(message => message.id))
+        await live.command({ type: 'send', text: 'Synthetic partial-result test: call budget_terminal_portfolio with request {}, then budget_terminal_news with request {"tickers":["AAPL"]}. These routes return synthetic fixtures, not real market data. Briefly report the evidenceTail value and explicitly say news is unavailable when its tool fails. Do not retry the denied source, navigate or edit anything.' })
+        const partialDeadline = Date.now() + 90_000
+        while (live.snapshot().busy && Date.now() < partialDeadline) await new Promise(resolve => setTimeout(resolve, 100))
+        assert.equal(live.snapshot().error, '')
+        assert.equal(live.snapshot().busy, false, 'Live partial-evidence test timed out')
+        assert.equal(newsAttempts, 1, 'A denied source must not create a retry loop')
+        const partialAnswer = live.snapshot().messages.filter(message => message.role === 'assistant' && !oldMessageIds.has(message.id)).map(message => message.text).join('\n')
+        assert(partialAnswer.includes('LARGE_RESEARCH_EVIDENCE_7429') && /unavailable/i.test(partialAnswer), 'The live model must report useful evidence and missing-source coverage')
+        assert.equal(live.snapshot().messages.findLast(message => message.run)?.run?.status, 'partial')
+        console.log('PASS: real Codex produces a useful partial answer after a source failure without retry loops')
+      } finally { liveRoutes.set('portfolio', portfolioRoute) }
       if (process.argv.includes('--live-image')) {
         const bytes = await readFile(resolve(import.meta.dirname, '../../../output/playwright/agent-portfolio-fixture.png'))
         await live.command({ type: 'send', text: `The attached synthetic screenshot is for my existing portfolio ${portfolioId}. Read my saved portfolio, then use terminal_propose_portfolio_update to update only AAPL shares and average cost from the image. Do not fetch market data.`, images: [{ name: 'Synthetic portfolio.png', dataUrl: `data:image/png;base64,${bytes.toString('base64')}` }] })

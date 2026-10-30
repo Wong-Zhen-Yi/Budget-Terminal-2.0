@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 import { agentWorkspaceSchema, notificationInputSchema, trackerDefinitionSchema, trackerReportSchema } from '../shared/agentWorkspace.js'
 import type { AgentConversation, AgentNotification, AgentNotificationInput, AgentTracker, AgentTrackerDefinition, AgentTrackerReport, AgentWorkspaceData, AgentWorkspaceState } from '../shared/agentWorkspace.js'
 import type { AgentMessage } from '../shared/agents.js'
+import type { AgentCheckpoint } from '../shared/agentRuns.js'
 import type { NotificationCenter } from './notifications.js'
 
 const MAX_BYTES = 50 * 1024 * 1024
@@ -47,8 +48,18 @@ export class AgentWorkspace {
         if (tracker.running) tracker.error = 'The app closed during this check. Review and start again.'
         tracker.enabled = false; tracker.running = false; tracker.nextRunAt = null
       }
+      for (const chat of this.data.conversations) for (const message of chat.messages) if (message.run?.status === 'running') {
+        this.dirty = true
+        message.run.status = 'failed'; message.run.endedAt = Math.max(message.run.startedAt, Math.min(Date.now(), chat.updatedAt))
+        message.run.error = 'The app closed during this run. Continue research to recover.'
+        for (const tool of message.run.tools) if (tool.status === 'running') {
+          tool.status = 'cancelled'; tool.durationMs = Math.max(0, message.run.endedAt - tool.startedAt)
+        }
+        message.text = 'Research was interrupted when the app closed.'
+      }
       if (!this.data.conversations.some(chat => chat.id === this.data.currentChatId)) this.data.currentChatId = null
       this.writable = true
+      if (this.dirty) this.changed()
     } catch (error) {
       if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') this.writable = true
       else {
@@ -69,7 +80,7 @@ export class AgentWorkspace {
   snapshot(): AgentWorkspaceState {
     return structuredClone({
       currentChatId: this.data.currentChatId,
-      history: this.data.conversations.map(({ messages, ...chat }) => ({ ...chat, messageCount: messages.filter(message => message.role !== 'activity').length })).sort((a, b) => b.updatedAt - a.updatedAt),
+      history: this.data.conversations.map(({ messages, checkpoint: _checkpoint, ...chat }) => ({ ...chat, messageCount: messages.filter(message => message.role !== 'activity').length })).sort((a, b) => b.updatedAt - a.updatedAt),
       notifications: this.options.notifications
         ? this.options.notifications.snapshot().notifications.filter((item): item is AgentNotification => ['chat', 'autonomy', 'tracker'].includes(item.source))
         : [...this.data.notifications].reverse(), trackers: this.data.trackers, storageError: this.storageError,
@@ -97,13 +108,20 @@ export class AgentWorkspace {
     this.changed()
     return chat
   }
-  recordConversation(messages: AgentMessage[], model: string | null, thinking: string | null) {
+  recordConversation(messages: AgentMessage[], model: string | null, thinking: string | null, runLimitMinutes = 10) {
     if (this.closed) return
     let chat = this.data.conversations.find(chat => chat.id === this.data.currentChatId)
     if (!chat) { this.createConversation(); chat = this.data.conversations.at(-1)! }
     chat.messages = structuredClone(messages.slice(-300))
     chat.title = messages.find(message => message.role === 'user')?.text.replace(/\s+/g, ' ').slice(0, 100) || 'New chat'
     chat.updatedAt = Date.now(); chat.model = model; chat.thinking = thinking
+    chat.runLimitMinutes = runLimitMinutes
+    this.changed()
+  }
+  recordCheckpoint(checkpoint: AgentCheckpoint) {
+    const chat = this.data.conversations.find(chat => chat.id === this.data.currentChatId)
+    if (!chat || this.closed) return
+    chat.checkpoint = structuredClone(checkpoint)
     this.changed()
   }
   deleteConversation(id: string) {

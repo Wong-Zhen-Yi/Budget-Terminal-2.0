@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { AgentMessage } from './agents.js'
 import { agentImageArtifactSchema } from './agentImageArtifacts.js'
+import { agentCheckpointSchema, agentRunSchema } from './agentRuns.js'
 import { notificationInputSchema } from './notifications.js'
 export { notificationInputSchema } from './notifications.js'
 
@@ -26,17 +27,19 @@ export const trackerReportSchema = z.object({
 export type AgentTrackerReport = z.infer<typeof trackerReportSchema>
 
 export const agentMessageSchema = z.object({
+  run: agentRunSchema.optional(),
   id, role: z.enum(['user', 'assistant', 'activity']), text: z.string().max(100_000), at: timestamp,
   images: z.array(z.string().max(255)).max(4).optional(),
   imageArtifacts: z.array(agentImageArtifactSchema).max(4).optional(),
   imageStatus: z.enum(['generating', 'ready', 'failed']).optional(),
 }).strict()
 export const conversationSchema = z.object({
+  checkpoint: agentCheckpointSchema.optional(), runLimitMinutes: z.number().int().min(5).max(30).optional(),
   id, title: z.string().max(120), createdAt: timestamp, updatedAt: timestamp,
   messages: z.array(agentMessageSchema).max(300), model: z.string().nullable(), thinking: z.string().nullable(),
 }).strict()
 export type AgentConversation = z.infer<typeof conversationSchema>
-export type AgentConversationSummary = Omit<AgentConversation, 'messages'> & { messageCount: number }
+export type AgentConversationSummary = Omit<AgentConversation, 'messages' | 'checkpoint'> & { messageCount: number }
 
 export const notificationSchema = notificationInputSchema.extend({
   id, at: timestamp, read: z.boolean(), source: z.enum(['chat', 'autonomy', 'tracker']),

@@ -1311,6 +1311,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'stocks', label: 'Stocks', implemented: true },
   { id: 'stock-discovery', label: 'Discovery', implemented: true },
   { id: 'fundamentals', label: 'Fundamentals', implemented: true },
+  { id: 'scorecard', label: 'Scorecard', implemented: true },
   { id: 'defeatbeta', label: 'DefeatBeta Terminal', implemented: true },
   { id: 'charts', label: 'Charts', implemented: true },
   { id: 'valuation', label: 'Valuation', implemented: true },

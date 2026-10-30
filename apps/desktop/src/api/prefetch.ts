@@ -15,6 +15,8 @@ import { calendarToday, earningsDateRange } from '@shared/calendar'
 import { useCalendarPage } from '@/stores/calendar'
 import { useIpoPage } from '@/stores/ipo'
 import { useFundamentalsStore } from '@/stores/fundamentals'
+import { useScorecard } from '@/stores/scorecard'
+import { loadScorecardCompany } from './scorecardQueries'
 import { useDefeatBetaTerminal } from '@/stores/defeatbeta'
 import { DEFEATBETA_SECTIONS, TERMINAL_TTL } from '@shared/defeatbetaTerminal'
 import { useStocksPage } from '@/stores/stocks'
@@ -122,6 +124,14 @@ export function buildTasks(
     run: client => warmStartupQuery(client, { queryKey: queryKeys.articles, queryFn: () => api.articles(), staleTime: Infinity }),
   }]
   const terminalSymbol = useDefeatBetaTerminal.getState().symbol
+  for (const symbol of useScorecard.getState().symbols) tasks.push({
+    tab: 'scorecard', label: `Scorecard ${symbol}`,
+    run: (client, backgroundOrder) => warmStartupQuery(client, {
+      queryKey: queryKeys.fundamentalsPage(symbol),
+      queryFn: () => loadScorecardCompany(symbol, { background: true, backgroundOrder }),
+      staleTime: queryFreshness(queryKeys.fundamentalsPage(symbol)),
+    }),
+  })
   for (const section of DEFEATBETA_SECTIONS) tasks.push({
     tab: 'defeatbeta', label: `DefeatBeta ${section}`,
     run: (client, backgroundOrder) => warmStartupQuery(client, {

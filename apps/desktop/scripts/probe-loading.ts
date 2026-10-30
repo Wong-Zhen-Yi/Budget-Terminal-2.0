@@ -454,8 +454,9 @@ await local.resolve('degraded-derived', 12 * 60 * 60_000, async () => {
   return { usable: true }
 })
 assert(await local.get('degraded-derived'), 'Partial content remains usable during the failure-coalescing window')
+const afterDerivedCooldown = realNow() + 10_001
 try {
-  Date.now = () => afterCooldown
+  Date.now = () => afterDerivedCooldown
   assert.equal(await local.get('degraded-derived'), null, 'Incomplete cache must not suppress a recovery fetch for hours')
   assert(await local.get('degraded-derived', { allowStale: true }), 'Incomplete content remains available as a stale fallback')
   await local.resolve('degraded-derived', 12 * 60 * 60_000, async () => { derivedCalls++; return { usable: true } })

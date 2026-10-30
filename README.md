@@ -123,7 +123,7 @@ restarts or reloads. Keep the terminal open. The normal launcher still builds an
 opens a fixed production snapshot; it does not watch source changes.
 
 These Node minimums include the October 2026 eMudhra certificate compromise fix.
-Electron **44.9.3** already includes the corresponding native SPKI blocklist for
+Electron **45.1.0** includes the corresponding native SPKI blocklist for
 both Node TLS (including Yahoo workers) and Chromium research tabs. Electron's
 embedded Node version is separate from the system Node installation; keep both
 runtimes patched and fully restart the app after updating. Startup rejects
@@ -169,13 +169,13 @@ application updates are not configured.
 
 ## Explore the workspaces
 
-The current navigation includes **56 implemented pages**, including Settings.
+The current navigation includes **57 implemented pages**, including Settings.
 
 | Workspace | Pages |
 | :--- | :--- |
 | **Overview** | Dashboard, News, Calendar, YouTube, Dictionary |
 | **Markets** | Pre-Market, Heatmap, Up/Down, Trading Volumes, Beta, Market Cap, Price, ETF, S&P500, Forex, Crypto, Gold, Oil |
-| **Research** | Stocks, Discovery, Fundamentals, Valuation, Institutions |
+| **Research** | Stocks, Discovery, Fundamentals, Scorecard, Valuation, Institutions |
 | **Focus** | BMNR, Bitcoin, HOOD, HIMS, SOFI, MU, AMZN, AVGO, Semiconductors, VST |
 | **Trading** | Charts, Options, Technical Indicators, Quant, Backtest |
 | **Macro & events** | Global, Economic, Bonds, Money, IPO, Politics |
@@ -202,6 +202,13 @@ skipped. Keep the app open for delivery.
 The Research bar transfers a ticker to Stocks, Fundamentals, Charts, Options, or
 Valuation. Clicking a portfolio ticker opens Stocks; options handoffs open a
 single-expiration chain. Hidden pages remain hidden.
+
+**Scorecard** compares 3–6 companies with selectable, sortable financial and
+valuation columns and a metric comparison chart. Save named comparisons locally,
+then restore their tickers, columns, and chart metric. Annual metrics show each
+company's fiscal year end; financial amounts use Fundamentals' USD normalization.
+Source details retain freshness, currency conversions, and partial-data warnings.
+The current comparison loads at startup, including when Scorecard is unvisited.
 
 ## Your data and your workspace
 
@@ -243,6 +250,9 @@ npm run probe:charts -- --offline
 ```
 
 See the [development guide](docs/development.md#verification) for additional checks.
+`@tanstack/react-virtual` remains pinned to **3.13.12**: version 3.14.24 fails
+the 10,000-row table sorting check. Run `probe:performance-ui` in the desktop
+workspace before changing that pin.
 Keep credentials, personal financial records, and generated bundles out of commits.
 
 ---
