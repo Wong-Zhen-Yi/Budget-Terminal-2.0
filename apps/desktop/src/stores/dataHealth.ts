@@ -98,6 +98,7 @@ export const useDataHealth = create<DataHealthState>()(persist((set) => ({
           page, label: panel.label, source: 'Renderer IPC', freshness: 'failed' as const,
           failureReason: failure, errors: [], fetchedAt: Date.now(),
         }
+        if (panel.freshnessMs !== undefined) record.freshnessMs = panel.freshnessMs
         if (failure) {
           record.freshness = panel.envelope ? 'stale' : 'failed'
           record.failureReason = failure
@@ -110,7 +111,7 @@ export const useDataHealth = create<DataHealthState>()(persist((set) => ({
         changed = true
       }
       return changed ? { records: Object.fromEntries(Object.entries(next)
-        .sort((a, b) => b[1].fetchedAt - a[1].fetchedAt).slice(0, 200)) } : state
+        .sort((a, b) => Number(Boolean(a[1].previousSession)) - Number(Boolean(b[1].previousSession)) || b[1].fetchedAt - a[1].fetchedAt).slice(0, 500)) } : state
     }),
 
   clear: () => set({ records: {} }),
@@ -126,7 +127,7 @@ export const useDataHealth = create<DataHealthState>()(persist((set) => ({
       Number.isFinite(record.fetchedAt) && Array.isArray(record.errors) &&
       record.errors.every((error) => typeof error === 'string') &&
       ['failed', 'partial', 'stale', 'cached', 'fresh'].includes(record.freshness),
-    ).slice(0, 200).map(([key, record]) => [key, { ...record, previousSession: true }])
+    ).slice(0, 500).map(([key, record]) => [key, { ...record, previousSession: true }])
     return { ...current, records: Object.fromEntries(restored),
       startupLoads: restoreStartupLoads((saved as Partial<DataHealthState> | null)?.startupLoads),
     }

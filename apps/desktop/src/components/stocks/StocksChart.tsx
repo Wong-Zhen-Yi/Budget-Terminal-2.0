@@ -234,7 +234,7 @@ export function StocksChart({
         requestAnimationFrame(() => { applyingRange.current = false })
       }
     })
-  }, [payload, volumeEnabled])
+  }, [payload?.candles, payload?.mfi, payload?.stats.close, volumeEnabled])
 
   useEffect(() => {
     const count = payload?.candles.length ?? 0

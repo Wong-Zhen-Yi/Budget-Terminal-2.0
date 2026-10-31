@@ -4,17 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import type { ChartsHistoryPayload, Envelope, EnvelopeMeta } from '@shared/contract'
 import { useChartsHistory } from '@/api/chartsQueries'
+import { MULTI_CHART_REQUESTS as REQUESTS } from '@/api/portfolioCharts'
 import { usePortfolio } from '@/api/queries'
 import { MiniChart } from '@/components/chartsworkstation/MiniChart'
 import { Button } from '@/components/ui/Button'
 import { quotePrice } from '@/lib/format'
 import { useChartsStore } from '@/stores/charts'
-
-const REQUESTS = {
-  '1D': { interval: '1 Day', range: '1Y' },
-  '1W': { interval: '1 Week', range: '5Y' },
-  '1M': { interval: '1 Month', range: '5Y' },
-} as const
 
 export function MultiCharts({ onStatus }: { onStatus: (meta: EnvelopeMeta | undefined, loading: boolean, error?: unknown) => void }) {
   const mode = useChartsStore((state) => state.multiMode)

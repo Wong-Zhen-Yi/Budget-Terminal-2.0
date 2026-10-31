@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 
 import type { ApiProviderUsage, ApiUsageSnapshot, Envelope, Freshness } from '@shared/contract'
 import { effectiveFreshness, errorMessage, useSnapshotClock } from '@/api/snapshotHealth'
@@ -104,6 +105,7 @@ export function StatusBar({
   sourcePath,
   notice = '',
   warming = '',
+  portfolioCharts,
 }: {
   panels: PanelStatus[]
   sourcePath: string
@@ -117,6 +119,7 @@ export function StatusBar({
    * what is on screen matters more than what is being loaded for later.
    */
   warming?: string
+  portfolioCharts?: ReactNode
 }) {
   const now = useSnapshotClock()
   const expected = panels.filter((panel) => panel.enabled !== false)
@@ -155,6 +158,7 @@ export function StatusBar({
     <footer className="flex h-8 min-w-0 shrink-0 flex-nowrap items-center gap-x-3 overflow-hidden whitespace-nowrap border-t border-border bg-surface px-2 py-1 text-2xs">
       <span className={`min-w-0 truncate ${tone}`} title={health}>{health}</span>
       {warming ? <span role="status" className="min-w-0 truncate text-text-muted" title={warming}>{warming}</span> : null}
+      {portfolioCharts}
       <span className="ml-auto min-w-0 truncate text-text-dim" title={sourcePath}>
         {sourcePath || 'no holdings file'}
       </span>

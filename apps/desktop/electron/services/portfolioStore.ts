@@ -585,6 +585,25 @@ function apply(document: StoredDocument, mutation: PortfolioMutation): void {
       entry.holdings[ticker] = { ticker, shares: 0, avgPrice: 0, includeInWeight: true }
       return
     }
+    case 'movePositions': {
+      const source = requireEditable(document, mutation.portfolioId)
+      const destination = requireEditable(document, mutation.destinationId)
+      if (source.id === destination.id) throw new Error('Choose a different destination portfolio.')
+      const tickers = [...new Set(mutation.tickers.map((ticker) => ticker.trim().toUpperCase()))]
+      if (!tickers.length) throw new Error('Select at least one position to move.')
+      // Validate the entire transfer before changing either portfolio.
+      for (const ticker of tickers) {
+        if (!source.tickers.includes(ticker) || !source.holdings[ticker]) throw new Error(ticker + ' is no longer in the source portfolio.')
+        if (destination.tickers.includes(ticker)) throw new Error(ticker + ' already exists in the destination portfolio. No positions were moved.')
+      }
+      for (const ticker of tickers) {
+        destination.tickers.push(ticker)
+        destination.holdings[ticker] = { ...source.holdings[ticker] }
+        delete source.holdings[ticker]
+      }
+      source.tickers = source.tickers.filter((ticker) => !tickers.includes(ticker))
+      return
+    }
     case 'removePosition': {
       const entry = requireEditable(document, mutation.portfolioId)
       const ticker = mutation.ticker.trim().toUpperCase()

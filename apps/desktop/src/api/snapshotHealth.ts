@@ -14,9 +14,11 @@ export function snapshotLifetime(envelope: Envelope<unknown>): number | undefine
 
 export function effectiveFreshness(envelope: Envelope<unknown>, now = Date.now(), freshnessMs = snapshotLifetime(envelope)): Freshness {
   const freshness = envelope.meta.freshness
-  if ((freshness === 'fresh' || freshness === 'cached') && (
-    (typeof envelope.meta.expiresAt === 'number' && now > envelope.meta.expiresAt) ||
-    (typeof freshnessMs === 'number' && now - envelope.meta.fetchedAt > freshnessMs))) return 'stale'
+  // Mixed feeds retain the oldest retrieval time for provenance. Their explicit
+  // expiry already accounts for each dependency's own lifetime (e.g. sectors vs prices).
+  const expiresAt = envelope.meta.expiresAt ?? (typeof freshnessMs === 'number'
+    ? envelope.meta.fetchedAt + freshnessMs : Infinity)
+  if ((freshness === 'fresh' || freshness === 'cached') && now > expiresAt) return 'stale'
   return freshness
 }
 

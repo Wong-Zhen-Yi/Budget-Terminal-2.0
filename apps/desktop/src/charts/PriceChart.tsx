@@ -128,7 +128,7 @@ export function PriceChart({ payload, indicators }: PriceChartProps) {
     }
   }, [])
 
-  // Data: replaced wholesale whenever the payload changes.
+  // Mark-only updates must not replace the candle series or reset its zoom.
   useEffect(() => {
     const series = seriesRef.current
     const chart = chartRef.current
@@ -165,7 +165,7 @@ export function PriceChart({ payload, indicators }: PriceChartProps) {
     series.rsiMa.setData(toLine(payload.indicators.rsiMa))
 
     chart.timeScale().fitContent()
-  }, [payload])
+  }, [payload?.candles, payload?.indicators])
 
   // lightweight-charts keeps its bar spacing when the canvas resizes, so a narrower pane
   // shows fewer bars rather than the same range compressed. Refit so dragging a splitter

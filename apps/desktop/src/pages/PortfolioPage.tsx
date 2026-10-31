@@ -16,6 +16,7 @@ import { MetricsTab } from '@/components/portfolio/MetricsTab'
 import { MomentumTab } from '@/components/portfolio/MomentumTab'
 import { buildOptionRows, OptionsTable, totalOptionsPnl } from '@/components/portfolio/OptionsTable'
 import { PositionsTable } from '@/components/portfolio/PositionsTable'
+import { MovePositionsDialog } from '@/components/portfolio/MovePositionsDialog'
 import { RemovePositionsDialog } from '@/components/portfolio/RemovePositionsDialog'
 import { SummaryBar } from '@/components/portfolio/SummaryBar'
 import { Button } from '@/components/ui/Button'
@@ -63,6 +64,7 @@ export function PortfolioPage({
   const [subTab, setSubTab] = useState<SubTabId>('stocks')
   const [managing, setManaging] = useState(false)
   const [addingPositions, setAddingPositions] = useState(false)
+  const [movingPositions, setMovingPositions] = useState(false)
   const [removingPositions, setRemovingPositions] = useState(false)
   const [error, setError] = useState('')
   const [saveStatus, setSaveStatus] = useState('')
@@ -384,6 +386,9 @@ export function PortfolioPage({
                   <Button variant="accent" onClick={() => setAddingPositions(true)}>
                     + Add Position
                   </Button>
+                  <Button onClick={() => setMovingPositions(true)} disabled={!selected.tickers.length}>
+                    Move Position
+                  </Button>
                   <Button
                     variant="danger"
                     onClick={() => setRemovingPositions(true)}
@@ -417,9 +422,6 @@ export function PortfolioPage({
             }
             onToggleWeight={(ticker, includeInWeight) =>
               void send({ type: 'setPosition', portfolioId: selected.id, ticker, includeInWeight })
-            }
-            onRemove={(ticker) =>
-              void send({ type: 'removePosition', portfolioId: selected.id, ticker })
             }
           />
         </Panel>
@@ -497,6 +499,20 @@ export function PortfolioPage({
           existing={selected.tickers}
           onClose={() => setAddingPositions(false)}
           onSubmit={(tickers) => eachTicker('addPosition', tickers)}
+        />
+      ) : null}
+
+      {movingPositions ? (
+        <MovePositionsDialog
+          key={selected.id}
+          source={selected}
+          portfolios={portfolios}
+          rows={rows}
+          onClose={() => setMovingPositions(false)}
+          onSubmit={async (destinationId, tickers) => {
+            const result = await send({ type: 'movePositions', portfolioId: selected.id, destinationId, tickers })
+            return result.meta.failureReason ?? ''
+          }}
         />
       ) : null}
 

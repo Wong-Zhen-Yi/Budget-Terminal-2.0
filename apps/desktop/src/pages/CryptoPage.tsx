@@ -153,19 +153,19 @@ export function CryptoPage({
 
       <div className="grid shrink-0 grid-cols-6 gap-2">
         <MetricTile
-          label="BTC"
+          label={quotes.BTC?.source === 'Hyperliquid crypto perp' ? 'BTC PERP' : 'BTC'}
           value={cryptoPrice(quotes.BTC?.price)}
           change={cryptoPercent(quotes.BTC?.changePct)}
           tone={cryptoTone(quotes.BTC?.changePct)}
         />
         <MetricTile
-          label="ETH"
+          label={quotes.ETH?.source === 'Hyperliquid crypto perp' ? 'ETH PERP' : 'ETH'}
           value={cryptoPrice(quotes.ETH?.price)}
           change={cryptoPercent(quotes.ETH?.changePct)}
           tone={cryptoTone(quotes.ETH?.changePct)}
         />
         <MetricTile
-          label="SOL"
+          label={quotes.SOL?.source === 'Hyperliquid crypto perp' ? 'SOL PERP' : 'SOL'}
           value={cryptoPrice(quotes.SOL?.price)}
           change={cryptoPercent(quotes.SOL?.changePct)}
           tone={cryptoTone(quotes.SOL?.changePct)}
@@ -212,7 +212,7 @@ export function CryptoPage({
         actions={
           <span className="text-2xs text-text-muted">
             {payload?.hyperliquid ? `${payload.hyperliquid.markets.length} markets | Updated ${clockTail(payload.hyperliquid.fetchedAt)}` : loading ? 'Loading...' : 'Unavailable'}
-            {' | 60s snapshots'}
+            {' | live feed · REST fallback'}
           </span>
         }
       >
@@ -326,14 +326,16 @@ function WatchlistTable({
       header: 'Vol',
       numeric: true,
       align: 'right',
-      cell: (row) => cryptoMoney(row.quote?.volume, true),
+      cell: (row) => <span title={row.quote?.volumeSource ?? row.quote?.source}>{row.quote?.volumeSource?.includes('(shares)')
+        ? row.quote.volume == null ? '--' : `${new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(row.quote.volume)} sh`
+        : cryptoMoney(row.quote?.volume, true)}</span>,
     },
     {
       key: 'marketCap',
       header: 'Mkt Cap',
       numeric: true,
       align: 'right',
-      cell: (row) => cryptoMoney(row.quote?.marketCap, true),
+      cell: (row) => <span title={row.quote?.metadataAsOf ? `${row.quote.marketCapSource ?? 'Yahoo Finance'} · ${new Date(row.quote.metadataAsOf).toLocaleString()}` : row.quote?.marketCapSource}>{cryptoMoney(row.quote?.marketCap, true)}</span>,
     },
   ]
   return (

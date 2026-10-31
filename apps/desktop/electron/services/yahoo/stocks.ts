@@ -27,6 +27,7 @@ import { getYahooSeries } from './series.js'
 import { withYahooStatements, withYahooSummary } from './requests.js'
 import { equityMarket } from '../../shared/equityMarkets.js'
 import { getQuote } from './quotes.js'
+import { captureSources } from '../sourceHealth.js'
 
 export const STOCKS_SOURCE = 'yahoo stocks'
 
@@ -287,7 +288,7 @@ export async function getStocks(symbolInput: string, force = false): Promise<Sto
     fetchChart(symbol, force),
     fetchSummary(symbol, force),
     fetchNews(symbol, force),
-    equityMarket(symbol) ? getQuote(symbol, force) : Promise.resolve(undefined),
+    equityMarket(symbol) ? captureSources(() => getQuote(symbol, force)).then(result => result.value) : Promise.resolve(undefined),
   ])
   if (chartResult.status === 'rejected') throw chartResult.reason
 
@@ -349,7 +350,7 @@ export async function getStocks(symbolInput: string, force = false): Promise<Sto
 /** Refresh the mark even when a focus page reuses its cached company-data block. */
 export async function refreshStocksQuote(payload: StocksPayload, force = false): Promise<StocksPayload> {
   if (!equityMarket(payload.symbol)) return payload
-  const quote = await getQuote(payload.symbol, force)
+  const { value: quote } = await captureSources(() => getQuote(payload.symbol, force))
   const upside = targetUpside(quote.price, payload.targets.meanPrice)
   return { ...payload, currentQuote: quote,
     targets: { ...payload.targets, upsideToMean: upside.text, upsidePct: upside.value },

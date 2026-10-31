@@ -18,6 +18,8 @@ function offlineChecks(): void {
     JSON.stringify(normalizeUpDownSymbols('aaa, BBB\ncash 123 aaa')) === JSON.stringify(['AAA', 'BBB']),
     'custom symbols should normalize, filter and de-duplicate',
   )
+  assert(normalizeUpDownSymbols(['2602335D', 'CASH', 'BRK.B', 'BRK-B', '0700.HK', 'AAPL']).join(',') === 'BRK.B,BRK-B,0700.HK,AAPL',
+    'issuer numeric security IDs and cash must never become equity-history requests')
   const series = {
     dates: ['2025-12-31', '2026-01-02', '2026-01-03', '2026-01-04', '2026-01-05', '2026-01-06'],
     values: [100, 110, 100, 100, 120, 108],

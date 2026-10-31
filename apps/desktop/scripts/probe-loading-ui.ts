@@ -417,7 +417,7 @@ try {
           window.setSize(width, 800);
           await new Promise(resolve => setTimeout(resolve, 250));
           await window.webContents.executeJavaScript(\`(() => {
-            const footer = document.querySelector('footer');
+            const footer = document.querySelector('[aria-label="API request pressure"]').closest('footer');
             const bounds = footer.getBoundingClientRect();
             const check = (ok, message) => { if (!ok) throw Error(message + ' at width ' + innerWidth) };
             check(bounds.height === 32, 'Status bar changed height');

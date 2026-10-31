@@ -17,6 +17,7 @@ import { useSettings, useSettingsMutation } from '@/api/settingsQueries'
 import { PageCache } from '@/components/chrome/PageCache'
 import { NumberPrivacy } from '@/components/ui/NumberPrivacy'
 import { StatusBar, type PanelStatus } from '@/components/chrome/StatusBar'
+import { PortfolioChartsStatus } from '@/components/chrome/PortfolioChartsStatus'
 import { TabBar } from '@/components/chrome/TabBar'
 import { TabPicker } from '@/components/chrome/TabPicker'
 import { WorkspaceHeader, WorkspaceSidebar } from '@/components/chrome/WorkspaceNavigation'
@@ -407,6 +408,7 @@ export function App() {
       </div>
 
       <StatusBar
+        portfolioCharts={<PortfolioChartsStatus enabled={!settingsQuery.isPending} />}
         panels={panels}
         sourcePath={sourcePath}
         notice={notice}

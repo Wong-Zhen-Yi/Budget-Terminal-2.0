@@ -3,6 +3,7 @@ import type {
   ChartPayload,
   ChartStats,
   IndicatorPoint,
+  Quote,
   TimeframeLabel,
   TimeframeSpec,
 } from '../../shared/contract.js'
@@ -12,6 +13,7 @@ import { periodStart } from './client.js'
 import { getMarketSeries } from '../marketSeries.js'
 import { equityMarket } from '../../shared/equityMarkets.js'
 import { getQuote } from './quotes.js'
+import { captureSources } from '../sourceHealth.js'
 
 export function timeframeSpec(label: TimeframeLabel): TimeframeSpec {
   return TIMEFRAMES.find((entry) => entry.label === label) ?? TIMEFRAMES[4]
@@ -178,6 +180,11 @@ export async function getChart(
   timeframe: TimeframeLabel,
   force = false,
 ): Promise<ChartPayload> {
+  // A current mark is a separate feed. Start it alongside history; a delayed or
+  // unavailable quote must not hold otherwise usable candles behind a spinner.
+  let currentQuote: Quote | undefined
+  if (equityMarket(symbol)) void captureSources(() => getQuote(symbol, force))
+    .then(({ value }) => { currentQuote = value }).catch(() => undefined)
   const spec = timeframeSpec(timeframe)
   const raw = await fetchCandles(symbol, spec, force)
 
@@ -202,10 +209,9 @@ export async function getChart(
   }
 
   const stats = buildStats(symbol, raw)
-  if (equityMarket(symbol)) {
-    const quote = await getQuote(symbol, force)
-    Object.assign(stats, { price: quote.price, change: quote.change, absChange: quote.absChange,
-      priceSource: quote.source, priceBasis: quote.priceBasis, changeBasis: quote.changeBasis })
+  if (currentQuote) {
+    Object.assign(stats, { price: currentQuote.price, change: currentQuote.change, absChange: currentQuote.absChange,
+      priceSource: currentQuote.source, priceBasis: currentQuote.priceBasis, changeBasis: currentQuote.changeBasis })
   }
   return {
     symbol,

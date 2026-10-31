@@ -85,6 +85,17 @@ for (const freshness of ['partial', 'stale', 'failed'] as const) {
   assert.equal(recoveryCalls, 1, 'Recent incomplete cache entries must refetch instead of remaining pinned')
   assert.equal(recovered.meta.freshness, 'fresh')
 }
+const startupObserved: Array<{ key: readonly unknown[]; result: unknown; error?: unknown }> = []
+await warmStartupQuery(expiredClient, { queryKey: ['unvisitedHealth'], staleTime: Infinity,
+  queryFn: async () => ok({ value: 42 }, 'fixture') }, (key, result, error) => startupObserved.push({ key, result, error }))
+await warmStartupQuery(expiredClient, { queryKey: ['unvisitedHealth'], staleTime: Infinity,
+  queryFn: async () => { throw new Error('Fresh cached startup must not fetch') } },
+  (key, result, error) => startupObserved.push({ key, result, error }))
+assert.equal(startupObserved.length, 2, 'Both restored and newly loaded startup snapshots must report health without a mounted page')
+await assert.rejects(warmStartupQuery(expiredClient, { queryKey: ['failedUnvisitedHealth'], staleTime: 0,
+  queryFn: async () => { throw new Error('Unvisited provider offline') } },
+  (key, result, error) => startupObserved.push({ key, result, error })), /Unvisited provider offline/)
+assert.match(String(startupObserved.at(-1)?.error), /Unvisited provider offline/)
 assert.throws(() => assertStartupReady({ ...degradedSnapshot,
   meta: { ...degradedSnapshot.meta, failureReason: '' }, errors: [{ reason: 'HTTP 503 from upstream' }] }), /HTTP 503 from upstream/,
   'Partial envelopes without meta.failureReason must retain the actual retryable source error')
@@ -127,6 +138,43 @@ const portfolio = {
 } as unknown as import('../electron/shared/contract.js').PortfolioPayload
 const scheduled = new Set(buildTasks(portfolio, undefined, { stocks: 'AAPL', fundamentals: 'AAPL' },
   { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 }).map((task) => task.tab))
+const { portfolioChartTargets, portfolioChartRefreshMs, loadPortfolioChart } = await import('../src/api/portfolioCharts.js')
+const chartViews = { timeframe: '1 Day', interval: '1 Hour', range: '1M', multiInterval: '1D' } as const
+const allBooks = { ...portfolio, portfolios: [portfolio.portfolios[0],
+  { ...portfolio.portfolios[0], id: 'inactive', tickers: ['NVDA', ' aapl '] },
+  { ...portfolio.portfolios[0], id: 'combined', readOnly: true, tickers: ['NVDA', 'MSFT'] },
+] }
+const chartTargets = portfolioChartTargets(allBooks, chartViews)
+assert.equal(chartTargets.length, 12, 'All three deduplicated holdings need Dashboard, Stocks, Main and Multi chart views')
+assert.equal(portfolioChartTargets(allBooks, { ...chartViews, interval: '1 Day', range: '1Y' }).length, 9,
+  'Matching Main and Multi chart requests must share one query')
+assert.deepEqual(portfolioChartTargets(undefined, chartViews), [])
+const chartStartup = buildTasks(allBooks, undefined, { stocks: 'AAPL', fundamentals: 'AAPL' },
+  { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 }).filter(task => /^Portfolio (?:AAPL|NVDA|MSFT) ·/.test(task.label))
+assert.equal(chartStartup.length, 12, 'Holding charts must participate in visible startup readiness')
+const chartRequests: Array<{ symbol: string; background: boolean; backgroundOrder: number }> = []
+Object.assign(window.api, Object.fromEntries(['chart', 'chartsHistory', 'stocks'].map(method => [method, async (request: typeof chartRequests[number]) => {
+  chartRequests.push(request)
+  return ok(method === 'stocks' ? { chart: { candles: [{ time: 1, close: 100 }] } } : { candles: [{ time: 1, close: 100 }] }, 'fixture')
+}])))
+const holdingClient = new QueryClient()
+await Promise.all(chartStartup.map(task => task.run(holdingClient, 7)))
+assert.equal(chartRequests.length, 12)
+assert(chartRequests.every(request => request.background && request.backgroundOrder === 7), 'Holding warm-ups must yield to foreground work')
+for (const symbol of ['AAPL', 'NVDA', 'MSFT']) {
+  assert(holdingClient.getQueryData(['stocks', symbol]), 'Stocks ticker must be ready without a first-visit load')
+  assert(holdingClient.getQueryData(['chart', symbol, '1 Day']), 'Dashboard holding chart must be ready')
+  assert(holdingClient.getQueryData(['chartsHistory', symbol, '1 Day', '5Y', 2]), 'Main chart must use its exact page key')
+  assert(holdingClient.getQueryData(['chartsHistory', symbol, '1 Day', '1Y', 2]), 'Multi chart must use its exact page key')
+}
+const refreshNow = Date.now()
+assert.equal(portfolioChartRefreshMs(chartTargets[0], { ...ok({}, 'fixture'), meta: {
+  source: 'fixture', freshness: 'fresh', fetchedAt: refreshNow, expiresAt: refreshNow + 15_000,
+} }, false, refreshNow), 15_250, 'Refresh must respect source expiry before the normal chart TTL')
+assert.equal(portfolioChartRefreshMs(chartTargets[0], undefined, true), 30_000, 'Failed refreshes must back off')
+await assert.rejects(loadPortfolioChart({ ...chartTargets[0], load: async () => ok({ candles: [] }, 'fixture') }), /no chart candles/)
+holdingClient.clear()
+console.log('Portfolio chart readiness checks passed: every book and holding, exact deduplicated view keys, startup accounting, background priority, source expiry and empty-history failures.')
 const pltrTasks = buildTasks(undefined, { hiddenTabs: ['pltr'] } as unknown as import('../electron/shared/contract.js').AppSettings,
   { stocks: 'AAPL', fundamentals: 'AAPL' }, { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 }).filter(task => task.tab === 'pltr')
 assert.equal(pltrTasks.length, 2, 'Hidden, unvisited PLTR must warm both market and financial data')

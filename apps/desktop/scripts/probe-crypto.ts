@@ -25,7 +25,7 @@ import {
   localIsoSeconds,
   rankSortValue,
 } from '../electron/shared/crypto.js'
-import { fetchTopTiles, getCrypto, sortTilesByRank } from '../electron/services/crypto.js'
+import { fetchMappedProxyQuote, fetchTopTiles, getCrypto, sortTilesByRank } from '../electron/services/crypto.js'
 import { yahoo } from '../electron/services/yahoo/client.js'
 import { HyperliquidClient, hyperliquidClient, parseHyperliquidMarkets } from '../electron/services/hyperliquid.js'
 import { getApiUsageSnapshot } from '../electron/services/apiUsage.js'
@@ -129,7 +129,7 @@ async function checkCryptoHyperliquidStage(): Promise<void> {
     currency: 'USD', source: `Hyperliquid equity perp (xyz:${symbol})` }))
   const request = mock.method(globalThis, 'fetch', async () => new Response('[]'))
   const chart = mock.method(yahoo, 'chart', async () => ({ quotes: [{ close: 100 }, { close: 110 }] }))
-  const summary = mock.method(yahoo, 'quoteSummary', async () => ({ price: { marketCap: 1000 } }))
+  const summary = mock.method(yahoo, 'quoteSummary', async () => ({ price: { marketCap: 1000, regularMarketVolume: 42 } }))
   const screen = mock.method(yahoo, '_fetch', async () => ({ finance: { result: [{ quotes: [] }] } }))
   let calls = 0
   const markets = { markets: parseHyperliquidMarkets(hyperliquidFixture), fetchedAt: localIsoSeconds() }
@@ -138,9 +138,30 @@ async function checkCryptoHyperliquidStage(): Promise<void> {
     const first = await getCrypto(true)
     assert.equal(first.payload.hyperliquid, markets)
     assert.equal(first.payload.progress.hyperliquid, 'loaded')
+    assert.equal(first.payload.quotes.BTC.source, 'Hyperliquid crypto perp')
+    assert.equal(first.payload.quotes.BTC.marketCap, null, 'Perpetual open interest is never a crypto market cap')
+    assert.equal(first.payload.quotes.COIN.volume, 42, 'Stock volume comes from cached Yahoo metadata, never perp volume')
+    assert.match(first.payload.quotes.COIN.volumeSource!, /Yahoo/)
+    const avoided = new Set(['COIN', 'MSTR', 'BMNR', 'BTC-USD', 'ETH-USD'])
+    assert.ok(chart.mock.calls.every(call => !avoided.has(String(call.arguments[0]))), 'Mapped stock and available perp fallback prices must skip Yahoo charts')
+    const metadataCalls = summary.mock.callCount()
+    await fetchMappedProxyQuote('COIN')
+    await fetchMappedProxyQuote('COIN')
+    assert.equal(summary.mock.callCount(), metadataCalls, 'Price reads must reuse independently cached metadata')
+    await fetchMappedProxyQuote('COIN', true)
+    assert.equal(summary.mock.callCount(), metadataCalls + 1, 'Manual refresh still refreshes Yahoo metadata')
     const cached = await getCrypto()
     assert.equal(cached, first)
     assert.equal(calls, 1, 'Tab revisits must reuse the shared page cache')
+    request.mock.mockImplementation(async (url) => Response.json(String(url).includes('/coins/markets')
+      ? [{ id: 'bitcoin', symbol: 'btc', current_price: null, price_change_percentage_24h: 999, market_cap: 900, total_volume: 88 }]
+      : []))
+    const mixed = await getCrypto(true)
+    assert.equal(mixed.payload.quotes.BTC.price, 110)
+    assert.ok(Math.abs(mixed.payload.quotes.BTC.changePct! - 10) < 1e-10, 'Perp fallback must not mix in a spot percentage change')
+    assert.equal(mixed.payload.quotes.BTC.marketCap, 900)
+    assert.equal(mixed.payload.quotes.BTC.volumeSource, 'CoinGecko')
+    request.mock.mockImplementation(async () => Response.json([]))
     hyperliquid.mock.mockImplementation(async () => { throw new Error('Hyperliquid HTTP 429.') })
     const partial = await getCrypto(true)
     assert.equal(partial.payload.hyperliquid, null)
@@ -264,6 +285,7 @@ function runOffline(): void {
     'ETH $4,210 -0.75%',
     'SOL -- --',
   ])
+  assert.match(buildCryptoSnapshot({ fetchedAt: '', quotes: { BTC: { ...quote('BTC', 110, 10), source: 'Hyperliquid crypto perp' } } }), /BTC PERP \$110.00 \+10.00%/)
 
   // The tables' fixed orders, which the reference hard-codes rather than deriving.
   assert.equal(CRYPTO_WATCHLIST_ORDER.length, 10)

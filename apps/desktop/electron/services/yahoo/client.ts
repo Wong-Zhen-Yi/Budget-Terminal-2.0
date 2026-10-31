@@ -25,6 +25,11 @@ export const closeYahooWorker = workerClient.close
  */
 const priorityStore = new AsyncLocalStorage<{ priority: Priority; backgroundOrder?: number }>()
 
+/** Other providers inherit foreground/startup priority without using Yahoo's gate. */
+export function requestPriority(): Priority {
+  return priorityStore.getStore()?.priority ?? 'foreground'
+}
+
 /** Run `fn` — and everything it awaits — in the given rate-gate lane. */
 export function runWithPriority<T>(priority: Priority, fn: () => Promise<T>, backgroundOrder?: number): Promise<T> {
   return priorityStore.run({ priority, backgroundOrder }, fn)

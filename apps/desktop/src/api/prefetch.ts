@@ -36,7 +36,9 @@ import { loadUpDownTargets, upDownTargetBatches, upDownTargetsKey } from './upDo
 import { completeStartupRegistration } from './queryMemory'
 import { queryFreshness } from './queryPersistence'
 import { usePortfolio } from './queries'
-import { assertStartupReady, runWarmTasks, StartupLoadError, warmStartupQuery, warmStartupSnapshot } from './warmQueue'
+import { assertStartupReady, runWarmTasks, StartupLoadError, warmQuery, warmStartupQuery, warmStartupSnapshot, type StartupSnapshotObserver } from './warmQueue'
+import { recordStartupSnapshot, startupRefreshDelay } from './startupHealth'
+import { loadPortfolioChart, portfolioChartTargets } from './portfolioCharts'
 import { initialNewsImages, initialYouTubeVideo, newsQuoteTickers } from './initialContent'
 import { warmAgentWorkspace } from './agentsQueries'
 import { browserKey, loadBrowser } from './browserQueries'
@@ -62,7 +64,8 @@ import { createProgressReporter } from './progressReporter'
 interface WarmTask {
   tab: string
   label: string
-  run: (client: QueryClient, backgroundOrder?: number) => Promise<unknown>
+  run: (client: QueryClient, backgroundOrder?: number, onSnapshot?: StartupSnapshotObserver) => Promise<unknown>
+  refresh?: boolean
 }
 
 export interface WarmProgress {
@@ -112,62 +115,62 @@ export function buildTasks(
   const { active, every, editable, main, upDown } = holdingsOf(payload)
   const tasks: WarmTask[] = [{
     tab: 'browser', label: 'Browser Chromium session',
-    run: client => warmStartupQuery(client, { queryKey: browserKey, queryFn: loadBrowser, staleTime: Infinity }),
+    run: (client, _backgroundOrder, onSnapshot) => warmStartupQuery(client, { queryKey: browserKey, queryFn: loadBrowser, staleTime: Infinity }, onSnapshot),
   }, {
     tab: 'agents', label: 'Agents workspace',
-    run: (client, backgroundOrder) => warmAgentWorkspace(client, backgroundOrder),
+    run: (client, backgroundOrder, onSnapshot) => warmAgentWorkspace(client, backgroundOrder, onSnapshot),
   }, {
     tab: 'notifications', label: 'Notification inbox',
-    run: client => warmStartupQuery(client, { queryKey: notificationsKey, queryFn: loadNotifications, staleTime: Infinity }),
+    run: (client, _backgroundOrder, onSnapshot) => warmStartupQuery(client, { queryKey: notificationsKey, queryFn: loadNotifications, staleTime: Infinity }, onSnapshot),
   }, {
     tab: 'articles', label: 'Articles library',
-    run: client => warmStartupQuery(client, { queryKey: queryKeys.articles, queryFn: () => api.articles(), staleTime: Infinity }),
+    run: (client, _backgroundOrder, onSnapshot) => warmStartupQuery(client, { queryKey: queryKeys.articles, queryFn: () => api.articles(), staleTime: Infinity }, onSnapshot),
   }]
   const terminalSymbol = useDefeatBetaTerminal.getState().symbol
   for (const symbol of useScorecard.getState().symbols) tasks.push({
     tab: 'scorecard', label: `Scorecard ${symbol}`,
-    run: (client, backgroundOrder) => warmStartupQuery(client, {
+    run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
       queryKey: queryKeys.fundamentalsPage(symbol),
       queryFn: () => loadScorecardCompany(symbol, { background: true, backgroundOrder }),
       staleTime: queryFreshness(queryKeys.fundamentalsPage(symbol)),
-    }),
+    }, onSnapshot),
   })
   for (const section of DEFEATBETA_SECTIONS) tasks.push({
     tab: 'defeatbeta', label: `DefeatBeta ${section}`,
-    run: (client, backgroundOrder) => warmStartupQuery(client, {
+    run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
       queryKey: queryKeys.defeatbetaTerminal(terminalSymbol, section),
       queryFn: () => api.defeatbetaTerminal({ symbol: terminalSymbol, section, background: true, backgroundOrder }),
       staleTime: TERMINAL_TTL,
-    }),
+    }, onSnapshot),
   })
 
   const dashboard = useDashboard.getState()
   for (const { symbol, label } of MACRO_SYMBOLS) {
     tasks.push({
       tab: 'dashboard', label: `${label} sparkline`,
-      run: (client, backgroundOrder) => warmStartupQuery(client, {
+      run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
         queryKey: queryKeys.chart(symbol, '1 Day'),
         queryFn: () => api.chart({ symbol, timeframe: '1 Day', background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.chart(symbol, '1 Day')),
-      }),
+      }, onSnapshot),
     })
   }
   if (dashboard.symbol) {
     tasks.push({
       tab: 'dashboard', label: 'Dashboard chart',
-      run: (client, backgroundOrder) => warmStartupQuery(client, {
+      run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
         queryKey: queryKeys.chart(dashboard.symbol, dashboard.timeframe),
         queryFn: () => api.chart({ symbol: dashboard.symbol, timeframe: dashboard.timeframe, background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.chart(dashboard.symbol, dashboard.timeframe)),
-      }),
+      }, onSnapshot),
     })
     tasks.push({
       tab: 'dashboard', label: 'Dashboard options',
-      run: (client, backgroundOrder) => warmStartupQuery(client, {
+      run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
         queryKey: queryKeys.options(dashboard.symbol),
         queryFn: () => api.options({ symbol: dashboard.symbol, background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.options(dashboard.symbol)),
-      }),
+      }, onSnapshot),
     })
   }
 
@@ -177,34 +180,34 @@ export function buildTasks(
   // The macro bar has quotes even when the saved holdings book is empty.
   if (!dashboardTickers.length) tasks.push({
     tab: 'dashboard', label: 'Macro quotes',
-    run: (client, backgroundOrder) => warmStartupQuery(client, {
+    run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
       queryKey: queryKeys.quotes([]),
       queryFn: () => api.quotes({ holdings: [], background: true, backgroundOrder }),
       staleTime: queryFreshness(queryKeys.quotes([])),
-    }),
+    }, onSnapshot),
   })
   if (dashboardTickers.length && dashboardTickers.join(',') !== active.join(',')) {
     tasks.push({
       tab: 'dashboard', label: 'Dashboard holdings',
-      run: (client, backgroundOrder) => warmStartupQuery(client, {
+      run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
         queryKey: queryKeys.quotes(dashboardTickers),
         queryFn: () => api.quotes({ holdings: dashboardTickers, background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.quotes(dashboardTickers)),
-      }),
+      }, onSnapshot),
     }, {
       tab: 'dashboard', label: 'Dashboard targets',
-      run: (client, backgroundOrder) => warmStartupQuery(client, {
+      run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
         queryKey: queryKeys.targets(dashboardTickers),
         queryFn: () => api.targets({ tickers: dashboardTickers, background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.targets(dashboardTickers)),
-      }),
+      }, onSnapshot),
     }, {
       tab: 'dashboard', label: 'Dashboard news',
-      run: (client, backgroundOrder) => warmStartupQuery(client, {
+      run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
         queryKey: queryKeys.news(dashboardTickers),
         queryFn: () => api.news({ tickers: dashboardTickers, background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.news(dashboardTickers)),
-      }),
+      }, onSnapshot),
     })
   }
 
@@ -213,64 +216,64 @@ export function buildTasks(
     tasks.push({
       tab: 'dashboard',
       label: 'Quotes',
-      run: (client, backgroundOrder) =>
+      run: (client, backgroundOrder, onSnapshot) =>
         warmStartupQuery(client, {
           queryKey: queryKeys.quotes(active),
           queryFn: () => api.quotes({ holdings: active, background: true, backgroundOrder }),
           staleTime: queryFreshness(queryKeys.quotes(active)),
-        }),
+        }, onSnapshot),
     })
     tasks.push({
       tab: 'dashboard',
       label: 'Targets',
-      run: (client, backgroundOrder) =>
+      run: (client, backgroundOrder, onSnapshot) =>
         warmStartupQuery(client, {
           queryKey: queryKeys.targets(active),
           queryFn: () => api.targets({ tickers: active, background: true, backgroundOrder }),
           staleTime: queryFreshness(queryKeys.targets(active)),
-        }),
+        }, onSnapshot),
     })
     tasks.push({
       tab: 'dashboard',
       label: 'Dashboard news',
-      run: (client, backgroundOrder) =>
+      run: (client, backgroundOrder, onSnapshot) =>
         warmStartupQuery(client, {
           queryKey: queryKeys.news(active),
           queryFn: () => api.news({ tickers: active, background: true, backgroundOrder }),
           staleTime: queryFreshness(queryKeys.news(active)),
-        }),
+        }, onSnapshot),
     })
     tasks.push({
       tab: 'portfolio',
       label: 'Portfolio fundamentals',
-      run: (client, backgroundOrder) =>
+      run: (client, backgroundOrder, onSnapshot) =>
         warmStartupQuery(client, {
           queryKey: queryKeys.fundamentals(active),
           queryFn: () => api.fundamentals({ tickers: active, background: true, backgroundOrder }),
           staleTime: queryFreshness(queryKeys.fundamentals(active)),
-        }),
+        }, onSnapshot),
     })
   }
 
   if (main.length && main.join(',') !== active.join(',')) {
     tasks.push({
       tab: 'backtest', label: 'Backtest quotes',
-      run: (client, backgroundOrder) => warmStartupQuery(client, {
+      run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
         queryKey: queryKeys.quotes(main),
         queryFn: () => api.quotes({ holdings: main, background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.quotes(main)),
-      }),
+      }, onSnapshot),
     })
   }
 
   // Warm Dip Finder's default month return even before its Portfolio subtab is opened.
   if (upDown.length) tasks.push({
     tab: 'portfolio', label: 'Portfolio Dip Finder',
-    run: (client, backgroundOrder) => warmStartupQuery(client, {
+    run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
       queryKey: queryKeys.returns(upDown, '1mo'),
       queryFn: () => api.returns({ tickers: upDown, window: '1mo', background: true, backgroundOrder }),
       staleTime: queryFreshness(queryKeys.returns(upDown, '1mo')),
-    }),
+    }, onSnapshot),
   })
 
   const selectedBook = payload?.portfolios.find((entry) => entry.id === payload.activeId)
@@ -295,11 +298,11 @@ export function buildTasks(
       .join('|')
     tasks.push({
       tab, label,
-      run: (client, backgroundOrder) => warmStartupQuery(client, {
+      run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
         queryKey: queryKeys.optionQuotes(signature),
         queryFn: () => api.optionQuotes({ positions, background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.optionQuotes(signature)),
-      }),
+      }, onSnapshot),
     })
   }
 
@@ -307,21 +310,21 @@ export function buildTasks(
   tasks.push({
     tab: 'cards',
     label: 'Cards',
-    run: (client) =>
+    run: (client, _backgroundOrder, onSnapshot) =>
       warmStartupQuery(client, {
         queryKey: queryKeys.cards,
         queryFn: () => api.cards(),
         staleTime: Infinity,
-      }),
+      }, onSnapshot),
   })
   tasks.push({
     tab: 'cards', label: 'Card performance',
-    run: async (client, backgroundOrder) => {
+    run: async (client, backgroundOrder, onSnapshot) => {
       const cards = await warmStartupQuery(client, {
         queryKey: queryKeys.cards,
         queryFn: () => api.cards(),
         staleTime: Infinity,
-      })
+      }, onSnapshot)
       const models = buildCardModels(cards.data, payload?.portfolios ?? [])
       if (!models.length) return
       const outcomes = await Promise.allSettled(CARD_INTERVALS.map(async interval => {
@@ -335,7 +338,7 @@ export function buildTasks(
           queryKey: cardsPerformanceKey(request),
           queryFn: () => api.cardsPerformance({ ...request, background: true, backgroundOrder }),
           staleTime: queryFreshness(cardsPerformanceKey(request)),
-        })
+        }, onSnapshot)
       }))
       const failure = outcomes.find(entry => entry.status === 'rejected' && !(entry.reason instanceof StartupLoadError && entry.reason.state === 'degraded'))
         ?? outcomes.find(entry => entry.status === 'rejected')
@@ -346,56 +349,56 @@ export function buildTasks(
   tasks.push({
     tab: 'personal-finance',
     label: 'Personal Finance',
-    run: (client) =>
+    run: (client, _backgroundOrder, onSnapshot) =>
       warmStartupQuery(client, {
         queryKey: queryKeys.personalFinance,
         queryFn: () => api.personalFinance(),
         staleTime: Infinity,
-      }),
+      }, onSnapshot),
   })
   tasks.push({
     tab: 'personal-finance',
     label: 'FX rate',
-    run: (client, backgroundOrder) =>
+    run: (client, backgroundOrder, onSnapshot) =>
       warmStartupQuery(client, {
         queryKey: queryKeys.fx,
         queryFn: () => api.fx({ background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.fx),
-      }),
+      }, onSnapshot),
   })
   if (editable.length) {
     tasks.push({
       tab: 'personal-finance',
       label: 'Brokerage quotes',
-      run: (client, backgroundOrder) =>
+      run: (client, backgroundOrder, onSnapshot) =>
         warmStartupQuery(client, {
           queryKey: queryKeys.quotes(editable),
           queryFn: () => api.quotes({ holdings: editable, background: true, backgroundOrder }),
           staleTime: queryFreshness(queryKeys.quotes(editable)),
-        }),
+        }, onSnapshot),
     })
   }
 
   tasks.push({
     tab: 'global',
     label: 'Global markets',
-    run: (client, backgroundOrder) =>
+    run: (client, backgroundOrder, onSnapshot) =>
       warmStartupQuery(client, {
         queryKey: queryKeys.globalMarkets,
         queryFn: () => api.globalMarkets({ background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.globalMarkets),
-      }),
+      }, onSnapshot),
   })
 
   tasks.push({
     tab: 'pre-market',
     label: 'Pre-Market',
-    run: (client, backgroundOrder) =>
+    run: (client, backgroundOrder, onSnapshot) =>
       warmStartupQuery(client, {
         queryKey: queryKeys.preMarket,
         queryFn: () => api.preMarket({ background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.preMarket),
-      }),
+      }, onSnapshot),
   })
 
   const upDownPage = useUpDownPage.getState()
@@ -403,7 +406,7 @@ export function buildTasks(
     : upDownPage.activeSource === 'custom' ? upDownPage.customSymbols : []
   tasks.push({
     tab: 'up-down', label: 'Up/Down',
-    run: async (client, backgroundOrder) => {
+    run: async (client, backgroundOrder, onSnapshot) => {
       const result = await warmStartupSnapshot(client, {
         queryKey: queryKeys.upDown(upDownPage.activeSource, upDownPage.interval, upDownSymbols),
         queryFn: () => api.upDown({
@@ -411,11 +414,11 @@ export function buildTasks(
           symbols: upDownSymbols, background: true, backgroundOrder,
         }),
         staleTime: queryFreshness(queryKeys.upDown(upDownPage.activeSource, upDownPage.interval, upDownSymbols)),
-      })
+      }, onSnapshot)
       const outcomes = await Promise.allSettled(upDownTargetBatches(result.data.rows).map(tickers => {
         const queryKey = upDownTargetsKey(tickers)
         return warmStartupQuery(client, { queryKey, staleTime: queryFreshness(queryKey),
-          queryFn: () => loadUpDownTargets({ tickers, background: true, backgroundOrder }) })
+          queryFn: () => loadUpDownTargets({ tickers, background: true, backgroundOrder }) }, onSnapshot)
       }))
       const failure = outcomes.find(entry => entry.status === 'rejected' && !(entry.reason instanceof StartupLoadError && entry.reason.state === 'degraded'))
         ?? outcomes.find(entry => entry.status === 'rejected')
@@ -428,7 +431,7 @@ export function buildTasks(
   tasks.push({
     tab: 'calendar',
     label: 'Calendar month',
-    run: (client, backgroundOrder) =>
+    run: (client, backgroundOrder, onSnapshot) =>
       warmStartupQuery(client, {
         queryKey: queryKeys.calendarMonth(main, calendar.year, calendar.month),
         queryFn: () =>
@@ -439,25 +442,25 @@ export function buildTasks(
             background: true, backgroundOrder,
           }),
         staleTime: queryFreshness(queryKeys.calendarMonth(main, calendar.year, calendar.month)),
-      }),
+      }, onSnapshot),
   })
 
   tasks.push({
     tab: 'politics',
     label: 'Politics',
-    run: (client, backgroundOrder) =>
+    run: (client, backgroundOrder, onSnapshot) =>
       warmStartupQuery(client, {
         queryKey: queryKeys.politicsPage(1),
         queryFn: () => api.politicsPage({ page: 1, background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.politicsPage(1)),
-      }),
+      }, onSnapshot),
   })
   // The Earnings sub-tab opens on the whole current year.
   const earnings = earningsDateRange('year', calendar.earningsYear, calendarToday('local'))
   tasks.push({
     tab: 'calendar',
     label: 'Earnings calendar',
-    run: (client, backgroundOrder) =>
+    run: (client, backgroundOrder, onSnapshot) =>
       warmStartupQuery(client, {
         queryKey: queryKeys.earningsCalendar(earnings.rangeKey),
         queryFn: () =>
@@ -468,7 +471,7 @@ export function buildTasks(
             background: true, backgroundOrder,
           }),
         staleTime: queryFreshness(queryKeys.earningsCalendar(earnings.rangeKey)),
-      }),
+      }, onSnapshot),
   })
 
   // The slowest load in the app cold — five government hosts, about 45s — and the one
@@ -476,7 +479,7 @@ export function buildTasks(
   tasks.push({
     tab: 'money',
     label: 'Money',
-    run: (client, backgroundOrder) => warmStartupQuery(client, { queryKey: queryKeys.money, queryFn: () => api.money({ background: true, backgroundOrder }), staleTime: queryFreshness(queryKeys.money) }),
+    run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, { queryKey: queryKeys.money, queryFn: () => api.money({ background: true, backgroundOrder }), staleTime: queryFreshness(queryKeys.money) }, onSnapshot),
   })
 
   // The slowest load in the app cold — five government hosts, about 45s — and the one
@@ -484,12 +487,12 @@ export function buildTasks(
   tasks.push({
     tab: 'economic',
     label: 'Economic',
-    run: (client, backgroundOrder) =>
+    run: (client, backgroundOrder, onSnapshot) =>
       warmStartupQuery(client, {
         queryKey: queryKeys.economic,
         queryFn: () => api.economic({ background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.economic),
-      }),
+      }, onSnapshot),
   })
 
   // Two feeds, two keys, exactly as the page asks for them: a failed upcoming scrape must
@@ -497,58 +500,58 @@ export function buildTasks(
   tasks.push({
     tab: 'ipo',
     label: 'Upcoming IPOs',
-    run: (client, backgroundOrder) =>
+    run: (client, backgroundOrder, onSnapshot) =>
       warmStartupQuery(client, {
         queryKey: queryKeys.ipoUpcoming,
         queryFn: () => api.ipoUpcoming({ background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.ipoUpcoming),
-      }),
+      }, onSnapshot),
   })
   tasks.push({
     tab: 'ipo',
     label: 'Completed IPOs',
-    run: (client, backgroundOrder) =>
+    run: (client, backgroundOrder, onSnapshot) =>
       warmStartupQuery(client, {
         queryKey: queryKeys.ipoCompleted(calendar.ipoYear),
         queryFn: () => api.ipoCompleted({ year: calendar.ipoYear, background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.ipoCompleted(calendar.ipoYear)),
-      }),
+      }, onSnapshot),
   })
 
   // The empty quarter is the latest one, which is what the page opens on.
   tasks.push({
     tab: 'institutions',
     label: 'Institutions',
-    run: (client, backgroundOrder) =>
+    run: (client, backgroundOrder, onSnapshot) =>
       warmStartupQuery(client, {
         queryKey: queryKeys.institutionActivity(''),
         queryFn: () => api.institutionActivity({ quarter: '', limit: 50, background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.institutionActivity('')),
-      }),
+      }, onSnapshot),
   })
 
   if (symbols.stocks) {
     tasks.push({
       tab: 'stocks',
       label: `Stocks ${symbols.stocks}`,
-      run: (client, backgroundOrder) =>
+      run: (client, backgroundOrder, onSnapshot) =>
         warmStartupQuery(client, {
           queryKey: queryKeys.stocks(symbols.stocks),
           queryFn: () => api.stocks({ symbol: symbols.stocks, background: true, backgroundOrder }),
           staleTime: queryFreshness(queryKeys.stocks(symbols.stocks)),
-        }),
+        }, onSnapshot),
     })
   }
   if (symbols.fundamentals) {
     tasks.push({
       tab: 'fundamentals',
       label: `Fundamentals ${symbols.fundamentals}`,
-      run: (client, backgroundOrder) =>
+      run: (client, backgroundOrder, onSnapshot) =>
         warmStartupQuery(client, {
           queryKey: queryKeys.fundamentalsPage(symbols.fundamentals),
           queryFn: () => api.fundamentalsPage({ symbol: symbols.fundamentals, background: true, backgroundOrder }),
           staleTime: queryFreshness(queryKeys.fundamentalsPage(symbols.fundamentals)),
-        }),
+        }, onSnapshot),
     })
   }
 
@@ -558,24 +561,24 @@ export function buildTasks(
   tasks.push({
     tab: 'oil',
     label: 'Oil fundamentals',
-    run: (client, backgroundOrder) =>
+    run: (client, backgroundOrder, onSnapshot) =>
       warmStartupQuery(client, {
         queryKey: queryKeys.oil,
         queryFn: () => api.oil({ background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.oil),
-      }),
+      }, onSnapshot),
   })
 
   if (every.length) {
     tasks.push({
       tab: 'news',
       label: 'News',
-      run: async (client, backgroundOrder) => {
+      run: async (client, backgroundOrder, onSnapshot) => {
         const result = await warmStartupSnapshot(client, {
           queryKey: queryKeys.newsPage(every),
           queryFn: () => api.newsPage({ tickers: every, background: true, backgroundOrder }),
           staleTime: queryFreshness(queryKeys.newsPage(every)),
-        })
+        }, onSnapshot)
         const tickers = newsQuoteTickers(result.data.articles)
         const preferences = useNewsPageStore.getState()
         const requests: Array<Promise<unknown>> = []
@@ -583,12 +586,12 @@ export function buildTasks(
           queryKey: queryKeys.quotes(tickers),
           queryFn: () => api.quotes({ holdings: tickers, background: true, backgroundOrder }),
           staleTime: queryFreshness(queryKeys.quotes(tickers)),
-        }))
+        }, onSnapshot))
         if (preferences.showImages) for (const url of initialNewsImages(result.data.articles, preferences.filter, preferences.sort)) {
           requests.push(warmStartupQuery(client, {
             queryKey: queryKeys.newsThumbnail(url),
             queryFn: () => api.newsThumbnail({ url }), staleTime: Infinity,
-          }))
+          }, onSnapshot))
         }
         const outcomes = await Promise.allSettled(requests)
         const failure = outcomes.find((entry) => entry.status === 'rejected' && !(entry.reason instanceof StartupLoadError && entry.reason.state === 'degraded'))
@@ -603,17 +606,17 @@ export function buildTasks(
   tasks.push({
     tab: 'forex',
     label: 'Forex quotes',
-    run: (client, backgroundOrder) => warmStartupQuery(client, { queryKey: queryKeys.forexQuotes, queryFn: () => api.forexQuotes({ background: true, backgroundOrder }), staleTime: queryFreshness(queryKeys.forexQuotes) }),
+    run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, { queryKey: queryKeys.forexQuotes, queryFn: () => api.forexQuotes({ background: true, backgroundOrder }), staleTime: queryFreshness(queryKeys.forexQuotes) }, onSnapshot),
   })
   tasks.push({
     tab: 'forex',
     label: 'Forex history',
-    run: (client, backgroundOrder) => warmStartupQuery(client, { queryKey: queryKeys.forexHistory('EUR/USD', '1M'), queryFn: () => api.forexHistory({ pair: 'EUR/USD', range: '1M', background: true, backgroundOrder }), staleTime: queryFreshness(queryKeys.forexHistory('EUR/USD', '1M')) }),
+    run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, { queryKey: queryKeys.forexHistory('EUR/USD', '1M'), queryFn: () => api.forexHistory({ pair: 'EUR/USD', range: '1M', background: true, backgroundOrder }), staleTime: queryFreshness(queryKeys.forexHistory('EUR/USD', '1M')) }, onSnapshot),
   })
   tasks.push({
     tab: 'forex',
     label: 'Forex news',
-    run: (client, backgroundOrder) => warmStartupQuery(client, { queryKey: queryKeys.forexNews('EUR/USD'), queryFn: () => api.forexNews({ pair: 'EUR/USD', background: true, backgroundOrder }), staleTime: queryFreshness(queryKeys.forexNews('EUR/USD')) }),
+    run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, { queryKey: queryKeys.forexNews('EUR/USD'), queryFn: () => api.forexNews({ pair: 'EUR/USD', background: true, backgroundOrder }), staleTime: queryFreshness(queryKeys.forexNews('EUR/USD')) }, onSnapshot),
   })
 
   // Warm every Crypto stage, including Hyperliquid, before the page is visited.
@@ -621,12 +624,12 @@ export function buildTasks(
   tasks.push({
     tab: 'crypto',
     label: 'Crypto',
-    run: (client, backgroundOrder) =>
+    run: (client, backgroundOrder, onSnapshot) =>
       warmStartupQuery(client, {
         queryKey: queryKeys.crypto,
         queryFn: () => api.crypto({ background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.crypto),
-      }),
+      }, onSnapshot),
   })
 
   // Warm the directory and the default/restored fund even before the ETF page is visited.
@@ -634,33 +637,33 @@ export function buildTasks(
   tasks.push({
     tab: 'etf',
     label: 'ETF fund directory',
-    run: (client, backgroundOrder) =>
+    run: (client, backgroundOrder, onSnapshot) =>
       warmStartupQuery(client, {
         queryKey: queryKeys.etfAum,
         queryFn: () => api.etfAum({ background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.etfAum),
-      }),
+      }, onSnapshot),
   })
   const etfTicker = useEtfPage.getState().ticker || 'SPY'
   if (etfTicker) {
     tasks.push({
       tab: 'etf', label: `ETF ${etfTicker} holdings`,
-      run: (client, backgroundOrder) => warmStartupQuery(client, {
+      run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
         queryKey: queryKeys.etfHoldings(etfTicker),
         queryFn: () => api.etfHoldings({ ticker: etfTicker, background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.etfHoldings(etfTicker)),
-      }),
+      }, onSnapshot),
     })
   }
 
   tasks.push({
     tab: 'amzn', label: 'AMZN company dashboard',
-    run: async (client, backgroundOrder) => {
+    run: async (client, backgroundOrder, onSnapshot) => {
       const result = await warmStartupQuery(client, {
         queryKey: queryKeys.amzn,
         queryFn: () => api.amzn({ background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.amzn),
-      })
+      }, onSnapshot)
       if (result.meta.freshness === 'partial' || result.meta.freshness === 'stale') {
         throw new Error(result.meta.failureReason || 'AMZN startup data is incomplete')
       }
@@ -669,12 +672,12 @@ export function buildTasks(
   })
   tasks.push({
     tab: 'mu', label: 'MU company dashboard',
-    run: async (client, backgroundOrder) => {
+    run: async (client, backgroundOrder, onSnapshot) => {
       const result = await warmStartupQuery(client, {
         queryKey: queryKeys.mu,
         queryFn: () => api.mu({ background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.mu),
-      })
+      }, onSnapshot)
       // Retain usable panels, while keeping incomplete startup visible in progress.
       if (result.meta.freshness === 'partial' || result.meta.freshness === 'stale') {
         throw new Error(result.meta.failureReason || 'MU startup data is incomplete')
@@ -684,12 +687,12 @@ export function buildTasks(
   })
   tasks.push({
     tab: 'avgo', label: 'AVGO company dashboard',
-    run: async (client, backgroundOrder) => {
+    run: async (client, backgroundOrder, onSnapshot) => {
       const result = await warmStartupQuery(client, {
         queryKey: queryKeys.avgo,
         queryFn: () => api.avgo({ background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.avgo),
-      })
+      }, onSnapshot)
       // Retain usable panels, while keeping incomplete startup visible in progress.
       if (result.meta.freshness === 'partial' || result.meta.freshness === 'stale') {
         throw new Error(result.meta.failureReason || 'AVGO startup data is incomplete')
@@ -699,20 +702,20 @@ export function buildTasks(
   })
   tasks.push({
     tab: 'semiconductors', label: 'Semiconductor supply chain',
-    run: (client, backgroundOrder) => warmStartupQuery(client, {
+    run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
       queryKey: queryKeys.semiconductors,
       queryFn: () => api.semiconductors({ background: true, backgroundOrder }),
       staleTime: queryFreshness(queryKeys.semiconductors),
-    }),
+    }, onSnapshot),
   })
   tasks.push({
     tab: 'vst', label: 'VST company dashboard',
-    run: async (client, backgroundOrder) => {
+    run: async (client, backgroundOrder, onSnapshot) => {
       const result = await warmStartupQuery(client, {
         queryKey: queryKeys.vst,
         queryFn: () => api.vst({ background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.vst),
-      })
+      }, onSnapshot)
       // Retain usable panels, while keeping incomplete startup visible in progress.
       if (result.meta.freshness === 'partial' || result.meta.freshness === 'stale') {
         throw new Error(result.meta.failureReason || 'VST startup data is incomplete')
@@ -722,12 +725,12 @@ export function buildTasks(
   })
   tasks.push({
     tab: 'sofi', label: 'SOFI company dashboard',
-    run: async (client, backgroundOrder) => {
+    run: async (client, backgroundOrder, onSnapshot) => {
       const result = await warmStartupQuery(client, {
         queryKey: queryKeys.sofi,
         queryFn: () => api.sofi({ background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.sofi),
-      })
+      }, onSnapshot)
       // Keep usable panels cached, but report incomplete startup as a visible failure.
       if (result.meta.freshness === 'partial' || result.meta.freshness === 'stale') {
         throw new Error(result.meta.failureReason || 'SOFI startup data is incomplete')
@@ -737,12 +740,12 @@ export function buildTasks(
   })
   tasks.push({
     tab: 'hims', label: 'HIMS company dashboard',
-    run: async (client, backgroundOrder) => {
+    run: async (client, backgroundOrder, onSnapshot) => {
       const result = await warmStartupQuery(client, {
         queryKey: queryKeys.hims,
         queryFn: () => api.hims({ background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.hims),
-      })
+      }, onSnapshot)
       if (result.meta.freshness === 'partial' || result.meta.freshness === 'stale') {
         throw new Error(result.meta.failureReason || 'HIMS startup data is incomplete')
       }
@@ -751,38 +754,38 @@ export function buildTasks(
   })
   tasks.push({
     tab: 'hood', label: 'HOOD company dashboard',
-    run: (client, backgroundOrder) => warmStartupQuery(client, {
+    run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
       queryKey: queryKeys.hood,
       queryFn: () => api.hood({ background: true, backgroundOrder }),
       staleTime: queryFreshness(queryKeys.hood),
-    }),
+    }, onSnapshot),
   })
   tasks.push({
     tab: 'pltr', label: 'PLTR market, chart and news',
-    run: (client, backgroundOrder) => warmStartupQuery(client, {
+    run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
       queryKey: queryKeys.stocks('PLTR'),
       queryFn: () => api.stocks({ symbol: 'PLTR', background: true, backgroundOrder }),
       staleTime: queryFreshness(queryKeys.stocks('PLTR')),
-    }),
+    }, onSnapshot),
   }, {
     tab: 'pltr', label: 'PLTR financials and filings',
-    run: (client, backgroundOrder) => warmStartupQuery(client, {
+    run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
       queryKey: queryKeys.fundamentalsPage('PLTR'),
       queryFn: () => api.fundamentalsPage({ symbol: 'PLTR', background: true, backgroundOrder }),
       staleTime: queryFreshness(queryKeys.fundamentalsPage('PLTR')),
-    }),
+    }, onSnapshot),
   })
 
   // One CoinGecko call, two SEC calls behind their own disk cache and three Yahoo quotes.
   tasks.push({
     tab: 'bmnr',
     label: 'BMNR treasury',
-    run: (client, backgroundOrder) =>
+    run: (client, backgroundOrder, onSnapshot) =>
       warmStartupQuery(client, {
         queryKey: queryKeys.bmnr,
         queryFn: () => api.bmnr({ background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.bmnr),
-      }),
+      }, onSnapshot),
   })
 
   // Public WGC and USGS documents are long-cached in main; the two Yahoo proxy quotes
@@ -790,12 +793,12 @@ export function buildTasks(
   tasks.push({
     tab: 'gold',
     label: 'Gold fundamentals',
-    run: (client, backgroundOrder) =>
+    run: (client, backgroundOrder, onSnapshot) =>
       warmStartupQuery(client, {
         queryKey: queryKeys.gold,
         queryFn: () => api.gold({ background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.gold),
-      }),
+      }, onSnapshot),
   })
 
   if (every.length) {
@@ -803,18 +806,18 @@ export function buildTasks(
     tasks.push({
       tab: 'youtube',
       label: 'YouTube',
-      run: async (client, backgroundOrder) => {
+      run: async (client, backgroundOrder, onSnapshot) => {
         const result = await warmStartupSnapshot(client, {
           queryKey: queryKeys.youtube(every),
           queryFn: () => api.youtube({ tickers: every, background: true, backgroundOrder }),
           staleTime: queryFreshness(queryKeys.youtube(every)),
-        })
+        }, onSnapshot)
         const selected = initialYouTubeVideo(result.data.items, settings?.youtubePage)
         if (selected && (selected.videoId || selected.thumbnailUrl)) await warmStartupQuery(client, {
           queryKey: queryKeys.youtubeThumbnail(selected.videoId, selected.thumbnailUrl),
           queryFn: () => api.youtubeThumbnail({ videoId: selected.videoId, thumbnailUrl: selected.thumbnailUrl }),
           staleTime: Infinity,
-        })
+        }, onSnapshot)
         assertStartupReady(result)
         return result
       },
@@ -827,34 +830,51 @@ export function buildTasks(
   tasks.push({
     tab: 'heatmap',
     label: 'Heatmap',
-    run: (client, backgroundOrder) =>
+    run: (client, backgroundOrder, onSnapshot) =>
       warmStartupQuery(client, {
         queryKey: queryKeys.heatmap('SPY'),
         queryFn: () => api.heatmap({ etf: 'SPY', background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.heatmap('SPY')),
-      }),
+      }, onSnapshot),
   })
 
   // A costly twelve-page screen plus a hundred daily charts, sharing the Yahoo gate.
   tasks.push({
     tab: 'trading-volumes',
     label: 'Trading Volumes',
-    run: (client, backgroundOrder) =>
+    run: (client, backgroundOrder, onSnapshot) =>
       warmStartupQuery(client, {
         queryKey: queryKeys.tradingVolumes,
         queryFn: () => api.tradingVolumes({ background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.tradingVolumes),
-      }),
+      }, onSnapshot),
   })
 
   const charts = useChartsStore.getState()
+  for (const target of portfolioChartTargets(payload, {
+    timeframe: dashboard.timeframe, interval: charts.interval, range: charts.range, multiInterval: charts.multiInterval,
+  })) tasks.push({
+    tab: target.tab, label: target.label,
+    refresh: false, // PortfolioChartsStatus owns these continuously observed views.
+    run: async (client, backgroundOrder, onSnapshot) => {
+      // The always-mounted holding observers own retention, so removing a
+      // holding or changing views can release these queries normally.
+      const result = await warmQuery(client, {
+        queryKey: target.queryKey, queryFn: () => loadPortfolioChart(target, backgroundOrder),
+        staleTime: queryFreshness(target.queryKey),
+      }, 1_800_000)
+      onSnapshot?.(target.queryKey, result)
+      assertStartupReady(result)
+      return result
+    },
+  })
   tasks.push({
     tab: 'charts', label: 'Charts',
-    run: (client, backgroundOrder) => warmStartupQuery(client, {
+    run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
       queryKey: queryKeys.chartsHistory(charts.symbol, charts.interval, charts.range),
       queryFn: () => api.chartsHistory({ symbol: charts.symbol, interval: charts.interval, range: charts.range, background: true, backgroundOrder }),
       staleTime: queryFreshness(queryKeys.chartsHistory(charts.symbol, charts.interval, charts.range)),
-    }),
+    }, onSnapshot),
   })
 
   const valuation = useValuationPage.getState()
@@ -862,11 +882,11 @@ export function buildTasks(
     const peers = valuation.customPeersByTicker[valuation.ticker] ?? []
     tasks.push({
       tab: 'valuation', label: 'Valuation',
-      run: (client, backgroundOrder) => warmStartupQuery(client, {
+      run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
         queryKey: queryKeys.valuation(valuation.ticker, peers),
         queryFn: () => api.valuation({ symbol: valuation.ticker, customPeers: peers, background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.valuation(valuation.ticker, peers)),
-      }),
+      }, onSnapshot),
     })
   }
 
@@ -874,11 +894,11 @@ export function buildTasks(
   if (projections.symbol) {
     tasks.push({
       tab: 'projections', label: 'Projections',
-      run: (client, backgroundOrder) => warmStartupQuery(client, {
+      run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
         queryKey: queryKeys.projections(projections.symbol, projections.timeframe),
         queryFn: () => api.projections({ symbol: projections.symbol, timeframe: projections.timeframe, background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.projections(projections.symbol, projections.timeframe)),
-      }),
+      }, onSnapshot),
     })
   }
 
@@ -886,69 +906,69 @@ export function buildTasks(
   if (options.loaded && options.symbol) {
     tasks.push({
       tab: 'options', label: 'Options expirations',
-      run: (client, backgroundOrder) => warmStartupQuery(client, {
+      run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
         queryKey: queryKeys.optionsExpirations(options.symbol),
         queryFn: () => api.optionsExpirations({ symbol: options.symbol, background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.optionsExpirations(options.symbol)),
-      }),
+      }, onSnapshot),
     })
     tasks.push({
       tab: 'options', label: 'Options chain',
-      run: (client, backgroundOrder) => warmStartupQuery(client, {
+      run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
         queryKey: queryKeys.optionsChain(options.symbol, options.expiry),
         queryFn: () => api.optionsChain({ symbol: options.symbol, expiry: options.expiry, background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.optionsChain(options.symbol, options.expiry)),
-      }),
+      }, onSnapshot),
     })
   }
 
   tasks.push({
     tab: 'bitcoin', label: 'Bitcoin',
-    run: (client, backgroundOrder) => warmStartupQuery(client, {
+    run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
       queryKey: queryKeys.bitcoin,
       queryFn: () => api.bitcoin({ background: true, backgroundOrder }),
       staleTime: queryFreshness(queryKeys.bitcoin),
-    }),
+    }, onSnapshot),
   })
   tasks.push({
     tab: 'quant', label: 'Quant',
-    run: (client, backgroundOrder) => warmStartupQuery(client, {
+    run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
       queryKey: queryKeys.quant,
       queryFn: () => api.quantScan({ latestOnly: true, background: true, backgroundOrder }),
       staleTime: queryFreshness(queryKeys.quant),
-    }),
+    }, onSnapshot),
   })
   tasks.push({
     tab: 'technical-screen', label: 'Technical Indicators',
-    run: (client, backgroundOrder) => warmStartupQuery(client, {
+    run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
       queryKey: queryKeys.technicalScreen,
       queryFn: () => api.technicalScan({ background: true, backgroundOrder }),
       staleTime: queryFreshness(queryKeys.technicalScreen),
-    }),
+    }, onSnapshot),
   })
 
   for (const part of SP500_PARTS) {
     tasks.push({
       tab: 'sp500', label: `S&P500 ${part}`,
-      run: (client, backgroundOrder) => warmStartupQuery(client, {
+      run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
         queryKey: ['sp500', part],
         queryFn: () => api.sp500({ part, background: true, backgroundOrder }),
         staleTime: queryFreshness(['sp500', part]),
-      }),
+      }, onSnapshot),
     })
   }
   tasks.push({
     tab: 'sp500', label: 'S&P500 breadth status',
-    run: (client) => warmStartupQuery(client, {
+    run: (client, _backgroundOrder, onSnapshot) => warmStartupQuery(client, {
       queryKey: ['sp500Breadth'],
       queryFn: () => api.sp500Breadth({ action: 'status' }),
       staleTime: 30_000,
-    }),
+    }, onSnapshot),
   })
 
   tasks.push({
     tab: 'market-cap', label: 'Market Cap',
-    run: async (client, backgroundOrder) => {
+    run: async (client, backgroundOrder, onSnapshot) => {
       const result = await warmStartupQuery(client, {
         queryKey: queryKeys.marketCap('all'),
         queryFn: async () => {
@@ -959,41 +979,41 @@ export function buildTasks(
           return page
         },
         staleTime: queryFreshness(queryKeys.marketCap('all')),
-      })
+      }, onSnapshot)
       const symbols = result.data.rows.map((row) => row.ticker)
       if (symbols.length) await warmStartupQuery(client, {
         queryKey: ['marketCapSales', [...symbols].sort().join(',')],
         queryFn: () => api.marketCapSales({ symbols, background: true, backgroundOrder }),
         staleTime: queryFreshness(['marketCapSales', [...symbols].sort().join(',')]),
-      })
+      }, onSnapshot)
     },
   })
 
   const priceRequest = { minimumPrice: 100, maximumPrice: 200 }
   tasks.push({
     tab: 'price', label: 'Price',
-    run: (client, backgroundOrder) => warmStartupQuery(client, {
+    run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
       queryKey: priceScreenKey(priceRequest),
       queryFn: () => api.priceScreen({ ...priceRequest, background: true, backgroundOrder }),
       staleTime: queryFreshness(priceScreenKey(priceRequest)),
-    }),
+    }, onSnapshot),
   })
 
   tasks.push({
     tab: 'stock-discovery', label: 'Discovery',
-    run: async (client, backgroundOrder) => {
+    run: async (client, backgroundOrder, onSnapshot) => {
       const universe = await warmStartupQuery(client, {
         queryKey: ['discoveryUniverse'],
         queryFn: () => api.discoveryUniverse(),
         staleTime: queryFreshness(['discoveryUniverse']),
-      })
+      }, onSnapshot)
       const symbol = pickDiscoverySymbol(universe.data.symbols, [])
       if (!symbol) throw new Error('The stock directory is empty.')
       await warmStartupQuery(client, {
         queryKey: ['discoveryStartup'],
         queryFn: () => api.discovery({ symbol, background: true, backgroundOrder }),
         staleTime: queryFreshness(['discoveryStartup']),
-      })
+      }, onSnapshot)
     },
   })
 
@@ -1007,11 +1027,11 @@ export function buildTasks(
     }
     tasks.push({
       tab: 'backtest', label: 'Backtest',
-      run: (client, backgroundOrder) => warmStartupQuery(client, {
+      run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
         queryKey: backtestKey(request),
         queryFn: () => api.backtest({ ...request, background: true, backgroundOrder }),
         staleTime: queryFreshness(backtestKey(request)),
-      }),
+      }, onSnapshot),
     })
   }
 
@@ -1132,6 +1152,7 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
     const pageOrder = priority
     const pageRanks = new Map(pageOrder.map((page, index) => [page, index]))
     let cancelled = false
+    const refreshTimers = new Set<ReturnType<typeof setTimeout>>()
     let reporter: ReturnType<typeof createProgressReporter> | undefined
     // Defer startup so StrictMode's trial effect can clean up before marking this run
     // started. Otherwise the real effect skips a warm-up that was already cancelled.
@@ -1145,6 +1166,46 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
       const activeLabels = new Set<string>()
       const taskStarts = new Map<WarmTask, number>()
       const retryReasons = new Map<WarmTask, string>()
+      const snapshots = new Map<WarmTask, Array<{ key: Parameters<StartupSnapshotObserver>[0]; result: unknown }>>()
+      const taskStates = new Map<WarmTask, { state: 'ready' | 'degraded' | 'failed'; reason?: string }>()
+      const runTask = async (task: WarmTask) => {
+        const observed: NonNullable<ReturnType<typeof snapshots.get>> = []
+        snapshots.set(task, observed)
+        return task.run(queryClient, pageRanks.get(task.tab), (key, result, error) => {
+          // Scheduling needs metadata only; never retain an old chart/statement
+          // payload after streaming updates or query-memory eviction replace it.
+          const meta = (result as { meta?: unknown } | null)?.meta
+          observed.push({ key, result: meta ? { meta } : undefined })
+          if (!cancelled) recordStartupSnapshot(task.tab, key, result, error)
+        })
+      }
+      const maintain = (task: WarmTask, failed: boolean) => {
+        if (cancelled || task.refresh === false) return
+        const delay = startupRefreshDelay(snapshots.get(task) ?? [], failed)
+        if (!Number.isFinite(delay)) return
+        const timer = setTimeout(async () => {
+          refreshTimers.delete(timer)
+          if (cancelled) return
+          let state: 'ready' | 'degraded' | 'failed' = 'ready'
+          let reason: string | undefined
+          try { await runTask(task) } catch (error) {
+            state = error instanceof StartupLoadError && error.state === 'degraded' ? 'degraded' : 'failed'
+            reason = errorMessage(error)
+          }
+          if (cancelled) return
+          taskStates.set(task, { state, reason })
+          const pageTasks = tasks.filter(entry => entry.tab === task.tab).map(entry => taskStates.get(entry))
+          const worst = pageTasks.find(entry => entry?.state === 'failed') ?? pageTasks.find(entry => entry?.state === 'degraded')
+          const startup = useDataHealth.getState().startup
+          if (startup && !(task.tab === 'portfolio' && current.portfolioError)) {
+            const page = worst ?? { state: 'ready' as const }
+            useDataHealth.getState().setStartup({ ...startup, pages: { ...startup.pages, [task.tab]: page,
+              ...(task.tab === 'trading-volumes' ? { beta: page } : {}) } })
+          }
+          maintain(task, state !== 'ready')
+        }, delay)
+        refreshTimers.add(timer)
+      }
       const pages: NonNullable<NonNullable<ReturnType<typeof useDataHealth.getState>['startup']>['pages']> = Object.fromEntries(pageOrder.map((page) => [page, {
         state: tasks.some((task) => task.tab === page) ? 'loading' as const
           : ['options', 'news', 'youtube', 'valuation', 'backtest', 'stocks', 'fundamentals', 'projections'].includes(page) ? 'idle' as const : 'ready' as const,
@@ -1175,7 +1236,7 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
       })
       reporter.flush()
       await runWarmTasks(tasks, {
-        run: (task) => retryTransientData(() => task.run(queryClient, pageRanks.get(task.tab)), {
+        run: (task) => retryTransientData(() => runTask(task), {
           maxAttempts: 2,
           // Outlast the service cache's 10s failure coalescing window. Successful
           // dependencies stay cached, so recovery only reloads missing pieces.
@@ -1198,6 +1259,7 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
           const state = result.status === 'fulfilled' ? 'ready' : result.reason instanceof StartupLoadError && result.reason.state === 'degraded' ? 'degraded' : 'failed'
           const failed = state === 'failed'
           const reason = result.status === 'rejected' ? errorMessage(result.reason) : undefined
+          taskStates.set(task, { state, reason })
           if (state === 'degraded') degradedCount += 1
           if (failed) {
             failedCount += 1
@@ -1229,7 +1291,10 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
           else reporter!.schedule()
         },
       })
-      if (!cancelled) completeStartupRegistration(queryClient)
+      if (!cancelled) {
+        completeStartupRegistration(queryClient)
+        for (const task of tasks) maintain(task, taskStates.get(task)?.state !== 'ready')
+      }
     }
     const timer = setTimeout(() => void run(), 250)
 
@@ -1237,6 +1302,7 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
       cancelled = true
       reporter?.cancel()
       clearTimeout(timer)
+      for (const refreshTimer of refreshTimers) clearTimeout(refreshTimer)
     }
   }, [ready, queryClient])
 

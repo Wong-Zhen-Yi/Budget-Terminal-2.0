@@ -232,7 +232,7 @@ export function buildCryptoSnapshot(input: {
   ]
   for (const label of ['BTC', 'ETH', 'SOL']) {
     const quote = input.quotes[label]
-    lines.push(`${label} ${cryptoPrice(quote?.price)} ${cryptoPercent(quote?.changePct)}`)
+    lines.push(`${label}${quote?.source === 'Hyperliquid crypto perp' ? ' PERP' : ''} ${cryptoPrice(quote?.price)} ${cryptoPercent(quote?.changePct)}`)
   }
   return lines.join('\n')
 }

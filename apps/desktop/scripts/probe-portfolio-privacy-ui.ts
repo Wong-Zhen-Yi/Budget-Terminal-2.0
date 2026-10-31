@@ -28,7 +28,8 @@ try {
           premium: 7.25, currentPrice: 8.5, expiry: '2027-01-15', openDate: '2026-10-01', status: 'Open' }
         const portfolio = { id: 'demo', name: 'Demo Portfolio', tickers: ['DEMO'], cashBalance: 12345.67, marginDebt: 123.45,
           includeCashInWeight: true, holdings: { DEMO: { ticker: 'DEMO', shares: 17, avgPrice: 111.25, includeInWeight: true } }, options: [option] }
-        let payload = { portfolios: [portfolio], activeId: 'demo', mainId: 'demo', sourcePath: '' }
+        const destination = { ...portfolio, id: 'destination', name: 'Destination', tickers: [], holdings: {}, options: [] }
+        let payload = { portfolios: [portfolio, destination], activeId: 'demo', mainId: 'demo', sourcePath: '' }
         let finance = { cash: [{ id: 'cash', desc: 'Demo savings', amount: 45678.91 }],
           debt: [{ id: 'debt', desc: 'Demo loan', amount: 2345.67 }],
           recurringBills: [{ id: 'bill', desc: 'Demo subscription', amount: 88.99, frequency: 'monthly', currency: 'SGD' }],
@@ -92,7 +93,22 @@ try {
             check(body().includes('****'), tab + ' displays masked values')
           }
           await click('Stocks')
+          check(!document.querySelector('button[aria-label="Remove DEMO"]'), 'Stocks must not expose distant one-click remove buttons')
+          await click('Move Position'); noAmounts()
+          check(document.querySelector('[aria-label="Destination portfolio"]').value === 'destination', 'Move destination excludes source')
+          document.querySelector('input[aria-label="Move DEMO"]').click(); await settle()
+          await click('Move 1')
+          check(body().includes('Move DEMO from Demo Portfolio to Destination?'), 'Move preview names stock, source and destination')
+          check(!mutations.some(mutation => mutation.type === 'movePositions'), 'Move requires confirmation')
+          await click('Confirm moving 1')
+          check(mutations.some(mutation => mutation.type === 'movePositions' && mutation.destinationId === 'destination' && mutation.tickers[0] === 'DEMO'), 'Confirmed move sends selected tickers and destination')
           await click('- Remove Position'); noAmounts()
+          const removal = document.querySelector('[role="dialog"]')
+          check(removal.innerText.includes('DEMO'), 'Removal identifies the ticker')
+          removal.querySelector('li input[type="checkbox"]').click(); await settle()
+          await click('Remove 1')
+          check(body().includes('Confirm removing 1'), 'Removal requires explicit confirmation')
+          check(!mutations.some(mutation => mutation.type === 'removePosition'), 'Selection must not delete holdings before confirmation')
           check(document.querySelector('[role="dialog"]').innerText.includes('****'), 'Removal dialog hides values')
           await click('Cancel')
           // Updating data while hidden must retain masking, then reveal the latest values.

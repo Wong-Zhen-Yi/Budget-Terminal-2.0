@@ -1,8 +1,12 @@
-import type { Candle, EquityMarketUpdate, Quote } from '../shared/contract.js'
+import type { Candle, EquityMarketUpdate, HyperliquidPayload, Quote } from '../shared/contract.js'
+import { parseHyperliquidMarkets } from '../shared/hyperliquid.js'
+import { localIsoSeconds } from '../shared/crypto.js'
 import { EQUITY_MARKETS, equityMarket, equityPriceSource } from '../shared/equityMarkets.js'
 import { cache } from './cache.js'
 import { trackApiRequest } from './apiUsage.js'
 import { observeSource } from './sourceHealth.js'
+import { hyperliquidRateGate } from './hyperliquidRateGate.js'
+import { requestPriority } from './yahoo/client.js'
 
 const INFO_URL = 'https://api.hyperliquid.xyz/info'
 const WS_URL = 'wss://api.hyperliquid.xyz/ws'
@@ -65,8 +69,17 @@ export interface EquityCandleResult {
   cacheAgeSeconds: number
 }
 
+interface CandleDocument {
+  candles: Candle[]
+  /** Earliest boundary actually requested, including the overlap bar. */
+  requestedFrom: number
+}
+
 /** One shared read-only socket and weighted REST queue for all equity consumers. */
 export class HyperliquidEquities {
+  private cryptoMetadata: unknown
+  private cryptoMarkets: { payload: HyperliquidPayload; receivedAt: number } | undefined
+  private cryptoChanged = false
   private readonly quotes = new Map<string, Quote>()
   private readonly watched = new Set<string>()
   private readonly listeners = new Set<(update: EquityMarketUpdate) => void>()
@@ -83,15 +96,12 @@ export class HyperliquidEquities {
   private lastMessageAt = 0
   private connectedAt = 0
   private retryMs = 1_000
-  private nextRequestAt = 0
   private cooldownUntil = 0
-  private queue: Promise<unknown> = Promise.resolve()
 
   constructor(
     private readonly request: typeof fetch = (url, options) => globalThis.fetch(url, options),
     private readonly now: () => number = Date.now,
     private readonly socketFactory: (url: string) => WebSocket = url => new WebSocket(url),
-    private readonly wait: (ms: number) => Promise<void> = ms => new Promise(resolve => setTimeout(resolve, ms)),
   ) {}
 
   start(): void {
@@ -116,10 +126,31 @@ export class HyperliquidEquities {
     const socket = this.socket
     this.socket = null
     socket?.close()
+    this.cryptoMarkets = undefined
+    this.cryptoChanged = false
     this.quotes.clear()
     this.changed.clear()
     this.changedCandles.clear()
     this.latestCandles.clear()
+  }
+
+  /** Metadata is refreshed by REST; contexts stream on the existing shared socket. */
+  watchCryptoMarkets(metadata: unknown): void {
+    const first = !this.cryptoMetadata
+    this.cryptoMetadata = metadata
+    this.cryptoMarkets = undefined
+    this.cryptoChanged = false
+    if (first && this.socket?.readyState === 1) this.sendCryptoSubscription()
+    this.connect()
+  }
+
+  getCryptoMarkets(): HyperliquidPayload | null {
+    return this.socket?.readyState === 1 && this.cryptoMarkets && this.now() - this.cryptoMarkets.receivedAt <= QUOTE_MAX_AGE
+      ? this.cryptoMarkets.payload : null
+  }
+
+  private sendCryptoSubscription(): void {
+    this.socket?.send(JSON.stringify({ method: 'subscribe', subscription: { type: 'allDexsAssetCtxs' } }))
   }
 
   private watch(symbol: string): void {
@@ -151,7 +182,9 @@ export class HyperliquidEquities {
     if (this.flushTimer) return
     this.flushTimer = setTimeout(() => {
       this.flushTimer = undefined
-      const update = { quotes: [...this.changed.values()], candles: [...this.changedCandles.values()] }
+      const update: EquityMarketUpdate = { quotes: [...this.changed.values()], candles: [...this.changedCandles.values()] }
+      if (this.cryptoChanged && this.getCryptoMarkets()) update.hyperliquid = this.cryptoMarkets!.payload
+      this.cryptoChanged = false
       this.changed.clear()
       this.changedCandles.clear()
       for (const listener of this.listeners) listener(update)
@@ -160,7 +193,7 @@ export class HyperliquidEquities {
   }
 
   private connect(): void {
-    if (!this.enabled || this.socket || this.reconnect || !this.watched.size) return
+    if (!this.enabled || this.socket || this.reconnect || (!this.watched.size && !this.cryptoMetadata)) return
     let socket: WebSocket
     try {
       socket = this.socketFactory(WS_URL)
@@ -176,6 +209,7 @@ export class HyperliquidEquities {
       if (this.socket !== socket) return
       clearTimeout(this.connectingTimer)
       this.connectedAt = this.now()
+      if (this.cryptoMetadata) this.sendCryptoSubscription()
       for (const symbol of this.watched) this.sendSubscription(symbol)
       for (const { symbol, interval } of this.candleWatches.values()) this.sendCandleSubscription(symbol, interval)
       this.heartbeat = setInterval(() => {
@@ -192,6 +226,21 @@ export class HyperliquidEquities {
       this.lastMessageAt = this.now()
       let message: Record<string, unknown>
       try { message = record(JSON.parse(String(event.data))) } catch { return }
+      if (message.channel === 'allDexsAssetCtxs' && this.cryptoMetadata) {
+        const ctxs = record(message.data).ctxs
+        const base = Array.isArray(ctxs) ? ctxs.find(row => Array.isArray(row) && row[0] === '') : undefined
+        if (!Array.isArray(base)) return
+        try {
+          const markets = parseHyperliquidMarkets([this.cryptoMetadata, base[1]])
+          this.cryptoMarkets = { payload: { markets, fetchedAt: localIsoSeconds(new Date(this.now())) }, receivedAt: this.now() }
+          this.cryptoChanged = true
+          this.publish()
+        } catch {
+          // Changed universe lengths require a fresh REST metadata snapshot.
+          this.cryptoMarkets = undefined
+        }
+        return
+      }
       if (message.channel === 'candle') {
         for (const value of Array.isArray(message.data) ? message.data : [message.data]) {
           const row = record(value)
@@ -229,6 +278,8 @@ export class HyperliquidEquities {
       clearTimeout(this.connectingTimer)
       clearInterval(this.heartbeat)
       this.heartbeat = undefined
+      this.cryptoMarkets = undefined
+      this.cryptoChanged = false
       // Do not reuse an old stream mark as a live quote after disconnecting.
       this.quotes.clear()
       this.latestCandles.clear()
@@ -256,12 +307,8 @@ export class HyperliquidEquities {
   }
 
   private info(body: unknown, weight = 20): Promise<unknown> {
-    const run = async () => {
+    return hyperliquidRateGate.run(weight, async () => {
       if (this.cooldownUntil > this.now()) throw new Error('Hyperliquid equity data is rate limited; retry after cooldown.')
-      const delay = this.nextRequestAt - this.now()
-      if (delay > 0) await this.wait(delay)
-      // 480 weighted units/minute, leaving budget for crypto and other apps on this IP.
-      this.nextRequestAt = this.now() + Math.ceil(weight / 8 * 1_000)
       return trackApiRequest('hyperliquid', async () => {
         const response = await this.request(INFO_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body), signal: AbortSignal.timeout(12_000) })
@@ -275,10 +322,7 @@ export class HyperliquidEquities {
         if (!response.ok) throw new Error(`Hyperliquid equity data HTTP ${response.status}.`)
         return response.json() as Promise<unknown>
       })
-    }
-    const pending = this.queue.then(run)
-    this.queue = pending.catch(() => undefined)
-    return pending
+    }, requestPriority())
   }
 
   async getQuote(symbol: string, force = false): Promise<Quote> {
@@ -325,20 +369,39 @@ export class HyperliquidEquities {
     const count = Math.ceil((end - start.getTime()) / width) + 2
     if (count > 5_000) throw new Error('Requested history exceeds the Hyperliquid 5,000-candle window.')
     const apiInterval = interval === '1wk' ? '1w' : interval === '1mo' ? '1M' : interval
-    const key = `hyperliquid:equities:candles:v1:${market}:${interval}:${Math.floor(start.getTime() / width)}:${requireCoverage}`
-    const result = await cache.resolveWithStaleFallback(key, 5_000, async () => {
-      const body = await this.info({ type: 'candleSnapshot', req: { coin: market, interval: apiInterval, startTime: start.getTime() - width, endTime: this.now() } }, 20 + Math.ceil(Math.min(count, 5000) / 60))
-      const candles = parseEquityCandles(body, market, interval)
-      // Never splice a stock's older prices into a perpetual's recent history.
-      if (requireCoverage && candles[0].time * 1000 > start.getTime() + width) throw new Error(`Hyperliquid history for ${market} does not cover the requested start.`)
-      return candles.filter(row => row.time * 1000 >= start.getTime() - width)
-    }, { force })
+    // One canonical series per market/interval. Ticker revisits and indicator
+    // warm-ups reuse history instead of creating a new full-range request.
+    const key = `hyperliquid:equities:candles:v2:${market}:${interval}`
+    const requestedFrom = start.getTime() - width
+    const previous = await cache.get<CandleDocument>(key, { allowStale: true })
+    const old = previous && previous.value.candles.at(-1)!.time * 1000 >= requestedFrom - width ? previous.value : undefined
+    const needsRange = Boolean(previous && (!old || old.requestedFrom > requestedFrom))
+    const ttl = width < INTERVAL_MS['1d'] ? 60_000 : 5 * 60_000
+    let loaded = false
+    const result = await cache.resolveWithStaleFallback(key, ttl, async (): Promise<CandleDocument> => {
+      loaded = true
+      const incremental = old && !force && !needsRange
+      const from = incremental ? old.candles.at(-1)!.time * 1000 - width : requestedFrom
+      const requestCount = Math.min(5_000, Math.ceil((this.now() - from) / width) + 2)
+      const body = await this.info({ type: 'candleSnapshot', req: { coin: market, interval: apiInterval, startTime: from, endTime: this.now() } }, 20 + Math.ceil(requestCount / 60))
+      const incoming = parseEquityCandles(body, market, interval)
+      const merged = [...new Map([...(old?.candles ?? []), ...incoming].map(row => [row.time, row])).values()].sort((a, b) => a.time - b.time)
+      const candles = merged.slice(-5_000)
+      const attemptedFrom = Math.min(old?.requestedFrom ?? from, from)
+      return { candles, requestedFrom: merged.length > candles.length ? Math.max(attemptedFrom, candles[0].time * 1000) : attemptedFrom }
+    }, { force: force || needsRange })
+    // Another range can join an in-flight narrow request; extend it once complete.
+    if (!loaded && !result.stale && result.value.requestedFrom > requestedFrom) return this.getCandles(symbol, start, interval, force, requireCoverage)
+    let candles = result.value.candles.filter(row => row.time * 1000 >= requestedFrom)
+    if (!candles.length) throw new Error(`No Hyperliquid candles for ${market}.`)
+    // Coverage failures are checked outside the cache loader so the known listing
+    // boundary stays cached and long stock histories fall back without re-downloading.
+    if (requireCoverage && candles[0].time * 1000 > start.getTime() + width) throw new Error(`Hyperliquid history for ${market} does not cover the requested start.`)
     const source = equityPriceSource(market)
     this.watchCandles(symbol, interval)
     observeSource({ fetchedAt: this.now() - result.ageSeconds * 1000, stale: result.stale, fromCache: result.fromCache,
       failures: [], sources: [source] })
     const latest = this.latestCandles.get(`${symbol}:${interval}`)
-    let candles = result.value
     if (latest && this.now() - latest.receivedAt <= QUOTE_MAX_AGE && latest.candle.time >= candles.at(-1)!.time) {
       candles = latest.candle.time === candles.at(-1)!.time
         ? [...candles.slice(0, -1), latest.candle] : [...candles, latest.candle]

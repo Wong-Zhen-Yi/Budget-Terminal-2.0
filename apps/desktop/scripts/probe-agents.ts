@@ -127,6 +127,9 @@ try {
   assert(start.baseInstructions.includes('MCP options tools automatically refresh')
     && start.baseInstructions.includes('topVolume.rows is ranked before response projection')
     && start.baseInstructions.includes('Do not claim market-wide leaders from one ticker'), 'Agents must use refreshed, complete options rankings and disclose scope')
+  assert(start.baseInstructions.includes('shared live Hyperliquid stream') && start.baseInstructions.includes('priceBasis')
+    && start.baseInstructions.includes('rolling 24-hour basis') && start.baseInstructions.includes('never splice stock and perp candles'),
+  'Agents must use the current Hyperliquid quote tool and preserve instrument, change-basis and history-source distinctions')
   const browserTool = agentTools.find(tool => tool.name === 'budget_terminal_browser_research')!
   assert.equal(browserTool.description, catalog.find(entry => entry.operation === 'browserResearch')!.tool.description, 'Agent browser tool retains the shared catalog description')
   for (const tool of [...catalog.map(entry => entry.tool), connectionTool]) assert(agentTools.some(entry => entry.name === tool.name), `${tool.name} must be available in Agents`)

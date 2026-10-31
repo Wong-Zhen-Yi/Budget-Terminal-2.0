@@ -12,7 +12,6 @@ interface PositionsTableProps {
   onSetShares: (ticker: string, shares: number) => void
   onSetAvgPrice: (ticker: string, avgPrice: number) => void
   onToggleWeight: (ticker: string, include: boolean) => void
-  onRemove: (ticker: string) => void
   onResearch?: (ticker: string) => void
 }
 
@@ -45,7 +44,6 @@ export function PositionsTable({
   onSetShares,
   onSetAvgPrice,
   onToggleWeight,
-  onRemove,
   onResearch,
 }: PositionsTableProps) {
   const readOnly = portfolio.readOnly
@@ -233,26 +231,6 @@ export function PositionsTable({
       },
     },
   ]
-
-  if (!readOnly) {
-    columns.push({
-      key: 'actions',
-      header: '',
-      align: 'center',
-      width: '52px',
-      cell: (row) => (
-        <button
-          type="button"
-          aria-label={`Remove ${row.ticker}`}
-          title={`Remove ${row.ticker}`}
-          onClick={() => onRemove(row.ticker)}
-          className="px-1 text-2xs text-text-dim hover:text-down"
-        >
-          ✕
-        </button>
-      ),
-    })
-  }
 
   return (
     <DataTable

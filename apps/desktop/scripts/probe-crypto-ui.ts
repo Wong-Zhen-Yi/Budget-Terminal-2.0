@@ -24,6 +24,7 @@ try {
         import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
         import { CryptoPage } from './src/pages/CryptoPage'
         import { queryKeys } from './src/api/client'
+        import { applyEquityMarketUpdate } from './src/api/equityStream'
         const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
         const check = (ok, message) => { if (!ok) throw Error(message) }
         const settle = () => new Promise(resolve => setTimeout(resolve, 200))
@@ -42,6 +43,8 @@ try {
           ] },
           news: [{ id: 'fixture', title: 'Crypto market fixture headline', time: '10:00', source: 'Fixture' }], progress: { heatmap: 'loaded', quotes: 'loaded', market: 'loaded', news: 'loaded', hyperliquid: 'loaded' }
         }
+        good.quotes.COIN = { ...good.quotes.COIN, source: 'Hyperliquid equity perp (xyz:COIN)',
+          volumeSource: 'Yahoo Finance stock volume (shares)', marketCapSource: 'Yahoo Finance', metadataAsOf: Date.now() }
         Object.assign(window.api, {
           crypto: async request => {
             while (!ready) await new Promise(resolve => setTimeout(resolve, 25))
@@ -68,7 +71,21 @@ try {
           volumeHeader.click()
           await settle()
           check(perps.querySelector('tbody tr').textContent.startsWith('BTC PERP'), 'Perpetual market sorting failed')
-          check(text().includes('60s snapshots'), 'Refresh cadence must be visible')
+          check(text().includes('live feed') && text().includes('REST fallback'), 'Live feed and fallback must be visible')
+          check(document.querySelector('[title="Yahoo Finance stock volume (shares)"]').textContent === '1M sh', 'Stock volume must show shares instead of dollars')
+          const beforeStream = client.getQueryState(queryKeys.crypto).dataUpdatedAt
+          applyEquityMarketUpdate(client, { quotes: [], candles: [], hyperliquid: { ...good.hyperliquid,
+            markets: good.hyperliquid.markets.map(row => ({ ...row, markPrice: 12345 })) } })
+          await settle()
+          check(perps.textContent.includes('$12,345'), 'Shared stream did not update the rendered perpetual table')
+          check(client.getQueryData(queryKeys.crypto).data.quotes.BTC.price === 100, 'Perp stream replaced a spot watchlist price')
+          check(client.getQueryState(queryKeys.crypto).dataUpdatedAt === beforeStream, 'Live table must preserve other sources freshness')
+          const spotSnapshot = client.getQueryData(queryKeys.crypto)
+          client.setQueryData(queryKeys.crypto, { ...spotSnapshot, data: { ...spotSnapshot.data,
+            quotes: { ...spotSnapshot.data.quotes, BTC: { ...spotSnapshot.data.quotes.BTC, source: 'Hyperliquid crypto perp' } } } })
+          await settle()
+          check(document.querySelector('.grid-cols-6').textContent.includes('BTC PERP'), 'Perpetual fallback must be labelled in the headline price tile')
+          client.setQueryData(queryKeys.crypto, spotSnapshot)
           const refresh = () => [...document.querySelectorAll('button')].find(b => b.textContent === 'Refresh').click()
           mode = 'partial'
           refresh()

@@ -14,8 +14,9 @@ const XYZ_STOCKS = [
 
 export const EQUITY_MARKETS: Readonly<Record<string, string>> = Object.freeze({
   ...Object.fromEntries(XYZ_STOCKS.map(symbol => [symbol, `xyz:${symbol}`])),
-  SOFI: 'para:SOFI',
-  VST: 'para:VST',
+  // Reviewed USD single-stock markets from para metadata, 2026-10-31.
+  ...Object.fromEntries(['SOFI', 'VST', 'COHR', 'CRDO', 'STX', 'TER', 'CIEN', 'MELI', 'SMCI', 'TTWO', 'CIFR'].map(symbol => [symbol, `para:${symbol}`])),
+  STRC: 'xyz:STRC',
 })
 
 export const EQUITY_PRICE_POLICY = 'Stock prices: Hyperliquid equity-perp marks where mapped; Yahoo elsewhere. Perp changes are 24h.'

@@ -11,6 +11,7 @@ import type {
   ChartsRelationshipRequest,
   ChartsSeriesPoint,
   IndicatorPoint,
+  Quote,
 } from '../../shared/contract.js'
 import {
   aggregateFourHourCandles,
@@ -212,6 +213,10 @@ function stats(symbol: string, candles: Candle[], currency: string, longName: st
 export async function getChartsHistory(request: ChartsHistoryRequest): Promise<ChartsServiceResult<ChartsHistoryPayload>> {
   const symbol = request.symbol.trim().toUpperCase()
   if (!symbol) throw new Error('No chart symbol was provided.')
+  let currentQuote: Quote | undefined
+  // The independently streamed header mark must not expire historical candles in 15s.
+  if (equityMarket(symbol)) void captureSources(() => getQuote(symbol, Boolean(request.force)))
+    .then(({ value }) => { currentQuote = value }).catch(() => undefined)
   const fetchInterval = INTERVALS[request.interval]
   const start = requestStart(request.range, fetchInterval)
   const raw = request.interval === '4 Hours'
@@ -240,10 +245,9 @@ export async function getChartsHistory(request: ChartsHistoryRequest): Promise<C
   }
   const chartStats = stats(symbol, candles, raw.payload.currency, raw.payload.longName)
   Object.assign(chartStats, { source: raw.payload.source, market: raw.payload.market })
-  if (equityMarket(symbol)) {
-    const quote = await getQuote(symbol, Boolean(request.force))
-    Object.assign(chartStats, { price: quote.price, change: quote.change, absChange: quote.absChange,
-      priceSource: quote.source, priceBasis: quote.priceBasis, changeBasis: quote.changeBasis })
+  if (currentQuote) {
+    Object.assign(chartStats, { price: currentQuote.price, change: currentQuote.change, absChange: currentQuote.absChange,
+      priceSource: currentQuote.source, priceBasis: currentQuote.priceBasis, changeBasis: currentQuote.changeBasis })
   }
   return {
     payload: {

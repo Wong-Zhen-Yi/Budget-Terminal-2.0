@@ -682,16 +682,16 @@ function upDownEnvelope(result: UpDownFetchResult): Envelope<UpDownPayload> {
 }
 
 const providerImplementation: MarketDataProvider = {
-  async quotes({ holdings, force }) {
-    const macroSymbols = MACRO_SYMBOLS.map((entry) => entry.symbol)
+  async quotes({ holdings, force, includeMacro = true, includeSectors = true }) {
+    const macroSymbols = includeMacro ? MACRO_SYMBOLS.map((entry) => entry.symbol) : []
     const [batch, classifications] = await Promise.all([
       getQuotes([...macroSymbols, ...holdings], force),
-      getHoldingSectors(holdings),
+      includeSectors ? getHoldingSectors(holdings) : Promise.resolve({ sectors: {} as Record<string, string>, missing: [] as string[] }),
     ])
     const quoteSource = [...new Set(Object.values(batch.quotes).map(quote => quote.priceBasis === 'equity-perp-mark' ? 'Hyperliquid equity perps' : 'Yahoo Finance'))].join(' + ') || 'market prices'
 
     const macro: QuotesPayload['macro'] = {}
-    for (const entry of MACRO_SYMBOLS) {
+    for (const entry of includeMacro ? MACRO_SYMBOLS : []) {
       const quote = batch.quotes[entry.symbol]
       if (quote) macro[entry.label] = quote
     }

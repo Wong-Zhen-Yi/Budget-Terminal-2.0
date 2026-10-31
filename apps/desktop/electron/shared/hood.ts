@@ -50,7 +50,9 @@ export interface HoodDocument { period: string; url: string }
 
 /** Read year/section membership, rather than guessing the next release's URL. */
 export function discoverHoodDocument(html: string, kind: 'monthly' | 'quarterly'): HoodDocument {
-  const heading = kind === 'monthly' ? /Monthly Metrics (?:PDF|Press Release)/i : /^Press Release$/i
+  // Quarter-end press releases contain quarterly totals. The separate monthly
+  // metrics table is the only source for monthly volumes and comparisons.
+  const heading = kind === 'monthly' ? /^Monthly Metrics PDF$/i : /^Press Release$/i
   let year = 0
   let section = false
   const documents: HoodDocument[] = []
@@ -90,8 +92,8 @@ const monthlySpecs: MetricSpec[] = [
   { id: 'equities', label: 'Equity trading volume', pattern: /^Equity\s*\(\$B\)/i, unit: 'USD', scale: 1e9, section: 'Total Trading Volumes' },
   { id: 'options', label: 'Options contracts', pattern: /^Options Contracts\s*\(M\)/i, unit: 'count', scale: 1e6, section: 'Total Trading Volumes' },
   { id: 'crypto', label: 'Crypto volume · total', pattern: /^Crypto\s*\(\$B\)/i, unit: 'USD', scale: 1e9, section: 'Total Trading Volumes' },
-  { id: 'appCrypto', label: 'Crypto volume · Robinhood App', pattern: /^Robinhood App\s*\(\$B\)/i, unit: 'USD', scale: 1e9, section: 'Total Trading Volumes' },
-  { id: 'bitstamp', label: 'Crypto volume · Bitstamp', pattern: /^Bitstamp\s*\(\$B\)/i, unit: 'USD', scale: 1e9, section: 'Total Trading Volumes' },
+  { id: 'appCrypto', label: 'Crypto volume · Robinhood App', pattern: /^Robinhood App(?:\s*\(\$B\))?/i, unit: 'USD', scale: 1e9, section: 'Total Trading Volumes' },
+  { id: 'bitstamp', label: 'Crypto volume · Bitstamp', pattern: /^Bitstamp(?:\s*\(\$B\))?/i, unit: 'USD', scale: 1e9, section: 'Total Trading Volumes' },
   { id: 'events', label: 'Event contracts', pattern: /^Event Contracts\s*\(B\)/i, unit: 'count', scale: 1e9, section: 'Total Trading Volumes' },
   { id: 'margin', label: 'Margin balances', pattern: /^Margin Book/i, unit: 'USD', scale: 1e9 },
   { id: 'cash', label: 'Cash and deposits', pattern: /^Cash and Deposits/i, unit: 'USD', scale: 1e9 },
@@ -116,7 +118,7 @@ const quarterlySpecs: MetricSpec[] = [
 
 const numberToken = /\(?\s*\$?\s*[+−–-]?\d[\d,]*(?:\.\d+)?(?:\s*[%x])?\s*\)?|\bNM\b|\bNA\b|[—–-]/gi
 
-function tableMetric(lines: string[], spec: MetricSpec, quarterly: boolean): HoodMetric {
+function tableMetric(lines: string[], spec: MetricSpec, quarterly: boolean, monthlyColumns = 0): HoodMetric {
   let section = ''
   for (const line of lines) {
     if (/Net income per share|Earnings per share/i.test(line)) section = 'eps'
@@ -134,6 +136,13 @@ function tableMetric(lines: string[], spec: MetricSpec, quarterly: boolean): Hoo
     const values = tokens.map(token => hoodNumber(token, spec.scale))
     const comparison = (token: string | undefined) => token?.replace(/^\((.*)\)$/, '-$1') ?? ''
     if (!quarterly) {
+      if (monthlyColumns >= 13) {
+        if (tokens.length !== monthlyColumns + 2) continue
+        return { id: spec.id, label: spec.label, unit: spec.unit,
+          value: values[monthlyColumns - 1], previous: values[monthlyColumns - 2],
+          yearAgo: values[monthlyColumns - 13], change: comparison(tokens[monthlyColumns]),
+          yearChange: comparison(tokens[monthlyColumns + 1]) }
+      }
       if (tokens.length < 5) continue
       return { id: spec.id, label: spec.label, unit: spec.unit, value: values[0], previous: values[1],
         change: comparison(tokens[2]), yearAgo: values[3], yearChange: comparison(tokens[4]) }
@@ -149,9 +158,13 @@ function tableMetric(lines: string[], spec: MetricSpec, quarterly: boolean): Hoo
 
 /** Text is row-preserving: tab separates PDF cells and newline separates y coordinates. */
 export function parseHoodReport(text: string, document: HoodDocument, kind: 'monthly' | 'quarterly'): HoodReport {
-  const lines = text.replace(/\u00a0/g, ' ').split(/\r?\n/).map(line => line.trim().replace(/\t(?=[A-Za-z(])/g, ' ')).filter(Boolean)
+  const lines = text.replace(/\u00a0/g, ' ').replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g, '').split(/\r?\n/).map(line => line.trim().replace(/\t(?=[A-Za-z(])/g, ' ')).filter(Boolean)
+  // The metrics PDF lists a rolling history, oldest first, followed by M/M and Y/Y.
+  // Press-release summary tables use the separate five-column layout below.
+  const monthHeader = lines.find(line => /M\/M\s+Y\/Y\s*$/i.test(line))
+  const monthlyColumns = monthHeader?.split(/\s+/).filter(token => MONTHS.some(month => month.slice(0, 3).toLowerCase() === token.toLowerCase())).length ?? 0
   const specs = kind === 'monthly' ? monthlySpecs : quarterlySpecs
-  const metrics = specs.map(spec => tableMetric(lines, spec, kind === 'quarterly'))
+  const metrics = specs.map(spec => tableMetric(lines, spec, kind === 'quarterly', monthlyColumns))
   // Releases often introduce additional KPIs only in their prose. This fallback never overwrites table precision.
   const prose = text.replace(/\s+/g, ' ')
   const resultsStart = prose.search(/(?:First|Second|Third|Fourth) Quarter Results/i)

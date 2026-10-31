@@ -192,6 +192,24 @@ async function main(): Promise<void> {
   show('create', await mutatePortfolios({ type: 'create', name: 'Broker Two' }))
 
   const created = (await readPortfolios()).portfolios.filter((p) => !p.readOnly).at(-1)!
+  const sourceBefore = (await readPortfolios()).portfolios.find((p) => p.id === id)!
+  const holdingBefore = sourceBefore.holdings.NVDA
+  await assert.rejects(mutatePortfolios({ type: 'movePositions', portfolioId: id, destinationId: id, tickers: ['NVDA'] }))
+  await assert.rejects(mutatePortfolios({ type: 'movePositions', portfolioId: id, destinationId: 'combined', tickers: ['NVDA'] }))
+  await assert.rejects(mutatePortfolios({ type: 'movePositions', portfolioId: id, destinationId: created.id, tickers: ['NVDA', 'MISSING'] }))
+  assert.deepEqual((await readPortfolios()).portfolios.find((p) => p.id === id)!.holdings.NVDA, holdingBefore)
+  await mutatePortfolios({ type: 'movePositions', portfolioId: id, destinationId: created.id, tickers: ['nvda', 'NVDA'] })
+  let moved = await readPortfolios()
+  assert(!moved.portfolios.find((p) => p.id === id)!.tickers.includes('NVDA'))
+  assert.deepEqual(moved.portfolios.find((p) => p.id === created.id)!.holdings.NVDA, holdingBefore)
+  assert.equal(moved.portfolios.find((p) => p.id === id)!.cashBalance, sourceBefore.cashBalance)
+  await mutatePortfolios({ type: 'addPosition', portfolioId: id, ticker: 'NVDA' })
+  await assert.rejects(mutatePortfolios({ type: 'movePositions', portfolioId: created.id, destinationId: id, tickers: ['NVDA'] }))
+  moved = await readPortfolios()
+  assert.deepEqual(moved.portfolios.find((p) => p.id === created.id)!.holdings.NVDA, holdingBefore)
+  await mutatePortfolios({ type: 'removePosition', portfolioId: id, ticker: 'NVDA' })
+  await mutatePortfolios({ type: 'movePositions', portfolioId: created.id, destinationId: id, tickers: ['NVDA'] })
+  console.log('PASS: atomic stock transfers preserve holdings and reject missing, duplicate and read-only destinations')
   show('rename', await mutatePortfolios({ type: 'rename', id: created.id, name: 'Roth IRA' }))
   show('setMain', await mutatePortfolios({ type: 'setMain', id: created.id }))
   show('reorder', await mutatePortfolios({ type: 'reorder', order: [created.id, id] }))

@@ -15,6 +15,8 @@ try {
   assert(startupPages('dashboard', [], []).includes('hood'))
   const index = '<h2>2025</h2><h3>Monthly Metrics PDF</h3><a href="/static-files/old">Dec</a><h2>2026</h2><h3>Monthly Metrics PDF</h3><a href="/static-files/new">Aug</a><h3>Monthly Metrics Dashboard</h3><a href="/static-files/wrong">Sep</a>'
   assert.deepEqual(discoverHoodDocument(index, 'monthly'), { period: '2026-08', url: 'https://investors.robinhood.com/static-files/new' })
+  assert.deepEqual(discoverHoodDocument('<h2>2026</h2><h3>Monthly Metrics Press Release</h3><a href="/static-files/quarter">Sep</a><h3>Monthly Metrics PDF</h3><a href="/static-files/month">Sep</a>', 'monthly'),
+    { period: '2026-09', url: 'https://investors.robinhood.com/static-files/month' }, 'Quarter-end monthly metrics must use the monthly table, not quarterly totals')
   assert.throws(() => discoverHoodDocument('<h2>2026</h2><h3>Press Release</h3><a href="https://example.com/bad">Q2</a>', 'quarterly'))
   assert.equal(hoodNumber('($8)', 1e6), -8e6)
   assert.equal(hoodNumber('—'), null)
@@ -46,6 +48,18 @@ Cash Sweep4\t$31.2\t$29.2\t+7%\t$34.1\t(9%)`, { period: '2026-08', url: 'https:/
   assert.equal(metric('crypto').yearChange, '-38%')
   assert.equal(metric('appCrypto').value! + metric('bitstamp').value!, metric('crypto').value)
   assert.equal(monthly.previousPeriod, '2026-07')
+  const rolling = parseHoodReport(`Monthly Metrics Report for September 2026
+Aug Sep Oct Nov Dec Jan Feb Mar Apr May Jun Jul Aug Sep M/M Y/Y
+Funded Customers¹\t26.7\t26.8\t27.1\t26.9\t27.0\t27.2\t27.4\t27.4\t27.6\t27.7\t28.4\t28.5\t28.6\t28.7\t-\t7%
+Total Trading Volumes
+Robinhood App\t$13.7\t$9.3\t$13.9\t$12.0\t$8.1\t$8.7\t$9.4\t$5.7\t$5.4\t$5.9\t$6.9\t$4.3\t$7.4\t$8.9\t20%\t(4%)
+Bitstamp\t$14.4\t$14.2\t$18.6\t$16.6\t$13.1\t$14.2\t$15.6\t$12.1\t$6.5\t$6.3\t$9.4\t$6.6\t$10.1\t$12.5\t24%\t(12%)`, { period: '2026-09', url: monthly.sourceUrl }, 'monthly')
+  assert.equal(rolling.metrics.find(metric => metric.id === 'customers')!.value, 28.7e6)
+  assert.equal(rolling.metrics.find(metric => metric.id === 'customers')!.previous, 28.6e6)
+  assert.equal(rolling.metrics.find(metric => metric.id === 'customers')!.yearAgo, 26.8e6)
+  assert.equal(rolling.metrics.find(metric => metric.id === 'customers')!.yearChange, '7%')
+  assert.equal(rolling.metrics.find(metric => metric.id === 'appCrypto')!.value, 8.9e9)
+  assert.equal(rolling.metrics.find(metric => metric.id === 'bitstamp')!.value, 12.5e9)
   const quarterly = parseHoodReport(`July 29, 2026
 Total net revenues\t$\t989\t$\t1,308\t32%\t$\t1,041\t26%
 Transaction-based revenues\t$\t539\t$\t776\t44%\t$\t623\t25%

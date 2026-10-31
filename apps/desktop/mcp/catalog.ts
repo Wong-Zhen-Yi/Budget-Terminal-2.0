@@ -2,7 +2,7 @@ import { responseJsonSchema, responseSchema } from './response.js'
 import Ajv from 'ajv'
 import type { Tool } from '@modelcontextprotocol/sdk/types.js'
 import schemas from './schemas.json'
-import { operations, mutationDomains, newsRefreshOperations, optionsRefreshOperations, toolName, type Operation } from './operations.js'
+import { operations, mutationDomains, newsRefreshOperations, optionsRefreshOperations, priceRefreshOperations, toolName, type Operation } from './operations.js'
 
 const validator = new Ajv({ strict: false, allErrors: true })
 export const catalog = Object.entries(operations).map(([operation, description]) => {
@@ -12,7 +12,9 @@ export const catalog = Object.entries(operations).map(([operation, description])
     ? 'Always refreshes underlying news sources before returning, even if request.force is omitted or false. Check publishedAt, cite publication dates and links, and disclose refresh failures or stale/partial fallback data; a fresh fetch does not make an older article new.'
     : optionsRefreshOperations.has(operation as Operation)
       ? 'Always refreshes underlying options data before returning, even if request.force is omitted or false. Preserve source timestamps, delayed/stale quote warnings and failed-expiration coverage. Refreshed volume is provider-reported trading volume, distinct from open interest.'
-      : 'Prefer cached data and narrow symbols/dates before forcing a refresh.'
+      : priceRefreshOperations.has(operation as Operation)
+        ? 'Always refreshes the current quote snapshot, even if request.force is omitted or false; a fresh shared Hyperliquid stream observation takes precedence over REST. Preserve instrument labels, asOf timestamps and fallback/stale warnings.'
+        : 'Prefer cached data and narrow symbols/dates before forcing a refresh.'
   const tool: Tool = {
     name: toolName(operation), description: mutation ? `${description} Supply a unique requestId for each intended edit; reuse it only when retrying exactly the same edit in the same app session. Read saved records before retrying after an app restart. For portfolios, cards, personal finance and settings, supply expectedRevision from the latest read meta.revision.` : !mutation && !['screenshot', 'browserResearch'].includes(operation) ? `${description} Returns structured data with source/freshness metadata and partial-data warnings; coverage depends on the provider. Use response.mode summary for an overview, or response.collection with offset/limit and fields for large collections. Default JSON data budget: 256 KiB; omitted data is marked explicitly. ${freshness}` : description,
     // A wrapper keeps every MCP tool's root schema an object, including mutation unions.
@@ -51,7 +53,9 @@ export function validateCall(name: string, args: unknown) {
   const { request, requestId, expectedRevision, response } = args as { request: unknown; requestId?: string; expectedRevision?: string; response?: unknown }
   // Enforce this once for external MCP clients and embedded manual/autonomous agents.
   // Copy the validated request so caller-owned arguments remain unchanged.
-  const researchRequest = newsRefreshOperations.has(entry.operation) || optionsRefreshOperations.has(entry.operation) ? { ...(request as object), force: true } : request
+  const researchRequest = entry.operation === 'quotes'
+    ? { includeMacro: false, includeSectors: false, ...(request as object), force: true }
+    : newsRefreshOperations.has(entry.operation) || optionsRefreshOperations.has(entry.operation) ? { ...(request as object), force: true } : request
   return { operation: entry.operation, request: researchRequest, requestId, expectedRevision, response: response === undefined ? undefined : responseSchema.parse(response) }
 }
 

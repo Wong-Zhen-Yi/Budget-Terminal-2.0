@@ -42,7 +42,7 @@ export function shapeResponse(result: unknown, options: ResponseOptions = {}): u
     if (!value || typeof value !== 'object' || depth > 20) return
     if (Array.isArray(value)) { for (const row of value) sources(row, depth + 1); return }
     const entries = Object.entries(value)
-    const details = Object.fromEntries(entries.filter(([key]) => /^(sources?|url|publishedAt|fetchedAt|sourcedAt|completedAt|reportedAt|period|asOf|readAt|expiresAt|freshness|warnings?|errors|coverage)$/i.test(key)))
+    const details = Object.fromEntries(entries.filter(([key]) => /^(sources?|priceSource|symbol|ticker|market|currency|priceBasis|changeBasis|fallbackReason|url|publishedAt|fetchedAt|sourcedAt|completedAt|reportedAt|period|asOf|readAt|expiresAt|freshness|warnings?|errors|coverage)$/i.test(key)))
     if (Object.keys(details).length) {
       const bytes = Buffer.byteLength(JSON.stringify(details))
       if (provenance.length < 100 && provenanceBytes + bytes <= 32_768) { provenance.push(details); provenanceBytes += bytes }

@@ -16,11 +16,19 @@ try {
       loader: 'tsx',
       contents: `
         import { createRoot } from 'react-dom/client'
-        import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+        import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query'
         import { MainWorkspace } from './src/components/chartsworkstation/MainWorkspace'
         import { useChartsStore } from './src/stores/charts'
         import { applyEquityMarketUpdate } from './src/api/equityStream'
         import { queryKeys } from './src/api/client'
+        import { StocksPage } from './src/pages/StocksPage'
+        import { useStocksPage } from './src/stores/stocks'
+        import { emptyStocksPayload, buildStocksStats } from './electron/shared/stocks'
+        import { PortfolioChartsStatus } from './src/components/chrome/PortfolioChartsStatus'
+        import { useDashboard } from './src/stores/dashboard'
+        import { useDataHealth } from './src/stores/dataHealth'
+        import { manageQueryMemory } from './src/api/queryMemory'
+        import { useReloadAll } from './src/api/queries'
         useChartsStore.getState().setSymbol('AAPL')
         const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
         const check = (value, message) => { if (!value) throw Error(message) }
@@ -35,12 +43,16 @@ try {
           low: 99 + index, close: 101 + index, volume: 1000 + index,
         }))
         const envelope = data => ({ data, meta: { source: 'fixture', freshness: 'fresh', fetchedAt: Date.now() }, errors: [] })
-        window.api.chartsHistory = async request => envelope({
+        const historyRequests = []
+        window.api.chartsHistory = async request => {
+          historyRequests.push(request)
+          return envelope({
           symbol: request.symbol, intervalLabel: request.interval, rangeLabel: request.range,
           interval: '1d', candles, stats: { symbol: request.symbol, price: 180, change: 1, absChange: 1, open: 179, high: 181, low: 178, close: 180, volume: 1079,
-            currency: 'USD', longName: 'Synthetic Apple equity perp', source: 'Hyperliquid equity perp (xyz:AAPL)', market: 'xyz:AAPL', priceSource: 'Hyperliquid equity perp (xyz:AAPL)', priceBasis: 'equity-perp-mark', changeBasis: '24h' },
+            currency: 'USD', longName: 'Synthetic equity perp', source: 'Hyperliquid equity perp (xyz:' + request.symbol + ')', market: 'xyz:' + request.symbol, priceSource: 'Hyperliquid equity perp (xyz:' + request.symbol + ')', priceBasis: 'equity-perp-mark', changeBasis: '24h' },
           indicators: { ma50: candles.map(row => ({ time: row.time, value: row.close - 24.5 })), ma200: [], rsi: [], rsiMa: [] },
-        })
+          })
+        }
         window.api.portfolio = async () => envelope({ portfolios: [], activeId: '', mainId: '' })
         window.api.onPortfolioChanged = () => () => {}
         window.runProbe = async () => {
@@ -78,8 +90,130 @@ try {
           check(document.body.innerText.includes('Hyperliquid equity perp (xyz:AAPL)'), 'Chart and mark sources must be visible')
           check(document.body.innerText.includes('250.00'), 'Streamed mark must update the rendered header')
           check(client.getQueryData(key).data.candles.at(-1).close === 181, 'Actual streamed candle must update separately from the mark')
+          useChartsStore.getState().setSymbol('NVDA'); await settle()
+          check(historyRequests.filter(request => request.symbol === 'NVDA').length === 1, 'New ticker requests history once')
+          useChartsStore.getState().setSymbol('AAPL'); await settle()
+          check(historyRequests.filter(request => request.symbol === 'AAPL').length === 1, 'Returning to AAPL must reuse its prepared chart')
+          check(!document.body.innerText.includes('Loading AAPL'), 'Cached ticker switch must not wait on another load')
+          check(client.getQueryData(key).data.stats.price === 250, 'Switching back retains the streamed mark')
           window.finishProbe = () => app.unmount()
-          return 'PASS: real Charts canvas, SMA, persistence, styles, replay, focus, labelled Hyperliquid source and streamed mark/candle updates'
+          return 'PASS: real Charts canvas, SMA, persistence, styles, replay, focus, labelled Hyperliquid source, streamed updates and cached ticker switches'
+        }
+        window.runStocksProbe = async () => {
+          const calls = []
+          window.api.stocks = async request => {
+            calls.push(request)
+            const stock = emptyStocksPayload(request.symbol)
+            return envelope({ ...stock, generatedAt: Date.now(), chart: { candles, mfi: [], stats: buildStocksStats(request.symbol, candles) } })
+          }
+          useStocksPage.getState().setSymbol('AAPL')
+          const app = createRoot(document.getElementById('root'))
+          app.render(<QueryClientProvider client={client}><StocksPage onStatusChange={() => {}} onNavigate={() => {}} /></QueryClientProvider>)
+          await settle(); await settle()
+          const submit = async symbol => {
+            const input = document.querySelector('input[aria-label="Stock ticker"]')
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, symbol)
+            input.dispatchEvent(new Event('input', { bubbles: true })); await settle()
+            input.form.requestSubmit(); await settle()
+          }
+          check(document.querySelectorAll('canvas').length > 0, 'Stocks chart canvas must render')
+          await submit('NVDA')
+          check(calls.filter(request => request.symbol === 'NVDA').length === 1, 'Stocks ticker switch must load exactly once')
+          check(calls.every(request => !request.force), 'Changing Stocks tickers must preserve service caches')
+          await submit('AAPL')
+          check(calls.filter(request => request.symbol === 'AAPL').length === 1, 'Stocks revisit must reuse its cached query')
+          check(document.body.innerText.includes('Loaded AAPL.'), 'Stocks revisit must be ready')
+          await submit('AAPL')
+          check(calls.at(-1).force === true, 'Explicit same-ticker reload must still refresh data')
+          window.finishProbe = () => app.unmount()
+          return 'PASS: Stocks canvas, single cached ticker requests, immediate revisits and explicit refresh'
+        }
+        window.runPortfolioChartsProbe = async () => {
+          const prepared = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+          const book = (id, tickers, readOnly = false) => ({ id, name: id, tickers, holdings: {}, readOnly, options: [] })
+          let books = [book('main', ['AAPL']), book('inactive', ['NVDA']), book('combined', ['AAPL', 'NVDA'], true)]
+          window.api.portfolio = async () => envelope({ portfolios: books, activeId: 'main', mainId: 'main' })
+          const saveBooks = () => prepared.setQueryData(queryKeys.portfolio, envelope({ portfolios: books, activeId: 'main', mainId: 'main' }))
+          saveBooks()
+          useDataHealth.getState().setStartup({ durationMs: 0, planned: 0, timings: [] })
+          useDashboard.getState().setTimeframe('1 Day')
+          useChartsStore.setState({ interval: '1 Day', range: '5Y', multiInterval: '1D' })
+          const calls = []
+          let failMsft = false
+          const originalHistory = window.api.chartsHistory
+          window.api.chartsHistory = async request => { calls.push(['history', request]); return originalHistory(request) }
+          window.api.chart = async request => {
+            calls.push(['dashboard', request])
+            return envelope({ symbol: request.symbol, timeframe: request.timeframe, interval: '1d', candles,
+              indicators: { ma200: [], rsi: [], rsiMa: [] }, stats: buildStocksStats(request.symbol, candles) })
+          }
+          window.api.stocks = async request => {
+            calls.push(['stocks', request])
+            if (failMsft && request.symbol === 'MSFT') return { ...envelope(null), meta: { source: 'fixture', freshness: 'failed', fetchedAt: Date.now(), failureReason: 'Fixture provider outage' } }
+            return envelope({ ...emptyStocksPayload(request.symbol), generatedAt: Date.now(),
+              chart: { candles, mfi: [], stats: buildStocksStats(request.symbol, candles) } })
+          }
+          const timers = new Map()
+          const setIntervalOriginal = window.setInterval
+          const clearIntervalOriginal = window.clearInterval
+          window.setInterval = (callback, delay, ...args) => {
+            const id = setIntervalOriginal(callback, delay, ...args)
+            if (delay >= 60000) timers.set(id, callback)
+            return id
+          }
+          window.clearInterval = id => { timers.delete(id); clearIntervalOriginal(id) }
+          const app = createRoot(document.getElementById('root'))
+          let reload
+          function RefreshOwner() { reload = useReloadAll(); return null }
+          const render = (chart = false) => app.render(<QueryClientProvider client={prepared}><div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+            <RefreshOwner />
+            <div style={{ padding: 10 }}><PortfolioChartsStatus enabled /></div>
+            {chart ? <MainWorkspace onStatus={() => {}} /> : null}
+          </div></QueryClientProvider>)
+          const memory = manageQueryMemory(prepared, { maxBytes: 1, maxQueries: 0 })
+          const status = () => document.querySelector('[aria-label="Portfolio chart readiness"]')
+          try {
+            render(); await settle(); await settle()
+            check(status()?.textContent === 'Portfolio charts 8/8 ready', 'Every book must prepare holding charts: ' + status()?.textContent)
+            check(calls.length === 8 && calls.every(([, request]) => request.background && !request.force), 'Duplicate holdings must share paced background requests')
+            books = [...books, book('new', ['MSFT'])]; saveBooks(); await settle()
+            check(status()?.textContent === 'Portfolio charts 12/12 ready', 'A new holding must prepare without selecting its page')
+            useChartsStore.getState().setInterval('1 Hour'); await settle()
+            check(calls.filter(([kind, request]) => kind === 'history' && request.interval === '1 Hour').length === 3, 'New interval must prepare every holding')
+            useDashboard.getState().setTimeframe('1 Hour'); await settle()
+            check(calls.filter(([kind, request]) => kind === 'dashboard' && request.timeframe === '1 Hour').length === 3, 'New Dashboard timeframe must prepare every holding')
+            await memory.sweep()
+            check(prepared.getQueryData(queryKeys.stocks('NVDA')), 'Memory pressure must retain an inactive holding chart')
+            const beforeRefresh = calls.length
+            focusManager.setFocused(false)
+            for (const callback of [...timers.values()]) callback()
+            await settle()
+            check(calls.length > beforeRefresh, 'Holding charts must refresh while the window is unfocused')
+            focusManager.setFocused(true)
+            const beforeReload = calls.length
+            await reload(); await settle()
+            check(calls.length > beforeReload && calls.slice(beforeReload).every(([, request]) => request.force), 'Explicit Reload must still bypass provider caches for prepared holdings')
+            const previous = prepared.getQueryData(queryKeys.stocks('MSFT'))
+            failMsft = true
+            await prepared.refetchQueries({ queryKey: queryKeys.stocks('MSFT'), exact: true }); await settle()
+            check(prepared.getQueryData(queryKeys.stocks('MSFT')) === previous, 'A provider outage must retain the last usable holding chart')
+            check(status()?.textContent.includes('1 failed') && status()?.title.includes('Fixture provider outage'), 'Holding failures must stay visible')
+            check(useDataHealth.getState().records['stocks:Portfolio MSFT · Stocks']?.failureReason.includes('Fixture provider outage'), 'Settings must retain the holding failure detail')
+            failMsft = false
+            await prepared.refetchQueries({ queryKey: queryKeys.stocks('MSFT'), exact: true }); await settle()
+            check(status()?.textContent === 'Portfolio charts 12/12 ready', 'Recovered holding must become ready again')
+            books = books.map(entry => ({ ...entry, tickers: entry.tickers.filter(symbol => symbol !== 'NVDA') })); saveBooks(); await settle()
+            await memory.sweep()
+            check(status()?.textContent === 'Portfolio charts 8/8 ready', 'Removed holdings must stop participating')
+            check(!prepared.getQueryData(queryKeys.stocks('NVDA')), 'Removed holding queries must be releasable under memory pressure')
+            const historyBeforeVisit = calls.filter(([kind]) => kind === 'history').length
+            useChartsStore.getState().setSymbol('MSFT'); render(true); await settle()
+            check(calls.filter(([kind]) => kind === 'history').length === historyBeforeVisit, 'Opening a prepared holding must not start another history load')
+            check(document.querySelectorAll('canvas').length > 0 && document.body.innerText.includes('MSFT'), 'Prepared holding must render its chart immediately')
+            window.finishProbe = () => { app.unmount(); memory.stop(); prepared.clear() }
+            return 'PASS: all-portfolio chart preparation, deduplication, new/removed holdings, timeframe changes, memory retention, unfocused refresh, outage recovery and ready first visit'
+          } catch (error) { app.unmount(); memory.stop(); prepared.clear(); throw error }
+          finally { window.setInterval = setIntervalOriginal; window.clearInterval = clearIntervalOriginal; focusManager.setFocused(true) }
         }
       `,
     },
@@ -103,6 +237,13 @@ try {
         console.log(await window.webContents.executeJavaScript('window.runProbe()'))
         await window.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
         require('node:fs').writeFileSync(${JSON.stringify(join(root, 'out/hyperliquid-charts-smoke.png'))}, (await window.webContents.capturePage()).toPNG())
+        await window.webContents.executeJavaScript('window.finishProbe()')
+        console.log(await window.webContents.executeJavaScript('window.runStocksProbe()'))
+        require('node:fs').writeFileSync(${JSON.stringify(join(root, 'out/stocks-ticker-switches-smoke.png'))}, (await window.webContents.capturePage()).toPNG())
+        await window.webContents.executeJavaScript('window.finishProbe()')
+        console.log(await window.webContents.executeJavaScript('window.runPortfolioChartsProbe()'))
+        await window.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+        require('node:fs').writeFileSync(${JSON.stringify(join(root, 'out/portfolio-charts-ready-smoke.png'))}, (await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG())
         await window.webContents.executeJavaScript('window.finishProbe()')
         app.exit(0)
       } catch (error) { console.error(error); app.exit(1) }

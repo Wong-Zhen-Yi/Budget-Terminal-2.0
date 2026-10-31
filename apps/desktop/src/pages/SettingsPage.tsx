@@ -16,6 +16,7 @@ import { PrivacyPanel } from '@/components/settings/PrivacyPanel'
 import { SettingsSection } from '@/components/settings/SettingsSection'
 import { ShortcutsPanel } from '@/components/settings/ShortcutsPanel'
 import { UserDataPanel } from '@/components/settings/UserDataPanel'
+import { ApiUsagePanel } from '@/components/settings/ApiUsagePanel'
 import { McpPanel } from '@/components/settings/McpPanel'
 
 const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
@@ -131,6 +132,7 @@ export function SettingsPage({
         </header>
 
         <SettingsSection title="Data" hint="Backups, maintenance and observed feed health.">
+          <ApiUsagePanel />
           <McpPanel />
           <PageLoadOrderPanel />
           <UserDataPanel onRun={onRunMaintenance} busy={busy} sourcePath={holdingsPath} lastBackupAt={settings.lastBackupAt} automaticBackup={settings.automaticBackup} />
@@ -182,3 +184,4 @@ export function SettingsPage({
     </div>
   )
 }
+

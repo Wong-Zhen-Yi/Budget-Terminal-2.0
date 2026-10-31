@@ -7,6 +7,7 @@ import { sofiBookRatios, type SofiPayload } from '@shared/sofi'
 import { markBmnrPayload } from '@shared/bmnr'
 import type { SemiconductorsPayload } from '@shared/semiconductors'
 import { equityPriceSource } from '@shared/equityMarkets'
+import { markCryptoPerpetuals } from '@shared/hyperliquid'
 
 /** Update the live mark without pretending the underlying history is a perp series. */
 function stockMark(stock: StocksPayload, quote: Quote): StocksPayload {
@@ -49,6 +50,7 @@ export function applyEquityMarketUpdate(client: QueryClient, update: EquityMarke
         changed = true
       }
       if (changed) data = { ...payload, quotes: next }
+      if (update.hyperliquid) data = markCryptoPerpetuals(data as CryptoPayload, update.hyperliquid)
     } else if (root === 'marketCap' || root === 'priceScreen') {
       const payload = data as MarketCapPayload | PriceScreenPayload
       let changed = false

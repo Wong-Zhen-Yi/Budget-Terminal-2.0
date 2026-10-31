@@ -60,6 +60,8 @@ const bundle = await build({
         check(agentPanel.querySelector('.agents-embedded textarea'), 'Agents must occupy the center pane')
         check(agentPanel.scrollWidth <= agentPanel.clientWidth, 'Embedded Agents horizontal overflow')
         check(agentPanel.querySelector('.agents-composer').getBoundingClientRect().bottom <= center.bottom + 1, 'Keep the Agents composer inside its panel')
+        const composer = agentPanel.querySelector('.agents-composer').getBoundingClientRect()
+        check(Math.abs(composer.left - center.left - 9) <= 1 && Math.abs(center.right - composer.right - 9) <= 1, 'Agents composer must fill the center pane with equal margins')
         check(rightPanel.querySelector('section h2').textContent === 'Portfolio Heatmap', 'Portfolio heatmap must occupy the right pane')
         check(rightPanel.scrollWidth <= rightPanel.clientWidth, 'Heatmap panel horizontal overflow')
         check(rightPanel.querySelector('.portfolio-heatmap-map').getBoundingClientRect().height >= 100, 'Heatmap tiles must retain usable height')
@@ -287,7 +289,7 @@ await writeFile(join(directory, 'main.cjs'), `
       window.setSize(1680, 900)
       await new Promise(resolve => setTimeout(resolve, 150))
       console.log(await window.webContents.executeJavaScript('window.runDashboard2Probe()'))
-      for (const width of [1680, 1440, 1280]) {
+      for (const width of [2560, 1680, 1440, 1280]) {
         window.setSize(width, 900)
         await new Promise(resolve => setTimeout(resolve, 150))
         console.log(await window.webContents.executeJavaScript('window.checkDashboardLayout()'))

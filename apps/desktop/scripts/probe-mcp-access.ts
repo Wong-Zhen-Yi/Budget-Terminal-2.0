@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { mock } from 'node:test'
 import { catalog, validateCall } from '../mcp/catalog.js'
-import { newsRefreshOperations, optionsRefreshOperations, toolName, type Operation } from '../mcp/operations.js'
+import { newsRefreshOperations, optionsRefreshOperations, priceRefreshOperations, toolName, type Operation } from '../mcp/operations.js'
 import { McpDispatcher } from '../electron/mcp/dispatcher.js'
 import { ok, failed } from '../electron/shared/envelope.js'
 import { checkRecordRevision, mapMcpWork, mcpExecution, recordRevision } from '../electron/services/mcpContext.js'
@@ -36,8 +36,9 @@ try {
     forexNews: { pair: 'EUR/USD' },
     options: { symbol: 'AAPL' }, optionsChain: { symbol: 'AAPL' }, optionsExpirations: { symbol: 'AAPL' },
     optionQuotes: { positions: [{ rowId: 'option-fixture', ticker: 'AAPL', expiry: '2099-01-16', strike: 100, strategy: 'Calls' }] },
+    quotes: { holdings: ['AAPL', 'NVDA'] },
   }
-  for (const operation of [...newsRefreshOperations, ...optionsRefreshOperations]) {
+  for (const operation of [...newsRefreshOperations, ...optionsRefreshOperations, ...priceRefreshOperations]) {
     const original = routes.get(operation)!
     let refreshes = 0
     routes.set(operation, request => {
@@ -52,11 +53,17 @@ try {
         assert.equal(request.force, force, 'Freshness enforcement must not mutate caller-owned arguments')
       }
     }
-    assert.equal(refreshes, 6, 'Every news/options call refreshes, including repeated requests in one session')
+    assert.equal(refreshes, 6, 'Every current research read refreshes, including repeated requests in one session')
     const description = catalog.find(entry => entry.operation === operation)!.tool.description!
     assert(description.includes('Always refreshes') && !description.includes('Prefer cached data'))
     routes.set(operation, original)
   }
+  const compactRequest = { holdings: ['AAPL'], force: false }
+  assert.deepEqual(validateCall(toolName('quotes'), { request: compactRequest }).request,
+    { holdings: ['AAPL'], force: true, includeMacro: false, includeSectors: false })
+  assert.deepEqual(compactRequest, { holdings: ['AAPL'], force: false }, 'MCP quote defaults must not mutate the caller')
+  assert.deepEqual(validateCall(toolName('quotes'), { request: { holdings: ['AAPL'], includeMacro: true, includeSectors: true } }).request,
+    { holdings: ['AAPL'], force: true, includeMacro: true, includeSectors: true }, 'Explicit macro/reference opt-ins must remain available')
   await access.invoke('budget_terminal_portfolio', { request: {} })
   for (const source of ['external', 'agent'] as const) {
     await assert.rejects(access.invoke(name, args(`blocked-${source}`), source), /read only/)
@@ -212,6 +219,15 @@ try {
   const news = { data: { articles: [{ title: 'Earlier event', source: 'Fixture publisher', url: 'https://example.com/story', publishedAt: 123 }] }, meta: { freshness: 'fresh', fetchedAt: 456 }, errors: [] }
   const projectedNews = shapeResponse(news, { collection: 'articles', fields: ['title'] }) as { response: { provenance: unknown[] } }
   assert(projectedNews.response.provenance.some(row => (row as { publishedAt?: number }).publishedAt === 123), 'News publication dates must survive projection separately from retrieval time')
+  const perp = { symbol: 'NVDA', market: 'xyz:NVDA', price: 120, currency: 'USD', source: 'Hyperliquid equity perp (xyz:NVDA)',
+    priceSource: 'Hyperliquid equity perp (xyz:NVDA)', priceBasis: 'equity-perp-mark', changeBasis: '24h', asOf: 123,
+    fallbackReason: 'Fixture fallback explanation' }
+  for (const options of [{ fields: ['price'] }, { mode: 'summary' as const }, { fields: ['missing'] }]) {
+    const result = shapeResponse(ok(perp, 'fixture'), options) as { response: { provenance: typeof perp[] } }
+    const identity = result.response.provenance.find(row => row.market === 'xyz:NVDA')!
+    assert.equal(identity.symbol, 'NVDA')
+    for (const field of ['currency', 'source', 'priceSource', 'priceBasis', 'changeBasis', 'asOf', 'fallbackReason'] as const) assert.equal(identity[field], perp[field], `Projection dropped the ${field} instrument label`)
+  }
   const bounded = shapeResponse(research, { maxBytes: 4096 }) as { data: { omitted: boolean } }
   assert.equal(bounded.data.omitted, true)
   const summary = shapeResponse(research, { mode: 'summary' }) as typeof research

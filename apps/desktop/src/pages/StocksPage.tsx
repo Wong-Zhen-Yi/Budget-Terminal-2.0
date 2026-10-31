@@ -111,13 +111,16 @@ export function StocksPage({
     setDraft(next)
     setSymbol(next)
     setNotice(null)
+    // A different ticker has its own query and reusable history. Explicitly
+    // reloading the same ticker still bypasses caches, like the Refresh action.
+    if (next !== symbol) return
     setManualLoading(true)
     try {
       await refresh(next)
     } finally {
       setManualLoading(false)
     }
-  }, [draft, refresh, setSymbol])
+  }, [draft, refresh, setSymbol, symbol])
 
   const exportForLlm = useCallback(async () => {
     if (!payload?.chart.candles.length) {

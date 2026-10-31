@@ -54,7 +54,7 @@ export function MainWorkspace({ onStatus }: { onStatus: (meta: EnvelopeMeta | un
   const effectiveSymbol = payload?.symbol ?? store.symbol
   const effectiveInterval = payload?.intervalLabel ?? store.interval
   const context = `${effectiveSymbol}|${effectiveInterval}`
-  const shown = useMemo(() => payload?.candles.slice(0, replayLimit ?? undefined) ?? [], [payload, replayLimit])
+  const shown = useMemo(() => payload?.candles.slice(0, replayLimit ?? undefined) ?? [], [payload?.candles, replayLimit])
   const supportResistance = useMemo(() => calculateSupportResistance(shown), [shown])
   const manualFib = [...(store.drawingsByContext[context] ?? [])].reverse().find((drawing) => drawing.type === 'fib' && drawing.anchors.length === 2)
   const fibonacci = useMemo(() => calculateFibonacci(
@@ -86,7 +86,7 @@ export function MainWorkspace({ onStatus }: { onStatus: (meta: EnvelopeMeta | un
       return next
     }), speed.delay)
     return () => window.clearInterval(timer)
-  }, [payload, playing, replayLimit, store.playbackSpeed])
+  }, [payload?.candles, playing, replayLimit, store.playbackSpeed])
 
   const load = () => {
     const symbol = draft.trim().toUpperCase() || 'SPY'

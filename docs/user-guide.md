@@ -12,6 +12,12 @@ switching uses the prepared content. Startup progress and provider failures rema
 visible; failed pages are not treated as ready. Background work yields to foreground
 requests and reuses fresh cached results.
 
+After startup completes, prepared remote pages refresh in the background at their
+source expiry, including pages you have not visited. Failed refreshes retry after
+one minute while retaining usable content and visible failure details. Local data
+continues to use change events. Live price headers have their own timestamps and
+do not shorten the freshness of chart history or company statements.
+
 Remote page snapshots are saved incrementally in the local Electron profile, even
 while Browser or Agents polling continues. Startup restores them before warming
 **every** implemented page. Fresh snapshots do not need another provider request;
@@ -29,10 +35,12 @@ Agent conversations/images and local financial/settings records are excluded fro
 the remote snapshot cache and remain managed by their separate private stores.
 
 Settings > Data Health shows startup task timings and the latest observed feed
-results. Up to 200 panel records persist in the local renderer profile; older
+results, including snapshots loaded before a page is visited. Up to 500 panel
+records persist in the local renderer profile; older
 records are marked **Previous session** and do not count as current health. Clear
-removes that history. This report describes observed startup and subsequent feed
-results, not continuous monitoring of every feed.
+removes that history. The report retains source retrieval times; freshness follows
+each dependency's expiry, so long-lived classifications do not make current quotes
+appear stale. Real refresh failures and missing coverage remain visible.
 
 Valuation, ETF and Portfolio Metrics show source, freshness, snapshot time and data
 issues beside their results. ETF and portfolio history also show coverage. Snapshot

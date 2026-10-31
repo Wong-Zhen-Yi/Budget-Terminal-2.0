@@ -16,6 +16,8 @@ export class StartupLoadError extends Error {
   }
 }
 
+export type StartupSnapshotObserver = (queryKey: QueryKey, result: unknown, error?: unknown) => void
+
 function startupFailureReason(result: unknown, fallback: string): string {
   const envelope = result as { meta?: { failureReason?: string }; errors?: Array<{ reason?: string }> } | null
   return envelope?.meta?.failureReason || (Array.isArray(envelope?.errors)
@@ -31,13 +33,20 @@ export function assertStartupReady(result: unknown): void {
 }
 
 /** Fetch dependent snapshots before classifying the complete initial page. */
-export function warmStartupSnapshot<T>(client: QueryClient, options: Parameters<typeof warmQuery<T>>[1]): Promise<T> {
+export async function warmStartupSnapshot<T>(client: QueryClient, options: Parameters<typeof warmQuery<T>>[1], observe?: StartupSnapshotObserver): Promise<T> {
   pinStartupQuery(client, options.queryKey)
-  return warmQuery(client, { ...options, gcTime: Infinity }, STARTUP_TIMEOUT_MS)
+  try {
+    const result = await warmQuery(client, { ...options, gcTime: Infinity }, STARTUP_TIMEOUT_MS)
+    observe?.(options.queryKey, result)
+    return result
+  } catch (error) {
+    observe?.(options.queryKey, client.getQueryData(options.queryKey), error)
+    throw error
+  }
 }
 
-export async function warmStartupQuery<T>(client: QueryClient, options: Parameters<typeof warmQuery<T>>[1]): Promise<T> {
-  const result = await warmStartupSnapshot(client, options)
+export async function warmStartupQuery<T>(client: QueryClient, options: Parameters<typeof warmQuery<T>>[1], observe?: StartupSnapshotObserver): Promise<T> {
+  const result = await warmStartupSnapshot(client, options, observe)
   assertStartupReady(result)
   return result
 }

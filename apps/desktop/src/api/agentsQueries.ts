@@ -5,20 +5,20 @@ import { api, queryKeys } from './client'
 import { agentChartSymbols } from '@/lib/agentChartReferences'
 import { agentHistoryCandles } from '@/lib/agentChartHistory'
 import { queryFreshness } from './queryPersistence'
-import { assertStartupReady, StartupLoadError, warmStartupQuery, warmStartupSnapshot } from './warmQueue'
+import { assertStartupReady, StartupLoadError, warmStartupQuery, warmStartupSnapshot, type StartupSnapshotObserver } from './warmQueue'
 
 export const loadAgents = () => api.agentsStatus()
 
 /** Warm all charts in the restored conversation, even if Agents has not been visited. */
-export async function warmAgentWorkspace(client: QueryClient, backgroundOrder?: number) {
-  const result = await warmStartupSnapshot(client, { queryKey: queryKeys.agents, queryFn: loadAgents, staleTime: Infinity })
+export async function warmAgentWorkspace(client: QueryClient, backgroundOrder?: number, observe?: StartupSnapshotObserver) {
+  const result = await warmStartupSnapshot(client, { queryKey: queryKeys.agents, queryFn: loadAgents, staleTime: Infinity }, observe)
   const charts = await Promise.allSettled(agentChartSymbols(result.data.messages).map(async symbol => {
     const queryKey = queryKeys.chartsHistory(symbol, '1 Day', 'Max')
     try {
       const history = await warmStartupQuery(client, {
         queryKey, staleTime: queryFreshness(queryKey),
         queryFn: () => api.chartsHistory({ symbol, interval: '1 Day', range: 'Max', background: true, backgroundOrder }),
-      })
+      }, observe)
       const count = agentHistoryCandles(history.data.candles).length
       if (!count) throw new StartupLoadError('No usable OHLC history was returned.', 'failed')
       if (count < history.data.candles.length) throw new StartupLoadError('Invalid or duplicate bars were excluded.', 'degraded')

@@ -9,6 +9,7 @@
     "npm": ">=10.9.8"
   },
   "scripts": {
+    "probe:api-usage-ui": "tsx scripts/probe-api-usage-ui.ts",
     "probe:hyperliquid": "tsx scripts/probe-hyperliquid-equities.ts",
     "probe:notifications": "tsx scripts/probe-notifications.ts",
     "probe:notifications-native": "tsx scripts/probe-notifications-native.ts",

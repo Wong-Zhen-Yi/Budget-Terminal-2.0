@@ -271,7 +271,7 @@
 .agents-embedded .agents-message { margin-bottom: 18px; }
 .agents-embedded .agents-message.user { padding: 10px; }
 .agents-embedded .agents-prose { font-size: 13px; }
-.agents-embedded .agents-composer { width: calc(100% - 16px); margin: 0 8px 8px; padding: 8px; }
+.agents-embedded .agents-composer { width: calc(100% - 16px); max-width: none; margin: 0 8px 8px; padding: 8px; }
 .agents-embedded .agents-composer-toolbar { gap: 8px; }
 .agents-embedded .agents-composer-toolbar > span { display: none; }
 .agents-embedded .agents-error { padding: 8px; }

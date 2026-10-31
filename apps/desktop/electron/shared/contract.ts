@@ -106,6 +106,8 @@ export interface QuotesPayload {
 }
 
 export interface EquityMarketUpdate {
+  /** Separate venue data: never replace CoinGecko spot prices or global metrics. */
+  hyperliquid?: HyperliquidPayload
   quotes: Quote[]
   candles: Array<{ symbol: string; market: string; interval: string; candle: Candle }>
 }
@@ -162,6 +164,7 @@ export type PortfolioMutation =
   | { type: 'delete'; id: string }
   | { type: 'reorder'; order: string[] }
   | { type: 'addPosition'; portfolioId: string; ticker: string }
+  | { type: 'movePositions'; portfolioId: string; destinationId: string; tickers: string[] }
   | { type: 'removePosition'; portfolioId: string; ticker: string }
   | {
       type: 'setPosition'
@@ -2125,6 +2128,9 @@ export interface EarningsExportInput {
  * genuinely have come from different places.
  */
 export interface CryptoQuote {
+  volumeSource?: string
+  marketCapSource?: string
+  metadataAsOf?: number
   label: string
   symbol: string
   name: string
@@ -3596,6 +3602,10 @@ export const CHANNELS = {
 
 export interface QuotesRequest extends BackgroundRequest {
   holdings: string[]
+  /** Desktop defaults to true; compact MCP price reads default to false. */
+  includeMacro?: boolean
+  /** Optional company classifications may require slower stock reference data. */
+  includeSectors?: boolean
   force?: boolean
 }
 export interface ChartRequest extends BackgroundRequest {

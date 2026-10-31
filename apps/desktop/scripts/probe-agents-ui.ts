@@ -459,6 +459,26 @@ try {
         await new Promise(resolve => setTimeout(resolve, 200))
         const embedded = await window.webContents.executeJavaScript('({ width: document.documentElement.scrollWidth, viewport: innerWidth, charts: document.querySelectorAll(".agents-embedded .agents-pie").length, candles: document.querySelectorAll(".agents-embedded .agents-candlestick").length })')
         if (embedded.width > embedded.viewport || embedded.charts !== 2 || embedded.candles !== 3) throw Error('Embedded chart layout failed: ' + JSON.stringify(embedded))
+        for (const [width, height, zoom] of [[420, 520, 1], [1380, 900, 1], [1800, 900, 1], [1380, 900, 0.75], [900, 700, 1.25]]) {
+          window.setSize(width, height)
+          window.webContents.setZoomFactor(zoom)
+          await new Promise(resolve => setTimeout(resolve, 150))
+          const sizing = await window.webContents.executeJavaScript(\`(() => {
+            const chat = document.querySelector('.agents-chat').getBoundingClientRect()
+            const composer = document.querySelector('.agents-composer').getBoundingClientRect()
+            const send = document.querySelector('.agents-send').getBoundingClientRect()
+            const transcript = document.querySelector('.agents-transcript').getBoundingClientRect()
+            return { left: composer.left - chat.left, right: chat.right - composer.right, bottom: composer.bottom, height: innerHeight,
+              transcriptBottom: transcript.bottom, composerTop: composer.top, sendRight: send.right, composerRight: composer.right,
+              width: document.documentElement.scrollWidth, viewport: innerWidth }
+          })()\`)
+          if (Math.abs(sizing.left - 8) > 1 || Math.abs(sizing.right - 8) > 1 || sizing.bottom > sizing.height || sizing.transcriptBottom > sizing.composerTop + 1 || sizing.sendRight > sizing.composerRight || sizing.width > sizing.viewport) {
+            throw Error('Embedded composer must fill its pane and stay visible at ' + [width, height, zoom] + ': ' + JSON.stringify(sizing))
+          }
+        }
+        writeFileSync(${JSON.stringify(resolve(root, '../../output/playwright/agents-composer-embedded.png'))}, (await window.webContents.capturePage()).toPNG())
+        console.log('PASS: embedded composer fills narrow and wide panes at normal, reduced and enlarged zoom')
+        window.webContents.setZoomFactor(1)
         await window.webContents.executeJavaScript('window.setEmbedded(false)')
         window.setSize(1300, 900)
         await new Promise(resolve => setTimeout(resolve, 200))

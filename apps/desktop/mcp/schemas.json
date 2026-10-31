@@ -258,6 +258,14 @@
               "type": "string"
             }
           },
+          "includeMacro": {
+            "type": "boolean",
+            "description": "Desktop defaults to true; compact MCP price reads default to false."
+          },
+          "includeSectors": {
+            "type": "boolean",
+            "description": "Optional company classifications may require slower stock reference data."
+          },
           "force": {
             "type": "boolean"
           }
@@ -1136,6 +1144,34 @@
               "type",
               "portfolioId",
               "ticker"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "movePositions"
+              },
+              "portfolioId": {
+                "type": "string"
+              },
+              "destinationId": {
+                "type": "string"
+              },
+              "tickers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "type",
+              "portfolioId",
+              "destinationId",
+              "tickers"
             ],
             "additionalProperties": false
           },

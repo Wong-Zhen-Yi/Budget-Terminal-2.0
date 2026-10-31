@@ -87,6 +87,23 @@ try {
   assert.match(renderToStaticMarkup(createElement(DataFreshness, { envelope: fresh, error: failure })), /REFRESH FAILED/)
   const dependent = { ...fresh, meta: { ...fresh.meta, fetchedAt: Date.now(), expiresAt: Date.now() - 1 } }
   assert.equal(effectiveFreshness(dependent, Date.now(), Infinity), 'stale', 'Derived snapshots preserve dependency expiry')
+  const mixed = { ...fresh, meta: { ...fresh.meta, fetchedAt: Date.now() - 4 * 86400_000, expiresAt: Date.now() + 15_000 } }
+  assert.equal(effectiveFreshness(mixed, Date.now(), FRESHNESS.quotes), 'fresh', 'Valid week-old sector metadata must not expire newly fetched quotes')
+  const { recordStartupSnapshot, startupRefreshDelay } = await import('../src/api/startupHealth.js')
+  recordStartupSnapshot('stocks', ['stocks', 'FIX'], mixed)
+  assert.equal(useDataHealth.getState().records['stocks:Stocks'].previousSession, undefined)
+  assert.equal(useDataHealth.getState().records['stocks:Stocks'].freshnessMs, FRESHNESS.chartDaily)
+  recordStartupSnapshot('calendar', ['calendarMonth', 2026, 10], mixed)
+  for (const label of ['Company Events', 'Economic Events', 'Market Holidays']) assert(useDataHealth.getState().records[`calendar:${label}`])
+  recordStartupSnapshot('hood', ['hood'], undefined, failure)
+  assert.equal(useDataHealth.getState().records['hood:HOOD'].freshness, 'failed', 'Unvisited startup failures must appear in the health report')
+  recordStartupSnapshot('cards', ['cardsPerformance', JSON.stringify({ interval: '30d', cards: [] })], mixed)
+  assert(useDataHealth.getState().records['cards:Cards 30d'], 'Card signatures must never become health labels')
+  const refreshNow = Date.now()
+  assert.equal(startupRefreshDelay([{ key: ['quotes'], result: mixed }], false, refreshNow), mixed.meta.expiresAt - refreshNow + 250)
+  assert.equal(startupRefreshDelay([{ key: ['portfolio'], result: mixed }]), Infinity)
+  assert.equal(startupRefreshDelay([], true), 60_000)
+  assert.equal(startupRefreshDelay([{ key: ['quotes'], result: envelope }]), 60_000)
   // Inline labels must age while a snapshot stays mounted; no provider refresh is involved.
   const clock = Date.now
   try {

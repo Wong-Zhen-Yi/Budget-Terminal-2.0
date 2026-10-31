@@ -76,7 +76,7 @@ export function CryptoHeatmap({ tiles }: { tiles: CryptoHeatmapTile[] }) {
           >
             {tile ? (
               <>
-                <span className="truncate">{`#${rank} ${tile.symbol}`}</span>
+                <span className="truncate">{`#${rank} ${tile.symbol}${tile.source === 'Hyperliquid crypto perp' ? ' PERP' : ''}`}</span>
                 <span className="num truncate">
                   {cryptoPrice(tile.price)} {cryptoPercent(tile.changePct)}
                 </span>

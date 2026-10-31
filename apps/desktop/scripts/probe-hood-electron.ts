@@ -72,13 +72,15 @@ try {
       finally { cache.close(); closeYahooWorker() }
       })
     ` },
-    outfile: join(bundleDirectory, 'main.mjs'), bundle: true, platform: 'node', format: 'esm', packages: 'external',
+    outfile: join(bundleDirectory, 'probe-hood-electron.mjs'), bundle: true, platform: 'node', format: 'esm', packages: 'external',
   })
-  await writeFile(join(directory, 'package.json'), JSON.stringify({ name: 'hood-electron-probe', main: join(bundleDirectory, 'main.mjs') }))
+  await writeFile(join(directory, 'package.json'), JSON.stringify({ name: 'hood-electron-probe', main: join(bundleDirectory, 'probe-hood-electron.mjs') }))
   const env: NodeJS.ProcessEnv = { ...process.env, APPDATA: directory, LOCALAPPDATA: directory }
   delete env.ELECTRON_RUN_AS_NODE
   const result = await new Promise<{ code: number | null; output: string }>((resolveRun, reject) => {
-    const child = spawn(require('electron') as string, [directory], { env, windowsHide: true, stdio: 'pipe' })
+    // Electron argv names the package directory; include the probe entry so the
+    // service cache selects its in-memory probe mode instead of bundled workers.
+    const child = spawn(require('electron') as string, [directory, join(bundleDirectory, 'probe-hood-electron.mjs')], { env, windowsHide: true, stdio: 'pipe' })
     let output = ''
     child.stdout.on('data', data => { output += data })
     child.stderr.on('data', data => { output += data })

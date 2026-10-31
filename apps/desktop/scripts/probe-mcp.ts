@@ -6,7 +6,8 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { QueryClient } from '@tanstack/react-query'
 import { catalog, failed, validateCall } from '../mcp/catalog.js'
-import { mutationDomains, newsRefreshOperations, optionsRefreshOperations, operations, toolName, type Operation } from '../mcp/operations.js'
+import { mutationDomains, newsRefreshOperations, optionsRefreshOperations, priceRefreshOperations, operations, toolName, type Operation } from '../mcp/operations.js'
+import { mock } from 'node:test'
 import { APP_CLOSED, invokeBridge, runtimePath } from '../mcp/runtime.js'
 import { startBridge } from '../electron/mcp/bridge.js'
 import { McpDispatcher } from '../electron/mcp/dispatcher.js'
@@ -120,7 +121,7 @@ try {
     assert.equal(result.isError, false, entry.operation)
     const structured = result.structuredContent as Record<string, unknown>
     assert.equal((structured.data as { operation: string }).operation, entry.operation)
-    if (newsRefreshOperations.has(entry.operation) || optionsRefreshOperations.has(entry.operation)) assert.equal((structured.data as { request: { force?: boolean } }).request.force, true, 'External stdio news/options calls must refresh before reaching services')
+    if (newsRefreshOperations.has(entry.operation) || optionsRefreshOperations.has(entry.operation) || priceRefreshOperations.has(entry.operation)) assert.equal((structured.data as { request: { force?: boolean } }).request.force, true, 'External stdio research calls must refresh before reaching services')
     assert.equal((structured.meta as { freshness: string }).freshness, 'cached')
     if (entry.operation.startsWith('mutate')) {
       const root = entry.tool.inputSchema as unknown as Schema
@@ -130,7 +131,7 @@ try {
       }
     }
   }
-  assert.equal(mutationVariants, 44)
+  assert.equal(mutationVariants, 45)
   assert.equal(events.length, 5)
   assert(events.some(domains => domains.includes('articles')), 'Article edits must notify the renderer')
   const screenshotTool = tools.find((tool) => tool.name === toolName('screenshot'))!
@@ -230,6 +231,60 @@ try {
     const result = await invokeBridge(toolName(operation), { request, ...(domain ? { requestId: randomUUID(), ...(current ? { expectedRevision: current.meta.revision } : {}) } : {}) })
     assert.equal(failed(result), false, JSON.stringify(result))
     return result as Awaited<ReturnType<DesktopApi[Key]>>
+  }
+  const { hyperliquidEquities, equityQuoteFromContext } = await import('../electron/services/hyperliquidEquities.js')
+  const { equityMarket } = await import('../electron/shared/equityMarkets.js')
+  const { yahoo } = await import('../electron/services/yahoo/client.js')
+  let yahooPriceCalls = 0
+  const hlQuote = mock.method(hyperliquidEquities, 'getQuote', async (symbol: string) =>
+    equityQuoteFromContext(symbol, equityMarket(symbol)!, { markPx: '123', prevDayPx: '100' }, Date.now()))
+  const barTime = Math.floor(Date.now() / (4 * 3600_000)) * 4 * 3600
+  const hlCandles = mock.method(hyperliquidEquities, 'getCandles', async (symbol: string) => ({
+    candles: [barTime - 4 * 3600, barTime].map(time => ({ time, open: 100, high: 125, low: 99, close: 120, volume: 12 })),
+    market: equityMarket(symbol)!, source: `Hyperliquid equity perp (${equityMarket(symbol)})`, stale: false, fromCache: false, cacheAgeSeconds: 0,
+  }))
+  const yahooPrice = mock.method(yahoo, 'chart', async () => {
+    yahooPriceCalls++
+    return { quotes: [{ date: new Date(Date.now() - 86400_000), close: 90 }, { date: new Date(), close: 95 }],
+      meta: { regularMarketPrice: 95, previousClose: 90, currency: 'USD' } }
+  })
+  try {
+    for (const mcpClient of [client, pluginClient]) {
+      const result = await mcpClient.callTool({ name: toolName('quotes'), arguments: { request: { holdings: ['NVDA', 'SOFI'], force: false } } })
+      assert.equal(result.isError, false, JSON.stringify(result))
+      const prices = result.structuredContent as { data: { macro: object; holdings: Record<string, { price: number; market: string; priceBasis: string; changeBasis: string }> } }
+      assert.deepEqual(prices.data.macro, {})
+      assert.equal(prices.data.holdings.NVDA.price, 123)
+      assert.equal(prices.data.holdings.NVDA.market, 'xyz:NVDA')
+      assert.equal(prices.data.holdings.SOFI.market, 'para:SOFI')
+      assert.equal(prices.data.holdings.NVDA.priceBasis, 'equity-perp-mark')
+      assert.equal(prices.data.holdings.NVDA.changeBasis, '24h')
+    }
+    assert.equal(yahooPriceCalls, 0, 'Compact mapped MCP prices must not wait for Yahoo macros or company reference data')
+    const history = await client.callTool({ name: toolName('chartsHistory'), arguments: {
+      request: { symbol: 'NVDA', interval: '4 Hours', range: '1D' }, response: { fields: ['candles'] },
+    } })
+    assert.equal(history.isError, false, JSON.stringify(history))
+    const provenance = (history.structuredContent as { response: { provenance: Array<Record<string, unknown>> } }).response.provenance
+    assert(provenance.some(row => row.market === 'xyz:NVDA' && String(row.source).includes('Hyperliquid')), 'Projected candles must retain their market identity')
+    assert.equal(yahooPriceCalls, 0, 'Covered MCP perp history and indicators must use Hyperliquid')
+    const chart = await call('chart', { symbol: 'NVDA', timeframe: '1 Hour' })
+    assert.equal(chart.data.stats?.market, 'xyz:NVDA')
+    const unmapped = await call('quotes', { holdings: ['SPY'] })
+    assert.equal(unmapped.data.holdings.SPY.price, 95)
+    assert.match(unmapped.data.holdings.SPY.source!, /Yahoo/)
+    const withMacro = await call('quotes', { holdings: ['NVDA'], includeMacro: true })
+    assert(Object.keys(withMacro.data.macro).length > 0, 'Explicit macro opt-in remains available through MCP')
+    hlQuote.mock.mockImplementation(async () => { throw new Error('Fixture Hyperliquid unavailable') })
+    const fallback = await call('quotes', { holdings: ['NVDA'] })
+    assert.match(fallback.data.holdings.NVDA.source!, /Yahoo.*fallback/)
+    assert.match(fallback.data.holdings.NVDA.fallbackReason!, /Hyperliquid unavailable/)
+    assert.equal(fallback.data.holdings.NVDA.priceBasis, undefined, 'Yahoo fallback must not carry a perp mark label')
+    console.log('PASS: external and bundled-plugin MCP Hyperliquid quotes, fast mapped-only reads, covered charts, projected instrument provenance, macro opt-in and labelled Yahoo fallbacks')
+  } finally {
+    hlQuote.mock.restore()
+    hlCandles.mock.restore()
+    yahooPrice.mock.restore()
   }
   const portfolioId = (await call('portfolio')).data.mainId
   assert.ok(portfolioId)

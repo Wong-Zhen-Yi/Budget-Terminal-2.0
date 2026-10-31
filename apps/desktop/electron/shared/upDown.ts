@@ -30,7 +30,9 @@ export function normalizeUpDownSymbols(value: unknown): string[] {
   const symbols: string[] = []
   for (const entry of raw) {
     const symbol = String(entry ?? '').trim().toUpperCase()
-    if (!symbol || symbol === 'CASH' || seen.has(symbol) || !/[A-Z]/.test(symbol)) continue
+    // Issuer baskets include cash and temporary numeric security IDs, which are
+    // not Yahoo equity tickers. Preserve valid classes and international suffixes.
+    if (!symbol || symbol === 'CASH' || seen.has(symbol) || !/^(?:[A-Z][A-Z0-9]*(?:[.-][A-Z0-9]+)*|\d+\.[A-Z]+)$/.test(symbol)) continue
     seen.add(symbol)
     symbols.push(symbol)
   }

@@ -187,10 +187,17 @@ The current navigation includes **57 implemented pages**, including Settings.
 **Crypto** includes a **Hyperliquid Perpetuals** table with mark prices, 24-hour
 changes, hourly funding rates, USD open interest, and 24-hour volume. It uses the
 free public market-data API without an API key or wallet, loads at startup, and
-refreshes every 60 seconds while Crypto is visible. Sort columns to explore the
+shares the equity WebSocket for live updates, with REST fallback when unavailable.
+Other Crypto feeds refresh every 60 seconds while the page is visible. Sort columns to explore the
 active markets. Hyperliquid failures appear in page readiness and panel warnings;
 the other crypto feeds remain available. These are venue-specific perpetual
 contracts, displayed separately from spot quotes. No trading actions are exposed.
+
+Mapped crypto-equity proxies use the shared perpetual mark directly. Yahoo stock
+volume and market cap have an independent 15-minute cache; manual Refresh reloads
+that metadata. CoinGecko spot quotes remain primary. If a coin's spot price is
+unavailable, a labelled Hyperliquid perpetual can supply price and venue volume
+before trying Yahoo, without inventing a global market cap.
 
 **Stock quotes and charts** prefer explicitly mapped Hyperliquid equity perpetuals.
 These USD **mark prices** also value portfolio positions, gains and allocations.
@@ -211,6 +218,19 @@ The reviewed market mappings are in `apps/desktop/electron/shared/equityMarkets.
 SOFI and VST use `para` markets and most other mapped stocks use `xyz`.
 Run `npm run probe:hyperliquid` for deterministic checks, or append `-- --live`
 to verify prices, candles and WebSocket updates against the public API.
+
+Charts for tickers in every portfolio preload at startup and stay cached while the
+app runs. This covers Stocks and the selected Dashboard, Main and Multi chart views.
+New holdings and changes to chart intervals or ranges prepare those views automatically.
+Background refresh continues across pages and unfocused windows. The footer shows
+portfolio chart readiness; refresh failures retain the last usable chart and appear
+in the footer and Settings.
+
+MCP and embedded Agents use the same Hyperliquid routing. `budget_terminal_quotes`
+refreshes current prices, prefers the shared live stream, and skips macro quotes
+and sector lookups by default. Request `includeMacro: true` or `includeSectors: true`
+to include them. Compact, projected and paginated responses retain instrument,
+currency, price/change basis and fallback labels in `response.provenance`.
 
 Star pages to pin Favorites. Use **Ctrl+K** or **backtick** to open page search;
 recent pages appear first. Settings controls page visibility, ordering, favorites,

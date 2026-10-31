@@ -24,7 +24,7 @@ import { getYahooSeries } from './yahoo/series.js'
 
 export const UP_DOWN_SOURCE = 'Yahoo Finance Up/Down'
 
-const CACHE_VERSION = 1
+const CACHE_VERSION = 2
 const PAYLOAD_TTL_MS = 15 * 60_000
 const HOLDINGS_TTL_MS = 24 * 60 * 60_000
 const TARGET_TTL_MS = 24 * 60 * 60_000
@@ -272,7 +272,7 @@ export async function getUpDown(request: UpDownRequest): Promise<UpDownFetchResu
   const signature = source === 'spy' || source === 'qqq' ? `${source}:${interval}` : `${source}:${interval}:${symbols.join(',')}`
   try {
     const resolved = await cache.resolveWithStaleFallback(
-      `up-down:${signature}`,
+      `up-down:v2:${signature}`,
       PAYLOAD_TTL_MS,
       async () => {
         const loaded = await fetchLive({ source, interval, symbols, force })

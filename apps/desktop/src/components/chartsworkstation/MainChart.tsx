@@ -99,7 +99,7 @@ export function MainChart({
   const shownCandles = useMemo(() => {
     const source = payload?.candles ?? []
     return replayLimit === null ? source : source.slice(0, Math.max(1, replayLimit))
-  }, [payload, replayLimit])
+  }, [payload?.candles, replayLimit])
   const lastShownTime = shownCandles.at(-1)?.time ?? Infinity
 
   useEffect(() => {
@@ -178,7 +178,7 @@ export function MainChart({
     series.rsiMa.setData((payload?.indicators.rsiMa ?? []).filter((point) => point.time <= lastShownTime).map(pointData))
     if (shownCandles.length && (autoFollow || replayLimit !== null)) requestAnimationFrame(() => chart.timeScale().fitContent())
     setRevision((value) => value + 1)
-  }, [payload, shownCandles, lastShownTime, autoFollow, replayLimit])
+  }, [payload?.indicators, shownCandles, lastShownTime, autoFollow, replayLimit])
 
   useEffect(() => {
     const series = seriesRef.current

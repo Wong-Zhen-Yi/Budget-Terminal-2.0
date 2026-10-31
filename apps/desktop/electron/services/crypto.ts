@@ -9,6 +9,7 @@ import type {
   CryptoStageStatus,
   EnvelopeError,
   NewsArticle,
+  HyperliquidPayload,
 } from '../shared/contract.js'
 import {
   COINGECKO_IDS,
@@ -33,6 +34,9 @@ import { trackApiRequest } from './apiUsage.js'
 import { hyperliquidClient } from './hyperliquid.js'
 import { equityMarket } from '../shared/equityMarkets.js'
 import { getQuote } from './yahoo/quotes.js'
+import { observeSource } from './sourceHealth.js'
+import { hyperliquidEquities } from './hyperliquidEquities.js'
+import { markCryptoPerpetuals } from '../shared/hyperliquid.js'
 
 /**
  * The Crypto page's data, ported from `CryptoMarketWorker` (`workers/crypto.py`).
@@ -44,8 +48,8 @@ import { getQuote } from './yahoo/quotes.js'
  * **CoinGecko and alternative.me deliberately stay outside `paced()`**, on the
  * `services/fearGreed.ts` precedent: the rate gate models Yahoo's 429 behaviour and
  * halves its own budget on one, so letting a CoinGecko hiccup throttle the dashboard
- * would be strictly worse than letting the Crypto page fail alone. The six Yahoo proxy
- * quotes underneath are Yahoo, and they do go through the gate.
+ * would be strictly worse than letting the Crypto page fail alone. Yahoo metadata
+ * and fallback quotes still go through the shared gate.
  */
 
 export const CRYPTO_SOURCE = 'crypto market'
@@ -227,6 +231,9 @@ function buildHeatmapFromQuotes(quotes: Record<string, CryptoQuote>): CryptoHeat
 /* ------------------------------------------------------------------ stage 2 */
 
 interface RawQuote {
+  volumeSource?: string
+  marketCapSource?: string
+  metadataAsOf?: number
   price: number | null
   changePct: number | null
   volume: number | null
@@ -267,20 +274,33 @@ async function fetchCoinGeckoQuotes(): Promise<Record<string, RawQuote>> {
   return quotes
 }
 
-/**
- * `_fetch_quote`: five daily bars for price, the 24h move and volume, plus the summary
- * for market cap.
- *
- * The reference reads market cap off `fast_info`, which yfinance derives from shares
- * outstanding. `quoteSummary` is the equivalent here, and `totalAssets` is read as a
- * fallback so the proxy table's "AUM / Mkt Cap" column has a number for the three spot
- * ETFs rather than the dash the reference leaves there — the one deliberate departure in
- * this file.
- *
- * A failure is not thrown: the reference logs and returns an all-null row, which is what
- * makes one dead proxy ticker a dash in its cell instead of a dead stage.
- */
-async function fetchYahooQuote(symbol: string): Promise<RawQuote> {
+/** Stock metadata has its own cache; a fresh perpetual mark never refreshes it. */
+export async function fetchMappedProxyQuote(symbol: string, force = false): Promise<RawQuote> {
+  const [quote, metadata] = await Promise.allSettled([
+    getQuote(symbol, force),
+    cache.resolveWithStaleFallback(`crypto:proxy-metadata:v1:${symbol}`, 15 * 60_000, async () => {
+      const summary = await paced(() => yahoo.quoteSummary(symbol, { modules: ['price', 'summaryDetail'] }))
+      const marketCap = firstNumber(summary?.price?.marketCap, summary?.summaryDetail?.marketCap, summary?.summaryDetail?.totalAssets)
+      const volume = firstNumber(summary?.price?.regularMarketVolume)
+      if (marketCap === null && volume === null) throw new Error(`No Yahoo metadata for ${symbol}.`)
+      return { marketCap, volume, asOf: Date.now() }
+    }, { force }),
+  ])
+  if (metadata.status === 'rejected') observeSource({ fetchedAt: Date.now(), stale: false, fromCache: false,
+    failures: [`${symbol}: Yahoo stock volume/market cap unavailable. ${describeError(metadata.reason)}`] })
+  if (quote.status === 'rejected') observeSource({ fetchedAt: Date.now(), stale: false, fromCache: false,
+    failures: [`${symbol}: Price unavailable. ${describeError(quote.reason)}`] })
+  const snapshot = metadata.status === 'fulfilled' ? metadata.value.value : undefined
+  return { price: quote.status === 'fulfilled' ? quote.value.price : null,
+    changePct: quote.status === 'fulfilled' ? quote.value.change : null,
+    source: quote.status === 'fulfilled' ? quote.value.source ?? YAHOO_SOURCE : YAHOO_SOURCE,
+    marketCap: snapshot?.marketCap ?? null, volume: snapshot?.volume ?? null,
+    volumeSource: 'Yahoo Finance stock volume (shares)', marketCapSource: YAHOO_SOURCE, metadataAsOf: snapshot?.asOf }
+}
+
+/** Unmapped ETFs and last-resort crypto fallbacks retain Yahoo price/metadata. */
+async function fetchYahooQuote(symbol: string, force = false): Promise<RawQuote> {
+  if (equityMarket(symbol)) return fetchMappedProxyQuote(symbol, force)
   const result: RawQuote = { ...EMPTY_QUOTE }
   try {
     const chart = await paced(() =>
@@ -315,35 +335,30 @@ async function fetchYahooQuote(symbol: string): Promise<RawQuote> {
   } catch {
     /* Market cap simply stays null. */
   }
-  if (equityMarket(symbol)) {
-    try {
-      const quote = await getQuote(symbol)
-      result.price = quote.price
-      result.changePct = quote.change
-      result.source = quote.source ?? YAHOO_SOURCE
-    } catch {
-      // Preserve the dated Yahoo snapshot; source health retains the quote failure.
-    }
-  }
   return result
 }
 
 /**
- * `_fetch_quotes`: the five coins prefer CoinGecko and fall back to Yahoo **field by
- * field** — a coin whose CoinGecko row carried no market cap still shows Yahoo's — then
- * the six equity proxies. Their fundamentals/volume remain Yahoo; mapped stock
- * prices use the same Hyperliquid marks as portfolio quotes.
+ * CoinGecko spot quotes stay primary; missing spot prices prefer labelled perps.
+ * Stock metadata and volume remain separate from mapped perpetual prices.
  */
-async function fetchQuotes(): Promise<Record<string, CryptoQuote>> {
-  // The reference swallows a CoinGecko failure here and carries on with Yahoo alone.
+async function fetchQuotes(force: boolean, perpetuals: Promise<HyperliquidPayload | null>): Promise<Record<string, CryptoQuote>> {
   const live = await fetchCoinGeckoQuotes().catch(() => ({}) as Record<string, RawQuote>)
 
   const symbols = [...CRYPTO_TICKERS, ...PROXY_TICKERS]
-  const fallbacks = await Promise.all(symbols.map((entry) => {
+  const fallbacks = await Promise.all(symbols.map(async (entry): Promise<RawQuote> => {
     const preferred = live[entry.label]
+    // A CoinGecko outage must not fan out into two Yahoo requests per coin.
+    // Venue volume is labelled; perpetuals never supply a global market cap.
+    if (entry.symbol.endsWith('-USD') && preferred?.price == null) {
+      const market = (await perpetuals)?.markets.find(row => row.symbol === entry.label)
+      if (market) return { price: market.markPrice, changePct: market.changePct, volume: market.volume24hUsd,
+        marketCap: preferred?.marketCap ?? null, source: 'Hyperliquid crypto perp',
+        volumeSource: 'Hyperliquid perpetual 24h volume (USD)', marketCapSource: preferred?.source }
+    }
     return preferred && [preferred.price, preferred.changePct, preferred.volume, preferred.marketCap].every(value => value !== null)
       ? Promise.resolve(preferred)
-      : fetchYahooQuote(entry.symbol)
+      : fetchYahooQuote(entry.symbol, force)
   }))
 
   const rows: Record<string, CryptoQuote> = {}
@@ -355,10 +370,13 @@ async function fetchQuotes(): Promise<Record<string, CryptoQuote>> {
       symbol: entry.symbol,
       name: entry.name,
       price: firstNumber(preferred?.price, fallback.price),
-      changePct: firstNumber(preferred?.changePct, fallback.changePct),
+      changePct: fallback.source === 'Hyperliquid crypto perp' ? fallback.changePct : firstNumber(preferred?.changePct, fallback.changePct),
       volume: firstNumber(preferred?.volume, fallback.volume),
       marketCap: firstNumber(preferred?.marketCap, fallback.marketCap),
-      source: preferred?.source || fallback.source || YAHOO_SOURCE,
+      source: preferred?.price != null ? preferred.source : fallback.source || YAHOO_SOURCE,
+      volumeSource: preferred?.volume != null ? preferred.source : fallback.volumeSource,
+      marketCapSource: preferred?.marketCap != null ? preferred.source : fallback.marketCapSource,
+      metadataAsOf: fallback.metadataAsOf,
     }
   })
   return rows
@@ -461,12 +479,16 @@ async function fetchCrypto(force: boolean): Promise<CryptoFetchResult> {
     errors.push(err(CRYPTO_SOURCE, reason, 'crypto', STAGE_LABELS[stage]))
   }
 
+  const perpetuals = hyperliquidClient.getMarkets().catch((error) => {
+    stageError('hyperliquid', describeError(error))
+    return null
+  })
   const [tiles, quotes, market, news, hyperliquid] = await Promise.all([
     fetchTopTiles().catch((error) => {
       stageError('heatmap', describeError(error))
       return [] as CryptoHeatmapTile[]
     }),
-    fetchQuotes().catch((error) => {
+    fetchQuotes(force, perpetuals).catch((error) => {
       stageError('quotes', describeError(error))
       return {} as Record<string, CryptoQuote>
     }),
@@ -485,10 +507,7 @@ async function fetchCrypto(force: boolean): Promise<CryptoFetchResult> {
       stageError('news', describeError(error))
       return { articles: [] as NewsArticle[], errors: [] as EnvelopeError[] }
     }),
-    hyperliquidClient.getMarkets().catch((error) => {
-      stageError('hyperliquid', describeError(error))
-      return null
-    }),
+    perpetuals,
   ])
 
   let heatmap = buildHeatmapPayload(tiles, fetchedAt)
@@ -540,8 +559,11 @@ async function fetchCrypto(force: boolean): Promise<CryptoFetchResult> {
  */
 export function getCrypto(force = false): Promise<CryptoFetchResult> {
   return cache
-    .resolve('crypto:page:hyperliquid-equities-v1', TTL.crypto, () => fetchCrypto(force), { force })
-    .then((result) => result.value)
+    .resolve('crypto:page:shared-hyperliquid-v2', TTL.crypto, () => fetchCrypto(force), { force })
+    .then((result) => {
+      const live = hyperliquidEquities.getCryptoMarkets()
+      return live ? { ...result.value, payload: markCryptoPerpetuals(result.value.payload, live) } : result.value
+    })
 }
 
 /** Ranking helper the probe asserts against; the page renders `heatmap.tiles` in order. */
