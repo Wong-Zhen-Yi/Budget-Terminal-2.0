@@ -9,7 +9,9 @@ import type {
 import { TIMEFRAMES } from '../../shared/contract.js'
 import { alignBackward, rsi, sma, toPoints } from '../indicators.js'
 import { periodStart } from './client.js'
-import { getYahooSeries } from './series.js'
+import { getMarketSeries } from '../marketSeries.js'
+import { equityMarket } from '../../shared/equityMarkets.js'
+import { getQuote } from './quotes.js'
 
 export function timeframeSpec(label: TimeframeLabel): TimeframeSpec {
   return TIMEFRAMES.find((entry) => entry.label === label) ?? TIMEFRAMES[4]
@@ -19,6 +21,8 @@ interface RawChart {
   candles: Candle[]
   currency: string
   longName: string
+  source?: string
+  market?: string
 }
 
 /**
@@ -33,13 +37,16 @@ const MAX_LOOKBACK_DAYS: Record<string, number> = {
   '1h': 729,
 }
 
-async function fetchCandles(symbol: string, spec: TimeframeSpec, force = false): Promise<RawChart> {
+async function fetchCandles(symbol: string, spec: TimeframeSpec, force = false, seriesMarket?: string | false): Promise<RawChart> {
   const lookbackDays = Math.min(spec.lookbackDays, MAX_LOOKBACK_DAYS[spec.interval] ?? Infinity)
-  const result = await getYahooSeries({
+  const result = await getMarketSeries({
     symbol,
     start: periodStart(lookbackDays),
     interval: spec.interval,
     force,
+    sourceMarket: seriesMarket || undefined,
+    stockOnly: seriesMarket === false,
+    allowPartialHistory: Boolean(seriesMarket),
   })
 
   const candles: Candle[] = []
@@ -71,12 +78,17 @@ async function fetchCandles(symbol: string, spec: TimeframeSpec, force = false):
   }
 
   if (!candles.length) throw new Error(`No chart data returned for ${symbol}.`)
-  dropSyntheticQuoteBar(candles)
-  if (!spec.intraday) dropPartialTrailingBar(candles, spec.interval)
+  const provenance = result.meta as { source?: string; market?: string } | undefined
+  if (!provenance?.market) {
+    dropSyntheticQuoteBar(candles)
+    if (!spec.intraday) dropPartialTrailingBar(candles, spec.interval)
+  }
   return {
     candles,
     currency: result.currency,
     longName: result.longName,
+    source: provenance?.source,
+    market: provenance?.market,
   }
 }
 
@@ -128,8 +140,8 @@ function periodBucket(timeSeconds: number, interval: string): string {
  * PySide6 app. It is cached separately from the chart because every timeframe of the
  * same symbol shares it.
  */
-async function fetchDailyMa200(symbol: string, force: boolean): Promise<IndicatorPoint[]> {
-  const daily = await fetchCandles(symbol, timeframeSpec('1 Day'), force)
+async function fetchDailyMa200(symbol: string, force: boolean, market: string | false): Promise<IndicatorPoint[]> {
+  const daily = await fetchCandles(symbol, timeframeSpec('1 Day'), force, market)
   const closes = daily.candles.map((candle) => candle.close)
   return toPoints(daily.candles, sma(closes, 200))
 }
@@ -151,6 +163,8 @@ function buildStats(symbol: string, raw: RawChart): ChartStats {
     volume: last.volume,
     currency: raw.currency,
     longName: raw.longName,
+    source: raw.source ?? 'Yahoo Finance stock history',
+    market: raw.market,
   }
 }
 
@@ -170,7 +184,7 @@ export async function getChart(
   // A missing MA200 should not cost us the chart; it is one line among three panes.
   let ma200: IndicatorPoint[] = []
   try {
-    const daily = await fetchDailyMa200(symbol, force)
+    const daily = await fetchDailyMa200(symbol, force, raw.market ?? false)
     ma200 = spec.interval === '1d'
       ? daily.filter((point) => point.time >= raw.candles[0].time)
       : alignBackward(
@@ -182,12 +196,18 @@ export async function getChart(
     ma200 = []
   }
 
+  const stats = buildStats(symbol, raw)
+  if (equityMarket(symbol)) {
+    const quote = await getQuote(symbol, force)
+    Object.assign(stats, { price: quote.price, change: quote.change, absChange: quote.absChange,
+      priceSource: quote.source, priceBasis: quote.priceBasis, changeBasis: quote.changeBasis })
+  }
   return {
     symbol,
     timeframe,
     interval: spec.interval,
     candles: raw.candles,
-    stats: buildStats(symbol, raw),
+    stats,
     indicators: { ma200, rsi: rsiPoints, rsiMa: rsiMaPoints },
   }
 }

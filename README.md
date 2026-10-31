@@ -184,6 +184,14 @@ The current navigation includes **57 implemented pages**, including Settings.
 | **Notifications** | Notifications |
 | **Settings** | Settings |
 
+**Crypto** includes a **Hyperliquid Perpetuals** table with mark prices, 24-hour
+changes, hourly funding rates, USD open interest, and 24-hour volume. It uses the
+free public market-data API without an API key or wallet, loads at startup, and
+refreshes every 60 seconds while Crypto is visible. Sort columns to explore the
+active markets. Hyperliquid failures appear in page readiness and panel warnings;
+the other crypto feeds remain available. These are venue-specific perpetual
+contracts, displayed separately from spot quotes. No trading actions are exposed.
+
 Star pages to pin Favorites. Use **Ctrl+K** or **backtick** to open page search;
 recent pages appear first. Settings controls page visibility, ordering, favorites,
 privacy, and the market clock.

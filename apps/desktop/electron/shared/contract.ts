@@ -89,7 +89,11 @@ export interface Quote {
   asOf?: number
   currency?: string
   /** Published session closes are not live market quotes. */
-  priceBasis?: 'published-close'
+  priceBasis?: 'published-close' | 'equity-perp-mark'
+  source?: string
+  market?: string
+  changeBasis?: '24h' | 'previous-close'
+  fallbackReason?: string
 }
 
 /** The five macro readings across the top of the dashboard, keyed by display name. */
@@ -99,6 +103,11 @@ export interface QuotesPayload {
   macro: MacroQuotes
   holdings: Record<string, Quote>
   missing: string[]
+}
+
+export interface EquityMarketUpdate {
+  quotes: Quote[]
+  candles: Array<{ symbol: string; market: string; interval: string; candle: Candle }>
 }
 
 /* --------------------------------------------------------------- portfolio */
@@ -730,6 +739,11 @@ export interface ChartStats {
   volume: number
   currency: string
   longName: string
+  source?: string
+  market?: string
+  priceSource?: string
+  priceBasis?: Quote['priceBasis']
+  changeBasis?: Quote['changeBasis']
 }
 
 export interface IndicatorPoint {
@@ -2149,9 +2163,25 @@ export interface CryptoFearGreed {
   source: string
 }
 
-/** The four independent fetches `CryptoMarketWorker.run` stages. */
-export type CryptoStage = 'heatmap' | 'quotes' | 'market' | 'news'
+/** Independent Crypto page data stages, including venue-specific perpetuals. */
+export type CryptoStage = 'heatmap' | 'quotes' | 'market' | 'news' | 'hyperliquid'
 export type CryptoStageStatus = 'loaded' | 'unavailable'
+
+export interface HyperliquidMarket {
+  symbol: string
+  markPrice: number
+  changePct: number | null
+  /** Current hourly funding, in percent (not the raw decimal rate). */
+  fundingHourlyPct: number
+  /** Base-asset open interest multiplied by the mark price, in USD. */
+  openInterestUsd: number
+  volume24hUsd: number
+}
+
+export interface HyperliquidPayload {
+  fetchedAt: string
+  markets: HyperliquidMarket[]
+}
 
 export interface CryptoPayload {
   /** Local ISO stamp to the second, `datetime.now().isoformat(timespec='seconds')`. */
@@ -2162,6 +2192,7 @@ export interface CryptoPayload {
   fearGreed: CryptoFearGreed | null
   /** Ranked crypto-native RSS, capped at `CRYPTO_NEWS_LIMIT`. */
   news: NewsArticle[]
+  hyperliquid: HyperliquidPayload | null
   progress: Record<CryptoStage, CryptoStageStatus>
 }
 
@@ -3455,6 +3486,7 @@ export const CHANNELS = {
   screenshotReady: 'mcp:screenshot-ready',
   savedDataChanged: 'user-data:changed',
   apiUsage: 'system:api-usage',
+  equityMarketChanged: 'market:equity-changed',
   quotes: 'dashboard:quotes',
   chart: 'dashboard:chart',
   options: 'dashboard:options',
@@ -3632,6 +3664,7 @@ export interface FxRequest extends BackgroundRequest {
 export type WindowAction = 'minimize' | 'maximize' | 'close'
 
 export interface DesktopApi {
+  onEquityMarketChanged(listener: (update: EquityMarketUpdate) => void): () => void
   browserStatus(): Promise<Envelope<BrowserState>>
   browserResearch(request: BrowserRequest): Promise<Envelope<BrowserResult>>
   browserControl(request: BrowserControl): Promise<Envelope<BrowserResult>>

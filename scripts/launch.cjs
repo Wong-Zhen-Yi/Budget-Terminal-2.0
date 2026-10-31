@@ -63,6 +63,7 @@ function launch({ development = false, platform = process.platform, nodeVersion 
   }
 
   log.log(`Starting Budget Terminal for ${os}...`)
+  log.log('Crypto includes Hyperliquid perpetual markets: mark prices, hourly funding, open interest and volume. Free public data loads at startup and refreshes every 60 seconds while Crypto is visible.')
   log.log('Dependencies updated: Electron 45.1.0, query caching, MCP and Parquet readers. Virtual tables retain their tested version.')
   log.log('Agent recovery: saved run details, temporary read retries, partial answers and Continue research. Manual run limits are configurable in Controls.')
   log.log('Portfolio and Personal Finance privacy: Obscure replaces numbers with **** while labels, controls and charts stay visible. Reveal restores values and numeric editing.')

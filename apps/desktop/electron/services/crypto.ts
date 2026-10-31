@@ -30,16 +30,14 @@ import { cache, TTL } from './cache.js'
 import { loadFeed } from './news/feeds.js'
 import { paced, periodStart, yahoo } from './yahoo/client.js'
 import { trackApiRequest } from './apiUsage.js'
+import { hyperliquidClient } from './hyperliquid.js'
 
 /**
  * The Crypto page's data, ported from `CryptoMarketWorker` (`workers/crypto.py`).
  *
- * Four independent stages, exactly as the reference runs them — the Top 30 heatmap, the
- * eleven quotes, the global/Fear & Greed strip and the crypto-native news feed. Here they
- * run concurrently rather than in sequence: the reference emits a `partial` signal after
- * each stage so the Qt page fills in progressively, and an IPC request/response cannot,
- * so the payload carries a `progress` map instead and the page prints the same
- * "N/4 stages" line off it.
+ * Independent stages load the heatmap, quotes, global/Fear & Greed strip, news, and
+ * Hyperliquid perpetuals concurrently. The progress map keeps feed failures visible
+ * while the healthy panels remain usable, including during startup preloading.
  *
  * **CoinGecko and alternative.me deliberately stay outside `paced()`**, on the
  * `services/fearGreed.ts` precedent: the rate gate models Yahoo's 429 behaviour and
@@ -432,6 +430,7 @@ const STAGE_LABELS: Record<CryptoStage, string> = {
   quotes: 'Watchlist / Movers',
   market: 'Market Status',
   news: 'Crypto News Feed',
+  hyperliquid: 'Hyperliquid Perpetuals',
 }
 
 async function fetchCrypto(force: boolean): Promise<CryptoFetchResult> {
@@ -441,6 +440,7 @@ async function fetchCrypto(force: boolean): Promise<CryptoFetchResult> {
     quotes: 'unavailable',
     market: 'unavailable',
     news: 'unavailable',
+    hyperliquid: 'unavailable',
   }
   const errors: EnvelopeError[] = []
 
@@ -448,7 +448,7 @@ async function fetchCrypto(force: boolean): Promise<CryptoFetchResult> {
     errors.push(err(CRYPTO_SOURCE, reason, 'crypto', STAGE_LABELS[stage]))
   }
 
-  const [tiles, quotes, market, news] = await Promise.all([
+  const [tiles, quotes, market, news, hyperliquid] = await Promise.all([
     fetchTopTiles().catch((error) => {
       stageError('heatmap', describeError(error))
       return [] as CryptoHeatmapTile[]
@@ -471,6 +471,10 @@ async function fetchCrypto(force: boolean): Promise<CryptoFetchResult> {
     fetchCryptoNews(force).catch((error) => {
       stageError('news', describeError(error))
       return { articles: [] as NewsArticle[], errors: [] as EnvelopeError[] }
+    }),
+    hyperliquidClient.getMarkets().catch((error) => {
+      stageError('hyperliquid', describeError(error))
+      return null
     }),
   ])
 
@@ -498,6 +502,7 @@ async function fetchCrypto(force: boolean): Promise<CryptoFetchResult> {
     stageError('news', 'No crypto news feed articles returned.')
   }
   errors.push(...news.errors)
+  if (hyperliquid) progress.hyperliquid = 'loaded'
 
   return {
     payload: {
@@ -507,6 +512,7 @@ async function fetchCrypto(force: boolean): Promise<CryptoFetchResult> {
       global: globalMarket,
       fearGreed,
       news: news.articles,
+      hyperliquid,
       progress,
     },
     errors,
@@ -521,7 +527,7 @@ async function fetchCrypto(force: boolean): Promise<CryptoFetchResult> {
  */
 export function getCrypto(force = false): Promise<CryptoFetchResult> {
   return cache
-    .resolve('crypto:page', TTL.crypto, () => fetchCrypto(force), { force })
+    .resolve('crypto:page:hyperliquid-v1', TTL.crypto, () => fetchCrypto(force), { force })
     .then((result) => result.value)
 }
 

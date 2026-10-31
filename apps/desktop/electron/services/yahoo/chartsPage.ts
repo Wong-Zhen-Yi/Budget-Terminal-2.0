@@ -20,6 +20,9 @@ import {
 } from '../../shared/charts.js'
 import { alignBackward, rsi, sma, toPoints } from '../indicators.js'
 import { getYahooSeries } from './series.js'
+import { getMarketSeries } from '../marketSeries.js'
+import { equityMarket } from '../../shared/equityMarkets.js'
+import { getQuote } from './quotes.js'
 
 const DAY = 24 * 60 * 60 * 1000
 
@@ -85,6 +88,8 @@ interface RawCandles {
   candles: Candle[]
   currency: string
   longName: string
+  source?: string
+  market?: string
 }
 
 async function cachedCandles(
@@ -93,13 +98,17 @@ async function cachedCandles(
   interval: YahooInterval,
   force: boolean,
   adjusted = false,
+  sourceMarket?: string | false,
 ): Promise<ChartsServiceResult<RawCandles>> {
-  const result = await getYahooSeries({
+  const result = await getMarketSeries({
     symbol,
     start,
     interval,
     force,
     variant: adjusted ? 'adjusted' : 'ohlcv',
+    sourceMarket: sourceMarket || undefined,
+    stockOnly: sourceMarket === false,
+    allowPartialHistory: Boolean(sourceMarket),
   })
   const payload = fetchCandlesFromSeries(result, adjusted, interval)
   return {
@@ -138,23 +147,25 @@ function fetchCandlesFromSeries(
     }]
   })
   const candles = [...new Map(received.map((row) => [row.time, row])).values()]
-  if (candles.length > 1) {
+  const provenance = result.meta as { source?: string; market?: string } | undefined
+  if (!provenance?.market && candles.length > 1) {
     const last = candles.at(-1)!
     if (last.open === last.high && last.high === last.low && last.low === last.close && last.volume === 0) candles.pop()
   }
-  if (candles.length > 1 && (interval === '1wk' || interval === '1mo')) {
+  if (!provenance?.market && candles.length > 1 && (interval === '1wk' || interval === '1mo')) {
     const last = candles.at(-1)!
     const previous = candles.at(-2)!
     if (periodBucket(last.time, interval) === periodBucket(previous.time, interval)) candles.pop()
   }
   if (!candles.length) throw new Error('No usable chart data returned.')
-  return { candles, currency: result.currency, longName: result.longName }
+  return { candles, currency: result.currency, longName: result.longName,
+    source: provenance?.source ?? 'Yahoo Finance stock history', market: provenance?.market }
 }
 
-async function dailyMovingAverages(symbol: string, firstTime: number, force: boolean) {
+async function dailyMovingAverages(symbol: string, firstTime: number, force: boolean, market: string | false) {
   // Warm up both daily SMAs before the displayed range, even on short or intraday charts.
   const start = new Date(Math.max(0, Math.min(Date.now() - 730 * DAY, firstTime * 1000 - 400 * DAY)))
-  const raw = await cachedCandles(symbol, start, '1d', force)
+  const raw = await cachedCandles(symbol, start, '1d', force, false, market)
   const closes = raw.payload.candles.map((row) => row.close)
   return {
     ma50: toPoints(raw.payload.candles, sma(closes, 50)),
@@ -194,7 +205,7 @@ export async function getChartsHistory(request: ChartsHistoryRequest): Promise<C
   let ma50: IndicatorPoint[] = []
   let ma200: IndicatorPoint[] = []
   try {
-    const daily = await dailyMovingAverages(symbol, candles[0].time, Boolean(request.force))
+    const daily = await dailyMovingAverages(symbol, candles[0].time, Boolean(request.force), raw.payload.market ?? false)
     const align = (points: IndicatorPoint[]) => alignBackward(
       candles.map((row) => row.time), points,
       ['1m', '5m', '15m', '1h'].includes(fetchInterval) ? 'exact' : 'day',
@@ -205,6 +216,13 @@ export async function getChartsHistory(request: ChartsHistoryRequest): Promise<C
     ma50 = []
     ma200 = []
   }
+  const chartStats = stats(symbol, candles, raw.payload.currency, raw.payload.longName)
+  Object.assign(chartStats, { source: raw.payload.source, market: raw.payload.market })
+  if (equityMarket(symbol)) {
+    const quote = await getQuote(symbol, Boolean(request.force))
+    Object.assign(chartStats, { price: quote.price, change: quote.change, absChange: quote.absChange,
+      priceSource: quote.source, priceBasis: quote.priceBasis, changeBasis: quote.changeBasis })
+  }
   return {
     payload: {
       symbol,
@@ -212,7 +230,7 @@ export async function getChartsHistory(request: ChartsHistoryRequest): Promise<C
       rangeLabel: request.range,
       interval: request.interval === '4 Hours' ? '4h' : fetchInterval,
       candles,
-      stats: stats(symbol, candles, raw.payload.currency, raw.payload.longName),
+      stats: chartStats,
       indicators: {
         ma50,
         ma200,

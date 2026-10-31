@@ -616,8 +616,8 @@ export function buildTasks(
     run: (client, backgroundOrder) => warmStartupQuery(client, { queryKey: queryKeys.forexNews('EUR/USD'), queryFn: () => api.forexNews({ pair: 'EUR/USD', background: true, backgroundOrder }), staleTime: queryFreshness(queryKeys.forexNews('EUR/USD')) }),
   })
 
-  // Three unrelated hosts and six Yahoo quotes; cheap next to Trading Volumes, but it is
-  // the one page whose upstream (CoinGecko's free tier) rate-limits by the minute.
+  // Warm every Crypto stage, including Hyperliquid, before the page is visited.
+  // The versioned key ensures old snapshots cannot skip the newly added stage.
   tasks.push({
     tab: 'crypto',
     label: 'Crypto',

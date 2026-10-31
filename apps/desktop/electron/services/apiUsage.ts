@@ -22,6 +22,13 @@ const PROVIDERS: Record<string, ProviderDefinition> = {
     windowMs: 60_000,
     fallbackCooldownMs: 60_000,
   },
+  hyperliquid: {
+    label: 'Hyperliquid',
+    // Counts requests to our one 20-weight endpoint, not weighted quota units.
+    softLimit: 30,
+    windowMs: 60_000,
+    fallbackCooldownMs: 60_000,
+  },
   alternative: {
     label: 'Alt.me',
     softLimit: 60,

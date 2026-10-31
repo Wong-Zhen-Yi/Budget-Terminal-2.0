@@ -23,6 +23,7 @@ try {
         import { createRoot } from 'react-dom/client'
         import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
         import { CryptoPage } from './src/pages/CryptoPage'
+        import { queryKeys } from './src/api/client'
         const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
         const check = (ok, message) => { if (!ok) throw Error(message) }
         const settle = () => new Promise(resolve => setTimeout(resolve, 200))
@@ -35,7 +36,11 @@ try {
           heatmap: { tiles: Array.from({ length: 30 }, (_, i) => ({ rank: i+1, symbol: 'C'+i, name: 'Coin '+i, price: 100, changePct: 1, marketCap: 1e9, volume: 1e6, source: 'Yahoo Finance' })), coverage: { loaded: 30, total: 30 }, updatedAt: '2026-09-29T10:00:00' },
           quotes: Object.fromEntries(['BTC','ETH','SOL','XRP','BNB','COIN','MSTR','BMNR','IBIT','ETHA','BITQ'].map(label => [label, { label, price: 100, changePct: 1, volume: 1e6, marketCap: 1e9 }])), global: { marketCap: 2e12, volume24h: 1e11, changePct: 1 },
           fearGreed: { value: 70, classification: 'Greed', source: 'Alternative.me' },
-          news: [{ id: 'fixture', title: 'Crypto market fixture headline', time: '10:00', source: 'Fixture' }], progress: { heatmap: 'loaded', quotes: 'loaded', market: 'loaded', news: 'loaded' }
+          hyperliquid: { fetchedAt: '2026-09-29T10:00:00', markets: [
+            { symbol: 'BTC', markPrice: 110, changePct: 10, fundingHourlyPct: 0.00125, openInterestUsd: 550, volume24hUsd: 1000 },
+            { symbol: 'ETH', markPrice: 20, changePct: null, fundingHourlyPct: -0.002, openInterestUsd: 60, volume24hUsd: 2000 }
+          ] },
+          news: [{ id: 'fixture', title: 'Crypto market fixture headline', time: '10:00', source: 'Fixture' }], progress: { heatmap: 'loaded', quotes: 'loaded', market: 'loaded', news: 'loaded', hyperliquid: 'loaded' }
         }
         Object.assign(window.api, {
           crypto: async request => {
@@ -43,8 +48,8 @@ try {
             forced = request.force
             await new Promise(resolve => setTimeout(resolve, 50))
             if (mode === 'reject') throw Error('IPC disconnected')
-            const data = mode === 'partial' ? { ...good, heatmap: { ...good.heatmap, tiles: good.heatmap.tiles.slice(0, 5), coverage: { loaded: 5, total: 30 } }, progress: { ...good.progress, heatmap: 'unavailable' } } : good
-            return { data, meta: { freshness: mode === 'partial' ? 'partial' : 'fresh', source: 'fixture', fetchedAt: Date.now() }, errors: mode === 'partial' ? [{ symbol: 'Top 30 Cryptocurrencies', reason: 'Only 5/30 cryptocurrencies available.' }] : [] }
+            const data = mode === 'partial' ? { ...good, heatmap: { ...good.heatmap, tiles: good.heatmap.tiles.slice(0, 5), coverage: { loaded: 5, total: 30 } }, progress: { ...good.progress, heatmap: 'unavailable' } } : mode === 'hyperliquid-failed' ? { ...good, hyperliquid: null, progress: { ...good.progress, hyperliquid: 'unavailable' } } : good
+            return { data, meta: { freshness: mode === 'partial' || mode === 'hyperliquid-failed' ? 'partial' : 'fresh', source: 'fixture', fetchedAt: Date.now() }, errors: mode === 'partial' ? [{ symbol: 'Top 30 Cryptocurrencies', reason: 'Only 5/30 cryptocurrencies available.' }] : mode === 'hyperliquid-failed' ? [{ symbol: 'Hyperliquid Perpetuals', reason: 'Hyperliquid HTTP 429.' }] : [] }
           }
         })
         window.runProbe = async () => {
@@ -55,13 +60,28 @@ try {
           await settle()
           check(text().includes('Snapshot coverage 30/30'), 'Missing complete heatmap')
           check(document.querySelectorAll('[title^="Rank:"]').length === 30, 'Missing heatmap tiles')
+          check(text().includes('BTC PERP') && text().includes('+0.00125%'), 'Missing Hyperliquid market or incorrect funding units')
+          check(text().includes('-0.00200%'), 'Negative funding must keep its sign')
+          const perps = [...document.querySelectorAll('section')].find(section => section.textContent.includes('Hyperliquid Perpetuals'))
+          check(perps.querySelector('tbody tr').textContent.startsWith('ETH PERP'), 'Perpetuals must initially sort by numeric volume')
+          const volumeHeader = [...perps.querySelectorAll('th')].find(header => header.textContent.includes('24h volume'))
+          volumeHeader.click()
+          await settle()
+          check(perps.querySelector('tbody tr').textContent.startsWith('BTC PERP'), 'Perpetual market sorting failed')
+          check(text().includes('60s snapshots'), 'Refresh cadence must be visible')
           const refresh = () => [...document.querySelectorAll('button')].find(b => b.textContent === 'Refresh').click()
           mode = 'partial'
           refresh()
           await settle()
           check(forced, 'Refresh must force request')
-          check(text().includes('3/4 stages ready'), 'Partial load must not report all stages ready')
+          check(text().includes('4/5 stages ready'), 'Partial load must not report all stages ready')
           check(text().includes('Only 5/30 cryptocurrencies available'), 'Missing provider failure detail')
+          mode = 'hyperliquid-failed'
+          refresh()
+          await settle()
+          check(text().includes('Hyperliquid HTTP 429'), 'Missing Hyperliquid failure')
+          check(text().includes('4/5 stages ready'), 'Hyperliquid outage must prevent full readiness')
+          check(!text().includes('BTC PERP') && text().includes('Snapshot coverage 30/30'), 'Hyperliquid outage must preserve other data')
           mode = 'reject'
           refresh()
           await settle()
@@ -71,12 +91,12 @@ try {
           await settle()
           check(text().includes('Snapshot coverage 30/30'), 'Refresh did not recover')
           check(!text().includes('IPC disconnected'), 'Recovered page retained error')
-          const snapshot = client.getQueryData(['crypto'])
-          client.setQueryData(['crypto'], { ...snapshot, meta: { ...snapshot.meta, freshness: 'stale', fetchedAt: Date.now() - 180000 } })
+          const snapshot = client.getQueryData(queryKeys.crypto)
+          client.setQueryData(queryKeys.crypto, { ...snapshot, meta: { ...snapshot.meta, freshness: 'stale', fetchedAt: Date.now() - 180000 } })
           await settle()
           check(text().includes('Snapshot updated at'), 'Retained snapshot timestamp missing')
           check(!document.body.innerHTML.includes('Snapshot expired'), 'Expired snapshot warning escaped Settings')
-          return 'PASS: loading, 30 tiles, partial readiness, forced refresh, rejection, and recovery'
+          return 'PASS: loading, 30 tiles, Hyperliquid funding units and sorting, isolated outages, partial readiness, forced refresh and recovery'
         }
       `,
     },

@@ -445,6 +445,7 @@ function emptyCryptoPayload(): CryptoPayload {
     global: null,
     fearGreed: null,
     news: [],
+    hyperliquid: null,
     progress: Object.fromEntries(
       CRYPTO_STAGES.map((stage) => [stage, 'unavailable' as const]),
     ) as CryptoPayload['progress'],
@@ -1352,9 +1353,7 @@ const providerImplementation: MarketDataProvider = {
     try {
       const { payload, errors } = await getCrypto(force)
       if (!errors.length) return ok(payload, CRYPTO_SOURCE)
-      // Four independent feeds across three unrelated hosts. A dead stage leaves its own
-      // panel showing a warning dot; the other three still render, exactly as the
-      // reference's per-stage `progress` map does.
+      // A dead feed leaves its own panel showing a warning while healthy stages render.
       const dead = CRYPTO_STAGES.filter((stage) => payload.progress[stage] === 'unavailable')
       return partial(
         payload,
