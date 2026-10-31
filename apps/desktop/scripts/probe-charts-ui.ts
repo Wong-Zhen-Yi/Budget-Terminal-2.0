@@ -101,6 +101,7 @@ try {
       try {
         await window.loadFile(${JSON.stringify(join(directory, 'index.html'))})
         console.log(await window.webContents.executeJavaScript('window.runProbe()'))
+        await window.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
         require('node:fs').writeFileSync(${JSON.stringify(join(root, 'out/hyperliquid-charts-smoke.png'))}, (await window.webContents.capturePage()).toPNG())
         await window.webContents.executeJavaScript('window.finishProbe()')
         app.exit(0)

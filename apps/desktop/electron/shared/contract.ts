@@ -1946,6 +1946,8 @@ export interface SignalsPayload {
 
 /** One major-exchange U.S. equity returned by the Price market screen. */
 export interface MarketCapRow {
+  priceSource?: string
+  priceBasis?: Quote['priceBasis']
   rank: number
   ticker: string
   name: string
@@ -1969,6 +1971,8 @@ export type MarketCapTier = 'all' | 'mega' | 'large' | 'mid' | 'small' | 'micro'
 export interface MarketCapRequest extends BackgroundRequest { force?: boolean; tier?: MarketCapTier }
 
 export interface PriceScreenRow {
+  priceSource?: string
+  priceBasis?: Quote['priceBasis']
   ticker: string
   name: string
   exchange: string
@@ -2731,6 +2735,8 @@ export type HeatmapEtfKey = 'SPY' | 'NDX' | 'DJI'
 
 /** `EtfHeatmapHolding`. `weight` is a fraction: 0.0873 prints as 8.73%. */
 export interface HeatmapHolding {
+  priceSource?: string
+  priceBasis?: Quote['priceBasis']
   symbol: string
   name: string
   sector: string

@@ -31,6 +31,8 @@ import { loadFeed } from './news/feeds.js'
 import { paced, periodStart, yahoo } from './yahoo/client.js'
 import { trackApiRequest } from './apiUsage.js'
 import { hyperliquidClient } from './hyperliquid.js'
+import { equityMarket } from '../shared/equityMarkets.js'
+import { getQuote } from './yahoo/quotes.js'
 
 /**
  * The Crypto page's data, ported from `CryptoMarketWorker` (`workers/crypto.py`).
@@ -313,13 +315,24 @@ async function fetchYahooQuote(symbol: string): Promise<RawQuote> {
   } catch {
     /* Market cap simply stays null. */
   }
+  if (equityMarket(symbol)) {
+    try {
+      const quote = await getQuote(symbol)
+      result.price = quote.price
+      result.changePct = quote.change
+      result.source = quote.source ?? YAHOO_SOURCE
+    } catch {
+      // Preserve the dated Yahoo snapshot; source health retains the quote failure.
+    }
+  }
   return result
 }
 
 /**
  * `_fetch_quotes`: the five coins prefer CoinGecko and fall back to Yahoo **field by
  * field** — a coin whose CoinGecko row carried no market cap still shows Yahoo's — then
- * the six equity proxies, which are Yahoo only.
+ * the six equity proxies. Their fundamentals/volume remain Yahoo; mapped stock
+ * prices use the same Hyperliquid marks as portfolio quotes.
  */
 async function fetchQuotes(): Promise<Record<string, CryptoQuote>> {
   // The reference swallows a CoinGecko failure here and carries on with Yahoo alone.
@@ -527,7 +540,7 @@ async function fetchCrypto(force: boolean): Promise<CryptoFetchResult> {
  */
 export function getCrypto(force = false): Promise<CryptoFetchResult> {
   return cache
-    .resolve('crypto:page:hyperliquid-v1', TTL.crypto, () => fetchCrypto(force), { force })
+    .resolve('crypto:page:hyperliquid-equities-v1', TTL.crypto, () => fetchCrypto(force), { force })
     .then((result) => result.value)
 }
 

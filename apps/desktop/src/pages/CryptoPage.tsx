@@ -308,7 +308,7 @@ function WatchlistTable({
       header: 'Last',
       numeric: true,
       align: 'right',
-      cell: (row) => cryptoPrice(row.quote?.price),
+      cell: (row) => <span title={row.quote?.source}>{cryptoPrice(row.quote?.price)}{row.quote?.source?.startsWith('Hyperliquid') ? ' PERP' : ''}</span>,
     },
     {
       key: 'change',

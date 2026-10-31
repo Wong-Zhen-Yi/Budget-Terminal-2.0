@@ -1,4 +1,5 @@
 import { RecordRevisionError } from './mcpContext.js'
+import { markEquityScreenRows } from './equityScreenMarks.js'
 import { getMoney, clearMoneyCache } from './money.js'
 import { withSourceEnvelope } from './sourceHealth.js'
 import { getHims } from './hims.js'
@@ -2052,6 +2053,29 @@ export const yahooProvider: MarketDataProvider = new Proxy(providerImplementatio
     if (typeof method !== 'function') return method
     return (...args: unknown[]) => withSourceEnvelope(async () => {
       const result = await method.apply(target, args)
+      const force = Boolean((args[0] as { force?: boolean } | undefined)?.force)
+      if ((property === 'marketCap' || property === 'priceScreen') && result.data?.rows) {
+        const marked = await markEquityScreenRows(result.data.rows, force)
+        const rows = property === 'priceScreen' ? marked.rows.filter(row => row.price !== null
+          && row.price >= result.data.minimumPrice && row.price <= result.data.maximumPrice) : marked.rows
+        result.data = { ...result.data, rows,
+          source: marked.marked ? `${result.data.source} screen candidates; Hyperliquid marks on mapped rows` : result.data.source }
+        if (marked.errors.length) {
+          result.errors = [...result.errors, ...marked.errors]
+          result.meta = { ...result.meta, freshness: 'partial', failureReason: marked.errors.map(error => error.reason).join(' · ') }
+        }
+      }
+      if (property === 'heatmap' && result.data?.holdings) {
+        const marked = await markEquityScreenRows(result.data.holdings.map((row: { symbol: string; price: number | null }) => ({ ticker: row.symbol, price: row.price })), force)
+        result.data = { ...result.data,
+          holdings: result.data.holdings.map((row: object, index: number) => ({ ...row, price: marked.rows[index].price,
+            priceSource: marked.rows[index].priceSource, priceBasis: marked.rows[index].priceBasis })),
+          priceSource: marked.marked ? 'Hyperliquid mapped marks + Yahoo other prices; returns use Yahoo stock history' : result.data.priceSource }
+        if (marked.errors.length) {
+          result.errors = [...result.errors, ...marked.errors]
+          result.meta = { ...result.meta, freshness: 'partial', failureReason: marked.errors.map(error => error.reason).join(' · ') }
+        }
+      }
       if (['amzn', 'avgo', 'mu', 'sofi', 'vst', 'hood', 'hims'].includes(String(property)) && result.data?.market) {
         try {
           result.data = { ...result.data, market: await refreshStocksQuote(result.data.market, Boolean((args[0] as { force?: boolean } | undefined)?.force)) }

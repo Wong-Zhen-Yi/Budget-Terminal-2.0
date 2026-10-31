@@ -11,6 +11,7 @@ import { getQuote, getQuotes } from '../electron/services/yahoo/quotes.js'
 import { yahoo, closeYahooWorker } from '../electron/services/yahoo/client.js'
 import { getChartsHistory } from '../electron/services/yahoo/chartsPage.js'
 import { getMarketSeries } from '../electron/services/marketSeries.js'
+import { markEquityScreenRows } from '../electron/services/equityScreenMarks.js'
 import { applyEquityMarketUpdate, mergeStreamCandle } from '../src/api/equityStream.js'
 
 const market = 'xyz:AAPL'
@@ -24,9 +25,15 @@ class TestSocket extends EventTarget {
   readyState = 0
   sent: Array<Record<string, unknown>> = []
   send(value: string): void { this.sent.push(JSON.parse(value)) }
-  open(): void { this.readyState = 1; this.dispatchEvent(new Event('open')) }
+  open(): void {
+    this.readyState = 1
+    this.dispatchEvent(new Event('open'))
+  }
   message(value: unknown): void { this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(value) })) }
-  close(): void { this.readyState = 3; this.dispatchEvent(new Event('close')) }
+  close(): void {
+    this.readyState = 3
+    this.dispatchEvent(new Event('close'))
+  }
 }
 
 async function offline(): Promise<void> {
@@ -59,7 +66,11 @@ async function offline(): Promise<void> {
     if (body.type === 'candleSnapshot') return Response.json([bar])
     assert.deepEqual(body, { type: 'metaAndAssetCtxs', dex: 'xyz' })
     return Response.json([{ universe: [{ name: market }, { name: 'xyz:NVDA' }] }, [context, { markPx: '200', prevDayPx: '200' }]])
-  }, () => now, () => { const socket = new TestSocket(); sockets.push(socket); return socket as unknown as WebSocket }, async ms => { now += ms })
+  }, () => now, () => {
+    const socket = new TestSocket()
+    sockets.push(socket)
+    return socket as unknown as WebSocket
+  }, async ms => { now += ms })
   client.start()
   const [aapl, nvda] = await Promise.all([client.getQuote('AAPL'), client.getQuote('NVDA')])
   assert.equal(aapl.price, 110)
@@ -109,6 +120,13 @@ async function offline(): Promise<void> {
     assert.equal(quotes.quotes.AAPL.price, 110)
     assert.equal(quotes.quotes.UNMAPPED.price, 95)
     assert.equal(yahooCalls, 1, 'Mapped quotes must not request Yahoo prices')
+    const originalRows = [{ ticker: 'AAPL', price: 1, marketCap: 100 }, { ticker: 'UNMAPPED', price: 95, marketCap: 200 }]
+    const markedRows = await markEquityScreenRows(originalRows)
+    assert.equal(markedRows.rows[0].price, 110)
+    assert.equal(markedRows.rows[1].price, 95)
+    assert.equal(markedRows.rows[0].marketCap, 100, 'Updating a displayed mark must not rewrite screener fundamentals or ranks')
+    assert.equal(originalRows[0].price, 1, 'Cached screener snapshots must remain immutable')
+    assert.equal(yahooCalls, 1, 'Unmapped screener prices must not require extra quote requests')
     const rows = buildPositionRows(portfolio, quotes.quotes, {})
     assert.equal(rows[0].marketValue, 220)
     assert.equal(rows[0].dollarGain, 60)
@@ -118,6 +136,10 @@ async function offline(): Promise<void> {
     assert.equal(history.payload.stats?.market, market)
     assert.equal(history.payload.stats?.price, 110)
     assert.equal(yahooCalls, 1, 'A covered perp chart and its indicators must not request Yahoo candles')
+    const fourHour = await getChartsHistory({ symbol: 'AAPL', interval: '4 Hours', range: '1D', force: true })
+    assert.equal(fourHour.payload.interval, '4h')
+    assert.equal(fourHour.payload.candles[0].time, candle.time)
+    assert.ok(hCandles.mock.calls.some(call => call.arguments[2] === '4h'), 'Perp 4h charts must request native bars, not stock-session aggregation')
     hCandles.mock.mockImplementation(async () => { throw new Error('History does not cover requested start') })
     const long = await getMarketSeries({ symbol: 'AAPL', start: new Date(Date.now() - 5 * 365 * 86400_000), interval: '1d', force: true })
     assert.match((long.meta as { source: string }).source, /Yahoo stock history/)
@@ -141,9 +163,16 @@ async function offline(): Promise<void> {
     indicators: { ma200: [], rsi: [], rsiMa: [] } }
   queryClient.setQueryData(['quotes', 'AAPL'], quoteEnvelope, { updatedAt: 1000 })
   queryClient.setQueryData(['chart', 'AAPL', '1 Hour'], ok(chart, 'fixture'))
+  queryClient.setQueryData(['marketCap'], ok({ rows: [{ ticker: 'AAPL', price: 100, marketCap: 500 }], source: 'Yahoo candidates' }, 'fixture'))
+  const changes = { '1D': 1 }
+  queryClient.setQueryData(['heatmap'], ok({ holdings: [{ symbol: 'AAPL', price: 100, changes }] }, 'fixture'))
   applyEquityMarketUpdate(queryClient, { quotes: [{ ...mark, price: 120 }], candles: [{ symbol: 'AAPL', market, interval: '1h', candle: { ...candle, close: 111 } }] })
   assert.equal(queryClient.getQueryData<typeof quoteEnvelope>(['quotes', 'AAPL'])?.data.holdings.AAPL.price, 120)
   assert.equal(queryClient.getQueryState(['quotes', 'AAPL'])?.dataUpdatedAt, 1000, 'Streaming one quote must not extend other cached sources')
+  assert.equal(queryClient.getQueryData<{ data: { rows: Array<{ price: number; marketCap: number }> } }>(['marketCap'])?.data.rows[0].price, 120)
+  assert.equal(queryClient.getQueryData<{ data: { rows: Array<{ marketCap: number }> } }>(['marketCap'])?.data.rows[0].marketCap, 500)
+  assert.equal(queryClient.getQueryData<{ data: { holdings: Array<{ price: number; changes: unknown }> } }>(['heatmap'])?.data.holdings[0].price, 120)
+  assert.equal(queryClient.getQueryData<{ data: { holdings: Array<{ changes: unknown }> } }>(['heatmap'])?.data.holdings[0].changes, changes, 'A live perp mark must not fabricate stock historical returns')
   assert.equal(queryClient.getQueryData<ReturnType<typeof ok<ChartPayload>>>(['chart', 'AAPL', '1 Hour'])?.data.candles[0].close, 111)
   queryClient.setQueryData(['chart', 'AAPL', '1 Hour'], ok({ ...chart, stats: { ...chart.stats!, market: undefined } }, 'Yahoo stock history'))
   applyEquityMarketUpdate(queryClient, { quotes: [], candles: [{ symbol: 'AAPL', market, interval: '1h', candle: { ...candle, close: 200 } }] })
@@ -164,6 +193,9 @@ async function live(): Promise<void> {
   }
   const history = await hyperliquidEquities.getCandles('NVDA', new Date(Date.now() - 24 * 3600_000), '1h', true)
   assert.ok(history.candles.length >= 24)
+  const fourHour = await hyperliquidEquities.getCandles('NVDA', new Date(Date.now() - 24 * 3600_000), '4h', true)
+  assert.ok(fourHour.candles.length >= 6)
+  assert.ok(fourHour.candles.every(candle => candle.time % (4 * 3600) === 0), 'Native perp bars use UTC opening timestamps')
   const streamed = new Promise<void>((resolve, reject) => {
     let quoteSeen = false
     let candleSeen = false

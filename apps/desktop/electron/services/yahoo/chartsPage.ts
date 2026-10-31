@@ -24,6 +24,7 @@ import { getMarketSeries } from '../marketSeries.js'
 import { equityMarket } from '../../shared/equityMarkets.js'
 import { getQuote } from './quotes.js'
 import { hyperliquidEquities } from '../hyperliquidEquities.js'
+import { captureSources, observeSource } from '../sourceHealth.js'
 
 const DAY = 24 * 60 * 60 * 1000
 
@@ -120,6 +121,21 @@ async function cachedCandles(
   }
 }
 
+async function fourHourCandles(symbol: string, start: Date, force: boolean): Promise<ChartsServiceResult<RawCandles>> {
+  if (!equityMarket(symbol)) return cachedCandles(symbol, start, '1h', force)
+  try {
+    const captured = await captureSources(() => hyperliquidEquities.getCandles(symbol, start, '4h', force))
+    if (captured.snapshot) observeSource(captured.snapshot)
+    const result = captured.value
+    return { payload: { candles: result.candles, currency: 'USD', longName: `${symbol} equity perpetual`,
+      source: result.source, market: result.market }, stale: result.stale, fromCache: result.fromCache, cacheAgeSeconds: result.cacheAgeSeconds }
+  } catch (error) {
+    const result = await cachedCandles(symbol, start, '1h', force, false, false)
+    return { ...result, payload: { ...result.payload,
+      source: `Yahoo stock history (${error instanceof Error ? error.message : String(error)})` } }
+  }
+}
+
 function fetchCandlesFromSeries(
   result: Awaited<ReturnType<typeof getYahooSeries>>,
   adjusted: boolean,
@@ -198,8 +214,12 @@ export async function getChartsHistory(request: ChartsHistoryRequest): Promise<C
   if (!symbol) throw new Error('No chart symbol was provided.')
   const fetchInterval = INTERVALS[request.interval]
   const start = requestStart(request.range, fetchInterval)
-  const raw = await cachedCandles(symbol, start, fetchInterval, Boolean(request.force))
-  const candles = request.interval === '4 Hours' ? aggregateFourHourCandles(raw.payload.candles) : raw.payload.candles
+  const raw = request.interval === '4 Hours'
+    ? await fourHourCandles(symbol, start, Boolean(request.force))
+    : await cachedCandles(symbol, start, fetchInterval, Boolean(request.force))
+  // Stock 4h bars follow trading sessions; Hyperliquid's native 4h bars use UTC
+  // opening timestamps. Keep those native bars aligned with the candle stream.
+  const candles = request.interval === '4 Hours' && !raw.payload.market ? aggregateFourHourCandles(raw.payload.candles) : raw.payload.candles
   if (request.interval === '4 Hours' && raw.payload.market) hyperliquidEquities.watchCandles(symbol, '4h')
   if (!candles.length) throw new Error(`No chart data returned for ${symbol}.`)
   const closes = candles.map((row) => row.close)

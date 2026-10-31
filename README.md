@@ -198,6 +198,9 @@ Their percentage changes use a rolling **24-hour** basis. One shared WebSocket
 streams marks and actual venue candles; reconnects restore subscriptions. Stock
 and chart views identify the price and candle sources separately. Source labels
 and PERP badges distinguish these derivative marks from stock-exchange prices.
+Market Cap, Price, Heatmap and Crypto equity-proxy displays share these marks.
+Screen candidates and historical-return metrics remain Yahoo stock data; the Price
+screen filters its returned candidates against the selected displayed marks.
 
 Yahoo remains the source for fundamentals, unsupported symbols, adjusted return
 analytics and longer stock histories. A chart switches as a complete series when

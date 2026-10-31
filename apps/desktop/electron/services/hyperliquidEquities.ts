@@ -81,6 +81,7 @@ export class HyperliquidEquities {
   private flushTimer: ReturnType<typeof setTimeout> | undefined
   private readonly changed = new Map<string, Quote>()
   private lastMessageAt = 0
+  private connectedAt = 0
   private retryMs = 1_000
   private nextRequestAt = 0
   private cooldownUntil = 0
@@ -161,7 +162,12 @@ export class HyperliquidEquities {
   private connect(): void {
     if (!this.enabled || this.socket || this.reconnect || !this.watched.size) return
     let socket: WebSocket
-    try { socket = this.socketFactory(WS_URL) } catch { this.scheduleReconnect(); return }
+    try {
+      socket = this.socketFactory(WS_URL)
+    } catch {
+      this.scheduleReconnect()
+      return
+    }
     this.socket = socket
     this.connectingTimer = setTimeout(() => { if (socket.readyState === 0) socket.close() }, 12_000)
     this.connectingTimer.unref?.()
@@ -169,10 +175,14 @@ export class HyperliquidEquities {
     socket.addEventListener('open', () => {
       if (this.socket !== socket) return
       clearTimeout(this.connectingTimer)
+      this.connectedAt = this.now()
       for (const symbol of this.watched) this.sendSubscription(symbol)
       for (const { symbol, interval } of this.candleWatches.values()) this.sendCandleSubscription(symbol, interval)
       this.heartbeat = setInterval(() => {
-        if (this.now() - this.lastMessageAt > 45_000) { socket.close(); return }
+        if (this.now() - this.lastMessageAt > 45_000) {
+          socket.close()
+          return
+        }
         if (socket.readyState === 1) socket.send(JSON.stringify({ method: 'ping' }))
       }, 15_000)
       this.heartbeat.unref?.()
@@ -207,7 +217,7 @@ export class HyperliquidEquities {
       if (!symbol || EQUITY_MARKETS[symbol] !== market || !this.watched.has(symbol)) return
       try {
         const quote = equityQuoteFromContext(symbol, market, data.ctx, this.now())
-        this.retryMs = 1_000
+        if (this.now() - this.connectedAt >= 30_000) this.retryMs = 1_000
         this.quotes.set(symbol, quote)
         this.changed.set(symbol, quote)
         this.publish()
@@ -229,12 +239,18 @@ export class HyperliquidEquities {
       this.scheduleReconnect()
     }
     socket.addEventListener('close', disconnected)
-    socket.addEventListener('error', () => { socket.close(); disconnected() })
+    socket.addEventListener('error', () => {
+      socket.close()
+      disconnected()
+    })
   }
 
   private scheduleReconnect(): void {
     if (!this.enabled || this.reconnect) return
-    this.reconnect = setTimeout(() => { this.reconnect = undefined; this.connect() }, this.retryMs)
+    this.reconnect = setTimeout(() => {
+      this.reconnect = undefined
+      this.connect()
+    }, this.retryMs)
     this.reconnect.unref?.()
     this.retryMs = Math.min(30_000, this.retryMs * 2)
   }

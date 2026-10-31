@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
-import type { BmnrPayload, Candle, ChartPayload, ChartsComparePayload, ChartsHistoryPayload, EquityMarketUpdate, Envelope, FundamentalsPagePayload, Quote, QuotesPayload, StocksPayload, ValuationPayload } from '@shared/contract'
+import type { BmnrPayload, Candle, ChartPayload, ChartsComparePayload, ChartsHistoryPayload, CryptoPayload, EquityMarketUpdate, Envelope, FundamentalsPagePayload, HeatmapPayload, MarketCapPayload, PriceScreenPayload, Quote, QuotesPayload, StocksPayload, ValuationPayload } from '@shared/contract'
 import { rsi, sma, toPoints } from '../../electron/services/indicators'
 import { targetUpside } from '@shared/stocks'
 import { sofiBookRatios, type SofiPayload } from '@shared/sofi'
@@ -40,6 +40,39 @@ export function applyEquityMarketUpdate(client: QueryClient, update: EquityMarke
         changed = true
       }
       if (changed) data = { ...payload, holdings }
+    } else if (root === 'crypto') {
+      const payload = data as CryptoPayload
+      const next = { ...payload.quotes }
+      let changed = false
+      for (const [symbol, quote] of quotes) if (next[symbol]) {
+        next[symbol] = { ...next[symbol], price: quote.price, changePct: quote.change, source: quote.source ?? next[symbol].source }
+        changed = true
+      }
+      if (changed) data = { ...payload, quotes: next }
+    } else if (root === 'marketCap' || root === 'priceScreen') {
+      const payload = data as MarketCapPayload | PriceScreenPayload
+      let changed = false
+      let rows = payload.rows.map(row => {
+        const quote = quotes.get(row.ticker)
+        if (!quote) return row
+        changed = true
+        return { ...row, price: quote.price, priceSource: quote.source, priceBasis: quote.priceBasis }
+      })
+      if (changed) {
+        if ('minimumPrice' in payload) rows = rows.filter(row => row.price !== null && row.price >= payload.minimumPrice && row.price <= payload.maximumPrice)
+        data = { ...payload, rows,
+          source: payload.source.includes('Hyperliquid') ? payload.source : `${payload.source}; Hyperliquid mapped marks` }
+      }
+    } else if (root === 'heatmap') {
+      const payload = data as HeatmapPayload
+      let changed = false
+      const holdings = payload.holdings.map(row => {
+        const quote = quotes.get(row.symbol)
+        if (!quote) return row
+        changed = true
+        return { ...row, price: quote.price, priceSource: quote.source, priceBasis: quote.priceBasis }
+      })
+      if (changed) data = { ...payload, holdings, priceSource: 'Hyperliquid mapped marks + Yahoo other prices; returns use Yahoo stock history' }
     } else if (root === 'bmnr') {
       const quote = quotes.get('BMNR')
       if (quote) data = markBmnrPayload(data as BmnrPayload, quote)

@@ -29,6 +29,7 @@ import { fetchTopTiles, getCrypto, sortTilesByRank } from '../electron/services/
 import { yahoo } from '../electron/services/yahoo/client.js'
 import { HyperliquidClient, hyperliquidClient, parseHyperliquidMarkets } from '../electron/services/hyperliquid.js'
 import { getApiUsageSnapshot } from '../electron/services/apiUsage.js'
+import { hyperliquidEquities } from '../electron/services/hyperliquidEquities.js'
 
 const hyperliquidFixture = [
   { universe: [{ name: 'BTC' }, { name: 'OLD', isDelisted: true }, { name: 'ETH' }] },
@@ -124,6 +125,8 @@ async function checkHeatmapFallback(): Promise<void> {
 }
 
 async function checkCryptoHyperliquidStage(): Promise<void> {
+  const equityQuote = mock.method(hyperliquidEquities, 'getQuote', async (symbol: string) => ({ symbol, price: 110, change: 10, absChange: 10,
+    currency: 'USD', source: `Hyperliquid equity perp (xyz:${symbol})` }))
   const request = mock.method(globalThis, 'fetch', async () => new Response('[]'))
   const chart = mock.method(yahoo, 'chart', async () => ({ quotes: [{ close: 100 }, { close: 110 }] }))
   const summary = mock.method(yahoo, 'quoteSummary', async () => ({ price: { marketCap: 1000 } }))
@@ -152,6 +155,7 @@ async function checkCryptoHyperliquidStage(): Promise<void> {
     summary.mock.restore()
     screen.mock.restore()
     hyperliquid.mock.restore()
+    equityQuote.mock.restore()
   }
 }
 
