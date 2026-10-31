@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { SETTINGS_TAB_ID, TABS } from '@shared/contract'
 import { DEFAULT_TAB_ID, WORKSPACES } from '@shared/navigation'
 import { useWarmPages } from '@/api/prefetch'
+import { useEquityMarketStream } from '@/api/equityStream'
 import { useMcpScreenshot, useScreenshotReady } from '@/api/mcpScreenshot'
 import { useReloadAll } from '@/api/queries'
 import { useSettings, useSettingsMutation } from '@/api/settingsQueries'
@@ -82,6 +83,7 @@ import { useNavigation } from '@/stores/navigation'
 const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
 
 export function App() {
+  useEquityMarketStream()
   const isMac = window.api.platform === 'darwin'
   const [selectedTab, setActiveTab] = useState(DEFAULT_TAB_ID)
   const { command: screenshot, complete: completeScreenshot } = useMcpScreenshot()

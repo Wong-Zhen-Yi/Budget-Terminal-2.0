@@ -16,7 +16,7 @@ const CLIENT_KEY = 'remote-query-client'
 const LOCAL_ROOTS = new Set(['browser', 'agents', 'agentImages', 'notifications', 'articles', 'portfolio', 'cards', 'settings', 'personalFinance'])
 const LARGE_ROOTS = new Set(['newsThumbnail', 'youtubeThumbnail', 'newsPreview'])
 
-export const RENDERER_CACHE_BUSTER = `budget-terminal-renderer-v${CACHE_SCHEMA_VERSION}`
+export const RENDERER_CACHE_BUSTER = `budget-terminal-renderer-v${CACHE_SCHEMA_VERSION}-equity-perps-v2`
 
 export function isRemoteQueryKey(queryKey: QueryKey): boolean {
   const root = String(queryKey[0] ?? '')

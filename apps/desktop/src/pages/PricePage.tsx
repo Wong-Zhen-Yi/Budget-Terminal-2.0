@@ -155,7 +155,7 @@ export function PricePage({
       {
         key: 'price',
         header: 'Price',
-        cell: (row) => preciseCurrency(row.price),
+        cell: (row) => <span title={row.priceSource}>{preciseCurrency(row.price)}{row.priceBasis === 'equity-perp-mark' ? ' PERP' : ''}</span>,
         sortValue: (row) => row.price,
         align: 'right',
         numeric: true,

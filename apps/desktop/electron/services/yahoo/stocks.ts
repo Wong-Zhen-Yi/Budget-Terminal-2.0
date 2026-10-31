@@ -16,6 +16,7 @@ import {
   stocksHolderChange,
   stocksHolderPercentage,
   stocksShares,
+  targetUpside,
   type StocksRawFacts,
 } from '../../shared/stocks.js'
 import { normalizeNewsSymbol } from '../../shared/news.js'
@@ -24,6 +25,8 @@ import { paced, yahoo } from './client.js'
 import { searchNews } from './newsPage.js'
 import { getYahooSeries } from './series.js'
 import { withYahooStatements, withYahooSummary } from './requests.js'
+import { equityMarket } from '../../shared/equityMarkets.js'
+import { getQuote } from './quotes.js'
 
 export const STOCKS_SOURCE = 'yahoo stocks'
 
@@ -280,16 +283,22 @@ export async function getStocks(symbolInput: string, force = false): Promise<Sto
   const symbol = symbolInput.trim().toUpperCase()
   if (!symbol) throw new Error('Enter a ticker symbol.')
 
-  const [chartResult, summaryResult, newsResult] = await Promise.allSettled([
+  const [chartResult, summaryResult, newsResult, quoteResult] = await Promise.allSettled([
     fetchChart(symbol, force),
     fetchSummary(symbol, force),
     fetchNews(symbol, force),
+    equityMarket(symbol) ? getQuote(symbol, force) : Promise.resolve(undefined),
   ])
   if (chartResult.status === 'rejected') throw chartResult.reason
 
   const chart = chartResult.value
   const stats = buildStocksStats(symbol, chart.candles, chart.currency, chart.longName)
   const failures: StocksFailure[] = []
+  const currentQuote = quoteResult.status === 'fulfilled' ? quoteResult.value : undefined
+  if (quoteResult.status === 'rejected') failures.push({ block: 'Overview', reason: `Current price: ${describe(quoteResult.reason)}` })
+  if (currentQuote) Object.assign(stats, { price: currentQuote.price, change: currentQuote.change, absChange: currentQuote.absChange,
+    priceSource: currentQuote.source, priceBasis: currentQuote.priceBasis, changeBasis: currentQuote.changeBasis })
+  stats.source = 'Yahoo Finance stock history (3 years)'
   if (chart.stale) failures.push({ block: 'Chart', reason: 'Live chart refresh failed; showing cached data.' })
 
   let summary: SummaryResult = { facts: {}, institutional: [], insiders: [], stale: false }
@@ -316,14 +325,16 @@ export async function getStocks(symbolInput: string, force = false): Promise<Sto
   const normalized = normalizeStocksFacts(symbol, {
     ...summary.facts,
     companyName: summary.facts.companyName || stats.longName,
-    currentPrice: summary.facts.currentPrice ?? stats.close,
+    currentPrice: currentQuote?.price ?? summary.facts.currentPrice ?? stats.close,
     volume: summary.facts.volume ?? stats.volume,
   })
   const missing = [...new Set(failures.map((failure) => failure.block))]
   return {
     payload: {
       symbol,
+      currentQuote,
       ...normalized,
+      targets: { ...normalized.targets, meanPrice: firstFinite(summary.facts.targetMean) },
       chart: { candles: chart.candles, stats, mfi: calculateMfi(chart.candles) },
       news,
       institutional: summary.institutional,
@@ -333,4 +344,16 @@ export async function getStocks(symbolInput: string, force = false): Promise<Sto
     },
     failures,
   }
+}
+
+/** Refresh the mark even when a focus page reuses its cached company-data block. */
+export async function refreshStocksQuote(payload: StocksPayload, force = false): Promise<StocksPayload> {
+  if (!equityMarket(payload.symbol)) return payload
+  const quote = await getQuote(payload.symbol, force)
+  const upside = targetUpside(quote.price, payload.targets.meanPrice)
+  return { ...payload, currentQuote: quote,
+    targets: { ...payload.targets, upsideToMean: upside.text, upsidePct: upside.value },
+    chart: { ...payload.chart, stats: { ...payload.chart.stats,
+      price: quote.price, change: quote.change, absChange: quote.absChange, priceSource: quote.source,
+      priceBasis: quote.priceBasis, changeBasis: quote.changeBasis } } }
 }

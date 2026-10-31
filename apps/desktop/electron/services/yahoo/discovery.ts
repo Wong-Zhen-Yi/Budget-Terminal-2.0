@@ -4,6 +4,8 @@ import { cache, TTL } from '../cache.js'
 import { paced, yahoo } from './client.js'
 import { getYahooSeries } from './series.js'
 import { withYahooSummary } from './requests.js'
+import { equityMarket } from '../../shared/equityMarkets.js'
+import { getQuote } from './quotes.js'
 
 const DAY = 86_400_000
 const modules = ['price', 'summaryDetail', 'financialData', 'defaultKeyStatistics', 'assetProfile', 'calendarEvents'] as const
@@ -86,14 +88,15 @@ export async function getDiscoverySnapshot(input: string): Promise<DiscoverySnap
   const profile = object(summary.assetProfile)
   const calendar = object(summary.calendarEvents)
   const last = candles.at(-1)!
+  const perp = equityMarket(symbol) ? await getQuote(symbol).catch(() => undefined) : undefined
   const prior = candles.at(-2)
-  const quotePrice = first(quote.regularMarketPrice, priceData.regularMarketPrice)
-  const quoteTime = date(quote.regularMarketTime ?? priceData.regularMarketTime)
+  const quotePrice = perp?.price ?? first(quote.regularMarketPrice, priceData.regularMarketPrice)
+  const quoteTime = perp?.asOf ?? date(quote.regularMarketTime ?? priceData.regularMarketTime)
   const delayed = first(quote.exchangeDataDelayedBy, priceData.exchangeDataDelayedBy)
   const marketState = string(quote.marketState) ?? string(priceData.marketState)
   const price = quotePrice ?? last.close
-  const previousClose = first(quote.regularMarketPreviousClose, detail.previousClose, priceData.regularMarketPreviousClose, prior?.close)
-  const status: DiscoverySnapshot['quoteStatus'] = quotePrice === null
+  const previousClose = perp ? perp.price - perp.absChange : first(quote.regularMarketPreviousClose, detail.previousClose, priceData.regularMarketPreviousClose, prior?.close)
+  const status: DiscoverySnapshot['quoteStatus'] = perp?.priceBasis === 'equity-perp-mark' ? 'equity-perp mark' : quotePrice === null
     ? 'previous close'
     : !marketState ? 'unavailable'
     : marketState === 'REGULAR' && delayed === 0
@@ -131,7 +134,8 @@ export async function getDiscoverySnapshot(input: string): Promise<DiscoverySnap
     previousClose,
     quoteTime,
     quoteStatus: status,
-    quoteDelayedMinutes: delayed,
+    quoteSource: perp?.source ?? 'Yahoo Finance',
+    quoteDelayedMinutes: perp?.priceBasis === 'equity-perp-mark' ? null : delayed,
     market: {
       open: first(quote.regularMarketOpen, detail.open, last.open),
       dayHigh: first(quote.regularMarketDayHigh, detail.dayHigh, last.high),

@@ -89,7 +89,11 @@ export interface Quote {
   asOf?: number
   currency?: string
   /** Published session closes are not live market quotes. */
-  priceBasis?: 'published-close'
+  priceBasis?: 'published-close' | 'equity-perp-mark'
+  source?: string
+  market?: string
+  changeBasis?: '24h' | 'previous-close'
+  fallbackReason?: string
 }
 
 /** The five macro readings across the top of the dashboard, keyed by display name. */
@@ -99,6 +103,11 @@ export interface QuotesPayload {
   macro: MacroQuotes
   holdings: Record<string, Quote>
   missing: string[]
+}
+
+export interface EquityMarketUpdate {
+  quotes: Quote[]
+  candles: Array<{ symbol: string; market: string; interval: string; candle: Candle }>
 }
 
 /* --------------------------------------------------------------- portfolio */
@@ -730,6 +739,11 @@ export interface ChartStats {
   volume: number
   currency: string
   longName: string
+  source?: string
+  market?: string
+  priceSource?: string
+  priceBasis?: Quote['priceBasis']
+  changeBasis?: Quote['changeBasis']
 }
 
 export interface IndicatorPoint {
@@ -805,6 +819,7 @@ export interface ChartsComparePayload {
   interval: ChartsCompareInterval
   range: ChartsCompareRange
   series: Record<string, ChartsSeriesPoint[]>
+  sources?: Record<string, string>
   missing: string[]
 }
 
@@ -930,6 +945,7 @@ export interface StocksMetrics {
 }
 
 export interface StocksTargets {
+  meanPrice?: number | null
   low: string
   mean: string
   high: string
@@ -974,6 +990,7 @@ export interface StocksChartPayload {
 
 export interface StocksPayload {
   symbol: string
+  currentQuote?: Quote
   company: StocksCompany
   metrics: StocksMetrics
   targets: StocksTargets
@@ -1015,7 +1032,8 @@ export interface DiscoverySnapshot {
   price: number | null
   previousClose: number | null
   quoteTime: number | null
-  quoteStatus: 'real-time' | 'delayed' | 'previous close' | 'unavailable'
+  quoteStatus: 'real-time' | 'delayed' | 'previous close' | 'unavailable' | 'equity-perp mark'
+  quoteSource?: string
   quoteDelayedMinutes: number | null
   market: Record<string, number | null>
   valuation: Record<string, number | null>
@@ -1928,6 +1946,8 @@ export interface SignalsPayload {
 
 /** One major-exchange U.S. equity returned by the Price market screen. */
 export interface MarketCapRow {
+  priceSource?: string
+  priceBasis?: Quote['priceBasis']
   rank: number
   ticker: string
   name: string
@@ -1951,6 +1971,8 @@ export type MarketCapTier = 'all' | 'mega' | 'large' | 'mid' | 'small' | 'micro'
 export interface MarketCapRequest extends BackgroundRequest { force?: boolean; tier?: MarketCapTier }
 
 export interface PriceScreenRow {
+  priceSource?: string
+  priceBasis?: Quote['priceBasis']
   ticker: string
   name: string
   exchange: string
@@ -2149,9 +2171,25 @@ export interface CryptoFearGreed {
   source: string
 }
 
-/** The four independent fetches `CryptoMarketWorker.run` stages. */
-export type CryptoStage = 'heatmap' | 'quotes' | 'market' | 'news'
+/** Independent Crypto page data stages, including venue-specific perpetuals. */
+export type CryptoStage = 'heatmap' | 'quotes' | 'market' | 'news' | 'hyperliquid'
 export type CryptoStageStatus = 'loaded' | 'unavailable'
+
+export interface HyperliquidMarket {
+  symbol: string
+  markPrice: number
+  changePct: number | null
+  /** Current hourly funding, in percent (not the raw decimal rate). */
+  fundingHourlyPct: number
+  /** Base-asset open interest multiplied by the mark price, in USD. */
+  openInterestUsd: number
+  volume24hUsd: number
+}
+
+export interface HyperliquidPayload {
+  fetchedAt: string
+  markets: HyperliquidMarket[]
+}
 
 export interface CryptoPayload {
   /** Local ISO stamp to the second, `datetime.now().isoformat(timespec='seconds')`. */
@@ -2162,6 +2200,7 @@ export interface CryptoPayload {
   fearGreed: CryptoFearGreed | null
   /** Ranked crypto-native RSS, capped at `CRYPTO_NEWS_LIMIT`. */
   news: NewsArticle[]
+  hyperliquid: HyperliquidPayload | null
   progress: Record<CryptoStage, CryptoStageStatus>
 }
 
@@ -2696,6 +2735,8 @@ export type HeatmapEtfKey = 'SPY' | 'NDX' | 'DJI'
 
 /** `EtfHeatmapHolding`. `weight` is a fraction: 0.0873 prints as 8.73%. */
 export interface HeatmapHolding {
+  priceSource?: string
+  priceBasis?: Quote['priceBasis']
   symbol: string
   name: string
   sector: string
@@ -3455,6 +3496,7 @@ export const CHANNELS = {
   screenshotReady: 'mcp:screenshot-ready',
   savedDataChanged: 'user-data:changed',
   apiUsage: 'system:api-usage',
+  equityMarketChanged: 'market:equity-changed',
   quotes: 'dashboard:quotes',
   chart: 'dashboard:chart',
   options: 'dashboard:options',
@@ -3632,6 +3674,7 @@ export interface FxRequest extends BackgroundRequest {
 export type WindowAction = 'minimize' | 'maximize' | 'close'
 
 export interface DesktopApi {
+  onEquityMarketChanged(listener: (update: EquityMarketUpdate) => void): () => void
   browserStatus(): Promise<Envelope<BrowserState>>
   browserResearch(request: BrowserRequest): Promise<Envelope<BrowserResult>>
   browserControl(request: BrowserControl): Promise<Envelope<BrowserResult>>

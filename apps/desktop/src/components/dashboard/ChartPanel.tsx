@@ -35,7 +35,8 @@ export function ChartPanel({ payload, indicators, loading, failureReason }: Char
           O {decimals(stats?.open, 2)} H {decimals(stats?.high, 2)} L {decimals(stats?.low, 2)} C{' '}
           {decimals(stats?.close, 2)} Vol {compactNumber(stats?.volume)}
         </span>
-        {barDate ? <span className="text-2xs text-text-muted">Last bar {barDate} UTC · vs previous bar</span> : null}
+        {barDate ? <span className="text-2xs text-text-muted">Last bar {barDate} UTC{stats?.changeBasis === '24h' ? ' · mark change vs 24h ago' : ' · vs previous bar'}</span> : null}
+        {stats?.source ? <span className="text-2xs text-text-muted" title={stats.source}>Chart: {stats.market ? `${stats.market} PERP` : 'Yahoo stock history'}{stats.priceSource ? ` · Price: ${stats.priceSource}` : ''}</span> : null}
         <div className="ml-auto flex items-baseline gap-3">
           {indicators.ma200 && lastMa200 !== undefined ? (
             <span className="num text-2xs" style={{ color: '#e0a34a' }}>

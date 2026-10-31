@@ -103,7 +103,7 @@ export function MuPage({ onStatusChange, onNavigate }: {
     </div>
     {query.data?.errors.length ? <div role="alert" className="shrink-0 border border-warn/40 bg-surface px-2 py-1 text-2xs text-warn">{query.data.errors.map(feedErrorText).join(' · ')}</div> : null}
     <div className="grid shrink-0 grid-cols-2 gap-2 md:grid-cols-3 2xl:grid-cols-6">
-      <Tile label="Share price" value={currency(market?.chart.stats.price)} sub={`USD · ${percent(market?.chart.stats.change)} daily`} />
+      <Tile label={market?.chart.stats.priceBasis === 'equity-perp-mark' ? 'Equity-perp mark' : 'Share price'} value={currency(market?.chart.stats.price)} sub={`${market?.chart.stats.priceSource ?? 'USD'} · ${percent(market?.chart.stats.change)} ${market?.chart.stats.changeBasis === '24h' ? '24h' : 'daily'}`} />
       <Tile label="Market cap" value={market?.metrics.marketCap ?? unavailable} sub="Yahoo Finance · market" />
       <Tile label="Forward P/E" value={market?.metrics.forwardPe ?? unavailable} sub="Yahoo Finance · estimate" />
       <Tile label="Quarterly revenue" value={metricText(metric('revenue'))} sub={`${earnings?.period ?? '--'} · GAAP`} />

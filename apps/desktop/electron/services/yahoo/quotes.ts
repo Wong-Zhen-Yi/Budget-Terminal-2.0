@@ -1,7 +1,9 @@
 import type { Quote } from '../../shared/contract.js'
-import { cache, TTL } from '../cache.js'
+import { cache, TTL, type CachedResult } from '../cache.js'
 import { paced, periodStart, yahoo } from './client.js'
 import { observeSource } from '../sourceHealth.js'
+import { equityMarket } from '../../shared/equityMarkets.js'
+import { hyperliquidEquities } from '../hyperliquidEquities.js'
 
 interface QuoteChartResult {
   quotes: Array<{ date: Date; close: number | null }>
@@ -52,6 +54,7 @@ export function quoteFromChart(symbol: string, result: QuoteChartResult): Quote 
       absChange,
       asOf: result.meta?.regularMarketTime?.getTime(),
       currency: result.meta?.currency,
+      source: 'Yahoo Finance',
     }
   }
 
@@ -66,6 +69,7 @@ export function quoteFromChart(symbol: string, result: QuoteChartResult): Quote 
     absChange,
     asOf: result.quotes.at(-1)?.date.getTime(),
     currency: result.meta?.currency,
+    source: 'Yahoo Finance',
   }
 }
 
@@ -85,7 +89,20 @@ export async function getQuote(symbol: string, force = false): Promise<Quote> {
   return (await resolveQuote(symbol, force)).value
 }
 
-function resolveQuote(symbol: string, force = false) {
+async function resolveQuote(symbol: string, force = false): Promise<CachedResult<Quote> & { stale: boolean }> {
+  symbol = symbol.trim().toUpperCase()
+  if (equityMarket(symbol)) {
+    try {
+      const quote = await hyperliquidEquities.getQuote(symbol, force)
+      return { value: quote, fromCache: false, stale: false, ageSeconds: Math.max(0, (Date.now() - quote.asOf!) / 1000) }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      const fallback = await cache.resolveWithStaleFallback(`quote:yahoo-only:${symbol}`, TTL.quotes, () => fetchQuote(symbol), { force })
+      observeSource({ fetchedAt: Date.now(), stale: false, fromCache: fallback.fromCache,
+        failures: [`${symbol}: Hyperliquid unavailable; using Yahoo stock quote. ${reason}`], sources: ['Yahoo stock quote fallback'] })
+      return { ...fallback, value: { ...fallback.value, source: 'Yahoo Finance (Hyperliquid fallback)', fallbackReason: reason } }
+    }
+  }
   return cache.resolveWithStaleFallback(`quote:yahoo-only:${symbol}`, TTL.quotes, () => fetchQuote(symbol), { force })
 }
 
@@ -113,6 +130,8 @@ export async function getQuotes(symbols: string[], force = false): Promise<Quote
     const symbol = unique[index]
     if (outcome.status === 'fulfilled') {
       quotes[symbol] = outcome.value.value
+      if (outcome.value.value.fallbackReason) errors.push({ symbol,
+        reason: `Hyperliquid unavailable; using Yahoo stock quote. ${outcome.value.value.fallbackReason}` })
       if (outcome.value.fromCache) fromCacheCount += 1
       if (outcome.value.stale) staleCount += 1
       cacheAgeSeconds = Math.max(cacheAgeSeconds, outcome.value.ageSeconds)

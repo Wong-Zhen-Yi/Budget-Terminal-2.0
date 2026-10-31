@@ -43,7 +43,7 @@ export function PortfolioPanel({
       header: 'Price',
       align: 'right',
       numeric: true,
-      cell: (row) => currency(row.price),
+      cell: (row) => <span title={row.priceSource}>{currency(row.price)}{row.priceBasis === 'equity-perp-mark' ? <span className="ml-1 text-[9px] text-accent">PERP</span> : null}</span>,
     },
     {
       key: 'change',

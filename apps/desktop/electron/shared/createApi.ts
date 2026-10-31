@@ -1,4 +1,4 @@
-import type { DesktopApi, SavedDataChanged } from './contract.js'
+import type { DesktopApi, EquityMarketUpdate, SavedDataChanged } from './contract.js'
 import { CHANNELS } from './contract.js'
 import type { ScreenshotCommand } from './screenshot.js'
 
@@ -7,6 +7,9 @@ export type Subscribe = <Payload>(channel: string, listener: (payload?: Payload)
 
 export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS.Platform): DesktopApi {
   return {
+    onEquityMarketChanged: listener => subscribe<EquityMarketUpdate>(CHANNELS.equityMarketChanged, payload => {
+      if (payload) listener(payload)
+    }),
     browserStatus: () => invoke(CHANNELS.browserStatus),
     browserResearch: (request) => invoke(CHANNELS.browserResearch, request),
     browserControl: (request) => invoke(CHANNELS.browserControl, request),

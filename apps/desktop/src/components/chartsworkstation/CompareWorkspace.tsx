@@ -73,7 +73,7 @@ export function CompareWorkspace({ onStatus }: { onStatus: (meta: EnvelopeMeta |
         <Button onClick={createPreset}>New preset</Button><Button disabled={!selectedPreset} onClick={updatePreset}>Update</Button><Button disabled={!selectedPreset} variant="danger" onClick={deletePreset}>Delete</Button>
         <span className="ml-auto text-2xs text-text-muted">{query.isFetching ? 'Loading comparison…' : query.data?.meta.failureReason ?? (envelope ? `${model?.symbols.length ?? 0} series` : 'Add tickers to begin.')}</span>
       </div>
-      <div className="flex shrink-0 flex-wrap gap-1">{symbols.map((symbol, index) => <button type="button" key={symbol} onClick={() => setSymbols(symbols.filter((entry) => entry !== symbol))} title={`Remove ${symbol}`} className="border border-border bg-surface px-2 py-1 text-2xs" style={{ color: COMPARE_COLORS[index % COMPARE_COLORS.length] }}>{symbol} ×</button>)}</div>
+      <div className="flex shrink-0 flex-wrap gap-1">{symbols.map((symbol, index) => <button type="button" key={symbol} onClick={() => setSymbols(symbols.filter((entry) => entry !== symbol))} title={`${envelope?.data.sources?.[symbol] ?? 'Source unavailable'} · Remove ${symbol}`} className="border border-border bg-surface px-2 py-1 text-2xs" style={{ color: COMPARE_COLORS[index % COMPARE_COLORS.length] }}>{symbol}{envelope?.data.sources?.[symbol]?.startsWith('Hyperliquid') ? ' PERP' : ''} ×</button>)}</div>
       <section className="flex min-h-[260px] flex-1 flex-col border border-border bg-surface"><CompareChart payload={envelope?.data ?? null} showIntervalLabels={showLabels} /></section>
       {showCorrelation && model?.symbols.length ? <CorrelationMatrix model={model} /> : null}
     </div>

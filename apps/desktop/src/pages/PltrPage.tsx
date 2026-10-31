@@ -89,7 +89,7 @@ export function PltrPage({ onStatusChange, onNavigate }: {
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-text-muted">
           <span>{market?.company.exchange || financials?.company.exchange || 'Exchange unavailable'}</span>
           <span>{market?.company.sector || financials?.company.sector || 'Sector unavailable'}</span>
-          <span>USD · daily close</span>
+          <span>{stats?.priceSource ?? 'USD · daily close'}</span>
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">

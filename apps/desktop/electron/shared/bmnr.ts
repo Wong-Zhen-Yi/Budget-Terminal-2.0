@@ -15,6 +15,7 @@ import type {
   BmnrValue,
   SecFiling,
   SecFreshness,
+  Quote,
 } from './contract.js'
 import { BMNR_SYMBOL } from './contract.js'
 
@@ -834,6 +835,21 @@ export function buildBmnrPayload(input: BmnrBuildInput): BmnrPayload {
     filings: input.sec?.filings ?? [],
     progress,
   }
+}
+
+/** Refresh the selected equity mark while retaining the filed/treasury observations. */
+export function markBmnrPayload(payload: BmnrPayload, quote: Quote): BmnrPayload {
+  const asOf = new Date(quote.asOf ?? Date.now()).toISOString()
+  const source = quote.source ?? 'Yahoo Finance'
+  const market = { ...payload.market,
+    sharePrice: bmnrValue(quote.price, asOf, source, 'live', quote.priceBasis === 'equity-perp-mark' ? 'Equity-perpetual mark, not a stock-exchange trade.' : undefined),
+    shareChangePct: bmnrValue(quote.change, asOf, source, 'live', quote.changeBasis === '24h' ? '24-hour perpetual mark change.' : 'Change against previous stock close.'),
+    impliedShares: bmnrValue(ratio(payload.market.marketCap.value, quote.price), asOf, 'derived', 'cross',
+      'Yahoo stock market cap divided by the selected price. Comparison only; filed share counts remain the preferred denominator.'),
+  }
+  const derived = buildDerived(payload.live, payload.filed, market)
+  return { ...payload, market, derived,
+    sensitivity: buildSensitivity(payload.live, payload.filed, market, derived.shares.value) }
 }
 
 export function emptyBmnrPayload(fetchedAt = ''): BmnrPayload {

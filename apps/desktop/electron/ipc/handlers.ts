@@ -18,6 +18,7 @@ import type { AgentsCommand } from '../shared/agents.js'
 import { rendererCacheFlushed } from '../services/rendererCacheShutdown.js'
 import { notificationsStatus, notificationsCommand, onNotificationClick } from '../services/notificationsHost.js'
 import type { NotificationCommand } from '../shared/notifications.js'
+import { hyperliquidEquities } from '../services/hyperliquidEquities.js'
 
 export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent) => boolean): () => void {
   const handle: typeof ipcMain.handle = (channel, listener) => {
@@ -27,6 +28,12 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
     })
   }
   const provider = yahooProvider
+  const stopEquityUpdates = hyperliquidEquities.subscribe(update => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.webContents.isDestroyed()) window.webContents.send(CHANNELS.equityMarketChanged, update)
+    }
+  })
+  hyperliquidEquities.start()
   handle(CHANNELS.browserControl, async (_event, request) => (await import('../services/browser.js')).browserControl(request))
   handle(CHANNELS.browserViewport, async (_event, viewport) => (await import('../services/browser.js')).setBrowserViewport(viewport))
   handle(CHANNELS.agentsStatus, () => agentsStatus())
@@ -168,6 +175,8 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
     closeAgents()
     stopWatching()
     stopSavedData()
+    stopEquityUpdates()
+    hyperliquidEquities.close()
     for (const channel of Object.values(CHANNELS)) ipcMain.removeHandler(channel)
   }
 }

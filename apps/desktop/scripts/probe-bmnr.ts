@@ -7,6 +7,7 @@ import {
   bmnrQuarterLabel,
   buildBmnrPayload,
   buildBmnrSnapshot,
+  markBmnrPayload,
   buildComposition,
   buildFiledTreasury,
   buildHistory,
@@ -374,6 +375,14 @@ function runOffline(): void {
     market: { sharePrice: 40, shareChangePct: 1.5, marketCap: 20_000_000_000, ethPrice, ethChangePct: -2 },
   })
   const d = built.derived
+  const marked = markBmnrPayload(built, { symbol: 'BMNR', price: 50, change: 25, absChange: 10, currency: 'USD',
+    asOf: Date.now(), priceBasis: 'equity-perp-mark', changeBasis: '24h', source: 'Hyperliquid equity perp (xyz:BMNR)' })
+  assert.equal(marked.market.sharePrice.value, 50)
+  assert.match(marked.market.sharePrice.source, /Hyperliquid/)
+  assert.match(marked.market.shareChangePct.note ?? '', /24-hour/)
+  assert.equal(marked.derived.shares.value, d.shares.value, 'A new perp mark must never change a filed share denominator')
+  assert.equal(marked.derived.nav.value, d.nav.value, 'A share mark must not alter treasury or filed NAV observations')
+  assert.equal(built.market.sharePrice.value, 40, 'A stream update must not mutate the cached base payload')
   assert.equal(d.shares.value, 603_226_394, 'the cover-page count is the denominator')
   near(d.cryptoValue.value, 5_901_112 * ethPrice, 1, 'crypto value')
   const expectedNav = 11_599_577_000 + (5_901_112 * ethPrice - 10_871_934_000)

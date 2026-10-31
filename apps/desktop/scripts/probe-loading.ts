@@ -672,18 +672,18 @@ Object.defineProperty(globalThis, 'document', { configurable: true, value: { hid
 const cryptoClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 try {
   const { CryptoPage } = await import('../src/pages/CryptoPage.js')
-  const cryptoSnapshot: CryptoPayload = { fetchedAt: '2026-10-08T07:50:45', quotes: {}, global: null, fearGreed: null, news: [],
+  const cryptoSnapshot: CryptoPayload = { fetchedAt: '2026-10-08T07:50:45', quotes: {}, global: null, fearGreed: null, news: [], hyperliquid: null,
     heatmap: { tiles: [], coverage: { loaded: 0, total: 30 }, updatedAt: '2026-10-08T07:50:45' },
-    progress: { heatmap: 'loaded', quotes: 'loaded', market: 'loaded', news: 'loaded' } }
+    progress: { heatmap: 'loaded', quotes: 'loaded', market: 'loaded', news: 'loaded', hyperliquid: 'loaded' } }
   const cryptoEnvelope = ok(cryptoSnapshot)
-  cryptoClient.setQueryData(['crypto'], { ...cryptoEnvelope, meta: { ...cryptoEnvelope.meta, fetchedAt: Date.now() - 180_000 } })
+  cryptoClient.setQueryData(['crypto', 'hyperliquid-v1'], { ...cryptoEnvelope, meta: { ...cryptoEnvelope.meta, fetchedAt: Date.now() - 180_000 } })
   const cryptoMarkup = renderToStaticMarkup(createElement(QueryClientProvider, { client: cryptoClient },
     createElement(CryptoPage, { onStatusChange: () => {} })))
   assert.match(cryptoMarkup, /Snapshot updated at 07:50:45/)
   assert.doesNotMatch(cryptoMarkup, /Snapshot expired/)
   assert.match(cryptoMarkup, /Snapshot coverage 0\/30 \| stale \| Updated 07:50:45/)
   assert.doesNotMatch(cryptoMarkup, /Live data|Live coverage/)
-  cryptoClient.setQueryData(['crypto'], cryptoEnvelope)
+  cryptoClient.setQueryData(['crypto', 'hyperliquid-v1'], cryptoEnvelope)
   const freshCryptoMarkup = renderToStaticMarkup(createElement(QueryClientProvider, { client: cryptoClient },
     createElement(CryptoPage, { onStatusChange: () => {} })))
   assert.match(freshCryptoMarkup, /Snapshot updated at 07:50:45 · fresh/)

@@ -103,6 +103,7 @@ export function HimsPage({ onStatusChange, onNavigate }: {
     <div className="flex shrink-0 flex-wrap items-center gap-2">
       <h1 className="text-sm font-semibold">HIMS · Hims & Hers Health</h1>
       <span className="num text-sm font-bold">{amount(stats?.price, true)}</span>
+      {stats?.priceSource ? <span className="text-2xs text-text-muted">{stats.priceSource} · {stats.changeBasis === '24h' ? '24h' : 'daily'}</span> : null}
       <span className={`num text-xs ${stats && stats.change >= 0 ? 'text-up' : 'text-down'}`}>{percent(stats?.change, true)}</span>
       <span className="text-2xs text-text-muted">NYSE · USD · Consumer health platform</span>
       <Button className="ml-auto" variant="accent" disabled={busy} onClick={onRefresh}>{busy ? loading ? 'Loading HIMS…' : 'Updating HIMS…' : 'Refresh'}</Button>

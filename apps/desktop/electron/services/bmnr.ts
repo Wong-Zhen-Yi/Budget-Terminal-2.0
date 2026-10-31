@@ -1,7 +1,7 @@
 import type { BmnrBlock, BmnrPayload, EnvelopeError } from '../shared/contract.js'
 import { BMNR_CIK, BMNR_ETH_SYMBOL, BMNR_SYMBOL } from '../shared/contract.js'
 import type { BmnrMarketInput, BmnrSecInput } from '../shared/bmnr.js'
-import { buildBmnrPayload, finiteOrNull } from '../shared/bmnr.js'
+import { buildBmnrPayload, finiteOrNull, markBmnrPayload } from '../shared/bmnr.js'
 import { localIsoSeconds } from '../shared/crypto.js'
 import { describeError, err } from '../shared/envelope.js'
 import { cache, TTL } from './cache.js'
@@ -167,8 +167,13 @@ async function fetchMarket(force: boolean): Promise<BmnrMarketInput> {
  * matches `TTL.crypto` because it is the same CoinGecko free tier and the same rate budget;
  * it only stops a tab revisit from spending that budget again.
  */
-export function getBmnr(force = false): Promise<BmnrFetchResult> {
-  return cache.resolve('bmnr:page', TTL.bmnr, () => fetchBmnr(force), { force }).then((result) => result.value)
+export async function getBmnr(force = false): Promise<BmnrFetchResult> {
+  const result = (await cache.resolve('bmnr:page', TTL.bmnr, () => fetchBmnr(force), { force })).value
+  try {
+    return { ...result, payload: markBmnrPayload(result.payload, await getQuote(BMNR_SYMBOL, force)) }
+  } catch (error) {
+    return { ...result, errors: [...result.errors, err('market prices', describeError(error), 'quote', BMNR_BLOCK_LABELS.market)] }
+  }
 }
 
 export const bmnrTesting = { TREASURY_URL, HEADERS, TIMEOUT_MS, fetchMarket, hasTreasuryRow }

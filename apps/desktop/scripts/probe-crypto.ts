@@ -27,6 +27,74 @@ import {
 } from '../electron/shared/crypto.js'
 import { fetchTopTiles, getCrypto, sortTilesByRank } from '../electron/services/crypto.js'
 import { yahoo } from '../electron/services/yahoo/client.js'
+import { HyperliquidClient, hyperliquidClient, parseHyperliquidMarkets } from '../electron/services/hyperliquid.js'
+import { getApiUsageSnapshot } from '../electron/services/apiUsage.js'
+import { hyperliquidEquities } from '../electron/services/hyperliquidEquities.js'
+
+const hyperliquidFixture = [
+  { universe: [{ name: 'BTC' }, { name: 'OLD', isDelisted: true }, { name: 'ETH' }] },
+  [
+    { markPx: '110', prevDayPx: '100', funding: '0.0000125', openInterest: '5', dayNtlVlm: '1000' },
+    {},
+    { markPx: '20', prevDayPx: '0', funding: '-0.00002', openInterest: '3', dayNtlVlm: '2000' },
+  ],
+]
+
+async function checkHyperliquid(): Promise<void> {
+  const rows = parseHyperliquidMarkets(hyperliquidFixture)
+  assert.deepEqual(rows.map(row => row.symbol), ['ETH', 'BTC'])
+  assert.equal(rows[0].markPrice, 20, 'Delisted filtering must preserve metadata/context alignment')
+  assert.equal(rows[0].changePct, null, 'New listings without a previous price have no daily change')
+  assert.equal(rows[0].fundingHourlyPct, -0.002)
+  assert.equal(rows[1].fundingHourlyPct, 0.00125, 'Funding must convert decimal rate to percent exactly once')
+  assert.equal(rows[1].openInterestUsd, 550, 'Open interest is returned in base units')
+  assert.ok(Math.abs(rows[1].changePct! - 10) < 1e-10)
+  assert.throws(() => parseHyperliquidMarkets({}), /Invalid Hyperliquid/)
+  assert.throws(() => parseHyperliquidMarkets([{ universe: [{ name: 'BTC' }] }, []]), /do not match/)
+  assert.throws(() => parseHyperliquidMarkets([{ universe: [] }, []]), /no active/)
+  for (const bad of [null, '', ' ', 'NaN', true, '-1']) {
+    assert.throws(() => parseHyperliquidMarkets([{ universe: [{ name: 'BTC' }] },
+      [{ markPx: bad, funding: '0', openInterest: '1', dayNtlVlm: '1' }]]), /Incomplete/)
+  }
+
+  let now = 100_000
+  let calls = 0
+  let response = () => new Response(JSON.stringify(hyperliquidFixture))
+  const waits: number[] = []
+  const client = new HyperliquidClient(async (url, options) => {
+    calls += 1
+    assert.equal(url, 'https://api.hyperliquid.xyz/info')
+    assert.equal(options?.method, 'POST')
+    assert.deepEqual(JSON.parse(String(options?.body)), { type: 'metaAndAssetCtxs' })
+    assert.ok(options?.signal, 'Provider requests must have a timeout')
+    return response()
+  }, () => now, async ms => { waits.push(ms); now += ms })
+  const before = getApiUsageSnapshot().providers.find(provider => provider.id === 'hyperliquid')!.requestCount
+  const [first, concurrent] = await Promise.all([client.getMarkets(), client.getMarkets()])
+  assert.equal(first, concurrent, 'Concurrent page loads share a request')
+  assert.equal(calls, 1)
+  assert.equal(getApiUsageSnapshot().providers.find(provider => provider.id === 'hyperliquid')!.requestCount, before + 1)
+  await client.getMarkets()
+  assert.deepEqual(waits, [2_000], 'Forced refreshes must respect provider pacing')
+
+  response = () => new Response('', { status: 429, headers: { 'Retry-After': '120' } })
+  await assert.rejects(client.getMarkets(), /HTTP 429/)
+  const throttledCalls = calls
+  now += 60_000
+  await assert.rejects(client.getMarkets(), /retry in 60s/)
+  assert.equal(calls, throttledCalls, 'Cooldown must prevent another HTTP request')
+  now += 60_000
+  response = () => new Response(JSON.stringify(hyperliquidFixture))
+  assert.equal((await client.getMarkets()).markets.length, 2)
+
+  const dated = new HyperliquidClient(async () => new Response('', { status: 429,
+    headers: { 'Retry-After': new Date(now + 180_000).toUTCString() } }), () => now)
+  await assert.rejects(dated.getMarkets(), /HTTP 429/)
+  await assert.rejects(dated.getMarkets(), /retry in 180s/)
+  const failed = new HyperliquidClient(async () => { throw new Error('Timed out') })
+  await assert.rejects(failed.getMarkets(), /Timed out/)
+  console.log('Hyperliquid checks passed: aligned markets, units, schema failures, request sharing, pacing, usage tracking, cooldown and timeout.')
+}
 
 async function checkHeatmapFallback(): Promise<void> {
   const request = mock.method(globalThis, 'fetch', async () => new Response('', { status: 403 }))
@@ -53,6 +121,41 @@ async function checkHeatmapFallback(): Promise<void> {
   } finally {
     request.mock.restore()
     fallback.mock.restore()
+  }
+}
+
+async function checkCryptoHyperliquidStage(): Promise<void> {
+  const equityQuote = mock.method(hyperliquidEquities, 'getQuote', async (symbol: string) => ({ symbol, price: 110, change: 10, absChange: 10,
+    currency: 'USD', source: `Hyperliquid equity perp (xyz:${symbol})` }))
+  const request = mock.method(globalThis, 'fetch', async () => new Response('[]'))
+  const chart = mock.method(yahoo, 'chart', async () => ({ quotes: [{ close: 100 }, { close: 110 }] }))
+  const summary = mock.method(yahoo, 'quoteSummary', async () => ({ price: { marketCap: 1000 } }))
+  const screen = mock.method(yahoo, '_fetch', async () => ({ finance: { result: [{ quotes: [] }] } }))
+  let calls = 0
+  const markets = { markets: parseHyperliquidMarkets(hyperliquidFixture), fetchedAt: localIsoSeconds() }
+  const hyperliquid = mock.method(hyperliquidClient, 'getMarkets', async () => { calls += 1; return markets })
+  try {
+    const first = await getCrypto(true)
+    assert.equal(first.payload.hyperliquid, markets)
+    assert.equal(first.payload.progress.hyperliquid, 'loaded')
+    const cached = await getCrypto()
+    assert.equal(cached, first)
+    assert.equal(calls, 1, 'Tab revisits must reuse the shared page cache')
+    hyperliquid.mock.mockImplementation(async () => { throw new Error('Hyperliquid HTTP 429.') })
+    const partial = await getCrypto(true)
+    assert.equal(partial.payload.hyperliquid, null)
+    assert.equal(partial.payload.progress.hyperliquid, 'unavailable')
+    assert.equal(partial.payload.progress.quotes, 'loaded', 'Other stages must survive a Hyperliquid outage')
+    assert.equal(partial.payload.quotes.BTC.price, 110)
+    assert.ok(partial.errors.some(error => error.symbol === 'Hyperliquid Perpetuals' && /429/.test(error.reason)))
+    console.log('Crypto Hyperliquid integration passed: stage readiness, shared cache, force refresh and isolated provider failure.')
+  } finally {
+    request.mock.restore()
+    chart.mock.restore()
+    summary.mock.restore()
+    screen.mock.restore()
+    hyperliquid.mock.restore()
+    equityQuote.mock.restore()
   }
 }
 
@@ -129,10 +232,10 @@ function runOffline(): void {
   assert.equal(fearGreedStamp(''), '')
 
   // Failed stages must not count as ready.
-  const allLoaded = { heatmap: 'loaded', quotes: 'loaded', market: 'loaded', news: 'loaded' } as const
+  const allLoaded = { heatmap: 'loaded', quotes: 'loaded', market: 'loaded', news: 'loaded', hyperliquid: 'loaded' } as const
   const mixed = { ...allLoaded, news: 'unavailable' } as const
-  assert.equal(loadedStageCount(allLoaded), 4)
-  assert.equal(loadedStageCount(mixed), 3)
+  assert.equal(loadedStageCount(allLoaded), 5)
+  assert.equal(loadedStageCount(mixed), 4)
   assert.equal(hasUnavailableStage(allLoaded), false)
   assert.equal(hasUnavailableStage(mixed), true)
 
@@ -228,4 +331,11 @@ async function runLive(): Promise<void> {
 const args = process.argv.slice(2)
 runOffline()
 await checkHeatmapFallback()
-if (!args.includes('--offline')) await runLive()
+await checkHyperliquid()
+await checkCryptoHyperliquidStage()
+if (args.includes('--hyperliquid-live')) {
+  const result = await hyperliquidClient.getMarkets()
+  assert.ok(result.markets.some(row => row.symbol === 'BTC'))
+  assert.ok(result.markets.some(row => row.symbol === 'ETH'))
+  console.log(`Hyperliquid live check passed: ${result.markets.length} active perpetual markets at ${result.fetchedAt}.`)
+} else if (!args.includes('--offline')) await runLive()

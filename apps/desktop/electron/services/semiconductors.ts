@@ -8,6 +8,8 @@ import { paced, yahoo } from './yahoo/client.js'
 import { getYahooSeries } from './yahoo/series.js'
 import { withYahooSummary } from './yahoo/requests.js'
 import { fetchPortfolioNews } from './yahoo/newsPage.js'
+import { equityMarket } from '../shared/equityMarkets.js'
+import { getQuote } from './yahoo/quotes.js'
 
 const SOURCE = 'Yahoo Finance · reviewed SEC company catalog'
 const DAY = 86_400_000
@@ -43,11 +45,16 @@ const defaults: SemiconductorFetchers = {
     else if (series.value.stale) warnings.push('History refresh failed; showing cached data.')
     if (!history.length) warnings.push('Adjusted price history unavailable.')
     if (finite(raw.regularMarketPrice) === null) warnings.push('Share price unavailable.')
-    const price = finite(raw.regularMarketPrice)
+    const perp = equityMarket(symbol) ? await getQuote(symbol, force).catch(error => {
+      warnings.push(`Selected price refresh failed; showing Yahoo stock quote: ${describeError(error)}`)
+      return undefined
+    }) : undefined
+    const price = perp?.price ?? finite(raw.regularMarketPrice)
     const previous = finite(raw.regularMarketPreviousClose)
     if (price === null && !history.length) throw new Error(warnings.join(' · '))
-    return { value: { price, dailyChange: finite(raw.regularMarketChangePercent) ?? (price !== null && previous !== null && previous > 0 ? (price / previous - 1) * 100 : null),
-      marketCap: finite(raw.marketCap), quoteTime: timestamp(raw.regularMarketTime), history }, warnings }
+    return { value: { price, dailyChange: perp?.change ?? finite(raw.regularMarketChangePercent) ?? (price !== null && previous !== null && previous > 0 ? (price / previous - 1) * 100 : null),
+      marketCap: finite(raw.marketCap), quoteTime: perp?.asOf ?? timestamp(raw.regularMarketTime), history,
+      priceSource: perp?.source ?? 'Yahoo Finance', changeBasis: perp?.changeBasis ?? 'previous-close' }, warnings }
   },
   async profile(symbol) {
     const raw = await withYahooSummary(symbol, () => paced(() => yahoo.quoteSummary(symbol, { modules: ['assetProfile', 'summaryDetail', 'defaultKeyStatistics', 'financialData', 'calendarEvents'] })))

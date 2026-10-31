@@ -35,7 +35,7 @@ export interface IncrementalSeriesResult {
   meta?: unknown
 }
 
-interface IncrementalOptions {
+export interface IncrementalOptions {
   symbol: string
   start: Date
   interval: YahooSeriesInterval

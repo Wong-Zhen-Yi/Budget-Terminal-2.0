@@ -216,6 +216,7 @@ export function StocksPage({
         <header className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-border px-2 py-1">
           <span className="text-sm font-semibold text-text">{payload?.symbol ?? symbol}</span>
           <span className="num text-sm font-semibold text-text">{quotePrice(stats?.price, stats?.currency)}</span>
+          {stats?.priceSource ? <span className="text-2xs text-text-muted" title={stats.source}>{stats.priceSource}{stats.changeBasis === '24h' ? ' · 24h change' : ''}</span> : null}
           <span className={`num text-2xs ${up ? 'text-up' : 'text-down'}`}>
             {signedQuotePrice(stats?.absChange, stats?.currency)} ({stats ? `${stats.change >= 0 ? '+' : ''}${stats.change.toFixed(2)}%` : '--'})
           </span>

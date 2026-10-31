@@ -1,4 +1,5 @@
 import { RecordRevisionError } from './mcpContext.js'
+import { markEquityScreenRows } from './equityScreenMarks.js'
 import { getMoney, clearMoneyCache } from './money.js'
 import { withSourceEnvelope } from './sourceHealth.js'
 import { getHims } from './hims.js'
@@ -7,6 +8,7 @@ import type { HimsPayload, HimsRequest } from '../shared/hims.js'
 import { getHood } from './hood.js'
 import { getSofi } from './sofi.js'
 import type { SofiPayload, SofiRequest } from '../shared/sofi.js'
+import { sofiBookRatios } from '../shared/sofi.js'
 import { getAmzn } from './amzn.js'
 import type { AmznPayload, AmznRequest } from '../shared/amzn.js'
 import { getMu } from './mu.js'
@@ -270,7 +272,7 @@ import {
   SIGNALS_SOURCE,
 } from './yahoo/signals.js'
 import { getTradingVolumes, TRADING_VOLUMES_SOURCE } from './yahoo/tradingVolumes.js'
-import { getStocks, STOCKS_SOURCE } from './yahoo/stocks.js'
+import { getStocks, refreshStocksQuote, STOCKS_SOURCE } from './yahoo/stocks.js'
 import { getDiscoverySnapshot, getDiscoveryUniverse } from './yahoo/discovery.js'
 import { getCloses, getClosesBatch, periodReturn } from './yahoo/history.js'
 import { getOptionQuotes } from './yahoo/optionQuotes.js'
@@ -445,6 +447,7 @@ function emptyCryptoPayload(): CryptoPayload {
     global: null,
     fearGreed: null,
     news: [],
+    hyperliquid: null,
     progress: Object.fromEntries(
       CRYPTO_STAGES.map((stage) => [stage, 'unavailable' as const]),
     ) as CryptoPayload['progress'],
@@ -685,6 +688,7 @@ const providerImplementation: MarketDataProvider = {
       getQuotes([...macroSymbols, ...holdings], force),
       getHoldingSectors(holdings),
     ])
+    const quoteSource = [...new Set(Object.values(batch.quotes).map(quote => quote.priceBasis === 'equity-perp-mark' ? 'Hyperliquid equity perps' : 'Yahoo Finance'))].join(' + ') || 'market prices'
 
     const macro: QuotesPayload['macro'] = {}
     for (const entry of MACRO_SYMBOLS) {
@@ -704,35 +708,36 @@ const providerImplementation: MarketDataProvider = {
     }
     if (classifications.missing.length) {
       return partial(payload, [
-        ...batch.errors.map(entry => err('yahoo quotes', entry.reason, 'quotes', entry.symbol)),
+        ...batch.errors.map(entry => err('market prices', entry.reason, 'quotes', entry.symbol)),
         err('Sector classification', `No classification available for: ${classifications.missing.join(', ')}. These holdings remain Unclassified.`, 'holding_sectors'),
-      ], 'yahoo quotes + sectors', `${classifications.missing.length} holding classification(s) unavailable${batch.errors.length ? `; ${batch.errors.length} quote(s) unavailable` : ''}.`)
+      ], `${quoteSource} + sectors`, `${classifications.missing.length} holding classification(s) unavailable${batch.errors.length ? `; ${batch.errors.length} quote(s) unavailable` : ''}.`)
     }
     if (!batch.errors.length) {
       if (batch.staleCount > 0) {
         return {
           data: payload,
-          meta: meta('yahoo quotes', 'stale', { cacheAgeSeconds: batch.cacheAgeSeconds }),
+          meta: meta(quoteSource, 'stale', { cacheAgeSeconds: batch.cacheAgeSeconds }),
           errors: [],
         }
       }
-      return ok(payload, 'yahoo quotes', batch.fromCacheCount === Object.keys(batch.quotes).length
+      return ok(payload, quoteSource, batch.fromCacheCount === Object.keys(batch.quotes).length
         ? { freshness: 'cached', cacheAgeSeconds: batch.cacheAgeSeconds }
         : {})
     }
     return partial(
       payload,
       batch.errors.map((entry) =>
-        err('yahoo quotes', entry.reason, 'quotes', entry.symbol),
+        err('market prices', entry.reason, 'quotes', entry.symbol),
       ),
-      'yahoo quotes',
+      quoteSource,
       `${batch.errors.length} quote(s) were unavailable.`,
     )
   },
 
   async chart({ symbol, timeframe, force }) {
     try {
-      return ok(await getChart(symbol, timeframe, force), 'yahoo chart')
+      const payload = await getChart(symbol, timeframe, force)
+      return ok(payload, [payload.stats?.source ?? 'Yahoo stock chart', payload.stats?.priceSource].filter(Boolean).join(' + '))
     } catch (error) {
       return failed(emptyChart(symbol, timeframe), describeError(error), 'yahoo chart')
     }
@@ -756,7 +761,7 @@ const providerImplementation: MarketDataProvider = {
             errors: [],
           }
         }
-        return ok(result.payload, 'yahoo chart')
+        return ok(result.payload, [result.payload.stats?.source ?? 'Yahoo stock chart', result.payload.stats?.priceSource].filter(Boolean).join(' + '))
     } catch (error) {
       return failed({
         symbol,
@@ -1352,9 +1357,7 @@ const providerImplementation: MarketDataProvider = {
     try {
       const { payload, errors } = await getCrypto(force)
       if (!errors.length) return ok(payload, CRYPTO_SOURCE)
-      // Four independent feeds across three unrelated hosts. A dead stage leaves its own
-      // panel showing a warning dot; the other three still render, exactly as the
-      // reference's per-stage `progress` map does.
+      // A dead feed leaves its own panel showing a warning while healthy stages render.
       const dead = CRYPTO_STAGES.filter((stage) => payload.progress[stage] === 'unavailable')
       return partial(
         payload,
@@ -2048,6 +2051,46 @@ export const yahooProvider: MarketDataProvider = new Proxy(providerImplementatio
   get(target, property, receiver) {
     const method = Reflect.get(target, property, receiver)
     if (typeof method !== 'function') return method
-    return (...args: unknown[]) => withSourceEnvelope(() => method.apply(target, args))
+    return (...args: unknown[]) => withSourceEnvelope(async () => {
+      const result = await method.apply(target, args)
+      const force = Boolean((args[0] as { force?: boolean } | undefined)?.force)
+      if ((property === 'marketCap' || property === 'priceScreen') && result.data?.rows) {
+        const marked = await markEquityScreenRows(result.data.rows, force)
+        const rows = property === 'priceScreen' ? marked.rows.filter(row => row.price !== null
+          && row.price >= result.data.minimumPrice && row.price <= result.data.maximumPrice) : marked.rows
+        result.data = { ...result.data, rows,
+          source: marked.marked ? `${result.data.source} screen candidates; Hyperliquid marks on mapped rows` : result.data.source }
+        if (marked.errors.length) {
+          result.errors = [...result.errors, ...marked.errors]
+          result.meta = { ...result.meta, freshness: 'partial', failureReason: marked.errors.map(error => error.reason).join(' · ') }
+        }
+      }
+      if (property === 'heatmap' && result.data?.holdings) {
+        const marked = await markEquityScreenRows(result.data.holdings.map((row: { symbol: string; price: number | null }) => ({ ticker: row.symbol, price: row.price })), force)
+        result.data = { ...result.data,
+          holdings: result.data.holdings.map((row: object, index: number) => ({ ...row, price: marked.rows[index].price,
+            priceSource: marked.rows[index].priceSource, priceBasis: marked.rows[index].priceBasis })),
+          priceSource: marked.marked ? 'Hyperliquid mapped marks + Yahoo other prices; returns use Yahoo stock history' : result.data.priceSource }
+        if (marked.errors.length) {
+          result.errors = [...result.errors, ...marked.errors]
+          result.meta = { ...result.meta, freshness: 'partial', failureReason: marked.errors.map(error => error.reason).join(' · ') }
+        }
+      }
+      if (['amzn', 'avgo', 'mu', 'sofi', 'vst', 'hood', 'hims'].includes(String(property)) && result.data?.market) {
+        try {
+          result.data = { ...result.data, market: await refreshStocksQuote(result.data.market, Boolean((args[0] as { force?: boolean } | undefined)?.force)) }
+          if (property === 'sofi' && result.data.market.currentQuote) {
+            const quote = result.data.market.currentQuote
+            result.data = { ...result.data, price: quote.price, changePct: quote.change, priceAsOf: quote.asOf,
+              valuation: sofiBookRatios(quote.price, result.data.reports?.quarters.at(-1)) }
+          }
+        } catch (error) {
+          const reason = `Current price refresh failed: ${describeError(error)}`
+          result.errors = [...result.errors, err('market prices', reason, 'quote')]
+          result.meta = { ...result.meta, freshness: 'partial', failureReason: reason }
+        }
+      }
+      return result
+    })
   },
 })

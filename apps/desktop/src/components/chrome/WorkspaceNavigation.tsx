@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 import { SETTINGS_TAB_ID } from '@shared/contract'
 import { WORKSPACES, workspaceFor } from '@shared/navigation'
 import { NavigationIcon } from './NavigationIcon'
+import { EQUITY_PRICE_POLICY } from '@shared/equityMarkets'
 
 interface NavigationTab {
   id: string
@@ -113,6 +114,7 @@ export function WorkspaceHeader({ tabs, activeTab, onSelectTab, favorite, onTogg
         <div className="flex min-w-0 items-baseline gap-3">
           <span className="text-2xs text-text-muted">{workspace?.label ?? 'Preferences'} /</span>
           <h1 className="text-sm font-semibold text-text">{page?.label}</h1>
+          <span className="truncate text-2xs text-text-dim" title={EQUITY_PRICE_POLICY}>Equity prices: Hyperliquid perps · Yahoo fallback</span>
         </div>
         {workspace ? <button type="button" onClick={onToggleFavorite} disabled={saving}
           aria-pressed={favorite} aria-label={favorite ? 'Remove page from favorites' : 'Add page to favorites'}

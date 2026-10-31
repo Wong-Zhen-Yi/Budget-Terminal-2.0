@@ -82,6 +82,8 @@ function tooltipFor(row: HeatmapRow): string {
     `Sector: ${row.sector}`,
     `Weight: ${formatHeatmapWeightPct(row.weight)}`,
     `Price: ${formatHeatmapPrice(row.price)}`,
+    `Price source: ${row.priceSource ?? 'Yahoo stock history'}`,
+    'Returns: Yahoo stock history',
     `${row.changeLabel}: ${formatHeatmapPct(row.changePct, true)}`,
   ].join('\n')
 }

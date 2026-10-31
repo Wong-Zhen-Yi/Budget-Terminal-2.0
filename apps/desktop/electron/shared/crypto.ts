@@ -96,8 +96,8 @@ export const CRYPTO_NEWS_FOCUS_TICKERS: ReadonlyArray<string> = [
   'BITQ',
 ]
 
-/** The four worker stages, in the order the reference runs them. */
-export const CRYPTO_STAGES: ReadonlyArray<CryptoStage> = ['heatmap', 'quotes', 'market', 'news']
+/** Independent data stages used by startup readiness and the page status. */
+export const CRYPTO_STAGES: ReadonlyArray<CryptoStage> = ['heatmap', 'quotes', 'market', 'news', 'hyperliquid']
 
 /* ------------------------------------------------------------------ numbers */
 

@@ -258,6 +258,8 @@ export function buildIntervalSummaries(
 /* -------------------------------------------------------------- presenters */
 
 export interface HeatmapRow {
+  priceSource?: string
+  priceBasis?: HeatmapHolding['priceBasis']
   symbol: string
   name: string
   sector: string
@@ -285,6 +287,8 @@ export function buildHeatmapRows(
     sector: normalizeSector(holding.sector) || UNCLASSIFIED,
     weight: holding.weight,
     price: holding.price,
+    priceSource: holding.priceSource,
+    priceBasis: holding.priceBasis,
     changePct: holdingChange(holding, interval),
     interval,
     intervalLabel: label,

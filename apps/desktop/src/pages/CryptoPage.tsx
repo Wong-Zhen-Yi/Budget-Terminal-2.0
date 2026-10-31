@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import type { CryptoQuote, Envelope, NewsArticle } from '@shared/contract'
+import type { CryptoQuote, Envelope, HyperliquidMarket, NewsArticle } from '@shared/contract'
 import {
   CRYPTO_HEATMAP_LIMIT,
   CRYPTO_PROXY_ROWS,
@@ -31,13 +31,13 @@ import { Panel } from '@/components/ui/Panel'
 /**
  * The Crypto page, ported from `CryptoMixin.init_page19`.
  *
- * Same four surfaces in the same proportions as the reference: a six-tile KPI strip, the
- * Top 30 heatmap at flex 3, and the Watchlist / News / Proxies row at flex 2.
+ * The reference's KPI strip, heatmap, watchlist, news and proxies, plus a separately
+ * labelled Hyperliquid perpetuals panel so venue derivatives never replace spot quotes.
  *
  * One structural departure. The reference's worker emits a `partial` signal after each of
- * its four stages and the Qt page fills in as they land; an IPC request/response cannot,
- * so all four stages run concurrently in the main process and the payload carries the
- * same `progress` map. The "N/4 stages ready" line reports incomplete data alongside
+ * its stages and the Qt page fills in as they land; an IPC request/response cannot,
+ * so all stages run concurrently in the main process and the payload carries the
+ * same `progress` map. The stage readiness line reports incomplete data alongside
  * the provider errors, while healthy panels remain available.
  */
 
@@ -205,6 +205,20 @@ export function CryptoPage({
         <CryptoHeatmap tiles={payload?.heatmap.tiles ?? []} />
       </Panel>
 
+      <Panel
+        className="min-h-0 flex-[2]"
+        title="Hyperliquid Perpetuals"
+        warning={warningOf(query.data, 'Hyperliquid Perpetuals', now)}
+        actions={
+          <span className="text-2xs text-text-muted">
+            {payload?.hyperliquid ? `${payload.hyperliquid.markets.length} markets | Updated ${clockTail(payload.hyperliquid.fetchedAt)}` : loading ? 'Loading...' : 'Unavailable'}
+            {' | 60s snapshots'}
+          </span>
+        }
+      >
+        <HyperliquidTable markets={payload?.hyperliquid?.markets ?? []} loading={loading} />
+      </Panel>
+
       <div className="flex min-h-0 flex-[2] gap-2">
         <Panel
           className="min-h-0 flex-1"
@@ -233,6 +247,23 @@ export function CryptoPage({
       </div>
     </div>
   )
+}
+
+function HyperliquidTable({ markets, loading }: { markets: HyperliquidMarket[]; loading: boolean }) {
+  const columns: Array<Column<HyperliquidMarket>> = [
+    { key: 'symbol', header: 'Perpetual', cell: row => `${row.symbol} PERP`, sortValue: row => row.symbol },
+    { key: 'mark', header: 'Mark (USD)', numeric: true, align: 'right', cell: row => cryptoPrice(row.markPrice), sortValue: row => row.markPrice },
+    { key: 'change', header: '24h', numeric: true, align: 'right',
+      cell: row => <span className={toneClass[cryptoTone(row.changePct)]}>{cryptoPercent(row.changePct)}</span>, sortValue: row => row.changePct },
+    { key: 'funding', header: <span title="Current hourly rate. Positive: longs pay shorts. Negative: shorts pay longs.">Funding / 1h</span>, numeric: true, align: 'right',
+      cell: row => `${row.fundingHourlyPct >= 0 ? '+' : ''}${row.fundingHourlyPct.toFixed(5)}%`, sortValue: row => row.fundingHourlyPct },
+    { key: 'interest', header: <span title="Base-asset open interest multiplied by the mark price.">Open interest (USD)</span>, numeric: true, align: 'right',
+      cell: row => cryptoMoney(row.openInterestUsd, true), sortValue: row => row.openInterestUsd },
+    { key: 'volume', header: '24h volume (USD)', numeric: true, align: 'right', cell: row => cryptoMoney(row.volume24hUsd, true), sortValue: row => row.volume24hUsd },
+  ]
+  return <DataTable columns={columns} rows={markets} rowKey={row => row.symbol}
+    defaultSort={{ key: 'volume', direction: 'desc' }}
+    empty={loading ? 'Loading Hyperliquid perpetual markets...' : 'Hyperliquid unavailable. Refresh to retry; other crypto data remains available.'} />
 }
 
 /** `_p19_metric_tile`: label over a large value over the coloured change line. */
@@ -277,7 +308,7 @@ function WatchlistTable({
       header: 'Last',
       numeric: true,
       align: 'right',
-      cell: (row) => cryptoPrice(row.quote?.price),
+      cell: (row) => <span title={row.quote?.source}>{cryptoPrice(row.quote?.price)}{row.quote?.source?.startsWith('Hyperliquid') ? ' PERP' : ''}</span>,
     },
     {
       key: 'change',

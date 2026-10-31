@@ -101,7 +101,7 @@ export function SofiPage({ onStatusChange }: { onStatusChange: (panels: PanelSta
       {notice || (query.isError ? query.error.message : query.data?.meta.failureReason)}
     </div> : null}
     <div className="grid shrink-0 grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
-      <Tile label="Share price" value={currency(payload?.price)} sub={`Daily change ${percent(payload?.changePct)}`} title={`Yahoo Finance · quote retrieved ${quoteTime}`} />
+      <Tile label={payload?.market?.chart.stats.priceBasis === 'equity-perp-mark' ? 'Equity-perp mark' : 'Share price'} value={currency(payload?.price)} sub={`${payload?.market?.chart.stats.changeBasis === '24h' ? '24h' : 'Daily'} change ${percent(payload?.changePct)}`} title={`${payload?.market?.chart.stats.priceSource ?? 'Yahoo Finance'} · quote retrieved ${quoteTime}`} />
       <Tile label="Market capitalization" value={payload?.market?.metrics.marketCap && payload.market.metrics.marketCap !== 'N/A' ? `$${payload.market.metrics.marketCap}` : EM_DASH} sub="Yahoo Finance · USD" />
       <Tile label="P/E" value={payload?.market?.metrics.pe ?? EM_DASH} sub="Trailing · Yahoo Finance" />
       <Tile label="Price-to-book (P/B)" value={ratio(payload?.valuation.priceToBook)} sub={bookDate ? `GAAP book · ${quarterLabel(bookDate)}` : 'Book value unavailable'} title={`Share price ÷ reported book value per share\nQuote retrieved ${quoteTime}\n${sourceTitle('bookValuePerShare', latest)}`} />

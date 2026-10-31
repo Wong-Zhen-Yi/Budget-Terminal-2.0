@@ -63,7 +63,7 @@ function buildColumns(largestCap: number): Column<MetricsRow>[] {
       align: 'right',
       width: '13%',
     },
-    { key: 'price', header: 'Share Price', cell: (row) => currency(row.price), sortValue: (row) => row.price, numeric: true, align: 'right', width: '9%' },
+    { key: 'price', header: 'Price', cell: (row) => <span title={row.priceSource}>{currency(row.price)}{row.priceBasis === 'equity-perp-mark' ? ' PERP' : ''}</span>, sortValue: (row) => row.price, numeric: true, align: 'right', width: '9%' },
     {
       key: 'trailingEps',
       header: <span title="Reported earnings per share over the trailing twelve months">EPS (TTM)</span>,

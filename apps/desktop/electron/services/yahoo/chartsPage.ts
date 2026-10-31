@@ -20,6 +20,11 @@ import {
 } from '../../shared/charts.js'
 import { alignBackward, rsi, sma, toPoints } from '../indicators.js'
 import { getYahooSeries } from './series.js'
+import { getMarketSeries } from '../marketSeries.js'
+import { equityMarket } from '../../shared/equityMarkets.js'
+import { getQuote } from './quotes.js'
+import { hyperliquidEquities } from '../hyperliquidEquities.js'
+import { captureSources, observeSource } from '../sourceHealth.js'
 
 const DAY = 24 * 60 * 60 * 1000
 
@@ -85,6 +90,8 @@ interface RawCandles {
   candles: Candle[]
   currency: string
   longName: string
+  source?: string
+  market?: string
 }
 
 async function cachedCandles(
@@ -93,13 +100,17 @@ async function cachedCandles(
   interval: YahooInterval,
   force: boolean,
   adjusted = false,
+  sourceMarket?: string | false,
 ): Promise<ChartsServiceResult<RawCandles>> {
-  const result = await getYahooSeries({
+  const result = await getMarketSeries({
     symbol,
     start,
     interval,
     force,
     variant: adjusted ? 'adjusted' : 'ohlcv',
+    sourceMarket: sourceMarket || undefined,
+    stockOnly: sourceMarket === false,
+    allowPartialHistory: Boolean(sourceMarket),
   })
   const payload = fetchCandlesFromSeries(result, adjusted, interval)
   return {
@@ -107,6 +118,21 @@ async function cachedCandles(
     stale: result.stale,
     fromCache: result.fromCache,
     cacheAgeSeconds: result.cacheAgeSeconds,
+  }
+}
+
+async function fourHourCandles(symbol: string, start: Date, force: boolean): Promise<ChartsServiceResult<RawCandles>> {
+  if (!equityMarket(symbol)) return cachedCandles(symbol, start, '1h', force)
+  try {
+    const captured = await captureSources(() => hyperliquidEquities.getCandles(symbol, start, '4h', force))
+    if (captured.snapshot) observeSource(captured.snapshot)
+    const result = captured.value
+    return { payload: { candles: result.candles, currency: 'USD', longName: `${symbol} equity perpetual`,
+      source: result.source, market: result.market }, stale: result.stale, fromCache: result.fromCache, cacheAgeSeconds: result.cacheAgeSeconds }
+  } catch (error) {
+    const result = await cachedCandles(symbol, start, '1h', force, false, false)
+    return { ...result, payload: { ...result.payload,
+      source: `Yahoo stock history (${error instanceof Error ? error.message : String(error)})` } }
   }
 }
 
@@ -138,23 +164,25 @@ function fetchCandlesFromSeries(
     }]
   })
   const candles = [...new Map(received.map((row) => [row.time, row])).values()]
-  if (candles.length > 1) {
+  const provenance = result.meta as { source?: string; market?: string } | undefined
+  if (!provenance?.market && candles.length > 1) {
     const last = candles.at(-1)!
     if (last.open === last.high && last.high === last.low && last.low === last.close && last.volume === 0) candles.pop()
   }
-  if (candles.length > 1 && (interval === '1wk' || interval === '1mo')) {
+  if (!provenance?.market && candles.length > 1 && (interval === '1wk' || interval === '1mo')) {
     const last = candles.at(-1)!
     const previous = candles.at(-2)!
     if (periodBucket(last.time, interval) === periodBucket(previous.time, interval)) candles.pop()
   }
   if (!candles.length) throw new Error('No usable chart data returned.')
-  return { candles, currency: result.currency, longName: result.longName }
+  return { candles, currency: result.currency, longName: result.longName,
+    source: provenance?.source ?? 'Yahoo Finance stock history', market: provenance?.market }
 }
 
-async function dailyMovingAverages(symbol: string, firstTime: number, force: boolean) {
+async function dailyMovingAverages(symbol: string, firstTime: number, force: boolean, market: string | false) {
   // Warm up both daily SMAs before the displayed range, even on short or intraday charts.
   const start = new Date(Math.max(0, Math.min(Date.now() - 730 * DAY, firstTime * 1000 - 400 * DAY)))
-  const raw = await cachedCandles(symbol, start, '1d', force)
+  const raw = await cachedCandles(symbol, start, '1d', force, false, market)
   const closes = raw.payload.candles.map((row) => row.close)
   return {
     ma50: toPoints(raw.payload.candles, sma(closes, 50)),
@@ -186,15 +214,20 @@ export async function getChartsHistory(request: ChartsHistoryRequest): Promise<C
   if (!symbol) throw new Error('No chart symbol was provided.')
   const fetchInterval = INTERVALS[request.interval]
   const start = requestStart(request.range, fetchInterval)
-  const raw = await cachedCandles(symbol, start, fetchInterval, Boolean(request.force))
-  const candles = request.interval === '4 Hours' ? aggregateFourHourCandles(raw.payload.candles) : raw.payload.candles
+  const raw = request.interval === '4 Hours'
+    ? await fourHourCandles(symbol, start, Boolean(request.force))
+    : await cachedCandles(symbol, start, fetchInterval, Boolean(request.force))
+  // Stock 4h bars follow trading sessions; Hyperliquid's native 4h bars use UTC
+  // opening timestamps. Keep those native bars aligned with the candle stream.
+  const candles = request.interval === '4 Hours' && !raw.payload.market ? aggregateFourHourCandles(raw.payload.candles) : raw.payload.candles
+  if (request.interval === '4 Hours' && raw.payload.market) hyperliquidEquities.watchCandles(symbol, '4h')
   if (!candles.length) throw new Error(`No chart data returned for ${symbol}.`)
   const closes = candles.map((row) => row.close)
   const rsiValues = rsi(closes, 14)
   let ma50: IndicatorPoint[] = []
   let ma200: IndicatorPoint[] = []
   try {
-    const daily = await dailyMovingAverages(symbol, candles[0].time, Boolean(request.force))
+    const daily = await dailyMovingAverages(symbol, candles[0].time, Boolean(request.force), raw.payload.market ?? false)
     const align = (points: IndicatorPoint[]) => alignBackward(
       candles.map((row) => row.time), points,
       ['1m', '5m', '15m', '1h'].includes(fetchInterval) ? 'exact' : 'day',
@@ -205,6 +238,13 @@ export async function getChartsHistory(request: ChartsHistoryRequest): Promise<C
     ma50 = []
     ma200 = []
   }
+  const chartStats = stats(symbol, candles, raw.payload.currency, raw.payload.longName)
+  Object.assign(chartStats, { source: raw.payload.source, market: raw.payload.market })
+  if (equityMarket(symbol)) {
+    const quote = await getQuote(symbol, Boolean(request.force))
+    Object.assign(chartStats, { price: quote.price, change: quote.change, absChange: quote.absChange,
+      priceSource: quote.source, priceBasis: quote.priceBasis, changeBasis: quote.changeBasis })
+  }
   return {
     payload: {
       symbol,
@@ -212,7 +252,7 @@ export async function getChartsHistory(request: ChartsHistoryRequest): Promise<C
       rangeLabel: request.range,
       interval: request.interval === '4 Hours' ? '4h' : fetchInterval,
       candles,
-      stats: stats(symbol, candles, raw.payload.currency, raw.payload.longName),
+      stats: chartStats,
       indicators: {
         ma50,
         ma200,
@@ -232,6 +272,7 @@ export async function getChartsCompare(request: ChartsCompareRequest): Promise<C
   const start = startOfRange(request.range)
   const settled = await Promise.allSettled(symbols.map((symbol) => cachedCandles(symbol, start, interval, Boolean(request.force))))
   const series: Record<string, ChartsSeriesPoint[]> = {}
+  const sources: Record<string, string> = {}
   const missing: string[] = []
   const failures: ChartsBatchResult<ChartsComparePayload>['failures'] = []
   let stale = false
@@ -248,9 +289,10 @@ export async function getChartsCompare(request: ChartsCompareRequest): Promise<C
     fromCache &&= outcome.value.fromCache
     cacheAgeSeconds = Math.max(cacheAgeSeconds, outcome.value.cacheAgeSeconds)
     series[symbol] = outcome.value.payload.candles.map((row) => ({ time: row.time, close: row.close }))
+    sources[symbol] = outcome.value.payload.source ?? 'Yahoo stock history'
   })
   return {
-    payload: { symbols, interval: request.interval, range: request.range, series, missing },
+    payload: { symbols, interval: request.interval, range: request.range, series, sources, missing },
     failures,
     stale,
     fromCache,
