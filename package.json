@@ -11,6 +11,7 @@
     "apps/desktop"
   ],
   "scripts": {
+    "probe:hyperliquid": "npm run --workspace budget-terminal-desktop probe:hyperliquid --",
     "preinstall": "node scripts/runtime.cjs",
     "prepare": "git config core.hooksPath .githooks || exit 0",
     "postinstall": "npm run ensure:electron",

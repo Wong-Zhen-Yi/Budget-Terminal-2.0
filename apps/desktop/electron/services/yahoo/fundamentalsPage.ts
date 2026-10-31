@@ -15,6 +15,7 @@ import {
   sortSeries,
 } from '../../shared/fundamentalsPage.js'
 import { cache, TTL } from '../cache.js'
+import { equityMarket } from '../../shared/equityMarkets.js'
 import { fetchSecCompanyBundle, type SecCompanyBundle } from '../secEdgar.js'
 import { paced, yahoo } from './client.js'
 import { withYahooStatements, withYahooSummary } from './requests.js'
@@ -402,6 +403,17 @@ export async function getFundamentalsPage(symbolInput: string, force = false): P
     () => fetchUncached(symbol, force),
     { force },
   )
+  if (equityMarket(symbol)) {
+    try {
+      const quote = await getQuote(symbol, force)
+      return { ...resolved.value, payload: { ...resolved.value.payload,
+        facts: { ...resolved.value.payload.facts, currentPrice: quote.price },
+        currencyNote: `${resolved.value.payload.currencyNote} · Price: ${quote.source}` }, stale: resolved.stale }
+    } catch (error) {
+      return { ...resolved.value, failures: [...resolved.value.failures,
+        { source: 'market prices', operation: 'quote', reason: `Current price refresh failed: ${String(error)}` }], stale: resolved.stale }
+    }
+  }
   return { ...resolved.value, stale: resolved.stale }
 }
 

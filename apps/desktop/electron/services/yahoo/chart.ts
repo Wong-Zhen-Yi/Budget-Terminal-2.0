@@ -38,7 +38,12 @@ const MAX_LOOKBACK_DAYS: Record<string, number> = {
 }
 
 async function fetchCandles(symbol: string, spec: TimeframeSpec, force = false, seriesMarket?: string | false): Promise<RawChart> {
-  const lookbackDays = Math.min(spec.lookbackDays, MAX_LOOKBACK_DAYS[spec.interval] ?? Infinity)
+  // Dashboard timeframes have an implicit recent window rather than a user-selected
+  // date range. Keep their intraday window inside Hyperliquid's candle limit.
+  const minutes: Record<string, number> = { '1m': 1, '5m': 5, '15m': 15, '1h': 60 }
+  const perpWindow = equityMarket(symbol) && seriesMarket !== false && spec.intraday && minutes[spec.interval]
+    ? 4_995 * minutes[spec.interval] / 1440 : Infinity
+  const lookbackDays = Math.min(spec.lookbackDays, MAX_LOOKBACK_DAYS[spec.interval] ?? Infinity, perpWindow)
   const result = await getMarketSeries({
     symbol,
     start: periodStart(lookbackDays),

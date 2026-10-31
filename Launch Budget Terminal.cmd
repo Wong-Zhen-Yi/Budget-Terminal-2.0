@@ -1,4 +1,5 @@
 @echo off
+echo Stock prices use labelled Hyperliquid equity-perpetual marks where mapped, including portfolio values. Prices and covered charts stream live; Yahoo supplies stock-history and quote fallbacks plus fundamentals.
 echo Crypto includes Hyperliquid perpetual markets: mark prices, hourly funding, open interest and volume. Free public data loads at startup and refreshes every 60 seconds while Crypto is visible.
 echo Dependencies updated: Electron 45.1.0, query caching, MCP and Parquet readers. Virtual tables retain their tested version.
 echo Agent recovery: saved run details, temporary read retries, partial answers and Continue research. Manual run limits are configurable in Controls.

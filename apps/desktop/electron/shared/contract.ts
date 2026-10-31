@@ -819,6 +819,7 @@ export interface ChartsComparePayload {
   interval: ChartsCompareInterval
   range: ChartsCompareRange
   series: Record<string, ChartsSeriesPoint[]>
+  sources?: Record<string, string>
   missing: string[]
 }
 
@@ -944,6 +945,7 @@ export interface StocksMetrics {
 }
 
 export interface StocksTargets {
+  meanPrice?: number | null
   low: string
   mean: string
   high: string
@@ -988,6 +990,7 @@ export interface StocksChartPayload {
 
 export interface StocksPayload {
   symbol: string
+  currentQuote?: Quote
   company: StocksCompany
   metrics: StocksMetrics
   targets: StocksTargets
@@ -1029,7 +1032,8 @@ export interface DiscoverySnapshot {
   price: number | null
   previousClose: number | null
   quoteTime: number | null
-  quoteStatus: 'real-time' | 'delayed' | 'previous close' | 'unavailable'
+  quoteStatus: 'real-time' | 'delayed' | 'previous close' | 'unavailable' | 'equity-perp mark'
+  quoteSource?: string
   quoteDelayedMinutes: number | null
   market: Record<string, number | null>
   valuation: Record<string, number | null>

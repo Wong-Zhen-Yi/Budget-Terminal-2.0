@@ -89,7 +89,7 @@ export async function getQuote(symbol: string, force = false): Promise<Quote> {
   return (await resolveQuote(symbol, force)).value
 }
 
-async function resolveQuote(symbol: string, force = false): Promise<CachedResult<Quote>> {
+async function resolveQuote(symbol: string, force = false): Promise<CachedResult<Quote> & { stale: boolean }> {
   symbol = symbol.trim().toUpperCase()
   if (equityMarket(symbol)) {
     try {

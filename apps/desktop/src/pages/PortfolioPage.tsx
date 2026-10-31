@@ -403,6 +403,7 @@ export function PortfolioPage({
           }
         >
           {Object.values(quotesQuery.data?.data.holdings ?? {}).some(quote => quote.priceBasis === 'published-close') && <div className="shrink-0 px-2 py-1 text-2xs text-text-dim">DefeatBeta prices are published daily closes, not live quotes. The status bar shows the source date.</div>}
+          {Object.values(quotesQuery.data?.data.holdings ?? {}).some(quote => quote.priceBasis === 'equity-perp-mark') && <div className="shrink-0 px-2 py-1 text-2xs text-text-muted">PERP prices are Hyperliquid equity-perpetual marks, used for market value, gain and allocation. Their changes are 24h; other quotes use the previous stock close.</div>}
           <PositionsTable
             onResearch={(symbol) => onNavigate?.('stocks', symbol)}
             portfolio={selected}

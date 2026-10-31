@@ -29,6 +29,8 @@ export interface SemiconductorsRequest extends BackgroundRequest { force?: boole
 export type SemiconductorStatus = 'loaded' | 'partial' | 'stale' | 'unavailable'
 export interface SemiconductorPoint { date: string; close: number }
 export interface SemiconductorMarket {
+  priceSource?: string
+  changeBasis?: '24h' | 'previous-close'
   price: number | null
   dailyChange: number | null
   marketCap: number | null

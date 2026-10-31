@@ -7,6 +7,7 @@ import type { HimsPayload, HimsRequest } from '../shared/hims.js'
 import { getHood } from './hood.js'
 import { getSofi } from './sofi.js'
 import type { SofiPayload, SofiRequest } from '../shared/sofi.js'
+import { sofiBookRatios } from '../shared/sofi.js'
 import { getAmzn } from './amzn.js'
 import type { AmznPayload, AmznRequest } from '../shared/amzn.js'
 import { getMu } from './mu.js'
@@ -270,7 +271,7 @@ import {
   SIGNALS_SOURCE,
 } from './yahoo/signals.js'
 import { getTradingVolumes, TRADING_VOLUMES_SOURCE } from './yahoo/tradingVolumes.js'
-import { getStocks, STOCKS_SOURCE } from './yahoo/stocks.js'
+import { getStocks, refreshStocksQuote, STOCKS_SOURCE } from './yahoo/stocks.js'
 import { getDiscoverySnapshot, getDiscoveryUniverse } from './yahoo/discovery.js'
 import { getCloses, getClosesBatch, periodReturn } from './yahoo/history.js'
 import { getOptionQuotes } from './yahoo/optionQuotes.js'
@@ -686,6 +687,7 @@ const providerImplementation: MarketDataProvider = {
       getQuotes([...macroSymbols, ...holdings], force),
       getHoldingSectors(holdings),
     ])
+    const quoteSource = [...new Set(Object.values(batch.quotes).map(quote => quote.priceBasis === 'equity-perp-mark' ? 'Hyperliquid equity perps' : 'Yahoo Finance'))].join(' + ') || 'market prices'
 
     const macro: QuotesPayload['macro'] = {}
     for (const entry of MACRO_SYMBOLS) {
@@ -705,35 +707,36 @@ const providerImplementation: MarketDataProvider = {
     }
     if (classifications.missing.length) {
       return partial(payload, [
-        ...batch.errors.map(entry => err('yahoo quotes', entry.reason, 'quotes', entry.symbol)),
+        ...batch.errors.map(entry => err('market prices', entry.reason, 'quotes', entry.symbol)),
         err('Sector classification', `No classification available for: ${classifications.missing.join(', ')}. These holdings remain Unclassified.`, 'holding_sectors'),
-      ], 'yahoo quotes + sectors', `${classifications.missing.length} holding classification(s) unavailable${batch.errors.length ? `; ${batch.errors.length} quote(s) unavailable` : ''}.`)
+      ], `${quoteSource} + sectors`, `${classifications.missing.length} holding classification(s) unavailable${batch.errors.length ? `; ${batch.errors.length} quote(s) unavailable` : ''}.`)
     }
     if (!batch.errors.length) {
       if (batch.staleCount > 0) {
         return {
           data: payload,
-          meta: meta('yahoo quotes', 'stale', { cacheAgeSeconds: batch.cacheAgeSeconds }),
+          meta: meta(quoteSource, 'stale', { cacheAgeSeconds: batch.cacheAgeSeconds }),
           errors: [],
         }
       }
-      return ok(payload, 'yahoo quotes', batch.fromCacheCount === Object.keys(batch.quotes).length
+      return ok(payload, quoteSource, batch.fromCacheCount === Object.keys(batch.quotes).length
         ? { freshness: 'cached', cacheAgeSeconds: batch.cacheAgeSeconds }
         : {})
     }
     return partial(
       payload,
       batch.errors.map((entry) =>
-        err('yahoo quotes', entry.reason, 'quotes', entry.symbol),
+        err('market prices', entry.reason, 'quotes', entry.symbol),
       ),
-      'yahoo quotes',
+      quoteSource,
       `${batch.errors.length} quote(s) were unavailable.`,
     )
   },
 
   async chart({ symbol, timeframe, force }) {
     try {
-      return ok(await getChart(symbol, timeframe, force), 'yahoo chart')
+      const payload = await getChart(symbol, timeframe, force)
+      return ok(payload, [payload.stats?.source ?? 'Yahoo stock chart', payload.stats?.priceSource].filter(Boolean).join(' + '))
     } catch (error) {
       return failed(emptyChart(symbol, timeframe), describeError(error), 'yahoo chart')
     }
@@ -757,7 +760,7 @@ const providerImplementation: MarketDataProvider = {
             errors: [],
           }
         }
-        return ok(result.payload, 'yahoo chart')
+        return ok(result.payload, [result.payload.stats?.source ?? 'Yahoo stock chart', result.payload.stats?.priceSource].filter(Boolean).join(' + '))
     } catch (error) {
       return failed({
         symbol,
@@ -2047,6 +2050,23 @@ export const yahooProvider: MarketDataProvider = new Proxy(providerImplementatio
   get(target, property, receiver) {
     const method = Reflect.get(target, property, receiver)
     if (typeof method !== 'function') return method
-    return (...args: unknown[]) => withSourceEnvelope(() => method.apply(target, args))
+    return (...args: unknown[]) => withSourceEnvelope(async () => {
+      const result = await method.apply(target, args)
+      if (['amzn', 'avgo', 'mu', 'sofi', 'vst', 'hood', 'hims'].includes(String(property)) && result.data?.market) {
+        try {
+          result.data = { ...result.data, market: await refreshStocksQuote(result.data.market, Boolean((args[0] as { force?: boolean } | undefined)?.force)) }
+          if (property === 'sofi' && result.data.market.currentQuote) {
+            const quote = result.data.market.currentQuote
+            result.data = { ...result.data, price: quote.price, changePct: quote.change, priceAsOf: quote.asOf,
+              valuation: sofiBookRatios(quote.price, result.data.reports?.quarters.at(-1)) }
+          }
+        } catch (error) {
+          const reason = `Current price refresh failed: ${describeError(error)}`
+          result.errors = [...result.errors, err('market prices', reason, 'quote')]
+          result.meta = { ...result.meta, freshness: 'partial', failureReason: reason }
+        }
+      }
+      return result
+    })
   },
 })

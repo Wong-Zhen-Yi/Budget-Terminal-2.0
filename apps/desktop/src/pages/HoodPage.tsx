@@ -90,6 +90,7 @@ export function HoodPage({ onStatusChange, onNavigate }: {
     <div className="flex shrink-0 flex-wrap items-center gap-2">
       <h1 className="text-sm font-semibold">HOOD · Robinhood Markets</h1>
       <span className="num text-sm font-bold">{amount(stats?.price, true)}</span>
+      {stats?.priceSource ? <span className="text-2xs text-text-muted">{stats.priceSource} · {stats.changeBasis === '24h' ? '24h' : 'daily'}</span> : null}
       <span className={`num text-xs ${stats && stats.change >= 0 ? 'text-up' : 'text-down'}`}>{stats ? `${stats.change >= 0 ? '+' : ''}${stats.change.toFixed(2)}%` : '—'}</span>
       <span className="text-2xs text-text-muted">Market cap {amount(data?.financials?.facts.marketCap, true)}</span>
       <Button className="ml-auto" variant="accent" disabled={busy} onClick={onRefresh}>{busy ? 'Loading HOOD…' : 'Refresh'}</Button>

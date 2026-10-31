@@ -9,6 +9,8 @@ import type { Fundamentals, Holding, Portfolio, Quote } from './contract.js'
 /* --------------------------------------------------- dashboard holdings panel */
 
 export interface PortfolioRow {
+  priceSource?: string
+  priceBasis?: Quote['priceBasis']
   unavailableReason?: string
   ticker: string
   price: number | null
@@ -60,6 +62,8 @@ export function buildPortfolioRows(
     const price = quote?.price ?? 0
     return {
       ticker,
+      priceSource: quote?.source,
+      priceBasis: quote?.priceBasis,
       price: hasQuote ? price : null,
       changePercent: quote?.change ?? null,
       weight: null,
@@ -110,6 +114,8 @@ export function buildPortfolioAllocation(portfolio: Portfolio, quotes: Record<st
 /* ------------------------------------------------------ portfolio page rows */
 
 export interface PositionRow {
+  priceSource?: string
+  priceBasis?: Quote['priceBasis']
   sector?: string
   unavailableReason?: string
   ticker: string
@@ -199,6 +205,8 @@ export function buildPositionRows(
     return {
       ticker: entry.ticker,
       sector: entry.quote?.sector,
+      priceSource: entry.quote?.source,
+      priceBasis: entry.quote?.priceBasis,
       shares: entry.holding.shares,
       avgPrice: entry.holding.avgPrice,
       cost: entry.cost,

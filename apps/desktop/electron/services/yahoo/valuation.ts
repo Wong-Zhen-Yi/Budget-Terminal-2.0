@@ -29,6 +29,8 @@ import { paced, yahoo } from './client.js'
 import { withYahooSummary } from './requests.js'
 import { getFundamentalsPage } from './fundamentalsPage.js'
 import { getYahooSeries } from './series.js'
+import { getQuote } from './quotes.js'
+import { equityMarket } from '../../shared/equityMarkets.js'
 
 /**
  * The Valuation page's data load, ported from `workers/valuation.py`
@@ -227,6 +229,12 @@ async function fetchInfo(symbol: string, force: boolean): Promise<SummaryInfo> {
     { force },
   )
   analystCache.set(symbol, resolved.value.trend)
+  if (equityMarket(symbol)) {
+    try {
+      const quote = await getQuote(symbol, force)
+      return { ...resolved.value.info, currentPrice: quote.price, regularMarketPrice: quote.price }
+    } catch { /* Retain the dated company snapshot; source health records the quote failure. */ }
+  }
   return resolved.value.info
 }
 
@@ -797,14 +805,20 @@ export async function getValuation(
   if (!symbol) throw new Error('Enter a ticker to load valuation data.')
   const customPeers = normalizePeerSymbols(customPeersInput, symbol)
   const resolved = await cache.resolveWithStaleFallback(
-    `valuation:${symbol}:${customPeers.join(',')}`,
+    `valuation:equity-perps-v1:${symbol}:${customPeers.join(',')}`,
     TTL.profile,
     () => fetchUncached(symbol, customPeers, force),
     { force },
   )
+  const priceErrors: EnvelopeError[] = []
+  const quote = equityMarket(symbol) ? await getQuote(symbol, force).catch(error => {
+    priceErrors.push({ source: 'market prices', operation: 'quote', symbol, reason: `Current price refresh failed: ${describeError(error)}` })
+    return undefined
+  }) : undefined
   return {
-    payload: resolved.value.payload,
-    errors: resolved.value.errors,
+    payload: quote ? { ...resolved.value.payload, metrics: { ...resolved.value.payload.metrics, price: quote.price },
+      sources: { ...resolved.value.payload.sources, quote: `${quote.source}; Yahoo stock monthly history` } } : resolved.value.payload,
+    errors: [...resolved.value.errors, ...priceErrors],
     stale: resolved.stale,
     fromCache: resolved.fromCache,
     cacheAgeSeconds: resolved.ageSeconds,

@@ -142,7 +142,8 @@ export function AvgoPage({ onStatusChange, onNavigate }: {
       </div>
       <div className="avgo-quote">
         <div className="num text-3xl font-semibold">{currency(price?.price)}</div>
-        <div className={`num text-2xs ${price ? price.change >= 0 ? 'text-up' : 'text-down' : 'text-text-muted'}`}>{signedCurrencyPrecise(price?.absChange)} ({percent(price?.change)}) daily</div>
+        <div className={`num text-2xs ${price ? price.change >= 0 ? 'text-up' : 'text-down' : 'text-text-muted'}`}>{signedCurrencyPrecise(price?.absChange)} ({percent(price?.change)}) {price?.changeBasis === '24h' ? '24h' : 'daily'}</div>
+        {price?.priceSource ? <div className="text-2xs text-text-muted">{price.priceSource}</div> : null}
       </div>
       <div className="flex flex-wrap gap-2">
         <Button variant="accent" disabled={busy} onClick={() => void onRefresh()}>{busy ? 'Refreshing...' : 'Refresh'}</Button>

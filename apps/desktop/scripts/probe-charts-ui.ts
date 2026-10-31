@@ -19,6 +19,9 @@ try {
         import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
         import { MainWorkspace } from './src/components/chartsworkstation/MainWorkspace'
         import { useChartsStore } from './src/stores/charts'
+        import { applyEquityMarketUpdate } from './src/api/equityStream'
+        import { queryKeys } from './src/api/client'
+        useChartsStore.getState().setSymbol('AAPL')
         const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
         const check = (value, message) => { if (!value) throw Error(message) }
         const settle = () => new Promise(resolve => setTimeout(resolve, 250))
@@ -34,7 +37,8 @@ try {
         const envelope = data => ({ data, meta: { source: 'fixture', freshness: 'fresh', fetchedAt: Date.now() }, errors: [] })
         window.api.chartsHistory = async request => envelope({
           symbol: request.symbol, intervalLabel: request.interval, rangeLabel: request.range,
-          interval: '1d', candles, stats: null,
+          interval: '1d', candles, stats: { symbol: request.symbol, price: 180, change: 1, absChange: 1, open: 179, high: 181, low: 178, close: 180, volume: 1079,
+            currency: 'USD', longName: 'Synthetic Apple equity perp', source: 'Hyperliquid equity perp (xyz:AAPL)', market: 'xyz:AAPL', priceSource: 'Hyperliquid equity perp (xyz:AAPL)', priceBasis: 'equity-perp-mark', changeBasis: '24h' },
           indicators: { ma50: candles.map(row => ({ time: row.time, value: row.close - 24.5 })), ma200: [], rsi: [], rsiMa: [] },
         })
         window.api.portfolio = async () => envelope({ portfolios: [], activeId: '', mainId: '' })
@@ -65,8 +69,17 @@ try {
           await click('Focus')
           check(document.querySelectorAll('canvas').length > 0, 'Focus mode keeps chart')
           await click('Exit Focus')
-          app.unmount()
-          return 'PASS: real Charts canvas, 50-day SMA default, toggle, persistence, price styles, replay and focus'
+          const state = useChartsStore.getState()
+          const key = queryKeys.chartsHistory(state.symbol, state.interval, state.range)
+          const last = client.getQueryData(key).data.candles.at(-1)
+          applyEquityMarketUpdate(client, { quotes: [{ symbol: 'AAPL', price: 250, change: 25, absChange: 50, currency: 'USD', priceBasis: 'equity-perp-mark', changeBasis: '24h', source: 'Hyperliquid equity perp (xyz:AAPL)' }],
+            candles: [{ symbol: 'AAPL', market: 'xyz:AAPL', interval: '1d', candle: { ...last, close: 181, high: 182 } }] })
+          await settle()
+          check(document.body.innerText.includes('Hyperliquid equity perp (xyz:AAPL)'), 'Chart and mark sources must be visible')
+          check(document.body.innerText.includes('250.00'), 'Streamed mark must update the rendered header')
+          check(client.getQueryData(key).data.candles.at(-1).close === 181, 'Actual streamed candle must update separately from the mark')
+          window.finishProbe = () => app.unmount()
+          return 'PASS: real Charts canvas, SMA, persistence, styles, replay, focus, labelled Hyperliquid source and streamed mark/candle updates'
         }
       `,
     },
@@ -88,6 +101,8 @@ try {
       try {
         await window.loadFile(${JSON.stringify(join(directory, 'index.html'))})
         console.log(await window.webContents.executeJavaScript('window.runProbe()'))
+        require('node:fs').writeFileSync(${JSON.stringify(join(root, 'out/hyperliquid-charts-smoke.png'))}, (await window.webContents.capturePage()).toPNG())
+        await window.webContents.executeJavaScript('window.finishProbe()')
         app.exit(0)
       } catch (error) { console.error(error); app.exit(1) }
     })

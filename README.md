@@ -192,6 +192,23 @@ active markets. Hyperliquid failures appear in page readiness and panel warnings
 the other crypto feeds remain available. These are venue-specific perpetual
 contracts, displayed separately from spot quotes. No trading actions are exposed.
 
+**Stock quotes and charts** prefer explicitly mapped Hyperliquid equity perpetuals.
+These USD **mark prices** also value portfolio positions, gains and allocations.
+Their percentage changes use a rolling **24-hour** basis. One shared WebSocket
+streams marks and actual venue candles; reconnects restore subscriptions. Stock
+and chart views identify the price and candle sources separately. Source labels
+and PERP badges distinguish these derivative marks from stock-exchange prices.
+
+Yahoo remains the source for fundamentals, unsupported symbols, adjusted return
+analytics and longer stock histories. A chart switches as a complete series when
+Hyperliquid cannot cover the requested range or its 5,000-candle window; it never
+joins stock candles to perp candles. Indicators use the chart's instrument.
+Quote outages use labelled Yahoo fallbacks and remain visible in data readiness.
+The reviewed market mappings are in `apps/desktop/electron/shared/equityMarkets.ts`;
+SOFI and VST use `para` markets and most other mapped stocks use `xyz`.
+Run `npm run probe:hyperliquid` for deterministic checks, or append `-- --live`
+to verify prices, candles and WebSocket updates against the public API.
+
 Star pages to pin Favorites. Use **Ctrl+K** or **backtick** to open page search;
 recent pages appear first. Settings controls page visibility, ordering, favorites,
 privacy, and the market clock.

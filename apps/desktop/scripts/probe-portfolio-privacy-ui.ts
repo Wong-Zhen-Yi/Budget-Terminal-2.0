@@ -44,7 +44,7 @@ try {
           if (mutation.type === 'setEntry') finance = { ...finance, [mutation.category]: finance[mutation.category].map(row => row.id === mutation.id ? { ...row, amount: mutation.amount } : row) }
           return envelope(finance)
         }
-        window.api.quotes = async () => envelope({ holdings: { DEMO: { ticker: 'DEMO', price: 145.5, changePercent: 2.75, currency: 'USD' } } })
+        window.api.quotes = async () => envelope({ holdings: { DEMO: { symbol: 'DEMO', price: 145.5, change: 2.75, absChange: 3.89, currency: 'USD', priceBasis: 'equity-perp-mark', source: 'Synthetic Hyperliquid equity perp' } } })
         window.api.fundamentals = async () => envelope({ fundamentals: { DEMO: { sector: 'Technology', marketCap: 987654321, trailingPe: 20, forwardPe: 18 } } })
         window.api.optionQuotes = async ({ positions }) => envelope({ quotes: Object.fromEntries(positions.map(position => [position.rowId,
           { currentPrice: 8.5, volume: 555, openInterest: 333, impliedVolatility: .45 }])), expiries: {} })
@@ -100,6 +100,7 @@ try {
           client.setQueryData(['portfolio'], envelope(payload)); await settle()
           check(!body().includes('23,456.78'), 'Live updates remain hidden')
           hidden = false; render(); await settle()
+          check([...document.querySelectorAll('tbody td')].some(cell => cell.textContent.includes('PERP')), 'Revealed portfolio prices must identify equity-perpetual marks')
           check(document.querySelector('input[aria-label="Brokerage cash"]').value === '23456.78', 'Reveal shows current cash')
           check(document.querySelector('input[aria-label="DEMO shares"]').value === '17', 'Reveal restores shares editor')
           check(body().includes('$145.50'), 'Reveal restores table values')

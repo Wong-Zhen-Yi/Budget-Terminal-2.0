@@ -77,7 +77,7 @@ export function AmznPage({ onStatusChange, onNavigate }: {
     </div>
     {(notice || query.error || query.data?.errors.length) ? <div role="alert" className="shrink-0 border border-warn/40 bg-surface px-2 py-1 text-2xs text-warn">{notice || query.error?.message || query.data?.errors.map(feedErrorText).join(' · ')}</div> : null}
     <div className="grid shrink-0 grid-cols-2 gap-2 lg:grid-cols-3 2xl:grid-cols-6">
-      <Tile label="Share price" value={currency(market?.chart.stats.price)} sub={`USD · ${percent(market?.chart.stats.change)} daily · ${market?.chart.candles.at(-1) ? new Date(market.chart.candles.at(-1)!.time * 1000).toISOString().slice(0, 10) : '--'}`} />
+      <Tile label={market?.chart.stats.priceBasis === 'equity-perp-mark' ? 'Equity-perp mark' : 'Share price'} value={currency(market?.chart.stats.price)} sub={`${market?.chart.stats.priceSource ?? 'USD'} · ${percent(market?.chart.stats.change)} ${market?.chart.stats.changeBasis === '24h' ? '24h' : 'daily'}`} />
       <Tile label="Market cap" value={market?.metrics.marketCap ?? '--'} sub="Yahoo Finance · market snapshot" />
       <Tile label="Quarterly revenue" value={compactCurrency(latest?.revenue)} sub={`${latest?.period ?? '--'} · GAAP · USD`} />
       <Tile label="Operating margin" value={plainPercent(latest?.operatingMargin, 1)} sub={`${latest?.period ?? '--'} · GAAP`} />

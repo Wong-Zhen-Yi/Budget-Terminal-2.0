@@ -120,11 +120,11 @@ export function PositionsTable({
       align: 'right',
       numeric: true,
       sortValue: (row) => (row.hasQuote ? row.price : null),
-      cell: (row) => (row.hasQuote ? currency(row.price) : <span title={row.unavailableReason}>N/A</span>),
+      cell: (row) => (row.hasQuote ? <span title={row.priceSource}>{currency(row.price)}{row.priceBasis === 'equity-perp-mark' ? <span className="ml-1 text-[9px] text-accent">PERP</span> : null}</span> : <span title={row.unavailableReason}>N/A</span>),
     },
     {
       key: 'change',
-      header: "Day's Change",
+      header: <span title="Hyperliquid equity perps use 24h change; stock quotes use previous close.">Change</span>,
       align: 'right',
       numeric: true,
       sortValue: (row) => (row.hasQuote ? row.changePercent : null),

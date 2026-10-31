@@ -23,6 +23,7 @@ import { getYahooSeries } from './series.js'
 import { getMarketSeries } from '../marketSeries.js'
 import { equityMarket } from '../../shared/equityMarkets.js'
 import { getQuote } from './quotes.js'
+import { hyperliquidEquities } from '../hyperliquidEquities.js'
 
 const DAY = 24 * 60 * 60 * 1000
 
@@ -199,6 +200,7 @@ export async function getChartsHistory(request: ChartsHistoryRequest): Promise<C
   const start = requestStart(request.range, fetchInterval)
   const raw = await cachedCandles(symbol, start, fetchInterval, Boolean(request.force))
   const candles = request.interval === '4 Hours' ? aggregateFourHourCandles(raw.payload.candles) : raw.payload.candles
+  if (request.interval === '4 Hours' && raw.payload.market) hyperliquidEquities.watchCandles(symbol, '4h')
   if (!candles.length) throw new Error(`No chart data returned for ${symbol}.`)
   const closes = candles.map((row) => row.close)
   const rsiValues = rsi(closes, 14)
@@ -250,6 +252,7 @@ export async function getChartsCompare(request: ChartsCompareRequest): Promise<C
   const start = startOfRange(request.range)
   const settled = await Promise.allSettled(symbols.map((symbol) => cachedCandles(symbol, start, interval, Boolean(request.force))))
   const series: Record<string, ChartsSeriesPoint[]> = {}
+  const sources: Record<string, string> = {}
   const missing: string[] = []
   const failures: ChartsBatchResult<ChartsComparePayload>['failures'] = []
   let stale = false
@@ -266,9 +269,10 @@ export async function getChartsCompare(request: ChartsCompareRequest): Promise<C
     fromCache &&= outcome.value.fromCache
     cacheAgeSeconds = Math.max(cacheAgeSeconds, outcome.value.cacheAgeSeconds)
     series[symbol] = outcome.value.payload.candles.map((row) => ({ time: row.time, close: row.close }))
+    sources[symbol] = outcome.value.payload.source ?? 'Yahoo stock history'
   })
   return {
-    payload: { symbols, interval: request.interval, range: request.range, series, missing },
+    payload: { symbols, interval: request.interval, range: request.range, series, sources, missing },
     failures,
     stale,
     fromCache,

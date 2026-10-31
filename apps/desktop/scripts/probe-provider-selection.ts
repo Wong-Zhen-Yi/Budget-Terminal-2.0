@@ -80,7 +80,7 @@ async function offline() {
     assert.equal(failedSearch.errors.length, 1)
     const cachedFailure = await yahooProvider.youtube({ tickers: ['IAU'] })
     assert.equal(cachedFailure.errors.length, 1, 'Persisted failures must not become successful empty searches')
-    console.log('PASS: Yahoo-only quotes/history/spark/statements, no provider or quote endpoint switch, ETF calendars, empty searches and persisted YouTube failures')
+    console.log('PASS: unmapped quotes and adjusted history/spark/statements retain Yahoo routing; ETF calendars, empty searches and persisted YouTube failures')
   } finally {
     Object.assign(yahoo, { chart: original.chart, quote: original.quote, quoteSummary: original.quoteSummary, _fetch: original._fetch })
     defeatBeta.rows = original.rows

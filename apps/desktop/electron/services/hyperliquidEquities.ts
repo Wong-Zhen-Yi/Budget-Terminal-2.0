@@ -30,6 +30,7 @@ export function equityQuoteFromContext(symbol: string, market: string, value: un
     throw new Error(`Incomplete Hyperliquid price for ${market}.`)
   }
   const absChange = price - previous
+  if (!Number.isFinite(absChange / previous * 100)) throw new Error(`Invalid Hyperliquid change for ${market}.`)
   return { symbol, price, absChange, change: absChange / previous * 100, currency: 'USD', asOf,
     priceBasis: 'equity-perp-mark', changeBasis: '24h', source: equityPriceSource(market), market }
 }
@@ -71,10 +72,12 @@ export class HyperliquidEquities {
   private readonly listeners = new Set<(update: EquityMarketUpdate) => void>()
   private readonly candleWatches = new Map<string, { symbol: string; interval: string }>()
   private readonly changedCandles = new Map<string, EquityMarketUpdate['candles'][number]>()
+  private readonly latestCandles = new Map<string, { candle: Candle; receivedAt: number }>()
   private socket: WebSocket | null = null
   private enabled = false
   private reconnect: ReturnType<typeof setTimeout> | undefined
   private heartbeat: ReturnType<typeof setInterval> | undefined
+  private connectingTimer: ReturnType<typeof setTimeout> | undefined
   private flushTimer: ReturnType<typeof setTimeout> | undefined
   private readonly changed = new Map<string, Quote>()
   private lastMessageAt = 0
@@ -105,6 +108,7 @@ export class HyperliquidEquities {
     clearTimeout(this.reconnect)
     clearTimeout(this.flushTimer)
     clearInterval(this.heartbeat)
+    clearTimeout(this.connectingTimer)
     this.reconnect = undefined
     this.flushTimer = undefined
     this.heartbeat = undefined
@@ -114,6 +118,7 @@ export class HyperliquidEquities {
     this.quotes.clear()
     this.changed.clear()
     this.changedCandles.clear()
+    this.latestCandles.clear()
   }
 
   private watch(symbol: string): void {
@@ -133,6 +138,14 @@ export class HyperliquidEquities {
     this.socket?.send(JSON.stringify({ method: 'subscribe', subscription: { type: 'candle', coin: equityMarket(symbol), interval: apiInterval } }))
   }
 
+  watchCandles(symbol: string, interval: string): void {
+    const key = `${symbol}:${interval}`
+    if (!equityMarket(symbol) || !INTERVAL_MS[interval] || this.candleWatches.has(key)) return
+    this.candleWatches.set(key, { symbol, interval })
+    this.watch(symbol)
+    if (this.socket?.readyState === 1) this.sendCandleSubscription(symbol, interval)
+  }
+
   private publish(): void {
     if (this.flushTimer) return
     this.flushTimer = setTimeout(() => {
@@ -150,9 +163,12 @@ export class HyperliquidEquities {
     let socket: WebSocket
     try { socket = this.socketFactory(WS_URL) } catch { this.scheduleReconnect(); return }
     this.socket = socket
+    this.connectingTimer = setTimeout(() => { if (socket.readyState === 0) socket.close() }, 12_000)
+    this.connectingTimer.unref?.()
     this.lastMessageAt = this.now()
     socket.addEventListener('open', () => {
       if (this.socket !== socket) return
+      clearTimeout(this.connectingTimer)
       for (const symbol of this.watched) this.sendSubscription(symbol)
       for (const { symbol, interval } of this.candleWatches.values()) this.sendCandleSubscription(symbol, interval)
       this.heartbeat = setInterval(() => {
@@ -176,6 +192,8 @@ export class HyperliquidEquities {
           if (!symbol || EQUITY_MARKETS[symbol] !== market || !this.candleWatches.has(key)) continue
           try {
             const candle = parseEquityCandles([row], market, interval)[0]
+            if ((this.latestCandles.get(key)?.candle.time ?? 0) > candle.time) continue
+            this.latestCandles.set(key, { candle, receivedAt: this.now() })
             this.changedCandles.set(key, { symbol, market, interval, candle })
             this.publish()
           } catch { /* Reject malformed or cross-market candles. */ }
@@ -198,10 +216,16 @@ export class HyperliquidEquities {
     const disconnected = () => {
       if (this.socket !== socket) return
       this.socket = null
+      clearTimeout(this.connectingTimer)
       clearInterval(this.heartbeat)
       this.heartbeat = undefined
       // Do not reuse an old stream mark as a live quote after disconnecting.
       this.quotes.clear()
+      this.latestCandles.clear()
+      this.changed.clear()
+      this.changedCandles.clear()
+      clearTimeout(this.flushTimer)
+      this.flushTimer = undefined
       this.scheduleReconnect()
     }
     socket.addEventListener('close', disconnected)
@@ -276,6 +300,7 @@ export class HyperliquidEquities {
   }
 
   async getCandles(symbol: string, start: Date, interval: string, force = false, requireCoverage = true): Promise<EquityCandleResult> {
+    symbol = symbol.trim().toUpperCase()
     const market = equityMarket(symbol)
     const width = INTERVAL_MS[interval]
     if (!market || !width) throw new Error('Hyperliquid stock market or candle interval is unsupported.')
@@ -293,15 +318,16 @@ export class HyperliquidEquities {
       return candles.filter(row => row.time * 1000 >= start.getTime() - width)
     }, { force })
     const source = equityPriceSource(market)
-    const subscriptionKey = `${symbol}:${interval}`
-    if (!this.candleWatches.has(subscriptionKey)) {
-      this.candleWatches.set(subscriptionKey, { symbol, interval })
-      this.watch(symbol)
-      if (this.socket?.readyState === 1) this.sendCandleSubscription(symbol, interval)
-    }
+    this.watchCandles(symbol, interval)
     observeSource({ fetchedAt: this.now() - result.ageSeconds * 1000, stale: result.stale, fromCache: result.fromCache,
       failures: [], sources: [source] })
-    return { candles: result.value, source, market, stale: result.stale, fromCache: result.fromCache, cacheAgeSeconds: result.ageSeconds }
+    const latest = this.latestCandles.get(`${symbol}:${interval}`)
+    let candles = result.value
+    if (latest && this.now() - latest.receivedAt <= QUOTE_MAX_AGE && latest.candle.time >= candles.at(-1)!.time) {
+      candles = latest.candle.time === candles.at(-1)!.time
+        ? [...candles.slice(0, -1), latest.candle] : [...candles, latest.candle]
+    }
+    return { candles, source, market, stale: result.stale, fromCache: result.fromCache, cacheAgeSeconds: result.ageSeconds }
   }
 }
 
