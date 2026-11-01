@@ -27,6 +27,7 @@ function buildReport({ startup, startupLoads }: ReturnType<typeof useDataHealth.
     lines.push(`${index + 1} | ${PAGE_LABELS.get(page) ?? page} (${page}) | ${status?.state ?? 'loading'}${status?.reason ? ` · ${status.reason}` : ''} | ${load ? `${(load.durationMs / 1000).toFixed(1)}s` : 'Not measured'} | ${load?.samples ?? 0}`)
   }
   lines.push('', 'Completed startup task timings:')
+  lines.push('Initial attempts are historical; the page statuses above show current health after background recovery.')
   for (const task of startup?.timings ?? []) {
     lines.push(`${PAGE_LABELS.get(task.tab) ?? task.tab} / ${task.label} | ${(task.durationMs / 1000).toFixed(1)}s | ${task.state ?? (task.failed ? 'failed' : 'ready')}${task.reason ? ` · ${task.reason}` : ''}`)
   }

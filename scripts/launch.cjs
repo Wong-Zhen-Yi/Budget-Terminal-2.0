@@ -63,14 +63,22 @@ function launch({ development = false, platform = process.platform, nodeVersion 
   }
 
   log.log(`Starting Budget Terminal for ${os}...`)
+  log.log('MCP startup fix: desktop-only cache controls and heatmap progress no longer block the app from opening.')
+  log.log('Heatmap fills holdings and quote colours progressively while data loads; loading progress stays visible until completion.')
+  log.log('Cache startup: saved pages stay usable during background refresh. Settings controls 256 MiB page snapshots, 2 GiB market data, a separate 512 MiB image budget and 30-day retention. All pages still preload.')
+  log.log('Refresh schedule: Heatmap every 30 minutes; company snapshots and Personal Finance FX hourly; Dashboard headlines every 5 minutes. Backtest preloads once with no automatic refresh.')
+  log.log('Startup loading: completed pages refresh while slower pages load, recovered warnings clear, and changed selections preload without restarting unrelated pages.')
+  log.log('Page headers: removed the equity price source subtitle from every page.')
+  log.log('Agents connects quietly at startup; connection status and errors stay visible in the Agents toolbar.')
   log.log('Yahoo load reduction: mapped crypto-equity prices skip Yahoo charts, stock metadata is cached for 15 minutes, and crypto perpetuals share the live equity socket with REST fallback. All pages still preload.')
+  log.log('Stock data reuse: checked Yahoo U.S. closing quotes and history stay cached until the next regular session, after closing updates settle. Manual refresh and live perpetual feeds continue. All pages still preload.')
   log.log('Agents chat: the message composer fills resizable dashboard and dropdown panes at every zoom level.')
   log.log('Data health: all startup pages report current results and refresh after expiry. Chart history keeps its own freshness; SPY security IDs and Robinhood monthly reports are handled correctly.')
   log.log('MCP prices use the shared live Hyperliquid feed for mapped stocks. Fast quote reads skip macro and sector lookups by default; projected responses preserve perp market labels and Yahoo fallback details.')
-  log.log('Portfolio charts stay prepared across all books: Dashboard, Stocks and selected Main/Multi views load at startup, refresh in the background and prepare new holdings automatically. The footer shows readiness and failures.')
+  log.log('Portfolio charts stay prepared across all books: Dashboard, Stocks and selected Main/Multi views load at startup, refresh in the background and prepare new holdings automatically. The bottom status strip is hidden; background loading, chart refresh and monitoring continue. Readiness and failures remain available in Settings.')
   log.log('Chart ticker switches reuse cached history and refresh its recent tail. Interactive requests have priority and reserved Hyperliquid rate budget; live marks keep chart zoom steady.')
   log.log('Stock prices use labelled Hyperliquid equity-perpetual marks where mapped, including portfolio values and screener prices. Prices and covered charts stream live with native UTC 4-hour perp bars; Yahoo supplies stock-history and quote fallbacks plus fundamentals.')
-  log.log('Crypto includes Hyperliquid perpetual markets: mark prices, hourly funding, open interest and volume. Free public data loads at startup and refreshes every 60 seconds while Crypto is visible.')
+  log.log('Crypto Workspace: interactive perpetual charts, watchlist selection, searchable markets, source labels and enforced CoinGecko cooldowns. The chart preloads with every page. Hourly funding, USD open interest and volume remain separate from spot prices.')
   log.log('Dependencies updated: Electron 45.1.0, query caching, MCP and Parquet readers. Virtual tables retain their tested version.')
   log.log('Agent recovery: saved run details, temporary read retries, partial answers and Continue research. Manual run limits are configurable in Controls.')
   log.log('Portfolio and Personal Finance privacy: Obscure replaces numbers with **** while labels, controls and charts stay visible. Reveal restores values and numeric editing.')
@@ -100,7 +108,7 @@ function launch({ development = false, platform = process.platform, nodeVersion 
 
   log.log('Certificate protection: patched Node.js required; Electron 44.9.3+ blocks compromised eMudhra keys in Node and Chromium. Certificate verification bypasses are rejected.')
 
-  log.log('Startup Yahoo pacing is now 3 requests per second (up from 1), without bursts, with up to 3 background requests in flight and a reserved foreground slot. All pages still preload; foreground requests take priority and rate limits trigger automatic backoff. The API USAGE footer shows Yahoo rolling request counts, active requests and queued work; its tooltip explains the current pacing budget, not a provider-reported quota or loading progress.')
+  log.log('Startup Yahoo pacing is now 3 requests per second (up from 1), without bursts, with up to 3 background requests in flight and a reserved foreground slot. All pages still preload; foreground requests take priority and rate limits trigger automatic backoff. Settings API Usage shows Yahoo rolling request counts, active requests and queued work, not a provider-reported quota or loading progress.')
   log.log('Pre-Market futures now try daily history when hourly refresh fails or returns stale data. Healthy daily fallbacks clear old degradation; retained stale prices keep their warnings. All pages still preload at startup.')
   log.log('Trading Volumes circles the matching dot and shows its ticker label when you hover over a ticker in the volume table. Beta centers the ticker cluster horizontally using median dollar volume, keeping all outliers visible and the log scale fixed during replay.')
 

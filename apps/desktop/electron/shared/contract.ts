@@ -3502,6 +3502,8 @@ export const CHANNELS = {
   screenshotReady: 'mcp:screenshot-ready',
   savedDataChanged: 'user-data:changed',
   apiUsage: 'system:api-usage',
+  cacheStatus: 'system:cache-status',
+  configureCache: 'system:cache-configure',
   equityMarketChanged: 'market:equity-changed',
   quotes: 'dashboard:quotes',
   chart: 'dashboard:chart',
@@ -3552,6 +3554,7 @@ export const CHANNELS = {
   gold: 'gold:read',
   oil: 'oil:read',
   heatmap: 'heatmap:read',
+  heatmapProgress: 'heatmap:progress',
   etfHoldings: 'etf:holdings',
   etfArbitrage: 'etf:arbitrage',
   etfAum: 'etf:aum',
@@ -3704,6 +3707,8 @@ export interface DesktopApi {
   onSavedDataChanged(listener: (event: SavedDataChanged) => void): () => void
   readonly platform: NodeJS.Platform
   apiUsage(): Promise<ApiUsageSnapshot>
+  cacheStatus(): Promise<Envelope<import('./cachePolicy.js').CacheStatus>>
+  configureCache(settings: import('./cachePolicy.js').CacheSettings): Promise<Envelope<import('./cachePolicy.js').CacheStatus>>
   quotes(request: QuotesRequest): Promise<Envelope<QuotesPayload>>
   chart(request: ChartRequest): Promise<Envelope<ChartPayload>>
   chartsHistory(request: ChartsHistoryRequest): Promise<Envelope<ChartsHistoryPayload>>
@@ -3764,6 +3769,8 @@ export interface DesktopApi {
   gold(request: GoldRequest): Promise<Envelope<GoldPayload>>
   oil(request: OilRequest): Promise<Envelope<OilPayload>>
   heatmap(request: HeatmapRequest): Promise<Envelope<HeatmapPayload>>
+  /** In-memory preview only; never starts provider work. */
+  heatmapProgress(etf: HeatmapEtfKey): Promise<HeatmapPayload | null>
   etfHoldings(request: EtfHoldingsRequest): Promise<Envelope<EtfHoldingsPayload>>
   etfArbitrage(request: EtfArbitrageRequest): Promise<Envelope<EtfArbitragePayload>>
   etfAum(request: EtfAumRequest): Promise<Envelope<EtfAumPayload>>

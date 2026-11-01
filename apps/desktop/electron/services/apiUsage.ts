@@ -18,7 +18,7 @@ const PROVIDERS: Record<string, ProviderDefinition> = {
   },
   coingecko: {
     label: 'CoinGecko',
-    softLimit: 30,
+    softLimit: 5,
     windowMs: 60_000,
     fallbackCooldownMs: 60_000,
   },
@@ -73,6 +73,11 @@ export class ApiUsageTracker {
     private readonly providers: Record<string, ProviderDefinition> = PROVIDERS,
     private readonly now: () => number = Date.now,
   ) {}
+
+  setCooldown(providerId: string, until: number): void {
+    const state = this.stateFor(providerId)
+    state.throttledUntil = Math.max(state.throttledUntil, until)
+  }
 
   async track<T>(providerId: string, task: () => Promise<T>): Promise<T> {
     const definition = this.providers[providerId]

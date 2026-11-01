@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQuery, useQueryClient, type UseQueryResult, type QueryClient } from '@tanstack/react-query'
 
-import type { CryptoPayload, Envelope } from '@shared/contract'
+import type { CryptoPayload, Envelope, ChartsHistoryRequest } from '@shared/contract'
 import { api, queryKeys } from './client'
 import { queryFreshness } from './queryPersistence'
 import { forcing } from './queries'
+import { warmStartupQuery, type StartupSnapshotObserver } from './warmQueue'
 
 // Match the main-process crypto cache lifetime without forcing provider requests.
 const CRYPTO_REFRESH_MS = 60_000
@@ -35,4 +36,25 @@ export function useRefreshCrypto(): () => Promise<void> {
     const result = await api.crypto({ force: true })
     queryClient.setQueryData(queryKeys.crypto, result)
   }, [queryClient])
+}
+
+/** Diagnostic polling is local IPC and never sends a provider request. */
+export function useCryptoProviderUsage() {
+  return useQuery({
+    queryKey: ['apiUsage'], queryFn: () => api.apiUsage(), staleTime: 500,
+    refetchInterval: 1_000, refetchIntervalInBackground: false, retry: false,
+  })
+}
+
+export async function warmCryptoChart(
+  client: QueryClient,
+  request: ChartsHistoryRequest,
+  backgroundOrder?: number,
+  onSnapshot?: StartupSnapshotObserver,
+) {
+  return warmStartupQuery(client, {
+    queryKey: queryKeys.chartsHistory(request.symbol, request.interval, request.range),
+    queryFn: () => api.chartsHistory({ ...request, background: true, backgroundOrder }),
+    staleTime: queryFreshness(queryKeys.chartsHistory(request.symbol, request.interval, request.range)),
+  }, onSnapshot)
 }

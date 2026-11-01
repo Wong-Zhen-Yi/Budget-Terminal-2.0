@@ -110,7 +110,8 @@ export interface SparkBatch {
  * A chunk that fails only costs its own twenty symbols, which then land in `missing` and
  * render as no-data tiles — the same degradation the reference reports as a partial load.
  */
-export async function fetchSparkCloses(symbols: string[], range = '1y', force = false): Promise<SparkBatch> {
+export async function fetchSparkCloses(symbols: string[], range = '1y', force = false,
+  onProgress?: (series: Record<string, SparkSeries>) => void): Promise<SparkBatch> {
   const unique = [...new Set(symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean))].sort()
   const series: Record<string, SparkSeries> = {}
   const needed: string[] = []
@@ -119,6 +120,7 @@ export async function fetchSparkCloses(symbols: string[], range = '1y', force = 
     if (hit) series[symbol] = hit.value
     if (!hit) needed.push(symbol)
   }))
+  if (Object.keys(series).length) onProgress?.({ ...series })
   needed.sort()
   const chunks: string[][] = []
   for (let index = 0; index < needed.length; index += SPARK_BATCH_SIZE) {
@@ -127,7 +129,7 @@ export async function fetchSparkCloses(symbols: string[], range = '1y', force = 
 
   // Reuse constituent histories across Heatmap indexes and ETF arbitrage. Identical
   // concurrent chunks share a request; failed chunks keep the existing missing state.
-  const settled = await Promise.allSettled(chunks.map(async (chunk) => {
+  await Promise.allSettled(chunks.map(async (chunk) => {
     const result = await cache.resolve(`spark-batch:${range}:${chunk.join(',')}`, 0, async () => {
       const rows = await fetchChunk(chunk, range)
       await Promise.all(Object.entries(rows).map(async ([symbol, value]) => {
@@ -139,11 +141,9 @@ export async function fetchSparkCloses(symbols: string[], range = '1y', force = 
       }))
       return rows
     }, { force: true })
-    return result.value
+    Object.assign(series, result.value)
+    onProgress?.({ ...series })
   }))
-  for (const outcome of settled) {
-    if (outcome.status === 'fulfilled') Object.assign(series, outcome.value)
-  }
   return { series, missing: unique.filter((symbol) => !series[symbol]) }
 }
 

@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 
 import type { Envelope, HeatmapEtfKey, HeatmapPayload } from '@shared/contract'
@@ -25,6 +25,33 @@ export function useHeatmap(etf: HeatmapEtfKey): UseQueryResult<Envelope<HeatmapP
     refetchInterval: false,
     placeholderData: (previous) => previous,
   })
+}
+
+/** Read local previews while the normal query (including startup warm-up) completes. */
+export function useHeatmapProgress(etf: HeatmapEtfKey, loading: boolean): HeatmapPayload | null {
+  const [preview, setPreview] = useState<HeatmapPayload | null>(null)
+  useEffect(() => {
+    setPreview(null)
+    if (!loading) return
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const poll = async () => {
+      try {
+        const payload = await api.heatmapProgress(etf)
+        if (!cancelled && payload?.etf === etf) setPreview(payload)
+      } catch {
+        // The completed query owns provider errors and retry status.
+      } finally {
+        if (!cancelled) timer = setTimeout(() => void poll(), 500)
+      }
+    }
+    void poll()
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [etf, loading])
+  return loading && preview?.etf === etf ? preview : null
 }
 
 export function useRefreshHeatmap(): (etf: HeatmapEtfKey) => Promise<void> {

@@ -1,15 +1,30 @@
 import { hashKey, type QueryClient, type QueryKey } from '@tanstack/react-query'
 
-const pins = new WeakMap<QueryClient, Set<string>>()
+const pins = new WeakMap<QueryClient, Map<string, Set<object | undefined>>>()
+const retiredOwners = new WeakSet<object>()
 const completed = new WeakSet<QueryClient>()
 export const QUERY_IDLE_MS = 15 * 60_000
 
-export function pinStartupQuery(client: QueryClient, queryKey: QueryKey): void {
+export function pinStartupQuery(client: QueryClient, queryKey: QueryKey, owner?: object): boolean {
+  if (owner && retiredOwners.has(owner)) return false
   let keys = pins.get(client)
-  if (!keys) { keys = new Set(); pins.set(client, keys) }
-  keys.add(hashKey(queryKey))
+  if (!keys) { keys = new Map(); pins.set(client, keys) }
+  const hash = hashKey(queryKey)
+  let owners = keys.get(hash)
+  if (!owners) { owners = new Set(); keys.set(hash, owners) }
+  owners.add(owner)
   const query = client.getQueryCache().find({ queryKey, exact: true })
   if (query) query.setOptions({ ...query.options, gcTime: Infinity })
+  return true
+}
+
+/** Release superseded selections while retaining keys shared by current pages. */
+export function releaseStartupQueries(client: QueryClient, owner: object): void {
+  retiredOwners.add(owner)
+  for (const [hash, owners] of pins.get(client) ?? []) {
+    owners.delete(owner)
+    if (!owners.size) pins.get(client)!.delete(hash)
+  }
 }
 
 export function completeStartupRegistration(client: QueryClient): void {

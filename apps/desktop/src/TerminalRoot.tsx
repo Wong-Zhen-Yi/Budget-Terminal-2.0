@@ -5,7 +5,7 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { App } from './App'
 import { api } from './api/client'
 import { refreshSavedData } from './api/mcpChanges'
-import { RENDERER_CACHE_MAX_AGE_MS } from '@shared/freshness'
+import { CACHE_SETTING_BOUNDS } from '@shared/cachePolicy'
 import {
   RENDERER_CACHE_BUSTER,
   rendererQueryPersister,
@@ -54,7 +54,8 @@ export default function TerminalRoot() {
         client={queryClient}
         persistOptions={{
           persister: rendererQueryPersister,
-          maxAge: RENDERER_CACHE_MAX_AGE_MS,
+          // The persister enforces the user's retention per query, including 90 days.
+          maxAge: CACHE_SETTING_BOUNDS.retentionDays.max * 86_400_000,
           buster: RENDERER_CACHE_BUSTER,
           dehydrateOptions: { shouldDehydrateQuery: shouldPersistRemoteQuery },
         }}

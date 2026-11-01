@@ -248,6 +248,7 @@ import {
   settingsPath,
 } from './settingsStore.js'
 import { getChart } from './yahoo/chart.js'
+import { cryptoPerpSymbol } from '../shared/cryptoWorkspace.js'
 import { CARDS_SOURCE, getCardsPerformance } from './yahoo/cards.js'
 import {
   getChartsCompare,
@@ -745,13 +746,14 @@ const providerImplementation: MarketDataProvider = {
 
   async chartsHistory(request) {
     const symbol = request.symbol.trim().toUpperCase()
+    const chartSource = cryptoPerpSymbol(symbol) ? 'Hyperliquid crypto perp' : 'yahoo chart'
     try {
       const result = await getChartsHistory({ ...request, symbol })
         if (result.stale) {
         return {
           data: result.payload,
           meta: meta('charts history cache', 'stale', { cacheAgeSeconds: result.cacheAgeSeconds }),
-          errors: [err('yahoo chart', 'Live chart refresh failed; showing cached data.', 'charts history', symbol)],
+          errors: [err(chartSource, 'Live chart refresh failed; showing cached data.', 'charts history', symbol)],
         }
         }
         if (result.fromCache) {
@@ -771,7 +773,7 @@ const providerImplementation: MarketDataProvider = {
         candles: [],
         stats: null,
         indicators: { ma50: [], ma200: [], rsi: [], rsiMa: [] },
-      }, describeError(error), 'yahoo chart')
+      }, describeError(error), chartSource)
     }
   },
 

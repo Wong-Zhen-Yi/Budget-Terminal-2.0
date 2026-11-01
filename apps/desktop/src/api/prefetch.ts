@@ -4,13 +4,12 @@ import { useIsRestoring, useQueryClient, type QueryClient } from '@tanstack/reac
 import { CARD_INTERVALS, MACRO_SYMBOLS, type AppSettings, type PortfolioPayload } from '@shared/contract'
 import { startupPages } from '@shared/navigation'
 import { startupPageOrder } from '@shared/startupLoading'
-import { retryTransientData } from '@shared/dataRetry'
 import { SP500_PARTS } from '@shared/sp500'
 import { marketCapInTier } from '@shared/marketCap'
 import { pickDiscoverySymbol } from '@shared/discovery'
 import { normalizeBacktestPageSettings } from '@shared/backtest'
 import { buildCardModels } from '@shared/cards'
-import { useDataHealth, type StartupTiming } from '@/stores/dataHealth'
+import { useDataHealth } from '@/stores/dataHealth'
 import { calendarToday, earningsDateRange } from '@shared/calendar'
 import { useCalendarPage } from '@/stores/calendar'
 import { useIpoPage } from '@/stores/ipo'
@@ -21,6 +20,9 @@ import { useDefeatBetaTerminal } from '@/stores/defeatbeta'
 import { DEFEATBETA_SECTIONS, TERMINAL_TTL } from '@shared/defeatbetaTerminal'
 import { useStocksPage } from '@/stores/stocks'
 import { useChartsStore } from '@/stores/charts'
+import { useCryptoWorkspace } from '@/stores/crypto'
+import { cryptoChartRequest } from '@shared/cryptoWorkspace'
+import { warmCryptoChart } from './cryptoQueries'
 import { useOptionsPage } from '@/stores/options'
 import { useProjectionsPage } from '@/stores/projections'
 import { useValuationPage } from '@/stores/valuation'
@@ -30,14 +32,15 @@ import { useUpDownPage } from '@/stores/upDown'
 import { useNewsPageStore } from '@/stores/news'
 import { api, queryKeys } from './client'
 import { priceScreenKey } from './priceQueries'
-import { backtestKey } from './backtestQueries'
+import { backtestKey, backtestQuotesKey } from './backtestQueries'
+import { FX_REFRESH_MS, PAGE_REFRESH_INTERVAL_MS } from './refreshRates'
 import { cardsPerformanceKey } from './cardsQueries'
 import { loadUpDownTargets, upDownTargetBatches, upDownTargetsKey } from './upDownTargetsQueries'
-import { completeStartupRegistration } from './queryMemory'
+import { completeStartupRegistration, releaseStartupQueries } from './queryMemory'
 import { queryFreshness } from './queryPersistence'
 import { usePortfolio } from './queries'
-import { assertStartupReady, runWarmTasks, StartupLoadError, warmQuery, warmStartupQuery, warmStartupSnapshot, type StartupSnapshotObserver } from './warmQueue'
-import { recordStartupSnapshot, startupRefreshDelay } from './startupHealth'
+import { assertStartupReady, StartupLoadError, warmQuery, warmStartupQuery, warmStartupSnapshot, type StartupSnapshotObserver } from './warmQueue'
+import { recordStartupSnapshot } from './startupHealth'
 import { loadPortfolioChart, portfolioChartTargets } from './portfolioCharts'
 import { initialNewsImages, initialYouTubeVideo, newsQuoteTickers } from './initialContent'
 import { warmAgentWorkspace } from './agentsQueries'
@@ -45,6 +48,7 @@ import { browserKey, loadBrowser } from './browserQueries'
 import { notificationsKey, loadNotifications } from './notificationsQueries'
 import { errorMessage } from './snapshotHealth'
 import { createProgressReporter } from './progressReporter'
+import { createStartupScheduler } from './startupScheduler'
 
 /**
  * Load every implemented page's automatic initial data when the app opens.
@@ -58,7 +62,7 @@ import { createProgressReporter } from './progressReporter'
  * requests still pass through the shared rate gate in its background lane, so
  * parallel pages share one request budget and yield to foreground requests.
  *
- * It runs once per renderer session.
+ * One scheduler runs per renderer session and reconciles changed page inputs.
  */
 
 interface WarmTask {
@@ -66,6 +70,11 @@ interface WarmTask {
   label: string
   run: (client: QueryClient, backgroundOrder?: number, onSnapshot?: StartupSnapshotObserver) => Promise<unknown>
   refresh?: boolean
+  refreshIntervalMs?: number
+}
+
+interface PlannedWarmTask extends WarmTask {
+  id: string
 }
 
 export interface WarmProgress {
@@ -111,9 +120,14 @@ export function buildTasks(
   settings: AppSettings | undefined,
   symbols: { stocks: string; fundamentals: string },
   calendar: { year: number; month: number; earningsYear: number; ipoYear: number },
-): WarmTask[] {
+): PlannedWarmTask[] {
   const { active, every, editable, main, upDown } = holdingsOf(payload)
   const tasks: WarmTask[] = [{
+    tab: 'settings', label: 'Cache diagnostics', refresh: false,
+    run: (client, _backgroundOrder, onSnapshot) => warmStartupQuery(client, {
+      queryKey: ['cacheStatus'], queryFn: () => api.cacheStatus(), staleTime: Infinity,
+    }, onSnapshot),
+  }, {
     tab: 'browser', label: 'Browser Chromium session',
     run: (client, _backgroundOrder, onSnapshot) => warmStartupQuery(client, { queryKey: browserKey, queryFn: loadBrowser, staleTime: Infinity }, onSnapshot),
   }, {
@@ -255,13 +269,13 @@ export function buildTasks(
     })
   }
 
-  if (main.length && main.join(',') !== active.join(',')) {
+  if (main.length) {
     tasks.push({
       tab: 'backtest', label: 'Backtest quotes',
       run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
-        queryKey: queryKeys.quotes(main),
+        queryKey: backtestQuotesKey(main),
         queryFn: () => api.quotes({ holdings: main, background: true, backgroundOrder }),
-        staleTime: queryFreshness(queryKeys.quotes(main)),
+        staleTime: queryFreshness(backtestQuotesKey(main)),
       }, onSnapshot),
     })
   }
@@ -359,6 +373,7 @@ export function buildTasks(
   tasks.push({
     tab: 'personal-finance',
     label: 'FX rate',
+    refreshIntervalMs: FX_REFRESH_MS,
     run: (client, backgroundOrder, onSnapshot) =>
       warmStartupQuery(client, {
         queryKey: queryKeys.fx,
@@ -619,6 +634,12 @@ export function buildTasks(
     run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, { queryKey: queryKeys.forexNews('EUR/USD'), queryFn: () => api.forexNews({ pair: 'EUR/USD', background: true, backgroundOrder }), staleTime: queryFreshness(queryKeys.forexNews('EUR/USD')) }, onSnapshot),
   })
 
+  const cryptoWorkspace = useCryptoWorkspace.getState()
+  tasks.push({
+    tab: 'crypto', label: 'Crypto perpetual chart',
+    run: (client, backgroundOrder, onSnapshot) => warmCryptoChart(client,
+      cryptoChartRequest(cryptoWorkspace.symbol, cryptoWorkspace.interval), backgroundOrder, onSnapshot),
+  })
   // Warm every Crypto stage, including Hyperliquid, before the page is visited.
   // The versioned key ensures old snapshots cannot skip the newly added stage.
   tasks.push({
@@ -762,6 +783,7 @@ export function buildTasks(
   })
   tasks.push({
     tab: 'pltr', label: 'PLTR market, chart and news',
+    refreshIntervalMs: 60 * 60_000,
     run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
       queryKey: queryKeys.stocks('PLTR'),
       queryFn: () => api.stocks({ symbol: 'PLTR', background: true, backgroundOrder }),
@@ -1043,268 +1065,163 @@ export function buildTasks(
     (task.tab === 'dashboard' && dashboard2Labels.has(task.label)))
     .map((task) => ({ ...task, tab: 'dashboard-2' })))
 
-  return tasks
+  // Only request inputs belong in these identities. Layout, privacy and navigation
+  // edits must not restart loading, and unchanged pages retain their in-flight work.
+  const holdingSymbols = [...new Set(payload?.portfolios.flatMap(book => book.tickers) ?? [])].sort()
+  const news = useNewsPageStore.getState()
+  const revisions: Record<string, unknown> = {
+    dashboard: [dashboard.symbol, dashboard.timeframe, active, dashboardTickers, holdingSymbols],
+    'dashboard-2': [active, dashboardTickers],
+    portfolio: [active, upDown, optionPositions],
+    'personal-finance': [editable, financeOptionPositions],
+    cards: payload?.portfolios,
+    calendar: [main, calendar.year, calendar.month, calendar.earningsYear],
+    ipo: calendar.ipoYear,
+    backtest: [main, backtest],
+    stocks: [symbols.stocks, holdingSymbols],
+    fundamentals: symbols.fundamentals,
+    scorecard: useScorecard.getState().symbols,
+    defeatbeta: terminalSymbol,
+    news: [every, news.showImages, news.filter, news.sort],
+    youtube: [every, settings?.youtubePage],
+    etf: etfTicker,
+    'up-down': [upDownPage.activeSource, upDownPage.interval, upDownSymbols],
+    charts: [charts.symbol, charts.interval, charts.range, charts.multiInterval, holdingSymbols],
+    crypto: [cryptoWorkspace.symbol, cryptoWorkspace.interval],
+    valuation: [valuation.ticker, valuation.customPeersByTicker[valuation.ticker]],
+    projections: [projections.symbol, projections.timeframe],
+    options: [options.loaded, options.symbol, options.expiry],
+  }
+  const counts = new Map<string, number>()
+  return tasks.map(task => {
+    const index = counts.get(task.tab) ?? 0
+    counts.set(task.tab, index + 1)
+    return { ...task,
+      refresh: task.tab === 'backtest' ? false : task.refresh,
+      refreshIntervalMs: task.refreshIntervalMs ?? PAGE_REFRESH_INTERVAL_MS[task.tab],
+      id: JSON.stringify([task.tab, index, revisions[task.tab]]),
+    }
+  })
 }
 
 export function useWarmPages(settings: AppSettings | undefined, settingsSettled: boolean, activeTab: string, recent: string[], settingsError?: unknown): WarmProgress {
   const queryClient = useQueryClient()
   const isRestoring = useIsRestoring()
   const portfolioQuery = usePortfolio()
-
-  const stocksSymbol = useStocksPage((state) => state.symbol)
-  const fundamentalsSymbol = useFundamentalsStore((state) => state.symbol)
-  const calendarYear = useCalendarPage((state) => state.year)
-  const calendarMonth = useCalendarPage((state) => state.month)
-  const earningsYear = useCalendarPage((state) => state.earningsYear)
-  const ipoYear = useIpoPage((state) => state.completedYear)
-
-  const [progress, setProgress] = useState<WarmProgress>({
-    active: false,
-    done: 0,
-    total: 0,
-    label: '',
-    failed: 0,
-    degraded: 0,
-  })
-
-  // One warm-up per session, and it must survive StrictMode's double effect.
-  const started = useRef(false)
   const payload = portfolioQuery.data?.data
-
-  /**
-   * Everything the task list is built from, read through a ref.
-   *
-   * The effect below used to list all of these as dependencies. The warm-up takes
-   * minutes, and any of them changing inside that window — a portfolio edit, a Settings
-   * toggle, typing a ticker into Stocks, paging the Calendar — ran the effect's cleanup,
-   * which set `cancelled` and abandoned the warm-up part way through. The re-run then hit
-   * the `started` guard and returned, so nothing ever restarted it: every page behind the
-   * one being warmed at that moment silently went back to fetching on mount. Only
-   * `ready` gates the effect now, and it flips false to true exactly once.
-   */
-  const inputs = useRef({
-    activeTab, recent, favorites: settings?.favoriteTabs ?? [],
-    payload,
-    settings,
-    stocksSymbol,
-    fundamentalsSymbol,
-    calendarYear,
-    calendarMonth,
-    earningsYear,
-    ipoYear,
-    settingsError,
-    portfolioError: portfolioQuery.error ?? (portfolioQuery.data?.meta.freshness === 'failed' ? portfolioQuery.data.meta.failureReason || 'Holdings could not load' : undefined),
+  const portfolioError = portfolioQuery.error ?? (portfolioQuery.data?.meta.freshness === 'failed'
+    ? portfolioQuery.data.meta.failureReason || 'Holdings could not load' : undefined)
+  const [progress, setProgress] = useState<WarmProgress>({
+    active: false, done: 0, total: 0, label: '', failed: 0, degraded: 0,
   })
-  inputs.current = {
-    activeTab, recent, favorites: settings?.favoriteTabs ?? [],
-    payload,
-    settings,
-    stocksSymbol,
-    fundamentalsSymbol,
-    calendarYear,
-    calendarMonth,
-    earningsYear,
-    ipoYear,
-    settingsError,
-    portfolioError: portfolioQuery.error ?? (portfolioQuery.data?.meta.freshness === 'failed' ? portfolioQuery.data.meta.failureReason || 'Holdings could not load' : undefined),
-  }
+  const inputs = useRef({ activeTab, recent, settings, payload, settingsError, portfolioError })
+  inputs.current = { activeTab, recent, settings, payload, settingsError, portfolioError }
+  const reconcile = useRef<(() => void) | undefined>(undefined)
 
-  // A failed local read must not prevent unrelated pages from starting their loads.
+  // A failed local read must not prevent unrelated pages from starting. Keep the
+  // scheduler alive through later edits, retries and navigation changes.
   const readyRef = useRef(false)
   readyRef.current ||= !isRestoring && settingsSettled && !portfolioQuery.isPending
   const ready = readyRef.current
 
   useEffect(() => {
-    if (started.current || !ready) return
-    // Calendar's persisted timezone selects its civil date. Initialize it before
-    // warming keys, so its first mount cannot move to a different month/year.
-    const calendarState = useCalendarPage.getState()
-    calendarState.initialize(calendarToday(calendarState.timezone))
-    const initializedCalendar = useCalendarPage.getState()
-    const currentIpoYear = new Date().getFullYear()
-    if (useIpoPage.getState().completedYear !== currentIpoYear) useIpoPage.getState().setCompletedYear(currentIpoYear)
-    const current = inputs.current
-    const priority = startupPageOrder(
-      startupPages(current.activeTab, current.favorites, current.recent),
-      useDataHealth.getState().startupLoads,
-    )
-    const tasks = buildTasks(
-      current.payload,
-      current.settings,
-      { stocks: current.stocksSymbol, fundamentals: current.fundamentalsSymbol },
-      {
-        year: initializedCalendar.year,
-        month: initializedCalendar.month,
-        earningsYear: initializedCalendar.earningsYear,
-        ipoYear: currentIpoYear,
-      },
-    ).sort((a, b) => {
-      const rank = (tab: string) => priority.indexOf(tab)
-      return rank(a.tab) - rank(b.tab)
-    })
-
-    if (!tasks.length) {
-      completeStartupRegistration(queryClient)
-      useDataHealth.getState().setStartup({ durationMs: 0, planned: 0, timings: [] })
-      return
-    }
-
-    const pageOrder = priority
-    const pageRanks = new Map(pageOrder.map((page, index) => [page, index]))
-    let cancelled = false
-    const refreshTimers = new Set<ReturnType<typeof setTimeout>>()
+    if (!ready) return
+    let scheduler: ReturnType<typeof createStartupScheduler> | undefined
     let reporter: ReturnType<typeof createProgressReporter> | undefined
-    // Defer startup so StrictMode's trial effect can clean up before marking this run
-    // started. Otherwise the real effect skips a warm-up that was already cancelled.
-    const run = async () => {
-      started.current = true
-      const startedAt = performance.now()
-      const timings: StartupTiming[] = []
-      let failedCount = 0
-      let degradedCount = 0
-      let completed = 0
-      const activeLabels = new Set<string>()
-      const taskStarts = new Map<WarmTask, number>()
-      const retryReasons = new Map<WarmTask, string>()
-      const snapshots = new Map<WarmTask, Array<{ key: Parameters<StartupSnapshotObserver>[0]; result: unknown }>>()
-      const taskStates = new Map<WarmTask, { state: 'ready' | 'degraded' | 'failed'; reason?: string }>()
-      const runTask = async (task: WarmTask) => {
-        const observed: NonNullable<ReturnType<typeof snapshots.get>> = []
-        snapshots.set(task, observed)
-        return task.run(queryClient, pageRanks.get(task.tab), (key, result, error) => {
-          // Scheduling needs metadata only; never retain an old chart/statement
-          // payload after streaming updates or query-memory eviction replace it.
-          const meta = (result as { meta?: unknown } | null)?.meta
-          observed.push({ key, result: meta ? { meta } : undefined })
-          if (!cancelled) recordStartupSnapshot(task.tab, key, result, error)
-        })
-      }
-      const maintain = (task: WarmTask, failed: boolean) => {
-        if (cancelled || task.refresh === false) return
-        const delay = startupRefreshDelay(snapshots.get(task) ?? [], failed)
-        if (!Number.isFinite(delay)) return
-        const timer = setTimeout(async () => {
-          refreshTimers.delete(timer)
-          if (cancelled) return
-          let state: 'ready' | 'degraded' | 'failed' = 'ready'
-          let reason: string | undefined
-          try { await runTask(task) } catch (error) {
-            state = error instanceof StartupLoadError && error.state === 'degraded' ? 'degraded' : 'failed'
-            reason = errorMessage(error)
-          }
-          if (cancelled) return
-          taskStates.set(task, { state, reason })
-          const pageTasks = tasks.filter(entry => entry.tab === task.tab).map(entry => taskStates.get(entry))
-          const worst = pageTasks.find(entry => entry?.state === 'failed') ?? pageTasks.find(entry => entry?.state === 'degraded')
-          const startup = useDataHealth.getState().startup
-          if (startup && !(task.tab === 'portfolio' && current.portfolioError)) {
-            const page = worst ?? { state: 'ready' as const }
-            useDataHealth.getState().setStartup({ ...startup, pages: { ...startup.pages, [task.tab]: page,
-              ...(task.tab === 'trading-volumes' ? { beta: page } : {}) } })
-          }
-          maintain(task, state !== 'ready')
-        }, delay)
-        refreshTimers.add(timer)
-      }
-      const pages: NonNullable<NonNullable<ReturnType<typeof useDataHealth.getState>['startup']>['pages']> = Object.fromEntries(pageOrder.map((page) => [page, {
-        state: tasks.some((task) => task.tab === page) ? 'loading' as const
-          : ['options', 'news', 'youtube', 'valuation', 'backtest', 'stocks', 'fundamentals', 'projections'].includes(page) ? 'idle' as const : 'ready' as const,
-        reason: tasks.some((task) => task.tab === page) ? undefined
-          : page === 'beta' ? 'Shares Trading Volumes startup data'
-          : ['options', 'news', 'youtube', 'valuation', 'backtest', 'stocks', 'fundamentals', 'projections'].includes(page) ? 'Awaiting configured inputs'
-          : 'Local or shared initial state',
-      }]))
-      for (const [page, error] of [['settings', current.settingsError], ['portfolio', current.portfolioError]] as const) {
-        if (!error) continue
-        pages[page] = { state: 'failed', reason: errorMessage(error) }
-        failedCount += 1
-      }
-      const report = () => useDataHealth.getState().setStartup({
-        durationMs: performance.now() - startedAt, planned: tasks.length, timings: [...timings], pageOrder, pages: { ...pages },
-      })
-      const reportProgress = () => setProgress({
-        active: completed < tasks.length,
-        done: completed,
-        total: tasks.length,
-        label: activeLabels.values().next().value ?? '',
-        failed: failedCount,
-        degraded: degradedCount,
-      })
+    let reconcileTimer: ReturnType<typeof setTimeout> | undefined
+    let initialBacktestTasks: PlannedWarmTask[] | undefined
+    const unsubscribers: Array<() => void> = []
+    const timer = setTimeout(() => {
+      // Calendar's persisted timezone selects its civil date. Initialize it before
+      // planning keys, so first mount cannot move to another month/year.
+      const calendar = useCalendarPage.getState()
+      calendar.initialize(calendarToday(calendar.timezone))
+      useIpoPage.getState().setCompletedYear(new Date().getFullYear())
+      const current = inputs.current
+      const pageOrder = startupPageOrder(
+        startupPages(current.activeTab, current.settings?.favoriteTabs ?? [], current.recent),
+        useDataHealth.getState().startupLoads,
+      )
+      const pageRanks = new Map(pageOrder.map((page, index) => [page, index]))
+      const idlePages = new Set(['options', 'news', 'youtube', 'valuation', 'backtest', 'stocks', 'fundamentals', 'projections'])
       reporter = createProgressReporter(() => {
-        report()
-        reportProgress()
+        const snapshot = scheduler!.snapshot()
+        const pages = Object.fromEntries(pageOrder.map(page => [page, snapshot.pages[page] ?? {
+          state: idlePages.has(page) ? 'idle' as const : 'ready' as const,
+          reason: idlePages.has(page) ? 'Awaiting configured inputs' : 'Local or shared initial state',
+        }]))
+        pages.beta = { ...pages['trading-volumes'], reason: pages['trading-volumes']?.reason ?? 'Shares Trading Volumes startup data' }
+        let localFailures = 0
+        for (const [page, error] of [['settings', inputs.current.settingsError], ['portfolio', inputs.current.portfolioError]] as const) {
+          if (!error) continue
+          pages[page] = { state: 'failed', reason: errorMessage(error) }
+          localFailures += 1
+        }
+        useDataHealth.getState().setStartup({ durationMs: snapshot.durationMs, planned: snapshot.total,
+          timings: snapshot.timings, pageOrder, pages })
+        setProgress({ active: snapshot.active, done: snapshot.done, total: snapshot.total,
+          label: snapshot.label, failed: snapshot.failed + localFailures, degraded: snapshot.degraded })
+        if (!snapshot.active) completeStartupRegistration(queryClient)
       })
-      reporter.flush()
-      await runWarmTasks(tasks, {
-        run: (task) => retryTransientData(() => runTask(task), {
-          maxAttempts: 2,
-          // Outlast the service cache's 10s failure coalescing window. Successful
-          // dependencies stay cached, so recovery only reloads missing pieces.
-          baseDelayMs: 12_000,
-          isCancelled: () => cancelled,
-          onRetry: (error, attempt, delayMs) => {
-            const reason = `Retry ${attempt}/2 in ${Math.ceil(delayMs / 1000)}s: ${errorMessage(error)}`
-            retryReasons.set(task, reason)
-            pages[task.tab] = { state: 'loading', reason }
-            reporter!.schedule()
-          },
-        }),
-        isCancelled: () => cancelled,
-        onStart: (task) => {
-          activeLabels.add(task.label)
-          taskStarts.set(task, performance.now())
-          reporter!.schedule()
-        },
-        onSettled: (task, result) => {
-          const state = result.status === 'fulfilled' ? 'ready' : result.reason instanceof StartupLoadError && result.reason.state === 'degraded' ? 'degraded' : 'failed'
-          const failed = state === 'failed'
-          const reason = result.status === 'rejected' ? errorMessage(result.reason) : undefined
-          taskStates.set(task, { state, reason })
-          if (state === 'degraded') degradedCount += 1
-          if (failed) {
-            failedCount += 1
-            console.warn(`[warm-up] ${task.label}:`, reason)
-          }
-          activeLabels.delete(task.label)
-          retryReasons.delete(task)
-          if (pages[task.tab]?.state === 'loading') {
-            pages[task.tab] = { state: 'loading', reason: tasks.filter(entry => entry.tab === task.tab)
-              .map(entry => retryReasons.get(entry)).find(Boolean) }
-          }
-          completed += 1
-          timings.push({ tab: task.tab, label: task.label, durationMs: performance.now() - taskStarts.get(task)!, failed, state, reason })
-          const pageTimings = timings.filter((entry) => entry.tab === task.tab)
-          if (pageTimings.length === tasks.filter((entry) => entry.tab === task.tab).length) {
-            const worst = pageTimings.find((entry) => entry.state === 'failed') ?? pageTimings.find((entry) => entry.state === 'degraded')
-            if (!(task.tab === 'portfolio' && current.portfolioError)) {
-              pages[task.tab] = { state: worst?.state ?? 'ready', reason: worst?.reason }
-            }
-            if (task.tab === 'trading-volumes') pages.beta = { ...pages[task.tab], reason: worst?.reason ?? 'Shares Trading Volumes startup data' }
-            useDataHealth.getState().recordStartupLoad(
-              task.tab, Math.max(...pageTimings.map((entry) => entry.durationMs)),
-              pageTimings.some((entry) => entry.state !== 'ready'),
-            )
-          }
-          // Keep accounting exact, but publish bursts at most ten times a second.
-          // Flush completion immediately so readiness never waits on the timer.
-          if (completed === tasks.length) reporter!.flush()
+      scheduler = createStartupScheduler({
+        onChange: complete => {
+          if (complete) reporter!.flush()
           else reporter!.schedule()
         },
+        onSnapshot: recordStartupSnapshot,
+        onRetired: owner => releaseStartupQueries(queryClient, owner),
+        onPageSettled: (page, timings) => {
+          useDataHealth.getState().recordStartupLoad(page,
+            Math.max(...timings.map(entry => entry.durationMs)), timings.some(entry => entry.state !== 'ready'))
+        },
       })
-      if (!cancelled) {
-        completeStartupRegistration(queryClient)
-        for (const task of tasks) maintain(task, taskStates.get(task)?.state !== 'ready')
+      const update = () => {
+        const latest = inputs.current
+        const calendar = useCalendarPage.getState()
+        const planned = buildTasks(latest.payload, latest.settings,
+          { stocks: useStocksPage.getState().symbol, fundamentals: useFundamentalsStore.getState().symbol },
+          { year: calendar.year, month: calendar.month, earningsYear: calendar.earningsYear,
+            ipoYear: useIpoPage.getState().completedYear })
+        // Prepare saved Backtest inputs once. Editing controls must wait for Run.
+        initialBacktestTasks ??= planned.filter(task => task.tab === 'backtest')
+        const tasks = [...planned.filter(task => task.tab !== 'backtest'), ...initialBacktestTasks]
+          .sort((a, b) => (pageRanks.get(a.tab) ?? 0) - (pageRanks.get(b.tab) ?? 0))
+        scheduler!.reconcile(tasks.map(task => ({ ...task,
+          // Maintenance joins behind initial page loads so short-lived quotes
+          // cannot repeatedly overtake pages still preparing their first data.
+          run: (observe, maintenance) => task.run(queryClient,
+            (pageRanks.get(task.tab) ?? 0) + (maintenance ? pageOrder.length : 0), observe),
+        })))
       }
-    }
-    const timer = setTimeout(() => void run(), 250)
+      // Coalesce multi-field edits (e.g. symbol + loaded + expiry), then reconcile
+      // exact page input identities. Never cancel shared provider requests.
+      const schedule = () => {
+        reconcileTimer ??= setTimeout(() => {
+          reconcileTimer = undefined
+          update()
+        }, 100)
+      }
+      reconcile.current = schedule
+      for (const store of [useStocksPage, useFundamentalsStore, useCalendarPage, useIpoPage,
+        useScorecard, useDefeatBetaTerminal, useDashboard, useEtfPage, useUpDownPage,
+        useNewsPageStore, useChartsStore, useCryptoWorkspace, useValuationPage, useProjectionsPage, useOptionsPage]) {
+        unsubscribers.push(store.subscribe(schedule))
+      }
+      update()
+      reporter.flush()
+    }, 250)
 
     return () => {
-      cancelled = true
-      reporter?.cancel()
+      reconcile.current = undefined
       clearTimeout(timer)
-      for (const refreshTimer of refreshTimers) clearTimeout(refreshTimer)
+      clearTimeout(reconcileTimer)
+      for (const unsubscribe of unsubscribers) unsubscribe()
+      scheduler?.stop()
+      reporter?.cancel()
     }
   }, [ready, queryClient])
+
+  useEffect(() => { reconcile.current?.() }, [settings, payload, settingsError, portfolioError])
 
   return progress
 }

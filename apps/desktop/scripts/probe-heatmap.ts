@@ -3,7 +3,8 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import type { HeatmapHolding, HeatmapInterval } from '../electron/shared/contract.js'
+import type { HeatmapHolding, HeatmapInterval, HeatmapPayload } from '../electron/shared/contract.js'
+import type { SparkSeries } from '../electron/services/yahoo/spark.js'
 import {
   HEATMAP_ETFS,
   buildHeatmapDetail,
@@ -381,6 +382,30 @@ async function runProviderChecks(): Promise<void> {
     },
   }
   const result = await fetchHeatmap('SPY', true, deps)
+  let finishPrices!: () => void
+  const waiting = new Promise<void>(resolve => { finishPrices = resolve })
+  let firstBatch!: () => void
+  const batchPublished = new Promise<void>(resolve => { firstBatch = resolve })
+  const previews: HeatmapPayload[] = []
+  let finished = false
+  const progressive = fetchHeatmap('SPY', true, { ...deps,
+    prices: async (symbols, range, force, onProgress) => {
+      const prices = await deps.prices(symbols, range, force)
+      onProgress?.({ AAA: prices.series.AAA })
+      firstBatch()
+      await waiting
+      return prices
+    },
+  }, payload => previews.push(payload)).then(value => { finished = true; return value })
+  await batchPublished
+  assert.equal(finished, false, 'The completed snapshot must wait for every batch')
+  assert.equal(previews[0].holdings.length, 4, 'Holdings populate before prices')
+  assert.equal(previews[0].quoteCoverage, 0)
+  assert.equal(previews.at(-1)?.quoteCoverage, 1, 'The first batch populates while remaining quotes load')
+  assert.equal(previews.at(-1)?.holdings[0].price, 110)
+  finishPrices()
+  assert.equal((await progressive).payload.quoteCoverage, 2)
+  assert.equal(previews[0].holdings[0].price, null, 'Earlier snapshots remain immutable')
   assert(observedForce, 'Refresh must force Yahoo history reads')
   assert.equal(result.payload.holdingsLoaded, 4)
   assert.equal(result.payload.quoteCoverage, 2)
@@ -413,6 +438,29 @@ async function runProviderChecks(): Promise<void> {
   }) })
   try {
     const { fetchSparkCloses } = await import('../electron/services/yahoo/spark.js')
+    const batches: Array<Record<string, SparkSeries>> = []
+    await fetchSparkCloses(['AAA', 'BRK-B'], '1y', true, rows => batches.push(rows))
+    assert.equal(batches.length, 1, 'Spark publishes each completed batch')
+    assert.equal(batches[0].AAA.closes.at(-1), 110)
+    let releaseBatch!: () => void
+    const waitingBatch = new Promise<void>(resolve => { releaseBatch = resolve })
+    let publishBatch!: () => void
+    const publishedBatch = new Promise<void>(resolve => { publishBatch = resolve })
+    Object.assign(yahoo, { _fetch: async (_url: string, params: { symbols: string }) => {
+      if (params.symbols.includes('ZZZ')) await waitingBatch
+      return { AAA: { symbol: 'AAA', timestamp: [Date.parse(day(2)) / 1000, Date.parse(day(1)) / 1000], close: [100, 110] } }
+    } })
+    let allBatchesFinished = false
+    const pendingBatches = fetchSparkCloses(['AAA', ...Array.from({ length: 19 }, (_, index) => `B${index}`), 'ZZZ'], '1y', true,
+      rows => { if (rows.AAA) publishBatch() }).then(value => { allBatchesFinished = true; return value })
+    await publishedBatch
+    assert.equal(allBatchesFinished, false, 'Spark publishes available quotes before a slower batch completes')
+    releaseBatch()
+    await pendingBatches
+    Object.assign(yahoo, { _fetch: async () => ({
+      AAA: { symbol: 'AAA', timestamp: [Date.parse(day(2)) / 1000, Date.parse(day(1)) / 1000], close: [100, 110] },
+      'BRK-B': { symbol: 'BRK-B', timestamp: [Date.parse(day(2)) / 1000, Date.parse(day(1)) / 1000], close: [200, 180] },
+    }) })
     const actual = await fetchHeatmap('SPY', true, { ...deps, prices: fetchSparkCloses })
     assert.equal(actual.payload.quoteCoverage, 2)
     Object.assign(yahoo, { _fetch: async () => { throw new Error('Yahoo offline') } })

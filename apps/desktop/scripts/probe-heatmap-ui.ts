@@ -24,7 +24,9 @@ try {
         const settle = () => new Promise(resolve => setTimeout(resolve, 180))
         const body = () => document.body.innerText
         let calls = 0
-        let mode = 'partial'
+        let mode = 'loading'
+        let progress = null
+        let finishLoad
         let lastForce = false
         let navigated = ''
         let status
@@ -34,6 +36,9 @@ try {
           { symbol: 'MISS', name: 'No history', sector: 'Unclassified', weight: 0.2, price: null, changes: {} },
         ]
         const summaries = buildIntervalSummaries(holdings)
+        const preview = (payload, rows) => ({ ...payload, holdings: rows, intervalSummaries: buildIntervalSummaries(rows),
+          quoteCoverage: rows.filter(row => row.changes.live !== undefined).length })
+        window.api.heatmapProgress = async etf => progress?.etf === etf ? progress : null
         window.api.heatmap = async ({ etf, force }) => {
           calls += 1; lastForce = Boolean(force)
           if (etf === 'NDX') await new Promise(resolve => setTimeout(resolve, 80))
@@ -43,6 +48,11 @@ try {
             holdings: mode === 'failed' ? [] : holdings, holdingsLoaded: mode === 'failed' ? 0 : 3, quoteCoverage: mode === 'failed' ? 0 : 2,
             weightedDayMove: summaries.live.weightedMove, strongest: summaries.live.strongest, weakest: summaries.live.weakest,
             intervalSummaries: summaries, fetchedAt: Date.now() }
+          if (mode === 'loading') {
+            progress = preview(payload, holdings.map(row => ({ ...row, price: null, changes: {} })))
+            await new Promise(resolve => { finishLoad = resolve })
+            progress = null
+          }
           return { data: payload, meta: { source: payload.priceSource, freshness: mode, fetchedAt: Date.now(),
             failureReason: mode === 'failed' ? 'Yahoo offline' : mode === 'stale' ? 'Yahoo refresh failed; showing cached prices' : 'MISS has no usable daily history' }, errors: [] }
         }
@@ -50,6 +60,13 @@ try {
         window.runProbe = async () => {
           createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><HeatmapPage onStatusChange={(panels) => { status = panels[0] }} onNavigate={(tab, symbol) => { navigated = tab + ':' + symbol }} /></QueryClientProvider>)
           await settle()
+          await new Promise(resolve => setTimeout(resolve, 600))
+          check(body().includes('0/3') && body().includes('Loading S&P 500 heatmap') && document.querySelector('[title^="AAA"]'), 'Holdings must render before any price history finishes')
+          progress = preview(progress, [holdings[0], ...holdings.slice(1).map(row => ({ ...row, price: null, changes: {} }))])
+          await new Promise(resolve => setTimeout(resolve, 650))
+          check(body().includes('1/3') && body().includes('Loading S&P 500 heatmap') && status.loading, 'Tiles and quote coverage must populate during loading')
+          check(client.getQueryState(['heatmap', 'SPY', 'yahoo-v2']).fetchStatus === 'fetching' && !client.getQueryData(['heatmap', 'SPY', 'yahoo-v2']), 'Preview must not mark the completed query ready')
+          mode = 'partial'; finishLoad(); await settle()
           check(calls === 1 && body().includes('Yahoo Finance') && body().includes('2026-10-15'), 'Provider and actual price date')
           check(body().includes('Live') && !body().includes('DefeatBeta'), 'Yahoo provider label and Live control')
           check(body().includes('2/3') && body().includes('MISS has no usable daily history'), 'Partial coverage must stay visible')
@@ -64,13 +81,18 @@ try {
           check(calls === 2 && body().includes('(QQQ)'), 'Nasdaq button')
           await click('S&P 500')
           check(calls === 2, 'Switching back must reuse its query')
+          mode = 'loading'; await click('Refresh')
+          await new Promise(resolve => setTimeout(resolve, 600))
+          check(body().includes('2/3') && status.loading, 'Refresh retains the existing map while new quotes are pending')
+          mode = 'partial'; finishLoad(); await settle()
+          check(!status.loading, 'Refresh clears loading only after the final result')
           mode = 'stale'; await click('Refresh')
-          check(lastForce && calls === 3 && body().includes('Yahoo refresh failed') && body().includes('2/3'), 'Stale Yahoo data must retain coverage and show its reason')
+          check(lastForce && calls === 4 && body().includes('Yahoo refresh failed') && body().includes('2/3'), 'Stale Yahoo data must retain coverage and show its reason')
           mode = 'failed'; await click('Refresh')
           check(body().includes('Yahoo offline') && body().includes('Heatmap unavailable.'), 'Failure must stop showing a loading message')
           mode = 'partial'; await click('Refresh')
           check(body().includes('2/3') && status.envelope.meta.freshness === 'partial', 'Recovery and status bar propagation')
-          return 'PASS: Yahoo date, provider labels, partial coverage, intervals, index cache, navigation, forced refresh, stale data and recovery'
+          return 'PASS: progressive holdings and quote batches, readiness, Yahoo date, coverage, intervals, index cache, navigation, refresh, stale data and recovery'
         }
       `,
     },

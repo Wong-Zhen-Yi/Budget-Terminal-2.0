@@ -1,0 +1,38 @@
+Generated with the built-in image_gen tool. This is a design prototype; market figures and headlines are illustrative.
+
+Use case: ui-mockup.
+Create a polished high-fidelity desktop UI PNG prototype for a complete redesign of the existing Budget Terminal 2.0 Crypto Market page. This is a realistic shippable financial terminal interface, not marketing art. Generate a wide 2400 by 1600 pixel landscape canvas, flat front view, edge-to-edge application screenshot, no browser/device frame, no perspective, no desk or photo, no watermark. Crisp legible typography, exact English labels, carefully aligned tables, restrained information density and generous legibility. All edges and footer visible.
+
+Visual language from existing project: very dark navy background #080b12, panels #0d1420 and #121b2b, thin borders #1e2b3f, pale text #d5dee9, muted #7d8ea6, blue selection #2f6fd0, green #26c281, red #f0554e, amber #d6b25e. Segoe UI / Inter sans-serif labels, Cascadia/Consolas monospace tabular numerals. Small 6px panel corners, precise 16-24px gutters. No purple, neon glow, glassmorphism, giant rounded cards, decorative coins, gradients or 3D graphics.
+
+Composition and hierarchy:
+A narrow 64px left icon rail with a small BT monogram at top, restrained simple line navigation icons, crypto icon selected blue, settings bottom. The rest is the Crypto page.
+Top compact application chrome reads "BUDGET TERMINAL" and "MARKETS / CRYPTO", right aligned "DESIGN PROTOTYPE · ILLUSTRATIVE DATA".
+Under this a strong page header: small eyebrow "MARKET INTELLIGENCE", large title "Crypto Market", subtitle "Spot markets, perpetuals and equity exposure in one workspace." Right-side controls "USD", outlined "Copy snapshot", and a disabled refresh button "Retry in 00:42". Next thin tabs: "Overview" selected blue, "Spot markets", "Perpetuals", "News". No trading or portfolio balance controls.
+Immediately below show a slim tasteful amber notice with warning icon, readable exact text "CoinGecko rate limited · Showing cached spot data" and right aligned "Auto-retry in 00:42". This status affects only CoinGecko panels, live venue and news panels stay healthy.
+
+A row of six equal compact metric cards:
+"BITCOIN / BTC" "$108,420.50" green "+2.34% · 24h";
+"ETHEREUM / ETH" "$3,865.20" green "+1.82% · 24h";
+"SOLANA / SOL" "$184.62" red "−0.76% · 24h";
+"TOTAL MARKET CAP" "$3.62T" green "+1.68% · 24h";
+"24H SPOT VOLUME" "$128.4B" muted "CoinGecko · Cached 2m";
+"FEAR & GREED" "64 / 100" amber "Greed · Alternative.me" with a refined small horizontal segmented gauge.
+For first four cards include a discreet amber "Cached 2m" sublabel. Do not put fake historical sparklines into metrics.
+
+Main content upper row, about 390px height: a large panel occupying 69% and a right column occupying 31%.
+Large panel title "Market heatmap", subtitle "Top 30 by market cap", right control "24h change" and amber "Cached 2m · 30/30".
+Show EXACTLY 30 orderly heatmap tiles in a 6 columns x 5 rows grid, with variable restrained dark green/red backgrounds, consistent tile size. Every tile has a distinct crypto ticker, small price, signed percent. First row BTC, ETH, USDT, XRP, BNB, SOL; subsequent rows USDC, DOGE, ADA, TRX, AVAX, LINK; SUI, XLM, TON, HBAR, SHIB, LTC; BCH, DOT, UNI, AAVE, PEPE, NEAR; ICP, ETC, ONDO, CRO, POL, FIL. Neutral dark navy stablecoins. BTC +2.34%, ETH +1.82%, SOL −0.76%, DOGE +4.21%, LINK +3.12%, ADA −1.28%. Clean text white; no oversized BTC tile, no pie chart. Bottom compact color legend "-5%   0%   +5%". Do not claim all tiles are live.
+Right upper panel "Watchlist" with "Spot quotes · Cached 2m" and 5 neatly spaced rows BTC, ETH, SOL, XRP, DOGE. Columns "Asset", "Last price", "24h". Consistent values for BTC/ETH/SOL; small circular asset letter badges, no sparkline.
+Below Watchlist within same right column a distinct compact "Market context" panel with "BTC dominance 59.4%" and neutral "CoinGecko · Cached 2m". Also "Fear & Greed 64 · Greed" and "Alternative.me · Updated 6h ago". Useful whitespace, no invented allocation or advice.
+
+Next content row about 340px: left 69% "Hyperliquid perpetuals", small green dot "Live · Hyperliquid", sublabel "Perpetual marks · Separate from spot prices", right "Search markets".
+A precise readable table with columns "Market", "Mark price", "24h", "Funding / 8h", "Open interest", "24h volume".
+Six rows BTC-PERP, ETH-PERP, SOL-PERP, DOGE-PERP, SUI-PERP, HYPE-PERP, coherent illustrative USD amounts, positive/negative changes, signed funding percentages. Explicit "-PERP" tickers. All values right aligned, muted headers, clean separators.
+Right 31% "Crypto news" with small green "Updated 1m ago", five editorial rows: "Bitcoin rises as ETF inflows accelerate" CoinDesk · 12m; "Ethereum activity picks up across L2 networks" The Block · 28m; "Stablecoin supply expands across major chains" Cointelegraph · 45m; "Perpetual funding stays mixed across majors" Decrypt · 1h; "Crypto markets digest the latest macro data" CoinDesk · 2h. Small topical pills such as "Markets", "Ethereum", "Stablecoins", no thumbnails and no invented source logos. Compact external-link arrows. Headlines readable, not clipped.
+
+Bottom full-width panel "ETF & equity proxies", subtitle "Listed securities · Separate from spot and perpetual markets", right muted "Yahoo metadata · Live venue marks where available".
+A single clean table four rows IBIT with type "Bitcoin ETF", ETHA "Ethereum ETF", MSTR "Bitcoin treasury", COIN "Exchange". Columns "Ticker", "Exposure", "Last price", "1D change", "AUM / Market cap", "Price source". Plausible illustrative prices, mixed red/green. Distinguish source "Yahoo Finance" for ETFs and "Hyperliquid equity perp" for MSTR and COIN, with tiny explicit "PERP" badge for their marked price. Never describe a derivative as stock or spot price.
+A thin bottom status bar: amber dot "Spot data cached" then green dot "Perpetual feed live" then green dot "News ready"; right "CoinGecko: rate limited · Retry in 42s". No misleading 100% usage bar, no credentials, no personal info.
+
+This is one coherent polished software screen with complete visual hierarchy, not a collage. All market figures and headlines are illustrative and explicitly labelled by the top prototype label. Prioritize impeccable spacing, readable text, source honesty, clear status handling and a complete picture of the redesigned existing crypto capabilities.

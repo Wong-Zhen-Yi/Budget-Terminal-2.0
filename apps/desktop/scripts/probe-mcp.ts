@@ -224,7 +224,13 @@ try {
   const { createServiceRoutes } = await import('../electron/mcp/routes.js')
   const { cache } = await import('../electron/services/cache.js')
   closeCache = () => cache.close()
-  bridge = await startBridge({ dispatcher: new McpDispatcher({ routes: createServiceRoutes(), policy: { readOnly: false, requireApproval: false } }), onChanged: (domains) => events.push(domains) })
+  const serviceRoutes = createServiceRoutes()
+  assert.deepEqual([...serviceRoutes.keys()].sort(), Object.keys(operations).sort(), 'Desktop-only services must not break MCP route registration or expand the tool allowlist')
+  for (const operation of ['cacheStatus', 'configureCache', 'heatmapProgress']) {
+    assert.equal(serviceRoutes.has(operation as Operation), false)
+    assert.throws(() => validateCall(toolName(operation), { request: {} }), /Unknown/)
+  }
+  bridge = await startBridge({ dispatcher: new McpDispatcher({ routes: serviceRoutes, policy: { readOnly: false, requireApproval: false } }), onChanged: (domains) => events.push(domains) })
   async function call<Key extends Exclude<Operation, 'screenshot'>>(operation: Key, request: unknown = {}): Promise<Awaited<ReturnType<DesktopApi[Key]>>> {
     const domain = mutationDomains[operation as keyof typeof mutationDomains]
     const current = domain && domain !== 'articles' ? await invokeBridge(toolName(domain), { request: {} }) as { meta: { revision: string } } : undefined

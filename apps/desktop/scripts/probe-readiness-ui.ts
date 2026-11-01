@@ -58,6 +58,8 @@ try {
     import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
     import { App } from './src/App'
     import { buildTasks } from './src/api/prefetch'
+    import { applyEquityMarketUpdate } from './src/api/equityStream'
+    import { backtestQuotesKey } from './src/api/backtestQueries'
     import { useDataHealth } from './src/stores/dataHealth'
     import { useStocksPage } from './src/stores/stocks'
     import { useFundamentalsStore } from './src/stores/fundamentals'
@@ -76,6 +78,7 @@ try {
     import { DEFAULT_BACKTEST_PAGE_SETTINGS } from './electron/shared/backtest'
     import { DEFAULT_QUANT_PAGE_SETTINGS } from './electron/shared/quant'
     import { DEFAULT_YOUTUBE_PAGE_SETTINGS } from './electron/shared/youtube'
+    import { DEFAULT_CACHE_SETTINGS } from './electron/shared/cachePolicy'
     const check = (condition, message) => { if (!condition) throw Error(message) }
     const wait = () => new Promise(resolve => setTimeout(resolve, 110))
     const visiblePage = id => [...document.querySelectorAll('[data-page-id]')].find(page => page.dataset.pageId === id && page.getBoundingClientRect().height > 0)
@@ -115,7 +118,13 @@ try {
     const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg=='
     let populated = false, calls = [], fixtureSettings = settings, restoredCurrency = false
     const fixture = (method, request = {}) => {
+      if (method === 'cacheStatus') {
+        const part = { bytes: 0, entries: 0, expiredEntries: 0, evictions: 0 }
+        return ok({ settings: DEFAULT_CACHE_SETTINGS, service: { market: part, assets: part,
+          hits: 0, misses: 0, expired: 0, loads: 0, forced: 0, errors: 0 } })
+      }
       if (method === 'mutateSettings') {
+        if (request.type === 'setBacktestPage') fixtureSettings = { ...fixtureSettings, backtestPage: request.value }
         if (request.type === 'setClockCountry') fixtureSettings = { ...fixtureSettings, clockCountry: request.code }
         if (request.type === 'setTime12h') fixtureSettings = { ...fixtureSettings, time12h: request.value }
         if (request.type === 'setTabHidden') fixtureSettings = { ...fixtureSettings, hiddenTabs: request.hidden ? [...fixtureSettings.hiddenTabs, request.id] : fixtureSettings.hiddenTabs.filter(id => id !== request.id) }
@@ -182,7 +191,8 @@ try {
     window.runReadinessProbe = async () => {
       const element = document.getElementById('root')
       const agentsOnly = ${JSON.stringify(process.argv.includes('--agents'))}
-      for (const scenario of agentsOnly ? ['empty'] : ['empty', 'populated', 'persisted']) {
+      const refreshOnly = ${JSON.stringify(process.argv.includes('--refresh'))}
+      for (const scenario of refreshOnly ? ['persisted'] : agentsOnly ? ['empty'] : ['empty', 'populated', 'persisted']) {
         console.log('Completed-startup scenario: ' + scenario)
         populated = scenario !== 'empty'
         const restored = scenario === 'persisted'
@@ -221,6 +231,38 @@ try {
           check(client.getQueryData(['youtubeThumbnail', 'fixture1', 'https://example.com/video.png']), 'Selected video media was not warmed')
         }
         check(!document.body.innerText.includes('Review access') && !document.body.innerText.includes('Pairing code'), 'Remote controls must not appear in the desktop shell')
+        if (refreshOnly) {
+          const intervals = []
+          const originalInterval = window.setInterval
+          window.setInterval = (callback, delay, ...args) => {
+            intervals.push(delay)
+            return originalInterval(callback, delay, ...args)
+          }
+          try {
+            await selectPage(TABS.find(tab => tab.id === 'backtest'))
+          } finally { window.setInterval = originalInterval }
+          const page = visiblePage('backtest')
+          check(page && !document.body.innerText.includes('This page could not render'), 'Prepared Backtest must render')
+          check(!intervals.includes(60000), 'Opening Backtest must not install a quote polling timer')
+          const key = backtestQuotesKey(book.tickers)
+          const snapshot = client.getQueryData(key)
+          check(snapshot, 'Backtest must have an independent quote snapshot before first visit')
+          applyEquityMarketUpdate(client, { candles: [], quotes: [{ symbol: 'AAPL', price: 999, change: 2, absChange: 2 }] })
+          check(client.getQueryData(key) === snapshot, 'Live market marks must leave Backtest quotes unchanged')
+          const runsBefore = calls.filter(call => call.method === 'backtest').length
+          const interval = [...page.querySelectorAll('button')].find(button => button.textContent.trim() === '1W')
+          interval.click()
+          await new Promise(resolve => setTimeout(resolve, 350))
+          check(fixtureSettings.backtestPage.interval === '1W', 'Backtest control change was not saved')
+          check(calls.filter(call => call.method === 'backtest').length === runsBefore, 'Saving Backtest controls must not automatically recompute results')
+          ;[...page.querySelectorAll('button')].find(button => button.textContent.trim() === 'Run Backtest').click()
+          await wait()
+          check(calls.filter(call => call.method === 'backtest').length === runsBefore + 1, 'Explicit Run must still execute Backtest once')
+          check(calls.filter(call => call.method === 'backtest').at(-1).request.interval === '1W', 'Manual Run must use the edited controls')
+          await paint(); await window.captureFixture('completed-backtest-refresh')
+          memory.stop(); rendered.unmount(); client.clear()
+          return 'PASS: all-page startup retained; Backtest has no quote polling, ignores shared live marks, does not recompute on saved control changes and still runs manually'
+        }
         if (agentsOnly) {
           const before = calls.length
           await selectPage(TABS.find(tab => tab.id === 'agents'))
@@ -256,7 +298,10 @@ try {
           // Shared notification polling continues independently of page navigation.
           if (tab.id === 'up-down') check(!visiblePage('up-down').innerText.includes('loading price targets'), 'Targets were deferred until first visit')
           if (tab.id === 'notifications') check(client.getQueryData(['notifications']), 'Notification data was not warmed')
-          const initial = calls.slice(before).filter(call => !['mcpStatus', 'apiUsage', 'mutateSettings', 'browserViewport', 'notificationsStatus'].includes(call.method))
+          // Expiry maintenance runs throughout navigation and uses a rank behind
+          // every initial page. It is independent of a first-visit data request.
+          const maintenance = call => call.request?.background && call.request.backgroundOrder >= TABS.filter(tab => tab.implemented).length
+          const initial = calls.slice(before).filter(call => !maintenance(call) && !['mcpStatus', 'apiUsage', 'mutateSettings', 'browserViewport', 'notificationsStatus'].includes(call.method))
           check(initial.length === 0, 'First-visit request on ' + scenario + '/' + tab.id + ': ' + JSON.stringify(initial))
           if (scenario === 'populated' && tab.id === 'portfolio') {
             const page = visiblePage(tab.id)
@@ -272,7 +317,7 @@ try {
               check(button, 'Missing Portfolio subtab: ' + label)
               button.click(); await wait(); await paint()
               check(headings().includes(label), 'Portfolio subtab panel missing: ' + label)
-              const subtabRequests = calls.slice(beforeSubtab).filter(call => !['mcpStatus', 'apiUsage', 'mutateSettings', 'notificationsStatus'].includes(call.method))
+              const subtabRequests = calls.slice(beforeSubtab).filter(call => !maintenance(call) && !['mcpStatus', 'apiUsage', 'mutateSettings', 'notificationsStatus'].includes(call.method))
               check(subtabRequests.length === 0, 'Portfolio subtab made a first-visit request: ' + label + ': ' + JSON.stringify(subtabRequests))
               const panel = [...page.querySelectorAll('section')].find(panel => panel.querySelector('h2')?.textContent.trim() === label)
               check(panel.getBoundingClientRect().width >= page.getBoundingClientRect().width - 20, 'Portfolio subtab must use the full width: ' + label)
@@ -292,6 +337,8 @@ try {
             }
           }
           if (tab.id === 'settings') {
+            check(visiblePage(tab.id).querySelectorAll('meter').length === 3, 'Cache diagnostics must be ready on first visit')
+            check(visiblePage(tab.id).querySelector('input[type="number"]')?.value === '256', 'Saved cache limits must be available without a first-visit load')
             check(!visiblePage(tab.id).innerText.includes('Remote'), 'Settings must not offer remote access')
             check(visiblePage(tab.id).innerText.includes('User Data'), 'Desktop data controls must remain available')
           }

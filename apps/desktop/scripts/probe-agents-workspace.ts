@@ -50,6 +50,7 @@ try {
     await store.flush()
   }
   await service.command({ type: 'connect' })
+  assert.deepEqual(service.snapshot().messages, [], 'Connecting must not add a startup notice to chat')
   const firstId = service.snapshot().currentChatId!
   await service.command({ type: 'send', text: 'Research my portfolio and retain the source date' })
   await service.callTool('terminal_notify', { title: 'Research update', body: 'Fixture source · as of 2026-10-17', eventKey: 'research-1' })
@@ -89,8 +90,17 @@ try {
   const bytes = await readFile(agentWorkspacePath(), 'utf8')
   assert(!bytes.includes('thread-') && !bytes.includes('baseInstructions') && !bytes.includes('data:image'), 'Persist no thread IDs, tool configuration or image bytes')
   service.close(); await store.close()
+  const legacy = JSON.parse(bytes)
+  const connectionNotice = 'Codex connected. Budget Terminal MCP tools are available for research, screenshots and requested saved-data edits.'
+  for (const chat of legacy.conversations) chat.messages.push({ id: 'legacy-connect-' + chat.id, role: 'activity', text: connectionNotice, at: Date.now() })
+  await writeFile(agentWorkspacePath(), JSON.stringify(legacy))
   const restored = workspace()
   await restored.initialize()
+  for (const chat of legacy.conversations) {
+    assert.deepEqual(restored.conversation(chat.id)?.messages, chat.messages.slice(0, -1), 'Restore removes only the old connection notice from every saved chat')
+  }
+  await restored.flush()
+  assert(!(await readFile(agentWorkspacePath(), 'utf8')).includes(connectionNotice), 'Old connection notices stay removed on subsequent launches')
   assert.equal(restored.snapshot().notifications.length, 2)
   assert(restored.snapshot().notifications.every(value => value.read))
   assert.equal(restored.snapshot().trackers[0].enabled, false)
@@ -102,7 +112,9 @@ try {
   assert.equal(requests.length, requestsBeforeRestore, 'Loading history alone never starts inference or Codex')
   assert(restarted.snapshot().messages.some(message => message.text === 'Restored conversation evidence'))
   assert.deepEqual(restarted.snapshot().messages.find(message => message.text === 'Persist this latest chat')?.images, ['Synthetic.png'])
+  const restoredMessages = restarted.snapshot().messages
   await restarted.command({ type: 'connect' })
+  assert.deepEqual(restarted.snapshot().messages, restoredMessages, 'Reconnecting after launch must preserve the transcript without adding a notice')
   assert(requests.at(-1)!.params.baseInstructions.includes('Persist this latest chat'))
 
   const worker = new AgentsService({ executable: 'unused', cwd: directory, workspace: restored, trackerId: tracker.tracker.id, routes: new Map(), clientFactory: receiver => { receive = receiver; return client } })

@@ -34,6 +34,7 @@ try {
         import { DEFAULT_BACKTEST_PAGE_SETTINGS } from './electron/shared/backtest'
         import { DEFAULT_QUANT_PAGE_SETTINGS } from './electron/shared/quant'
         import { DEFAULT_YOUTUBE_PAGE_SETTINGS } from './electron/shared/youtube'
+        import { useEtfPage } from './src/stores/etf'
         const toolCount = ${toolCount}
         window.fixtureSettings = {
           clockCountry: 'US', time12h: true, tabOrder: TABS.map(tab => tab.id),
@@ -51,6 +52,7 @@ try {
           createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><App /></QueryClientProvider>)
           await settle()
           const meters = () => document.querySelector('footer [aria-label="API request pressure"]')
+          check(document.querySelector('footer')?.getClientRects().length === 0, 'Bottom status strip must be hidden without unmounting background monitoring')
           await new Promise(resolve => setTimeout(resolve, 1100))
           check(meters()?.textContent.includes('API USAGE'), 'Footer must describe usage, not provider quota')
           check(meters()?.textContent.includes('60/240 · 1 active · 120 queued'), 'Yahoo request counts and queue are missing')
@@ -83,7 +85,7 @@ try {
           check(heatmapRequest?.request.backgroundOrder === pageOrder.indexOf('heatmap'), 'Learned page rank was not sent through the API')
           check(useDataHealth.getState().startupLoads.bitcoin?.durationMs >= 100, 'Completed page duration was not learned')
           check(JSON.parse(localStorage.getItem('budget-terminal:data-health')).state.startupLoads.bitcoin?.samples === 1, 'Completed page duration was not persisted')
-          check(document.querySelector('footer [role=status]')?.textContent.includes('Loading pages'), 'Startup progress hidden by foreground loading')
+          check(document.querySelector('footer [role=status]')?.textContent.includes('Loading pages'), 'Background startup progress must keep updating while the strip is hidden')
           const pacingHost = document.createElement('div')
           document.body.append(pacingHost)
           const pacingRoot = createRoot(pacingHost)
@@ -217,6 +219,16 @@ try {
           check([...document.querySelectorAll('[role=alert]')].some(alert => alert.textContent.includes('Automatic backup failed: Fixture backup failure')), 'Backup failure is not visible')
           client.setQueryData(['settings'], result => ({ ...result, data: { ...result.data, automaticBackup: window.fixtureSettings.automaticBackup } }))
           await settle()
+          const economicStarts = window.fixtureRequests.filter(entry => entry.method === 'economic' && entry.request?.background).length
+          const previousEtf = useEtfPage.getState().ticker
+          useEtfPage.getState().setTicker('QQQ')
+          await settle(); await settle()
+          check(window.fixtureRequests.some(entry => entry.method === 'etfHoldings' && entry.request?.ticker === 'QQQ' && entry.request?.background), 'Changed ETF selection was not warmed during startup')
+          check(window.fixtureRequests.filter(entry => entry.method === 'economic' && entry.request?.background).length === economicStarts, 'Changed inputs restarted unrelated pending pages')
+          useEtfPage.getState().setTicker(previousEtf)
+          await settle(); await settle()
+          check(useDataHealth.getState().startup.pages.economic.state === 'loading', 'Input changes abandoned a pending startup page')
+          console.log('PASS: saved page selections reconcile during pending startup without restarting unrelated work')
           window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))
           await settle()
           check(document.activeElement?.getAttribute('aria-label') === 'Search pages', 'Picker input cannot receive focus')
@@ -411,33 +423,23 @@ try {
         fs.writeFileSync(${JSON.stringify(screenshot)}, coveredImage.toPNG());
         }
         // Hidden/minimized capture behavior is verified above. Resume visible
-        // painting for the separate responsive-footer checks after hide/show.
+        // painting to check the hidden strip at several window sizes after hide/show.
         window.showInactive();
         for (const width of [1920, 1280, 1000, 800]) {
           window.setSize(width, 800);
           await new Promise(resolve => setTimeout(resolve, 250));
           await window.webContents.executeJavaScript(\`(() => {
             const footer = document.querySelector('[aria-label="API request pressure"]').closest('footer');
-            const bounds = footer.getBoundingClientRect();
             const check = (ok, message) => { if (!ok) throw Error(message + ' at width ' + innerWidth) };
-            check(bounds.height === 32, 'Status bar changed height');
-            check(bounds.bottom <= innerHeight && bounds.right <= innerWidth, 'Status bar overflows window');
+            check(footer.getClientRects().length === 0, 'Bottom status strip became visible');
             const meters = footer.querySelector('[aria-label="API request pressure"]');
-            check(meters.children.length === 5, 'API meters did not load');
-            const meterTop = meters.firstElementChild.getBoundingClientRect().top;
-            check([...meters.children].every(child => Math.abs(child.getBoundingClientRect().top - meterTop) <= 2), 'API meters wrapped');
-            const status = footer.querySelector('[role="status"]');
-            const health = footer.firstElementChild;
-            const top = health.getBoundingClientRect().top;
-            for (const message of ['', 'Loading pages: 12 of 60 complete', '0 startup load(s) failed · 9 incomplete. Open Settings for details.']) {
-              status.textContent = message;
-              check(footer.getBoundingClientRect().height === bounds.height, 'Startup progress changed footer height');
-              check(health.getBoundingClientRect().top === top, 'Startup progress moved footer content');
-            }
+            check(meters.children.length === 5, 'Background API monitoring did not load');
+            const workspace = document.querySelector('.terminal-workspace').getBoundingClientRect();
+            check(Math.abs(workspace.bottom - innerHeight) <= 1, 'Hidden strip still reserves workspace height');
           })()\`);
         }
         fs.writeFileSync(${JSON.stringify(join(root, 'out', 'status-bar-smoke.png'))}, (await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG());
-        console.log('PASS: status bar stays on one 32px line with API meters and changing progress at 800, 1000, 1280 and 1920px');
+        console.log('PASS: bottom strip stays hidden without reserving space; background API monitoring continues at 800, 1000, 1280 and 1920px');
         app.exit(0);
       } catch (error) { console.error(error); app.exit(1); }
     });

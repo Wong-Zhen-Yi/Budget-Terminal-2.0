@@ -71,7 +71,7 @@ export function DashboardPage({
   const chartQuery = useChart(newsFocused ? '' : symbol, timeframe)
   const optionsQuery = useOptions(newsFocused ? '' : symbol)
   const targetsQuery = useTargets(newsFocused ? [] : holdings)
-  const newsQuery = useNews(newsFocused ? [] : holdings)
+  const newsQuery = useNews(newsFocused ? [] : holdings, true)
   const macroCharts = useMacroCharts(!newsFocused)
   const macroChartStatus = useMemo(() => macroCharts.map((query, index) => ({
     label: `${MACRO_SYMBOLS[index].label} history`,

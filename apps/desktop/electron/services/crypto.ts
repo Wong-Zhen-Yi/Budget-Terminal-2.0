@@ -31,6 +31,7 @@ import { cache, TTL } from './cache.js'
 import { loadFeed } from './news/feeds.js'
 import { paced, periodStart, yahoo } from './yahoo/client.js'
 import { trackApiRequest } from './apiUsage.js'
+import { coinGeckoClient } from './coingecko.js'
 import { hyperliquidClient } from './hyperliquid.js'
 import { equityMarket } from '../shared/equityMarkets.js'
 import { getQuote } from './yahoo/quotes.js'
@@ -45,11 +46,9 @@ import { markCryptoPerpetuals } from '../shared/hyperliquid.js'
  * Hyperliquid perpetuals concurrently. The progress map keeps feed failures visible
  * while the healthy panels remain usable, including during startup preloading.
  *
- * **CoinGecko and alternative.me deliberately stay outside `paced()`**, on the
- * `services/fearGreed.ts` precedent: the rate gate models Yahoo's 429 behaviour and
- * halves its own budget on one, so letting a CoinGecko hiccup throttle the dashboard
- * would be strictly worse than letting the Crypto page fail alone. Yahoo metadata
- * and fallback quotes still go through the shared gate.
+ * CoinGecko has its own endpoint cache, pacing and enforced cooldown, shared with
+ * BMNR. Its failures cannot throttle Yahoo; metadata and fallback quotes still use
+ * Yahoo's shared gate. Alternative.me stays independent of both provider budgets.
  */
 
 export const CRYPTO_SOURCE = 'crypto market'
@@ -94,6 +93,7 @@ interface YahooCryptoRow {
 }
 
 async function getJson(url: string): Promise<unknown> {
+  if (url.startsWith('https://api.coingecko.com/')) return coinGeckoClient.getJson(url)
   const providerId = url.startsWith('https://api.coingecko.com/')
     ? 'coingecko'
     : 'alternative'
@@ -555,7 +555,8 @@ async function fetchCrypto(force: boolean): Promise<CryptoFetchResult> {
  * One cached load of the whole page.
  *
  * Automatic refreshes and tab revisits respect the one-minute cache to conserve
- * provider requests. Manual Refresh bypasses it with force.
+ * provider requests. Manual Refresh bypasses the page cache; CoinGecko's endpoint
+ * cache and cooldown still apply.
  */
 export function getCrypto(force = false): Promise<CryptoFetchResult> {
   return cache

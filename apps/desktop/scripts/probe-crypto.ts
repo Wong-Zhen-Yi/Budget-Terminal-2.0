@@ -30,6 +30,102 @@ import { yahoo } from '../electron/services/yahoo/client.js'
 import { HyperliquidClient, hyperliquidClient, parseHyperliquidMarkets } from '../electron/services/hyperliquid.js'
 import { getApiUsageSnapshot } from '../electron/services/apiUsage.js'
 import { hyperliquidEquities } from '../electron/services/hyperliquidEquities.js'
+import { CoinGeckoClient, coinGeckoClient } from '../electron/services/coingecko.js'
+import { CryptoChartsClient } from '../electron/services/cryptoCharts.js'
+import { cache, TtlCache } from '../electron/services/cache.js'
+import { cryptoChartRequest } from '../electron/shared/cryptoWorkspace.js'
+
+const directCoinGecko = async (url: string): Promise<unknown> => {
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.json()
+}
+
+async function checkCoinGeckoBudget(): Promise<void> {
+  let clock = Date.now()
+  const sent: number[] = []
+  let limited = false
+  const storage = new TtlCache()
+  const client = new CoinGeckoClient(async () => {
+    sent.push(clock)
+    return limited ? new Response('', { status: 429, headers: { 'Retry-After': '120' } }) : Response.json({ value: 7 })
+  }, () => clock, async delay => { clock += delay }, storage)
+  const markets = 'https://api.coingecko.com/api/v3/coins/markets?fixture=budget'
+  const global = 'https://api.coingecko.com/api/v3/global'
+  const [first, same] = await Promise.all([client.getJson(markets), client.getJson(markets)])
+  assert.deepEqual(first, same)
+  assert.equal(sent.length, 1, 'Identical simultaneous requests must share one upstream load')
+  await client.getJson(markets)
+  assert.equal(sent.length, 1, 'Endpoint hits must avoid upstream requests')
+  await client.getJson(global)
+  assert.ok(sent[1] - sent[0] >= 12_100, 'Different endpoints must share the keyless rate budget')
+  limited = true
+  await assert.rejects(client.getJson(`${markets}&limited=1`), /429/)
+  const requestsAt429 = sent.length
+  await assert.rejects(client.getJson(`${markets}&blocked=1`), /retry in 120s/)
+  assert.equal(sent.length, requestsAt429, 'Cooldown must reject queued/new endpoints before fetching')
+  assert.ok(getApiUsageSnapshot().providers.find(row => row.id === 'coingecko')!.cooldownMs >= 119_000, 'Retry-After must reach the diagnostic countdown')
+  await storage.set(`coingecko:v1:${global}`, { retained: true }, 60_000, {
+    fetchedAt: Date.now() - 120_000, expiresAt: Date.now() - 1, stale: false, fromCache: false, failures: [],
+  })
+  assert.deepEqual(await client.getJson(global), { retained: true }, 'Cooldown must retain an expired successful endpoint snapshot')
+  assert.equal(sent.length, requestsAt429)
+  clock += 120_001
+  limited = false
+  await client.getJson(`${markets}&recovered=1`)
+  assert.equal(sent.length, requestsAt429 + 1)
+  const dateClient = new CoinGeckoClient(async () => new Response('', { status: 429,
+    headers: { 'Retry-After': new Date(clock + 180_000).toUTCString() } }), () => clock, async () => {}, new TtlCache())
+  await assert.rejects(dateClient.getJson(`${markets}&date=1`), /429/)
+  await assert.rejects(dateClient.getJson(`${markets}&date=2`), /retry in 180s/)
+  console.log('CoinGecko checks passed: shared pacing, endpoint coalescing/cache, Retry-After seconds/date, enforced cooldown, retained stale data and recovery.')
+}
+
+async function checkCryptoCharts(): Promise<void> {
+  const clock = Date.now()
+  let calls = 0
+  let malformed = false
+  const metadata = mock.method(hyperliquidClient, 'getMarkets', async () => ({ fetchedAt: localIsoSeconds(), markets: [
+    { symbol: 'BTC', markPrice: 110, changePct: 10, fundingHourlyPct: 0, openInterestUsd: 1, volume24hUsd: 1 },
+  ] }))
+  const client = new CryptoChartsClient(async (_url, options) => {
+    calls++
+    const body = JSON.parse(String(options?.body))
+    assert.equal(body.type, 'candleSnapshot')
+    assert.equal(body.req.coin, 'BTC', 'The API coin must be the perpetual asset name, never the Yahoo ticker')
+    assert.ok((body.req.endTime - body.req.startTime) / 3_600_000 <= 5_000)
+    return Response.json([2, 1, 2].map(offset => ({ t: clock - offset * 3_600_000,
+      s: malformed ? 'ETH' : 'BTC', i: body.req.interval, o: '100', h: '112', l: '99', c: '110', v: '42' })))
+  }, () => clock, new TtlCache())
+  try {
+    const request = cryptoChartRequest()
+    const [a, b] = await Promise.all([client.getHistory(request), client.getHistory(request)])
+    assert.equal(calls, 1, 'Prepared and mounted chart reads must share the candle request')
+    assert.deepEqual(a.payload.candles, b.payload.candles)
+    assert.equal(a.payload.candles.length, 2, 'Candle times must be sorted and deduplicated')
+    assert.equal(a.payload.candles[0].volume, 42, 'Volume stays in base-asset units')
+    assert.match(a.payload.stats!.source!, /Hyperliquid crypto perp/)
+    await client.getHistory(request)
+    assert.equal(calls, 1)
+    metadata.mock.mockImplementation(async () => { throw new Error('Venue metadata offline') })
+    const retained = await client.getHistory({ ...request, force: true })
+    assert.equal(retained.stale, true, 'A venue outage must preserve previously loaded chart history')
+    assert.deepEqual(retained.payload.candles, a.payload.candles)
+    metadata.mock.mockImplementation(async () => ({ fetchedAt: localIsoSeconds(), markets: [
+      { symbol: 'BTC', markPrice: 110, changePct: 10, fundingHourlyPct: 0, openInterestUsd: 1, volume24hUsd: 1 },
+    ] }))
+    malformed = true
+    await assert.rejects(client.getHistory(cryptoChartRequest('BTC', '4 Hours')), /Invalid Hyperliquid candle/)
+    await assert.rejects(client.getHistory(cryptoChartRequest('UNKNOWN')), /unavailable/)
+    const route = mock.method((await import('../electron/services/cryptoCharts.js')).cryptoCharts, 'getHistory', async () => a)
+    try {
+      const { getChartsHistory } = await import('../electron/services/yahoo/chartsPage.js')
+      await getChartsHistory(request)
+      assert.equal(route.mock.callCount(), 1, 'The existing chart IPC must route explicit -PERP requests to the venue')
+    } finally { route.mock.restore() }
+    console.log('Crypto candle checks passed: request identity, coalescing/cache, units, strict validation and -PERP routing.')
+  } finally { metadata.mock.restore() }
+}
 
 const hyperliquidFixture = [
   { universe: [{ name: 'BTC' }, { name: 'OLD', isDelisted: true }, { name: 'ETH' }] },
@@ -97,6 +193,7 @@ async function checkHyperliquid(): Promise<void> {
 }
 
 async function checkHeatmapFallback(): Promise<void> {
+  const primary = mock.method(coinGeckoClient, 'getJson', directCoinGecko)
   const request = mock.method(globalThis, 'fetch', async () => new Response('', { status: 403 }))
   const fallback = mock.method(yahoo, '_fetch', async () => ({ finance: { result: [{ quotes:
     Array.from({ length: 30 }, (_, index) => ({
@@ -119,12 +216,14 @@ async function checkHeatmapFallback(): Promise<void> {
     await assert.rejects(fetchTopTiles(), /Yahoo fallback: offline/)
     console.log('Crypto fallback checks passed: HTTP 403, empty response, full ranking, and dual-provider failure.')
   } finally {
+    primary.mock.restore()
     request.mock.restore()
     fallback.mock.restore()
   }
 }
 
 async function checkCryptoHyperliquidStage(): Promise<void> {
+  const primary = mock.method(coinGeckoClient, 'getJson', directCoinGecko)
   const equityQuote = mock.method(hyperliquidEquities, 'getQuote', async (symbol: string) => ({ symbol, price: 110, change: 10, absChange: 10,
     currency: 'USD', source: `Hyperliquid equity perp (xyz:${symbol})` }))
   const request = mock.method(globalThis, 'fetch', async () => new Response('[]'))
@@ -171,6 +270,7 @@ async function checkCryptoHyperliquidStage(): Promise<void> {
     assert.ok(partial.errors.some(error => error.symbol === 'Hyperliquid Perpetuals' && /429/.test(error.reason)))
     console.log('Crypto Hyperliquid integration passed: stage readiness, shared cache, force refresh and isolated provider failure.')
   } finally {
+    primary.mock.restore()
     request.mock.restore()
     chart.mock.restore()
     summary.mock.restore()
@@ -249,6 +349,7 @@ function runOffline(): void {
   // `fetched_at[-8:]` is the clock tail of a seconds-precision local ISO stamp.
   assert.equal(localIsoSeconds(new Date(2026, 7, 27, 9, 5, 3)), '2026-08-27T09:05:03')
   assert.equal(clockTail('2026-08-27T09:05:03'), '09:05:03')
+  assert.equal(clockTail('2026-08-27T09:05:03.123Z'), '09:05:03')
   assert.equal(clockTail(''), '--')
   assert.equal(fearGreedStamp(''), '')
 
@@ -355,9 +456,28 @@ runOffline()
 await checkHeatmapFallback()
 await checkHyperliquid()
 await checkCryptoHyperliquidStage()
-if (args.includes('--hyperliquid-live')) {
+await checkCoinGeckoBudget()
+await checkCryptoCharts()
+if (args.includes('--workspace-live')) {
+  const { cryptoCharts } = await import('../electron/services/cryptoCharts.js')
+  const result = await cryptoCharts.getHistory(cryptoChartRequest())
+  assert.ok(result.payload.candles.length > 0)
+  assert.match(result.payload.stats!.source!, /Hyperliquid crypto perp/)
+  console.log(`Crypto chart live check passed: ${result.payload.candles.length} BTC-PERP ${result.payload.interval} candles, ${result.payload.stats!.source}.`)
+  const liveCoinGecko = new CoinGeckoClient(undefined, undefined, undefined, new TtlCache())
+  try {
+    const body = await liveCoinGecko.getJson('https://api.coingecko.com/api/v3/global') as {data?: {total_market_cap?: {usd?: number}}}
+    assert.ok(Number(body.data?.total_market_cap?.usd) > 0)
+    console.log('CoinGecko live check passed: global market response parsed.')
+  } catch (error) {
+    if (!/429/.test(String(error))) throw error
+    await assert.rejects(liveCoinGecko.getJson('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd'), /retry in/)
+    console.log('CoinGecko live check: provider returned HTTP 429; the shared client blocked a further endpoint during cooldown.')
+  }
+} else if (args.includes('--hyperliquid-live')) {
   const result = await hyperliquidClient.getMarkets()
   assert.ok(result.markets.some(row => row.symbol === 'BTC'))
   assert.ok(result.markets.some(row => row.symbol === 'ETH'))
   console.log(`Hyperliquid live check passed: ${result.markets.length} active perpetual markets at ${result.fetchedAt}.`)
 } else if (!args.includes('--offline')) await runLive()
+await cache.close()

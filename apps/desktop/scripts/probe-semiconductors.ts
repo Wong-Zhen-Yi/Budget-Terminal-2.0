@@ -7,6 +7,7 @@ import { SEMICONDUCTOR_GROUPS, priceReturn, rowReturns, semiconductorComparison,
 import { semiconductorFixture } from './fixtures/semiconductors.js'
 import { TABS } from '../electron/shared/contract.js'
 import { startupPages, workspaceFor } from '../electron/shared/navigation.js'
+import { FRESHNESS } from '../electron/shared/freshness.js'
 
 const scratch = await mkdtemp(join(tmpdir(), 'budget-semiconductors-'))
 const original = { APPDATA: process.env.APPDATA, LOCALAPPDATA: process.env.LOCALAPPDATA }
@@ -65,7 +66,8 @@ try {
   assert.equal(semiconductorOverview([{ ...row, market: { ...row.market!, dailyChange: NaN } }]).quoteCount, 0)
   assert.equal(semiconductorOverview([{ ...row, market: { ...row.market!, marketCap: Infinity } }]).capCount, 0)
   assert.equal(semiconductorNews([row, { ...other, news: row.news }]).length, 1)
-  assert.equal(semiconductorLaneStatus(row, 'market', fixture.fetchedAt + 300_001), 'stale')
+  assert.equal(semiconductorLaneStatus(row, 'market', fixture.fetchedAt + FRESHNESS.semiconductors - 1), 'loaded')
+  assert.equal(semiconductorLaneStatus(row, 'market', fixture.fetchedAt + FRESHNESS.semiconductors + 1), 'stale')
   assert.equal(semiconductorLaneStatus(row, 'profile', fixture.fetchedAt + 300_001), 'loaded')
   assert.equal(semiconductorLaneStatus(row, 'news', fixture.fetchedAt + 600_001), 'stale')
 
@@ -116,9 +118,9 @@ try {
   }
   const before = await withSourceEnvelope(() => getSemiconductors({}, mixedFetchers, mixed, targets.slice(0, 1)))
   try {
-    Date.now = () => clock() + 300_001
+    Date.now = () => clock() + FRESHNESS.semiconductors + 1
     const after = await withSourceEnvelope(() => getSemiconductors({}, mixedFetchers, mixed, targets.slice(0, 1)))
-    assert.deepEqual(laneCalls, { market: 2, profile: 1, news: 1 }, 'Automatic renewal must respect the separate profile/news TTLs')
+    assert.deepEqual(laneCalls, { market: 2, profile: 1, news: 2 }, 'Hourly market renewal must refresh expired news while retaining the longer-lived profile')
     assert.equal(after.data.rows[0].fetchedAt.profile, before.data.rows[0].fetchedAt.profile)
     assert(after.meta.expiresAt && after.meta.expiresAt > Date.now(), 'An older fresh profile must not expire newly refreshed market data')
   } finally { Date.now = clock }

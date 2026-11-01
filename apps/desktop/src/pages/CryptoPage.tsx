@@ -1,434 +1,223 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-
-import type { CryptoQuote, Envelope, HyperliquidMarket, NewsArticle } from '@shared/contract'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
+import type { Candle, CryptoPayload, CryptoQuote, HyperliquidMarket } from '@shared/contract'
 import {
-  CRYPTO_HEATMAP_LIMIT,
-  CRYPTO_PROXY_ROWS,
-  CRYPTO_STAGES,
-  CRYPTO_WATCHLIST_ORDER,
-  buildCryptoSnapshot,
-  clockTail,
-  cryptoMoney,
-  cryptoNewsTone,
-  cryptoPercent,
-  cryptoPrice,
-  cryptoTone,
-  hasUnavailableStage,
-  loadedStageCount,
-  type CryptoNewsTone,
-  type CryptoTone,
+  CRYPTO_HEATMAP_LIMIT, CRYPTO_STAGES, CRYPTO_TICKERS, PROXY_TICKERS,
+  buildCryptoSnapshot, clockTail, cryptoMoney, cryptoPercent, cryptoPrice, cryptoTone, heatmapIntensity, loadedStageCount,
 } from '@shared/crypto'
-import { api } from '@/api/client'
-import { useCrypto, useRefreshCrypto } from '@/api/cryptoQueries'
-import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
+import { CRYPTO_CHART_INTERVALS, cryptoChartRequest } from '@shared/cryptoWorkspace'
 import { FRESHNESS } from '@shared/freshness'
+import { api } from '@/api/client'
+import { useCrypto, useCryptoProviderUsage, useRefreshCrypto } from '@/api/cryptoQueries'
+import { useChartsHistory } from '@/api/chartsQueries'
+import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
+import { useCryptoWorkspace } from '@/stores/crypto'
+import { CryptoPriceChart } from '@/components/crypto/CryptoPriceChart'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
-import { CryptoHeatmap } from '@/components/crypto/CryptoHeatmap'
 import { Button } from '@/components/ui/Button'
 import { DataTable, type Column } from '@/components/ui/DataTable'
-import { Panel } from '@/components/ui/Panel'
 
-/**
- * The Crypto page, ported from `CryptoMixin.init_page19`.
- *
- * The reference's KPI strip, heatmap, watchlist, news and proxies, plus a separately
- * labelled Hyperliquid perpetuals panel so venue derivatives never replace spot quotes.
- *
- * One structural departure. The reference's worker emits a `partial` signal after each of
- * its stages and the Qt page fills in as they land; an IPC request/response cannot,
- * so all stages run concurrently in the main process and the payload carries the
- * same `progress` map. The stage readiness line reports incomplete data alongside
- * the provider errors, while healthy panels remain available.
- */
-
-const toneClass: Record<CryptoTone, string> = {
-  positive: 'text-up',
-  negative: 'text-down',
-  muted: 'text-text-muted',
+const EMPTY_CANDLES: Candle[] = []
+const changeClass = (value: number | null | undefined) => `crypto-${cryptoTone(value)}`
+const perpQuote = (quote?: CryptoQuote) => Boolean(quote?.source?.startsWith('Hyperliquid'))
+const ageText = (stamp: string | undefined, now: number) => {
+  const age = stamp ? now - new Date(stamp).getTime() : NaN
+  return Number.isFinite(age) ? age < 60_000 ? 'Updated just now' : `Updated ${Math.max(1, Math.floor(age / 60_000))}m ago` : 'Awaiting data'
 }
 
-const newsToneClass: Record<CryptoNewsTone, string> = {
-  Bullish: 'text-up',
-  Bearish: 'text-down',
-  Neutral: 'text-text-muted',
-}
-
-/** The dot on a panel whose stage is degraded, as every other multi-panel page reports one. */
-function warningOf(envelope: Envelope<unknown> | undefined, block: string, now: number): string | undefined {
-  if (!envelope) return undefined
-  const failed = envelope.errors.find((entry) => entry.symbol === block)
-  if (failed) return failed.reason
-  const freshness = effectiveFreshness(envelope, now, FRESHNESS.crypto)
-  if (freshness === 'failed') return envelope.meta.failureReason || freshness
-  return undefined
-}
-
-export function CryptoPage({
-  onStatusChange,
-}: {
-  onStatusChange: (panels: PanelStatus[], sourcePath: string) => void
+function Section({ title, subtitle, badge, children, className = '' }: {
+  title: string; subtitle?: string; badge?: ReactNode; children: ReactNode; className?: string
 }) {
+  return <section className={`crypto-panel ${className}`} aria-label={title}>
+    <header className="crypto-panel-title"><h2>{title}</h2>{badge}</header>
+    {subtitle && <div className="crypto-panel-subtitle">{subtitle}</div>}
+    {children}
+  </section>
+}
+
+export function CryptoPage({ onStatusChange }: { onStatusChange: (panels: PanelStatus[], sourcePath: string) => void }) {
   const query = useCrypto()
   const refresh = useRefreshCrypto()
-  const now = useSnapshotClock()
+  const usage = useCryptoProviderUsage()
+  const snapshotNow = useSnapshotClock()
+  const now = Math.max(snapshotNow, Date.now())
+  const { symbol, interval, selectSymbol, setInterval } = useCryptoWorkspace()
+  const history = useChartsHistory(cryptoChartRequest(symbol, interval), 60)
   const [refreshing, setRefreshing] = useState(false)
   const [notice, setNotice] = useState('')
-
+  const [search, setSearch] = useState('')
   const payload = query.data?.data
+  const quotes = payload?.quotes ?? {}
   const loading = query.isFetching || refreshing
-
-  useEffect(() => {
-    // No file behind this page, so the status bar's path slot stays empty.
-    onStatusChange([{ label: 'Crypto', envelope: query.data, error: query.error, enabled: query.isEnabled, loading }], '')
-  }, [onStatusChange, query.data, loading])
-
-  // A notice describes the action that produced it; a refresh replaces the page under it.
-  useEffect(() => {
-    if (loading) setNotice('')
-  }, [loading])
-
-  const quotes = useMemo<Record<string, CryptoQuote>>(() => payload?.quotes ?? {}, [payload])
-
-  /** `_p19_set_refresh_status`, in the same order of precedence the reference writes it. */
-  const status = useMemo(() => {
-    if (notice) return notice
-    if (loading) return 'Fetching crypto market data...'
-    if (query.isError) return `Crypto data refresh failed: ${query.error.message}`
-    if (!payload) return 'Loading crypto market data...'
-    const meta = query.data?.meta
-    if (meta?.freshness === 'failed') {
-      return `Crypto data refresh failed: ${meta.failureReason ?? 'unknown error'}`
-    }
-    const stamp = clockTail(payload.fetchedAt)
-    const freshness = query.data ? effectiveFreshness(query.data, now, FRESHNESS.crypto) : 'failed'
-    if (freshness === 'stale') return `Snapshot updated at ${stamp}`
-    if (hasUnavailableStage(payload.progress) || query.data?.errors.length) {
-      return `Partial data at ${stamp} — ${loadedStageCount(payload.progress)}/${CRYPTO_STAGES.length} stages ready. ${query.data?.errors.map(error => error.reason).join(' ') ?? ''}`
-    }
-    return `Snapshot updated at ${stamp} · ${freshness}`
-  }, [notice, loading, payload, query.data, query.isError, query.error, now])
-
+  const coinGecko = usage.data?.providers.find(provider => provider.id === 'coingecko')
+  const cooldownSeconds = coinGecko?.throttled ? Math.max(0, Math.ceil(((usage.data?.sampledAt ?? now) + coinGecko.cooldownMs - now) / 1_000)) : 0
+  const cooldown = cooldownSeconds > 0
+  const wasCooling = useRef(false)
+  const freshness = query.data ? effectiveFreshness(query.data, now, FRESHNESS.crypto) : 'unavailable'
+  const spotWarning = query.data?.errors.some(error => /coingecko/i.test(`${error.source} ${error.reason}`))
+  const errors = query.data?.errors.map(error => error.reason).join(' · ') ?? ''
+  const market = payload?.hyperliquid?.markets.find(row => row.symbol === symbol)
+  const venueAge = payload?.hyperliquid ? now - new Date(payload.hyperliquid.fetchedAt).getTime() : Infinity
+  const venueRecent = venueAge >= -5_000 && venueAge <= 15_000
   const coverage = payload?.heatmap.coverage
-  const heatmapStatus = loading
-    ? `Snapshot coverage --/${CRYPTO_HEATMAP_LIMIT} | Loading...`
-    : `Snapshot coverage ${coverage ? `${coverage.loaded}/${coverage.total}` : `--/${CRYPTO_HEATMAP_LIMIT}`} | ${query.data ? effectiveFreshness(query.data, now, FRESHNESS.crypto) : 'unavailable'} | Updated ${
-        payload ? clockTail(payload.heatmap.updatedAt) : '--'
-      }`
+  const breadthSources = [...new Set(payload?.heatmap.tiles.map(tile => tile.source).filter(Boolean) ?? [])].join(' + ')
+  const chartCandles = history.data?.meta.freshness === 'failed' ? EMPTY_CANDLES : history.data?.data.candles ?? EMPTY_CANDLES
+  const chartFailure = history.error?.message || (history.data?.meta.freshness === 'failed' ? history.data.meta.failureReason : '')
+  const chartFreshness = history.data ? effectiveFreshness(history.data, now, FRESHNESS.chartIntraday) : 'loading'
+  const chartSource = history.data?.data.stats?.source ?? 'Hyperliquid crypto perpetual'
+  const status = notice || (query.error ? `Crypto data refresh failed: ${query.error.message}`
+    : query.data?.meta.freshness === 'failed' ? `Crypto data refresh failed: ${query.data.meta.failureReason || errors || 'Provider unavailable'}`
+    : loading && !payload ? 'Fetching crypto market data...'
+    : !payload ? 'Loading crypto market data...'
+    : `Snapshot updated at ${clockTail(payload.fetchedAt)} · ${freshness} · ${loadedStageCount(payload.progress)}/${CRYPTO_STAGES.length} stages ready${errors ? `. ${errors}` : ''}`)
+
+  useEffect(() => {
+    onStatusChange([
+      { label: 'Crypto', envelope: query.data, error: query.error, loading, freshnessMs: FRESHNESS.crypto },
+      { label: 'Crypto perpetual chart', envelope: history.data, error: history.error, loading: history.isFetching, freshnessMs: FRESHNESS.chartIntraday },
+    ], '')
+  }, [onStatusChange, query.data, query.error, loading, history.data, history.error, history.isFetching])
+
+  useEffect(() => {
+    if (wasCooling.current && !cooldown) void query.refetch()
+    wasCooling.current = cooldown
+  }, [cooldown, query.refetch])
 
   const onRefresh = useCallback(async () => {
-    setNotice('')
     setRefreshing(true)
+    setNotice('')
     try {
-      await refresh()
+      const results = await Promise.allSettled([refresh(), history.refetch()])
+      const failed = results.find(result => result.status === 'rejected')
+      if (failed?.status === 'rejected') throw failed.reason
     } catch (error) {
       setNotice(`Crypto refresh failed: ${error instanceof Error ? error.message : String(error)}`)
-    } finally {
-      setRefreshing(false)
-    }
-  }, [refresh])
+    } finally { setRefreshing(false) }
+  }, [refresh, history.refetch])
 
-  /** `_p19_export_snapshot`: the reference copies, it does not write a file. */
-  const onExport = useCallback(async () => {
-    if (!payload) {
-      setNotice('Load crypto market data before exporting.')
-      return
-    }
-    await api.writeClipboard(buildCryptoSnapshot({ fetchedAt: payload.fetchedAt, quotes }))
-    setNotice('Snapshot copied to clipboard')
-  }, [payload, quotes])
+  const onCopy = async () => {
+    if (!payload) { setNotice('Load crypto market data before copying.'); return }
+    try { await api.writeClipboard(buildCryptoSnapshot({ fetchedAt: payload.fetchedAt, quotes })); setNotice('Snapshot copied to clipboard') }
+    catch (error) { setNotice(`Copy failed: ${error instanceof Error ? error.message : String(error)}`) }
+  }
 
-  const fearGreed = payload?.fearGreed
-  const globalMarket = payload?.global
+  const markets = useMemo(() => (payload?.hyperliquid?.markets ?? []).filter(row => row.symbol.toLowerCase().includes(search.trim().toLowerCase())), [payload?.hyperliquid, search])
 
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
-      <div className="flex shrink-0 flex-wrap items-center gap-1">
-        <h1 className="pr-2 text-sm font-semibold text-text">Crypto Market</h1>
-        <span className="ml-auto px-2 text-2xs text-text-muted">{status}</span>
-        <Button variant="accent" onClick={() => void onRefresh()} disabled={refreshing || loading}>
-          {refreshing ? 'Refreshing...' : 'Refresh'}
+  return <div className="crypto-workspace">
+    <header className="crypto-heading">
+      <div><div className="crypto-eyebrow">Market intelligence</div><h1>Crypto Workspace</h1><p>Price action, spot quotes and perpetual markets</p></div>
+      <div className="crypto-actions"><span className="crypto-currency" title="Quotes and chart prices are shown in USD">USD</span>
+        <Button onClick={() => void onCopy()} disabled={!payload}>Copy snapshot</Button>
+        <Button variant="accent" onClick={() => void onRefresh()} disabled={loading || cooldown}>
+          {cooldown ? `Retry in ${cooldownSeconds}s` : loading ? 'Refreshing...' : 'Refresh'}
         </Button>
-        <Button onClick={() => void onExport()}>Export</Button>
       </div>
+    </header>
 
-      <div className="grid shrink-0 grid-cols-6 gap-2">
-        <MetricTile
-          label={quotes.BTC?.source === 'Hyperliquid crypto perp' ? 'BTC PERP' : 'BTC'}
-          value={cryptoPrice(quotes.BTC?.price)}
-          change={cryptoPercent(quotes.BTC?.changePct)}
-          tone={cryptoTone(quotes.BTC?.changePct)}
-        />
-        <MetricTile
-          label={quotes.ETH?.source === 'Hyperliquid crypto perp' ? 'ETH PERP' : 'ETH'}
-          value={cryptoPrice(quotes.ETH?.price)}
-          change={cryptoPercent(quotes.ETH?.changePct)}
-          tone={cryptoTone(quotes.ETH?.changePct)}
-        />
-        <MetricTile
-          label={quotes.SOL?.source === 'Hyperliquid crypto perp' ? 'SOL PERP' : 'SOL'}
-          value={cryptoPrice(quotes.SOL?.price)}
-          change={cryptoPercent(quotes.SOL?.changePct)}
-          tone={cryptoTone(quotes.SOL?.changePct)}
-        />
-        <MetricTile
-          label="Total Market Cap"
-          value={cryptoMoney(globalMarket?.marketCap)}
-          change={cryptoPercent(globalMarket?.changePct)}
-          tone={cryptoTone(globalMarket?.changePct)}
-        />
-        <MetricTile
-          label="Fear & Greed"
-          value={fearGreed?.value == null ? '--' : fearGreed.value.toFixed(0)}
-          change={
-            fearGreed?.value == null
-              ? '--'
-              : `${fearGreed.classification || '--'} - ${fearGreed.source}`
-          }
-          // The reference paints this one amber whatever the reading is: the classification
-          // already names the direction, so a green "Extreme Greed" would read as good news.
-          tone={fearGreed?.value == null ? 'muted' : 'warning'}
-        />
-        <MetricTile
-          label="24h Volume"
-          value={cryptoMoney(globalMarket?.volume24h)}
-          change="CoinGecko global"
-          tone="muted"
-        />
-      </div>
+    {(cooldown || spotWarning || freshness === 'partial' || freshness === 'stale' || freshness === 'failed' || query.error || notice) && <div className="crypto-notice" role="status">
+      <span>{cooldown ? `CoinGecko rate limited · ${payload ? 'Showing available snapshots and labelled fallback prices' : 'Spot data unavailable'}` : status}</span>
+      {cooldown && <span className="num">Auto-retry in {cooldownSeconds}s</span>}
+    </div>}
 
-      <Panel
-        className="min-h-0 flex-[3]"
-        title="Top 30 Cryptocurrencies"
-        warning={warningOf(query.data, 'Top 30 Cryptocurrencies', now)}
-        actions={<span className="text-2xs text-text-muted">{heatmapStatus}</span>}
-      >
-        <CryptoHeatmap tiles={payload?.heatmap.tiles ?? []} />
-      </Panel>
-
-      <Panel
-        className="min-h-0 flex-[2]"
-        title="Hyperliquid Perpetuals"
-        warning={warningOf(query.data, 'Hyperliquid Perpetuals', now)}
-        actions={
-          <span className="text-2xs text-text-muted">
-            {payload?.hyperliquid ? `${payload.hyperliquid.markets.length} markets | Updated ${clockTail(payload.hyperliquid.fetchedAt)}` : loading ? 'Loading...' : 'Unavailable'}
-            {' | live feed · REST fallback'}
-          </span>
-        }
-      >
-        <HyperliquidTable markets={payload?.hyperliquid?.markets ?? []} loading={loading} />
-      </Panel>
-
-      <div className="flex min-h-0 flex-[2] gap-2">
-        <Panel
-          className="min-h-0 flex-1"
-          title="Watchlist / Movers"
-          warning={warningOf(query.data, 'Watchlist / Movers', now)}
-        >
-          <WatchlistTable quotes={quotes} loading={loading} />
-        </Panel>
-
-        <Panel
-          className="min-h-0 flex-[2]"
-          title="Crypto News Feed"
-          warning={warningOf(query.data, 'Crypto News Feed', now)}
-        >
-          <NewsTable articles={payload?.news ?? []} loading={loading} />
-        </Panel>
-
-        {/* Proxies and the watchlist are the same quote stage, so they share its warning. */}
-        <Panel
-          className="min-h-0 flex-1"
-          title="ETF / Equity Proxies"
-          warning={warningOf(query.data, 'Watchlist / Movers', now)}
-        >
-          <ProxyTable quotes={quotes} loading={loading} />
-        </Panel>
-      </div>
+    <div className="crypto-ribbon" aria-label="Market overview">
+      {['BTC', 'ETH', 'SOL'].map(label => <div className="crypto-ribbon-item" key={label} title={quotes[label]?.source ?? 'Awaiting quote'}>
+        <strong>{label}{perpQuote(quotes[label]) ? ' PERP' : ''}</strong><span className="num">{cryptoPrice(quotes[label]?.price)}</span>
+        <span className={`num ${changeClass(quotes[label]?.changePct)}`}>{cryptoPercent(quotes[label]?.changePct)}</span>
+      </div>)}
+      <div className="crypto-ribbon-item" title="CoinGecko global market snapshot"><span className="crypto-muted">Market cap</span><strong className="num">{cryptoMoney(payload?.global?.marketCap)}</strong></div>
+      <div className="crypto-ribbon-item" title={payload?.fearGreed?.source ?? 'Alternative.me'}><span className="crypto-muted">Fear &amp; Greed</span><strong className="num crypto-warning">{payload?.fearGreed?.value ?? '--'}</strong><span className="crypto-warning">{payload?.fearGreed?.classification ?? '--'}</span></div>
     </div>
-  )
+
+    <div className="crypto-layout">
+      <aside className="crypto-left" aria-label="Symbol selection and proxies">
+        <Section title="Spot watchlist" subtitle="Select an asset to chart its Hyperliquid perpetual. Fallback prices are labelled PERP.">
+          <div className="crypto-watch-head"><span>Asset</span><span>Last</span><span>24h</span></div>
+          {CRYPTO_TICKERS.map(entry => <button type="button" className="crypto-watch-row" key={entry.label}
+            aria-label={`Chart ${entry.label} perpetual`} aria-pressed={symbol === entry.label} onClick={() => selectSymbol(entry.label)} title={quotes[entry.label]?.source ?? 'Quote unavailable'}>
+            <strong>{entry.label}{perpQuote(quotes[entry.label]) && <small> PERP</small>}</strong>
+            <span className="num">{cryptoPrice(quotes[entry.label]?.price)}</span>
+            <span className={`num ${changeClass(quotes[entry.label]?.changePct)}`}>{cryptoPercent(quotes[entry.label]?.changePct)}</span>
+          </button>)}
+          <div className="crypto-chart-caption">Snapshot {payload ? clockTail(payload.fetchedAt) : '--'} · {freshness}</div>
+        </Section>
+        <Section title="Equity & ETF proxies" subtitle="Yahoo stock metadata · Perpetual marks labelled separately">
+          {PROXY_TICKERS.map(entry => { const quote = quotes[entry.label]; return <div className="crypto-proxy" key={entry.label}>
+            <strong>{entry.label}{perpQuote(quote) ? ' PERP' : ''}</strong><span className="num">{cryptoPrice(quote?.price)}</span>
+            <small>{entry.name}</small><span className={`num ${changeClass(quote?.changePct)}`}>{cryptoPercent(quote?.changePct)}</span>
+            <small className="crypto-proxy-source" title={quote?.source}>{quote?.source ?? 'Awaiting data'}</small>
+            <small title={quote?.marketCapSource}>AUM / cap {cryptoMoney(quote?.marketCap, true)}</small>
+            <small title={quote?.volumeSource}>{quote?.volumeSource?.includes('(shares)') ? `${new Intl.NumberFormat('en-US', { notation: 'compact' }).format(quote.volume ?? 0)} sh` : cryptoMoney(quote?.volume, true)}</small>
+          </div> })}
+        </Section>
+      </aside>
+
+      <section className="crypto-panel crypto-price-panel" aria-label="Perpetual price chart" aria-busy={history.isFetching}>
+        <div className="crypto-chart-heading"><div><h2>{symbol}-PERP / USD</h2>
+          <span className={`crypto-badge ${venueRecent ? 'crypto-positive' : 'crypto-muted'}`}>Hyperliquid perpetual · {venueRecent ? 'Live mark' : ageText(payload?.hyperliquid?.fetchedAt, now)}</span>
+          <div className="crypto-mark num">{cryptoPrice(market?.markPrice)}<small className={changeClass(market?.changePct)}>{cryptoPercent(market?.changePct)} <span className="crypto-muted">24h</span></small></div>
+        </div><div className="crypto-timeframes" aria-label="Candle interval">{CRYPTO_CHART_INTERVALS.map(choice =>
+          <button type="button" key={choice.label} aria-pressed={interval === choice.interval} onClick={() => setInterval(choice.interval)}>{choice.label}</button>)}</div></div>
+        {chartFailure && <div className="crypto-chart-error" role="alert">{chartFailure} {chartCandles.length ? 'Showing retained history.' : 'Chart history is unavailable.'} <button type="button" disabled={history.isFetching} onClick={() => void history.refetch()}>Retry chart</button></div>}
+        {!chartCandles.length && !chartFailure && <div className="crypto-empty">{history.isFetching ? 'Loading perpetual candles...' : 'No candle history returned.'}</div>}
+        <CryptoPriceChart candles={chartCandles} context={`${symbol}:${interval}`} />
+        <div className="crypto-chart-caption"><span>{chartSource} · {chartFreshness} · {chartCandles.length} candles</span><span>UTC · Volume in base asset · Scroll to zoom, drag to pan</span></div>
+      </section>
+
+      <div className="crypto-right">
+        <Section title="Market breadth" subtitle={`Snapshot coverage ${coverage?.loaded ?? 0}/${coverage?.total ?? 30} | ${freshness} | Updated ${payload ? clockTail(payload.heatmap.updatedAt) : '--'}`} className="crypto-breadth"
+          badge={<span className="crypto-badge">Top 30 · {breadthSources || 'Awaiting data'}</span>}><Breadth payload={payload} /></Section>
+        <Section title="Market context">
+          <div className="crypto-context-row"><span>BTC dominance</span><strong className="num">{payload?.global?.btcDominance == null ? '--' : `${payload.global.btcDominance.toFixed(1)}%`}</strong></div>
+          <div className="crypto-context-row"><span>24h spot volume</span><strong className="num">{cryptoMoney(payload?.global?.volume24h)}</strong></div>
+          <div className="crypto-chart-caption">CoinGecko snapshot · {freshness}</div>
+          <div className="crypto-context-row"><span>Fear &amp; Greed</span><strong className="crypto-warning">{payload?.fearGreed?.value ?? '--'} / 100</strong></div>
+          <div className="crypto-chart-caption">Alternative.me · {payload?.fearGreed?.timestamp || 'Awaiting observation date'}</div>
+        </Section>
+      </div>
+
+      <Section title="Perpetual markets" className="crypto-perps" subtitle="Hyperliquid · Hourly funding · Live feed with REST fallback"
+        badge={<span className={`crypto-badge ${venueRecent ? 'crypto-positive' : 'crypto-muted'}`}>{ageText(payload?.hyperliquid?.fetchedAt, now)}</span>}>
+        <div className="crypto-search-wrap"><label className="crypto-sr-only" htmlFor="crypto-market-search">Search perpetual markets</label><input id="crypto-market-search" className="crypto-search" placeholder="Search markets..." value={search} onChange={event => setSearch(event.target.value)} /></div>
+        <PerpetualTable markets={markets} loading={loading} selected={symbol} select={selectSymbol} />
+      </Section>
+      <Section title="Latest news" className="crypto-news" badge={<span className="crypto-badge">{payload?.news.length ?? 0} headlines</span>}>
+        <div className="crypto-news-list">{payload?.news.length ? payload.news.map(article => <button type="button" className="crypto-news-item" key={article.id}
+          onClick={() => { if (article.url) void api.openExternal(article.url) }} title={article.title}>
+          {article.title}<small>{article.source} · {article.time || (article.publishedAt ? new Date(article.publishedAt).toLocaleString() : 'Time unavailable')}</small>
+        </button>) : <div className="crypto-empty">{loading ? 'Loading market news...' : 'No crypto news available.'}</div>}</div>
+      </Section>
+    </div>
+    <footer className="crypto-footer"><div className="crypto-feed-states">
+      <span className={`crypto-badge ${cooldown || spotWarning ? 'crypto-warning' : ''}`}>Spot: {cooldown ? 'rate limited' : freshness}</span>
+      <span className={`crypto-badge ${venueRecent ? 'crypto-positive' : ''}`}>Perpetuals: {venueRecent ? 'live mark' : payload?.hyperliquid ? 'snapshot' : 'unavailable'}</span>
+      <span className="crypto-badge">News: {payload?.news.length ? 'ready' : 'unavailable'}</span>
+    </div><span title={status}>{status}</span></footer>
+  </div>
 }
 
-function HyperliquidTable({ markets, loading }: { markets: HyperliquidMarket[]; loading: boolean }) {
+function Breadth({ payload }: { payload?: CryptoPayload }) {
+  const tiles = [...(payload?.heatmap.tiles ?? [])].sort((a, b) => a.rank - b.rank)
+  return <div className="crypto-heatmap">{Array.from({ length: CRYPTO_HEATMAP_LIMIT }, (_, index) => {
+    const tile = tiles[index]
+    const tone = cryptoTone(tile?.changePct)
+    const hue = tone === 'positive' ? '#26c281' : '#f0554e'
+    return <div className="crypto-heatmap-cell" key={index} title={tile ? `Rank: #${tile.rank}\n${tile.name}\nPrice: ${cryptoPrice(tile.price)}\nMarket cap: ${cryptoMoney(tile.marketCap)}\nSource: ${tile.source}` : `Rank ${index + 1} unavailable`}
+      style={{ background: tone === 'muted' ? '#121b2b' : `color-mix(in srgb, ${hue} ${18 + heatmapIntensity(tile?.changePct) * 32}%, #0d1420)` }}>
+      <strong>{tile?.symbol ?? `#${index + 1}`}</strong><span className="num">{cryptoPercent(tile?.changePct)}</span>
+    </div>
+  })}</div>
+}
+
+function PerpetualTable({ markets, loading, selected, select }: { markets: HyperliquidMarket[]; loading: boolean; selected: string; select: (symbol: string) => void }) {
   const columns: Array<Column<HyperliquidMarket>> = [
-    { key: 'symbol', header: 'Perpetual', cell: row => `${row.symbol} PERP`, sortValue: row => row.symbol },
+    { key: 'market', header: 'Market', cell: row => <button type="button" aria-label={`Chart ${row.symbol} perpetual market`} onClick={() => select(row.symbol)}>{row.symbol}-PERP</button>, sortValue: row => row.symbol },
     { key: 'mark', header: 'Mark (USD)', numeric: true, align: 'right', cell: row => cryptoPrice(row.markPrice), sortValue: row => row.markPrice },
-    { key: 'change', header: '24h', numeric: true, align: 'right',
-      cell: row => <span className={toneClass[cryptoTone(row.changePct)]}>{cryptoPercent(row.changePct)}</span>, sortValue: row => row.changePct },
-    { key: 'funding', header: <span title="Current hourly rate. Positive: longs pay shorts. Negative: shorts pay longs.">Funding / 1h</span>, numeric: true, align: 'right',
-      cell: row => `${row.fundingHourlyPct >= 0 ? '+' : ''}${row.fundingHourlyPct.toFixed(5)}%`, sortValue: row => row.fundingHourlyPct },
-    { key: 'interest', header: <span title="Base-asset open interest multiplied by the mark price.">Open interest (USD)</span>, numeric: true, align: 'right',
-      cell: row => cryptoMoney(row.openInterestUsd, true), sortValue: row => row.openInterestUsd },
-    { key: 'volume', header: '24h volume (USD)', numeric: true, align: 'right', cell: row => cryptoMoney(row.volume24hUsd, true), sortValue: row => row.volume24hUsd },
+    { key: 'change', header: '24h', numeric: true, align: 'right', cell: row => <span className={changeClass(row.changePct)}>{cryptoPercent(row.changePct)}</span>, sortValue: row => row.changePct },
+    { key: 'funding', header: <span title="Current hourly funding. Positive: longs pay shorts; negative: shorts pay longs.">Funding / 1h</span>, numeric: true, align: 'right', cell: row => `${row.fundingHourlyPct >= 0 ? '+' : ''}${row.fundingHourlyPct.toFixed(5)}%`, sortValue: row => row.fundingHourlyPct },
+    { key: 'interest', header: 'Open interest', numeric: true, align: 'right', cell: row => cryptoMoney(row.openInterestUsd, true), sortValue: row => row.openInterestUsd },
+    { key: 'volume', header: '24h volume', numeric: true, align: 'right', cell: row => cryptoMoney(row.volume24hUsd, true), sortValue: row => row.volume24hUsd },
   ]
-  return <DataTable columns={columns} rows={markets} rowKey={row => row.symbol}
-    defaultSort={{ key: 'volume', direction: 'desc' }}
-    empty={loading ? 'Loading Hyperliquid perpetual markets...' : 'Hyperliquid unavailable. Refresh to retry; other crypto data remains available.'} />
-}
-
-/** `_p19_metric_tile`: label over a large value over the coloured change line. */
-function MetricTile({
-  label,
-  value,
-  change,
-  tone,
-}: {
-  label: string
-  value: string
-  change: string
-  tone: CryptoTone | 'warning'
-}) {
-  const changeClass = tone === 'warning' ? 'text-warn' : toneClass[tone]
-  return (
-    <div className="flex flex-col items-center justify-center border border-border bg-surface px-2 py-1">
-      <span className="truncate text-2xs text-text-muted">{label}</span>
-      <span className="num truncate text-sm font-bold text-text">{value}</span>
-      <span className={`truncate text-2xs font-bold ${changeClass}`}>{change}</span>
-    </div>
-  )
-}
-
-interface WatchRow {
-  label: string
-  quote: CryptoQuote | undefined
-}
-
-function WatchlistTable({
-  quotes,
-  loading,
-}: {
-  quotes: Record<string, CryptoQuote>
-  loading: boolean
-}) {
-  const rows = CRYPTO_WATCHLIST_ORDER.map((label) => ({ label, quote: quotes[label] }))
-  const columns: Array<Column<WatchRow>> = [
-    { key: 'symbol', header: 'Symbol', cell: (row) => row.label },
-    {
-      key: 'last',
-      header: 'Last',
-      numeric: true,
-      align: 'right',
-      cell: (row) => <span title={row.quote?.source}>{cryptoPrice(row.quote?.price)}{row.quote?.source?.startsWith('Hyperliquid') ? ' PERP' : ''}</span>,
-    },
-    {
-      key: 'change',
-      header: '24h',
-      numeric: true,
-      align: 'right',
-      cell: (row) => (
-        <span className={toneClass[cryptoTone(row.quote?.changePct)]}>
-          {cryptoPercent(row.quote?.changePct)}
-        </span>
-      ),
-    },
-    {
-      key: 'volume',
-      header: 'Vol',
-      numeric: true,
-      align: 'right',
-      cell: (row) => <span title={row.quote?.volumeSource ?? row.quote?.source}>{row.quote?.volumeSource?.includes('(shares)')
-        ? row.quote.volume == null ? '--' : `${new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(row.quote.volume)} sh`
-        : cryptoMoney(row.quote?.volume, true)}</span>,
-    },
-    {
-      key: 'marketCap',
-      header: 'Mkt Cap',
-      numeric: true,
-      align: 'right',
-      cell: (row) => <span title={row.quote?.metadataAsOf ? `${row.quote.marketCapSource ?? 'Yahoo Finance'} · ${new Date(row.quote.metadataAsOf).toLocaleString()}` : row.quote?.marketCapSource}>{cryptoMoney(row.quote?.marketCap, true)}</span>,
-    },
-  ]
-  return (
-    <DataTable
-      columns={columns}
-      rows={rows}
-      rowKey={(row) => row.label}
-      empty={loading ? 'Loading...' : 'No quote data'}
-    />
-  )
-}
-
-function NewsTable({ articles, loading }: { articles: NewsArticle[]; loading: boolean }) {
-  const columns: Array<Column<NewsArticle>> = [
-    { key: 'time', header: 'Time', width: '4.5rem', cell: (row) => row.time || '--' },
-    {
-      key: 'title',
-      header: 'Headline',
-      width: '100%',
-      cell: (row) => (
-        <button
-          type="button"
-          title={`${row.source} — ${row.title}`}
-          onClick={() => row.url && void api.openExternal(row.url)}
-          className="block w-full truncate text-left hover:text-accent-hover hover:underline"
-        >
-          {row.title}
-        </button>
-      ),
-    },
-    {
-      key: 'tone',
-      header: 'Tone',
-      width: '5rem',
-      cell: (row) => {
-        const tone = cryptoNewsTone(row.title)
-        return <span className={newsToneClass[tone]}>{tone}</span>
-      },
-    },
-  ]
-  return (
-    <DataTable
-      columns={columns}
-      rows={articles}
-      rowKey={(row) => row.id}
-      layout="fixed"
-      empty={loading ? 'Loading live market news...' : 'No crypto news feed articles returned yet.'}
-    />
-  )
-}
-
-interface ProxyRow {
-  label: string
-  type: string
-  quote: CryptoQuote | undefined
-}
-
-function ProxyTable({
-  quotes,
-  loading,
-}: {
-  quotes: Record<string, CryptoQuote>
-  loading: boolean
-}) {
-  const rows = CRYPTO_PROXY_ROWS.map((entry) => ({ ...entry, quote: quotes[entry.label] }))
-  const columns: Array<Column<ProxyRow>> = [
-    { key: 'ticker', header: 'Ticker', cell: (row) => row.label },
-    { key: 'type', header: 'Type', cell: (row) => row.type },
-    {
-      key: 'size',
-      header: 'AUM / Mkt Cap',
-      numeric: true,
-      align: 'right',
-      cell: (row) => cryptoMoney(row.quote?.marketCap, true),
-    },
-    {
-      key: 'change',
-      header: '1D',
-      numeric: true,
-      align: 'right',
-      cell: (row) => (
-        <span className={toneClass[cryptoTone(row.quote?.changePct)]}>
-          {cryptoPercent(row.quote?.changePct)}
-        </span>
-      ),
-    },
-  ]
-  return (
-    <DataTable
-      columns={columns}
-      rows={rows}
-      rowKey={(row) => row.label}
-      empty={loading ? 'Loading...' : 'No proxy data'}
-    />
-  )
+  return <DataTable columns={columns} rows={markets} rowKey={row => row.symbol} defaultSort={{ key: 'volume', direction: 'desc' }}
+    rowClassName={row => row.symbol === selected ? 'bg-accent-dim' : ''} minWidth="620px"
+    empty={loading ? 'Loading Hyperliquid perpetual markets...' : 'No matching perpetual markets. Data may be unavailable.'} />
 }

@@ -15,6 +15,7 @@ import { useMcpScreenshot, useScreenshotReady } from '@/api/mcpScreenshot'
 import { useReloadAll } from '@/api/queries'
 import { useSettings, useSettingsMutation } from '@/api/settingsQueries'
 import { PageCache } from '@/components/chrome/PageCache'
+import { CachedPageNotice } from '@/components/chrome/CachedPageNotice'
 import { NumberPrivacy } from '@/components/ui/NumberPrivacy'
 import { StatusBar, type PanelStatus } from '@/components/chrome/StatusBar'
 import { PortfolioChartsStatus } from '@/components/chrome/PortfolioChartsStatus'
@@ -385,6 +386,7 @@ export function App() {
             favorite={favorites.includes(activeTab)} onToggleFavorite={() => void toggleFavorite()}
             saving={savingFavorite || !settings} />}
           <div className="relative flex min-h-0 flex-1 flex-col">
+            {!blurCurrent && <CachedPageNotice page={activeTab} />}
             {/* Finance pages keep their controls usable and mask numbers in their own subtrees. */}
             <div
               aria-hidden={blurCurrent}
@@ -407,17 +409,20 @@ export function App() {
         </div>
       </div>
 
-      <StatusBar
-        portfolioCharts={<PortfolioChartsStatus enabled={!settingsQuery.isPending} />}
-        panels={panels}
-        sourcePath={sourcePath}
-        notice={notice}
-        warming={
-          warm.active
-            ? `Loading pages (${warm.done}/${warm.total} complete): ${warm.label}...${warm.failed ? ` · ${warm.failed} failed` : ''}${warm.degraded ? ` · ${warm.degraded} incomplete` : ''}`
-            : warm.failed || warm.degraded ? `${warm.failed} startup load(s) failed · ${warm.degraded} incomplete. Open Settings for details.` : ''
-        }
-      />
+      {/* Keep chart observers and diagnostic polling mounted without a visible bottom strip. */}
+      <div hidden>
+        <StatusBar
+          portfolioCharts={<PortfolioChartsStatus enabled={!settingsQuery.isPending} />}
+          panels={panels}
+          sourcePath={sourcePath}
+          notice={notice}
+          warming={
+            warm.active
+              ? `Loading pages (${warm.done}/${warm.total} complete): ${warm.label}...${warm.failed ? ` · ${warm.failed} failed` : ''}${warm.degraded ? ` · ${warm.degraded} incomplete` : ''}`
+              : warm.failed || warm.degraded ? `${warm.failed} startup load(s) failed · ${warm.degraded} incomplete. Open Settings for details.` : ''
+          }
+        />
+      </div>
 
       {pickerOpen && !screenshotPage ? (
         <TabPicker

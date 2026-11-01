@@ -25,8 +25,21 @@ only missing, expired or incomplete results reload. Existing content stays visib
 while expired data refreshes, and age/failure indicators are not reset to look fresh.
 Refresh and F5 remain available when you want new data explicitly.
 
-The cache keeps up to 64 MB of renderer snapshots for seven days, alongside the
-512 MB main-process market cache (including reusable historical series). A normal
+Settings > Data > **Cache and startup** controls independent disk budgets: by
+default, 256 MiB of page snapshots retained for 30 days, 2 GiB of market data
+(including reusable historical series), and 512 MiB of images and previews.
+Images cannot evict market data. Existing caches are retained in place. Limits
+apply immediately and survive restarts; lowering them evicts older entries.
+Snapshot retention can range from 7 to 90 days and is separate from freshness.
+Daily chart history checks every 30 minutes, company fundamentals every 24 hours,
+and the stock-directory page every 24 hours. Live quote, intraday-chart and news
+intervals remain unchanged. Manual Refresh still requests new data.
+
+The panel reports bytes used, saved/restored queries, retention exclusions,
+evictions, service cache reads, and startup/background refresh reasons. Counters
+cover this session; saved bytes and entries reflect disk contents. Cached pages
+show their retrieval time while refreshing, and keep update failures visible.
+A normal
 window close gives pending renderer saves up to three seconds to commit. Failed
 refreshes retain usable previous snapshots. Old cache formats upgrade in place;
 Settings' cache reset still clears saved remote data. A first run, cache reset,

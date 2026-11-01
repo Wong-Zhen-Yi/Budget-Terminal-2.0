@@ -4,6 +4,7 @@ import { paced, periodStart, yahoo } from './client.js'
 import { observeSource } from '../sourceHealth.js'
 import { equityMarket } from '../../shared/equityMarkets.js'
 import { hyperliquidEquities } from '../hyperliquidEquities.js'
+import { regularMarketRefreshAt } from '../../shared/marketRefresh.js'
 
 interface QuoteChartResult {
   quotes: Array<{ date: Date; close: number | null }>
@@ -13,6 +14,9 @@ interface QuoteChartResult {
     chartPreviousClose?: number
     previousClose?: number
     currency?: string
+    instrumentType?: string
+    exchangeTimezoneName?: string
+    currentTradingPeriod?: { regular?: { start?: Date | number; end?: Date | number } }
   }
 }
 
@@ -74,17 +78,33 @@ export function quoteFromChart(symbol: string, result: QuoteChartResult): Quote 
 }
 
 /** Yahoo chart supplies both the current price and previous completed close. */
-async function fetchQuote(symbol: string): Promise<Quote> {
-  const result = await paced(() => yahoo.chart(symbol, {
+async function fetchQuoteChart(symbol: string): Promise<QuoteChartResult> {
+  return paced(() => yahoo.chart(symbol, {
     period1: periodStart(7), interval: '1d', includePrePost: true,
   }))
-  const quote = quoteFromChart(symbol, result)
-  if (!quote) throw new Error(`No chart quote returned for ${symbol}.`)
-  observeSource({ fetchedAt: Date.now(), asOf: quote.asOf, stale: false, fromCache: false, failures: [] })
-  return quote
 }
 
-/** One quote, cached for `TTL.quotes` and coalesced across concurrent callers. */
+/** Cache the regular-session quote until its next useful check, preserving its trade time. */
+export async function resolveYahooQuote(symbol: string, force = false, store = cache, loader = fetchQuoteChart): Promise<CachedResult<Quote> & { stale: boolean }> {
+  const result = await store.resolveWithStaleFallback(
+    `quote:yahoo-session-v1:${symbol}`,
+    (value: { quote: Quote; meta: QuoteChartResult['meta'] }) => {
+      const now = Date.now()
+      return regularMarketRefreshAt(value.meta, TTL.quotes, now) - now
+    },
+    async () => {
+      const response = await loader(symbol)
+      const quote = quoteFromChart(symbol, response)
+      if (!quote) throw new Error(`No chart quote returned for ${symbol}.`)
+      observeSource({ fetchedAt: Date.now(), asOf: quote.asOf, stale: false, fromCache: false, failures: [] })
+      return { quote, meta: response.meta }
+    },
+    { force },
+  )
+  return { ...result, value: result.value.quote }
+}
+
+/** One quote, session-aware caching and coalescing across concurrent callers. */
 export async function getQuote(symbol: string, force = false): Promise<Quote> {
   return (await resolveQuote(symbol, force)).value
 }
@@ -97,13 +117,13 @@ async function resolveQuote(symbol: string, force = false): Promise<CachedResult
       return { value: quote, fromCache: false, stale: false, ageSeconds: Math.max(0, (Date.now() - quote.asOf!) / 1000) }
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
-      const fallback = await cache.resolveWithStaleFallback(`quote:yahoo-only:${symbol}`, TTL.quotes, () => fetchQuote(symbol), { force })
+      const fallback = await resolveYahooQuote(symbol, force)
       observeSource({ fetchedAt: Date.now(), stale: false, fromCache: fallback.fromCache,
         failures: [`${symbol}: Hyperliquid unavailable; using Yahoo stock quote. ${reason}`], sources: ['Yahoo stock quote fallback'] })
       return { ...fallback, value: { ...fallback.value, source: 'Yahoo Finance (Hyperliquid fallback)', fallbackReason: reason } }
     }
   }
-  return cache.resolveWithStaleFallback(`quote:yahoo-only:${symbol}`, TTL.quotes, () => fetchQuote(symbol), { force })
+  return resolveYahooQuote(symbol, force)
 }
 
 export interface QuoteBatch {

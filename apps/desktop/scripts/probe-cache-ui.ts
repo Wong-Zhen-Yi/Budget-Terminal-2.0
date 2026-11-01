@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createRequire } from 'node:module'
@@ -12,6 +12,10 @@ const electron = createRequire(import.meta.url)('electron') as string
 const env: NodeJS.ProcessEnv = { ...process.env, APPDATA: directory, LOCALAPPDATA: directory }
 delete env.ELECTRON_RUN_AS_NODE
 try {
+  const assets = join(root, 'out/renderer/assets')
+  const stylesheet = (await readdir(assets)).find(name => name.endsWith('.css'))
+  assert(stylesheet, 'Build before running the cache UI probe')
+  await writeFile(join(directory, 'theme.css'), await readFile(join(assets, stylesheet)))
   await build({ stdin: { resolveDir: root, loader: 'ts', contents: `
     import { contextBridge, ipcRenderer } from 'electron'
     import { createApi } from './electron/shared/createApi'
@@ -23,9 +27,13 @@ try {
       }, process.platform))
   ` }, bundle: true, platform: 'node', format: 'cjs', external: ['electron'], outfile: join(directory, 'preload.cjs') })
   await build({ stdin: { resolveDir: root, loader: 'tsx', contents: `
-    import { QueryClient, dehydrate, hydrate } from '@tanstack/react-query'
+    import { QueryClient, QueryClientProvider, dehydrate, hydrate } from '@tanstack/react-query'
     import { createRoot } from 'react-dom/client'
-    import { createRendererQueryPersister, shouldPersistRemoteQuery } from './src/api/queryPersistence'
+    import { createRendererQueryPersister, shouldPersistRemoteQuery, configureRendererCache } from './src/api/queryPersistence'
+    import { DEFAULT_CACHE_SETTINGS } from './electron/shared/cachePolicy'
+    import { CachePanel } from './src/components/settings/CachePanel'
+    import { CachedPageNotice } from './src/components/chrome/CachedPageNotice'
+    import { useDataHealth } from './src/stores/dataHealth'
     import { warmStartupQuery } from './src/api/warmQueue'
     import { effectiveFreshness } from './src/api/snapshotHealth'
     const check = (condition, message) => { if (!condition) throw Error(message) }
@@ -60,6 +68,20 @@ try {
         await legacy.flush()
         check((await legacy.restoreClient()).clientState.queries.length === 1, 'Incremental migration failed')
         await legacy.removeClient()
+        client.clear()
+
+        const retained = createRendererQueryPersister({ database: 'synthetic-retention-cache', throttleMs: 0 })
+        const oldAt = Date.now() - 45 * 86_400_000
+        configureRendererCache({ ...DEFAULT_CACHE_SETTINGS, retentionDays: 60 })
+        client.setQueryData(['fundamentals', 'RETAINED'], envelope(8, oldAt), { updatedAt: oldAt })
+        retained.persistClient(snapshot())
+        await retained.flush()
+        check((await retained.restoreClient()).clientState.queries.length === 1, 'Configured retention above 30 days must survive restore')
+        configureRendererCache({ ...DEFAULT_CACHE_SETTINGS, retentionDays: 7 })
+        check((await retained.restoreClient()).clientState.queries.length === 0, 'Lowered retention must exclude old snapshots')
+        check(retained.stats().expiredOnRestore === 1, 'Retention exclusions must be visible in diagnostics')
+        await retained.removeClient()
+        configureRendererCache(DEFAULT_CACHE_SETTINGS)
         client.clear()
 
         // Keep emitting excluded local polling faster than the save interval.
@@ -101,6 +123,9 @@ try {
         await client.fetchQuery({ queryKey: ['fundamentals', 'FIXTURE'],
           queryFn: async () => { throw Error('Synthetic offline refresh') } }).catch(() => {})
         client.setQueryData(['quotes', 'AGED'], envelope(50, Date.now() - 120_000))
+        const closingAt = Date.now() - 2 * 86_400_000
+        client.setQueryData(['quotes', 'CLOSED-SESSION'], { ...envelope(75, closingAt),
+          meta: { ...envelope(75, closingAt).meta, expiresAt: Date.now() + 86_400_000 } }, { updatedAt: closingAt })
         client.setQueryData(['browser'], { secret: 'synthetic private tab' })
         client.setQueryData(['agents'], { secret: 'synthetic private conversation' })
         persister.persistClient(snapshot())
@@ -118,7 +143,7 @@ try {
       check(!client.getQueryData(['browser']) && !client.getQueryData(['agents']), 'Private state entered the remote cache')
       check(client.getQueryState(['fundamentals', 'FIXTURE']).status === 'success', 'Refresh failure erased the usable snapshot')
       let providerRequests = 0
-      for (const key of [['quotes', 'FIXTURE'], ['fundamentals', 'FIXTURE']]) {
+      for (const key of [['quotes', 'FIXTURE'], ['fundamentals', 'FIXTURE'], ['quotes', 'CLOSED-SESSION']]) {
         const result = await warmStartupQuery(client, { queryKey: key, staleTime: Infinity,
           queryFn: async () => { providerRequests++; throw Error('Fresh data must not refetch: ' + JSON.stringify(key) + ' ' + JSON.stringify(client.getQueryState(key))) } })
         check(result.meta.freshness === 'cached', 'Restored data must be labelled cached')
@@ -145,24 +170,55 @@ try {
           return envelope(51)
         } })
       check(seenOldData && providerRequests === 1, 'Refresh must retain expired data and fetch only the expired key')
-      createRoot(document.getElementById('root')).render(<main>Saved snapshot ready: {client.getQueryData(['quotes', 'FIXTURE']).data.price} (cached)</main>)
+      useDataHealth.getState().setStartup({ durationMs: 1, planned: 1, timings: [],
+        pages: { stocks: { state: 'loading', cachedAt: Date.now() - 86_400_000 } } })
+      createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}>
+        <main>Saved snapshot ready: {client.getQueryData(['quotes', 'FIXTURE']).data.price} (cached)</main>
+        <CachedPageNotice page="stocks" /><CachePanel />
+      </QueryClientProvider>)
       await wait(100)
       check(document.querySelector('main').textContent.includes('101 (cached)'), 'Restored UI did not paint its ready content')
-      return 'PASS: incremental migration, non-starving polling, no redundant writes, clear/write race, close flush, real restart, cache privacy, fresh startup reuse and selective expiry refresh'
+      check(document.body.textContent.includes('Refreshing in the background; you can use this page.'), 'Cached page must explain the pending refresh')
+      check(document.querySelectorAll('meter').length === 3, 'Cache Settings must show three independent budgets')
+      check(document.body.textContent.includes('due for a check'), 'Cache Settings must describe revalidation without declaring market history invalid')
+      check(document.body.textContent.includes('next regular session'), 'Cache Settings must explain session-aware reuse')
+      const button = [...document.querySelectorAll('button')].find(button => button.textContent === 'Use defaults')
+      button.click(); await wait(50)
+      document.querySelector('form').requestSubmit(); await wait(100)
+      check(document.body.textContent.includes('Cache limits saved and applied.'), 'Cache settings must apply through the preload API')
+      useDataHealth.getState().setStartup({ durationMs: 1, planned: 1, timings: [],
+        pages: { stocks: { state: 'failed', cachedAt: Date.now() - 86_400_000, reason: 'Fixture provider unavailable' } } })
+      await wait(50)
+      check(document.body.textContent.includes('Update failed. Fixture provider unavailable'), 'Refresh failure must remain visible over saved content')
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      return 'PASS: retention configuration, cache controls, saved-page notices, incremental migration, polling, clear/write race, close flush, real restart, privacy and selective refresh'
     }
   ` }, bundle: true, platform: 'browser', format: 'iife', tsconfig: join(root, 'tsconfig.json'), outfile: join(directory, 'renderer.js') })
-  await writeFile(join(directory, 'index.html'), '<!doctype html><html><body><div id="root"></div><script src="renderer.js"></script></body></html>')
+  await writeFile(join(directory, 'index.html'), '<!doctype html><html><head><link rel="stylesheet" href="theme.css"></head><body class="bg-bg text-text"><div id="root"></div><script src="renderer.js"></script></body></html>')
   await build({ stdin: { resolveDir: root, loader: 'ts', contents: `
     import assert from 'node:assert/strict'
     import { app, BrowserWindow, ipcMain } from 'electron'
     import { join } from 'node:path'
+    import { mkdir, writeFile } from 'node:fs/promises'
     import { CHANNELS } from './electron/shared/contract'
+    import { DEFAULT_CACHE_SETTINGS, validCacheSettings } from './electron/shared/cachePolicy'
     import { configureRendererCacheShutdown, rendererCacheFlushed } from './electron/services/rendererCacheShutdown'
     const directory = ${JSON.stringify(directory)}
     app.setPath('userData', join(directory, 'profile'))
     app.whenReady().then(async () => {
-      const window = new BrowserWindow({ show: false, webPreferences: {
-        preload: join(directory, 'preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false } })
+      let settings = { ...DEFAULT_CACHE_SETTINGS }
+      const partition = { bytes: 0, entries: 0, expiredEntries: 0, evictions: 0 }
+      const status = () => ({ data: { settings, service: { market: partition, assets: partition,
+        hits: 0, misses: 0, expired: 0, loads: 0, forced: 0, errors: 0 } },
+        meta: { source: 'synthetic cache', fetchedAt: Date.now(), freshness: 'fresh' }, errors: [] })
+      ipcMain.handle(CHANNELS.cacheStatus, () => status())
+      ipcMain.handle(CHANNELS.configureCache, (_event, value) => {
+        assert(validCacheSettings(value))
+        settings = value
+        return status()
+      })
+      const window = new BrowserWindow({ width: 1280, height: 900, show: false, webPreferences: {
+        preload: join(directory, 'preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } })
       configureRendererCacheShutdown(window)
       ipcMain.handle(CHANNELS.rendererCacheFlushed, event => {
         assert.equal(event.sender, window.webContents)
@@ -172,6 +228,9 @@ try {
         await window.loadFile(join(directory, 'index.html'))
         console.log(await window.webContents.executeJavaScript('window.runChecks(' + JSON.stringify(process.argv[2]) + ')'))
         if (process.argv[2] === 'restore') {
+          const screenshots = ${JSON.stringify(join(root, 'out/maintenance'))}
+          await mkdir(screenshots, { recursive: true })
+          await writeFile(join(screenshots, 'cache-settings.png'), (await window.webContents.capturePage()).toPNG())
           const unresponsive = new BrowserWindow({ show: false })
           configureRendererCacheShutdown(unresponsive, 50)
           const started = Date.now()

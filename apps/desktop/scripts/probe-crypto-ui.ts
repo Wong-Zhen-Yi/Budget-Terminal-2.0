@@ -25,27 +25,41 @@ try {
         import { CryptoPage } from './src/pages/CryptoPage'
         import { queryKeys } from './src/api/client'
         import { applyEquityMarketUpdate } from './src/api/equityStream'
-        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        import { buildTasks } from './src/api/prefetch'
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } })
         const check = (ok, message) => { if (!ok) throw Error(message) }
         const settle = () => new Promise(resolve => setTimeout(resolve, 200))
         const text = () => document.body.innerText
         let mode = 'success'
         let ready = false
         let forced = false
+        let chartCalls = 0, chartRequest, copied = '', opened = ''
         const good = {
-          fetchedAt: '2026-09-29T10:00:00',
+          fetchedAt: new Date().toISOString(),
           heatmap: { tiles: Array.from({ length: 30 }, (_, i) => ({ rank: i+1, symbol: 'C'+i, name: 'Coin '+i, price: 100, changePct: 1, marketCap: 1e9, volume: 1e6, source: 'Yahoo Finance' })), coverage: { loaded: 30, total: 30 }, updatedAt: '2026-09-29T10:00:00' },
           quotes: Object.fromEntries(['BTC','ETH','SOL','XRP','BNB','COIN','MSTR','BMNR','IBIT','ETHA','BITQ'].map(label => [label, { label, price: 100, changePct: 1, volume: 1e6, marketCap: 1e9 }])), global: { marketCap: 2e12, volume24h: 1e11, changePct: 1 },
           fearGreed: { value: 70, classification: 'Greed', source: 'Alternative.me' },
-          hyperliquid: { fetchedAt: '2026-09-29T10:00:00', markets: [
+          hyperliquid: { fetchedAt: new Date().toISOString(), markets: [
             { symbol: 'BTC', markPrice: 110, changePct: 10, fundingHourlyPct: 0.00125, openInterestUsd: 550, volume24hUsd: 1000 },
             { symbol: 'ETH', markPrice: 20, changePct: null, fundingHourlyPct: -0.002, openInterestUsd: 60, volume24hUsd: 2000 }
           ] },
-          news: [{ id: 'fixture', title: 'Crypto market fixture headline', time: '10:00', source: 'Fixture' }], progress: { heatmap: 'loaded', quotes: 'loaded', market: 'loaded', news: 'loaded', hyperliquid: 'loaded' }
+          news: [{ id: 'fixture', title: 'Crypto market fixture headline', time: '10:00', source: 'Fixture', url: 'https://example.com/crypto' }], progress: { heatmap: 'loaded', quotes: 'loaded', market: 'loaded', news: 'loaded', hyperliquid: 'loaded' }
         }
         good.quotes.COIN = { ...good.quotes.COIN, source: 'Hyperliquid equity perp (xyz:COIN)',
           volumeSource: 'Yahoo Finance stock volume (shares)', marketCapSource: 'Yahoo Finance', metadataAsOf: Date.now() }
         Object.assign(window.api, {
+          apiUsage: async () => ({ providers: [], sampledAt: Date.now() }),
+          writeClipboard: async value => { copied = value },
+          openExternal: async url => { opened = url },
+          chartsHistory: async request => {
+            chartCalls++; chartRequest = request
+            const base = request.symbol.startsWith('ETH') ? 20 : 110
+            const candles = Array.from({length: 60}, (_, index) => ({time: Math.floor(Date.now()/3600000)*3600 - (60-index)*3600,
+              open: base+index, close: base+index+1, high: base+index+2, low: base+index-1, volume: 42+index}))
+            return { data: { symbol: request.symbol, interval: request.interval === '4 Hours' ? '4h' : '1h', candles,
+              stats: { source: 'Hyperliquid crypto perp ('+request.symbol.replace('-PERP','')+')' } },
+              meta: { freshness: 'fresh', source: 'Hyperliquid crypto perp', fetchedAt: Date.now() }, errors: [] }
+          },
           crypto: async request => {
             while (!ready) await new Promise(resolve => setTimeout(resolve, 25))
             forced = request.force
@@ -56,22 +70,29 @@ try {
           }
         })
         window.runProbe = async () => {
+          const chartTask = buildTasks(undefined, undefined, {stocks:'AAPL',fundamentals:'AAPL'}, {year:2026,month:9,earningsYear:2026,ipoYear:2026}).find(task => task.label === 'Crypto perpetual chart')
+          check(chartTask, 'Crypto startup chart task is missing')
+          await chartTask.run(client, 9)
+          check(chartRequest.background && chartRequest.backgroundOrder === 9, 'Startup chart lost background priority')
           createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><CryptoPage onStatusChange={() => {}} /></QueryClientProvider>)
           await settle()
           check(text().includes('Fetching crypto market data'), 'Missing loading state')
           ready = true
           await settle()
           check(text().includes('Snapshot coverage 30/30'), 'Missing complete heatmap')
+          check(chartCalls === 1, 'First visit re-fetched prepared chart history')
+          check(document.querySelector('.crypto-chart-canvas').dataset.candleCount === '60', 'Prepared candles missing')
+          check(document.querySelectorAll('canvas').length > 0, 'Candlestick canvas did not render')
           check(document.querySelectorAll('[title^="Rank:"]').length === 30, 'Missing heatmap tiles')
-          check(text().includes('BTC PERP') && text().includes('+0.00125%'), 'Missing Hyperliquid market or incorrect funding units')
+          check(text().includes('BTC-PERP') && text().includes('+0.00125%'), 'Missing Hyperliquid market or incorrect funding units')
           check(text().includes('-0.00200%'), 'Negative funding must keep its sign')
-          const perps = [...document.querySelectorAll('section')].find(section => section.textContent.includes('Hyperliquid Perpetuals'))
-          check(perps.querySelector('tbody tr').textContent.startsWith('ETH PERP'), 'Perpetuals must initially sort by numeric volume')
+          const perps = document.querySelector('[aria-label="Perpetual markets"]')
+          check(perps.querySelector('tbody tr').textContent.startsWith('ETH-PERP'), 'Perpetuals must initially sort by numeric volume')
           const volumeHeader = [...perps.querySelectorAll('th')].find(header => header.textContent.includes('24h volume'))
           volumeHeader.click()
           await settle()
-          check(perps.querySelector('tbody tr').textContent.startsWith('BTC PERP'), 'Perpetual market sorting failed')
-          check(text().includes('live feed') && text().includes('REST fallback'), 'Live feed and fallback must be visible')
+          check(perps.querySelector('tbody tr').textContent.startsWith('BTC-PERP'), 'Perpetual market sorting failed')
+          check(text().includes('Live feed') && text().includes('REST fallback'), 'Live feed and fallback must be visible')
           check(document.querySelector('[title="Yahoo Finance stock volume (shares)"]').textContent === '1M sh', 'Stock volume must show shares instead of dollars')
           const beforeStream = client.getQueryState(queryKeys.crypto).dataUpdatedAt
           applyEquityMarketUpdate(client, { quotes: [], candles: [], hyperliquid: { ...good.hyperliquid,
@@ -80,11 +101,27 @@ try {
           check(perps.textContent.includes('$12,345'), 'Shared stream did not update the rendered perpetual table')
           check(client.getQueryData(queryKeys.crypto).data.quotes.BTC.price === 100, 'Perp stream replaced a spot watchlist price')
           check(client.getQueryState(queryKeys.crypto).dataUpdatedAt === beforeStream, 'Live table must preserve other sources freshness')
+          document.querySelector('[aria-label="Chart ETH perpetual"]').click(); await settle()
+          check(chartRequest.symbol === 'ETH-PERP' && text().includes('ETH-PERP / USD'), 'Watchlist failed to change the chart market')
+          ;[...document.querySelectorAll('button')].find(button => button.textContent === '4h').click(); await settle()
+          check(chartRequest.interval === '4 Hours' && chartRequest.range === '3M', 'Timeframe lost its native interval/range')
+          const countBeforeSearch = chartCalls
+          const input = document.querySelector('#crypto-market-search')
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'ETH')
+          input.dispatchEvent(new Event('input', {bubbles:true})); await settle()
+          check(perps.querySelectorAll('tbody tr').length === 1 && perps.querySelector('tbody tr').textContent.includes('ETH-PERP'), 'Market search failed')
+          check(chartCalls === countBeforeSearch, 'Search sent a history request')
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '')
+          input.dispatchEvent(new Event('input', {bubbles:true})); await settle()
+          ;[...document.querySelectorAll('button')].find(button => button.textContent === 'Copy snapshot').click(); await settle()
+          check(copied.includes('BTC') && copied.includes('ETH'), 'Copy snapshot lost watchlist data')
+          document.querySelector('.crypto-news-item').click(); await settle()
+          check(opened === 'https://example.com/crypto', 'News link failed')
           const spotSnapshot = client.getQueryData(queryKeys.crypto)
           client.setQueryData(queryKeys.crypto, { ...spotSnapshot, data: { ...spotSnapshot.data,
             quotes: { ...spotSnapshot.data.quotes, BTC: { ...spotSnapshot.data.quotes.BTC, source: 'Hyperliquid crypto perp' } } } })
           await settle()
-          check(document.querySelector('.grid-cols-6').textContent.includes('BTC PERP'), 'Perpetual fallback must be labelled in the headline price tile')
+          check(document.querySelector('.crypto-ribbon').textContent.includes('BTC PERP'), 'Perpetual fallback must be labelled in the headline ribbon')
           client.setQueryData(queryKeys.crypto, spotSnapshot)
           const refresh = () => [...document.querySelectorAll('button')].find(b => b.textContent === 'Refresh').click()
           mode = 'partial'
@@ -98,7 +135,7 @@ try {
           await settle()
           check(text().includes('Hyperliquid HTTP 429'), 'Missing Hyperliquid failure')
           check(text().includes('4/5 stages ready'), 'Hyperliquid outage must prevent full readiness')
-          check(!text().includes('BTC PERP') && text().includes('Snapshot coverage 30/30'), 'Hyperliquid outage must preserve other data')
+          check(perps.textContent.includes('No matching perpetual markets') && text().includes('Snapshot coverage 30/30'), 'Hyperliquid outage must preserve other data')
           mode = 'reject'
           refresh()
           await settle()
@@ -108,16 +145,29 @@ try {
           await settle()
           check(text().includes('Snapshot coverage 30/30'), 'Refresh did not recover')
           check(!text().includes('IPC disconnected'), 'Recovered page retained error')
+          client.setQueryData(['apiUsage'], {sampledAt:Date.now(), providers:[{id:'coingecko',throttled:true,cooldownMs:42000}]})
+          await settle()
+          const cooldownButton = [...document.querySelectorAll('button')].find(button => button.textContent.startsWith('Retry in'))
+          check(cooldownButton?.disabled && text().includes('CoinGecko rate limited'), 'Cooldown must disable refresh and remain visible')
+          check(document.querySelector('.crypto-chart-canvas').dataset.candleCount === '60' && text().includes('Crypto market fixture headline'), 'Cooldown erased healthy data')
+          client.setQueryData(['apiUsage'], {sampledAt:Date.now(),providers:[]}); await settle()
           const snapshot = client.getQueryData(queryKeys.crypto)
           client.setQueryData(queryKeys.crypto, { ...snapshot, meta: { ...snapshot.meta, freshness: 'stale', fetchedAt: Date.now() - 180000 } })
           await settle()
           check(text().includes('Snapshot updated at'), 'Retained snapshot timestamp missing')
           check(!document.body.innerHTML.includes('Snapshot expired'), 'Expired snapshot warning escaped Settings')
-          return 'PASS: loading, 30 tiles, Hyperliquid funding units and sorting, isolated outages, partial readiness, forced refresh and recovery'
+          client.setQueryData(queryKeys.crypto, snapshot)
+          document.querySelector('[aria-label="Chart BTC perpetual"]').click()
+          ;[...document.querySelectorAll('button')].find(button => button.textContent === '1h').click()
+          await settle()
+          const lastCell = document.querySelector('.crypto-heatmap-cell:last-child')
+          check(lastCell.getBoundingClientRect().bottom <= document.querySelector('.crypto-breadth').getBoundingClientRect().bottom, 'The last heatmap row is clipped')
+          return 'PASS: prepared startup chart, watchlist/timeframes, real candlestick rendering, market search/sort, source separation, copy/news actions, cooldown, partial readiness and recovery'
         }
       `,
     },
     bundle: true, jsx: 'automatic', write: false, format: 'iife',
+    loader: { '.css': 'empty' },
     alias: { '@': join(root, 'src'), '@shared': join(root, 'electron/shared') },
     define: { 'process.env.NODE_ENV': '"production"' },
   })
@@ -140,9 +190,16 @@ try {
         await new Promise(resolve => setTimeout(resolve, 300));
         window.webContents.invalidate();
         fs.writeFileSync(${JSON.stringify(screenshot)}, (await window.webContents.capturePage()).toPNG());
+        window.setSize(1600, 1200);
+        await new Promise(resolve => setTimeout(resolve, 200));
+        fs.writeFileSync(${JSON.stringify(join(root, 'out', 'crypto-smoke-full.png'))}, (await window.webContents.capturePage()).toPNG());
         window.setSize(1280, 720);
         await new Promise(resolve => setTimeout(resolve, 200));
         if (await window.webContents.executeJavaScript('document.documentElement.scrollWidth > window.innerWidth')) throw Error('Narrow layout overflows');
+        window.setSize(720, 850);
+        await new Promise(resolve => setTimeout(resolve, 200));
+        if (await window.webContents.executeJavaScript('document.documentElement.scrollWidth > window.innerWidth')) throw Error('Mobile layout overflows');
+        fs.writeFileSync(${JSON.stringify(join(root, 'out', 'crypto-smoke-narrow.png'))}, (await window.webContents.capturePage()).toPNG());
         console.log('PASS: minimum supported window size and screenshot'); app.exit(0);
       } catch (error) { console.error(error); app.exit(1); }
     });

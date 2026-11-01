@@ -11,7 +11,11 @@ import { captureSources, observeSource, type SourceSnapshot } from './sourceHeal
 import {
   FRESHNESS,
   SERVICE_CACHE_MAX_BYTES,
+  ASSET_CACHE_MAX_BYTES,
 } from '../shared/freshness.js'
+import type { ServiceCacheStats } from '../shared/cachePolicy.js'
+import { MIB } from '../shared/cachePolicy.js'
+import { readCacheSettings } from './cacheSettings.js'
 
 export const TTL = FRESHNESS
 
@@ -32,6 +36,7 @@ const DEGRADED_RETRY_MS = 10_000
 interface CacheOptions {
   path?: string
   maxBytes?: number
+  assetMaxBytes?: number
   memoryMaxBytes?: number
   memoryMaxEntries?: number
 }
@@ -97,6 +102,8 @@ export class TtlCache {
   private readonly disk
   private readonly memoryMaxBytes: number
   private readonly memoryMaxEntries: number
+  private maxBytes: number
+  private assetMaxBytes: number
   private memoryBytes = 0
   private pendingBytes = 0
   private readonly pending = new Set<Promise<unknown>>()
@@ -107,17 +114,34 @@ export class TtlCache {
   private closing?: Promise<void>
   private readonly writes = new Set<Promise<void>>()
   private readonly loads = new Map<string, object>()
+  private readonly counters = { hits: 0, misses: 0, expired: 0, loads: 0, forced: 0, errors: 0 }
+  private lastError?: string
 
   constructor(options: CacheOptions = {}) {
     this.memoryMaxBytes = options.memoryMaxBytes ?? 128 * 1024 * 1024
     this.memoryMaxEntries = options.memoryMaxEntries ?? 5_000
+    this.maxBytes = options.maxBytes ?? SERVICE_CACHE_MAX_BYTES
+    this.assetMaxBytes = options.assetMaxBytes ?? ASSET_CACHE_MAX_BYTES
     this.disk = options.path ? createWorkerRpc(() => serviceWorker('cacheWorker', {
-      path: options.path, maxBytes: options.maxBytes ?? SERVICE_CACHE_MAX_BYTES,
+      path: options.path, maxBytes: this.maxBytes, assetMaxBytes: this.assetMaxBytes,
     })) : undefined
   }
 
   get memoryUsage(): { bytes: number; entries: number; pendingBytes: number } {
     return { bytes: this.memoryBytes, entries: this.entries.size, pendingBytes: this.pendingBytes }
+  }
+
+  async configureLimits(maxBytes: number, assetMaxBytes: number): Promise<void> {
+    if (![maxBytes, assetMaxBytes].every(value => Number.isFinite(value) && value > 0)) throw new Error('Invalid cache budget')
+    await this.disk?.call<void>({ kind: 'configure', maxBytes, assetMaxBytes })
+    this.maxBytes = maxBytes
+    this.assetMaxBytes = assetMaxBytes
+  }
+
+  async stats(): Promise<ServiceCacheStats> {
+    const empty = () => ({ bytes: 0, entries: 0, expiredEntries: 0, evictions: 0 })
+    const disk = await this.disk?.call<Pick<ServiceCacheStats, 'market' | 'assets'>>({ kind: 'stats' })
+    return { market: disk?.market ?? empty(), assets: disk?.assets ?? empty(), ...this.counters, lastError: this.lastError }
   }
 
   private remember(key: string, entry: Entry<unknown>): void {
@@ -138,6 +162,8 @@ export class TtlCache {
   private persist(request: CacheWork): Promise<void> {
     if (!this.disk || this.closed) return Promise.resolve()
     const pending = this.disk.call<void>(request).catch(error => {
+      this.counters.errors += 1
+      this.lastError = error instanceof Error ? error.message : String(error)
       console.warn('[cache] Persistence unavailable; cached memory remains usable.', error)
     })
     this.pending.add(pending)
@@ -172,6 +198,8 @@ export class TtlCache {
           this.remember(key, entry)
         }
       } catch (error) {
+        this.counters.errors += 1
+        this.lastError = error instanceof Error ? error.message : String(error)
         console.warn('[cache] Could not restore cached data.', error)
         return null
       } finally {
@@ -179,7 +207,7 @@ export class TtlCache {
         if (!reads.count) this.reads.delete(key)
       }
     }
-    if (!entry) return null
+    if (!entry) { this.counters.misses += 1; return null }
     if (entry.value === undefined || (entry.snapshot !== undefined
       && (!usableSnapshot(entry.snapshot) || entry.snapshot.failures.some(repairedSeriesCacheFailure)))) {
       await this.delete(key)
@@ -189,7 +217,8 @@ export class TtlCache {
     const degraded = entry.snapshot?.stale || Boolean(entry.snapshot?.failures.length)
     const expiresAt = Math.min(entry.storedAt + entry.ttlMs, entry.snapshot?.expiresAt ?? Infinity,
       degraded ? entry.storedAt + DEGRADED_RETRY_MS : Infinity)
-    if (now > expiresAt && !allowStale) return null
+    if (now > expiresAt && !allowStale) { this.counters.expired += 1; return null }
+    this.counters.hits += 1
     if (this.entries.has(key)) {
       this.entries.delete(key)
       this.entries.set(key, entry)
@@ -292,7 +321,7 @@ export class TtlCache {
 
   async resolve<T>(
     key: string,
-    ttlMs: number,
+    ttlMs: number | ((value: T) => number),
     loader: () => Promise<T>,
     { force = false } = {},
   ): Promise<CachedResult<T>> {
@@ -316,15 +345,18 @@ export class TtlCache {
     this.failures.delete(key)
 
     const token = {}
+    this.counters.loads += 1
+    if (force) this.counters.forced += 1
     this.loads.set(key, token)
     const pending = captureSources(loader)
       .then(async ({ value, snapshot }) => {
         const storedAt = Date.now()
-        if (this.loads.get(key) === token) await this.set(key, value, ttlMs, snapshot)
+        const lifetime = typeof ttlMs === 'function' ? ttlMs(value) : ttlMs
+        if (this.loads.get(key) === token) await this.set(key, value, lifetime, snapshot)
         const fetchedAt = Math.min(storedAt, snapshot?.fetchedAt ?? storedAt)
         return { value, ageSeconds: Math.max(0, Date.now() - fetchedAt) / 1000, fromCache: false,
           snapshot: { ...snapshot, fetchedAt, fromCache: false, stale: snapshot?.stale ?? false,
-            expiresAt: ttlMs > 0 ? Math.min(storedAt + ttlMs, snapshot?.expiresAt ?? Infinity,
+            expiresAt: lifetime > 0 ? Math.min(storedAt + lifetime, snapshot?.expiresAt ?? Infinity,
               snapshot?.stale || snapshot?.failures.length ? storedAt + DEGRADED_RETRY_MS : Infinity) : snapshot?.expiresAt,
             failures: snapshot?.failures ?? [] } }
       })
@@ -347,7 +379,7 @@ export class TtlCache {
 
   async resolveWithStaleFallback<T>(
     key: string,
-    ttlMs: number,
+    ttlMs: number | ((value: T) => number),
     loader: () => Promise<T>,
     { force = false } = {},
   ): Promise<CachedResult<T> & { stale: boolean }> {
@@ -370,4 +402,6 @@ export class TtlCache {
 
 // Probe processes use injected/scratch caches and must never touch a developer's real cache.
 const runningProbe = process.argv.some((argument) => /(?:^|[\\/])probe-[^\\/]+\.[cm]?[jt]s$/.test(argument))
-export const cache = new TtlCache(runningProbe ? {} : { path: persistentCachePath() })
+const settings = runningProbe ? undefined : readCacheSettings()
+export const cache = new TtlCache(runningProbe ? {} : { path: persistentCachePath(),
+  maxBytes: settings!.marketMiB * MIB, assetMaxBytes: settings!.assetsMiB * MIB })

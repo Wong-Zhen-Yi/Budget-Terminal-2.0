@@ -4,9 +4,15 @@ import type { PersistedClient, Persister } from '@tanstack/query-persist-client-
 import {
   CACHE_SCHEMA_VERSION,
   FRESHNESS,
-  RENDERER_CACHE_MAX_BYTES,
-  RENDERER_CACHE_MAX_AGE_MS,
 } from '@shared/freshness'
+import { DEFAULT_CACHE_SETTINGS, MIB, validCacheSettings, type CacheSettings } from '@shared/cachePolicy'
+
+let cacheSettings = { ...DEFAULT_CACHE_SETTINGS }
+export function configureRendererCache(settings: CacheSettings): void {
+  if (validCacheSettings(settings)) cacheSettings = { ...settings }
+}
+export const rendererCacheSettings = (): CacheSettings => ({ ...cacheSettings })
+const retentionMs = () => cacheSettings.retentionDays * 86_400_000
 
 const DATABASE = `budget-terminal-renderer-cache-v${CACHE_SCHEMA_VERSION}`
 const STORE = 'clients'
@@ -14,7 +20,7 @@ const CLIENT_KEY = 'remote-query-client'
 
 // Local records and private agent state are managed by their own stores.
 const LOCAL_ROOTS = new Set(['browser', 'agents', 'agentImages', 'notifications', 'articles', 'portfolio', 'cards', 'settings', 'personalFinance'])
-const LARGE_ROOTS = new Set(['newsThumbnail', 'youtubeThumbnail', 'newsPreview'])
+const LARGE_ROOTS = new Set(['newsThumbnail', 'youtubeThumbnail', 'newsPreview', 'apiUsage', 'cacheStatus'])
 
 export const RENDERER_CACHE_BUSTER = `budget-terminal-renderer-v${CACHE_SCHEMA_VERSION}-equity-perps-v2`
 
@@ -37,7 +43,7 @@ export function shouldPersistRemoteQuery(query: Query): boolean {
 export function queryFreshness(queryKey: QueryKey): number {
   const root = String(queryKey[0] ?? '')
   if (LOCAL_ROOTS.has(root)) return Infinity
-  if (root === 'quotes') return FRESHNESS.quotes
+  if (root === 'quotes' || root === 'backtestQuotes') return FRESHNESS.quotes
   if (root === 'chart' || root.startsWith('charts') || root === 'forexHistory') {
     const interval = String(queryKey[2] ?? queryKey[1] ?? '')
     return /Minute|Hour|1m|5m|15m|1h/.test(interval) ? FRESHNESS.chartIntraday : FRESHNESS.chartDaily
@@ -49,10 +55,10 @@ export function queryFreshness(queryKey: QueryKey): number {
   if (root === 'newsThumbnail') return FRESHNESS.newsImage
   if (root.startsWith('news')) return FRESHNESS.newsPage
   if (root === 'stocks') return FRESHNESS.chartDaily
-  if (root === 'defeatbetaTerminal') return 60 * 60_000
+  if (root === 'defeatbetaTerminal') return FRESHNESS.publishedData
   if (root === 'backtest') return FRESHNESS.chartDaily
   if (root === 'priceScreen') return FRESHNESS.marketCap
-  if (root === 'discoveryUniverse') return FRESHNESS.chartDaily
+  if (root === 'discoveryUniverse') return FRESHNESS.directory
   if (root === 'discoveryStartup') return FRESHNESS.quotes
   if (root === 'fundamentals' || root === 'fundamentalsPage' || root === 'valuation') return FRESHNESS.profile
   if (root === 'fx') return FRESHNESS.fx
@@ -158,7 +164,7 @@ function jsonBytes(value: unknown): number {
 // each startup result does not serialize all previously loaded histories again.
 const querySizes = new WeakMap<object, number>()
 
-function* trimClient(client: PersistedClient): Generator<void, PersistedClient> {
+function* trimClient(client: PersistedClient, maxBytes = cacheSettings.rendererMiB * MIB): Generator<void, PersistedClient> {
   const candidates = [...client.clientState.queries]
     .sort((left, right) => right.state.dataUpdatedAt - left.state.dataUpdatedAt)
   const empty = { ...client, clientState: { ...client.clientState, queries: [] } }
@@ -171,7 +177,7 @@ function* trimClient(client: PersistedClient): Generator<void, PersistedClient> 
       querySizes.set(query.state, size)
     }
     yield
-    if (used + size > RENDERER_CACHE_MAX_BYTES) continue
+    if (used + size > maxBytes) continue
     queries.push(query)
     used += size
   }
@@ -179,8 +185,8 @@ function* trimClient(client: PersistedClient): Generator<void, PersistedClient> 
 }
 
 /** Keep the newest successful page snapshots within the explicit renderer budget. */
-export function trimPersistedClient(client: PersistedClient): PersistedClient {
-  const steps = trimClient(client)
+export function trimPersistedClient(client: PersistedClient, maxBytes?: number): PersistedClient {
+  const steps = trimClient(client, maxBytes)
   let step = steps.next()
   while (!step.done) step = steps.next()
   return step.value
@@ -190,8 +196,9 @@ export function trimPersistedClient(client: PersistedClient): PersistedClient {
 export async function trimPersistedClientInBackground(
   client: PersistedClient,
   cancelled: () => boolean = () => false,
+  maxBytes?: number,
 ): Promise<PersistedClient | undefined> {
-  const steps = trimClient(client)
+  const steps = trimClient(client, maxBytes)
   let sliceStarted = performance.now()
   while (!cancelled()) {
     const step = steps.next()
@@ -238,8 +245,28 @@ function savedMetadata(query: SavedQuery): SavedMetadata {
 
 type ClientHeader = PersistedClient & { incremental?: boolean }
 
+export interface RendererCacheStats {
+  bytes: number
+  saved: number
+  restored: number
+  expiredOnRestore: number
+  evictions: number
+  lastSavedAt?: number
+  lastRestoredAt?: number
+  error?: string
+  refreshes: Record<string, { reused: number; missing: number; expired: number; recovery: number }>
+}
+
+const refreshes: RendererCacheStats['refreshes'] = {}
+export function recordCacheDecision(root: string, reason: 'reused' | 'missing' | 'expired' | 'recovery'): void {
+  const counters = refreshes[root] ??= { reused: 0, missing: 0, expired: 0, recovery: 0 }
+  counters[reason] += 1
+}
+
 /** Independent instances let restart probes use real IndexedDB, never a user's profile. */
-export function createRendererQueryPersister({ database = DATABASE, throttleMs = 1_000 } = {}): Persister & { flush: () => Promise<void> } {
+export function createRendererQueryPersister({ database = DATABASE, throttleMs = 1_000, loadSettings }: {
+  database?: string; throttleMs?: number; loadSettings?: () => Promise<void>
+} = {}): Persister & { flush: () => Promise<void>; stats: () => RendererCacheStats } {
   let pendingWrite: ReturnType<typeof setTimeout> | undefined
   let latestClient: PersistedClient | undefined
   let writing: Promise<void> | undefined
@@ -247,6 +274,11 @@ export function createRendererQueryPersister({ database = DATABASE, throttleMs =
   let lastWrite = 0
   let savedQueries = new Map<string, SavedMetadata>()
   let initialized = false
+  const stats: Omit<RendererCacheStats, 'refreshes'> = { bytes: 0, saved: 0, restored: 0, expiredOnRestore: 0, evictions: 0 }
+  const summarize = () => {
+    stats.saved = savedQueries.size
+    stats.bytes = [...savedQueries.values()].reduce((sum, query) => sum + query.size, 0)
+  }
 
   function schedule(): void {
     // Throttle, never debounce: Browser/Agent polling can emit cache events faster
@@ -282,7 +314,7 @@ export function createRendererQueryPersister({ database = DATABASE, throttleMs =
         }
         let used = jsonBytes({ ...trimmed, clientState: { ...trimmed.clientState, queries: [] } })
         for (const [hash, entry] of [...next].sort((a, b) => b[1].updatedAt - a[1].updatedAt)) {
-          if (Date.now() - entry.updatedAt > RENDERER_CACHE_MAX_AGE_MS || used + entry.size > RENDERER_CACHE_MAX_BYTES) next.delete(hash)
+          if (Date.now() - entry.updatedAt > retentionMs() || used + entry.size > cacheSettings.rendererMiB * MIB) next.delete(hash)
           else used += entry.size
         }
         const removed = [...savedQueries.keys()].filter(hash => !next.has(hash))
@@ -307,9 +339,16 @@ export function createRendererQueryPersister({ database = DATABASE, throttleMs =
         if (currentGeneration === generation) {
           initialized = true
           savedQueries = next
+          stats.evictions += removed.length + changed.filter(query => !next.has(query.queryHash)).length
+          stats.lastSavedAt = Date.now()
+          stats.error = undefined
+          summarize()
         }
       } catch (error) {
-        if (currentGeneration === generation) console.warn('[query-cache] Could not persist renderer data.', error)
+        if (currentGeneration === generation) {
+          stats.error = error instanceof Error ? error.message : String(error)
+          console.warn('[query-cache] Could not persist renderer data.', error)
+        }
       } finally {
         lastWrite = Date.now()
         writing = undefined
@@ -320,6 +359,7 @@ export function createRendererQueryPersister({ database = DATABASE, throttleMs =
   }
 
   return {
+    stats: () => ({ ...stats, refreshes: structuredClone(refreshes) }),
     persistClient: client => {
       latestClient = client
       schedule()
@@ -335,6 +375,7 @@ export function createRendererQueryPersister({ database = DATABASE, throttleMs =
     restoreClient: async () => {
       const currentGeneration = generation
       try {
+        await loadSettings?.()
         const restored = await transact(database, 'readonly', transaction => {
           const header = transaction.objectStore(STORE).get(CLIENT_KEY)
           const snapshots = transaction.objectStore(SNAPSHOTS).getAll()
@@ -345,17 +386,22 @@ export function createRendererQueryPersister({ database = DATABASE, throttleMs =
           }
         })
         if (!restored || currentGeneration !== generation) return undefined
-        const marked = markRestored({ ...restored, clientState: { ...restored.clientState, queries: restored.clientState.queries.filter(query => Date.now() - query.state.dataUpdatedAt <= RENDERER_CACHE_MAX_AGE_MS) } })
+        const marked = markRestored({ ...restored, clientState: { ...restored.clientState, queries: restored.clientState.queries.filter(query => Date.now() - query.state.dataUpdatedAt <= retentionMs()) } })
+        stats.restored = marked.clientState.queries.length
+        stats.expiredOnRestore = restored.clientState.queries.length - stats.restored
+        stats.lastRestoredAt = Date.now()
         if (!initialized && restored.incremental) {
           // Hydration reuses the weak data identities without retaining evicted histories.
           savedQueries = new Map([
-            ...restored.clientState.queries.filter(query => Date.now() - query.state.dataUpdatedAt > RENDERER_CACHE_MAX_AGE_MS),
+            ...restored.clientState.queries.filter(query => Date.now() - query.state.dataUpdatedAt > retentionMs()),
             ...marked.clientState.queries,
           ].map(query => [query.queryHash, savedMetadata(query)]))
           initialized = true
+          summarize()
         }
         return marked
       } catch (error) {
+        stats.error = error instanceof Error ? error.message : String(error)
         console.warn('[query-cache] Could not restore renderer data.', error)
         return undefined
       }
@@ -364,6 +410,7 @@ export function createRendererQueryPersister({ database = DATABASE, throttleMs =
       generation += 1
       initialized = false
       savedQueries.clear()
+      summarize()
       clearTimeout(pendingWrite)
       pendingWrite = undefined
       latestClient = undefined
@@ -380,7 +427,17 @@ export function createRendererQueryPersister({ database = DATABASE, throttleMs =
   }
 }
 
-export const rendererQueryPersister = createRendererQueryPersister()
+export const rendererQueryPersister = createRendererQueryPersister({
+  loadSettings: async () => {
+    // The preload is optional in isolated probes; production always supplies it.
+    if (typeof window !== 'undefined' && typeof window.api?.cacheStatus === 'function') {
+      try {
+        const result = await window.api.cacheStatus()
+        if (result?.data?.settings) configureRendererCache(result.data.settings)
+      } catch (error) { console.warn('[query-cache] Cache preferences unavailable; using defaults.', error) }
+    }
+  },
+})
 
 export function removeRendererCache(): PromiseLike<void> | void {
   return rendererQueryPersister.removeClient()

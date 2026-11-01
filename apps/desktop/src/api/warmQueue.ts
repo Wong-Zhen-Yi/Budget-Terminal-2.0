@@ -1,6 +1,6 @@
 import type { QueryClient, QueryKey } from '@tanstack/react-query'
-import { pinStartupQuery } from './queryMemory'
-import { queryFreshness } from './queryPersistence'
+import { pinStartupQuery, QUERY_IDLE_MS } from './queryMemory'
+import { queryFreshness, recordCacheDecision } from './queryPersistence'
 import type { Envelope } from '@shared/contract'
 import { effectiveFreshness, registerSnapshot } from './snapshotHealth'
 
@@ -16,7 +16,15 @@ export class StartupLoadError extends Error {
   }
 }
 
-export type StartupSnapshotObserver = (queryKey: QueryKey, result: unknown, error?: unknown) => void
+export type StartupSnapshotObserver = ((queryKey: QueryKey, result: unknown, error?: unknown, cached?: boolean) => void) & { owner?: object }
+
+function cacheLifetime(cached: Envelope<unknown> | undefined, updatedAt: number | undefined, requested: number): number {
+  // A service can schedule the next useful check at the next market session.
+  // Keep explicit zero-time requests and invalidation as refresh overrides.
+  const expiry = cached?.meta?.expiresAt
+  return requested !== 0 && updatedAt && expiry !== undefined && Number.isFinite(expiry)
+    ? Math.max(0, expiry - updatedAt) : requested
+}
 
 function startupFailureReason(result: unknown, fallback: string): string {
   const envelope = result as { meta?: { failureReason?: string }; errors?: Array<{ reason?: string }> } | null
@@ -34,9 +42,18 @@ export function assertStartupReady(result: unknown): void {
 
 /** Fetch dependent snapshots before classifying the complete initial page. */
 export async function warmStartupSnapshot<T>(client: QueryClient, options: Parameters<typeof warmQuery<T>>[1], observe?: StartupSnapshotObserver): Promise<T> {
-  pinStartupQuery(client, options.queryKey)
+  const pinned = pinStartupQuery(client, options.queryKey, observe?.owner)
+  const cached = client.getQueryData<Envelope<unknown>>(options.queryKey)
+  // Publish restored content before waiting for the provider queue. Readiness still
+  // waits for this task's refresh, so expired data is never silently called ready.
+  const state = client.getQueryState(options.queryKey)
+  const lifetime = cacheLifetime(cached, state?.dataUpdatedAt, Math.min(options.staleTime, queryFreshness(options.queryKey)))
+  const freshness = cached?.meta && effectiveFreshness(cached, Date.now(), queryFreshness(options.queryKey))
+  const refreshing = state?.isInvalidated || state?.status === 'error' || Date.now() - (state?.dataUpdatedAt ?? 0) >= lifetime
+    || freshness === 'stale' || freshness === 'partial'
+  if (cached !== undefined && cached?.meta?.freshness !== 'failed' && refreshing) observe?.(options.queryKey, cached, undefined, true)
   try {
-    const result = await warmQuery(client, { ...options, gcTime: Infinity }, STARTUP_TIMEOUT_MS)
+    const result = await warmQuery(client, { ...options, gcTime: pinned ? Infinity : QUERY_IDLE_MS }, STARTUP_TIMEOUT_MS)
     observe?.(options.queryKey, result)
     return result
   } catch (error) {
@@ -95,14 +112,19 @@ export async function warmQuery<T>(client: QueryClient, options: {
   const cached = client.getQueryData<Envelope<unknown>>(options.queryKey)
   const lifetime = queryFreshness(options.queryKey)
   const freshness = cached?.meta && effectiveFreshness(cached, Date.now(), lifetime)
-  const needsRecovery = freshness === 'stale' || freshness === 'partial' || freshness === 'failed'
+  const state = client.getQueryState(options.queryKey)
+  const needsRecovery = state?.status === 'error' || freshness === 'stale' || freshness === 'partial' || freshness === 'failed'
+  const staleTime = cacheLifetime(cached, state?.dataUpdatedAt, Math.min(options.staleTime, lifetime))
+  const expired = needsRecovery || !state?.dataUpdatedAt || Date.now() - state.dataUpdatedAt >= staleTime
+  recordCacheDecision(String(options.queryKey[0]), cached === undefined ? 'missing'
+    : state?.status === 'error' || freshness === 'partial' || freshness === 'failed' ? 'recovery' : expired || state?.isInvalidated ? 'expired' : 'reused')
   // The outer deadline also covers joining an existing foreground fetch or a query
   // paused by React Query while offline. Never cancel a query another page is using.
   const result = await withDeadline(() => client.fetchQuery({
     ...options,
     // A recent partial/failed snapshot is not a successful warm-up. Refetch it on
     // recovery instead of reusing it until its normal (possibly hours-long) TTL.
-    staleTime: needsRecovery ? 0 : Math.min(options.staleTime, lifetime),
+    staleTime: needsRecovery ? 0 : staleTime,
     retry: false,
     networkMode: 'always',
     queryFn: () => withDeadline(async () => {

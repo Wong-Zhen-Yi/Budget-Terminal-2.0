@@ -423,7 +423,6 @@ export class AgentsService {
       this.state.connected = true
       this.state.busy = false
       this.state.activity = 'idle'
-      this.add('activity', 'Codex connected. Budget Terminal MCP tools are available for research, screenshots and requested saved-data edits.')
     } catch (error) {
       if (generation === this.generation) { this.resetConnection(); this.failure(error) }
     }

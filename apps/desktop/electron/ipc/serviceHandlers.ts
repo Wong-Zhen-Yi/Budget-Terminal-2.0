@@ -82,6 +82,10 @@ import { CHANNELS } from '../shared/contract.js'
 import { yahooProvider } from '../services/provider.js'
 import { runWithPriority } from '../services/yahoo/client.js'
 import { getApiUsageSnapshot } from '../services/apiUsage.js'
+import { configureCache, getCacheStatus } from '../services/cacheControl.js'
+import type { CacheSettings } from '../shared/cachePolicy.js'
+import { getHeatmapProgress } from '../services/heatmap.js'
+import { normalizeEtfKey } from '../shared/heatmap.js'
 import { publishSavedDataChanged } from '../services/savedDataEvents.js'
 import type { SavedDataDomain } from '../shared/contract.js'
 
@@ -99,6 +103,9 @@ export function registerServiceHandlers(register: RegisterService): void {
   const provider = yahooProvider
 
   register(CHANNELS.apiUsage, () => getApiUsageSnapshot())
+  register(CHANNELS.cacheStatus, () => getCacheStatus())
+  register(CHANNELS.configureCache, (settings: CacheSettings) => configureCache(settings))
+  register(CHANNELS.heatmapProgress, (etf: string) => getHeatmapProgress(normalizeEtfKey(etf)))
   register(CHANNELS.browserStatus, async () => (await import('../services/browser.js')).browserStatus())
   register(CHANNELS.browserResearch, async (request: unknown) => (await import('../services/browser.js')).browserResearch(request))
 

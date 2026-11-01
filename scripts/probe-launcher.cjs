@@ -14,10 +14,17 @@ const { version: electronVersion } = require('electron/package.json')
 
 const log = { log() {}, error() {} }
 function assertCurrentStartupMessages(messages) {
+  assert(messages.some(message => message.includes('MCP startup fix:') && message.includes('desktop-only cache controls')), 'Every launch mode must announce the MCP startup fix')
+  assert(messages.some(message => message.includes('Stock data reuse:') && message.includes('next regular session') && message.includes('All pages still preload')), 'Every launch mode must announce session-aware stock caching')
+  assert(messages.some(message => message.includes('Cache startup:') && message.includes('256 MiB') && message.includes('2 GiB') && message.includes('separate 512 MiB image budget') && message.includes('All pages still preload')), 'Every launch mode announces saved pages, configurable cache budgets and all-page loading')
+  assert(messages.some(message => message.includes('Heatmap fills holdings and quote colours progressively')), 'All launch modes announce progressive heatmap loading')
+  assert(messages.some(message => message.includes('Heatmap every 30 minutes') && message.includes('Personal Finance FX hourly') && message.includes('Dashboard headlines every 5 minutes') && message.includes('Backtest preloads once with no automatic refresh')), 'Every launch mode must announce the current refresh schedule and manual Backtest behavior')
+  assert(messages.some(message => message.includes('completed pages refresh while slower pages load') && message.includes('recovered warnings clear')), 'Every launch mode must announce current startup freshness and recovery behavior')
   assert(messages.some(message => message.includes('Yahoo load reduction:') && message.includes('15 minutes') && message.includes('All pages still preload')), 'Every launch mode must announce shared streams and independently cached stock metadata')
   assert(messages.some(message => message.includes('Agent recovery:') && message.includes('Continue research')), 'All launch modes announce current agent recovery behavior')
   assert(messages.some(message => message.includes('3 requests per second') && message.includes('up to 3 background requests') && message.includes('All pages still preload')), 'Every launch mode must describe current Yahoo startup pacing and all-page loading')
-  assert(messages.some(message => message.includes('API USAGE footer') && message.includes('not a provider-reported quota or loading progress')), 'Explain API usage without implying a provider quota')
+  assert(messages.some(message => message.includes('Settings API Usage') && message.includes('not a provider-reported quota or loading progress')), 'Explain API usage without implying a provider quota')
+  assert(messages.some(message => message.includes('bottom status strip is hidden') && message.includes('monitoring continue')), 'Launchers must describe the hidden strip and continuing background work')
   assert(messages.some(message => message.includes('Trading Volumes circles') && message.includes('median dollar volume')), 'Every launch mode must announce current Trading Volumes and Beta behavior')
 }
 for (const version of ['22.23.4', '22.24.0', '24.22.1', '24.23.0', '26.12.1', '26.13.0']) assert(supportedNodeVersion(version), version)

@@ -5,6 +5,9 @@ import { failed } from '../shared/envelope.js'
 import type { ScreenshotPayload, ScreenshotRequest } from '../shared/screenshot.js'
 import type { Envelope } from '../shared/contract.js'
 
+// Local diagnostics and cache maintenance are desktop-only, outside MCP permissions.
+const desktopOnlyChannels = [CHANNELS.cacheStatus, CHANNELS.configureCache, CHANNELS.heatmapProgress]
+
 export function createServiceRoutes(screenshot: (request: ScreenshotRequest) => Promise<Envelope<ScreenshotPayload>> = async () =>
   failed({ screenshots: [] }, 'Screenshot capture requires an Electron window.', 'Electron page capture'),
 ): Map<Operation, (request: unknown) => unknown> {
@@ -12,6 +15,9 @@ export function createServiceRoutes(screenshot: (request: ScreenshotRequest) => 
   registerServiceHandlers(<Request>(channel: string, run: (request: Request) => unknown) => {
     registered.set(channel, (request) => run(request as Request))
   })
+  for (const channel of desktopOnlyChannels) {
+    if (!registered.delete(channel)) throw new Error(`Missing desktop-only service route: ${channel}`)
+  }
   const routes = new Map<Operation, (request: unknown) => unknown>()
   for (const operation of Object.keys(operations) as Operation[]) {
     if (operation === 'screenshot') {
@@ -27,6 +33,8 @@ export function createServiceRoutes(screenshot: (request: ScreenshotRequest) => 
     if (!run) throw new Error(`Missing MCP service route: ${operation}`)
     routes.set(operation, run)
   }
-  if (routes.size !== registered.size + 1) throw new Error('Service registry and MCP allowlist differ. Update the MCP catalog.')
+  if (routes.size !== registered.size + 1) {
+    throw new Error('Service registry and MCP allowlist differ. Classify new services as MCP tools or desktop-only routes in electron/mcp/routes.ts.')
+  }
   return routes
 }

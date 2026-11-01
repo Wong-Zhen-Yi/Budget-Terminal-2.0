@@ -45,7 +45,7 @@ export function SemiconductorsPage({ onStatusChange, onNavigate }: {
   const [detailed, setDetailed] = useState(false)
   const rows = query.data?.data.rows ?? initialRows
   const busy = query.isFetching
-  // The payload combines five-minute prices, ten-minute news and twelve-hour
+  // The payload combines hourly market snapshots, ten-minute news and twelve-hour
   // profiles. Its dependency expiry, not the oldest profile's retrieval age,
   // determines whether the whole snapshot is still usable as current data.
   const freshnessMs = query.data?.meta.expiresAt !== undefined ? Infinity : FRESHNESS.semiconductors

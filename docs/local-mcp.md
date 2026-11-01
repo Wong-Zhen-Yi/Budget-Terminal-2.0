@@ -41,6 +41,10 @@ rotates its session token and port; existing MCP clients recover on their next
 call. Do not retry a write after a timeout or interrupted response until you have
 read the saved record to check whether it completed.
 
+Cache status, cache configuration and heatmap loading progress remain desktop-only
+services. They are explicitly excluded from the MCP route registry so adding these
+local controls does not prevent MCP or the Agents workspace from starting.
+
 ## Permissions, approval and diagnostics
 
 MCP defaults to **read-only**, including upgrades without a saved MCP policy.

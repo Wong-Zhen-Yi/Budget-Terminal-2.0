@@ -8,7 +8,7 @@ import { cache, TTL } from './cache.js'
 import { fetchSecFactsDocument } from './secEdgar.js'
 import { getFundamentals } from './yahoo/fundamentals.js'
 import { getQuote } from './yahoo/quotes.js'
-import { trackApiRequest } from './apiUsage.js'
+import { coinGeckoClient, COINGECKO_HEADERS as HEADERS, COINGECKO_TIMEOUT_MS as TIMEOUT_MS } from './coingecko.js'
 
 /**
  * The BMNR page's data — three independent lanes over three different hosts.
@@ -16,12 +16,9 @@ import { trackApiRequest } from './apiUsage.js'
  * No arithmetic lives in this file. It fetches, hands the raw documents to
  * `buildBmnrPayload` in `shared/bmnr.ts`, and reports which lanes answered.
  *
- * **CoinGecko deliberately stays outside `paced()`**, on the `services/fearGreed.ts` and
- * `services/crypto.ts` precedent: the rate gate models Yahoo's 429 behaviour and halves its
- * own budget on one, so letting a CoinGecko hiccup throttle the Dashboard would be strictly
- * worse than letting this page's live panel fail alone. SEC has its own 200ms limiter and
- * disk cache inside `secEdgar.ts`. Only the three Yahoo quotes go through the Yahoo gate,
- * and their helpers already call it.
+ * CoinGecko uses the same endpoint cache, keyless pacing and enforced cooldown as
+ * Crypto. It stays independent of Yahoo's rate gate. SEC has its own limiter and
+ * disk cache; Yahoo quotes use their existing helpers and shared gate.
  */
 
 export const BMNR_SOURCE = 'BMNR treasury'
@@ -30,14 +27,6 @@ export const BMNR_SEC_SOURCE = 'SEC EDGAR'
 export const BMNR_MARKET_SOURCE = 'Yahoo Finance'
 
 const TREASURY_URL = 'https://api.coingecko.com/api/v3/companies/public_treasury/ethereum'
-
-/** Per-host agent string, the same pattern `services/crypto.ts` uses for its own calls. */
-const HEADERS = {
-  'User-Agent': 'BudgetTerminal/1.0 bmnr-page',
-  Accept: 'application/json, text/plain, */*',
-}
-
-const TIMEOUT_MS = 12_000
 
 /**
  * Block labels ride on `EnvelopeError.symbol`, which is what lets the page's `warningOf`
@@ -50,11 +39,7 @@ export const BMNR_BLOCK_LABELS: Record<BmnrBlock, string> = {
 }
 
 async function getJson(url: string): Promise<unknown> {
-  return trackApiRequest('coingecko', async () => {
-    const response = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(TIMEOUT_MS) })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    return response.json()
-  })
+  return coinGeckoClient.getJson(url)
 }
 
 export interface BmnrFetchResult {
@@ -163,9 +148,9 @@ async function fetchMarket(force: boolean): Promise<BmnrMarketInput> {
 }
 
 /**
- * The page has no refresh timer — Refresh and F5 are the only ways it refetches. The TTL
- * matches `TTL.crypto` because it is the same CoinGecko free tier and the same rate budget;
- * it only stops a tab revisit from spending that budget again.
+ * The startup scheduler maintains the page snapshot. The shared CoinGecko client
+ * caches slower treasury disclosures independently of market prices, so refreshing
+ * quotes does not repeatedly spend the treasury endpoint budget.
  */
 export async function getBmnr(force = false): Promise<BmnrFetchResult> {
   const result = (await cache.resolve('bmnr:page', TTL.bmnr, () => fetchBmnr(force), { force })).value

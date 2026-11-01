@@ -198,7 +198,7 @@ export function hasUnavailableStage(progress: Record<CryptoStage, CryptoStageSta
 /** The reference's `fetched_at[-8:]` — the `HH:MM:SS` tail of an ISO stamp. */
 export function clockTail(isoStamp: string): string {
   const text = String(isoStamp ?? '').trim()
-  return text ? text.slice(-8) : '--'
+  return /[T ](\d{2}:\d{2}:\d{2})/.exec(text)?.[1] ?? (text ? text.slice(-8) : '--')
 }
 
 /** `datetime.now().isoformat(timespec='seconds')`, in local time as the reference is. */

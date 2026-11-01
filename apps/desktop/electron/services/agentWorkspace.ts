@@ -44,6 +44,10 @@ export class AgentWorkspace {
       if (new Set(this.data.conversations.map(chat => chat.id)).size !== this.data.conversations.length
         || new Set(this.data.trackers.map(tracker => tracker.id)).size !== this.data.trackers.length) throw new Error('Duplicate IDs in Agents data.')
       // Saved definitions survive, but background work always needs explicit consent after launch.
+      for (const chat of this.data.conversations) {
+        const messages = chat.messages.filter(message => message.role !== 'activity' || message.text !== 'Codex connected. Budget Terminal MCP tools are available for research, screenshots and requested saved-data edits.')
+        if (messages.length !== chat.messages.length) { chat.messages = messages; this.dirty = true }
+      }
       for (const tracker of this.data.trackers) {
         if (tracker.running) tracker.error = 'The app closed during this check. Review and start again.'
         tracker.enabled = false; tracker.running = false; tracker.nextRunAt = null

@@ -30,7 +30,7 @@ export function portfolioChartRefreshMs(target: PortfolioChartTarget, envelope?:
   if (failed || (envelope && ['failed', 'partial', 'stale'].includes(envelope.meta.freshness))) return 30_000
   const lifetime = queryFreshness(target.queryKey)
   const expiresAt = envelope ? envelope.meta.expiresAt ?? envelope.meta.fetchedAt + lifetime : now + lifetime
-  return Math.max(10_000, Math.min(lifetime, expiresAt - now + 250))
+  return Math.max(10_000, expiresAt - now + 250)
 }
 
 /** Exact page keys for every book, including inactive and read-only portfolios. */

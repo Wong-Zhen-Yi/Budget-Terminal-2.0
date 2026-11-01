@@ -16,7 +16,7 @@ import {
   selectHeatmapRow,
   type HeatmapRow,
 } from '@shared/heatmap'
-import { useHeatmap, useRefreshHeatmap } from '@/api/heatmapQueries'
+import { useHeatmap, useHeatmapProgress, useRefreshHeatmap } from '@/api/heatmapQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { IndexHeatmap } from '@/components/heatmap/IndexHeatmap'
 import { Button } from '@/components/ui/Button'
@@ -56,13 +56,16 @@ export function HeatmapPage({
   const refresh = useRefreshHeatmap()
   const [refreshing, setRefreshing] = useState(false)
 
-  const payload = query.data?.data.etf === etf ? query.data.data : undefined
-  const loading = query.isFetching
+  const loading = query.isFetching || refreshing
+  const preview = useHeatmapProgress(etf, loading)
+  const completed = query.data?.data.etf === etf ? query.data.data : undefined
+  // Keep the previous map during refresh until new prices begin arriving.
+  const payload = preview && (preview.quoteCoverage > 0 || !completed?.holdings.length) ? preview : completed
 
   useEffect(() => {
     // No file behind this page, so the status bar's path slot stays empty.
     onStatusChange([{ label: 'Heatmap', envelope: query.data, error: query.error, enabled: query.isEnabled, loading }], '')
-  }, [onStatusChange, query.data, loading])
+  }, [onStatusChange, query.data, query.error, query.isEnabled, loading])
 
   const rows = useMemo(
     () => (payload && payload.etf === etf ? buildHeatmapRows(payload, etf, interval) : []),
@@ -88,7 +91,9 @@ export function HeatmapPage({
   /** `_p17_render_interval_result`'s status line, including its loaded-count rescue. */
   const status = useMemo(() => {
     if (loading) {
-      return `Loading ${etfLabel(etf)} holdings heatmap - ${intervalLabel(interval)}...`
+      return payload?.holdings.length
+        ? `Loading ${etfLabel(etf)} heatmap - ${summary.quoteCoverage}/${summary.holdingsLoaded} quotes available - ${intervalLabel(interval)}...`
+        : `Loading ${etfLabel(etf)} holdings heatmap - ${intervalLabel(interval)}...`
     }
     const meta = query.data?.meta
     if (!payload || meta?.freshness === 'failed') {
@@ -102,7 +107,7 @@ export function HeatmapPage({
     // hiding how much of the map did work.
     if ((meta?.freshness === 'partial' || meta?.freshness === 'stale') && meta.failureReason) return `${loaded} ${meta.failureReason}`
     return loaded
-  }, [loading, query.data, query.error, payload, rows.length, etf, interval])
+  }, [loading, query.data, query.error, payload, rows.length, etf, interval, summary])
 
   const missing = Math.max(0, summary.holdingsLoaded - summary.quoteCoverage)
   const unclassified = rows.filter(row => row.sector === UNCLASSIFIED)
@@ -136,7 +141,7 @@ export function HeatmapPage({
             : 'text-warn',
       title: summary.holdingsLoaded
         ? missing
-          ? `${missing} of ${summary.holdingsLoaded} holdings have no quote and render as no-data tiles.`
+          ? `${missing} of ${summary.holdingsLoaded} holdings ${loading ? 'are waiting for quotes' : 'have no quote'} and render as no-data tiles.`
           : `All ${summary.holdingsLoaded} holdings are quoted.`
         : undefined,
     },
@@ -204,7 +209,7 @@ export function HeatmapPage({
         ))}
       </div>
 
-      <p className="shrink-0 text-right text-2xs text-text-muted" title={status}>
+      <p className="shrink-0 text-right text-2xs text-text-muted" title={status} role="status">
         {status}
       </p>
 

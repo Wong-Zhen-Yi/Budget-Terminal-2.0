@@ -55,7 +55,11 @@ export function useQuotes(holdings: string[], includeMacro = false): UseQueryRes
     queryKey: queryKeys.quotes(holdings),
     queryFn: () => api.quotes({ holdings, force: forcing() }),
     enabled: includeMacro || holdings.length > 0,
-    refetchInterval: QUOTE_REFRESH_MS,
+    refetchInterval: query => {
+      const meta = query.state.data?.meta
+      return query.state.status !== 'error' && meta && (meta.freshness === 'fresh' || meta.freshness === 'cached') && meta.expiresAt !== undefined
+        ? Math.max(QUOTE_REFRESH_MS, meta.expiresAt - Date.now()) : QUOTE_REFRESH_MS
+    },
     refetchIntervalInBackground: false,
     staleTime: QUOTE_REFRESH_MS / 2,
   })

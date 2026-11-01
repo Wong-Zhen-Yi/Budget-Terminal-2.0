@@ -1,4 +1,5 @@
 import type { BackgroundRequest } from './contract.js'
+import { FRESHNESS } from './freshness.js'
 
 export const DEFEATBETA_SECTIONS = ['prices', 'profile', 'officers', 'statements', 'shares', 'dividends', 'splits', 'earnings', 'news', 'transcripts', 'filings', 'breakdown'] as const
 export type DefeatBetaSection = typeof DEFEATBETA_SECTIONS[number]
@@ -19,7 +20,7 @@ export interface DefeatBetaTerminalPayload {
 }
 
 export const TERMINAL_TABS = ['Overview', 'Profile', 'Financials', 'Valuation', 'Growth', 'Profitability', 'DCF', 'News', 'SEC Filings', 'Breakdown'] as const
-export const TERMINAL_TTL = 60 * 60_000
+export const TERMINAL_TTL = FRESHNESS.publishedData
 export const terminalNumber = (value: TerminalValue | undefined): number | null => typeof value === 'number' && Number.isFinite(value) ? value : null
 export const terminalLabel = (value: string): string => value.replace(/_/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase())
 

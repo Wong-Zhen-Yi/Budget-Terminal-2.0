@@ -5,7 +5,7 @@ import { queryFreshness } from './queryPersistence'
 
 const pageLabels = new Map(TABS.map(tab => [tab.id, tab.label]))
 const labels: Record<string, string[]> = {
-  portfolio: ['Holdings'], personalFinance: ['Finance'], quotes: ['Quotes'],
+  portfolio: ['Holdings'], personalFinance: ['Finance'], quotes: ['Quotes'], backtestQuotes: ['Quotes'],
   targets: ['Targets'], news: ['News'], chart: ['Chart'], stocks: ['Stocks'],
   chartsHistory: ['Charts'], options: ['Options'], optionQuotes: ['Option marks'],
   optionsExpirations: ['Options expirations'], optionsChain: ['Options chain'],
@@ -66,7 +66,7 @@ export function startupRefreshDelay(snapshots: Array<{ key: QueryKey; result: un
     // Local queries are driven by change events, not timers.
     if (!Number.isFinite(lifetime)) continue
     const expiry = envelope.meta.expiresAt ?? envelope.meta.fetchedAt + lifetime
-    delay = Math.min(delay, Math.max(10_000, Math.min(lifetime, expiry - now + 250)))
+    delay = Math.min(delay, Math.max(10_000, expiry - now + 250))
   }
   return delay
 }

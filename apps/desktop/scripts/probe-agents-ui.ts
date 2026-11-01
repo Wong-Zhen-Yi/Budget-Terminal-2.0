@@ -77,7 +77,6 @@ try {
         reads++
         if (reads === 1) {
           state.connected = true; state.models = models; state.model = models[0].id
-          state.messages.push({ id: 'startup', role: 'activity', text: 'Codex connected.', at: Date.now() })
         }
         return envelope()
       }
@@ -124,7 +123,8 @@ try {
         render(); await settle()
         check(reads === 1 && commands.length === 0, 'Opening a warmed Agents page must neither reload nor connect')
         const suggestions = [...document.querySelectorAll('.agents-suggestions button')]
-        check(suggestions.length === 2, 'Startup connection activity must not hide the two portfolio quick prompts')
+        check(suggestions.length === 2, 'Quiet startup retains the two portfolio quick prompts')
+        check(!document.querySelector('.agents-transcript').textContent.includes('Codex connected.'), 'Startup must not show a connection announcement in chat')
         check(agentQuickPrompts[0].prompt === 'Summarize portfolio news' && agentQuickPrompts[1].prompt === 'Brief me on my portfolio for the day', 'Quick prompts retain their original one-line text')
         for (const embeddedMode of [false, true]) {
           embedded = embeddedMode; render(); await settle()
@@ -231,7 +231,7 @@ try {
         fail = true; await click('Connect Codex')
         check(document.querySelector('[role=alert]').textContent.includes('Fixture connection unavailable'), 'Visible connection failures')
         fail = false; await click('Connect Codex')
-        check(document.querySelectorAll('.agents-message').length === 4, 'Conversation survives disconnect/reconnect')
+        check(document.querySelectorAll('.agents-message').length === 3, 'Conversation survives disconnect/reconnect without a connection notice')
         await paste()
         check(document.querySelectorAll('.agents-image-previews img').length === 1, 'Ctrl+V clipboard image produces a preview')
         await click('×')
@@ -254,7 +254,7 @@ try {
         await click('Send message')
         check(document.documentElement.scrollWidth <= innerWidth, 'No horizontal overflow')
         await click('Dismiss update')
-        const savedMessages = state.messages.filter(message => message.id !== 'startup').slice(0, 3)
+        const savedMessages = state.messages.slice(0, 3)
         const beforeNewChat = commands.length
         await paste(); await fill('agent-message', 'Unsent draft')
         const selectedModel = document.getElementById('agent-model').value

@@ -36,7 +36,7 @@ interface DataHealthState {
   record: (page: string, panels: PanelStatus[]) => void
   clear: () => void
   startup: { durationMs: number; planned: number; timings: StartupTiming[]; pageOrder?: string[];
-    pages?: Record<string, { state: 'loading' | 'ready' | 'degraded' | 'failed' | 'idle'; reason?: string }> } | null
+    pages?: Record<string, { state: 'loading' | 'ready' | 'degraded' | 'failed' | 'idle'; reason?: string; cachedAt?: number }> } | null
   setStartup: (startup: DataHealthState['startup']) => void
   startupLoads: StartupLoads
   recordStartupLoad: (page: string, durationMs: number, failed: boolean) => void

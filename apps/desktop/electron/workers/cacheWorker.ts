@@ -9,6 +9,7 @@ export type CacheWork =
   | { kind: 'touch'; key: string; now: number }
   | { kind: 'set'; key: string; value: Uint8Array; storedAt: number; ttlMs: number; retention: string }
   | { kind: 'delete'; key: string }
+  | { kind: 'configure'; maxBytes: number; assetMaxBytes: number }
   | { kind: 'clear' | 'flush' | 'close' | 'stats' }
 
 type Request = CacheWork & { id: number }
@@ -23,9 +24,14 @@ db.exec(`CREATE TABLE IF NOT EXISTS cache_entries (
 db.exec(`DELETE FROM cache_entries WHERE schema_version != ${CACHE_SCHEMA_VERSION}`)
 db.exec('CREATE INDEX IF NOT EXISTS cache_entries_size_bytes ON cache_entries(size_bytes)')
 const select = db.prepare('SELECT value, stored_at, ttl_ms FROM cache_entries WHERE key = ? AND schema_version = ?')
-const size = db.prepare('SELECT size_bytes FROM cache_entries WHERE key = ?')
+const size = db.prepare('SELECT size_bytes, retention FROM cache_entries WHERE key = ?')
 const sum = () => (db.prepare('SELECT COALESCE(SUM(size_bytes), 0) AS total FROM cache_entries').get() as { total: number }).total
+const assetSum = () => (db.prepare("SELECT COALESCE(SUM(size_bytes), 0) AS total FROM cache_entries WHERE retention = 'asset'").get() as { total: number }).total
 let total = sum()
+let assetTotal = assetSum()
+let marketMaxBytes: number = workerData.maxBytes
+let assetMaxBytes: number = workerData.assetMaxBytes ?? workerData.maxBytes
+const evictions = { market: 0, assets: 0 }
 let transactions = 0
 let pruningRuns = 0
 let accessWrites = 0
@@ -44,17 +50,26 @@ const failure = (id: number, error: unknown) => port.postMessage({ id, error: {
 } })
 
 function prune(): void {
-  if (total <= workerData.maxBytes) return
-  pruningRuns += 1
-  const target = Math.floor(workerData.maxBytes * 0.9)
-  const candidates = db.prepare(`SELECT key, size_bytes FROM cache_entries ORDER BY CASE
+  const groups = [{ part: 'market' as const, bytes: total - assetTotal }, { part: 'assets' as const, bytes: assetTotal }]
+  for (const group of groups) {
+    const limit = group.part === 'assets' ? assetMaxBytes : marketMaxBytes
+    if (group.bytes <= limit) continue
+    pruningRuns += 1
+    const target = Math.floor(limit * 0.9)
+    let bytes = group.bytes
+    const candidates = db.prepare(`SELECT key, size_bytes FROM cache_entries
+    WHERE ${group.part === 'assets' ? "retention = 'asset'" : "retention != 'asset'"} ORDER BY CASE
     WHEN stored_at + ttl_ms < ? AND retention = 'snapshot' THEN 0
     WHEN retention = 'intraday' THEN 1 WHEN retention = 'asset' THEN 2
     WHEN retention = 'snapshot' THEN 3 ELSE 4 END, last_accessed ASC`).all(Date.now()) as Array<{ key: string; size_bytes: number }>
-  for (const entry of candidates) {
-    if (total <= target) break
-    remove.run(entry.key)
-    total -= entry.size_bytes
+    for (const entry of candidates) {
+      if (bytes <= target) break
+      remove.run(entry.key)
+      total -= entry.size_bytes
+      bytes -= entry.size_bytes
+      if (group.part === 'assets') assetTotal -= entry.size_bytes
+      evictions[group.part] += 1
+    }
   }
 }
 
@@ -63,29 +78,33 @@ function flush(includeTouches = false): void {
   batchTimer = undefined
   const current = batch
   batch = []
-  if (!current.length && (!includeTouches || !touches.size) && total <= workerData.maxBytes) return
+  const overBudget = () => total - assetTotal > marketMaxBytes || assetTotal > assetMaxBytes
+  if (!current.length && (!includeTouches || !touches.size) && !overBudget()) return
   let vacuum = false
   db.exec('BEGIN IMMEDIATE')
   try {
     for (const request of current) {
       if (request.kind === 'set') {
-        const old = size.get(request.key) as { size_bytes: number } | undefined
+        const old = size.get(request.key) as { size_bytes: number; retention: string } | undefined
         upsert.run(request.key, request.value, request.storedAt, request.ttlMs, request.storedAt,
           request.value.byteLength, request.retention, CACHE_SCHEMA_VERSION)
         total += request.value.byteLength - (old?.size_bytes ?? 0)
+        assetTotal += (request.retention === 'asset' ? request.value.byteLength : 0) - (old?.retention === 'asset' ? old.size_bytes : 0)
       } else if (request.kind === 'delete') {
-        const old = size.get(request.key) as { size_bytes: number } | undefined
+        const old = size.get(request.key) as { size_bytes: number; retention: string } | undefined
         remove.run(request.key)
         touches.delete(request.key)
         total -= old?.size_bytes ?? 0
+        if (old?.retention === 'asset') assetTotal -= old.size_bytes
       } else if (request.kind === 'clear') {
         db.exec('DELETE FROM cache_entries')
         total = 0
+        assetTotal = 0
         touches.clear()
         vacuum = true
       }
     }
-    if (includeTouches || total > workerData.maxBytes) {
+    if (includeTouches || overBudget()) {
       for (const [key, now] of touches) { touch.run(now, key); accessWrites += 1 }
       touches.clear()
     }
@@ -97,6 +116,7 @@ function flush(includeTouches = false): void {
   } catch (error) {
     db.exec('ROLLBACK')
     total = sum()
+    assetTotal = assetSum()
     for (const request of current) failure(request.id, error)
     throw error
   }
@@ -124,7 +144,24 @@ port.on('message', (request: Request) => {
     // Reads, flush and close are barriers for all earlier mutations.
     flush(request.kind === 'flush' || request.kind === 'close')
     if (request.kind === 'get') reply(request.id, select.get(request.key, CACHE_SCHEMA_VERSION))
-    else if (request.kind === 'stats') reply(request.id, { transactions, pruningRuns, accessWrites, bytes: total })
+    else if (request.kind === 'configure') {
+      if (![request.maxBytes, request.assetMaxBytes].every(value => Number.isFinite(value) && value > 0)) throw new Error('Invalid cache budget')
+      marketMaxBytes = request.maxBytes
+      assetMaxBytes = request.assetMaxBytes
+      db.exec('BEGIN IMMEDIATE')
+      try { prune(); db.exec('COMMIT') } catch (error) { db.exec('ROLLBACK'); total = sum(); assetTotal = assetSum(); throw error }
+      reply(request.id)
+    } else if (request.kind === 'stats') {
+      const rows = db.prepare(`SELECT CASE WHEN retention = 'asset' THEN 'assets' ELSE 'market' END AS part,
+        COUNT(*) AS entries, SUM(size_bytes) AS bytes,
+        SUM(CASE WHEN stored_at + ttl_ms < ? THEN 1 ELSE 0 END) AS expiredEntries
+        FROM cache_entries GROUP BY part`).all(Date.now()) as Array<{ part: 'market' | 'assets'; entries: number; bytes: number; expiredEntries: number }>
+      const partitions = Object.fromEntries(['market', 'assets'].map(part => [part, {
+        bytes: 0, entries: 0, expiredEntries: 0, evictions: evictions[part as keyof typeof evictions],
+        ...rows.find(row => row.part === part),
+      }]))
+      reply(request.id, { transactions, pruningRuns, accessWrites, bytes: total, ...partitions })
+    }
     else {
       if (request.kind === 'close') { clearInterval(maintenance); db.close() }
       reply(request.id)

@@ -8,6 +8,15 @@ import { dehydrate, QueryClient } from '@tanstack/react-query'
 
 import { createWorkerRpc, serviceWorker } from '../electron/services/workerRpc.js'
 import { TtlCache } from '../electron/services/cache.js'
+import { TTL } from '../electron/services/cache.js'
+import { resolveYahooQuote } from '../electron/services/yahoo/quotes.js'
+import { regularMarketRefreshAt } from '../electron/shared/marketRefresh.js'
+import { closeYahooWorker } from '../electron/services/yahoo/client.js'
+import { observeSource } from '../electron/services/sourceHealth.js'
+import { warmStartupQuery } from '../src/api/warmQueue.js'
+import { startupRefreshDelay } from '../src/api/startupHealth.js'
+import { readCacheSettings, saveCacheSettings } from '../electron/services/cacheSettings.js'
+import { DEFAULT_CACHE_SETTINGS } from '../electron/shared/cachePolicy.js'
 import {
   getYahooSeries,
   type YahooSeriesInterval,
@@ -271,7 +280,7 @@ async function incrementalSeriesChecks(): Promise<void> {
     await getYahooSeries({ symbol: 'FIX', start, interval: '1d' }, store, loader)
     assert.equal(calls.length, 1, 'a fresh covered series makes no request')
 
-    now += 6 * 60_000
+    now += TTL.chartDaily + 1
     await getYahooSeries({ symbol: 'FIX', start, interval: '1d' }, store, loader)
     assert.equal(calls.length, 2)
     assert.ok(calls[1].start > start.getTime(), 'a stale series requests only its overlapping tail')
@@ -285,7 +294,7 @@ async function incrementalSeriesChecks(): Promise<void> {
     await getYahooSeries({ symbol: 'FIX', start: earlier, interval: '1d' }, store, loader)
     assert.equal(calls.at(-1)?.start, earlier.getTime(), 'weekly reconciliation reloads the requested range')
 
-    now += 6 * 60_000
+    now += TTL.chartDaily + 1
     fail = true
     const stale = await getYahooSeries({ symbol: 'FIX', start: earlier, interval: '1d' }, store, loader)
     assert.equal(stale.stale, true)
@@ -332,13 +341,167 @@ async function rendererPolicyChecks(): Promise<void> {
   client.clear()
 }
 
+async function marketSessionChecks(): Promise<void> {
+  const originalNow = Date.now
+  const friday = Date.parse('2026-10-30T21:00:00Z')
+  const mondayOpen = Date.parse('2026-11-02T14:30:00Z')
+  const meta = { instrumentType: 'EQUITY', exchangeTimezoneName: 'America/New_York',
+    currentTradingPeriod: { regular: { start: new Date('2026-10-30T13:30:00Z'), end: new Date('2026-10-30T20:00:00Z') } } }
+  assert.equal(regularMarketRefreshAt(meta, TTL.quotes, friday), mondayOpen, 'Weekend reuse must follow the DST change')
+  for (const at of ['2026-10-30T14:00:00Z', '2026-10-30T20:10:00Z', '2026-11-02T15:00:00Z']) {
+    const now = Date.parse(at)
+    assert.equal(regularMarketRefreshAt(meta, TTL.quotes, now), now + TTL.quotes, 'Trading and closing updates retain their cadence, even with old session metadata')
+  }
+  const beforeOpen = Date.parse('2026-10-30T13:29:50Z')
+  assert.equal(regularMarketRefreshAt(meta, TTL.quotes, beforeOpen), meta.currentTradingPeriod.regular.start.getTime(), 'Reuse must end at the opening, even within the normal interval')
+  for (const other of [undefined, {}, { ...meta, instrumentType: 'CRYPTOCURRENCY' },
+    { ...meta, instrumentType: 'FUTURE' }, { ...meta, exchangeTimezoneName: 'Europe/London' }]) {
+    assert.equal(regularMarketRefreshAt(other, TTL.quotes, friday), friday + TTL.quotes, 'Unknown and continuously traded markets keep their normal policy')
+  }
+  assert.equal(regularMarketRefreshAt(meta, TTL.quotes, Date.parse('2026-11-26T15:00:00Z')),
+    Date.parse('2026-11-27T14:30:00Z'), 'Thanksgiving is not a trading day')
+  const halfDay = { ...meta, currentTradingPeriod: { regular: {
+    start: new Date('2026-11-27T14:30:00Z'), end: new Date('2026-11-27T18:00:00Z'),
+  } } }
+  assert.equal(regularMarketRefreshAt(halfDay, TTL.quotes, Date.parse('2026-11-27T19:00:00Z')),
+    Date.parse('2026-11-30T14:30:00Z'), 'Early closes must use the next trading session')
+
+  const path = join(scratch, 'sessions.sqlite')
+  let store = new TtlCache({ path })
+  const client = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } })
+  let now = friday
+  Date.now = () => now
+  let quoteLoads = 0
+  let historyLoads = 0
+  const start = new Date('2026-10-01T00:00:00Z')
+  const quoteLoader = async () => {
+    quoteLoads++
+    return { quotes: [{ date: new Date('2026-10-29'), close: 99 }, { date: new Date('2026-10-30'), close: 100 }],
+      meta: { ...meta, regularMarketPrice: 100, regularMarketTime: new Date('2026-10-30T20:00:00Z') } }
+  }
+  const historyLoader = async () => {
+    historyLoads++
+    return { rows: [row(start.getTime() / 1000, 99), row(Date.parse('2026-10-30') / 1000, 100)], currency: 'USD', longName: 'Fixture', meta }
+  }
+  try {
+    await store.resolve('dynamic-degraded', () => mondayOpen - now, async () => {
+      observeSource({ fetchedAt: now, stale: false, fromCache: false, failures: ['fixture partial feed'] })
+      return 1
+    })
+    now += 10_001
+    assert.equal(await store.get('dynamic-degraded'), null, 'A longer session lifetime must not suppress recovery of partial results')
+    await store.resolve('dynamic-dependency', () => mondayOpen - now, async () => {
+      observeSource({ fetchedAt: now, expiresAt: now + 1_000, stale: false, fromCache: false, failures: [] })
+      return 1
+    })
+    now += 1_001
+    assert.equal(await store.get('dynamic-dependency'), null, 'Earlier dependency checks must still limit a dynamic lifetime')
+    const first = await resolveYahooQuote('SESSION', false, store, quoteLoader)
+    assert.equal(first.snapshot?.expiresAt, mondayOpen)
+    const request = { symbol: 'SESSION', interval: '1d' as const, start }
+    await getYahooSeries(request, store, historyLoader)
+    await store.close()
+    store = new TtlCache({ path })
+    now += 24 * 60 * 60_000
+    for (let index = 0; index < 5; index++) {
+      now += 60 * 60_000
+      const quote = await resolveYahooQuote('SESSION', false, store, quoteLoader)
+      assert.equal(quote.fromCache, true)
+      assert.equal(quote.stale, false)
+      assert.equal(quote.value.asOf, Date.parse('2026-10-30T20:00:00Z'), 'Reuse must preserve the actual trade time')
+      assert.equal((await getYahooSeries(request, store, historyLoader)).fromCache, true)
+    }
+    assert.equal(quoteLoads, 1, 'Restart and repeated weekend reads must not reload unchanged quotes')
+    assert.equal(historyLoads, 1, 'Restart and repeated weekend reads must not reload chart tails')
+
+    const key = ['quotes', 'SESSION']
+    const saved = { data: { price: 100 }, errors: [], meta: { source: 'fixture', freshness: 'cached' as const,
+      fetchedAt: friday, expiresAt: mondayOpen } }
+    client.setQueryData(key, saved, { updatedAt: friday })
+    let rendererLoads = 0
+    const options = { queryKey: key, staleTime: TTL.quotes, queryFn: async () => { rendererLoads++; return saved } }
+    assert.equal(await warmStartupQuery(client, options), saved, 'Startup must reuse a checked closing snapshot even after its normal timer')
+    assert.equal(rendererLoads, 0)
+    assert.equal(startupRefreshDelay([{ key, result: saved }], false, now), mondayOpen - now + 250)
+    await client.invalidateQueries({ queryKey: key, refetchType: 'none' })
+    await warmStartupQuery(client, options)
+    assert.equal(rendererLoads, 1, 'Invalidation must still recheck closed-market data')
+    await warmStartupQuery(client, { ...options, staleTime: 0 })
+    assert.equal(rendererLoads, 2, 'Explicit refresh must still recheck closed-market data')
+    await assert.rejects(client.fetchQuery({ queryKey: key, staleTime: 0, retry: false,
+      queryFn: async () => { throw Error('fixture renderer refresh failed') } }), /fixture renderer refresh failed/)
+    await warmStartupQuery(client, options)
+    assert.equal(rendererLoads, 3, 'A failed renderer refresh must recover before the next session')
+
+    await resolveYahooQuote('SESSION', true, store, quoteLoader)
+    await getYahooSeries({ ...request, force: true }, store, historyLoader)
+    assert.equal(quoteLoads, 2, 'Manual quote refresh bypasses the closed-session cache')
+    assert.equal(historyLoads, 2, 'Manual chart refresh bypasses the closed-session cache')
+    const fallback = await resolveYahooQuote('SESSION', true, store, async () => { throw Error('fixture offline') })
+    assert.equal(fallback.stale, true, 'Closed-market refresh failures remain visible')
+    assert.equal(fallback.value.price, 100)
+
+    now = mondayOpen + 1
+    await resolveYahooQuote('SESSION', false, store, quoteLoader)
+    await getYahooSeries(request, store, historyLoader)
+    assert.equal(quoteLoads, 3, 'A new session resumes quote requests')
+    assert.equal(historyLoads, 3, 'A new session resumes history updates')
+    await warmStartupQuery(client, options)
+    assert.equal(rendererLoads, 4, 'Renderer reuse must also end at the next session')
+  } finally {
+    Date.now = originalNow
+    client.clear()
+    await store.close()
+  }
+}
+
+async function liveMarketChecks(): Promise<void> {
+  const store = new TtlCache()
+  try {
+    const quote = await resolveYahooQuote('IBM', false, store)
+    assert.ok(quote.value.price > 0 && quote.snapshot?.expiresAt! > Date.now())
+    assert.equal((await resolveYahooQuote('IBM', false, store)).fromCache, true)
+    const request = { symbol: 'IBM', interval: '1d' as const, start: new Date(Date.now() - 40 * 86_400_000) }
+    const history = await getYahooSeries(request, store)
+    assert.ok(history.rows.length > 10)
+    assert.equal((await getYahooSeries(request, store)).fromCache, true)
+    assert.equal((await store.stats()).loads, 2, 'Immediate live rereads must not make additional provider loads')
+    console.log(`Live Yahoo cache checks passed: IBM quote and ${history.rows.length} daily bars; next quote check ${new Date(quote.snapshot!.expiresAt!).toISOString()}.`)
+  } finally {
+    await store.close()
+    closeYahooWorker()
+  }
+}
+
 try {
+  assert.deepEqual(readCacheSettings(), DEFAULT_CACHE_SETTINGS)
+  const customSettings = { ...DEFAULT_CACHE_SETTINGS, rendererMiB: 512, marketMiB: 4096, assetsMiB: 128, retentionDays: 60 }
+  await saveCacheSettings(customSettings)
+  assert.deepEqual(readCacheSettings(), customSettings, 'Cache preferences must survive a process restart')
+  await assert.rejects(saveCacheSettings({ ...customSettings, marketMiB: -1 }), /supported range/)
+  await assert.rejects(saveCacheSettings({ ...customSettings, rendererMiB: 256.5 }), /supported range/)
+  assert.deepEqual(readCacheSettings(), customSettings, 'Invalid input must not overwrite valid limits')
+  await saveCacheSettings(DEFAULT_CACHE_SETTINGS)
+  const partitioned = new TtlCache({ path: join(scratch, 'partitioned.sqlite'), maxBytes: 4096, assetMaxBytes: 800, memoryMaxBytes: 0 })
+  try {
+    await partitioned.set('snapshot:protected', 'market'.repeat(100), 60_000)
+    for (let index = 0; index < 8; index++) await partitioned.set(`thumbnail:${index}`, 'image'.repeat(100), 60_000)
+    const stats = await partitioned.stats()
+    assert.equal((await partitioned.get<string>('snapshot:protected'))?.value, 'market'.repeat(100), 'Image pressure must never evict market data')
+    assert.ok(stats.assets.bytes <= 800 && stats.assets.evictions > 0)
+    assert.equal(stats.market.evictions, 0)
+    await partitioned.configureLimits(500, 800)
+    assert.equal(await partitioned.get('snapshot:protected'), null, 'Lowered limits must apply without restarting')
+    assert.ok((await partitioned.stats()).market.evictions > 0)
+  } finally { await partitioned.close() }
   await persistentCacheChecks()
   await memoryAndOrderingChecks()
   await batchingChecks()
   await workerFailureChecks()
   await incrementalSeriesChecks()
   await rendererPolicyChecks()
+  await marketSessionChecks()
+  if (process.argv.includes('--live')) await liveMarketChecks()
   const rendererClient = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } })
   try {
     for (let index = 0; index < 100; index += 1) {
@@ -357,7 +520,7 @@ try {
   } finally {
     rendererClient.clear()
   }
-  console.log('Cache checks passed: restart persistence, serialization, corruption, pruning, single-flight, stale fallback, incremental ranges, bounded memory, batching/touches, worker recovery, clear ordering, shutdown backpressure and cooperative renderer trimming.')
+  console.log('Cache checks passed: restart persistence, serialization, corruption, pruning, single-flight, stale fallback, incremental ranges, bounded memory, batching/touches, worker recovery, clear ordering, shutdown backpressure, cooperative renderer trimming and session-aware stock reuse.')
 } finally {
   if (originalAppData === undefined) delete process.env.APPDATA
   else process.env.APPDATA = originalAppData

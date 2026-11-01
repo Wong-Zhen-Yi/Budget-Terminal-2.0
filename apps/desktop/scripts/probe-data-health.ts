@@ -7,6 +7,12 @@ import { MacroBar } from '../src/components/dashboard/MacroBar.js'
 import { effectiveFreshness, registerSnapshot } from '../src/api/snapshotHealth.js'
 import { FRESHNESS } from '../electron/shared/freshness.js'
 import type { ChartPayload, Envelope } from '../electron/shared/contract.js'
+import { FX_REFRESH_MS, NEWS_REFRESH_MS } from '../src/api/refreshRates.js'
+
+assert.equal(NEWS_REFRESH_MS, 300_000, 'Dashboard headlines must poll every five minutes')
+assert.equal(FRESHNESS.news, NEWS_REFRESH_MS, 'Headline cache expiry must match its polling window')
+assert.equal(FX_REFRESH_MS, 3_600_000, 'Personal Finance FX must poll hourly')
+assert.equal(FRESHNESS.heatmap, 1_800_000, 'Heatmap cache expiry must match its 30-minute schedule')
 
 // Simulate a previous renderer session without touching the user's browser storage.
 const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')

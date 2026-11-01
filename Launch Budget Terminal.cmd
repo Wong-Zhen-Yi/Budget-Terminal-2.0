@@ -1,8 +1,16 @@
 @echo off
+echo MCP startup fix: desktop-only cache controls and heatmap progress no longer block the app from opening.
+echo Cache startup: saved pages stay usable during background refresh. Settings controls 256 MiB page snapshots, 2 GiB market data, a separate 512 MiB image budget and 30-day retention. All pages still preload.
+echo Heatmap fills holdings and quote colours progressively while data loads; loading progress stays visible until completion.
+echo Refresh schedule: Heatmap every 30 minutes; company snapshots and Personal Finance FX hourly; Dashboard headlines every 5 minutes. Backtest preloads once with no automatic refresh.
+echo Crypto Workspace: interactive perpetual charts, watchlist selection, searchable markets, source labels and enforced CoinGecko cooldowns. The chart preloads with every page.
+echo Startup loading: completed pages refresh while slower pages load, recovered warnings clear, and changed selections preload without restarting unrelated pages.
+echo Page headers: removed the equity price source subtitle from every page.
+echo Agents connects quietly at startup; connection status and errors stay visible in the Agents toolbar.
 echo Agents chat: the message composer fills resizable dashboard and dropdown panes at every zoom level.
 echo Data health: all startup pages report current results and refresh after expiry. Chart history keeps its own freshness; SPY security IDs and Robinhood monthly reports are handled correctly.
 echo MCP prices use the shared live Hyperliquid feed for mapped stocks. Fast quote reads skip macro and sector lookups by default; projected responses preserve perp market labels and Yahoo fallback details.
-echo Portfolio charts stay prepared across all books: Dashboard, Stocks and selected Main/Multi views load at startup, refresh in the background and prepare new holdings automatically. The footer shows readiness and failures.
+echo Portfolio charts stay prepared across all books: Dashboard, Stocks and selected Main/Multi views load at startup, refresh in the background and prepare new holdings automatically. The bottom status strip is hidden; background loading, chart refresh and monitoring continue. Readiness and failures remain available in Settings.
 echo Chart ticker switches reuse cached history and refresh its recent tail. Interactive requests have priority and reserved Hyperliquid rate budget; live marks keep chart zoom steady.
 echo Portfolio Move Position: select stocks and a destination, then confirm. Shares, average prices and weight settings are preserved; existing destination tickers are protected.
 echo Settings API Usage Dashboard shows live provider requests and searchable page-by-page API purposes.
@@ -22,6 +30,7 @@ echo Startup dependency fixes: Up/Down price targets preload before page readine
 echo Notifications contains the shared Agent inbox and U.S. market-open alerts.
 echo Settings API usage now shows startup health and a compact live provider table, with an expandable API and page directory. Failed and incomplete pages appear first in its startup status list.
 echo Yahoo load reduction: mapped crypto-equity prices skip Yahoo charts, stock metadata is cached for 15 minutes, and crypto perpetuals share the live equity socket with REST fallback. All pages still preload.
+echo Stock data reuse: checked Yahoo U.S. closing quotes and history stay cached until the next regular session, after closing updates settle. Manual refresh and live perpetual feeds continue. All pages still preload.
 title Budget Terminal
 rem Startup recovery: find a supported Node.js or install a verified private runtime.
 cd /d "%~dp0" || exit /b 1
@@ -31,7 +40,7 @@ echo Building and verifying the latest desktop-only app. Remote browser access a
 echo Browser login profiles stay outside source and Git repositories. Cookies and session files are ignored and checked by commit/push hooks, and excluded from app backups.
 echo Browser address bar accepts search terms or website URLs. Searches open DuckDuckGo; Agent browser research and search remain available.
 echo Browser is included: shared Chromium tabs, navigation, page reading and agent access ON by default for each new window. Browser initializes at startup. Disable and Stop revoke access until you re-enable it. No separate browser install is needed.
-echo Startup Yahoo loads are paced at 3 requests per second, without bursts, with up to 3 background requests in flight and a reserved foreground slot. All pages still preload; rate limits trigger automatic backoff. The API USAGE footer shows rolling request counts, active requests and queued work, not a provider quota or loading progress.
+echo Startup Yahoo loads are paced at 3 requests per second, without bursts, with up to 3 background requests in flight and a reserved foreground slot. All pages still preload; rate limits trigger automatic backoff. Settings API Usage shows rolling request counts, active requests and queued work, not a provider quota or loading progress.
 echo Temporary data failures retry with backoff. Stuck Yahoo workers restart automatically, and incomplete cached results can recover without waiting for their normal expiry. Startup retry progress and unresolved failures stay visible in Settings.
 echo Pre-Market futures now try daily history when hourly refresh fails or returns stale data. Healthy fallbacks clear old degradation; retained stale prices keep their warnings.
 echo Trading Volumes now circles the matching dot and shows its ticker label when you hover over a ticker in the volume table.
@@ -46,7 +55,7 @@ echo Data caching now saves remote snapshots incrementally across launches, even
 echo MCP research includes summaries, pagination and field selection. Settings adds token-free client setup, data-folder validation, optional website-content approval and request cancellation. Saved-record edits check current revisions.
 echo MCP now defaults to read-only, offers local approval for saved-record edits, shows privacy-safe activity in Settings and protects same-session write retries with request IDs.
 echo MCP bundles are updated safely with file-lock retries. Persistent locks will show recovery instructions; no MCP clients are forcibly stopped.
-echo Bottom status bar stays on one fixed-height line when resizing or updating startup progress. Long messages show their full text on hover; API meters scroll horizontally when needed.
+echo Bottom status strip is hidden. All pages still preload, portfolio charts refresh and API monitoring continues in the background; diagnostics are available in Settings.
 echo Certificate protection requires Node.js 22.23.4+, 24.22.1+, or 26.12.1+. Electron blocks compromised eMudhra keys in both Node and Chromium. TLS verification bypasses are rejected.
 echo Startup checks all installed Node.js candidates and installs a checksum-verified private Node.js runtime if needed.
 echo The Notifications workspace also offers a U.S. market-open alert at 9:30 AM New York time, skipping weekends and scheduled exchange holidays.

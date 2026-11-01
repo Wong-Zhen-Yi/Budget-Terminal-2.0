@@ -41,6 +41,7 @@ research pages.
 | **📈 Study price action** | Work with charts, technical indicators, options chains, quantitative tools, and backtests. |
 | **💼 Track your money** | Manage portfolios, personal finance, Cards, and projections with local saved records and backups. |
 | **⚡ Open ready pages** | Every implemented page starts loading at launch, with startup progress and failures visible. |
+| **Saved pages at launch** | Use cached content while every page refreshes. Settings controls separate page, market-data and image budgets, retention and cache diagnostics. |
 | **🔗 Extend your workspace** | Connect local research tools through MCP while keeping the workspace in the desktop app. |
 
 ## Screenshots
@@ -184,7 +185,20 @@ The current navigation includes **57 implemented pages**, including Settings.
 | **Notifications** | Notifications |
 | **Settings** | Settings |
 
-**Crypto** includes a **Hyperliquid Perpetuals** table with mark prices, 24-hour
+**Crypto Workspace** uses a chart-focused layout with a selectable spot watchlist,
+equity/ETF proxies, Top 30 breadth, market context, news and searchable perpetual
+markets. Its Hyperliquid perpetual chart has 15-minute, hourly, four-hour and daily
+candles, volume, zoom and pan. The initial chart loads at startup even when Crypto
+has not been visited; symbol and interval changes are prepared by the same startup
+scheduler. Chart history refreshes once a minute while visible and is explicitly
+separate from the live venue mark and spot quotes.
+
+CoinGecko calls from Crypto and BMNR share a five-request-per-minute app budget,
+endpoint caches and an enforced 429 cooldown that respects `Retry-After`. The page
+shows the actual cooldown countdown and retains available source-labelled data.
+Manual refresh cannot bypass the provider cooldown or its endpoint cache.
+
+The **Hyperliquid Perpetuals** table includes mark prices, 24-hour
 changes, hourly funding rates, USD open interest, and 24-hour volume. It uses the
 free public market-data API without an API key or wallet, loads at startup, and
 shares the equity WebSocket for live updates, with REST fallback when unavailable.
@@ -222,9 +236,26 @@ to verify prices, candles and WebSocket updates against the public API.
 Charts for tickers in every portfolio preload at startup and stay cached while the
 app runs. This covers Stocks and the selected Dashboard, Main and Multi chart views.
 New holdings and changes to chart intervals or ranges prepare those views automatically.
-Background refresh continues across pages and unfocused windows. The footer shows
-portfolio chart readiness; refresh failures retain the last usable chart and appear
-in the footer and Settings.
+Background refresh continues across pages and unfocused windows. Heatmap snapshots
+refresh every 30 minutes; AMZN, MU, AVGO, VST, SOFI, HIMS, HOOD, PLTR, BMNR and
+Semiconductors market snapshots refresh hourly, as does Personal Finance FX.
+Dashboard headlines refresh every five minutes. Shared live price streams continue
+to update covered market marks independently of these snapshot schedules.
+Backtest prepares saved inputs and a separate quote snapshot at startup, then waits
+for Run or an explicit reload; it has no automatic refresh or periodic quote polling.
+The bottom status
+strip is hidden while startup loading, chart observers and API monitoring keep running.
+Readiness and failures remain available in Settings; refresh failures retain the last
+usable chart.
+
+Yahoo U.S. cash-equity quotes and chart history reuse checked closing data until the
+next regular market opening, including weekends and scheduled exchange holidays.
+The cache keeps checking for 20 minutes after the close to collect delayed final
+updates. During trading, the normal quote and chart checks resume. Actual trade and
+snapshot timestamps remain visible; a check being due does not erase historical data.
+Manual refresh bypasses this reuse, and unknown exchanges, futures, FX, crypto and
+Hyperliquid perpetuals retain their existing schedules. Chart updates download the
+overlapping recent tail, with periodic reconciliation for historical corrections.
 
 MCP and embedded Agents use the same Hyperliquid routing. `budget_terminal_quotes`
 refreshes current prices, prefers the shared live stream, and skips macro quotes

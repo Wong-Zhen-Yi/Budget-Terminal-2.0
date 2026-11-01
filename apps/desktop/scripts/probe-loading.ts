@@ -92,6 +92,26 @@ await warmStartupQuery(expiredClient, { queryKey: ['unvisitedHealth'], staleTime
   queryFn: async () => { throw new Error('Fresh cached startup must not fetch') } },
   (key, result, error) => startupObserved.push({ key, result, error }))
 assert.equal(startupObserved.length, 2, 'Both restored and newly loaded startup snapshots must report health without a mounted page')
+const savedAt = Date.now() - 2 * 86_400_000
+const savedKey = ['quotes', 'SAVED-BACKGROUND']
+expiredClient.setQueryData(savedKey, { ...ok({ price: 42 }, 'fixture'),
+  meta: { source: 'fixture', freshness: 'cached', fetchedAt: savedAt } }, { updatedAt: savedAt })
+let resolveRefresh!: (value: ReturnType<typeof ok<{ price: number }>>) => void
+const refreshWait = new Promise<ReturnType<typeof ok<{ price: number }>>>(resolve => { resolveRefresh = resolve })
+let observedBeforeRefresh = false
+const refreshPending = warmStartupQuery(expiredClient, { queryKey: savedKey, staleTime: Infinity,
+  queryFn: () => refreshWait }, (_key, result, _error, cached) => {
+    if (cached) observedBeforeRefresh = (result as { data: { price: number } }).data.price === 42
+  })
+assert.equal(observedBeforeRefresh, true, 'Expired saved content must be published before waiting for the provider')
+assert.equal(expiredClient.getQueryData<{ data: { price: number } }>(savedKey)?.data.price, 42)
+resolveRefresh(ok({ price: 43 }, 'fixture'))
+await refreshPending
+assert.equal(expiredClient.getQueryData<{ data: { price: number } }>(savedKey)?.data.price, 43)
+await assert.rejects(warmStartupQuery(expiredClient, { queryKey: savedKey, staleTime: 0,
+  queryFn: async () => { throw new Error('Background refresh unavailable') } }), /Background refresh unavailable/)
+assert.equal(expiredClient.getQueryData<{ data: { price: number } }>(savedKey)?.data.price, 43,
+  'A failed background refresh must preserve the visible snapshot')
 await assert.rejects(warmStartupQuery(expiredClient, { queryKey: ['failedUnvisitedHealth'], staleTime: 0,
   queryFn: async () => { throw new Error('Unvisited provider offline') } },
   (key, result, error) => startupObserved.push({ key, result, error })), /Unvisited provider offline/)
@@ -130,6 +150,149 @@ console.log('Startup recovery checks passed: incomplete cached results refetch, 
 // must receive a task or be explicitly accounted for as local/shared initial state.
 Object.assign(globalThis, { window: { api: {} } })
 const { buildTasks } = await import('../src/api/prefetch.js')
+const { createStartupScheduler } = await import('../src/api/startupScheduler.js')
+const { manageQueryMemory, releaseStartupQueries } = await import('../src/api/queryMemory.js')
+
+const cachedClient = new QueryClient()
+const cachedAt = Date.now() - 86_400_000
+cachedClient.setQueryData(['stocks', 'CACHED'], { ...ok({ rows: [1] }, 'fixture'),
+  meta: { source: 'fixture', freshness: 'cached', fetchedAt: cachedAt } }, { updatedAt: cachedAt })
+let finishCachedRefresh!: () => void
+const cachedRefresh = new Promise<void>(resolve => { finishCachedRefresh = resolve })
+const cachedScheduler = createStartupScheduler({ onChange: () => {}, onSnapshot: () => {} })
+cachedScheduler.reconcile([{ id: 'saved-page', tab: 'stocks', label: 'Saved stocks', refresh: false,
+  run: observe => warmStartupQuery(cachedClient, { queryKey: ['stocks', 'CACHED'], staleTime: Infinity,
+    queryFn: async () => { await cachedRefresh; return ok({ rows: [2] }, 'fixture') } }, observe) }])
+assert.equal(cachedScheduler.snapshot().pages.stocks.cachedAt, cachedAt, 'Saved retrieval time must be visible while the provider is pending')
+assert.equal(cachedScheduler.snapshot().pages.stocks.state, 'loading', 'Saved content must not silently count as refreshed')
+assert.equal(cachedScheduler.snapshot().done, 0)
+finishCachedRefresh()
+await new Promise<void>(resolve => setImmediate(resolve))
+assert.equal(cachedScheduler.snapshot().pages.stocks.state, 'ready')
+cachedScheduler.stop()
+cachedClient.clear()
+
+// Keep a slow page pending while completed tasks expire, recover and are replaced.
+// Virtual timers exercise minute-long maintenance without real provider requests.
+let schedulerClock = 0
+let timerId = 0
+const schedulerTimers = new Map<number, { run: () => void; delay: number }>()
+const schedulerClient = new QueryClient()
+const schedulerCalls = new Map<string, number>()
+const schedulerMaintenance: string[] = []
+let settleSlow!: () => void
+let settleObsolete!: () => void
+const slowWait = new Promise<void>(resolve => { settleSlow = resolve })
+const obsoleteWait = new Promise<void>(resolve => { settleObsolete = resolve })
+const fixtureTask = (id: string, tab: string, wait?: Promise<void>, initialState?: 'failed' | 'degraded') => ({
+  id, tab, label: id,
+  run: async (observe: import('../src/api/warmQueue.js').StartupSnapshotObserver, maintenance: boolean) => {
+    if (maintenance) schedulerMaintenance.push(id)
+    const count = (schedulerCalls.get(id) ?? 0) + 1
+    schedulerCalls.set(id, count)
+    await wait
+    if (count === 1 && initialState) throw new StartupLoadError(`Fixture ${initialState}`, initialState)
+    return warmStartupQuery(schedulerClient, {
+      queryKey: ['schedulerFixture', id], staleTime: 0,
+      queryFn: async () => ({ ...ok({ value: count }, 'fixture'),
+        meta: { source: 'fixture', freshness: 'fresh' as const, fetchedAt: Date.now(), expiresAt: Date.now() + 5_000 } }),
+    }, observe)
+  },
+})
+let schedulerReports = 0
+const scheduler = createStartupScheduler({
+  now: () => schedulerClock,
+  setTimer: ((run: () => void, delay: number) => {
+    schedulerTimers.set(++timerId, { run, delay })
+    return timerId
+  }) as unknown as typeof setTimeout,
+  clearTimer: ((id: number) => { schedulerTimers.delete(id) }) as unknown as typeof clearTimeout,
+  onChange: () => { schedulerReports++ }, onSnapshot: () => {},
+  onRetired: owner => releaseStartupQueries(schedulerClient, owner),
+})
+const fastTask = fixtureTask('fast', 'forex')
+const slowTask = fixtureTask('slow', 'forex', slowWait)
+const failedTask = fixtureTask('failed', 'stocks', undefined, 'failed')
+const degradedTask = fixtureTask('degraded', 'fundamentals', undefined, 'degraded')
+const obsoleteTask = fixtureTask('obsolete', 'options', obsoleteWait)
+const settleScheduler = () => new Promise<void>(resolve => setImmediate(resolve))
+const fireSchedulerTimers = async (delay: number) => {
+  schedulerClock += delay
+  for (const [id, timer] of [...schedulerTimers]) {
+    if (timer.delay !== delay) continue
+    schedulerTimers.delete(id)
+    timer.run()
+  }
+  await settleScheduler()
+}
+scheduler.reconcile([fastTask, slowTask, failedTask, degradedTask, obsoleteTask])
+await settleScheduler()
+assert.equal(scheduler.snapshot().done, 3)
+assert.equal(scheduler.snapshot().failed, 1)
+assert.equal(scheduler.snapshot().degraded, 1)
+assert.equal(schedulerTimers.size, 3, 'Finished tasks must schedule maintenance before the whole plan completes')
+await fireSchedulerTimers(10_000)
+assert.equal(schedulerCalls.get('fast'), 2, 'An early page must refresh while another page is pending')
+assert.deepEqual(schedulerMaintenance, ['fast'], 'Maintenance must be distinguishable from initial loads for provider priority')
+assert.equal(scheduler.snapshot().pages.forex.state, 'loading', 'Refreshing one panel must not mark its pending sibling ready')
+assert.equal(scheduler.snapshot().done, 3, 'Maintenance must not double-count startup completion')
+await fireSchedulerTimers(60_000)
+assert.equal(scheduler.snapshot().failed, 0, 'Successful recovery must clear the current failure count')
+assert.equal(scheduler.snapshot().degraded, 0, 'Successful recovery must clear the current incomplete count')
+assert.equal(scheduler.snapshot().pages.stocks.state, 'ready')
+assert.equal(scheduler.snapshot().timings.find(task => task.label === 'failed')?.state, 'failed', 'Diagnostics must retain the initial failure')
+assert.equal(scheduler.snapshot().timings.find(task => task.label === 'degraded')?.state, 'degraded')
+const replacementTask = fixtureTask('replacement', 'forex')
+scheduler.reconcile([replacementTask, slowTask, failedTask, degradedTask])
+await settleScheduler()
+assert.equal(schedulerCalls.get('slow'), 1, 'Replanning must retain unrelated in-flight work')
+assert.equal(schedulerCalls.get('failed'), 2, 'Replanning must retain recovered tasks and their timers')
+assert.equal(scheduler.snapshot().total, 4)
+assert.equal(scheduler.snapshot().done, 3)
+settleObsolete()
+await settleScheduler()
+assert.equal(scheduler.snapshot().pages.options, undefined, 'An obsolete late completion must not restore removed readiness')
+await fireSchedulerTimers(10_000)
+assert.equal(schedulerCalls.get('fast'), 2, 'Superseded selections must stop refreshing')
+assert.equal(schedulerCalls.get('replacement'), 2, 'New selections must load and maintain their own data')
+settleSlow()
+await settleScheduler()
+assert.equal(scheduler.snapshot().active, false)
+assert.equal(scheduler.snapshot().done, scheduler.snapshot().total)
+assert.equal(scheduler.snapshot().pages.forex.state, 'ready')
+scheduler.stop()
+assert.equal(schedulerTimers.size, 0, 'Unmount must clear every maintenance timer')
+const stoppedReports = schedulerReports
+scheduler.reconcile([fastTask])
+assert.equal(schedulerReports, stoppedReports)
+schedulerClient.clear()
+
+// Replacing a task releases its cache pins, while shared current owners survive.
+const pinClient = new QueryClient()
+const owners = [{}, {}]
+for (const owner of owners) {
+  const observe: import('../src/api/warmQueue.js').StartupSnapshotObserver = () => {}
+  observe.owner = owner
+  await warmStartupQuery(pinClient, { queryKey: ['sharedStartup'], staleTime: Infinity,
+    queryFn: async () => ok({ value: 1 }, 'fixture') }, observe)
+}
+const pinMemory = manageQueryMemory(pinClient, { maxBytes: 0, maxQueries: 0 })
+releaseStartupQueries(pinClient, owners[0])
+await pinMemory.sweep()
+assert(pinClient.getQueryData(['sharedStartup']), 'Retiring one page must retain another page\'s shared startup data')
+releaseStartupQueries(pinClient, owners[1])
+await pinMemory.sweep()
+assert.equal(pinClient.getQueryData(['sharedStartup']), undefined, 'Superseded queries must become eligible for memory eviction')
+const retiredObserver: import('../src/api/warmQueue.js').StartupSnapshotObserver = () => {}
+retiredObserver.owner = owners[0]
+await warmStartupQuery(pinClient, { queryKey: ['lateRetiredStartup'], staleTime: 0,
+  queryFn: async () => ok({}, 'fixture') }, retiredObserver)
+await pinMemory.sweep()
+assert.equal(pinClient.getQueryData(['lateRetiredStartup']), undefined, 'Late obsolete dependencies must not pin themselves again')
+pinMemory.stop()
+pinClient.clear()
+console.log('Startup lifecycle checks passed: early maintenance, current recovery counts, historical failures, pending siblings, selective replacement, late results and shared cache ownership.')
+
 const portfolio = {
   activeId: 'main', mainId: 'main', portfolios: [{
     id: 'main', readOnly: false, tickers: ['AAPL'],
@@ -138,6 +301,93 @@ const portfolio = {
 } as unknown as import('../electron/shared/contract.js').PortfolioPayload
 const scheduled = new Set(buildTasks(portfolio, undefined, { stocks: 'AAPL', fundamentals: 'AAPL' },
   { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 }).map((task) => task.tab))
+const planSymbols = { stocks: 'AAPL', fundamentals: 'AAPL' }
+const planCalendar = { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 }
+const basePlan = buildTasks(portfolio, undefined, planSymbols, planCalendar)
+const { DEFAULT_BACKTEST_PAGE_SETTINGS } = await import('../electron/shared/backtest.js')
+const refreshPlan = buildTasks(portfolio, { backtestPage: { ...DEFAULT_BACKTEST_PAGE_SETTINGS,
+  rows: [{ symbol: 'AAPL', weight: 100 }] } } as import('../electron/shared/contract.js').AppSettings, planSymbols, planCalendar)
+const hourlyPages = ['amzn', 'mu', 'avgo', 'vst', 'sofi', 'hims', 'hood', 'bmnr', 'semiconductors']
+for (const page of hourlyPages) {
+  const tasks = refreshPlan.filter(task => task.tab === page)
+  assert(tasks.length > 0, `${page} must still prepare at startup`)
+  assert(tasks.every(task => task.refreshIntervalMs === 3_600_000), `${page} must refresh hourly despite shorter dependency expiry`)
+}
+assert.equal(refreshPlan.find(task => task.tab === 'pltr' && task.label === 'PLTR market, chart and news')?.refreshIntervalMs, 3_600_000)
+assert.equal(refreshPlan.find(task => task.label === 'PLTR financials and filings')?.refreshIntervalMs, undefined, 'PLTR filings retain their own slower refresh window')
+assert.equal(refreshPlan.find(task => task.tab === 'heatmap')?.refreshIntervalMs, 1_800_000)
+assert.equal(refreshPlan.find(task => task.label === 'FX rate')?.refreshIntervalMs, 3_600_000)
+const backtestTasks = refreshPlan.filter(task => task.tab === 'backtest')
+assert.equal(backtestTasks.length, 2, 'Both saved Backtest results and its independent quotes must preload')
+assert(backtestTasks.every(task => task.refresh === false), 'Backtest must not schedule result or quote maintenance')
+
+// Exercise the real plan policy with short-lived sources and virtual timers.
+const policyTimers = new Map<number, { run: () => void; delay: number }>()
+const policyCalls = new Map<string, number>()
+const policyScheduler = createStartupScheduler({
+  onChange: () => {}, onSnapshot: () => {},
+  setTimer: ((run: () => void, delay: number) => {
+    policyTimers.set(++timerId, { run, delay })
+    return timerId
+  }) as unknown as typeof setTimeout,
+  clearTimer: ((id: number) => { policyTimers.delete(id) }) as unknown as typeof clearTimeout,
+})
+const policyTasks = refreshPlan.filter(task => task.refreshIntervalMs !== undefined || task.tab === 'backtest')
+policyScheduler.reconcile(policyTasks.map(task => ({ ...task, run: async observe => {
+  policyCalls.set(task.id, (policyCalls.get(task.id) ?? 0) + 1)
+  observe(['quotes'], { ...ok({}, 'fixture'), meta: {
+    source: 'fixture', freshness: 'fresh', fetchedAt: Date.now(), expiresAt: Date.now() + 30_000,
+  } })
+} })))
+await settleScheduler()
+assert.equal(policyTimers.size, policyTasks.length - backtestTasks.length)
+assert([...policyTimers.values()].every(timer => timer.delay === 1_800_000 || timer.delay === 3_600_000), 'Source expiry must not shorten explicit page refresh windows')
+for (const [id, timer] of [...policyTimers]) {
+  policyTimers.delete(id)
+  timer.run()
+}
+await settleScheduler()
+for (const task of backtestTasks) assert.equal(policyCalls.get(task.id), 1, 'Backtest must stay at its initial load while other pages refresh')
+policyScheduler.stop()
+assert.equal(policyTimers.size, 0)
+
+const { backtestQuotesKey } = await import('../src/api/backtestQueries.js')
+const { applyEquityMarketUpdate } = await import('../src/api/equityStream.js')
+const backtestQuoteClient = new QueryClient()
+Object.assign(window.api, { quotes: async () => ok({ macro: {}, holdings: {
+  AAPL: { symbol: 'AAPL', price: 100, change: 1, absChange: 1 },
+}, missing: [] }, 'fixture') })
+await backtestTasks.find(task => task.label === 'Backtest quotes')!.run(backtestQuoteClient)
+const savedQuote = backtestQuoteClient.getQueryData(backtestQuotesKey(['AAPL']))
+assert(savedQuote, 'Backtest quotes must be available before its page is visited')
+backtestQuoteClient.setQueryData(['quotes', 'AAPL'], savedQuote)
+applyEquityMarketUpdate(backtestQuoteClient, { candles: [], quotes: [{ symbol: 'AAPL', price: 200, change: 2, absChange: 2 }] })
+assert.equal(backtestQuoteClient.getQueryData(backtestQuotesKey(['AAPL'])), savedQuote, 'Live marks must not update Backtest quotes')
+assert.equal(backtestQuoteClient.getQueryData<import('../electron/shared/contract.js').Envelope<import('../electron/shared/contract.js').QuotesPayload>>(['quotes', 'AAPL'])?.data.holdings.AAPL.price, 200, 'Other pages must continue receiving live quote updates')
+backtestQuoteClient.clear()
+console.log('Refresh policy checks passed: hourly company/FX snapshots, 30-minute Heatmap, retained startup loads and Backtest quote/maintenance isolation.')
+const samePageIds = (plan: typeof basePlan, page: string) => plan.filter(task => task.tab === page).map(task => task.id)
+const editedPortfolio = { ...portfolio, portfolios: [{ ...portfolio.portfolios[0], tickers: ['AAPL', 'MSFT'] }] }
+const editedPlan = buildTasks(editedPortfolio, undefined, planSymbols, planCalendar)
+assert.notDeepEqual(samePageIds(basePlan, 'news'), samePageIds(editedPlan, 'news'), 'Portfolio edits must prepare new News keys')
+assert.notDeepEqual(samePageIds(basePlan, 'charts'), samePageIds(editedPlan, 'charts'), 'Portfolio edits must prepare new holding charts')
+assert.deepEqual(samePageIds(basePlan, 'economic'), samePageIds(editedPlan, 'economic'), 'Unrelated page work must retain its identity')
+const symbolPlan = buildTasks(portfolio, undefined, { ...planSymbols, stocks: 'NVDA' }, planCalendar)
+assert.notDeepEqual(samePageIds(basePlan, 'stocks'), samePageIds(symbolPlan, 'stocks'), 'Saved ticker changes must replace the corresponding page work')
+assert.deepEqual(samePageIds(basePlan, 'fundamentals'), samePageIds(symbolPlan, 'fundamentals'))
+const layoutPlan = buildTasks(portfolio, { favoriteTabs: ['economic'], hiddenTabs: ['news'], sidebarCollapsed: true } as import('../electron/shared/contract.js').AppSettings,
+  planSymbols, planCalendar)
+assert.deepEqual(basePlan.map(task => task.id), layoutPlan.map(task => task.id), 'Navigation and layout preferences must not restart data loading')
+const { useEtfPage: planEtf } = await import('../src/stores/etf.js')
+const previousEtf = planEtf.getState().ticker
+const planEtfStorage = planEtf.persist.getOptions().storage
+planEtf.persist.setOptions({ storage: { getItem: () => null, setItem() {}, removeItem() {} } })
+planEtf.setState({ ticker: 'QQQ' })
+const etfPlan = buildTasks(portfolio, undefined, planSymbols, planCalendar)
+assert.notDeepEqual(samePageIds(basePlan, 'etf'), samePageIds(etfPlan, 'etf'))
+assert.deepEqual(samePageIds(basePlan, 'forex'), samePageIds(etfPlan, 'forex'))
+planEtf.setState({ ticker: previousEtf })
+planEtf.persist.setOptions({ storage: planEtfStorage })
 const { portfolioChartTargets, portfolioChartRefreshMs, loadPortfolioChart } = await import('../src/api/portfolioCharts.js')
 const chartViews = { timeframe: '1 Day', interval: '1 Hour', range: '1M', multiInterval: '1D' } as const
 const allBooks = { ...portfolio, portfolios: [portfolio.portfolios[0],
@@ -172,6 +422,9 @@ assert.equal(portfolioChartRefreshMs(chartTargets[0], { ...ok({}, 'fixture'), me
   source: 'fixture', freshness: 'fresh', fetchedAt: refreshNow, expiresAt: refreshNow + 15_000,
 } }, false, refreshNow), 15_250, 'Refresh must respect source expiry before the normal chart TTL')
 assert.equal(portfolioChartRefreshMs(chartTargets[0], undefined, true), 30_000, 'Failed refreshes must back off')
+assert.equal(portfolioChartRefreshMs(chartTargets[0], { ...ok({}, 'fixture'), meta: {
+  source: 'fixture', freshness: 'cached', fetchedAt: refreshNow - 86_400_000, expiresAt: refreshNow + 86_400_000,
+} }, false, refreshNow), 86_400_250, 'Closed-session chart reuse must survive the ordinary chart refresh interval')
 await assert.rejects(loadPortfolioChart({ ...chartTargets[0], load: async () => ok({ candles: [] }, 'fixture') }), /no chart candles/)
 holdingClient.clear()
 console.log('Portfolio chart readiness checks passed: every book and holding, exact deduplicated view keys, startup accounting, background priority, source expiry and empty-history failures.')
@@ -744,7 +997,8 @@ try {
   bmnrSnapshot.progress.treasury = 'loaded'
   bmnrSnapshot.market.ethPrice.value = 3500
   const bmnrEnvelope = ok(bmnrSnapshot)
-  cryptoClient.setQueryData(['bmnr'], { ...bmnrEnvelope, meta: { ...bmnrEnvelope.meta, fetchedAt: Date.now() - 360_000 } })
+  const { FRESHNESS } = await import('../electron/shared/freshness.js')
+  cryptoClient.setQueryData(['bmnr'], { ...bmnrEnvelope, meta: { ...bmnrEnvelope.meta, fetchedAt: Date.now() - FRESHNESS.bmnr - 60_000 } })
   const bmnrMarkup = renderToStaticMarkup(createElement(QueryClientProvider, { client: cryptoClient },
     createElement(BmnrPage, { onStatusChange: () => {} })))
   assert.match(bmnrMarkup, /CoinGecko ETH snapshot 07:51:55 · stale/)

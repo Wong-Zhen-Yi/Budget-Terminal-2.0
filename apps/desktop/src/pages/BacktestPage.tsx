@@ -14,9 +14,9 @@ import {
   DEFAULT_BACKTEST_PAGE_SETTINGS,
   normalizeBacktestPageSettings,
 } from '@shared/backtest'
-import { backtestKey, useBacktest } from '@/api/backtestQueries'
+import { backtestKey, useBacktest, useBacktestQuotes } from '@/api/backtestQueries'
 import { api } from '@/api/client'
-import { usePortfolio, useQuotes } from '@/api/queries'
+import { usePortfolio } from '@/api/queries'
 import { useSettings, useSettingsMutation } from '@/api/settingsQueries'
 import { LineChart, type LineSeries } from '@/components/charts/LineChart'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
@@ -68,7 +68,7 @@ export function BacktestPage({
     return payload?.portfolios.find((entry) => entry.id === payload.mainId)
   }, [portfolioQuery.data])
   const mainTickers = useMemo(() => mainPortfolio?.tickers ?? [], [mainPortfolio])
-  const quotesQuery = useQuotes(mainTickers)
+  const quotesQuery = useBacktestQuotes(mainTickers)
 
   const rowSequence = useRef(1)
   const editable = useCallback(

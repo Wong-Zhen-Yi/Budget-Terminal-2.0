@@ -9,9 +9,8 @@ import { queryFreshness } from './queryPersistence'
 /**
  * The BMNR page's single query.
  *
- * `refetchInterval: false` for the same reason the Crypto page sets it: one load is a
- * CoinGecko call, two SEC calls and three Yahoo quotes, and CoinGecko's free tier
- * rate-limits by the minute. Refresh and F5 are the only ways it refetches.
+ * The startup scheduler owns hourly snapshots, so mounting the page adds no timer.
+ * Refresh and F5 can also request a new snapshot through the shared provider gates.
  */
 export function useBmnr(): UseQueryResult<Envelope<BmnrPayload>> {
   return useQuery({
