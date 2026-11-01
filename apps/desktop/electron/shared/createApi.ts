@@ -114,6 +114,7 @@ export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS
     quantScan: (request) => invoke(CHANNELS.quantScan, request),
     quantPair: (request) => invoke(CHANNELS.quantPair, request),
     youtube: (request) => invoke(CHANNELS.youtube, request),
+    tv: (request) => invoke(CHANNELS.tv, request),
     youtubeThumbnail: (request) => invoke(CHANNELS.youtubeThumbnail, request),
     fundamentals: (request) => invoke(CHANNELS.fundamentals, request),
     fundamentalsPage: (request) => invoke(CHANNELS.fundamentalsPage, request),

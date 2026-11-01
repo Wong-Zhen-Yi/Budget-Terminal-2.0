@@ -1,6 +1,8 @@
 import { RecordRevisionError } from './mcpContext.js'
 import { markEquityScreenRows } from './equityScreenMarks.js'
 import { getMoney, clearMoneyCache } from './money.js'
+import { getTv } from './tv.js'
+import type { TvPayload, TvRequest } from '../shared/tv.js'
 import { withSourceEnvelope } from './sourceHealth.js'
 import { getHims } from './hims.js'
 import { replaceArticles } from './articlesStore.js'
@@ -340,6 +342,7 @@ import { getYouTubeThumbnail } from './youtubeImages.js'
  * and the renderer will not notice.
  */
 export interface MarketDataProvider {
+  tv(request: TvRequest): Promise<Envelope<TvPayload>>
   backtest(request: BacktestRequest): Promise<Envelope<BacktestPayload>>
   quantScan(request: QuantScanRequest): Promise<Envelope<QuantScanPayload | null>>
   technicalScan(): Promise<Envelope<TechnicalScanPayload | null>>
@@ -683,6 +686,7 @@ function upDownEnvelope(result: UpDownFetchResult): Envelope<UpDownPayload> {
 }
 
 const providerImplementation: MarketDataProvider = {
+  tv: getTv,
   async quotes({ holdings, force, includeMacro = true, includeSectors = true }) {
     const macroSymbols = includeMacro ? MACRO_SYMBOLS.map((entry) => entry.symbol) : []
     const [batch, classifications] = await Promise.all([

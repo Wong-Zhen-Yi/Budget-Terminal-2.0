@@ -1,63 +1,140 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { YouTubeVideo } from '@shared/contract'
-import {
-  filterYouTubeVideos,
-  normalizeYouTubePageSettings,
-  sortYouTubeVideos,
-  videoKey,
-} from '@shared/youtube'
+import { filterYouTubeVideos, normalizeYouTubePageSettings, sortYouTubeVideos, videoKey, YOUTUBE_MAX_AGE_DAYS, YOUTUBE_MIN_VIEW_COUNT } from '@shared/youtube'
 import { usePortfolio } from '@/api/queries'
 import { useSettings, useSettingsMutation } from '@/api/settingsQueries'
-import {
-  useRefreshYouTube,
-  useYouTube,
-  useYouTubeThumbnail,
-} from '@/api/youtubeQueries'
+import { useRefreshYouTube, useYouTube, useYouTubeThumbnail } from '@/api/youtubeQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
-import { Button } from '@/components/ui/Button'
-import { Splitter } from '@/components/ui/Splitter'
 import { api } from '@/api/client'
+import '@/styles/youtube.css'
 
-type Tone = 'muted' | 'positive' | 'warning' | 'negative'
+const SORT_OPTIONS = [
+  { label: 'Newest first', column: -1, descending: false },
+  { label: 'Oldest first', column: 5, descending: true },
+  { label: 'Most viewed', column: 3, descending: true },
+  { label: 'Least viewed', column: 3, descending: false },
+  { label: 'Ticker A–Z', column: 0, descending: false },
+  { label: 'Ticker Z–A', column: 0, descending: true },
+  { label: 'Title A–Z', column: 1, descending: false },
+  { label: 'Title Z–A', column: 1, descending: true },
+  { label: 'Channel A–Z', column: 2, descending: false },
+  { label: 'Channel Z–A', column: 2, descending: true },
+  { label: 'Published date ↓', column: 4, descending: true },
+  { label: 'Published date ↑', column: 4, descending: false },
+  { label: 'Days ago ↑', column: 5, descending: false },
+  { label: 'Longest first', column: 6, descending: true },
+  { label: 'Shortest first', column: 6, descending: false },
+] as const
 
-const toneClass: Record<Tone, string> = {
-  muted: 'text-text-muted',
-  positive: 'text-up',
-  warning: 'text-warn',
-  negative: 'text-down',
+function rowKey(video: YouTubeVideo): string {
+  return video.ticker + ':' + videoKey(video)
 }
 
-const COLUMNS = ['Ticker', 'Title', 'Channel', 'Views', 'Published', 'Days Ago', 'Duration'] as const
-const MIN_DETAIL_WIDTH = 300
-const MAX_DETAIL_WIDTH = 520
-const MIN_TABLE_WIDTH = 520
-
-function countText(visible: number, total: number): string {
-  const noun = total === 1 ? 'video' : 'videos'
-  return visible === total ? `${total} ${noun}` : `${visible} of ${total} ${noun}`
+function publishedAge(video: YouTubeVideo): string {
+  if (video.publishedDays === null) return video.publishedText || 'Date unavailable'
+  if (video.publishedDays === 0) return 'Today'
+  return video.publishedDays + (video.publishedDays === 1 ? ' day ago' : ' days ago')
 }
 
-function sortMark(column: number, active: number, descending: boolean): string {
-  if (active < 0) return column === 5 ? ' ↑' : ''
-  if (column !== active) return ''
-  return descending ? ' ↓' : ' ↑'
+function Icon({ name }: { name: 'search' | 'refresh' | 'external' | 'play' | 'close' }) {
+  const paths = {
+    search: 'M21 21l-5-5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0',
+    refresh: 'M20 7v5h-5M4 17v-5h5M6 6a8 8 0 0 1 13 3M18 18a8 8 0 0 1-13-3',
+    external: 'M14 3h7v7M21 3L10 14M10 3H4a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-6',
+    play: 'M9 5l11 7-11 7z',
+    close: 'M6 6l12 12M18 6L6 18',
+  }
+  return <svg viewBox="0 0 24 24" fill={name === 'play' ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>
 }
 
-function MetaRow({ label, value }: { label: string; value: string }) {
+function VideoThumbnail({ video, preview = false }: { video: YouTubeVideo | null; preview?: boolean }) {
+  const query = useYouTubeThumbnail(video)
+  const dataUri = query.data?.data.dataUri
   return (
-    <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2 text-2xs">
-      <dt className="text-text-muted">{label}:</dt>
-      <dd className="min-w-0 break-words text-text">{value || '-'}</dd>
-    </div>
+    <span className={preview ? 'youtube-image youtube-image--preview' : 'youtube-image'}>
+      {dataUri ? <img src={dataUri} alt="" /> : (
+        <span className="youtube-image-fallback">
+          <span className="youtube-image-symbol">{video?.ticker || 'YouTube'}</span>
+          <span>{query.isFetching ? 'Loading thumbnail…' : video ? 'Thumbnail unavailable' : 'No video selected'}</span>
+        </span>
+      )}
+      {video?.durationText && <span className="youtube-duration">{video.durationText}</span>}
+      {preview && video?.url && <span className="youtube-play"><Icon name="play" /></span>}
+    </span>
   )
 }
 
-export function YouTubePage({
-  onStatusChange,
-}: {
-  onStatusChange: (panels: PanelStatus[], sourcePath: string) => void
-}) {
+function MetaRow({ label, value }: { label: string; value: string }) {
+  return <div className="youtube-meta-row"><dt>{label}</dt><dd title={value}>{value || '—'}</dd></div>
+}
+
+
+/** Paginate text within its measured space rather than clipping it or adding a scrollbar. */
+function FittedText({ text, label }: { text: string; label: string }) {
+  const area = useRef<HTMLParagraphElement>(null)
+  const [pages, setPages] = useState<string[]>([text])
+  const [page, setPage] = useState(0)
+  useLayoutEffect(() => {
+    const element = area.current
+    if (!element) return
+    const measure = () => {
+      const context = document.createElement('canvas').getContext('2d')
+      if (!context || element.clientWidth <= 0 || element.clientHeight <= 0) return
+      const style = getComputedStyle(element)
+      context.font = style.font
+      const width = Math.max(1, element.clientWidth - 2)
+      const lines: string[] = []
+      let line = ''
+      for (const word of text.split(/\s+/)) {
+        const candidate = line ? line + ' ' + word : word
+        if (context.measureText(candidate).width <= width) {
+          line = candidate
+          continue
+        }
+        if (line) lines.push(line)
+        line = ''
+        for (const character of word) {
+          if (line && context.measureText(line + character).width > width) {
+            lines.push(line)
+            line = ''
+          }
+          line += character
+        }
+      }
+      if (line || !lines.length) lines.push(line)
+      const count = Math.max(1, Math.floor(element.clientHeight / Number.parseFloat(style.lineHeight)))
+      const result: string[] = []
+      for (let start = 0; start < lines.length; start += count) result.push(lines.slice(start, start + count).join('\n'))
+      setPages(result)
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    measure()
+    return () => observer.disconnect()
+  }, [text])
+  const current = Math.min(page, pages.length - 1)
+  return <div className="youtube-fitted-text">
+    <p ref={area}>{pages[current]}</p>
+    <div className="youtube-text-pagination">
+      {pages.length > 1 && <>
+        <button type="button" aria-label={'Previous ' + label + ' page'} disabled={!current} onClick={() => setPage(current - 1)}>‹</button>
+        <span>{current + 1} / {pages.length}</span>
+        <button type="button" aria-label={'Next ' + label + ' page'} disabled={current === pages.length - 1} onClick={() => setPage(current + 1)}>›</button>
+      </>}
+    </div>
+  </div>
+}
+
+const COLUMNS = [
+  { label: 'Ticker', column: 0, className: 'youtube-col-ticker' },
+  { label: 'Video', column: 1, className: 'youtube-col-video' },
+  { label: 'Channel', column: 2, className: 'youtube-col-channel' },
+  { label: 'Views', column: 3, className: 'youtube-col-views' },
+  { label: 'Published', column: 5, className: 'youtube-col-published' },
+  { label: 'Length', column: 6, className: 'youtube-col-length' },
+] as const
+
+export function YouTubePage({ onStatusChange }: { onStatusChange: (panels: PanelStatus[], sourcePath: string) => void }) {
   const portfolioQuery = usePortfolio()
   const settingsQuery = useSettings()
   const saveSettings = useSettingsMutation()
@@ -71,17 +148,36 @@ export function YouTubePage({
     }
     return [...seen]
   }, [portfolioQuery.data])
-
   const query = useYouTube(tickers)
   const refresh = useRefreshYouTube(tickers)
   const [filter, setFilter] = useState('')
+  const [tickerFilter, setTickerFilter] = useState('')
   const [sortColumn, setSortColumn] = useState<number>(() => normalizeYouTubePageSettings(settingsQuery.data?.data.youtubePage).sortColumn)
   const [sortDescending, setSortDescending] = useState<boolean>(() => normalizeYouTubePageSettings(settingsQuery.data?.data.youtubePage).sortDescending)
   const [manualSelectedKey, setManualSelectedKey] = useState('')
   const [refreshing, setRefreshing] = useState(false)
-  const [detailWidth, setDetailWidth] = useState(360)
+  const [refreshError, setRefreshError] = useState('')
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(1)
+  const [inspectorTab, setInspectorTab] = useState<'details' | 'description'>('details')
+  const tableArea = useRef<HTMLDivElement>(null)
   const hydrated = useRef(false)
-  const pageRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    const element = tableArea.current
+    if (!element) return
+    const measure = () => {
+      if (!element.clientHeight) return
+      const rowHeight = Number.parseFloat(getComputedStyle(element).getPropertyValue('--youtube-row-height')) || 50
+      const headerHeight = element.querySelector('thead')?.getBoundingClientRect().height ?? 32
+      setPageSize(Math.max(1, Math.floor((element.clientHeight - headerHeight - 1) / rowHeight)))
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    measure()
+    return () => observer.disconnect()
+  }, [])
+  const activeTicker = tickers.includes(tickerFilter) ? tickerFilter : ''
 
   useEffect(() => {
     if (hydrated.current || !settingsQuery.data?.data) return
@@ -92,243 +188,153 @@ export function YouTubePage({
   }, [settingsQuery.data])
 
   useEffect(() => {
-    onStatusChange(
-      [
-        { label: 'YouTube', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching },
-        { label: 'Holdings', envelope: portfolioQuery.data, error: portfolioQuery.error, enabled: portfolioQuery.isEnabled, loading: portfolioQuery.isFetching },
-      ],
-      settingsQuery.data?.data.sourcePath ?? '',
-    )
-  }, [
-    onStatusChange,
-    portfolioQuery.data,
-    portfolioQuery.isFetching,
-    query.data,
-    query.isFetching,
-    settingsQuery.data,
-  ])
+    onStatusChange([
+      { label: 'YouTube', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching },
+      { label: 'Holdings', envelope: portfolioQuery.data, error: portfolioQuery.error, enabled: portfolioQuery.isEnabled, loading: portfolioQuery.isFetching },
+    ], settingsQuery.data?.data.sourcePath ?? '')
+  }, [onStatusChange, portfolioQuery.data, portfolioQuery.error, portfolioQuery.isEnabled, portfolioQuery.isFetching,
+    query.data, query.error, query.isEnabled, query.isFetching, settingsQuery.data])
 
   const payload = query.data?.data
-  const sorted = useMemo(
-    () => sortYouTubeVideos(payload?.items ?? [], sortColumn, sortDescending),
-    [payload?.items, sortColumn, sortDescending],
-  )
-  const visible = useMemo(() => filterYouTubeVideos(sorted, filter), [filter, sorted])
-  const selected = useMemo(() => {
-    const manual = visible.find((item) => videoKey(item) === manualSelectedKey)
-    return manual ?? visible[0] ?? null
-  }, [manualSelectedKey, visible])
-  const thumbnail = useYouTubeThumbnail(selected)
+  const sorted = useMemo(() => sortYouTubeVideos(payload?.items ?? [], sortColumn, sortDescending), [payload?.items, sortColumn, sortDescending])
+  const visible = useMemo(() => filterYouTubeVideos(
+    activeTicker ? sorted.filter(item => item.ticker === activeTicker) : sorted, filter,
+  ), [activeTicker, filter, sorted])
+  const pageCount = Math.max(1, Math.ceil(visible.length / pageSize))
+  const currentPage = Math.min(page, pageCount - 1)
+  const start = currentPage * pageSize
+  const pageItems = visible.slice(start, start + pageSize)
+  const selected = pageItems.find(item => rowKey(item) === manualSelectedKey) ?? pageItems[0] ?? null
+  const busy = refreshing || query.isFetching
+  const hasFilters = Boolean(filter.trim() || activeTicker)
+  const status = useMemo<{ text: string; tone: 'muted' | 'positive' | 'warning' | 'negative' }>(() => {
+    const failure = refreshError || query.error?.message || (query.data?.meta.freshness === 'failed' ? query.data.meta.failureReason || 'Request failed' : '')
+    if (failure) return { text: 'YouTube refresh failed: ' + failure, tone: 'negative' }
+    if (portfolioQuery.isPending) return { text: 'Loading portfolio tickers…', tone: 'muted' }
+    if (portfolioQuery.error) return { text: 'Holdings could not load: ' + portfolioQuery.error.message, tone: 'negative' }
+    if (!tickers.length) return { text: 'Add portfolio tickers to discover videos.', tone: 'warning' }
+    if (busy) return { text: payload ? 'Refreshing videos · showing loaded results' : 'Loading portfolio videos…', tone: 'muted' }
+    if (!payload) return { text: 'Waiting for portfolio videos…', tone: 'muted' }
+    const freshness = query.data?.meta.freshness
+    if (freshness === 'stale' || freshness === 'partial') {
+      return { text: (freshness === 'stale' ? 'Showing stale results' : 'Some results are unavailable') + (query.data?.meta.failureReason ? ' · ' + query.data.meta.failureReason : ''), tone: 'warning' }
+    }
+    return { text: payload.warnings.length ? '' : 'Videos up to date', tone: 'positive' }
+  }, [busy, payload, portfolioQuery.error, portfolioQuery.isPending, query.data, query.error, refreshError, tickers.length])
 
-  const status = useMemo<{ text: string; tone: Tone }>(() => {
-    if (!tickers.length) {
-      return { text: 'No saved portfolio tickers are available yet.', tone: 'warning' }
-    }
-    if (query.isFetching) {
-      return {
-        text: payload ? 'Refreshing cached/stale YouTube results...' : 'Checking cached YouTube results...',
-        tone: 'muted',
-      }
-    }
-    if (query.data?.meta.freshness === 'failed') {
-      return {
-        text: `YouTube refresh failed: ${query.data.meta.failureReason ?? 'unknown error'}`,
-        tone: 'negative',
-      }
-    }
-    if (!payload) return { text: 'Open the tab to load YouTube results.', tone: 'muted' }
-    if (!payload.items.length) {
-      return {
-        text: payload.tickersTotal
-          ? `No YouTube matches loaded for ${payload.tickersTotal} ticker(s).`
-          : 'No YouTube results found.',
-        tone: payload.warnings.length ? 'warning' : 'muted',
-      }
-    }
-    return {
-      text: `Loaded ${payload.items.length} video result(s) for ${payload.tickersTotal} ticker(s) (${payload.fromCacheCount} cached, ${payload.fetchedCount} fresh).`,
-      tone: payload.warnings.length ? 'warning' : 'positive',
-    }
-  }, [payload, query.data, query.isFetching, tickers.length])
-
-  const onSort = useCallback((column: number) => {
-    const descending = column === sortColumn
-      ? !sortDescending
-      : column === 3 || column === 4 || column === 6
-    setSortColumn(column)
-    setSortDescending(descending)
-    void saveSettings({
-      type: 'setYouTubePage',
-      value: { sortColumn: column, sortDescending: descending },
-    })
-  }, [saveSettings, sortColumn, sortDescending])
-
-  const onRefresh = useCallback(async () => {
+  const onSort = (value: string) => {
+    const [column, descending] = value.split(':')
+    const next = { sortColumn: Number(column), sortDescending: descending === 'true' }
+    setPage(0)
+    setSortColumn(next.sortColumn)
+    setSortDescending(next.sortDescending)
+    void saveSettings({ type: 'setYouTubePage', value: next })
+  }
+  const onRefresh = async () => {
     setRefreshing(true)
-    try {
-      await refresh()
-    } finally {
-      setRefreshing(false)
-    }
-  }, [refresh])
-
+    setRefreshError('')
+    try { await refresh() }
+    catch (error) { setRefreshError(error instanceof Error ? error.message : String(error)) }
+    finally { setRefreshing(false) }
+  }
   const openVideo = useCallback((video: YouTubeVideo | null) => {
     if (video?.url) void api.openExternal(video.url)
   }, [])
-
-  const onDrag = useCallback((clientX: number) => {
-    const box = pageRef.current?.getBoundingClientRect()
-    if (!box) return
-    setDetailWidth(
-      Math.min(MAX_DETAIL_WIDTH, Math.max(MIN_DETAIL_WIDTH, Math.min(clientX - box.left, box.width - MIN_TABLE_WIDTH))),
-    )
-  }, [])
-
-  const warnings = payload?.warnings ?? []
-  const displayWarnings = warnings.slice(0, 5)
-  const busy = refreshing || query.isFetching
-  const thumbnailData = thumbnail.data?.data.dataUri ?? ''
+  const clearFilters = () => {
+    setFilter('')
+    setTickerFilter('')
+    setPage(0)
+  }
+  const emptyTitle = hasFilters && sorted.length ? 'No matching videos' : busy ? 'Loading your feed' : 'No videos available'
+  const emptyMessage = hasFilters && sorted.length ? 'Try a different ticker or search term.' : !tickers.length
+    ? 'Save tickers in a portfolio to see their recent research videos here.'
+    : status.tone === 'negative' ? 'Refresh to try again. Failure details are shown above.'
+    : 'Videos with at least 1,000 views from the last 90 days will appear here.'
+  const currentSort = sortColumn < 0 ? '-1:false' : sortColumn + ':' + sortDescending
+  const updatedAt = payload?.fetchedAt ?? 0
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-1 p-2">
-      <header className="flex shrink-0 flex-wrap items-center gap-2">
-        <div className="mr-auto min-w-64">
-          <h1 className="text-sm font-semibold text-text">YouTube</h1>
-          <p className="text-2xs text-text-muted">
-            Recent portfolio videos with at least 1,000 views, published in the last 90 days.
-          </p>
-        </div>
-        <span className="text-2xs text-text-muted">{countText(visible.length, sorted.length)}</span>
-        <input
-          value={filter}
-          onChange={(event) => setFilter(event.target.value)}
-          placeholder="Filter ticker, title, or channel..."
-          aria-label="Filter YouTube videos"
-          className="h-8 w-60 border border-border-strong bg-surface-raised px-2 text-2xs text-text outline-none placeholder:text-text-dim focus:border-accent"
-        />
-        <Button variant="accent" onClick={() => void onRefresh()} disabled={busy || !tickers.length}>
-          {busy ? 'Refreshing...' : 'Refresh Videos'}
-        </Button>
+    <div className="youtube-workspace" data-youtube-page>
+      <header className="youtube-header">
+        <div><h1>YouTube</h1><p>Research videos for your portfolio</p></div>
+        <span className="youtube-coverage">Last {YOUTUBE_MAX_AGE_DAYS} days · {YOUTUBE_MIN_VIEW_COUNT.toLocaleString()}+ views</span>
       </header>
-
-      <p className={`shrink-0 text-2xs ${toneClass[status.tone]}`}>{status.text}</p>
-      {displayWarnings.length && !payload?.items.length ? (
-        <div className="shrink-0 border border-warn/40 bg-warn-bg px-2 py-1 text-2xs text-warn">
-          {displayWarnings.map((warning) => <p key={warning}>{warning}</p>)}
-          {warnings.length > displayWarnings.length ? (
-            <p>+{warnings.length - displayWarnings.length} more warning(s)</p>
-          ) : null}
+      <div className="youtube-toolbar">
+        <div className="youtube-search">
+          <Icon name="search" />
+          <input value={filter} onChange={event => { setFilter(event.target.value); setPage(0) }} placeholder="Filter ticker, title or channel" aria-label="Filter YouTube videos" />
+          {filter && <button type="button" onClick={() => { setFilter(''); setPage(0) }} aria-label="Clear search"><Icon name="close" /></button>}
         </div>
-      ) : null}
+        <select className="youtube-ticker-filter" aria-label="Filter by portfolio ticker" value={activeTicker} onChange={event => { setTickerFilter(event.target.value); setPage(0) }}>
+          <option value="">All tickers</option>
+          {tickers.map(ticker => <option key={ticker} value={ticker}>{ticker}</option>)}
+        </select>
+        <select className="youtube-sort" aria-label="Sort videos" value={currentSort} onChange={event => onSort(event.target.value)}>
+          {SORT_OPTIONS.map(option => <option key={option.column + ':' + option.descending} value={option.column + ':' + option.descending}>{option.label}</option>)}
+        </select>
+        <button type="button" className="youtube-refresh" onClick={() => void onRefresh()} disabled={busy || !tickers.length}><Icon name="refresh" />{busy ? 'Refreshing…' : 'Refresh'}</button>
+      </div>
+      <div className="youtube-status-line">
+        <span className="youtube-count">{visible.length === sorted.length ? sorted.length + ' videos' : visible.length + ' of ' + sorted.length + ' videos'} · {payload?.tickersTotal ?? tickers.length} tickers</span>
+        {status.text && <span className={'youtube-status youtube-status--' + status.tone} role="status" title={status.text}><i aria-hidden="true" /><span>{status.text}</span></span>}
+        {payload?.fetchedAt ? <span className="youtube-updated" title={new Date(updatedAt).toLocaleString()}>Updated {new Date(updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span> : null}
+      </div>
 
-      <div ref={pageRef} className="flex min-h-0 flex-1">
-        <section
-          className="flex min-h-0 shrink-0 flex-col gap-2 border border-border bg-surface p-2"
-          style={{ width: detailWidth }}
-          aria-label="Selected Video"
-        >
-          <h2 className="shrink-0 text-xs font-semibold text-text">Selected Video</h2>
-          <button
-            type="button"
-            disabled={!selected?.url}
-            onClick={() => openVideo(selected)}
-            className="flex aspect-video w-[280px] max-w-full shrink-0 items-center justify-center self-center overflow-hidden border border-border-strong bg-bg text-2xs text-text-dim disabled:cursor-default"
-          >
-            {thumbnailData ? (
-              <img src={thumbnailData} alt={selected?.title ?? 'YouTube thumbnail'} className="h-full w-full object-contain" />
-            ) : thumbnail.isFetching ? (
-              'Loading thumbnail...'
-            ) : selected ? (
-              'Thumbnail unavailable'
-            ) : (
-              filter && sorted.length ? 'No matching videos' : 'No video selected'
-            )}
-          </button>
-          {selected ? (
-            <p className="shrink-0 text-center text-2xs text-text-muted">
-              {thumbnailData ? 'Click the thumbnail to watch in your browser.' : 'Thumbnail unavailable. Click here to watch in your browser.'}
-            </p>
-          ) : null}
-          <h3 className="shrink-0 text-xs font-semibold leading-snug text-text">
-            {selected?.title ?? (filter && sorted.length ? 'No matching videos' : 'No video selected')}
-          </h3>
-          <Button variant="accent" onClick={() => openVideo(selected)} disabled={!selected?.url}>
-            Watch on YouTube
-          </Button>
-          <dl className="shrink-0 space-y-1">
-            <MetaRow label="Ticker" value={selected?.ticker ?? '-'} />
-            <MetaRow label="Channel" value={selected?.channel ?? '-'} />
-            <MetaRow label="Views" value={selected?.viewCountText ?? '-'} />
-            <MetaRow label="Published" value={selected?.publishedText ?? '-'} />
-            <MetaRow label="Days Ago" value={selected?.publishedDaysText ?? '-'} />
-            <MetaRow label="Duration" value={selected?.durationText ?? '-'} />
-          </dl>
-          <h3 className="shrink-0 text-xs font-semibold text-text">Description</h3>
-          <div className="min-h-20 flex-1 overflow-y-auto border border-border bg-bg p-2 text-2xs leading-relaxed text-text-muted">
-            {selected?.descriptionSnippet
-              || (selected ? 'Description unavailable.' : filter && sorted.length
-                ? 'Clear or adjust the filter to see loaded videos.'
-                : 'No YouTube results are currently loaded.')}
+      <div className="youtube-body">
+        <section className="youtube-feed" aria-label="Portfolio YouTube feed" aria-busy={busy}>
+          <header className="youtube-feed-header"><h2>Portfolio feed <span>({visible.length})</span></h2><span>Select a video to inspect</span></header>
+          <div className="youtube-table-wrap" ref={tableArea}>
+            <table className="youtube-table">
+              <colgroup>{COLUMNS.map(column => <col key={column.column} className={column.className} />)}</colgroup>
+              <thead><tr>{COLUMNS.map(column => {
+                const active = sortColumn < 0 ? column.column === 5 : sortColumn === column.column
+                const descending = sortColumn >= 0 && sortDescending
+                return <th key={column.column} className={column.className} aria-sort={active ? descending ? 'descending' : 'ascending' : 'none'}>
+                  <button type="button" onClick={() => onSort(column.column + ':' + (active ? !descending : column.column === 3 || column.column === 6))}>{column.label}{active ? descending ? ' ↓' : ' ↑' : ''}</button>
+                </th>
+              })}</tr></thead>
+              <tbody>{pageItems.map(item => {
+                const key = rowKey(item)
+                const active = Boolean(selected && rowKey(selected) === key)
+                return <tr key={key} className="youtube-video-row" aria-selected={active} tabIndex={0} aria-label={'Select ' + item.title + ' for ' + item.ticker} onClick={() => setManualSelectedKey(key)} onDoubleClick={() => openVideo(item)} onKeyDown={event => {
+                  if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setManualSelectedKey(key) }
+                }}>
+                  <td className="youtube-col-ticker"><span className="youtube-ticker" title={item.ticker}>{item.ticker}</span></td>
+                  <td className="youtube-col-video"><span className="youtube-video-cell"><VideoThumbnail video={item} /><span className="youtube-video-title" title={item.title}>{item.title}</span></span></td>
+                  <td className="youtube-col-channel"><span title={item.channel}>{item.channel || 'Unavailable'}</span></td>
+                  <td className="youtube-col-views">{item.viewCountText || 'N/A'}</td>
+                  <td className="youtube-col-published"><span title={item.publishedText}>{publishedAge(item)}</span></td>
+                  <td className="youtube-col-length">{item.durationText || '—'}</td>
+                </tr>
+              })}</tbody>
+            </table>
+            {!pageItems.length && <div className="youtube-empty"><h2>{emptyTitle}</h2><p>{emptyMessage}</p>{hasFilters && <button type="button" onClick={clearFilters}>Clear filters</button>}</div>}
           </div>
+          <footer className="youtube-feed-footer">
+            <span>{visible.length ? start + 1 : 0}–{Math.min(start + pageSize, visible.length)} of {visible.length} videos</span>
+            <nav className="youtube-pagination" aria-label="Video pages">
+              <button type="button" aria-label="Previous video page" disabled={!currentPage} onClick={() => setPage(currentPage - 1)}>‹</button>
+              <span>Page {currentPage + 1} of {pageCount}</span>
+              <button type="button" aria-label="Next video page" disabled={currentPage === pageCount - 1} onClick={() => setPage(currentPage + 1)}>›</button>
+            </nav>
+          </footer>
         </section>
 
-        <Splitter onDrag={onDrag} />
-
-        <section className="flex min-h-0 min-w-0 flex-1 flex-col border border-border bg-surface p-1" aria-label="Portfolio YouTube Feed">
-          <h2 className="shrink-0 px-1 py-1 text-xs font-semibold text-text">Portfolio YouTube Feed</h2>
-          <div className="min-h-0 flex-1 overflow-auto border border-border">
-            <table className="w-full min-w-[780px] border-collapse text-2xs">
-              <thead className="sticky top-0 z-10 bg-surface-raised text-left text-text-muted">
-                <tr>
-                  {COLUMNS.map((label, column) => (
-                    <th
-                      key={label}
-                      className={`${column === 1 ? 'min-w-64' : 'whitespace-nowrap'} border-b border-border px-2 py-1 font-medium`}
-                      aria-sort={
-                        (sortColumn < 0 ? column === 5 : sortColumn === column)
-                          ? (sortColumn >= 0 && sortDescending ? 'descending' : 'ascending')
-                          : 'none'
-                      }
-                    >
-                      <button type="button" onClick={() => onSort(column)} className="w-full text-left hover:text-text">
-                        {label}{sortMark(column, sortColumn, sortDescending)}
-                      </button>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {visible.map((item) => {
-                  const key = videoKey(item)
-                  const active = selected ? videoKey(selected) === key : false
-                  return (
-                    <tr
-                      key={key}
-                      onClick={() => setManualSelectedKey(key)}
-                      onDoubleClick={() => openVideo(item)}
-                      className={`cursor-default border-b border-border/60 ${active ? 'bg-accent-dim/60' : 'odd:bg-bg/30 hover:bg-surface-hover'}`}
-                    >
-                      <td className="whitespace-nowrap px-2 py-1 text-text">{item.ticker}</td>
-                      <td className="px-2 py-1 text-accent" title={item.descriptionSnippet || item.title}>{item.title}</td>
-                      <td className="whitespace-nowrap px-2 py-1 text-text">{item.channel}</td>
-                      <td className="whitespace-nowrap px-2 py-1 text-right text-text">{item.viewCountText}</td>
-                      <td className="whitespace-nowrap px-2 py-1 text-text">{item.publishedText}</td>
-                      <td className="whitespace-nowrap px-2 py-1 text-right text-text">{item.publishedDaysText}</td>
-                      <td className="whitespace-nowrap px-2 py-1 text-right text-text">{item.durationText}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-            {!visible.length ? (
-              <div className="flex min-h-32 items-center justify-center text-2xs text-text-dim">
-                {query.isFetching
-                  ? 'Loading videos...'
-                  : filter && sorted.length
-                    ? 'No matching videos. Clear or adjust the filter.'
-                    : 'No YouTube results are currently loaded.'}
-              </div>
-            ) : null}
+        <section className="youtube-focus" aria-label="Selected video">
+          <div className="youtube-eyebrow">Selected video{selected && <span className="youtube-ticker">{selected.ticker}</span>}</div>
+          <button type="button" className="youtube-preview" onClick={() => openVideo(selected)} disabled={!selected?.url} aria-label={selected ? 'Watch ' + selected.title + ' on YouTube' : 'No video selected'}><VideoThumbnail key={selected ? videoKey(selected) : 'empty'} video={selected} preview /></button>
+          <div className="youtube-title-row"><h2 title={selected?.title}>{selected?.title || emptyTitle}</h2><span className="youtube-channel" title={selected?.channel}>{selected?.channel || (selected ? 'Channel unavailable' : emptyMessage)}</span></div>
+          {selected ? <button type="button" className="youtube-watch" onClick={() => openVideo(selected)} disabled={!selected.url}>Watch on YouTube<Icon name="external" /></button> : <button type="button" className="youtube-watch-placeholder" onClick={clearFilters} disabled={!hasFilters}>{hasFilters ? 'Clear filters' : 'Waiting for videos'}</button>}
+          <div className="youtube-inspector-tabs" role="group" aria-label="Video information">
+            <button type="button" aria-pressed={inspectorTab === 'details'} onClick={() => setInspectorTab('details')}>Details</button>
+            <button type="button" aria-pressed={inspectorTab === 'description'} onClick={() => setInspectorTab('description')}>Description</button>
+          </div>
+          <div className="youtube-information">
+            {inspectorTab === 'details' ? <dl className="youtube-details">
+              <MetaRow label="Ticker" value={selected?.ticker ?? ''} /><MetaRow label="Views" value={selected?.viewCountText ?? ''} />
+              <MetaRow label="Published" value={selected?.publishedText ?? ''} /><MetaRow label="Age" value={selected ? publishedAge(selected) : ''} />
+              <MetaRow label="Duration" value={selected?.durationText ?? ''} /><MetaRow label="Channel" value={selected?.channel ?? ''} />
+            </dl> : <FittedText key={(selected ? rowKey(selected) : '') + ':description'} text={selected?.descriptionSnippet || (selected ? 'No description is available for this video.' : emptyMessage)} label="description" />}
           </div>
         </section>
       </div>

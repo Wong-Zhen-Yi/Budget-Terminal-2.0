@@ -90,6 +90,7 @@ export const queryKeys = {
   newsPreview: (url: string) => ['newsPreview', url] as const,
   newsThumbnail: (url: string) => ['newsThumbnail', url] as const,
   youtube: (tickers: string[]) => ['youtube', [...tickers].sort().join(',')] as const,
+  tv: ['tv'] as const,
   youtubeThumbnail: (videoId: string, thumbnailUrl: string) =>
     ['youtubeThumbnail', videoId, thumbnailUrl] as const,
   fundamentals: (tickers: string[]) => ['fundamentals', [...tickers].sort().join(','), 'pe-peg-v2'] as const,

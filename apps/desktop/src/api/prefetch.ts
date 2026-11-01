@@ -42,7 +42,7 @@ import { usePortfolio } from './queries'
 import { assertStartupReady, StartupLoadError, warmQuery, warmStartupQuery, warmStartupSnapshot, type StartupSnapshotObserver } from './warmQueue'
 import { recordStartupSnapshot } from './startupHealth'
 import { loadPortfolioChart, portfolioChartTargets } from './portfolioCharts'
-import { initialNewsImages, initialYouTubeVideo, newsQuoteTickers } from './initialContent'
+import { initialNewsImages, initialYouTubeVideos, newsQuoteTickers } from './initialContent'
 import { warmAgentWorkspace } from './agentsQueries'
 import { browserKey, loadBrowser } from './browserQueries'
 import { notificationsKey, loadNotifications } from './notificationsQueries'
@@ -834,17 +834,42 @@ export function buildTasks(
           queryFn: () => api.youtube({ tickers: every, background: true, backgroundOrder }),
           staleTime: queryFreshness(queryKeys.youtube(every)),
         }, onSnapshot)
-        const selected = initialYouTubeVideo(result.data.items, settings?.youtubePage)
-        if (selected && (selected.videoId || selected.thumbnailUrl)) await warmStartupQuery(client, {
-          queryKey: queryKeys.youtubeThumbnail(selected.videoId, selected.thumbnailUrl),
-          queryFn: () => api.youtubeThumbnail({ videoId: selected.videoId, thumbnailUrl: selected.thumbnailUrl }),
+        const images = await Promise.allSettled(initialYouTubeVideos(result.data.items, settings?.youtubePage).map(video => warmStartupQuery(client, {
+          queryKey: queryKeys.youtubeThumbnail(video.videoId, video.thumbnailUrl),
+          queryFn: () => api.youtubeThumbnail({ videoId: video.videoId, thumbnailUrl: video.thumbnailUrl }),
           staleTime: Infinity,
-        }, onSnapshot)
+        }, onSnapshot)))
         assertStartupReady(result)
+        const failures = images.filter(image => image.status === 'rejected')
+        if (failures.length) throw new StartupLoadError(
+          failures.length + ' video thumbnail(s) could not load: ' + errorMessage(failures[0].reason), 'degraded',
+        )
         return result
       },
     })
   }
+
+  tasks.push({
+    tab: 'tv', label: 'Market TV',
+    run: async (client, backgroundOrder, onSnapshot) => {
+      const result = await warmStartupSnapshot(client, {
+        queryKey: queryKeys.tv,
+        queryFn: () => api.tv({ background: true, backgroundOrder }),
+        staleTime: queryFreshness(queryKeys.tv),
+      }, onSnapshot)
+      const images = await Promise.allSettled(result.data.items.map(video => warmStartupQuery(client, {
+        queryKey: queryKeys.youtubeThumbnail(video.videoId, video.thumbnailUrl),
+        queryFn: () => api.youtubeThumbnail({ videoId: video.videoId, thumbnailUrl: video.thumbnailUrl }),
+        staleTime: Infinity,
+      }, onSnapshot)))
+      assertStartupReady(result)
+      const failures = images.filter(image => image.status === 'rejected')
+      if (failures.length) throw new StartupLoadError(
+        failures.length + ' TV thumbnail(s) could not load: ' + errorMessage(failures[0].reason), 'degraded',
+      )
+      return result
+    },
+  })
 
   // The default index only. Warming the other two would triple the cost for maps nobody
   // has asked to see, and the per-index cache makes switching to one free on the second

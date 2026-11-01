@@ -333,6 +333,7 @@ const policyScheduler = createStartupScheduler({
   clearTimer: ((id: number) => { policyTimers.delete(id) }) as unknown as typeof clearTimeout,
 })
 const policyTasks = refreshPlan.filter(task => task.refreshIntervalMs !== undefined || task.tab === 'backtest')
+assert.equal(policyTasks.find(task => task.tab === 'tv')?.refreshIntervalMs, 300_000, 'TV must refresh recent uploads every five minutes')
 policyScheduler.reconcile(policyTasks.map(task => ({ ...task, run: async observe => {
   policyCalls.set(task.id, (policyCalls.get(task.id) ?? 0) + 1)
   observe(['quotes'], { ...ok({}, 'fixture'), meta: {
@@ -341,7 +342,7 @@ policyScheduler.reconcile(policyTasks.map(task => ({ ...task, run: async observe
 } })))
 await settleScheduler()
 assert.equal(policyTimers.size, policyTasks.length - backtestTasks.length)
-assert([...policyTimers.values()].every(timer => timer.delay === 1_800_000 || timer.delay === 3_600_000), 'Source expiry must not shorten explicit page refresh windows')
+assert([...policyTimers.values()].every(timer => timer.delay === 300_000 || timer.delay === 1_800_000 || timer.delay === 3_600_000), 'Source expiry must not shorten explicit TV, Heatmap or company refresh windows')
 for (const [id, timer] of [...policyTimers]) {
   policyTimers.delete(id)
   timer.run()
@@ -980,14 +981,15 @@ try {
   cryptoClient.setQueryData(['crypto', 'hyperliquid-v1'], { ...cryptoEnvelope, meta: { ...cryptoEnvelope.meta, fetchedAt: Date.now() - 180_000 } })
   const cryptoMarkup = renderToStaticMarkup(createElement(QueryClientProvider, { client: cryptoClient },
     createElement(CryptoPage, { onStatusChange: () => {} })))
-  assert.match(cryptoMarkup, /Snapshot updated at 07:50:45/)
+  assert.doesNotMatch(cryptoMarkup, /crypto-notice|Snapshot updated at|stages ready/)
   assert.doesNotMatch(cryptoMarkup, /Snapshot expired/)
   assert.match(cryptoMarkup, /Snapshot coverage 0\/30 \| stale \| Updated 07:50:45/)
   assert.doesNotMatch(cryptoMarkup, /Live data|Live coverage/)
   cryptoClient.setQueryData(['crypto', 'hyperliquid-v1'], cryptoEnvelope)
   const freshCryptoMarkup = renderToStaticMarkup(createElement(QueryClientProvider, { client: cryptoClient },
     createElement(CryptoPage, { onStatusChange: () => {} })))
-  assert.match(freshCryptoMarkup, /Snapshot updated at 07:50:45 · fresh/)
+  assert.doesNotMatch(freshCryptoMarkup, /crypto-notice|Snapshot updated at|stages ready/)
+  assert.match(freshCryptoMarkup, /Snapshot 07:50:45 · fresh/)
   console.log('Crypto renderer expiration checks passed: expired snapshots stop advertising live data or coverage.')
   const { BmnrPage } = await import('../src/pages/BmnrPage.js')
   const { emptyBmnrPayload, parseLiveTreasury } = await import('../electron/shared/bmnr.js')

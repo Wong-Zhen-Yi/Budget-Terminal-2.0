@@ -4,7 +4,7 @@ export const DEFAULT_TAB_ID = 'dashboard-2'
 
 /** Stable workspace membership; user ordering still applies within each workspace. */
 export const WORKSPACES = [
-  { id: 'overview', label: 'Overview', pages: ['dashboard', 'dashboard-2', 'news', 'calendar', 'youtube', 'dictionary'] },
+  { id: 'overview', label: 'Overview', pages: ['dashboard', 'dashboard-2', 'news', 'calendar', 'youtube', 'tv', 'dictionary'] },
   { id: 'markets', label: 'Markets', pages: ['pre-market', 'heatmap', 'up-down', 'trading-volumes', 'beta', 'market-cap', 'price', 'etf', 'sp500', 'forex', 'crypto', 'gold', 'oil'] },
   { id: 'research', label: 'Research', pages: ['browser', 'stocks', 'stock-discovery', 'fundamentals', 'scorecard', 'defeatbeta', 'valuation', 'institutions'] },
   { id: 'focus', label: 'Focus', pages: ['bmnr', 'bitcoin', 'pltr', 'hood', 'hims', 'sofi', 'mu', 'amzn', 'avgo', 'semiconductors', 'vst'] },

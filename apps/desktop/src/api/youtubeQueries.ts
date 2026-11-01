@@ -35,7 +35,7 @@ export function useRefreshYouTube(tickers: string[]): () => Promise<void> {
 }
 
 export function useYouTubeThumbnail(
-  video: YouTubeVideo | null,
+  video: Pick<YouTubeVideo, 'videoId' | 'thumbnailUrl'> | null,
 ): UseQueryResult<Envelope<YouTubeThumbnailPayload>> {
   const videoId = video?.videoId ?? ''
   const thumbnailUrl = video?.thumbnailUrl ?? ''

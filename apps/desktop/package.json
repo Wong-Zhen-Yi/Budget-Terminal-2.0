@@ -9,6 +9,9 @@
     "npm": ">=10.9.8"
   },
   "scripts": {
+    "probe:tv": "tsx scripts/probe-tv.ts",
+    "probe:tv-ui": "tsx scripts/probe-tv-ui.ts",
+    "probe:youtube-ui": "tsx scripts/probe-youtube-ui.ts",
     "probe:api-usage-ui": "tsx scripts/probe-api-usage-ui.ts",
     "probe:hyperliquid": "tsx scripts/probe-hyperliquid-equities.ts",
     "probe:notifications": "tsx scripts/probe-notifications.ts",
@@ -77,6 +80,7 @@
     "probe:charts": "tsx scripts/probe-charts.ts",
     "probe:charts-ui": "tsx scripts/probe-charts-ui.ts",
     "probe:dictionary": "tsx scripts/probe-dictionary.ts",
+    "probe:dictionary-ui": "tsx scripts/probe-dictionary-ui.ts",
     "probe:bitcoin": "tsx scripts/probe-bitcoin.ts",
     "probe:bitcoin-ui": "tsx scripts/probe-bitcoin-ui.ts",
     "probe:bmnr": "tsx scripts/probe-bmnr.ts",

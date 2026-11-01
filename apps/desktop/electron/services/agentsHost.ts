@@ -117,7 +117,7 @@ function agent() {
 }
 // Start once per app session, independently of which page is visible. Status reads
 // wait for this attempt so startup readiness includes connection success or failure.
-export function startAgents() {
+export async function startAgents() {
   void startTelegram()
   if (!startup) {
     const session = agent()

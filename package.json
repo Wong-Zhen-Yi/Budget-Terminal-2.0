@@ -11,6 +11,8 @@
     "apps/desktop"
   ],
   "scripts": {
+    "probe:tv": "npm run --workspace budget-terminal-desktop probe:tv --",
+    "probe:tv-ui": "npm run --workspace budget-terminal-desktop probe:tv-ui --",
     "probe:hyperliquid": "npm run --workspace budget-terminal-desktop probe:hyperliquid --",
     "preinstall": "node scripts/runtime.cjs",
     "prepare": "git config core.hooksPath .githooks || exit 0",
@@ -37,6 +39,7 @@
     "probe:calendar": "npm run --workspace budget-terminal-desktop probe:calendar --",
     "probe:charts": "npm run --workspace budget-terminal-desktop probe:charts --",
     "probe:dictionary": "npm run --workspace budget-terminal-desktop probe:dictionary --",
+    "probe:dictionary-ui": "npm run --workspace budget-terminal-desktop probe:dictionary-ui --",
     "probe:bmnr": "npm run --workspace budget-terminal-desktop probe:bmnr --",
     "probe:avgo": "npm run --workspace budget-terminal-desktop probe:avgo --",
     "probe:avgo-ui": "npm run --workspace budget-terminal-desktop probe:avgo-ui --",

@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Candle, CryptoPayload, CryptoQuote, HyperliquidMarket } from '@shared/contract'
 import {
-  CRYPTO_HEATMAP_LIMIT, CRYPTO_STAGES, CRYPTO_TICKERS, PROXY_TICKERS,
-  buildCryptoSnapshot, clockTail, cryptoMoney, cryptoPercent, cryptoPrice, cryptoTone, heatmapIntensity, loadedStageCount,
+  CRYPTO_HEATMAP_LIMIT, CRYPTO_TICKERS, PROXY_TICKERS,
+  buildCryptoSnapshot, clockTail, cryptoMoney, cryptoPercent, cryptoPrice, cryptoTone, heatmapIntensity,
 } from '@shared/crypto'
 import { CRYPTO_CHART_INTERVALS, cryptoChartRequest } from '@shared/cryptoWorkspace'
 import { FRESHNESS } from '@shared/freshness'
@@ -69,7 +69,7 @@ export function CryptoPage({ onStatusChange }: { onStatusChange: (panels: PanelS
     : query.data?.meta.freshness === 'failed' ? `Crypto data refresh failed: ${query.data.meta.failureReason || errors || 'Provider unavailable'}`
     : loading && !payload ? 'Fetching crypto market data...'
     : !payload ? 'Loading crypto market data...'
-    : `Snapshot updated at ${clockTail(payload.fetchedAt)} · ${freshness} · ${loadedStageCount(payload.progress)}/${CRYPTO_STAGES.length} stages ready${errors ? `. ${errors}` : ''}`)
+    : errors)
 
   useEffect(() => {
     onStatusChange([
@@ -114,7 +114,7 @@ export function CryptoPage({ onStatusChange }: { onStatusChange: (panels: PanelS
       </div>
     </header>
 
-    {(cooldown || spotWarning || freshness === 'partial' || freshness === 'stale' || freshness === 'failed' || query.error || notice) && <div className="crypto-notice" role="status">
+    {(cooldown || status) && <div className="crypto-notice" role="status">
       <span>{cooldown ? `CoinGecko rate limited · ${payload ? 'Showing available snapshots and labelled fallback prices' : 'Spot data unavailable'}` : status}</span>
       {cooldown && <span className="num">Auto-retry in {cooldownSeconds}s</span>}
     </div>}

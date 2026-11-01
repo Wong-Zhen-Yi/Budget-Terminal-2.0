@@ -15,6 +15,15 @@ try {
     const { app, dialog, session } = require('electron')
     app.setAppPath(${JSON.stringify(root)})
     app.setPath('userData', ${JSON.stringify(join(directory, 'profile'))})
+    if (process.env.BUDGET_PROBE_AGENT_FAILURE === '1') {
+      const fs = require('node:fs')
+      const mkdirSync = fs.mkdirSync
+      fs.mkdirSync = (path, ...args) => {
+        if (path === ${JSON.stringify(join(directory, 'profile', 'agents'))}) throw Error('Fixture Agent startup failure')
+        return mkdirSync(path, ...args)
+      }
+      require('node:module').syncBuiltinESMExports()
+    }
     dialog.showErrorBox = (title, message) => { console.error(title + ': ' + message); app.exit(1) }
     // Block browser network requests while exercising real startup and IPC.
     app.whenReady().then(() => session.defaultSession.webRequest.onBeforeRequest(
@@ -53,18 +62,21 @@ try {
   delete env.ELECTRON_RUN_AS_NODE
   delete env.ELECTRON_RENDERER_URL
   const electron = createRequire(import.meta.url)('electron') as string
-  const output = await new Promise<{ code: number | null; text: string }>((resolveRun, reject) => {
-    const child = spawn(electron, [entry], { env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
-    let text = ''
-    child.stdout.on('data', chunk => { text += chunk })
-    child.stderr.on('data', chunk => { text += chunk })
-    const timer = setTimeout(() => { child.kill(); reject(Error('Desktop startup timed out: ' + text)) }, 30_000)
-    child.on('error', error => { clearTimeout(timer); reject(error) })
-    child.on('close', code => { clearTimeout(timer); resolveRun({ code, text }) })
-  })
-  assert.equal(output.code, 0, output.text)
-  assert.match(output.text, /PASS: built desktop opens/)
-  console.log(output.text.trim())
+  for (const agentFailure of [false, true]) {
+    const output = await new Promise<{ code: number | null; text: string }>((resolveRun, reject) => {
+      const child = spawn(electron, [entry], { env: { ...env, BUDGET_PROBE_AGENT_FAILURE: agentFailure ? '1' : '0' }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+      let text = ''
+      child.stdout.on('data', chunk => { text += chunk })
+      child.stderr.on('data', chunk => { text += chunk })
+      const timer = setTimeout(() => { child.kill(); reject(Error('Desktop startup timed out: ' + text)) }, 30_000)
+      child.on('error', error => { clearTimeout(timer); reject(error) })
+      child.on('close', code => { clearTimeout(timer); resolveRun({ code, text }) })
+    })
+    assert.equal(output.code, 0, output.text)
+    assert.match(output.text, /PASS: built desktop opens/)
+    if (agentFailure) assert.match(output.text, /Codex startup connection failed:.*Fixture Agent startup failure/)
+    console.log(output.text.trim())
+  }
 } finally {
   await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
 }

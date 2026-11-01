@@ -24,3 +24,13 @@ export function initialYouTubeVideo(items: readonly YouTubeVideo[], settings: un
   const selection = normalizeYouTubePageSettings(settings)
   return sortYouTubeVideos(items, selection.sortColumn, selection.sortDescending)[0] ?? null
 }
+
+/** The focus preview and feed both display images on the first visit. */
+export function initialYouTubeVideos(items: readonly YouTubeVideo[], settings: unknown): YouTubeVideo[] {
+  const selection = normalizeYouTubePageSettings(settings)
+  const images = new Map<string, YouTubeVideo>()
+  for (const item of sortYouTubeVideos(items, selection.sortColumn, selection.sortDescending)) {
+    if (item.videoId || item.thumbnailUrl) images.set(JSON.stringify([item.videoId, item.thumbnailUrl]), item)
+  }
+  return [...images.values()]
+}

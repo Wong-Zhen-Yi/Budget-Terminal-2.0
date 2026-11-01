@@ -23,6 +23,7 @@ export const PRE_MARKET_REFRESH_MS = 15 * 60_000
 
 /** These page snapshots deliberately refresh less often than their dependencies. */
 export const PAGE_REFRESH_INTERVAL_MS: Readonly<Record<string, number>> = {
+  tv: FRESHNESS.tv,
   heatmap: FRESHNESS.heatmap,
   amzn: FRESHNESS.amzn,
   mu: FRESHNESS.mu,

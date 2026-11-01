@@ -226,7 +226,7 @@ try {
   closeCache = () => cache.close()
   const serviceRoutes = createServiceRoutes()
   assert.deepEqual([...serviceRoutes.keys()].sort(), Object.keys(operations).sort(), 'Desktop-only services must not break MCP route registration or expand the tool allowlist')
-  for (const operation of ['cacheStatus', 'configureCache', 'heatmapProgress']) {
+  for (const operation of ['cacheStatus', 'configureCache', 'heatmapProgress', 'tv']) {
     assert.equal(serviceRoutes.has(operation as Operation), false)
     assert.throws(() => validateCall(toolName(operation), { request: {} }), /Unknown/)
   }

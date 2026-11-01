@@ -16,6 +16,8 @@ function platformName(platform) {
 
 function launch({ development = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
   const os = platformName(platform)
+  log.log('YouTube Research Terminal: compact table, right-side inspector and pagination without scrollbars. Warning-count status and warning controls are removed. All videos and images still preload at startup.')
+  log.log('TV: separate market video page with recent channel uploads, newest-first coverage and five-minute refresh. Feed and images preload at startup.')
   if (!os) {
     log.error(`Budget Terminal supports Windows, macOS, and Linux; found ${platform}.`)
     return 1
@@ -63,8 +65,10 @@ function launch({ development = false, platform = process.platform, nodeVersion 
   }
 
   log.log(`Starting Budget Terminal for ${os}...`)
+  log.log('Dictionary Reading Room: category browsing, readable articles, section navigation, saved terms, recent history and formula copying. All 405 terms remain available offline.')
+  log.log('Crypto: removed the snapshot summary banner. Refresh errors, rate limits and startup loading remain visible.')
   log.log('Saved-data warning banners removed throughout the app, including ETF, IPO, Valuation, company pages and charts. Startup progress and failure details remain in Settings.')
-  log.log('MCP startup fix: desktop-only cache controls and heatmap progress no longer block the app from opening.')
+  log.log('MCP startup fix: desktop-only cache controls, heatmap progress and TV are classified correctly. Agent startup errors no longer block the app from opening.')
   log.log('Heatmap fills holdings and quote colours progressively while data loads; loading progress stays visible until completion.')
   log.log('Cache startup: saved pages stay usable during background refresh. Settings controls 256 MiB page snapshots, 2 GiB market data, a separate 512 MiB image budget and 30-day retention. All pages still preload.')
   log.log('Refresh schedule: Heatmap every 30 minutes; company snapshots and Personal Finance FX hourly; Dashboard headlines every 5 minutes. Backtest preloads once with no automatic refresh.')

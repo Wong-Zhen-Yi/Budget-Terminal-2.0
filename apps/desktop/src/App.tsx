@@ -73,6 +73,7 @@ import { SettingsPage } from '@/pages/SettingsPage'
 import { StocksPage } from '@/pages/StocksPage'
 import { StockDiscoveryPage } from '@/pages/StockDiscoveryPage'
 import { YouTubePage } from '@/pages/YouTubePage'
+import { TvPage } from '@/pages/TvPage'
 import { useDataHealth } from '@/stores/dataHealth'
 import { useChartsStore } from '@/stores/charts'
 import { useFundamentalsStore } from '@/stores/fundamentals'
@@ -585,6 +586,8 @@ function renderPage({
       <TechnicalScreenPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'youtube' ? (
       <YouTubePage onStatusChange={onStatusChange} />
+    ) : tabId === 'tv' ? (
+      <TvPage onStatusChange={onStatusChange} />
     ) : tabId === 'institutions' ? (
       <InstitutionsPage onStatusChange={onStatusChange} />
     ) : tabId === SETTINGS_TAB_ID ? (
