@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { TelegramError } from './telegram.js'
 
 export const agentToolRunSchema = z.object({
   name: z.string().max(120), startedAt: z.number().nonnegative(),
@@ -25,6 +26,7 @@ export type AgentCheckpoint = z.infer<typeof agentCheckpointSchema>
 
 /** Persist fixed diagnostic categories, never arbitrary provider text, URLs, arguments or secrets. */
 export function agentFailureReason(error: unknown): string {
+  if (error instanceof TelegramError) return error.message.slice(0, 300)
   const text = error instanceof Error ? error.message : String(error)
   if (/run reached its .*minute limit/i.test(text)) return 'The run reached its time limit.'
   if (/80-tool limit/i.test(text)) return 'The run reached its tool limit.'

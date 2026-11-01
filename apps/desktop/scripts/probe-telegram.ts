@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { TelegramService } from '../electron/services/telegram.js'
+import { agentFailureReason } from '../electron/shared/agentRuns.js'
 
 // Synthetic credentials and an in-memory store: never contact Telegram or touch real profiles.
 const token = '123456:' + 'synthetic_'.repeat(4)
@@ -20,6 +21,7 @@ const adapter = new TelegramService({
     requests.push({ method, body })
     if (fail) throw new Error(String(url))
     let result: unknown = { username: 'fixture_bot' }
+    if (method === 'getChat') result = { id: 123, type: 'private' }
     if (method === 'getUpdates') {
       result = updates; updates = []
       if (body.timeout && !(result as unknown[]).length) {
@@ -70,5 +72,40 @@ assert(resets >= 2)
 await adapter.disconnect()
 assert.equal(stored, null)
 assert.equal(adapter.snapshot().configured, false)
+for (const [code, description, expected] of [
+  [400, 'Bad Request: chat not found', /personal numeric user ID/],
+  [403, 'Forbidden: bot was blocked by the user', /Unblock/],
+  [401, 'Unauthorized', /bot token was rejected/],
+  [409, 'Conflict: terminated by other getUpdates request', /Another gateway/],
+  [429, 'Too Many Requests', /rate limit/],
+] as const) {
+  let polls = 0
+  const test = new TelegramService({
+    load: async () => ({ token, chatId: '123', enabled: true, receive: true, offset: 0 }),
+    save: async () => {}, reset: async () => {}, reply: async () => 'unused',
+    fetch: (async (url, init) => {
+      const method = String(url).split('/').pop()
+      if (method === 'getChat' || method === 'sendMessage') return new Response(JSON.stringify({ ok: false, error_code: code, description: description + token }), { status: code })
+      if (method === 'getUpdates') {
+        if (++polls > 1) await new Promise<void>((_resolve, reject) => {
+          init!.signal!.addEventListener('abort', () => reject(new Error('cancelled')), { once: true })
+        })
+        return new Response(JSON.stringify({ ok: true, result: [] }))
+      }
+      return new Response(JSON.stringify({ ok: true, result: { username: 'fixture_bot' } }))
+    }) as typeof fetch,
+  })
+  await test.initialize()
+  assert.match(test.snapshot().error, expected)
+  await new Promise(resolve => setTimeout(resolve, 0))
+  assert.match(test.snapshot().error, expected, 'Successful incoming polling must not erase a delivery failure')
+  await assert.rejects(test.send('fixture'), error => {
+    assert.match(agentFailureReason(error), expected)
+    assert(!agentFailureReason(error).includes(token))
+    return true
+  })
+  await test.close()
+}
 console.log('PASS: Telegram configuration, redaction, Unicode splitting, no send retries, private allowlist, stale-message rejection, persisted offset and cancellation')
+console.log('PASS: private-chat validation, actionable errors retained across successful polling, and safe agent diagnostics')
 

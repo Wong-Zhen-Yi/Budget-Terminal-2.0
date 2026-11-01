@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { TelegramState } from '../shared/telegram.js'
+import { TelegramError } from '../shared/telegram.js'
 
 export const telegramConfigSchema = z.object({
   token: z.string().regex(/^\d+:[A-Za-z0-9_-]{20,}$/),
@@ -23,6 +24,7 @@ export class TelegramService {
   private controller = new AbortController()
   private loop: Promise<void> | null = null
   private sending = false
+  private deliveryError = ''
   constructor(private options: Options) {}
   snapshot() { return { ...this.state } }
   async initialize() {
@@ -38,13 +40,26 @@ export class TelegramService {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
         signal: AbortSignal.any([signal, AbortSignal.timeout(35_000)]), redirect: 'error',
       })
-      const result = await response.json() as { ok: boolean; result: T }
-      if (!response.ok || !result.ok) throw new Error(`Telegram request failed (${response.status}). Check the bot token, chat ID and whether another bot gateway is running.`)
+      const result = await response.json() as { ok: boolean; result: T; error_code?: number; description?: string }
+      if (!response.ok || !result.ok) {
+        const code = result.error_code ?? response.status
+        // Match provider reasons, but never expose raw descriptions or URLs.
+        const reason = String(result.description ?? '').toLowerCase()
+        const advice = code === 401 || code === 404 ? 'The bot token was rejected. Update the token from BotFather.'
+          : code === 409 ? 'Another gateway or webhook is using this bot. Stop the other gateway or use a separate bot token.'
+            : code === 429 ? 'Telegram rate limit reached. Wait before trying again.'
+              : reason.includes('blocked') ? 'Your bot is blocked. Unblock it in Telegram and send /start.'
+                : reason.includes('chat not found') || reason.includes('initiate conversation') ? 'The private chat is unavailable to this bot. Check your personal numeric user ID, open this exact bot in Telegram, and send /start.'
+                  : reason.includes('bots') ? 'The recipient is a bot. Enter your personal numeric Telegram user ID, not the bot ID.'
+                    : code === 403 ? 'Telegram denied access to this chat. Check the user ID and unblock/start this exact bot.'
+                      : 'Telegram rejected the request. Check the bot and private chat settings.'
+        throw new TelegramError(`Telegram ${method} failed (${code}). ${advice}`)
+      }
       return result.result
     } catch (error) {
       // Fetch errors may contain the credential-bearing URL; never propagate them.
-      if (error instanceof Error && error.message.startsWith('Telegram request failed (')) throw error
-      throw new Error('Telegram request could not complete. Check connectivity; delivery may be uncertain. Do not resend automatically.')
+      if (error instanceof TelegramError) throw error
+      throw new TelegramError('Telegram request could not complete. Check connectivity; delivery may be uncertain. Do not resend automatically.')
     }
   }
   async configure(input: { token?: string; chatId: string; enabled: boolean; receive: boolean }) {
@@ -68,13 +83,26 @@ export class TelegramService {
   private async start() {
     const config = this.config!
     this.controller = new AbortController()
+    this.deliveryError = ''
     this.state = { configured: true, enabled: config.enabled, receive: config.receive, connected: false, chatId: config.chatId, bot: '', error: '' }
     if (!config.enabled) return
     try {
       const me = await this.api<{ username: string }>('getMe', {})
       this.state.bot = me.username; this.state.connected = true
+      await this.checkChat()
       if (config.receive) this.loop = this.poll(this.controller.signal)
     } catch (error) { this.state.error = (error as Error).message }
+  }
+  async checkChat() {
+    if (!this.config?.enabled) throw new TelegramError('Telegram messaging is disabled. Enable it in Agents first.')
+    try {
+      const chat = await this.api<{ id: number; type: string }>('getChat', { chat_id: this.config.chatId })
+      if (chat.type !== 'private' || String(chat.id) !== this.config.chatId) throw new TelegramError('Telegram requires your personal private chat ID. Check the configured user ID.')
+      this.deliveryError = ''; this.state.error = ''
+    } catch (error) {
+      this.deliveryError = (error as Error).message; this.state.error = this.deliveryError
+      // Keep polling available: /start can make a previously unknown private chat accessible.
+    }
   }
   async send(text: string, signal = this.controller.signal) {
     if (!this.config?.enabled) throw new Error('Telegram messaging is disabled. Configure it in Agents.')
@@ -91,11 +119,12 @@ export class TelegramService {
         await this.api('sendMessage', { chat_id: config.chatId, text: characters.slice(at, at + 3500).join(''), link_preview_options: { is_disabled: true } }, signal, config)
         sent++
       }
-      this.state.error = ''
+      this.deliveryError = ''; this.state.error = ''
       return { sent: true, parts: sent }
     } catch (error) {
-      this.state.error = `${(error as Error).message} ${sent} parts confirmed sent.`
-      throw new Error(this.state.error)
+      this.deliveryError = `${(error as Error).message} ${sent} parts confirmed sent.`
+      this.state.error = this.deliveryError
+      throw new TelegramError(this.state.error)
     } finally { this.sending = false }
   }
   private async poll(signal: AbortSignal) {
@@ -104,7 +133,7 @@ export class TelegramService {
       try {
         const config = this.config!
         const updates = await this.api<Update[]>('getUpdates', { offset: config.offset, timeout: 25, limit: 10, allowed_updates: ['message'] }, signal)
-        this.state.connected = true; this.state.error = ''; failures = 0
+        this.state.connected = true; this.state.error = this.deliveryError; failures = 0
         for (const update of updates) {
           if (signal.aborted) return
           if (update.update_id < config.offset) continue

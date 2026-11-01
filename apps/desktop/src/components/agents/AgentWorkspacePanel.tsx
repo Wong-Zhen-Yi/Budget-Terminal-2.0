@@ -1,13 +1,16 @@
 import { useState } from 'react'
 import type { AgentsCommand, AgentsState } from '@shared/agents'
+import { TelegramSettings } from './TelegramSettings'
 
-export function AgentWorkspacePanel({ agent, locked, perform, setDraft }: {
+export function AgentWorkspacePanel({ agent, locked, perform, setDraft, showTelegram = false, pending = false }: {
   agent?: AgentsState
   locked: boolean
   perform: (command: AgentsCommand) => Promise<boolean>
   setDraft: (text: string) => void
+  showTelegram?: boolean
+  pending?: boolean
 }) {
-  const [tab, setTab] = useState<'history' | 'trackers' | null>(null)
+  const [tab, setTab] = useState<'history' | 'trackers' | 'telegram' | null>(null)
   const [confirm, setConfirm] = useState('')
   const trackers = agent?.trackers ?? []
   const latestRun = [...agent?.messages ?? []].reverse().find(message => message.run)?.run
@@ -24,9 +27,11 @@ export function AgentWorkspacePanel({ agent, locked, perform, setDraft }: {
       {recoverable && <button type="button" disabled={locked || !!agent?.autonomy || !!agent?.portfolioProposal} title="Reconnect if needed and continue with saved research evidence. Saved-data edits and image generation are disabled." onClick={() => void perform({ type: 'continueResearch', runId: latestRun.id })}>Continue research</button>}
       <button type="button" aria-expanded={tab === 'history'} onClick={() => switchTab('history')}>History</button>
       <button type="button" aria-label="Trackers" aria-expanded={tab === 'trackers'} onClick={() => switchTab('trackers')}>Trackers{trackers.some(tracker => tracker.enabled) ? ` (${trackers.filter(tracker => tracker.enabled).length} active)` : ''}</button>
+      {showTelegram && <button type="button" aria-expanded={tab === 'telegram'} onClick={() => switchTab('telegram')}>Telegram · {agent?.telegram?.error ? 'Needs attention' : agent?.telegram?.enabled ? agent.telegram.connected ? 'Connected' : 'Connecting' : 'Off'}</button>}
       {agent?.storageError && <span role="alert">{agent.storageError}</span>}
     </div>
-    {tab && <div className="agents-workspace-content" aria-label={tab === 'history' ? 'Chat history' : 'Saved trackers'}>
+    {tab && <div className="agents-workspace-content" aria-label={tab === 'history' ? 'Chat history' : tab === 'telegram' ? 'Telegram settings' : 'Saved trackers'}>
+      {tab === 'telegram' && <TelegramSettings state={agent?.telegram} perform={perform} pending={pending} />}
       {tab === 'history' && <>
         <p>Chats and run diagnostics are saved locally across app restarts. Continue research recovers bounded saved evidence with edits disabled. Up to 100 chats; each retains its latest 300 messages.</p>
         {!agent?.history?.length && <p>No saved chats yet.</p>}

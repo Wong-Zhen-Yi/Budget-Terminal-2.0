@@ -135,16 +135,18 @@ export async function agentsStatus() {
 }
 export async function agentsCommand(command: AgentsCommand) {
   await startTelegram()
-  if (command?.type === 'telegramConfigure' || command?.type === 'telegramTest' || command?.type === 'telegramDisconnect') {
+  if (command?.type === 'telegramConfigure' || command?.type === 'telegramTest' || command?.type === 'telegramCheck' || command?.type === 'telegramDisconnect') {
     if (telegramChanging) return failed(snapshot(), 'Telegram settings are already being updated.', 'Telegram')
     telegramChanging = true
     try {
       if (command.type === 'telegramConfigure') {
         const { type: _type, ...config } = command
         await telegramAgent().configure(config)
-      } else if (command.type === 'telegramDisconnect') await telegramAgent().disconnect()
+      } else if (command.type === 'telegramCheck') await telegramAgent().checkChat()
+      else if (command.type === 'telegramDisconnect') await telegramAgent().disconnect()
       else await telegramAgent().send('Budget Terminal Telegram connection test.')
-      return ok(snapshot(), 'Telegram')
+      const state = snapshot()
+      return state.telegram.error ? failed(state, state.telegram.error, 'Telegram') : ok(state, 'Telegram')
     } catch (error) { return failed(snapshot(), error instanceof Error ? error.message : 'Telegram settings failed.', 'Telegram') }
     finally { telegramChanging = false }
   }

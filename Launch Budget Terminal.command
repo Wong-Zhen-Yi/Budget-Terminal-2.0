@@ -1,6 +1,6 @@
 #!/bin/sh
 echo "Agents fix: Windows detects both current and older Codex npm executable layouts at startup and reconnect."
-echo "Telegram: Agents now supports encrypted bot setup, private home-chat delivery and optional text research replies. Keep the app open; credentials stay outside the repository."
+echo "Telegram: the connection button sits beside Trackers in the Agents toolbar; startup checks private chat access; delivery errors stay visible and identify chat, token, blocked-bot or gateway problems. Agents offers Check private chat without sending a message."
 echo "Saved-data warning banners removed throughout the app, including ETF, IPO, Valuation, company pages and charts. Startup progress and failure details remain in Settings."
 echo "Branding: Fold logo is active in the title bar, app icon and launcher shortcuts."
 echo "MCP startup fix: desktop-only cache controls and heatmap progress no longer block the app from opening."
