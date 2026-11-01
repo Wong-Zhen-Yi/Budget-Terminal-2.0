@@ -276,3 +276,8 @@
 .agents-embedded .agents-composer-toolbar > span { display: none; }
 .agents-embedded .agents-error { padding: 8px; }
 .agents-embedded .agents-portfolio-review { padding: 10px; }
+.agents-telegram { flex-shrink: 0; max-height: 45%; overflow: auto; padding: 6px 12px; border-bottom: 1px solid var(--agents-border); }
+.agents-telegram form { display: flex; flex-direction: column; gap: 10px; max-width: 760px; padding: 12px 0; }
+.agents-telegram p { margin: 0; font-size: 12px; line-height: 1.5; }
+.agents-telegram label { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.agents-telegram input:not([type=checkbox]) { flex: 1; min-width: 0; padding: 6px; }

@@ -1,5 +1,19 @@
 # Agents
 
+## Telegram
+
+Open **Agents > Telegram** to connect a bot created with Telegram's **@BotFather** (`/newbot`). Start a private conversation with the bot first. Paste its token into the password field and enter your own numeric Telegram user ID as the private home chat ID. Save, then use **Send test message** to check delivery. Never paste a token into agent chat, commit it, or put it in a launcher. The token and connection settings are encrypted with Electron's OS-backed `safeStorage` in `telegram-settings.bin` under the app's private user-data directory. Linux requires a real system keyring; plaintext fallback is refused.
+
+Ask the built-in desktop agent “Send this summary to Telegram” to deliver text to that home chat. The `terminal_telegram_send` tool cannot select arbitrary recipients. Long answers are split into plain-text messages; delivery errors report how many parts were confirmed. Sends are never automatically retried because a network timeout can still mean a message arrived.
+
+Optionally enable **Receive research questions from Telegram**. Only fresh text from the configured user in their private bot chat reaches Codex. Other users, groups and bot senders are ignored. `/help` explains the commands; `/new` starts a separate Telegram conversation. Remote research history is stored locally in `telegram-agents.json`, separate from desktop chat. Remote tools allow research reads; saved-record edits, screenshots, browser control, notifications and messaging tools require desktop interaction. Images, files and voice are not supported by this first integration.
+
+Keep the desktop app open and Codex signed in. A saved enabled connection reconnects when the app starts, independently of page selection. Enabling or changing settings discards pending bot updates, and messages older than five minutes are skipped. Update offsets are saved before dispatch to avoid replaying research after a crash; interrupted requests must be sent again. Do not run another polling gateway with the same token. **Disconnect and forget token** cancels polling and deletes saved credentials; it retains local research history. Reconnecting starts a new remote conversation.
+
+This follows [Hermes's Telegram gateway pattern](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/messaging/telegram.md): bot credentials, long polling, sender authorization and a home destination. It uses the [Telegram Bot API](https://core.telegram.org/bots/api) directly, without requiring Hermes or a public webhook server. It does not reproduce Hermes's voice, media, group, topic or streaming features.
+
+Offline validation: `npm run probe:telegram --workspace budget-terminal-desktop`, `npm run probe:agents --workspace budget-terminal-desktop`, and `npm run probe:agents-ui --workspace budget-terminal-desktop`. Real delivery requires user-supplied local bot credentials and the test-message button.
+
 Codex connects automatically when the desktop app starts, even if Agents is not the active page. Open **Agents** in the sidebar to chat. If startup connection fails, the error stays visible; fix the installation or sign-in and select **Connect Codex** to retry. This uses the supported [Codex app-server protocol](https://learn.chatgpt.com/docs/app-server) through a private stdio connection in Electron's main process. Dynamic tool calls require the experimental app-server capability.
 
 Install Codex CLI and run `codex login` once if a signed-in installation is unavailable. Windows also detects the desktop Codex binary in `%LOCALAPPDATA%/Programs/OpenAI/Codex/bin`. `BUDGET_TERMINAL_CODEX_PATH` can select an executable on other installations. The selected account's configured model is used initially; no model or API key is hard-coded. Usage follows that account.

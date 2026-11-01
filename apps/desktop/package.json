@@ -15,6 +15,7 @@
     "probe:notifications-native": "tsx scripts/probe-notifications-native.ts",
     "probe:notifications-ui": "tsx scripts/probe-notifications-ui.ts",
     "probe:browser": "tsx scripts/probe-browser.ts",
+    "probe:telegram": "tsx scripts/probe-telegram.ts",
     "probe:agents": "tsx scripts/probe-agents.ts",
     "probe:agent-recovery": "tsx scripts/probe-agent-recovery.ts",
     "probe:agent-images": "tsx scripts/probe-agent-images.ts",

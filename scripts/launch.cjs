@@ -93,6 +93,7 @@ function launch({ development = false, platform = process.platform, nodeVersion 
   log.log('Performance updates: Quant pair calculations and SQLite persistence run in workers. Extra query memory is bounded, prepared startup pages stay available, and large tables render visible rows.')
   log.log('Startup dependency fixes: Up/Down price targets preload before page readiness; Cards warms every interval after a partial result; News splits multi-ticker article labels into valid quote requests.')
   log.log('Settings API usage now shows startup health and a compact live provider table, with an expandable API and page directory. Failed and incomplete pages appear first in its startup status list.')
+  log.log('Telegram: Agents now supports encrypted bot setup, private home-chat delivery and optional text research replies. Keep the app open; credentials stay outside the repository.')
   log.log('Installing dependencies...')
   const install = npm(['install', '--no-audit', '--no-fund', '--strict-ssl=true'])
   if (install.error || install.status !== 0) {

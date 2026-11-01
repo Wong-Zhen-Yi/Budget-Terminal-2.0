@@ -1,7 +1,10 @@
-import { app } from 'electron'
+import { app, safeStorage } from 'electron'
+import { readFile, writeFile, rename, rm } from 'node:fs/promises'
+import { TelegramService, telegramConfigSchema } from './telegram.js'
 import { notificationCenter } from './notificationsHost.js'
-import { existsSync, mkdirSync } from 'node:fs'
-import { delimiter, join } from 'node:path'
+import { mkdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { findCodex } from '../../../../scripts/codex-runtime.cjs'
 import { createServiceRoutes } from '../mcp/routes.js'
 import { captureTerminalScreenshot, getMcpStatus, invokeMcpTool } from '../mcp/host.js'
 import type { AgentsCommand } from '../shared/agents.js'
@@ -18,6 +21,55 @@ let service: AgentsService | null = null
 let startup: Promise<unknown> | null = null
 let workspace: AgentWorkspace | null = null
 let lifecycle = 0
+let telegram: TelegramService | null = null
+let telegramStartup: Promise<void> | null = null
+let telegramChanging = false
+let remote: AgentsService | null = null
+let remoteWorkspace: AgentWorkspace | null = null
+function telegramAgent() {
+  if (!telegram) {
+    const path = join(app.getPath('userData'), 'telegram-settings.bin')
+    telegram = new TelegramService({
+      load: async () => {
+        let bytes: Buffer
+        try { bytes = await readFile(path) } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error }
+        if (!safeStorage.isEncryptionAvailable()) throw new Error('OS encryption unavailable.')
+        return JSON.parse(safeStorage.decryptString(bytes))
+      },
+      save: async config => {
+        if (!config) { await rm(path, { force: true }); return }
+        if (!safeStorage.isEncryptionAvailable() || (process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text')) throw new Error('OS credential encryption is unavailable. Enable the system keyring before connecting Telegram.')
+        const bytes = safeStorage.encryptString(JSON.stringify(telegramConfigSchema.parse(config)))
+        await writeFile(path + '.tmp', bytes, { mode: 0o600 })
+        await rename(path + '.tmp', path)
+      },
+      reset: async () => { if (remote) await remote.command({ type: 'newChat' }) },
+      reply: async (text, signal) => {
+        if (!remote) {
+          const cwd = join(app.getPath('userData'), 'agents')
+          mkdirSync(cwd, { recursive: true })
+          remoteWorkspace = new AgentWorkspace({ path: join(app.getPath('userData'), 'telegram-agents.json') })
+          remote = new AgentsService({ executable: executable(), cwd, workspace: remoteWorkspace, remoteResearch: true, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool })
+        }
+        const worker = remote
+        const cancel = () => worker.close()
+        signal.addEventListener('abort', cancel, { once: true })
+        try {
+          if (signal.aborted) throw new Error('Telegram stopped.')
+          if (!worker.snapshot().connected) await worker.command({ type: 'connect' })
+          if (signal.aborted) throw new Error('Telegram stopped.')
+          await worker.command({ type: 'send', text })
+          while (worker.snapshot().busy && !signal.aborted) await new Promise(resolve => setTimeout(resolve, 100))
+          if (signal.aborted || worker.snapshot().error) throw new Error('Telegram research failed.')
+          return [...worker.snapshot().messages].reverse().find(message => message.role === 'assistant')?.text || 'No text answer was produced. Check the desktop app.'
+        } finally { signal.removeEventListener('abort', cancel) }
+      },
+    })
+  }
+  return telegram
+}
+function startTelegram() { return telegramStartup ??= telegramAgent().initialize() }
+function snapshot() { return { ...agent().snapshot(), telegram: telegramAgent().snapshot() } }
 async function checkTracker(tracker: AgentTracker, signal: AbortSignal) {
   const cwd = join(app.getPath('userData'), 'agents')
   const worker = new AgentsService({ executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, workspace: workspace!, trackerId: tracker.id })
@@ -45,19 +97,14 @@ async function checkTracker(tracker: AgentTracker, signal: AbortSignal) {
 }
 
 function executable() {
-  const binary = process.platform === 'win32' ? 'codex.exe' : 'codex'
-  const candidates = [process.env.BUDGET_TERMINAL_CODEX_PATH,
-    ...(process.env.PATH ?? '').split(delimiter).map(directory => join(directory, binary)),
-    ...(process.platform === 'win32' ? [join(process.env.LOCALAPPDATA ?? '', 'Programs', 'OpenAI', 'Codex', 'bin', binary)] : ['/usr/local/bin/codex', '/opt/homebrew/bin/codex']),
-  ]
-  return candidates.find((path): path is string => Boolean(path && existsSync(path))) ?? binary
+  return findCodex() ?? (process.platform === 'win32' ? 'codex.exe' : 'codex')
 }
 function agent() {
   if (!service) {
     const cwd = join(app.getPath('userData'), 'agents')
     mkdirSync(cwd, { recursive: true })
     workspace ??= new AgentWorkspace({ notifications: notificationCenter, check: checkTracker })
-    service = new AgentsService({ workspace, executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, connectionStatus: getMcpStatus, portfolio: {
+    service = new AgentsService({ workspace, telegramSend: (text, signal) => telegramAgent().send(text, signal), executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, connectionStatus: getMcpStatus, portfolio: {
       read: readPortfolios,
       apply: async (before, after) => {
         const result = await withAutomaticBackup(async () => ok(await applyAgentPortfolioUpdate(before, after), 'portfolio store'))
@@ -71,6 +118,7 @@ function agent() {
 // Start once per app session, independently of which page is visible. Status reads
 // wait for this attempt so startup readiness includes connection success or failure.
 export function startAgents() {
+  void startTelegram()
   if (!startup) {
     const session = agent()
     const generation = lifecycle
@@ -79,15 +127,30 @@ export function startAgents() {
   return startup
 }
 export async function agentsStatus() {
+  await startTelegram()
   try { await startup } catch { /* The snapshot retains startup/storage failures. */ }
-  const state = agent().snapshot()
-  const error = state.error || state.storageError
+  const state = snapshot()
+  const error = state.error || state.storageError || state.telegram.error
   return error ? failed(state, error, 'Codex agent') : ok(state, 'Codex agent')
 }
 export async function agentsCommand(command: AgentsCommand) {
+  await startTelegram()
+  if (command?.type === 'telegramConfigure' || command?.type === 'telegramTest' || command?.type === 'telegramDisconnect') {
+    if (telegramChanging) return failed(snapshot(), 'Telegram settings are already being updated.', 'Telegram')
+    telegramChanging = true
+    try {
+      if (command.type === 'telegramConfigure') {
+        const { type: _type, ...config } = command
+        await telegramAgent().configure(config)
+      } else if (command.type === 'telegramDisconnect') await telegramAgent().disconnect()
+      else await telegramAgent().send('Budget Terminal Telegram connection test.')
+      return ok(snapshot(), 'Telegram')
+    } catch (error) { return failed(snapshot(), error instanceof Error ? error.message : 'Telegram settings failed.', 'Telegram') }
+    finally { telegramChanging = false }
+  }
   if (command?.type === 'stop') await browserControl({ action: 'stop' })
-  try { return ok(await agent().command(command), 'Codex agent') }
-  catch (error) { return failed(agent().snapshot(), error instanceof Error ? error.message : String(error), 'Codex agent') }
+  try { await agent().command(command); return ok(snapshot(), 'Codex agent') }
+  catch (error) { return failed(snapshot(), error instanceof Error ? error.message : String(error), 'Codex agent') }
 }
 export async function agentsImage(id: string) {
   try { return ok(await agent().image(id), 'Private chat image') }
@@ -95,11 +158,17 @@ export async function agentsImage(id: string) {
 }
 export async function flushAgents() {
   lifecycle++
+  await telegram?.close()
+  remote?.close()
+  await remoteWorkspace?.close()
   service?.close()
   await workspace?.close()
 }
 export function closeAgents() {
   lifecycle++
+  void telegram?.close()
+  remote?.close(); remote = null
+  void remoteWorkspace?.close(); remoteWorkspace = null
   service?.close(); service = null; startup = null
   const closing = workspace; workspace = null
   void closing?.close().catch(error => console.warn('Agents could not save on close:', error))

@@ -165,6 +165,7 @@ for (const failedCall of [2, 3, 4, 5]) {
 }
 
 for (const [platform, environment, expected] of [
+  ['win32', { PATH: 'C:\\npm' }, 'C:\\npm\\node_modules\\@openai\\codex\\node_modules\\@openai\\codex-win32-x64\\vendor\\x86_64-pc-windows-msvc\\bin\\codex.exe'],
   ['win32', { Path: 'C:\\tools', LOCALAPPDATA: 'C:\\User Data' }, 'C:\\User Data\\Programs\\OpenAI\\Codex\\bin\\codex.exe'],
   ['win32', { PATH: '"C:\\Program Files\\Codex"' }, 'C:\\Program Files\\Codex\\codex.exe'],
   ['win32', { PATH: 'C:\\npm' }, 'C:\\npm\\node_modules\\@openai\\codex\\node_modules\\@openai\\codex-win32-x64\\vendor\\x86_64-pc-windows-msvc\\codex\\codex.exe'],

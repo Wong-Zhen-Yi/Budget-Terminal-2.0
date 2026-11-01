@@ -85,3 +85,7 @@ conf/
 **/*.sqlite-*
 **/*.db
 **/*.db-*
+
+# Private Telegram bot credentials and remote conversation history.
+**/telegram-settings.bin*
+**/telegram-agents.json*

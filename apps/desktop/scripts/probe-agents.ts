@@ -411,7 +411,8 @@ try {
   console.log('PASS: connected New chat, model preservation, thread isolation, failed thread rollback, Stop during reset, full MCP catalog, validated edits, screenshot image results, failed envelopes, read-only autonomy, navigation, streaming, cancellation and reconnect')
 
   if (process.argv.includes('--live')) {
-    const executable = process.env.BUDGET_TERMINAL_CODEX_PATH ?? (process.platform === 'win32' ? join(previous.LOCALAPPDATA!, 'Programs/OpenAI/Codex/bin/codex.exe') : 'codex')
+    const { findCodex } = await import('../../../scripts/codex-runtime.cjs')
+    const executable = findCodex({ environment: { ...process.env, ...previous } }) ?? 'codex'
     const liveRoutes = new Map(routes)
     liveRoutes.set('portfolio', async () => ok(await readPortfolios(), 'fixture portfolio'))
     const live = new AgentsService({ executable, cwd: directory, routes: liveRoutes, portfolio: { read: readPortfolios, apply: applyAgentPortfolioUpdate } })
@@ -480,6 +481,24 @@ try {
   }
 } finally {
   service.close()
+  let delivered = ''
+  const telegramAgent = new AgentsService({ executable: 'unused', cwd: directory, routes, telegramSend: async text => { delivered = text; return { sent: true } }, clientFactory: receive => { receiver = receive; return client } })
+  try {
+    await telegramAgent.command({ type: 'connect' })
+    await telegramAgent.command({ type: 'send', text: 'Send a summary to Telegram' })
+    assert.deepEqual(await telegramAgent.callTool('terminal_telegram_send', { text: 'summary' }), { sent: true })
+    assert.equal(delivered, 'summary')
+    await assert.rejects(telegramAgent.callTool('terminal_telegram_send', { text: 'summary', chatId: 'arbitrary-target' }))
+  } finally { telegramAgent.close() }
+  const remoteAgent = new AgentsService({ executable: 'unused', cwd: directory, routes, remoteResearch: true, clientFactory: receive => { receiver = receive; return client } })
+  try {
+    await remoteAgent.command({ type: 'connect' })
+    const tools = calls.findLast(call => call.method === 'thread/start')!.params.dynamicTools
+    assert(tools.length > 0 && tools.every((tool: { name: string }) => catalog.some(entry => entry.tool.name === tool.name && entry.tool.annotations?.readOnlyHint)))
+    await remoteAgent.command({ type: 'send', text: 'Research only' })
+    for (const name of ['budget_terminal_mutate_portfolio', 'budget_terminal_screenshot', 'budget_terminal_browser_research', 'terminal_telegram_send', 'terminal_notify', 'terminal_save_tracker']) await assert.rejects(remoteAgent.callTool(name, {}), /research reads only/)
+    console.log('PASS: embedded agent Telegram delivery and remote research tool isolation')
+  } finally { remoteAgent.close() }
   process.env.APPDATA = previous.APPDATA
   process.env.LOCALAPPDATA = previous.LOCALAPPDATA
   assert(directory.startsWith(join(tmpdir(), 'budget-agents-')))

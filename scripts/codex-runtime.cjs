@@ -15,9 +15,11 @@ function findCodex({ platform = process.platform, architecture = process.arch, e
       const target = architecture === 'arm64' ? 'aarch64-pc-windows-msvc' : 'x86_64-pc-windows-msvc'
       const packageName = `codex-win32-${architecture === 'arm64' ? 'arm64' : 'x64'}`
       const npmPackage = paths.join(directory, 'node_modules', '@openai', 'codex')
-      candidates.push(paths.join(npmPackage, 'vendor', target, 'codex', binary),
-        paths.join(npmPackage, 'node_modules', '@openai', packageName, 'vendor', target, 'codex', binary),
-        paths.join(directory, 'node_modules', '@openai', packageName, 'vendor', target, 'codex', binary))
+      for (const layout of ['bin', 'codex']) {
+        candidates.push(paths.join(npmPackage, 'vendor', target, layout, binary),
+          paths.join(npmPackage, 'node_modules', '@openai', packageName, 'vendor', target, layout, binary),
+          paths.join(directory, 'node_modules', '@openai', packageName, 'vendor', target, layout, binary))
+      }
     }
   }
   if (windows && value('LOCALAPPDATA')) candidates.push(paths.join(value('LOCALAPPDATA'), 'Programs', 'OpenAI', 'Codex', 'bin', binary))

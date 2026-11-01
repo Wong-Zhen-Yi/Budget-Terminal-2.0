@@ -38,7 +38,7 @@ export function useAgents(poll = false) {
   return useQuery({ queryKey: queryKeys.agents, queryFn: loadAgents, staleTime: Infinity, retry: false,
     refetchInterval: !poll ? false : query => {
       const agent = query.state.data?.data
-      return agent?.busy || agent?.trackers?.some(tracker => tracker.running) ? 700 : agent?.connected || agent?.autonomy || agent?.trackers?.some(tracker => tracker.enabled) ? 3000 : false
+      return agent?.busy || agent?.trackers?.some(tracker => tracker.running) ? 700 : agent?.connected || agent?.autonomy || agent?.telegram?.enabled || agent?.trackers?.some(tracker => tracker.enabled) ? 3000 : false
     }, refetchIntervalInBackground: true })
 }
 export function useAgentCommand() {

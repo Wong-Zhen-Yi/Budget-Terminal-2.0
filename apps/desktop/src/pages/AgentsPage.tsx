@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AgentImage } from '@shared/agents'
 import { useAgentComposer } from '@/api/agentComposer'
 import { AgentMessages } from '@/components/agents/AgentMessages'
+import { TelegramSettings } from '@/components/agents/TelegramSettings'
 import { AgentWorkspacePanel } from '@/components/agents/AgentWorkspacePanel'
 import { useAgentTranscript } from '@/components/agents/useAgentTranscript'
 import { agentQuickPrompts } from '@/lib/agentPrompts'
@@ -70,6 +71,7 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
     </header>
     {(error || agent?.error || query.error) && <div role="alert" className="agents-error">{error || agent?.error || String(query.error)}</div>}
     <AgentWorkspacePanel agent={agent} locked={locked} perform={perform} setDraft={setDraft} />
+    {!embedded && <TelegramSettings state={agent?.telegram} perform={perform} pending={pending} />}
     <div className={`agents-layout${showControls ? ' with-controls' : ''}`}>
       <section className="agents-chat" aria-label="Chat with Codex">
         <div ref={transcript} className="agents-transcript" role="log" aria-label="Conversation" aria-live="polite">
