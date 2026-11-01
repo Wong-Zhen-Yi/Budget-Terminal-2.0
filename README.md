@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/readme-banner.svg" alt="Budget Terminal 2.0 — Your markets. Your research. Your workspace." width="100%">
+  <img src="apps/desktop/resources/budget-terminal-fold.png" alt="Budget Terminal — Fold logo with code and candlesticks" width="100%">
 </p>
 
 <h1 align="center">Budget Terminal 2.0</h1>

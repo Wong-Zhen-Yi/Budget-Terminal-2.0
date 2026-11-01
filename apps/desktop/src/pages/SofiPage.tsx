@@ -97,9 +97,8 @@ export function SofiPage({ onStatusChange }: { onStatusChange: (panels: PanelSta
       <span className="ml-auto text-2xs text-text-muted">{status}</span>
       <Button variant="accent" onClick={() => void onRefresh()} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</Button>
     </div>
-    {notice || query.isError || query.data?.errors.length ? <div role="status" className="shrink-0 border border-warn/40 bg-surface p-2 text-2xs text-warn">
-      {notice || (query.isError ? query.error.message : query.data?.meta.failureReason)}
-    </div> : null}
+    {notice ? <p role="status" className="shrink-0 px-2 py-1 text-2xs text-text-muted">{notice}</p> : null}
+    {(!query.data || query.data.meta.freshness === 'failed') && (query.isError || query.data?.errors.length) ? <p role="alert" className="shrink-0 px-2 py-1 text-2xs text-down">{query.error?.message || query.data?.meta.failureReason}</p> : null}
     <div className="grid shrink-0 grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
       <Tile label={payload?.market?.chart.stats.priceBasis === 'equity-perp-mark' ? 'Equity-perp mark' : 'Share price'} value={currency(payload?.price)} sub={`${payload?.market?.chart.stats.changeBasis === '24h' ? '24h' : 'Daily'} change ${percent(payload?.changePct)}`} title={`${payload?.market?.chart.stats.priceSource ?? 'Yahoo Finance'} · quote retrieved ${quoteTime}`} />
       <Tile label="Market capitalization" value={payload?.market?.metrics.marketCap && payload.market.metrics.marketCap !== 'N/A' ? `$${payload.market.metrics.marketCap}` : EM_DASH} sub="Yahoo Finance · USD" />

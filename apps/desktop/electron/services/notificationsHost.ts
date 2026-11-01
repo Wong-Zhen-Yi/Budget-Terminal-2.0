@@ -20,6 +20,7 @@ export function configureDesktopNotifications() {
     if (!shell.writeShortcutLink(join(directory, 'Budget Terminal.lnk'), 'create', {
       target: process.execPath, args: app.isPackaged ? '' : `"${app.getAppPath()}"`,
       cwd: app.getAppPath(), description: 'Budget Terminal', appUserModelId: NOTIFICATION_APP_ID,
+      icon: join(app.getAppPath(), 'resources/budget-terminal-icon.ico'), iconIndex: 0,
     })) throw new Error('Windows could not register the Start Menu shortcut.')
   } catch (error) { notificationCenter.setupError = String(error) }
 }

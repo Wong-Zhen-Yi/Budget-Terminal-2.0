@@ -148,7 +148,7 @@ export function ArbitrageTab({
 
   /** `_p13_set_arbitrage_status`, across its five states. */
   const status = (() => {
-    if (failureReason) return `Arbitrage refresh failed: ${failureReason}`
+    if (failureReason) return payload ? 'Basket analysis available.' : `Arbitrage refresh failed: ${failureReason}`
     if (!hasHoldings) return 'Load ETF holdings before refreshing arbitrage.'
     if (loading) return 'Fetching ETF and basket quotes...'
     if (!payload) return 'Run basket analysis to request quotes. No Yahoo requests are made until you run it.'
@@ -156,7 +156,7 @@ export function ArbitrageTab({
   })()
 
   const statusClass = (() => {
-    if (failureReason) return 'text-down'
+    if (failureReason) return payload ? 'text-text-muted' : 'text-down'
     if (!payload || loading || !hasHoldings) return 'text-text-muted'
     return arbitrageStatus(payload).status === 'positive' ? 'text-up' : 'text-warn'
   })()

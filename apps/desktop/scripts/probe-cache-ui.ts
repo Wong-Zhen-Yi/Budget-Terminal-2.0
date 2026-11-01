@@ -32,8 +32,6 @@ try {
     import { createRendererQueryPersister, shouldPersistRemoteQuery, configureRendererCache } from './src/api/queryPersistence'
     import { DEFAULT_CACHE_SETTINGS } from './electron/shared/cachePolicy'
     import { CachePanel } from './src/components/settings/CachePanel'
-    import { CachedPageNotice } from './src/components/chrome/CachedPageNotice'
-    import { useDataHealth } from './src/stores/dataHealth'
     import { warmStartupQuery } from './src/api/warmQueue'
     import { effectiveFreshness } from './src/api/snapshotHealth'
     const check = (condition, message) => { if (!condition) throw Error(message) }
@@ -170,15 +168,12 @@ try {
           return envelope(51)
         } })
       check(seenOldData && providerRequests === 1, 'Refresh must retain expired data and fetch only the expired key')
-      useDataHealth.getState().setStartup({ durationMs: 1, planned: 1, timings: [],
-        pages: { stocks: { state: 'loading', cachedAt: Date.now() - 86_400_000 } } })
       createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}>
         <main>Saved snapshot ready: {client.getQueryData(['quotes', 'FIXTURE']).data.price} (cached)</main>
-        <CachedPageNotice page="stocks" /><CachePanel />
+        <CachePanel />
       </QueryClientProvider>)
       await wait(100)
       check(document.querySelector('main').textContent.includes('101 (cached)'), 'Restored UI did not paint its ready content')
-      check(document.body.textContent.includes('Refreshing in the background; you can use this page.'), 'Cached page must explain the pending refresh')
       check(document.querySelectorAll('meter').length === 3, 'Cache Settings must show three independent budgets')
       check(document.body.textContent.includes('due for a check'), 'Cache Settings must describe revalidation without declaring market history invalid')
       check(document.body.textContent.includes('next regular session'), 'Cache Settings must explain session-aware reuse')
@@ -186,12 +181,8 @@ try {
       button.click(); await wait(50)
       document.querySelector('form').requestSubmit(); await wait(100)
       check(document.body.textContent.includes('Cache limits saved and applied.'), 'Cache settings must apply through the preload API')
-      useDataHealth.getState().setStartup({ durationMs: 1, planned: 1, timings: [],
-        pages: { stocks: { state: 'failed', cachedAt: Date.now() - 86_400_000, reason: 'Fixture provider unavailable' } } })
-      await wait(50)
-      check(document.body.textContent.includes('Update failed. Fixture provider unavailable'), 'Refresh failure must remain visible over saved content')
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-      return 'PASS: retention configuration, cache controls, saved-page notices, incremental migration, polling, clear/write race, close flush, real restart, privacy and selective refresh'
+      return 'PASS: retention configuration, cache controls, incremental migration, polling, clear/write race, close flush, real restart, privacy and selective refresh'
     }
   ` }, bundle: true, platform: 'browser', format: 'iife', tsconfig: join(root, 'tsconfig.json'), outfile: join(directory, 'renderer.js') })
   await writeFile(join(directory, 'index.html'), '<!doctype html><html><head><link rel="stylesheet" href="theme.css"></head><body class="bg-bg text-text"><div id="root"></div><script src="renderer.js"></script></body></html>')

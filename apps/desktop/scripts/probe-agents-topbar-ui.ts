@@ -10,6 +10,9 @@ const require = createRequire(import.meta.url)
 const root = resolve(import.meta.dirname, '..')
 const directory = await mkdtemp(join(tmpdir(), 'budget-agents-topbar-'))
 try {
+  for (const file of ['budget-terminal-fold.png', 'budget-terminal-icon.png']) {
+    await writeFile(join(directory, file), await readFile(join(root, 'resources', file)))
+  }
   const bundle = await build({
     stdin: { resolveDir: root, loader: 'tsx', contents: `
       import { createRoot } from 'react-dom/client'
@@ -68,6 +71,8 @@ try {
       const click = async label => { const button = [...document.querySelectorAll('button')].find(button => button.getAttribute('aria-label') === label); check(button && !button.disabled, 'Missing/disabled ' + label); button.click(); await settle() }
       window.runProbe = async () => {
         client.setQueryData(['agents'], envelope()); render(); await settle()
+        await Promise.all([...document.querySelectorAll('.terminal-topbar img')].map(image => image.decode()))
+        check(document.querySelector('.terminal-brand img').naturalWidth > 0 && document.querySelector('.terminal-brand-icon').naturalWidth > 0, 'Fold wordmark and compact icon load successfully')
         check(input() && !dialog() && reads === 0 && commands.length === 0, 'Warmed top bar starts closed without connection, inference or reload')
         check(activity().textContent === 'Ready', 'Saved assistant text must not be mistaken for a newly completed run')
         input().click(); await settle()
@@ -184,6 +189,10 @@ try {
           const box = dialog().getBoundingClientRect()
           const composer = dialog().querySelector('.agents-composer').getBoundingClientRect()
           check(document.documentElement.scrollWidth <= innerWidth, 'Top bar must not overflow viewport')
+          const fullBrand = document.querySelector('.terminal-brand')
+          const compactBrand = document.querySelector('.terminal-brand-icon')
+          check((getComputedStyle(fullBrand).display !== 'none') === (innerWidth > 1100), 'Fold wordmark follows the compact breakpoint')
+          check((getComputedStyle(compactBrand).display !== 'none') === (innerWidth <= 1100), 'Compact Fold mark remains visible on narrow windows')
           check(input().getBoundingClientRect().width > 60, 'Keep top-bar chat input usable')
           check(box.left >= 0 && box.right <= innerWidth && box.top >= topbar.bottom && box.bottom <= innerHeight, 'Dropdown stays below title bar and inside viewport')
           check(composer.bottom <= box.bottom && composer.height > 60, 'Full composer remains inside dropdown')

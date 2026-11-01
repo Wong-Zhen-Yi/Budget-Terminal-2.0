@@ -41,6 +41,7 @@ function createWindow(): BrowserWindow {
     show: false,
     backgroundColor: '#080b12',
     title: 'Budget Terminal',
+    icon: join(app.getAppPath(), 'resources', process.platform === 'win32' ? 'budget-terminal-icon.ico' : 'budget-terminal-icon.png'),
     // macOS owns the traffic lights and native fullscreen; other platforms keep the
     // existing custom title bar and window controls.
     frame: isMac,
@@ -101,6 +102,9 @@ if (ownsInstance) {
 if (ownsInstance) app.whenReady().then(async () => {
   try {
     assertDesktopCertificateSecurity(process.versions.electron, process.env, name => app.commandLine.hasSwitch(name))
+    if (process.platform === 'darwin') {
+      app.dock?.setIcon(join(app.getAppPath(), 'resources/budget-terminal-icon.png'))
+    }
     if (process.platform === 'darwin') {
       Menu.setApplicationMenu(Menu.buildFromTemplate([
         { role: 'appMenu' },

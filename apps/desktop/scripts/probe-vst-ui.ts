@@ -101,7 +101,7 @@ try {
         mode = 'partial'; await client.invalidateQueries({ queryKey: ['vst', 2], refetchType: 'none' }); let startupError = ''; try { await task.run(client, 10) } catch (error) { startupError = String(error) }; check(startupError.includes('HTTP 503') && client.getQueryData(['vst', 2]).data.market, 'Partial startup was treated as ready or discarded useful content'); button('Refresh').click(); await settle()
         check(text().includes('HTTP 503') && text().includes('Vistra announces generation update'), 'Partial failure hid healthy panels')
         mode = 'operations-failed'; button('Refresh').click(); await settle()
-        check(text().includes('operations: HTTP 503') && text().includes('Approximately 94%') && text().includes('Vistra announces generation update'), 'Operations outage hid earnings or market panels')
+        check(client.getQueryData(['vst', 2]).errors.some(error => error.symbol === 'operations' && error.reason.includes('HTTP 503')) && !document.querySelector('[role=alert]') && text().includes('Approximately 94%') && text().includes('Vistra announces generation update'), 'Operations outage retains diagnostics and healthy panels without a banner')
         mode = 'failed'; button('Refresh').click(); await settle()
         check(text().includes('failed') && button('Export snapshot').disabled, 'Total failure was treated as ready')
         mode = 'waiting'; button('Refresh').click(); await settle()

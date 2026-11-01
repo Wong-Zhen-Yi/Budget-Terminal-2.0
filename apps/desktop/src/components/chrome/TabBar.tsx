@@ -40,11 +40,10 @@ export function TabBar({
 
   return (
     <div className={`terminal-topbar drag-region flex shrink-0 items-center gap-2 border-b border-border bg-surface ${isMac ? 'h-[52px] rounded-t-xl pr-3 pl-[86px]' : 'h-12 pr-0 pl-2'}`}>
-      <span className="shrink-0 pr-1 text-2xs font-semibold tracking-widest text-accent-hover">
-        BT
+      <span className="terminal-brand shrink-0" title="Budget Terminal">
+        <img src="./budget-terminal-fold.png" alt="Budget Terminal" width="2048" height="745" draggable={false} />
       </span>
-
-      <span className={`terminal-brand min-w-0 truncate text-2xs tracking-wide text-text-muted ${isMac ? 'px-1' : 'px-2'}`}>BUDGET TERMINAL</span>
+      <img className="terminal-brand-icon" src="./budget-terminal-icon.png" alt="Budget Terminal" width="36" height="36" draggable={false} />
       <McpActivity />
       <TopBarAgent available={agentChatAvailable} />
       <button type="button" onClick={onOpenPicker}

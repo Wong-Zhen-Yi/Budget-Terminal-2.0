@@ -107,7 +107,7 @@ export function PltrPage({ onStatusChange, onNavigate }: {
       </div>
       <div className="ml-auto flex flex-wrap gap-1 pb-1">{['stocks', 'charts', 'fundamentals', 'options', 'valuation'].map(id => <Button key={id} className="capitalize" aria-label={`Open PLTR ${id}`} onClick={() => onNavigate(id, 'PLTR')}>{id} ↗</Button>)}</div>
     </nav>
-    {notice || marketWarning || financialWarning ? <div role="status" className="shrink-0 border border-warn/40 bg-surface p-2 text-xs text-warn">{[notice, marketWarning, financialWarning].filter(Boolean).join(' · ')}</div> : null}
+    {notice ? <p role="status" className="shrink-0 px-2 py-1 text-2xs text-text-muted">{notice}</p> : null}
     <div className="pltr-kpis shrink-0" aria-label="PLTR financial snapshot">{tiles.map(([label, value, subtitle]) => <div key={label} className="pltr-kpi"><div className="text-2xs text-text-muted">{label}</div><div className="num my-1 text-xl font-semibold">{value}</div><div className="text-2xs text-text-muted">{subtitle}</div></div>)}</div>
     <div id="pltr-section-panel" role="tabpanel" aria-labelledby={`${sectionId(section)}-tab`} className="flex shrink-0 flex-col gap-3">
       {section === 'Overview' ? <>

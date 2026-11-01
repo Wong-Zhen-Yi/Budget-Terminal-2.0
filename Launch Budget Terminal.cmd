@@ -1,4 +1,6 @@
 @echo off
+echo Saved-data warning banners removed throughout the app, including ETF, IPO, Valuation, company pages and charts. Startup progress and failure details remain in Settings.
+echo Branding: Fold logo is active in the title bar, app icon and launcher shortcuts.
 echo MCP startup fix: desktop-only cache controls and heatmap progress no longer block the app from opening.
 echo Cache startup: saved pages stay usable during background refresh. Settings controls 256 MiB page snapshots, 2 GiB market data, a separate 512 MiB image budget and 30-day retention. All pages still preload.
 echo Heatmap fills holdings and quote colours progressively while data loads; loading progress stays visible until completion.

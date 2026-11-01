@@ -212,7 +212,7 @@ export function YouTubePage({
       </header>
 
       <p className={`shrink-0 text-2xs ${toneClass[status.tone]}`}>{status.text}</p>
-      {displayWarnings.length ? (
+      {displayWarnings.length && !payload?.items.length ? (
         <div className="shrink-0 border border-warn/40 bg-warn-bg px-2 py-1 text-2xs text-warn">
           {displayWarnings.map((warning) => <p key={warning}>{warning}</p>)}
           {warnings.length > displayWarnings.length ? (

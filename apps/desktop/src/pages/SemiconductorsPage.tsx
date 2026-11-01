@@ -74,8 +74,6 @@ export function SemiconductorsPage({ onStatusChange, onNavigate }: {
     .sort((a, b) => a.profile!.earningsDate! - b.profile!.earningsDate!)
   const errors = query.data?.errors ?? []
   const selectedErrors = errors.filter(error => error.symbol === selected?.company.symbol)
-  const issueCompanies = new Set(errors.map(error => error.symbol).filter(Boolean)).size
-  const generalWarnings = errors.filter(error => !error.symbol).map(error => `${error.source}: ${error.reason}`).join(' · ')
   const states = (row: SemiconductorRow) => (['market', 'profile', 'news'] as const).map(lane => semiconductorLaneStatus(row, lane, now))
 
   useEffect(() => onStatusChange([{ label: 'Semiconductors', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: busy, freshnessMs }], ''),
@@ -203,7 +201,8 @@ export function SemiconductorsPage({ onStatusChange, onNavigate }: {
       </div>
       <div className="semi-load-status"><Button variant="accent" disabled={busy} onClick={() => void onRefresh()}>{busy ? 'Refreshing...' : 'Refresh'}</Button><span role="status">{notice || (busy ? 'Loading company quotes, profiles, adjusted histories and news…' : query.error ? `Load failed: ${query.error.message}` : `${freshness} · ${rows.filter(row => row.market).length}/${rows.length} market snapshots`)}</span></div>
     </div>
-    {(errors.length || query.error || notice) ? <div role="alert" className="shrink-0 border border-warn/40 bg-surface px-2 py-1 text-2xs text-warn">{query.error?.message || notice || `${errors.length} data issue(s) across ${issueCompanies} companies. Usable data remains visible; select a company to inspect its warnings. ${generalWarnings}`}</div> : null}
+    {notice ? <p role="status" className="shrink-0 px-2 py-1 text-2xs text-text-muted">{notice}</p> : null}
+    {(!query.data || query.data.meta.freshness === 'failed') && query.error ? <p role="alert" className="shrink-0 px-2 py-1 text-2xs text-down">{query.error.message}</p> : null}
     <nav className="semi-nav" aria-label="Semiconductor views">{([
       ['supply', 'Supply chain'], ['companies', 'Companies'], ['compare', 'Compare'], ['news', 'News & earnings'],
     ] as const).map(([id, label]) => <button key={id} aria-pressed={view === id} onClick={() => setView(id)}>{label}</button>)}</nav>

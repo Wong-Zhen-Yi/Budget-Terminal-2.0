@@ -44,7 +44,7 @@ export function AumRail({ payload, loading, failureReason, filter, onFilterChang
         {QUICK_FUNDS.map(ticker => <button type="button" key={ticker} aria-pressed={selected === ticker} onClick={() => onSelect(ticker)}>{ticker}</button>)}
       </div>
       <div className="etf-browser-count"><span>{payload ? `${payload.rows.length.toLocaleString()} funds` : loading ? 'Loading fund directory…' : 'Directory unavailable'}</span><span>Assets ↓</span></div>
-      {failureReason ? <p role="alert" className="etf-warning">{failureReason} {payload ? 'Showing the saved directory.' : 'Popular tickers above still work.'}</p> : null}
+      {failureReason && !payload?.rows.length ? <p role="alert" className="etf-warning">{failureReason} Popular tickers above still work.</p> : null}
       <div className="etf-fund-list">
         {rows.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE).map(row => (
           <button type="button" key={row.ticker} className="etf-fund-row" aria-pressed={selected === row.ticker} onClick={() => onSelect(row.ticker)}>

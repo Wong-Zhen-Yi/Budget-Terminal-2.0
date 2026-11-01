@@ -28,7 +28,7 @@ try {
         const settle = () => new Promise(resolve => setTimeout(resolve, 150))
         const text = () => document.body.innerText
         window.runProbe = async () => {
-          createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><BitcoinPage onStatusChange={() => {}} /></QueryClientProvider>)
+          createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><BitcoinPage onStatusChange={panels => { window.panels = panels }} /></QueryClientProvider>)
           await settle()
           check(text().includes('Loading Bitcoin'), 'Missing loading state')
           window.ready = true
@@ -44,7 +44,7 @@ try {
           window.mode = 'partial'
           refresh()
           await settle()
-          check(text().includes('stats: HTTP 429'), 'Partial failure not visible')
+          check(window.panels[0].envelope.meta.failureReason.includes('stats: HTTP 429') && !document.querySelector('[role=status]'), 'Partial failure remains in diagnostics without a saved-data banner')
           check(document.querySelectorAll('tbody tr').length === 15, 'Partial failure hid healthy blocks')
           window.mode = 'failed'
           refresh()

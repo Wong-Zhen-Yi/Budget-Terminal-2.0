@@ -157,7 +157,7 @@ export function CryptoPage({ onStatusChange }: { onStatusChange: (panels: PanelS
           <div className="crypto-mark num">{cryptoPrice(market?.markPrice)}<small className={changeClass(market?.changePct)}>{cryptoPercent(market?.changePct)} <span className="crypto-muted">24h</span></small></div>
         </div><div className="crypto-timeframes" aria-label="Candle interval">{CRYPTO_CHART_INTERVALS.map(choice =>
           <button type="button" key={choice.label} aria-pressed={interval === choice.interval} onClick={() => setInterval(choice.interval)}>{choice.label}</button>)}</div></div>
-        {chartFailure && <div className="crypto-chart-error" role="alert">{chartFailure} {chartCandles.length ? 'Showing retained history.' : 'Chart history is unavailable.'} <button type="button" disabled={history.isFetching} onClick={() => void history.refetch()}>Retry chart</button></div>}
+        {chartFailure && !chartCandles.length && <div className="crypto-chart-error" role="alert">{chartFailure} Chart history is unavailable. <button type="button" disabled={history.isFetching} onClick={() => void history.refetch()}>Retry chart</button></div>}
         {!chartCandles.length && !chartFailure && <div className="crypto-empty">{history.isFetching ? 'Loading perpetual candles...' : 'No candle history returned.'}</div>}
         <CryptoPriceChart candles={chartCandles} context={`${symbol}:${interval}`} />
         <div className="crypto-chart-caption"><span>{chartSource} · {chartFreshness} · {chartCandles.length} candles</span><span>UTC · Volume in base asset · Scroll to zoom, drag to pan</span></div>

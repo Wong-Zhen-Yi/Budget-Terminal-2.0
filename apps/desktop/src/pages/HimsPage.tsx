@@ -115,7 +115,8 @@ export function HimsPage({ onStatusChange, onNavigate }: {
         {!reports.length ? <option value="">Unavailable</option> : reports.map(entry => <option key={entry.period}>{entry.period}</option>)}
       </select></label>
     </div>
-    {(notice || query.error || query.data?.errors.length) ? <div role="status" className="shrink-0 border border-warn/40 bg-surface p-2 text-xs text-warn">{notice || query.error?.message || query.data?.meta.failureReason || query.data?.errors.map(feedErrorText).join(' · ')}</div> : null}
+    {notice ? <p role="status" className="shrink-0 px-2 py-1 text-2xs text-text-muted">{notice}</p> : null}
+    {(!query.data || query.data.meta.freshness === 'failed') && (query.error || query.data?.errors.length) ? <p role="alert" className="shrink-0 px-2 py-1 text-2xs text-down">{query.error?.message || query.data?.meta.failureReason || query.data?.errors.map(feedErrorText).join(' · ')}</p> : null}
     <div className="grid shrink-0 grid-cols-2 gap-2 lg:grid-cols-3 2xl:grid-cols-6">{tileIds.map(id => {
       const spec = HIMS_METRICS.find(entry => entry.id === id)!
       const metric = report?.metrics[id]

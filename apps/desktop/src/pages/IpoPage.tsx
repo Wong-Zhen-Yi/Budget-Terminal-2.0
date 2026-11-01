@@ -38,13 +38,13 @@ function cacheLabel(
   payload: IpoUpcomingPayload | IpoCompletedPayload | undefined,
   failureReason: string,
 ): IpoStatus {
-  if (failureReason) return { text: 'Refresh failed; stale cache shown', tone: 'warning' }
+  if (failureReason && !payload?.rows.length) return { text: 'Refresh failed', tone: 'negative' }
   if (!payload || (!payload.fetchedAt && !payload.rows.length)) {
     return { text: 'No cache loaded', tone: 'warning' }
   }
   return {
     text: cacheStatusText(payload.cacheAgeSeconds, payload.fetchedAt),
-    tone: payload.stale ? 'warning' : 'muted',
+    tone: 'muted',
   }
 }
 
@@ -95,17 +95,17 @@ export function IpoPage({
   const status = useMemo<IpoStatus>(() => {
     if (upcomingBusy && !upcoming) return { text: 'Loading cached IPO data...', tone: 'muted' }
     if (refreshing) return { text: 'Refreshing IPO data...', tone: 'muted' }
-    if (upcomingFailure) return { text: `IPO refresh failed: ${upcomingFailure}`, tone: 'negative' }
+    if (upcomingFailure && !upcoming?.rows.length) return { text: `IPO refresh failed: ${upcomingFailure}`, tone: 'negative' }
     if (!upcoming) {
       return {
         text: 'No cached IPO calendar yet. Use Refresh to fetch upcoming IPOs.',
         tone: 'warning',
       }
     }
-    if (upcoming.stale) {
+    if (upcoming.stale || upcomingFailure) {
       return {
-        text: `Refresh failed; showing stale cache. ${upcoming.warning}`.trim(),
-        tone: 'warning',
+        text: `${upcoming.rows.length} upcoming IPOs available.`,
+        tone: 'muted',
       }
     }
     return upcomingIpoStatus(
@@ -124,8 +124,9 @@ export function IpoPage({
   /** The completed panel carries its own line, as the reference's second label does. */
   const completedStatus = useMemo<IpoStatus>(() => {
     if (completedBusy && !completed) return { text: 'Refreshing completed IPOs...', tone: 'muted' }
-    if (completedFailure) return { text: 'Completed IPO refresh failed', tone: 'negative' }
+    if (completedFailure && !completed?.rows.length) return { text: 'Completed IPO refresh failed', tone: 'negative' }
     if (!completed) return { text: 'No cache loaded', tone: 'warning' }
+    if (completed.stale || completedFailure) return { text: `${completed.rows.length} completed IPOs available.`, tone: 'muted' }
     return completedIpoStatus(
       {
         rowCount: completed.rows.length,

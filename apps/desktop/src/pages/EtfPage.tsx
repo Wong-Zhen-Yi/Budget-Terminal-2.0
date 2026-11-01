@@ -107,8 +107,7 @@ export function EtfPage({ onStatusChange, onNavigate }: {
           </section>
           <div className="etf-metrics">{metrics.map(metric => <div key={metric.label}><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.detail}</small></div>)}</div>
           {notice ? <p className="etf-notice" role="status">{notice}</p> : null}
-          {failure ? <div className="etf-warning" role="alert"><strong>{fund ? 'Refresh unavailable. Saved holdings remain visible.' : `Could not load ${ticker}.`}</strong> {failure}</div> : null}
-          {holdingsQuery.data?.meta.freshness === 'stale' ? <p className="etf-warning" role="status">Showing saved holdings. {holdingsQuery.data.meta.failureReason || 'The provider could not refresh this snapshot.'}</p> : null}
+          {failure && !holdings.length ? <div className="etf-warning" role="alert"><strong>Could not load {ticker}.</strong> {failure}</div> : null}
           {fund?.coverageNote ? <p className="etf-warning">{fund.coverageNote}</p> : null}
           <div className="etf-content-tabs" role="tablist" aria-label="ETF research views">
             <button type="button" role="tab" aria-selected={subtab === 'holdings'} onClick={() => setSubtab('holdings')}>Holdings & exposure <span>{holdings.length}</span></button>

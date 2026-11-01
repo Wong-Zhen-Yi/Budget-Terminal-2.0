@@ -63,6 +63,7 @@ function launch({ development = false, platform = process.platform, nodeVersion 
   }
 
   log.log(`Starting Budget Terminal for ${os}...`)
+  log.log('Saved-data warning banners removed throughout the app, including ETF, IPO, Valuation, company pages and charts. Startup progress and failure details remain in Settings.')
   log.log('MCP startup fix: desktop-only cache controls and heatmap progress no longer block the app from opening.')
   log.log('Heatmap fills holdings and quote colours progressively while data loads; loading progress stays visible until completion.')
   log.log('Cache startup: saved pages stay usable during background refresh. Settings controls 256 MiB page snapshots, 2 GiB market data, a separate 512 MiB image budget and 30-day retention. All pages still preload.')

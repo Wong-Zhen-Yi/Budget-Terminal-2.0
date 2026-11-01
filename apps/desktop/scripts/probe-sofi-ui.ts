@@ -93,7 +93,7 @@ try {
         await window.reloadAll(); await settle()
         check(window.forced, 'Global reload did not force the SOFI provider')
         window.mode = 'stale'; await refresh()
-        check(window.forced && text().includes('cached'), 'Forced refresh or stale warning missing')
+        check(window.forced && window.panels.some(panel => panel.envelope?.meta.freshness === 'stale') && !document.querySelector('[role=status]'), 'Forced refresh retains stale diagnostics without a saved-data banner')
         check(text().includes('2.91x') && document.querySelectorAll('thead th').length === 9, 'Stale data disappeared')
         window.mode = 'partial'; await refresh()
         check(text().includes('Reports unavailable') && text().includes('$25.00'), 'Partial outage hid market data')

@@ -385,19 +385,19 @@ export function ValuationPage({
     if (query.isFetching) {
       return { text: `${loaded ? 'Refreshing' : 'Loading'} ${ticker} valuation data...`, tone: 'warning' }
     }
-    if (query.error) {
+    if (query.error && !loaded) {
       return { text: `Valuation load failed: ${errorMessage(query.error)}`, tone: 'negative' }
     }
-    if (envelope?.meta.freshness === 'failed') {
+    if (envelope?.meta.freshness === 'failed' && !loaded) {
       return { text: `Valuation load failed: ${envelope.meta.failureReason || 'No usable data returned.'}`, tone: 'negative' }
     }
     if (!loaded) return { text: 'Enter a ticker and load valuation data.', tone: 'muted' }
     if (envelope) {
       const freshness = effectiveFreshness(envelope, now)
-      if (freshness === 'stale' || freshness === 'partial' || envelope.errors.length) {
+      if (query.error || freshness === 'stale' || freshness === 'partial' || envelope.errors.length) {
         return {
-          text: `Showing ${freshness === 'stale' ? 'cached' : 'incomplete'} valuation data for ${ticker}. ${envelope.meta.failureReason || envelope.errors[0]?.reason || 'Reload to refresh the snapshot.'}`,
-          tone: 'warning',
+          text: `Valuation data for ${ticker}.`,
+          tone: 'muted',
         }
       }
     }

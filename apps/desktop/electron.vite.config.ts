@@ -42,6 +42,7 @@ export default defineConfig({
   },
   renderer: {
     root: resolve(root, 'src'),
+    publicDir: resolve(root, 'resources'),
     plugins: [react(), tailwindcss(), {
       name: 'development-websocket-policy',
       apply: 'serve',

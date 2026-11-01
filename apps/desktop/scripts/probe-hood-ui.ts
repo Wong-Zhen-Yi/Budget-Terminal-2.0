@@ -100,7 +100,7 @@ try {
         click('Refresh'); await settle(); check(window.forced, 'Refresh did not force data reload')
         window.forced = false; await window.reloadAll(); await settle(); check(window.forced, 'F5 reload path did not force HOOD')
         window.mode = 'partial'; click('Refresh'); await settle()
-        check(text().includes('monthly: Fixture report unavailable'), 'Partial failure is hidden')
+        check(window.health[0].envelope.errors.some(error => error.reason.includes('Fixture report unavailable')) && !document.querySelector('[role=alert]'), 'Partial failure stays in diagnostics without a retained-data banner')
         check(text().toLowerCase().includes('financial history') && text().includes('$0.62'), 'Partial failure hid healthy sections')
         window.mode = 'reject'; click('Refresh'); await settle()
         check(text().includes('Fixture network offline'), 'Rejected refresh is hidden')

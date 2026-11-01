@@ -60,7 +60,7 @@ try {
           window.fail = true
           refresh().click()
           await settle()
-          check(text().includes('Refresh failed; showing stale cache'), 'Refresh failure must remain visible')
+          check(!text().includes('Refresh failed; showing stale cache') && !text().includes('refresh failed, stale cache shown'), 'Retained IPO rows must not show saved-data warning banners')
           check(text().includes('Waiting Company') && text().includes('Completed Company'), 'Failure erased available rows')
           check(document.documentElement.scrollWidth <= innerWidth, 'Page overflows instead of scrolling table locally')
           return 'PASS: startup-prefetched page, scheduled and TBD filings, counts, date sorting, readable company column, copy, source, forced refresh and stale failure'

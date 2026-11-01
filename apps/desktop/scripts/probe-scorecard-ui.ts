@@ -103,7 +103,7 @@ try {
         check(text().includes('could not refresh') && document.querySelectorAll('tbody tr').length === 3, 'Failed refresh must retain prior rows')
         document.querySelector('.scorecard-sources').open = true; await settle()
         document.querySelectorAll('.scorecard-source details').forEach(node => { node.open = true }); await settle()
-        check(text().includes('REFRESH FAILED') && text().includes('Fixture provider offline'), 'Failed refresh reason must be visible')
+        check(!text().includes('REFRESH FAILED') && status.some(panel => panel.error?.message.includes('Fixture provider offline')), 'Diagnostics retain the failure without a freshness warning banner')
         fail = ''; partial = 'MSFT'; await click('Refresh'); await settle()
         check(text().includes('PARTIAL') && text().includes('source issues'), 'Partial source coverage must remain visible')
         let degraded = false

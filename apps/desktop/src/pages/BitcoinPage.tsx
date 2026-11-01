@@ -54,7 +54,8 @@ export function BitcoinPage({ onStatusChange }: { onStatusChange: (panels: Panel
       <span className="ml-auto text-2xs text-text-muted">{busy ? 'Loading Bitcoin network data…' : `${freshness} · fetched ${stamp(query.data?.meta.fetchedAt)}`}</span>
       <Button variant="accent" disabled={busy} onClick={onRefresh}>{busy ? 'Refreshing…' : 'Refresh'}</Button>
     </div>
-    {(notice || query.error || query.data?.errors.length) ? <div role="status" className="border border-warn/40 bg-surface p-2 text-xs text-warn">{notice || query.error?.message || query.data?.meta.failureReason}</div> : null}
+    {notice ? <p role="status" className="shrink-0 px-2 py-1 text-2xs text-text-muted">{notice}</p> : null}
+    {(!query.data || query.data.meta.freshness === 'failed') && (query.error || query.data?.errors.length) ? <p role="alert" className="shrink-0 px-2 py-1 text-2xs text-down">{query.error?.message || query.data?.meta.failureReason}</p> : null}
     <div className="grid grid-cols-2 gap-2 lg:grid-cols-3 2xl:grid-cols-6">{tiles.map(([label, value, sub]) => <div key={label} className="border border-border bg-surface p-3 text-center"><div className="text-2xs text-text-muted">{label}</div><div className="num my-1 text-lg font-bold">{value}</div><div className="text-2xs text-text-muted">{sub}</div></div>)}</div>
     <div className="grid gap-2 lg:grid-cols-3">
       <Panel title="Mining activity · trailing 24 hours">

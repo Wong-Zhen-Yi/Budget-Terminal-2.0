@@ -119,7 +119,7 @@ try {
           click('Force universe refresh ↗'); await settle()
           check(requests[1].forceUniverseRefresh === true && document.querySelectorAll('tbody tr').length === 3, 'Force refresh and pending result retention')
           releaseScan(envelope(null, 'failed')); await settle()
-          check(body().includes('Scan failed: Offline') && document.querySelectorAll('tbody tr').length === 3, 'Failed refresh retains snapshot')
+          check(body().includes('Research snapshot available.') && !body().includes('Scan failed: Offline') && document.querySelectorAll('tbody tr').length === 3, 'Failed refresh retains snapshot without a saved-data warning')
           check(statuses[0].envelope.meta.freshness === 'failed', 'Failed readiness state must remain visible')
           document.querySelector('#quant-tab-pairs').click(); await settle()
           check(document.querySelectorAll('tbody tr').length === 2 && body().includes('Two assets. One relationship.'), 'Pairs workspace')
@@ -145,7 +145,7 @@ try {
           check(saved.quantPage.activeTab === 'pairs' && saved.quantPage.pairLeft === 'MSFT', 'Persist research controls')
           click('Export to LLM'); await settle()
           check(clipboard.includes('## Inspected pair') && clipboard.includes('MSFT'), 'Export includes pair model')
-          check(body().includes('Scan failed: Offline'), 'Export notice must not hide a scan failure')
+          check(body().includes('Research snapshot available.') && !body().includes('Scan failed: Offline'), 'Retained snapshot stays neutral after export')
           await window.checkLayout()
           return 'PASS: startup restore, manual/forced scans, partial coverage, sorting, filters, search, factor inspection, pair validation/model/charts, failures, retained snapshots, settings and export'
         }

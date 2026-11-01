@@ -46,14 +46,13 @@ export function AgentMarketChart({ chart, symbol }: { chart: AgentCandlestick; s
       </div>
     </div>
     {query.isPending && <p role="status">Loading full available {interval.toLowerCase()} history for {symbol}…</p>}
-    {failure && <div className="agents-history-warning" role="alert">{failure}{candles.length > 0 && ' Showing previously loaded history.'} <button type="button" disabled={query.isFetching} onClick={() => { void query.refetch() }}>Retry history</button></div>}
+    {failure && !candles.length && <div className="agents-history-warning" role="alert">{failure} <button type="button" disabled={query.isFetching} onClick={() => { void query.refetch() }}>Retry history</button></div>}
     <HistoryPlot candles={candles} interval={interval} range={range} onRangeChange={setRange} symbol={symbol} unit={unit} />
     {candles.length > 0 && <p className="agents-candlestick-caption" data-history-count={candles.length}>
       {envelope?.meta.freshness === 'stale' || envelope?.meta.freshness === 'partial' || query.error || raw.length > candles.length ? 'Available history (coverage may be incomplete)' : 'Full available history loaded'}: {date(candles[0].time)} – {date(candles.at(-1)!.time)} · {candles.length.toLocaleString()} candles · {interval} · {envelope?.meta.source} · {envelope?.meta.freshness}
       {envelope?.meta.fetchedAt ? ` · Fetched ${new Date(envelope.meta.fetchedAt).toLocaleString()}` : ''}
     </p>}
     {intraday && <p className="agents-history-warning">Intraday provider coverage is limited to at most {retention[interval]}. Choose daily, weekly or monthly candles for longer history.</p>}
-    {envelope && (envelope.meta.freshness === 'stale' || envelope.meta.freshness === 'partial' || envelope.errors.length > 0) && <p className="agents-history-warning" role="status">{envelope.meta.freshness === 'stale' ? 'Stale cached history; coverage may be incomplete. ' : 'Coverage warning: '}{envelope.errors.map(error => error.reason).join('; ')}</p>}
     {envelope?.meta.freshness !== 'failed' && raw.length > candles.length && <p className="agents-history-warning">Excluded {raw.length - candles.length} invalid or duplicate bars; no replacement prices were invented.</p>}
     {chart.caption && <p className="agents-candlestick-caption">{chart.caption}</p>}
     <HistoryTable key={interval} candles={candles} intraday={intraday} title={chart.title} />

@@ -54,7 +54,7 @@ try {
       import { HimsPage } from './src/pages/HimsPage'
       import { useReloadAll } from './src/api/queries'
       import { buildTasks } from './src/api/prefetch'
-      import { rendererQueryPersister, shouldPersistRemoteQuery, RENDERER_CACHE_BUSTER } from './src/api/queryPersistence'
+      import { queryFreshness, rendererQueryPersister, shouldPersistRemoteQuery, RENDERER_CACHE_BUSTER } from './src/api/queryPersistence'
       let client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
       const check = (ok, message) => { if (!ok) throw Error(message) }
       const settle = () => new Promise(resolve => setTimeout(resolve, 150))
@@ -108,7 +108,7 @@ try {
         window.ready = true; await settle(); check(window.forced, 'Refresh did not force data reload')
         window.forced = false; await window.reloadAll(); await settle(); check(window.forced, 'F5 reload path did not force HIMS')
         window.mode = 'partial'; click('Refresh'); await settle()
-        check(text().includes('earnings: Fixture report unavailable'), 'Partial failure is hidden')
+        check(window.health[0].envelope.errors.some(error => error.reason.includes('Fixture report unavailable')) && !document.querySelector('[role=alert]'), 'Partial failure stays in diagnostics without a retained-data banner')
         check(text().toLowerCase().includes('financial history') && text().includes('$100B'), 'Partial failure hid healthy sections')
         window.mode = 'reject'; click('Refresh'); await settle()
         check(text().includes('Fixture network offline'), 'Rejected refresh is hidden')
@@ -120,7 +120,8 @@ try {
         check(!document.querySelector('[role=status]'), 'Recovery left a stale error')
         // Age the snapshot past its TTL. A revisit still reuses it until refresh/startup.
         const saved = client.getQueryData(['hims'])
-        client.setQueryData(['hims'], saved, { updatedAt: Date.now() - 10 * 60_000 })
+        const expiredAt = Date.now() - queryFreshness(['hims']) - 60_000
+        client.setQueryData(['hims'], { ...saved, meta: { ...saved.meta, fetchedAt: expiredAt } }, { updatedAt: expiredAt })
         root.render(<QueryClientProvider client={client}><div /></QueryClientProvider>); await settle()
         const warmCalls = window.calls
         root.render(<QueryClientProvider client={client}><Page /></QueryClientProvider>); await settle()
@@ -139,7 +140,7 @@ try {
         hydrate(client, restored.clientState)
         const restoreCalls = window.calls
         root.render(<QueryClientProvider client={client}><Page /></QueryClientProvider>); await settle()
-        check(window.calls === restoreCalls && text().includes('2.9M') && text().includes('cached'), 'Restored HIMS content triggered another initial load')
+        check(window.calls === restoreCalls && text().includes('2.9M') && text().includes('stale'), 'Restored expired HIMS content triggered another initial load')
         // Startup must still update expired data, including HIMS before its first visit.
         root.render(null); await settle()
         const task = buildTasks(undefined, undefined, { stocks: 'AAPL', fundamentals: 'AAPL' }, { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 }).find(task => task.tab === 'hims')

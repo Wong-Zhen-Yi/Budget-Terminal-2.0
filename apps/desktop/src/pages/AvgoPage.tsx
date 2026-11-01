@@ -171,7 +171,7 @@ export function AvgoPage({ onStatusChange, onNavigate }: {
         </span>
       })}</div>
     </div>
-    {query.data?.errors.length ? <div role="alert" className="shrink-0 border border-warn/40 bg-surface px-2 py-1 text-2xs text-warn">{query.data.errors.map(feedErrorText).join(' · ')}</div> : null}
+    {query.data?.meta.freshness === 'failed' && query.data.errors.length ? <p role="alert" className="shrink-0 px-2 py-1 text-2xs text-down">{query.data.errors.map(feedErrorText).join(' · ')}</p> : null}
     <div className="avgo-kpis shrink-0" aria-label="AVGO financial snapshot">
       <Tile label="Market cap" value={market?.metrics.marketCap ?? '--'} sub="Yahoo Finance · market" />
       <Tile label="Forward P/E" value={market?.metrics.forwardPe ?? '--'} sub="Yahoo Finance · estimate" />

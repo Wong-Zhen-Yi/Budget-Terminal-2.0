@@ -125,7 +125,9 @@ export function QuantPage({ onStatusChange }: { onStatusChange: (panels: PanelSt
   const pairFailure = pair.error?.message ?? (pair.data?.meta.freshness === 'failed' ? pair.data.meta.failureReason ?? 'Pair unavailable' : null)
   const status = useMemo<Notice>(() => {
     if (scan.isPending) return { text: 'Sourcing the liquid US universe and computing factors. This can take a few minutes.', tone: 'warning' }
-    if (scanFailure) return { text: `Scan failed: ${scanFailure}.${payload ? ' Showing the last available snapshot.' : ' Try running a new scan.'}`, tone: 'negative' }
+    if (scanFailure) return payload
+      ? { text: 'Research snapshot available.', tone: 'muted' }
+      : { text: `Scan failed: ${scanFailure}. Try running a new scan.`, tone: 'negative' }
     if (latest.isPending) return { text: 'Restoring the latest research snapshot…', tone: 'warning' }
     if (notice) return notice
     if (!payload) return { text: 'Your workspace is ready. Run a scan to build a ranked universe and discover pairs.', tone: 'muted' }

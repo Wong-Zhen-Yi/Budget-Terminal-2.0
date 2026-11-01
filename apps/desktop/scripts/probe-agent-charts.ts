@@ -112,7 +112,7 @@ try {
         await select('AAPL candle interval', '1 Day')
         check(visible() === 12000 && requests.length === count + 3, 'Returning to daily reuses full-history cache')
         failure = 'stale'; await client.invalidateQueries({ queryKey: queryKeys.chartsHistory('AAPL', '1 Day', 'Max') }); await settle()
-        check(card().textContent.includes('Stale cached history; coverage may be incomplete'), 'Stale coverage remains visible')
+        check(!card().textContent.includes('Stale cached history; coverage may be incomplete') && card().querySelector('[data-history-count]').dataset.historyCount === '12000', 'Retained history stays usable without a saved-data warning banner')
         failure = 'failed'; text = fence('FAIL'); await render()
         check(card().querySelector('[role=alert]').textContent.includes('Synthetic provider outage') && !card().querySelector('[data-history-count]'), 'Provider failures cannot pretend to have full history')
         failure = ''; await click('Retry history')
