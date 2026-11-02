@@ -15,6 +15,8 @@ function platformName(platform) {
 }
 
 function launch({ development = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
+  log.log('Pages populate completed sections while remaining data loads; all pages still preload and startup failures remain visible.')
+  log.log('Page loading: visible startup status, per-page readiness and targeted retries; saved content and timestamps stay visible during refresh. Opening a page promotes its queued requests with fair background turns. Shared reads avoid duplicate work. Readers retain controls longer and evicted pages restore scroll. All pages still preload.')
   const os = platformName(platform)
   log.log('YouTube Research Terminal: compact table, right-side inspector and pagination without scrollbars. Warning-count status and warning controls are removed. All videos and images still preload at startup.')
   log.log('TV: separate market video page with recent channel uploads, newest-first coverage and five-minute refresh. Feed and images preload at startup.')
@@ -67,7 +69,7 @@ function launch({ development = false, platform = process.platform, nodeVersion 
   log.log(`Starting Budget Terminal for ${os}...`)
   log.log('Dictionary Reading Room: category browsing, readable articles, section navigation, saved terms, recent history and formula copying. All 405 terms remain available offline. Dictionary candlestick charts render at full size across all pattern examples.')
   log.log('Crypto: removed the snapshot summary banner. Refresh errors, rate limits and startup loading remain visible.')
-  log.log('Saved-data warning banners removed throughout the app, including ETF, IPO, Valuation, company pages and charts. Startup progress and failure details remain in Settings.')
+  log.log('Saved-data warning banners removed throughout the app, including ETF, IPO, Valuation, company pages and charts. Startup progress and failure details are visible above page content and in Settings.')
   log.log('MCP startup fix: desktop-only cache controls, heatmap progress and TV are classified correctly. Agent startup errors no longer block the app from opening.')
   log.log('Heatmap fills holdings and quote colours progressively while data loads; loading progress stays visible until completion.')
   log.log('Cache startup: saved pages stay usable during background refresh. Settings controls 256 MiB page snapshots, 2 GiB market data, a separate 512 MiB image budget and 30-day retention. All pages still preload.')
@@ -80,7 +82,7 @@ function launch({ development = false, platform = process.platform, nodeVersion 
   log.log('Agents chat: the message composer fills resizable dashboard and dropdown panes at every zoom level.')
   log.log('Data health: all startup pages report current results and refresh after expiry. Chart history keeps its own freshness; SPY security IDs and Robinhood monthly reports are handled correctly.')
   log.log('MCP prices use the shared live Hyperliquid feed for mapped stocks. Fast quote reads skip macro and sector lookups by default; projected responses preserve perp market labels and Yahoo fallback details.')
-  log.log('Portfolio charts stay prepared across all books: Dashboard, Stocks and selected Main/Multi views load at startup, refresh in the background and prepare new holdings automatically. The bottom status strip is hidden; background loading, chart refresh and monitoring continue. Readiness and failures remain available in Settings.')
+  log.log('Portfolio charts stay prepared across all books: Dashboard, Stocks and selected Main/Multi views load at startup, refresh in the background and prepare new holdings automatically. The bottom status strip is hidden; background loading, chart refresh and monitoring continue. Readiness and failures are visible above page content and in Settings.')
   log.log('Chart ticker switches reuse cached history and refresh its recent tail. Interactive requests have priority and reserved Hyperliquid rate budget; live marks keep chart zoom steady.')
   log.log('Stock prices use labelled Hyperliquid equity-perpetual marks where mapped, including portfolio values and screener prices. Prices and covered charts stream live with native UTC 4-hour perp bars; Yahoo supplies stock-history and quote fallbacks plus fundamentals.')
   log.log('Crypto Workspace: interactive perpetual charts, watchlist selection, searchable markets, source labels and enforced CoinGecko cooldowns. The chart preloads with every page. Hourly funding, USD open interest and volume remain separate from spot prices.')

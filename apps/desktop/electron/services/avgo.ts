@@ -1,3 +1,5 @@
+import { CHANNELS } from '../shared/contract.js'
+import { publishPageProgress } from './pageProgress.js'
 import type { Envelope, EnvelopeError } from '../shared/contract.js'
 import { AVGO_BLOCKS, avgoDocumentUrl, discoverAvgoDocuments, emptyAvgoPayload, parseAvgoEarnings } from '../shared/avgo.js'
 import type { AvgoBlock, AvgoEarnings, AvgoPayload, AvgoRequest } from '../shared/avgo.js'
@@ -96,7 +98,7 @@ export async function getAvgo({ force = false }: AvgoRequest = {}, fetchers: Avg
       payload.laneFetchedAt[block] = result.value.fetchedAt
       cached ||= result.fromCache
       warnings.forEach(reason => errors.push(err(AVGO_SOURCE, reason, `avgo-${block}`, block)))
-    } catch (error) { errors.push(err(AVGO_SOURCE, describeError(error), `avgo-${block}`, block)) }
+    } catch (error) { errors.push(err(AVGO_SOURCE, describeError(error), `avgo-${block}`, block)) } finally { publishPageProgress(payload, AVGO_SOURCE, errors, CHANNELS.avgo) }
   }
   await Promise.all([
     lane('market', TTL.avgo, () => fetchers.market('AVGO', force), result => {

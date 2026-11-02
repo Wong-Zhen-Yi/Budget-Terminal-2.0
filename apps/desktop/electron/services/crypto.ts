@@ -1,3 +1,5 @@
+import { progressiveAll, publishPageProgress } from './pageProgress.js'
+import { CHANNELS } from '../shared/contract.js'
 import type {
   CryptoFearGreed,
   CryptoGlobalMarket,
@@ -483,7 +485,7 @@ async function fetchCrypto(force: boolean): Promise<CryptoFetchResult> {
     stageError('hyperliquid', describeError(error))
     return null
   })
-  const [tiles, quotes, market, news, hyperliquid] = await Promise.all([
+  const [tiles, quotes, market, news, hyperliquid] = await progressiveAll([
     fetchTopTiles().catch((error) => {
       stageError('heatmap', describeError(error))
       return [] as CryptoHeatmapTile[]
@@ -508,7 +510,7 @@ async function fetchCrypto(force: boolean): Promise<CryptoFetchResult> {
       return { articles: [] as NewsArticle[], errors: [] as EnvelopeError[] }
     }),
     perpetuals,
-  ])
+  ], ([tiles, quotes, market, news, hyperliquid]) => publishPageProgress({ fetchedAt, heatmap: buildHeatmapPayload(tiles ?? [], fetchedAt), quotes: quotes ?? {}, global: market?.[0] ?? null, fearGreed: market?.[1] ?? null, news: news?.articles ?? [], hyperliquid: hyperliquid ?? null, progress }, 'Crypto sources', errors, CHANNELS.crypto))
 
   let heatmap = buildHeatmapPayload(tiles, fetchedAt)
   const missingQuotes = [...CRYPTO_TICKERS, ...PROXY_TICKERS].filter(entry => quotes[entry.label]?.price == null)

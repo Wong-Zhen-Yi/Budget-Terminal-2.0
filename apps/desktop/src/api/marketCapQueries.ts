@@ -1,6 +1,6 @@
 import type { MarketCapTier } from '@shared/contract'
 import { useRef } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 import { marketCapInTier } from '@shared/marketCap'
 import { api, queryKeys } from './client'
 import { queryFreshness } from './queryPersistence'

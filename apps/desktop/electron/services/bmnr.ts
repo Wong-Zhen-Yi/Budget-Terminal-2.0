@@ -1,3 +1,5 @@
+import { progressiveAll, publishPageProgress } from './pageProgress.js'
+import { CHANNELS } from '../shared/contract.js'
 import type { BmnrBlock, BmnrPayload, EnvelopeError } from '../shared/contract.js'
 import { BMNR_CIK, BMNR_ETH_SYMBOL, BMNR_SYMBOL } from '../shared/contract.js'
 import type { BmnrMarketInput, BmnrSecInput } from '../shared/bmnr.js'
@@ -82,7 +84,8 @@ async function fetchBmnr(force: boolean): Promise<BmnrFetchResult> {
     return emptyMarket()
   })
 
-  const [treasuryBody, sec, market] = await Promise.all([treasuryTask, secTask, marketTask])
+  const [treasuryBody, sec, market] = await progressiveAll([treasuryTask, secTask, marketTask], ([treasuryBody, sec, market]) =>
+    publishPageProgress(buildBmnrPayload({ fetchedAt, treasuryBody: treasuryBody ?? null, sec: sec ?? null, market: market ?? emptyMarket() }), 'BMNR sources', errors, CHANNELS.bmnr))
 
   if (treasuryBody !== null && !hasTreasuryRow(treasuryBody)) {
     errors.push(

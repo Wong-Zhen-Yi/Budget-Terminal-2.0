@@ -301,7 +301,7 @@ try {
           // Expiry maintenance runs throughout navigation and uses a rank behind
           // every initial page. It is independent of a first-visit data request.
           const maintenance = call => call.request?.background && call.request.backgroundOrder >= TABS.filter(tab => tab.implemented).length
-          const initial = calls.slice(before).filter(call => !maintenance(call) && !['mcpStatus', 'apiUsage', 'mutateSettings', 'browserViewport', 'notificationsStatus'].includes(call.method))
+          const initial = calls.slice(before).filter(call => !maintenance(call) && !['startupPriority', 'mcpStatus', 'apiUsage', 'mutateSettings', 'browserViewport', 'notificationsStatus'].includes(call.method))
           check(initial.length === 0, 'First-visit request on ' + scenario + '/' + tab.id + ': ' + JSON.stringify(initial))
           if (scenario === 'populated' && tab.id === 'portfolio') {
             const page = visiblePage(tab.id)
@@ -317,7 +317,7 @@ try {
               check(button, 'Missing Portfolio subtab: ' + label)
               button.click(); await wait(); await paint()
               check(headings().includes(label), 'Portfolio subtab panel missing: ' + label)
-              const subtabRequests = calls.slice(beforeSubtab).filter(call => !maintenance(call) && !['mcpStatus', 'apiUsage', 'mutateSettings', 'notificationsStatus'].includes(call.method))
+              const subtabRequests = calls.slice(beforeSubtab).filter(call => !maintenance(call) && !['startupPriority', 'mcpStatus', 'apiUsage', 'mutateSettings', 'notificationsStatus'].includes(call.method))
               check(subtabRequests.length === 0, 'Portfolio subtab made a first-visit request: ' + label + ': ' + JSON.stringify(subtabRequests))
               const panel = [...page.querySelectorAll('section')].find(panel => panel.querySelector('h2')?.textContent.trim() === label)
               check(panel.getBoundingClientRect().width >= page.getBoundingClientRect().width - 20, 'Portfolio subtab must use the full width: ' + label)
@@ -420,7 +420,7 @@ try {
               record.excluded = ['Backup/import/export/reset and destructive maintenance actions: service probes only; no UI dialog assertion', 'Reset Order', 'Clipboard-copy actions', 'Drag reordering']
             }
             check(!document.body.innerText.includes('This page could not render'), 'Interaction crashed: ' + tab.id)
-            record.userRequests = [...new Set(calls.slice(before).map(call => call.method).filter(method => !['mcpStatus', 'apiUsage', 'mutateSettings'].includes(method)))]
+            record.userRequests = [...new Set(calls.slice(before).map(call => call.method).filter(method => !['startupPriority', 'mcpStatus', 'apiUsage', 'mutateSettings'].includes(method)))]
             if (tab.id !== 'settings') record.excluded = ['Form submission/new arbitrary ticker or filter combinations', 'Export/clipboard/external links', 'Chart pointer/drawing/drag gestures', 'Financial edits and destructive actions']
             coverage.push(record)
           }

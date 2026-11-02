@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 import { api } from '@/api/client'
 
 export function McpActivity() {

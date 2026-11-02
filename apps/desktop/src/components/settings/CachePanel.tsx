@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { dehydrate, useQuery, useQueryClient } from '@tanstack/react-query'
+import { dehydrate, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 import { CACHE_SETTING_BOUNDS, DEFAULT_CACHE_SETTINGS, MIB, validCacheSettings, type CacheSettings } from '@shared/cachePolicy'
 import { api } from '@/api/client'
 import { configureRendererCache, rendererCacheSettings, rendererQueryPersister, RENDERER_CACHE_BUSTER, shouldPersistRemoteQuery } from '@/api/queryPersistence'

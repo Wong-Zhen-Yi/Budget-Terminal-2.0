@@ -1,5 +1,7 @@
+import { fetchRetainedQuery } from './snapshotResult'
 import { useCallback } from 'react'
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 
 import type { Envelope, UpDownPayload, UpDownRequest } from '@shared/contract'
 import { api, queryKeys } from './client'
@@ -27,7 +29,6 @@ export function useRefreshUpDown(
 ): () => Promise<void> {
   const queryClient = useQueryClient()
   return useCallback(async () => {
-    const result = await api.upDown({ ...request, force: true })
-    queryClient.setQueryData(keyOf(request), result)
+    await fetchRetainedQuery(queryClient, keyOf(request), () => api.upDown({ ...request, force: true }))
   }, [queryClient, request])
 }

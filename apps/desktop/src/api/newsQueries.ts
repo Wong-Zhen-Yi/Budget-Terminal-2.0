@@ -1,5 +1,7 @@
+import { retainedQueryOptions } from './snapshotResult'
 import { useCallback } from 'react'
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 
 import type {
   Envelope,
@@ -41,11 +43,11 @@ export function useNewsPage(tickers: string[]): UseQueryResult<Envelope<NewsPage
 export function useRefreshNewsPage(tickers: string[]): () => Promise<void> {
   const queryClient = useQueryClient()
   return useCallback(async () => {
-    await queryClient.fetchQuery({
+    await queryClient.fetchQuery(retainedQueryOptions(queryClient, {
       queryKey: queryKeys.newsPage(tickers),
       queryFn: () => api.newsPage({ tickers, force: true }),
       staleTime: 0,
-    })
+    }))
   }, [queryClient, tickers])
 }
 

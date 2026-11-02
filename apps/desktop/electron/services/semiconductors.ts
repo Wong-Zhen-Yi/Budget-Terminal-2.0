@@ -1,3 +1,5 @@
+import { CHANNELS } from '../shared/contract.js'
+import { publishPageProgress } from './pageProgress.js'
 import type { Envelope, EnvelopeError, NewsArticle } from '../shared/contract.js'
 import { describeError, err, meta } from '../shared/envelope.js'
 import { SEMICONDUCTOR_CATALOG, SEMICONDUCTOR_REVIEW_DATE } from '../shared/semiconductorCatalog.js'
@@ -96,7 +98,7 @@ export async function getSemiconductors({ force = false }: SemiconductorsRequest
       row.fetchedAt[block] = Math.min(result.value.fetchedAt, result.snapshot?.fetchedAt ?? Infinity)
       cached ||= result.fromCache
       warnings.forEach(reason => errors.push(err(SOURCE, reason, `semiconductors-${block}`, row.company.symbol)))
-    } catch (error) { errors.push(err(SOURCE, describeError(error), `semiconductors-${block}`, row.company.symbol)) }
+    } catch (error) { errors.push(err(SOURCE, describeError(error), `semiconductors-${block}`, row.company.symbol)) } finally { publishPageProgress(payload, SOURCE, errors, CHANNELS.semiconductors) }
   }
   // Bound the number of stock tasks; the shared rate gate additionally paces every
   // individual Yahoo request and reserves foreground capacity during startup.

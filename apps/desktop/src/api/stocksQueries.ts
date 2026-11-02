@@ -1,5 +1,7 @@
+import { retainedQueryOptions } from './snapshotResult'
 import { useCallback } from 'react'
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 
 import type { Envelope, StocksPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
@@ -30,11 +32,11 @@ export function useRefreshStocks(): (symbol: string) => Promise<Envelope<StocksP
   const queryClient = useQueryClient()
   return useCallback(
     (symbol) =>
-      queryClient.fetchQuery({
+      queryClient.fetchQuery(retainedQueryOptions(queryClient, {
         queryKey: queryKeys.stocks(symbol),
         queryFn: () => api.stocks({ symbol, force: true }),
         staleTime: 0,
-      }),
+      })),
     [queryClient],
   )
 }

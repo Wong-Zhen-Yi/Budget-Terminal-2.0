@@ -1,5 +1,7 @@
+import { retainedQueryOptions } from './snapshotResult'
 import { useCallback } from 'react'
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 
 import type { Envelope, GlobalMarketsPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
@@ -27,10 +29,10 @@ export function useGlobalMarkets(): UseQueryResult<Envelope<GlobalMarketsPayload
 export function useRefreshGlobalMarkets(): () => Promise<void> {
   const queryClient = useQueryClient()
   return useCallback(async () => {
-    await queryClient.fetchQuery({
+    await queryClient.fetchQuery(retainedQueryOptions(queryClient, {
       queryKey: queryKeys.globalMarkets,
       queryFn: () => api.globalMarkets({ force: true }),
       staleTime: 0,
-    })
+    }))
   }, [queryClient])
 }

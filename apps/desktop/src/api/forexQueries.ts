@@ -1,5 +1,7 @@
+import { retainedQueryOptions } from './snapshotResult'
 import { useEffect, useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 import type { ForexPair, ForexRange } from '@shared/forex'
 import { FOREX_MARKET_MS, FOREX_NEWS_MS } from '@shared/forex'
 import { api, queryKeys } from './client'
@@ -23,9 +25,9 @@ export function useForex(pair: ForexPair, range: ForexRange) {
     const keys = [queryKeys.forexQuotes, queryKeys.forexHistory(pair, range), queryKeys.forexNews(pair)]
     await Promise.all(keys.map((queryKey) => client.cancelQueries({ queryKey, exact: true })))
     await Promise.all([
-      client.fetchQuery({ queryKey: keys[0], queryFn: () => api.forexQuotes({ force: true }), staleTime: 0 }),
-      client.fetchQuery({ queryKey: keys[1], queryFn: () => api.forexHistory({ pair, range, force: true }), staleTime: 0 }),
-      client.fetchQuery({ queryKey: keys[2], queryFn: () => api.forexNews({ pair, force: true }), staleTime: 0 }),
+      client.fetchQuery(retainedQueryOptions(client, { queryKey: keys[0], queryFn: () => api.forexQuotes({ force: true }), staleTime: 0 })),
+      client.fetchQuery(retainedQueryOptions(client, { queryKey: keys[1], queryFn: () => api.forexHistory({ pair, range, force: true }), staleTime: 0 })),
+      client.fetchQuery(retainedQueryOptions(client, { queryKey: keys[2], queryFn: () => api.forexNews({ pair, force: true }), staleTime: 0 })),
     ])
   }
   return { quotes, history, news, refresh }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 import type { AgentImageArtifact } from '@shared/agentImageArtifacts'
 import type { AgentImage } from '@shared/agents'
 import { api } from '@/api/client'

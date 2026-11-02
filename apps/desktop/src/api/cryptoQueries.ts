@@ -1,5 +1,7 @@
+import { fetchRetainedQuery } from './snapshotResult'
 import { useCallback, useEffect, useState } from 'react'
-import { useQuery, useQueryClient, type UseQueryResult, type QueryClient } from '@tanstack/react-query'
+import { useQueryClient, type UseQueryResult, type QueryClient } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 
 import type { CryptoPayload, Envelope, ChartsHistoryRequest } from '@shared/contract'
 import { api, queryKeys } from './client'
@@ -33,8 +35,7 @@ export function useCrypto(): UseQueryResult<Envelope<CryptoPayload>> {
 export function useRefreshCrypto(): () => Promise<void> {
   const queryClient = useQueryClient()
   return useCallback(async () => {
-    const result = await api.crypto({ force: true })
-    queryClient.setQueryData(queryKeys.crypto, result)
+    await fetchRetainedQuery(queryClient, queryKeys.crypto, () => api.crypto({ force: true }))
   }, [queryClient])
 }
 

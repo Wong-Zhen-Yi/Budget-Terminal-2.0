@@ -1,3 +1,4 @@
+import { retainedQueryOptions } from '@/api/snapshotResult'
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
@@ -69,9 +70,9 @@ export function ScorecardPage({ onStatusChange, onNavigate }: {
   const refresh = async () => {
     setRefreshing(true); setMessage(''); setError('')
     try {
-      const results = await Promise.allSettled(symbols.map(symbol => client.fetchQuery({
+      const results = await Promise.allSettled(symbols.map(symbol => client.fetchQuery(retainedQueryOptions(client, {
         queryKey: queryKeys.fundamentalsPage(symbol), queryFn: () => loadScorecardCompany(symbol, { force: true }), staleTime: 0,
-      })))
+      }))))
       const failures = results.filter(result => result.status === 'rejected').length
       const degraded = results.filter((result, index) => result.status === 'fulfilled' && (
         ['partial', 'stale', 'failed'].includes(effectiveFreshness(result.value, Date.now(), queryFreshness(queryKeys.fundamentalsPage(symbols[index]))))

@@ -1,3 +1,5 @@
+import { progressiveAll, publishPageProgress } from '../pageProgress.js'
+import { CHANNELS } from '../../shared/contract.js'
 import type {
   DxySnapshot,
   FuturesRow,
@@ -193,14 +195,14 @@ async function fetchMomentum(force: boolean): Promise<SpyMomentumPayload> {
 }
 
 async function fetchAll(force: boolean): Promise<PreMarketPayload> {
-  const [futures, dxy, tnx, vix, fearGreed, momentum] = await Promise.all([
+  const [futures, dxy, tnx, vix, fearGreed, momentum] = await progressiveAll([
     fetchFutures(force).catch(() => [] as FuturesRow[]),
     fetchDxy(force).catch(() => null),
     fetchTnx(force).catch(() => null),
     fetchVix(force).catch(() => null),
     getFearGreed(force).catch(() => null),
     fetchMomentum(force).catch(() => null),
-  ])
+  ], ([futures, dxy, tnx, vix, fearGreed, momentum]) => publishPageProgress({ futures: futures ?? [], dxy: dxy ?? null, tnx: tnx ?? null, vix: vix ?? null, fearGreed: fearGreed ?? null, momentum: momentum ?? null, missing: [] }, SOURCE, [], CHANNELS.preMarket))
 
   const missing: string[] = []
   if (!futures.length) missing.push('Futures')

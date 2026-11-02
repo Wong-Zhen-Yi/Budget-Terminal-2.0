@@ -1,4 +1,5 @@
-import { useQueries } from '@tanstack/react-query'
+import { retainedLoader } from './snapshotResult'
+import { useQueries, useQueryClient } from '@tanstack/react-query'
 import type { UpDownRow, UpDownTargetsRequest } from '@shared/contract'
 import { api } from './client'
 import { queryFreshness } from './queryPersistence'
@@ -30,10 +31,11 @@ export async function loadUpDownTargets(request: UpDownTargetsRequest) {
 }
 
 export function useUpDownTargets(rows: UpDownRow[], force: boolean, revision: number) {
+  const client = useQueryClient()
   const batches = upDownTargetBatches(rows)
   const queries = useQueries({ queries: batches.map(tickers => {
     const queryKey = upDownTargetsKey(tickers, force ? revision : 0)
-    return { queryKey, queryFn: () => loadUpDownTargets({ tickers, force }),
+    return { queryKey, queryFn: retainedLoader(client, queryKey, () => loadUpDownTargets({ tickers, force })),
       staleTime: queryFreshness(queryKey) }
   }) })
   const targets: Record<string, number | null> = {}

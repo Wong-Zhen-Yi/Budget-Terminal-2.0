@@ -1,3 +1,5 @@
+import { publishPageProgress } from '../pageProgress.js'
+import { CHANNELS } from '../../shared/contract.js'
 import type { Fundamentals } from '../../shared/contract.js'
 import { cache, TTL } from '../cache.js'
 import { paced, yahoo } from './client.js'
@@ -62,11 +64,16 @@ export async function getFundamentals(
   force = false,
 ): Promise<Record<string, Fundamentals>> {
   const unique = [...new Set(tickers.map((t) => t.trim().toUpperCase()).filter(Boolean))]
+  const preview: Record<string, Fundamentals> = {}
   const settled = await Promise.allSettled(
     unique.map((ticker) =>
       cache
         .resolve(`fundamentals:pe-peg-v2:${ticker}`, TTL.targets, () => fetchFundamentals(ticker), { force })
-        .then((result) => result.value),
+        .then((result) => {
+          preview[ticker] = result.value
+          publishPageProgress({ fundamentals: preview }, 'yahoo quoteSummary', [], CHANNELS.fundamentals)
+          return result.value
+        }),
     ),
   )
 

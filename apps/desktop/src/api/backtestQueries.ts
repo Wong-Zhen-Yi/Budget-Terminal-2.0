@@ -1,4 +1,5 @@
-import { useMutation, useQuery, type UseMutationResult } from '@tanstack/react-query'
+import { useMutation, type UseMutationResult } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 
 import type { BacktestPayload, BacktestRequest, Envelope } from '@shared/contract'
 import { api } from './client'

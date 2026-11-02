@@ -136,9 +136,15 @@ export interface QuoteBatch {
 }
 
 /** Fetch many symbols concurrently; the rate gate decides how many actually run at once. */
-export async function getQuotes(symbols: string[], force = false): Promise<QuoteBatch> {
+export async function getQuotes(symbols: string[], force = false, onProgress?: (quotes: Record<string, Quote>) => void): Promise<QuoteBatch> {
   const unique = [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))]
-  const settled = await Promise.allSettled(unique.map((symbol) => resolveQuote(symbol, force)))
+  const preview: Record<string, Quote> = {}
+  const settled = await Promise.allSettled(unique.map(async symbol => {
+    const result = await resolveQuote(symbol, force)
+    preview[symbol] = result.value
+    onProgress?.({ ...preview })
+    return result
+  }))
 
   const quotes: Record<string, Quote> = {}
   const missing: string[] = []

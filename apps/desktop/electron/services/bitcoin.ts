@@ -1,3 +1,5 @@
+import { CHANNELS } from '../shared/contract.js'
+import { publishPageProgress } from './pageProgress.js'
 import { z } from 'zod'
 import type { Envelope, EnvelopeError } from '../shared/contract.js'
 import type { BitcoinPayload, BitcoinRequest } from '../shared/bitcoin.js'
@@ -36,7 +38,7 @@ export async function getBitcoin({ force = false }: BitcoinRequest = {}): Promis
       cached ||= result.fromCache
     } catch (error) {
       errors.push({ source, symbol: key, operation: 'bitcoin', reason: error instanceof Error ? error.message : String(error) })
-    }
+    } finally { publishPageProgress(data, 'Blockchain.com · mempool.space', errors, CHANNELS.bitcoin) }
   }))
   const staleStats = data.stats !== null && Date.now() - data.stats.timestamp > 2 * 60 * 60_000
   if (staleStats) errors.push({ source: bitcoinEndpoints.stats, symbol: 'stats', operation: 'bitcoin', reason: 'Mining statistics are more than two hours old; source timestamp shown.' })

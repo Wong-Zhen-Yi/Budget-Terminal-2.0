@@ -1,5 +1,7 @@
+import { fetchRetainedQuery } from './snapshotResult'
 import { useCallback } from 'react'
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 
 import type { Envelope, OptionsChainPayload, OptionsExpirationsPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
@@ -50,8 +52,7 @@ export function useRefreshOptionsChain(): (symbol: string, expiry: string) => Pr
   const queryClient = useQueryClient()
   return useCallback(
     async (symbol: string, expiry: string) => {
-      const result = await api.optionsChain({ symbol, expiry, force: true })
-      queryClient.setQueryData(queryKeys.optionsChain(symbol, expiry), result)
+      const result = await fetchRetainedQuery(queryClient, queryKeys.optionsChain(symbol, expiry), () => api.optionsChain({ symbol, expiry, force: true }))
       // The response resolves the expiry itself when the requested one is gone, so the
       // resolved key gets the same payload and the page does not fetch it twice.
       if (result.data.expiry && result.data.expiry !== expiry) {
@@ -88,8 +89,7 @@ export function useRefreshOptionsExpirations(): (symbol: string) => Promise<void
   const queryClient = useQueryClient()
   return useCallback(
     async (symbol: string) => {
-      const result = await api.optionsExpirations({ symbol, force: true })
-      queryClient.setQueryData(queryKeys.optionsExpirations(symbol), result)
+      await fetchRetainedQuery(queryClient, queryKeys.optionsExpirations(symbol), () => api.optionsExpirations({ symbol, force: true }))
     },
     [queryClient],
   )

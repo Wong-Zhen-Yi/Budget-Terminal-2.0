@@ -1,3 +1,5 @@
+import { progressiveAll, publishPageProgress } from '../pageProgress.js'
+import { CHANNELS } from '../../shared/contract.js'
 import type {
   ProjectionsFailure,
   ProjectionsPayload,
@@ -56,7 +58,7 @@ export async function getProjections(
 ): Promise<{ payload: ProjectionsPayload; failures: ProjectionsFailure[] }> {
   const failures: ProjectionsFailure[] = []
 
-  const [chart, sweep] = await Promise.all([
+  const [chart, sweep] = await progressiveAll([
     getChartsHistory({ symbol, interval: timeframe, range: projectionsRange(timeframe), force })
       .then((result) => result.payload)
       .catch((error) => {
@@ -66,7 +68,10 @@ export async function getProjections(
         return null
       }),
     getOptionsExpirations(symbol, force),
-  ])
+  ], ([chart, sweep]) => publishPageProgress({
+    ...emptyProjections(symbol, timeframe), interval: chart?.interval ?? '', candles: chart?.candles ?? [], stats: chart?.stats ?? null,
+    spotPrice: sweep?.payload.spotPrice ?? 0, marketDate: sweep?.payload.marketDate ?? '', buckets: sweep?.payload.buckets ?? [], generatedAt: Date.now(),
+  }, PROJECTIONS_SOURCE, [], CHANNELS.projections))
 
   failures.push(...sweep.failures)
 

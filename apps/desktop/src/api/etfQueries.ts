@@ -1,5 +1,7 @@
+import { retainedQueryOptions } from './snapshotResult'
 import { useCallback } from 'react'
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 
 import type { Envelope, EtfArbitragePayload, EtfAumPayload, EtfHoldingsPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
@@ -51,11 +53,11 @@ export function useRefreshEtfHoldings(): (ticker: string) => Promise<void> {
   return useCallback(async (ticker: string) => {
     const symbol = ticker.trim().toUpperCase()
     if (!symbol) return
-    await client.fetchQuery({
+    await client.fetchQuery(retainedQueryOptions(client, {
       queryKey: queryKeys.etfHoldings(symbol),
       queryFn: async () => usable(await api.etfHoldings({ ticker: symbol, force: true })),
       staleTime: 0, retry: false,
-    })
+    }))
     // Do not remove the basket snapshot: it has its own timestamp and refresh action.
   }, [client])
 }
@@ -65,21 +67,21 @@ export function useRefreshEtfArbitrage(): (ticker: string) => Promise<void> {
   return useCallback(async (ticker: string) => {
     const symbol = ticker.trim().toUpperCase()
     if (!symbol) return
-    await client.fetchQuery({
+    await client.fetchQuery(retainedQueryOptions(client, {
       queryKey: queryKeys.etfArbitrage(symbol),
       queryFn: async () => usable(await api.etfArbitrage({ ticker: symbol, force: true })),
       staleTime: 0, retry: false,
-    })
+    }))
   }, [client])
 }
 
 export function useRefreshEtfAum(): () => Promise<void> {
   const client = useQueryClient()
   return useCallback(async () => {
-    await client.fetchQuery({
+    await client.fetchQuery(retainedQueryOptions(client, {
       queryKey: queryKeys.etfAum,
       queryFn: async () => usable(await api.etfAum({ force: true })),
       staleTime: 0, retry: false,
-    })
+    }))
   }, [client])
 }

@@ -1,3 +1,5 @@
+import { CHANNELS } from '../shared/contract.js'
+import { publishPageProgress } from './pageProgress.js'
 import { RecordRevisionError } from './mcpContext.js'
 import { markEquityScreenRows } from './equityScreenMarks.js'
 import { getMoney, clearMoneyCache } from './money.js'
@@ -690,7 +692,12 @@ const providerImplementation: MarketDataProvider = {
   async quotes({ holdings, force, includeMacro = true, includeSectors = true }) {
     const macroSymbols = includeMacro ? MACRO_SYMBOLS.map((entry) => entry.symbol) : []
     const [batch, classifications] = await Promise.all([
-      getQuotes([...macroSymbols, ...holdings], force),
+      getQuotes([...macroSymbols, ...holdings], force, quotes => {
+        const macro: QuotesPayload['macro'] = {}
+        for (const entry of includeMacro ? MACRO_SYMBOLS : []) if (quotes[entry.symbol]) macro[entry.label] = quotes[entry.symbol]
+        const holdingQuotes = Object.fromEntries(holdings.map(symbol => symbol.trim().toUpperCase()).filter(symbol => quotes[symbol]).map(symbol => [symbol, quotes[symbol]]))
+        publishPageProgress({ macro, holdings: holdingQuotes, missing: [] }, 'market prices', [], CHANNELS.quotes)
+      }),
       includeSectors ? getHoldingSectors(holdings) : Promise.resolve({ sectors: {} as Record<string, string>, missing: [] as string[] }),
     ])
     const quoteSource = [...new Set(Object.values(batch.quotes).map(quote => quote.priceBasis === 'equity-perp-mark' ? 'Hyperliquid equity perps' : 'Yahoo Finance'))].join(' + ') || 'market prices'

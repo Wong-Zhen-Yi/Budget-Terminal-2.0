@@ -1,3 +1,5 @@
+import { CHANNELS } from '../shared/contract.js'
+import { publishPageProgress } from './pageProgress.js'
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import type { Envelope, EnvelopeError } from '../shared/contract.js'
 import { MU_BLOCKS, discoverMuDocuments, emptyMuPayload, muDocumentUrl, muHtmlText, parseMuEarnings, parseMuMemory, validateMuPeriod } from '../shared/mu.js'
@@ -116,7 +118,7 @@ export async function getMu({ force = false }: MuRequest = {}, fetchers: MuFetch
       payload.laneFetchedAt[block] = result.value.fetchedAt
       cached ||= result.fromCache
       warnings.forEach(reason => errors.push(err(MU_SOURCE, reason, `mu-${block}`, block)))
-    } catch (error) { errors.push(err(MU_SOURCE, describeError(error), `mu-${block}`, block)) }
+    } catch (error) { errors.push(err(MU_SOURCE, describeError(error), `mu-${block}`, block)) } finally { publishPageProgress(payload, MU_SOURCE, errors, CHANNELS.mu) }
   }
   await Promise.all([
     lane('market', TTL.mu, () => fetchers.market('MU', force), result => {

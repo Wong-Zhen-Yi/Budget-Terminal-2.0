@@ -1,3 +1,5 @@
+import { publishPageProgress } from '../pageProgress.js'
+import { CHANNELS } from '../../shared/contract.js'
 import type { Envelope, MarketCapPayload, MarketCapRow, MarketCapTier } from '../../shared/contract.js'
 import { describeError, failed, meta } from '../../shared/envelope.js'
 import { MARKET_CAP_LIMIT, MARKET_CAP_TTL, marketCapInTier, marketCapTier, marketCapRowFromQuote, rankMarketCapRows } from '../../shared/marketCap.js'
@@ -33,6 +35,7 @@ export async function getMarketCap(options: {
       const old = rows.get(row.ticker)
       if (!old || row.marketCap > old.marketCap) rows.set(row.ticker, row)
     }
+    publishPageProgress({ rows: rankMarketCapRows(rows.values(), limit), source: SOURCE, asOf: new Date().toISOString(), candidateCount }, SOURCE, [], CHANNELS.marketCap)
     if (rows.size >= limit || page.quotes.length < size || (page.total > 0 && offset + size >= page.total)) {
       return { rows: rankMarketCapRows(rows.values(), limit), source: SOURCE, asOf: new Date().toISOString(), candidateCount }
     }

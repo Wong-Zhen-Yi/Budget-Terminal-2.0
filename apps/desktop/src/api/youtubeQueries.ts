@@ -1,5 +1,7 @@
+import { retainedQueryOptions } from './snapshotResult'
 import { useCallback } from 'react'
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 
 import type {
   Envelope,
@@ -26,11 +28,11 @@ export function useRefreshYouTube(tickers: string[]): () => Promise<void> {
   const queryClient = useQueryClient()
   return useCallback(async () => {
     if (!tickers.length) return
-    await queryClient.fetchQuery({
+    await queryClient.fetchQuery(retainedQueryOptions(queryClient, {
       queryKey: queryKeys.youtube(tickers),
       queryFn: () => api.youtube({ tickers, force: true }),
       staleTime: 0,
-    })
+    }))
   }, [queryClient, tickers])
 }
 

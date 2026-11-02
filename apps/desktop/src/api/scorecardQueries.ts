@@ -1,4 +1,5 @@
-import { useQueries } from '@tanstack/react-query'
+import { retainedLoader } from './snapshotResult'
+import { useQueries, useQueryClient } from '@tanstack/react-query'
 import type { BackgroundRequest } from '@shared/contract'
 import { api, queryKeys } from './client'
 import { forcing } from './queries'
@@ -11,9 +12,10 @@ export async function loadScorecardCompany(symbol: string, options: BackgroundRe
 }
 
 export function useScorecardCompanies(symbols: string[]) {
+  const client = useQueryClient()
   return useQueries({ queries: symbols.map(symbol => ({
     queryKey: queryKeys.fundamentalsPage(symbol),
-    queryFn: () => loadScorecardCompany(symbol, { force: forcing() }),
+    queryFn: retainedLoader(client, queryKeys.fundamentalsPage(symbol), () => loadScorecardCompany(symbol, { force: forcing() })),
     staleTime: queryFreshness(queryKeys.fundamentalsPage(symbol)),
     refetchOnMount: false,
     refetchInterval: false as const,

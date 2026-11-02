@@ -92,6 +92,17 @@ export class RateGate {
   private pumping = false
   private timer: ReturnType<typeof setTimeout> | null = null
   private timerDueAt = 0
+  private preferredOrder: number | null = null
+  private preferredAdmissions = 0
+
+  /** Reorder queued work without cancelling requests or spending foreground capacity. */
+  preferBackgroundOrder(order: number | null): void {
+    if (order !== null && (!Number.isSafeInteger(order) || order < 0)) throw new Error('Invalid startup priority')
+    if (this.preferredOrder === order) return
+    this.preferredOrder = order
+    this.preferredAdmissions = 0
+    this.pump()
+  }
 
   constructor(options: Partial<RateGateOptions> = {}) {
     this.options = { ...DEFAULT_RATE_GATE_OPTIONS, ...options }
@@ -182,7 +193,12 @@ export class RateGate {
     if (foreground) return foreground
     // A background waiter yields to any queued foreground work and never takes the last
     // slot, so a foreground request arriving mid-warm waits for one call, not a hundred.
-    const background = this.queues.background[0]
+    const queue = this.queues.background
+    // Let another page advance after three preferred admissions, even during a
+    // large visible-page fan-out. FIFO still applies within each page.
+    const preferred = this.preferredAdmissions < 3 ? queue.find(waiter => waiter.order === this.preferredOrder) : undefined
+    const other = this.preferredAdmissions >= 3 ? queue.find(waiter => waiter.order !== this.preferredOrder) : undefined
+    const background = preferred ?? other ?? queue[0]
     if (!background) return null
     if (this.inFlight >= Math.max(1, this.options.maxConcurrency - FOREGROUND_RESERVED_SLOTS) ||
       this.backgroundInFlight >= this.options.backgroundMaxConcurrency) return null
@@ -216,7 +232,11 @@ export class RateGate {
           return
         }
 
-        this.queues[waiter.priority].shift()
+        const queue = this.queues[waiter.priority]
+        queue.splice(queue.indexOf(waiter), 1)
+        if (waiter.priority === 'background') {
+          this.preferredAdmissions = waiter.order === this.preferredOrder ? this.preferredAdmissions + 1 : 0
+        }
         this.tokens -= 1
         this.inFlight += 1
         if (waiter.priority === 'background') {

@@ -1,11 +1,7 @@
+import { fetchRetainedQuery } from './snapshotResult'
 import { useCallback } from 'react'
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-  type UseMutationResult,
-  type UseQueryResult,
-} from '@tanstack/react-query'
+import { useMutation, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 
 import type {
   Envelope,
@@ -36,9 +32,7 @@ export function useRefreshInstitutionActivity(): (
   const queryClient = useQueryClient()
   return useCallback(async (quarter: string) => {
     const normalized = quarter.replace(/\s+/g, ' ').trim()
-    const result = await api.institutionActivity({ quarter: normalized, limit: 50, force: true })
-    queryClient.setQueryData(queryKeys.institutionActivity(normalized), result)
-    return result
+    return fetchRetainedQuery(queryClient, queryKeys.institutionActivity(normalized), () => api.institutionActivity({ quarter: normalized, limit: 50, force: true }))
   }, [queryClient])
 }
 

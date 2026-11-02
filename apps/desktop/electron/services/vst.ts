@@ -1,3 +1,5 @@
+import { CHANNELS } from '../shared/contract.js'
+import { publishPageProgress } from './pageProgress.js'
 import type { Envelope, EnvelopeError } from '../shared/contract.js'
 import { VST_BLOCKS, vstDocumentUrl, discoverVstDocuments, emptyVstPayload, parseVstEarnings, parseVstOperations } from '../shared/vst.js'
 import type { VstBlock, VstEarnings, VstOperations, VstPayload, VstRequest } from '../shared/vst.js'
@@ -111,7 +113,7 @@ export async function getVst({ force = false }: VstRequest = {}, fetchers: VstFe
       payload.laneFetchedAt[block] = result.value.fetchedAt
       cached ||= result.fromCache
       warnings.forEach(reason => errors.push(err(VST_SOURCE, reason, `vst-${block}`, block)))
-    } catch (error) { errors.push(err(VST_SOURCE, describeError(error), `vst-${block}`, block)) }
+    } catch (error) { errors.push(err(VST_SOURCE, describeError(error), `vst-${block}`, block)) } finally { publishPageProgress(payload, VST_SOURCE, errors, CHANNELS.vst) }
   }
   await Promise.all([
     lane('market', TTL.vst, () => fetchers.market('VST', force), result => {

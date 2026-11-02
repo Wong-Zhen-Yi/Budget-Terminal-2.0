@@ -1,3 +1,5 @@
+import { publishPageProgress } from '../pageProgress.js'
+import { CHANNELS } from '../../shared/contract.js'
 import type { PriceScreenPayload, PriceScreenRow } from '../../shared/contract.js'
 import {
   PRICE_SCREEN_EXCHANGES,
@@ -70,6 +72,7 @@ export async function getPriceScreen(
       if (!existing || row.marketCap > existing.marketCap) rowsByTicker.set(row.ticker, row)
     }
 
+    publishPageProgress({ rows: rankPriceScreenRows(rowsByTicker.values(), limit), source: PRICE_SCREEN_SOURCE, asOf: asOfStamp(options.now), candidateCount, minimumPrice, maximumPrice }, PRICE_SCREEN_SOURCE, [], CHANNELS.priceScreen)
     offset += pageSize
     if (candidateCount && offset >= candidateCount) break
     if (page.quotes.length < pageSize) break

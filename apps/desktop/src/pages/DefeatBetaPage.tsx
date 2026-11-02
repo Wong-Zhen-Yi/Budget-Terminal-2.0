@@ -1,3 +1,4 @@
+import { retainedQueryOptions } from '@/api/snapshotResult'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -101,14 +102,14 @@ export function DefeatBetaPage({ active, onStatusChange, onNavigate }: {
   }
   const refresh = async () => {
     setNotice('')
-    const results = await Promise.allSettled(DEFEATBETA_SECTIONS.map(section => client.fetchQuery({
+    const results = await Promise.allSettled(DEFEATBETA_SECTIONS.map(section => client.fetchQuery(retainedQueryOptions(client, {
       queryKey: queryKeys.defeatbetaTerminal(symbol, section), staleTime: 0,
       queryFn: async () => {
         const result = await api.defeatbetaTerminal({ symbol, section, force: true })
         if (result.meta.freshness === 'failed') throw new Error(result.meta.failureReason || 'Section unavailable')
         return result
       },
-    })))
+    }))))
     const failures = results.filter(result => result.status === 'rejected').length
     if (failures) setNotice(`Refresh failed for ${failures} section(s). Previously loaded data remains visible.`)
   }

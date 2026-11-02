@@ -1,5 +1,7 @@
+import { fetchRetainedQuery } from './snapshotResult'
 import { useCallback } from 'react'
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 
 import type { ChartsInterval, Envelope, ProjectionsPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
@@ -38,8 +40,7 @@ export function useRefreshProjections(): (
   const queryClient = useQueryClient()
   return useCallback(
     async (symbol: string, timeframe: ChartsInterval) => {
-      const result = await api.projections({ symbol, timeframe, force: true })
-      queryClient.setQueryData(queryKeys.projections(symbol, timeframe), result)
+      await fetchRetainedQuery(queryClient, queryKeys.projections(symbol, timeframe), () => api.projections({ symbol, timeframe, force: true }))
     },
     [queryClient],
   )

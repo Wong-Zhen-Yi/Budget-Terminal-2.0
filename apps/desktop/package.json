@@ -41,6 +41,7 @@
     "probe:rate": "tsx scripts/probe-rate.ts",
     "probe:yahoo-worker-ui": "tsx scripts/probe-yahoo-worker-ui.ts",
     "probe:loading": "tsx scripts/probe-loading.ts",
+    "probe:page-progress-ui": "tsx scripts/probe-page-progress-ui.ts",
     "probe:loading-ui": "tsx scripts/probe-loading-ui.ts",
     "probe:readiness-ui": "tsx scripts/probe-readiness-ui.ts",
     "probe:dashboard-ui": "tsx scripts/probe-dashboard-ui.ts",

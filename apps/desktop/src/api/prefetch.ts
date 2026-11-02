@@ -84,6 +84,7 @@ export interface WarmProgress {
   label: string
   failed: number
   degraded: number
+  retry?: (page?: string) => void
 }
 
 /** The four different holding sets the pages ask for, from one document. */
@@ -1142,6 +1143,8 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
   const inputs = useRef({ activeTab, recent, settings, payload, settingsError, portfolioError })
   inputs.current = { activeTab, recent, settings, payload, settingsError, portfolioError }
   const reconcile = useRef<(() => void) | undefined>(undefined)
+  const retry = useRef<((page?: string) => void) | undefined>(undefined)
+  const prioritize = useRef<((page: string) => void) | undefined>(undefined)
 
   // A failed local read must not prevent unrelated pages from starting. Keep the
   // scheduler alive through later edits, retries and navigation changes.
@@ -1168,6 +1171,12 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
         useDataHealth.getState().startupLoads,
       )
       const pageRanks = new Map(pageOrder.map((page, index) => [page, index]))
+      prioritize.current = page => {
+        // Already-queued fan-outs keep their original rank. Change the gate's
+        // preferred rank instead of restarting requests when navigation changes.
+        void api.startupPriority(pageRanks.get(page) ?? null).catch(() => {})
+      }
+      prioritize.current(inputs.current.activeTab)
       const idlePages = new Set(['options', 'news', 'youtube', 'valuation', 'backtest', 'stocks', 'fundamentals', 'projections'])
       reporter = createProgressReporter(() => {
         const snapshot = scheduler!.snapshot()
@@ -1179,7 +1188,7 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
         let localFailures = 0
         for (const [page, error] of [['settings', inputs.current.settingsError], ['portfolio', inputs.current.portfolioError]] as const) {
           if (!error) continue
-          pages[page] = { state: 'failed', reason: errorMessage(error) }
+          pages[page] = { state: 'failed', reason: errorMessage(error), refreshing: false }
           localFailures += 1
         }
         useDataHealth.getState().setStartup({ durationMs: snapshot.durationMs, planned: snapshot.total,
@@ -1200,6 +1209,7 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
             Math.max(...timings.map(entry => entry.durationMs)), timings.some(entry => entry.state !== 'ready'))
         },
       })
+      retry.current = page => scheduler?.retry(page)
       const update = () => {
         const latest = inputs.current
         const calendar = useCalendarPage.getState()
@@ -1238,6 +1248,9 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
 
     return () => {
       reconcile.current = undefined
+      retry.current = undefined
+      prioritize.current = undefined
+      void api.startupPriority(null).catch(() => {})
       clearTimeout(timer)
       clearTimeout(reconcileTimer)
       for (const unsubscribe of unsubscribers) unsubscribe()
@@ -1247,6 +1260,7 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
   }, [ready, queryClient])
 
   useEffect(() => { reconcile.current?.() }, [settings, payload, settingsError, portfolioError])
+  useEffect(() => { prioritize.current?.(activeTab) }, [activeTab])
 
-  return progress
+  return { ...progress, retry: page => retry.current?.(page) }
 }

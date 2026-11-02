@@ -1,3 +1,5 @@
+import { CHANNELS } from '../shared/contract.js'
+import { publishPageProgress } from './pageProgress.js'
 import type { Envelope, EnvelopeError, StocksPayload } from '../shared/contract.js'
 import { SOFI_CIK, SOFI_BLOCKS, combineSofiReports, emptySofiPayload, parseSofiReport, sofiBookRatios, sofiPlain, sofiPublishedAt, sofiReportWarnings } from '../shared/sofi.js'
 import type { SofiBlock, SofiPayload, SofiReport, SofiReports, SofiRequest } from '../shared/sofi.js'
@@ -201,7 +203,7 @@ export async function getSofi({ force = false }: SofiRequest = {}, fetchers: Sof
       times.push(Date.now() - result.ageSeconds * 1000)
       cached ||= result.fromCache
       for (const warning of applied.warnings) errors.push(err(SOURCE, warning, `sofi-${block}`, block))
-    } catch (error) { errors.push(err(SOURCE, describeError(error), `sofi-${block}`, block)) }
+    } catch (error) { errors.push(err(SOURCE, describeError(error), `sofi-${block}`, block)) } finally { publishPageProgress(payload, SOURCE, errors, CHANNELS.sofi) }
   }
   await Promise.all([
     lane('market', TTL.sofi, () => fetchers.market(force), market => {

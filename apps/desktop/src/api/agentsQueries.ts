@@ -1,4 +1,5 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 import type { QueryClient } from '@tanstack/react-query'
 import type { AgentsCommand } from '@shared/agents'
 import { api, queryKeys } from './client'

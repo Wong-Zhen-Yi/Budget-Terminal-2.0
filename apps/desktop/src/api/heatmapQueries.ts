@@ -1,5 +1,7 @@
+import { fetchRetainedQuery } from './snapshotResult'
 import { useCallback, useEffect, useState } from 'react'
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 
 import type { Envelope, HeatmapEtfKey, HeatmapPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
@@ -58,8 +60,7 @@ export function useRefreshHeatmap(): (etf: HeatmapEtfKey) => Promise<void> {
   const queryClient = useQueryClient()
   return useCallback(
     async (etf: HeatmapEtfKey) => {
-      const result = await api.heatmap({ etf, force: true })
-      queryClient.setQueryData(queryKeys.heatmap(etf), result)
+      await fetchRetainedQuery(queryClient, queryKeys.heatmap(etf), () => api.heatmap({ etf, force: true }))
     },
     [queryClient],
   )

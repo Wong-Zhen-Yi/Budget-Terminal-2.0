@@ -1,3 +1,5 @@
+import { progressiveAll, publishPageProgress } from '../pageProgress.js'
+import { CHANNELS } from '../../shared/contract.js'
 import type { TargetRow } from '../../shared/contract.js'
 import { getFundamentals } from './fundamentals.js'
 import { getQuote } from './quotes.js'
@@ -10,7 +12,7 @@ export async function getTargets(tickers: string[], force = false): Promise<Targ
   const unique = [...new Set(tickers.map((t) => t.trim().toUpperCase()).filter(Boolean))]
   const facts = await getFundamentals(unique, force)
 
-  return Promise.all(
+  return progressiveAll(
     unique.map(async (ticker): Promise<TargetRow> => {
       const current = await getQuote(ticker, force)
         .then((quote) => quote.price)
@@ -29,6 +31,6 @@ export async function getTargets(tickers: string[], force = false): Promise<Targ
         upside: target !== null && current ? ((target - current) / current) * 100 : null,
         unavailableReason,
       }
-    }),
+    }), rows => publishPageProgress({ targets: rows.filter(Boolean) }, 'Yahoo Finance', [], CHANNELS.targets),
   )
 }

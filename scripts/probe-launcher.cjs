@@ -14,6 +14,7 @@ const { version: electronVersion } = require('electron/package.json')
 
 const log = { log() {}, error() {} }
 function assertCurrentStartupMessages(messages) {
+  assert(messages.some(message => message.includes('Page loading: visible startup status') && message.includes('targeted retries') && message.includes('All pages still preload')), 'Every launch mode announces visible page loading and recovery')
   assert(messages.some(message => message.includes('Dictionary Reading Room:') && message.includes('saved terms') && message.includes('offline')), 'Every launch mode announces the offline Dictionary Reading Room')
   assert(messages.some(message => message.includes('MCP startup fix:') && message.includes('TV are classified correctly') && message.includes('Agent startup errors no longer block')), 'Every launch mode must announce the MCP/TV startup fix')
   assert(messages.some(message => message.includes('Stock data reuse:') && message.includes('next regular session') && message.includes('All pages still preload')), 'Every launch mode must announce session-aware stock caching')

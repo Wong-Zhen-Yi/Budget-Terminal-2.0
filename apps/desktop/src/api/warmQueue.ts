@@ -1,20 +1,17 @@
+import { trackPageQuery } from './pageProgress'
 import type { QueryClient, QueryKey } from '@tanstack/react-query'
 import { pinStartupQuery, QUERY_IDLE_MS } from './queryMemory'
 import { queryFreshness, recordCacheDecision } from './queryPersistence'
 import type { Envelope } from '@shared/contract'
 import { effectiveFreshness, registerSnapshot } from './snapshotHealth'
+import { retainUsableSnapshot, StartupLoadError } from './snapshotResult'
+export { StartupLoadError } from './snapshotResult'
 
 const REQUEST_TIMEOUT_MS = 90_000
 // All pages join the provider queue together. Yahoo background requests start at
 // most once a second, so a cold startup with large universes can take many minutes.
 // Include queue time and 429 cooldowns without falsely failing the slower warm-up.
 const STARTUP_TIMEOUT_MS = 1_800_000
-
-export class StartupLoadError extends Error {
-  constructor(message: string, readonly state: 'degraded' | 'failed') {
-    super(message)
-  }
-}
 
 export type StartupSnapshotObserver = ((queryKey: QueryKey, result: unknown, error?: unknown, cached?: boolean) => void) & { owner?: object }
 
@@ -128,7 +125,7 @@ export async function warmQuery<T>(client: QueryClient, options: {
     retry: false,
     networkMode: 'always',
     queryFn: () => withDeadline(async () => {
-      const result = await options.queryFn()
+      const result = retainUsableSnapshot(client.getQueryData(options.queryKey), await trackPageQuery(options.queryKey, options.queryFn))
       const meta = (result as { meta?: { freshness?: string; failureReason?: string } } | null)?.meta
       // A failed envelope is otherwise cached as success forever by Infinity queries.
       // Keep partial/stale payloads, but let a wholly failed page retry on mount.

@@ -1,5 +1,7 @@
+import { retainedQueryOptions } from './snapshotResult'
 import { useCallback } from 'react'
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 
 import type { Envelope, FundamentalsPagePayload } from '@shared/contract'
 import { api, queryKeys } from './client'
@@ -36,11 +38,11 @@ export function useRefreshFundamentalsPage(): (
   const queryClient = useQueryClient()
   return useCallback(
     (symbol) =>
-      queryClient.fetchQuery({
+      queryClient.fetchQuery(retainedQueryOptions(queryClient, {
         queryKey: queryKeys.fundamentalsPage(symbol),
         queryFn: () => api.fundamentalsPage({ symbol, force: true }),
         staleTime: 0,
-      }),
+      })),
     [queryClient],
   )
 }

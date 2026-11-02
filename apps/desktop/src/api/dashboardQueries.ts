@@ -1,4 +1,5 @@
-import { useQueries, type UseQueryResult } from '@tanstack/react-query'
+import { retainedLoader } from './snapshotResult'
+import { useQueries, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 
 import { MACRO_SYMBOLS, type ChartPayload, type Envelope } from '@shared/contract'
 import { api, queryKeys } from './client'
@@ -12,12 +13,13 @@ function combineCharts(results: UseQueryResult<Envelope<ChartPayload>>[]) {
 }
 
 export function useMacroCharts(enabled = true) {
+  const client = useQueryClient()
   return useQueries({
     combine: combineCharts,
     queries: MACRO_SYMBOLS.map(({ symbol }) => ({
       enabled,
       queryKey: queryKeys.chart(symbol, '1 Day'),
-      queryFn: () => api.chart({ symbol, timeframe: '1 Day', force: forcing() }),
+      queryFn: retainedLoader(client, queryKeys.chart(symbol, '1 Day'), () => api.chart({ symbol, timeframe: '1 Day', force: forcing() })),
       staleTime: queryFreshness(queryKeys.chart(symbol, '1 Day')),
     })),
   })

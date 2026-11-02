@@ -1,3 +1,5 @@
+import { progressiveAll, publishPageProgress } from './pageProgress.js'
+import { CHANNELS } from '../shared/contract.js'
 import type {
   EnvelopeError,
   OilBlock,
@@ -249,12 +251,12 @@ export async function getOil(force = false): Promise<OilFetchResult> {
 
   // The curve needs the front-month price the market lane already fetches, so those two
   // run in sequence while the three document lanes run alongside them.
-  const [market, inventories, flows, benchmarks] = await Promise.all([
+  const [market, inventories, flows, benchmarks] = await progressiveAll([
     lane('oil:market', TTL.oilMarket, force, () => fetchMarket(force, fetchedAt)),
     lane('oil:inventories', TTL.oilEia, force, () => fetchEiaBlock(OIL_STOCK_SPECS)),
     lane('oil:flows', TTL.oilEia, force, () => fetchEiaBlock(OIL_FLOW_SPECS)),
     lane('oil:benchmarks', TTL.oilOpec, force, fetchBenchmarks),
-  ])
+  ], ([market, inventories, flows, benchmarks]) => publishPageProgress(buildOilPayload({ fetchedAt, market: market?.value ?? emptyOilMarket(), curve: null, inventories: inventories?.value ?? null, flows: flows?.value ?? null, benchmarks: benchmarks?.value ?? null }), 'Oil sources', [], CHANNELS.oil))
   const contracts = oilContractSymbols(new Date(), CURVE_MONTHS)
   // Expiry rolls invalidate the old strip immediately, including persisted snapshots
   // that captured a now-expired contract failure under the legacy oil:curve key.

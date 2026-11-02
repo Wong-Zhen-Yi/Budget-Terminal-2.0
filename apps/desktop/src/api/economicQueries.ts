@@ -1,5 +1,7 @@
+import { fetchRetainedQuery } from './snapshotResult'
 import { useCallback, useState } from 'react'
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 
 import type { Envelope, EconomicPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
@@ -43,8 +45,7 @@ export function useRefreshEconomic(): {
     async (force: boolean) => {
       setRefreshing(true)
       try {
-        const result = await api.economic({ force })
-        queryClient.setQueryData(queryKeys.economic, result)
+        await fetchRetainedQuery(queryClient, queryKeys.economic, () => api.economic({ force }))
       } finally {
         setRefreshing(false)
       }

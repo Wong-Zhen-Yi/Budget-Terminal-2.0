@@ -1,3 +1,5 @@
+import { publishPageProgress } from '../pageProgress.js'
+import { CHANNELS } from '../../shared/contract.js'
 import type {
   Candle,
   StocksInstitutionalRow,
@@ -284,67 +286,77 @@ export async function getStocks(symbolInput: string, force = false): Promise<Sto
   const symbol = symbolInput.trim().toUpperCase()
   if (!symbol) throw new Error('Enter a ticker symbol.')
 
-  const [chartResult, summaryResult, newsResult, quoteResult] = await Promise.allSettled([
+  const tasks = [
     fetchChart(symbol, force),
     fetchSummary(symbol, force),
     fetchNews(symbol, force),
     equityMarket(symbol) ? captureSources(() => getQuote(symbol, force)).then(result => result.value) : Promise.resolve(undefined),
-  ])
-  if (chartResult.status === 'rejected') throw chartResult.reason
+  ] as const
+  const settle = () => Promise.allSettled(tasks)
+  const assemble = ([chartResult, summaryResult, newsResult, quoteResult]: Awaited<ReturnType<typeof settle>>): StocksServiceResult => {
+    if (chartResult.status === 'rejected') throw chartResult.reason
 
-  const chart = chartResult.value
-  const stats = buildStocksStats(symbol, chart.candles, chart.currency, chart.longName)
-  const failures: StocksFailure[] = []
-  const currentQuote = quoteResult.status === 'fulfilled' ? quoteResult.value : undefined
-  if (quoteResult.status === 'rejected') failures.push({ block: 'Overview', reason: `Current price: ${describe(quoteResult.reason)}` })
-  if (currentQuote) Object.assign(stats, { price: currentQuote.price, change: currentQuote.change, absChange: currentQuote.absChange,
-    priceSource: currentQuote.source, priceBasis: currentQuote.priceBasis, changeBasis: currentQuote.changeBasis })
-  stats.source = 'Yahoo Finance stock history (3 years)'
-  if (chart.stale) failures.push({ block: 'Chart', reason: 'Live chart refresh failed; showing cached data.' })
+    const chart = chartResult.value
+    const stats = buildStocksStats(symbol, chart.candles, chart.currency, chart.longName)
+    const failures: StocksFailure[] = []
+    const currentQuote = quoteResult.status === 'fulfilled' ? quoteResult.value : undefined
+    if (quoteResult.status === 'rejected') failures.push({ block: 'Overview', reason: `Current price: ${describe(quoteResult.reason)}` })
+    if (currentQuote) Object.assign(stats, { price: currentQuote.price, change: currentQuote.change, absChange: currentQuote.absChange,
+      priceSource: currentQuote.source, priceBasis: currentQuote.priceBasis, changeBasis: currentQuote.changeBasis })
+    stats.source = 'Yahoo Finance stock history (3 years)'
+    if (chart.stale) failures.push({ block: 'Chart', reason: 'Live chart refresh failed; showing cached data.' })
 
-  let summary: SummaryResult = { facts: {}, institutional: [], insiders: [], stale: false }
-  if (summaryResult.status === 'fulfilled') {
-    summary = summaryResult.value
-    if (summary.stale) {
+    let summary: SummaryResult = { facts: {}, institutional: [], insiders: [], stale: false }
+    if (summaryResult.status === 'fulfilled') {
+      summary = summaryResult.value
+      if (summary.stale) {
+        for (const block of ['Overview', 'Price targets', 'Description', 'Institutional holders', 'Insider transactions']) {
+          failures.push({ block, reason: 'Live company-data refresh failed; showing cached data.' })
+        }
+      }
+    } else {
+      const reason = describe(summaryResult.reason)
       for (const block of ['Overview', 'Price targets', 'Description', 'Institutional holders', 'Insider transactions']) {
-        failures.push({ block, reason: 'Live company-data refresh failed; showing cached data.' })
+        failures.push({ block, reason })
       }
     }
-  } else {
-    const reason = describe(summaryResult.reason)
-    for (const block of ['Overview', 'Price targets', 'Description', 'Institutional holders', 'Insider transactions']) {
-      failures.push({ block, reason })
+
+    let news: StocksNewsRow[] = []
+    if (newsResult.status === 'fulfilled') {
+      news = newsResult.value.rows
+      if (newsResult.value.stale) failures.push({ block: 'News', reason: 'Live news refresh failed; showing cached data.' })
+    } else failures.push({ block: 'News', reason: describe(newsResult.reason) })
+
+    const normalized = normalizeStocksFacts(symbol, {
+      ...summary.facts,
+      companyName: summary.facts.companyName || stats.longName,
+      currentPrice: currentQuote?.price ?? summary.facts.currentPrice ?? stats.close,
+      volume: summary.facts.volume ?? stats.volume,
+    })
+    const missing = [...new Set(failures.map((failure) => failure.block))]
+    return {
+      payload: {
+        symbol,
+        currentQuote,
+        ...normalized,
+        targets: { ...normalized.targets, meanPrice: firstFinite(summary.facts.targetMean) },
+        chart: { candles: chart.candles, stats, mfi: calculateMfi(chart.candles) },
+        news,
+        institutional: summary.institutional,
+        insiders: summary.insiders,
+        missing,
+        generatedAt: Date.now(),
+      },
+      failures,
     }
   }
-
-  let news: StocksNewsRow[] = []
-  if (newsResult.status === 'fulfilled') {
-    news = newsResult.value.rows
-    if (newsResult.value.stale) failures.push({ block: 'News', reason: 'Live news refresh failed; showing cached data.' })
-  } else failures.push({ block: 'News', reason: describe(newsResult.reason) })
-
-  const normalized = normalizeStocksFacts(symbol, {
-    ...summary.facts,
-    companyName: summary.facts.companyName || stats.longName,
-    currentPrice: currentQuote?.price ?? summary.facts.currentPrice ?? stats.close,
-    volume: summary.facts.volume ?? stats.volume,
-  })
-  const missing = [...new Set(failures.map((failure) => failure.block))]
-  return {
-    payload: {
-      symbol,
-      currentQuote,
-      ...normalized,
-      targets: { ...normalized.targets, meanPrice: firstFinite(summary.facts.targetMean) },
-      chart: { candles: chart.candles, stats, mfi: calculateMfi(chart.candles) },
-      news,
-      institutional: summary.institutional,
-      insiders: summary.insiders,
-      missing,
-      generatedAt: Date.now(),
-    },
-    failures,
-  }
+  const preview = tasks.map(() => ({ status: 'rejected' as const, reason: 'Still loading' })) as Awaited<ReturnType<typeof settle>>
+  await Promise.all(tasks.map(async (task, index) => {
+    try { Object.assign(preview, { [index]: { status: 'fulfilled', value: await task } }) }
+    catch (reason) { Object.assign(preview, { [index]: { status: 'rejected', reason } }) }
+    if (preview[0].status === 'fulfilled') publishPageProgress(assemble(preview).payload, 'Stock data', [], CHANNELS.stocks)
+  }))
+  return assemble(await settle())
 }
 
 /** Refresh the mark even when a focus page reuses its cached company-data block. */

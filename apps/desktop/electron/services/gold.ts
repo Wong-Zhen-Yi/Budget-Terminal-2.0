@@ -1,3 +1,5 @@
+import { progressiveAll, publishPageProgress } from './pageProgress.js'
+import { CHANNELS } from '../shared/contract.js'
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
 
 import type {
@@ -194,13 +196,13 @@ export interface GoldFetchResult {
 
 export async function getGold(force = false): Promise<GoldFetchResult> {
   const fetchedAt = localIsoSeconds()
-  const [market, quarterly, aboveGround, etf, mining] = await Promise.all([
+  const [market, quarterly, aboveGround, etf, mining] = await progressiveAll([
     lane('gold:market', TTL.goldMarket, force, () => fetchMarket(force, fetchedAt)),
     lane('gold:demand', TTL.goldWgc, force, fetchQuarterly),
     lane('gold:above-ground', TTL.goldWgc, force, fetchAboveGround),
     lane('gold:etf', TTL.goldWgc, force, fetchEtf),
     lane('gold:mining', TTL.goldMining, force, fetchMining),
-  ])
+  ], ([market, quarterly, aboveGround, etf, mining]) => publishPageProgress(buildGoldPayload({ fetchedAt, market: market?.value ?? emptyGoldMarket(), quarterly: quarterly?.value ?? null, aboveGround: aboveGround?.value ?? null, etf: etf?.value ?? null, mining: mining?.value ?? null }), 'Gold sources', [], CHANNELS.gold))
 
   const errors: EnvelopeError[] = []
   const record = (block: GoldBlock, source: string, warning: unknown): void => {

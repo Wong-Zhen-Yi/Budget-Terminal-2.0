@@ -1,5 +1,7 @@
+import { fetchRetainedQuery } from './snapshotResult'
 import { useCallback, useState } from 'react'
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 
 import type { Envelope, MoneyPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
@@ -29,8 +31,7 @@ export function useRefreshMoney(): {
     async (force: boolean) => {
       setRefreshing(true)
       try {
-        const result = await api.money({ force })
-        queryClient.setQueryData(queryKeys.money, result)
+        await fetchRetainedQuery(queryClient, queryKeys.money, () => api.money({ force }))
       } finally {
         setRefreshing(false)
       }

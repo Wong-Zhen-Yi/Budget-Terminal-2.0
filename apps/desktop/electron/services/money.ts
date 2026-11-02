@@ -1,3 +1,5 @@
+import { progressiveAll, publishPageProgress } from './pageProgress.js'
+import { CHANNELS } from '../shared/contract.js'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { EconomicPoint, Envelope } from '../shared/contract.js'
@@ -35,7 +37,7 @@ export async function loadMoney(
   now = Date.now(),
 ): Promise<Envelope<MoneyPayload>> {
   const cached = await readCache()
-  const rows = await Promise.all(MONEY_SERIES.map(async (definition): Promise<MoneySeries> => {
+  const rows = await progressiveAll(MONEY_SERIES.map(async (definition): Promise<MoneySeries> => {
     const prior = cached.find((row) => row.seriesId === definition.seriesId && row.history.length && row.fetchedAt !== null && row.fetchedAt <= now && now - row.fetchedAt <= STALE_MS)
     if (!request.force && !prior?.error && prior?.fetchedAt != null && now - prior.fetchedAt <= FRESH_MS) {
       return { ...prior, ...definition, status: 'cached', error: null }
@@ -53,7 +55,7 @@ export async function loadMoney(
     } catch (error) {
       return { ...definition, history: prior?.history ?? [], fetchedAt: prior?.fetchedAt ?? null, status: prior ? 'stale' : 'unavailable', error: describeError(error) }
     }
-  }))
+  }), rows => publishPageProgress({ generatedAt: new Date(now).toISOString(), rows: rows.filter(Boolean) }, 'FRED', [], CHANNELS.money))
   const target = cachePath()
   const temporary = `${target}.${process.pid}.${now}.tmp`
   try {

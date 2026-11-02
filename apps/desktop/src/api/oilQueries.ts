@@ -1,5 +1,7 @@
+import { fetchRetainedQuery } from './snapshotResult'
 import { useCallback } from 'react'
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 
 import type { Envelope, OilPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
@@ -24,7 +26,6 @@ export function useOil(): UseQueryResult<Envelope<OilPayload>> {
 export function useRefreshOil(): () => Promise<void> {
   const queryClient = useQueryClient()
   return useCallback(async () => {
-    const result = await api.oil({ force: true })
-    queryClient.setQueryData(queryKeys.oil, result)
+    await fetchRetainedQuery(queryClient, queryKeys.oil, () => api.oil({ force: true }))
   }, [queryClient])
 }

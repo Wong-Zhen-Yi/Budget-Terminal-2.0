@@ -1,5 +1,7 @@
+import { retainedQueryOptions } from './snapshotResult'
 import { useCallback } from 'react'
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 
 import type { Envelope, IpoCompletedPayload, IpoUpcomingPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
@@ -49,18 +51,18 @@ export function useRefreshIpos(): (year: number) => Promise<void> {
     async (year: number) => {
       await Promise.allSettled([
         queryClient
-          .fetchQuery({
+          .fetchQuery(retainedQueryOptions(queryClient, {
             queryKey: queryKeys.ipoCompleted(year),
             queryFn: () => api.ipoCompleted({ year, force: true }),
             staleTime: 0,
-          })
+          }))
           .catch(() => undefined),
         queryClient
-          .fetchQuery({
+          .fetchQuery(retainedQueryOptions(queryClient, {
             queryKey: queryKeys.ipoUpcoming,
             queryFn: () => api.ipoUpcoming({ force: true }),
             staleTime: 0,
-          })
+          }))
           .catch(() => undefined),
       ])
     },

@@ -1,5 +1,7 @@
+import { retainedQueryOptions } from './snapshotResult'
 import { useCallback } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 import { api, queryKeys } from './client'
 import { forcing } from './queries'
 import { queryFreshness } from './queryPersistence'
@@ -15,6 +17,6 @@ export function useHims() {
 
 export function useRefreshHims() {
   const client = useQueryClient()
-  return useCallback(() => client.fetchQuery({ queryKey: queryKeys.hims,
-    queryFn: () => api.hims({ force: true }), staleTime: 0 }), [client])
+  return useCallback(() => client.fetchQuery(retainedQueryOptions(client, { queryKey: queryKeys.hims,
+    queryFn: () => api.hims({ force: true }), staleTime: 0 })), [client])
 }

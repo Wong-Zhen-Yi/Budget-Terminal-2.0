@@ -1,3 +1,5 @@
+import { CHANNELS } from '../shared/contract.js'
+import { publishPageProgress } from './pageProgress.js'
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import type { Envelope, EnvelopeError } from '../shared/contract.js'
 import { HOOD_BLOCKS, discoverHoodDocument, emptyHoodPayload, parseHoodReport } from '../shared/hood.js'
@@ -80,7 +82,7 @@ export async function getHood({ force = false }: HoodRequest = {}, fetchers: Hoo
       payload.progress[block] = result.stale ? 'stale' : warnings.length ? 'partial' : 'loaded'
       times.push(Date.now() - result.ageSeconds * 1000)
       for (const warning of warnings) errors.push(err(SOURCE, warning, `hood-${block}`, block))
-    } catch (error) { errors.push(err(SOURCE, describeError(error), `hood-${block}`, block)) }
+    } catch (error) { errors.push(err(SOURCE, describeError(error), `hood-${block}`, block)) } finally { publishPageProgress(payload, SOURCE, errors, CHANNELS.hood) }
   }
   await Promise.all([
     lane('market', TTL.hood, () => fetchers.market('HOOD', force), result => {

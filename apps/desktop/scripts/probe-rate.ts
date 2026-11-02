@@ -127,6 +127,7 @@ async function main(): Promise<void> {
   await probeTransientRetries()
   await probeBackgroundPacing()
   await probeStartupOrdering()
+  await probeNavigationPriority()
   if (process.argv.includes('--offline')) {
     assert.ok(await probeLanes())
     return
@@ -372,6 +373,24 @@ async function probeBackgroundPacing(): Promise<void> {
  * The tasks are local timers, not Yahoo calls — this is about admission order, and
  * spending a hundred real requests to measure it would be its own rate-limit problem.
  */
+async function probeNavigationPriority(): Promise<void> {
+  const gate = new RateGate({ requestsPerSecond: 1000, burst: 10, maxConcurrency: 2,
+    backgroundRequestsPerSecond: 1000, backgroundMaxConcurrency: 1 })
+  let release!: () => void
+  const first = gate.run(() => new Promise<void>(resolve => { release = resolve }), 'background', 0)
+  await new Promise(resolve => setTimeout(resolve, 0))
+  const order: string[] = []
+  const early = gate.run(async () => { order.push('other') }, 'background', 1)
+  const preferred = Array.from({ length: 4 }, (_, index) => gate.run(async () => { order.push(`selected${index}`) }, 'background', 9))
+  gate.preferBackgroundOrder(9)
+  release()
+  await Promise.all([first, early, ...preferred])
+  assert.deepEqual(order, ['selected0', 'selected1', 'selected2', 'other', 'selected3'], 'Navigation must promote queued requests while allowing other pages to advance')
+  assert.throws(() => gate.preferBackgroundOrder(-1), /Invalid startup priority/)
+  gate.preferBackgroundOrder(null)
+  console.log('Dynamic navigation priority and background fairness checks passed')
+}
+
 async function probeLanes(): Promise<boolean> {
   const gate = new RateGate({ requestsPerSecond: 4, burst: 6, maxConcurrency: 4, backgroundRequestsPerSecond: 4 })
   const work = () => new Promise<void>((resolve) => setTimeout(resolve, 20))

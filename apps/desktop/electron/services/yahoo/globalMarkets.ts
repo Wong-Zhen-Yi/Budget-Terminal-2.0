@@ -1,3 +1,5 @@
+import { publishPageProgress } from '../pageProgress.js'
+import { CHANNELS } from '../../shared/contract.js'
 import type {
   GlobalIndexConfig,
   GlobalIndexRow,
@@ -158,8 +160,14 @@ function buildRow(config: GlobalIndexConfig, result: SymbolResult | null): Globa
 async function fetchAll(force: boolean): Promise<GlobalMarketsPayload> {
   const start = historyStart()
   // One symbol failing is a `--` row, not a blank page, so settle rather than race.
+  const previewRows = GLOBAL_MARKET_INDEXES.map(config => buildRow(config, null))
   const settled = await Promise.allSettled(
-    GLOBAL_MARKET_INDEXES.map((config) => fetchSymbol(config.symbol, start, force)),
+    GLOBAL_MARKET_INDEXES.map(async (config, index) => {
+      const value = await fetchSymbol(config.symbol, start, force)
+      previewRows[index] = buildRow(config, value)
+      publishPageProgress({ generatedAt: new Date().toISOString(), source: SOURCE, rows: previewRows, missing: [] }, SOURCE, [], CHANNELS.globalMarkets)
+      return value
+    }),
   )
 
   const rows: GlobalIndexRow[] = []

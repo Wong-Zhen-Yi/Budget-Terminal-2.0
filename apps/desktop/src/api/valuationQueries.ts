@@ -1,5 +1,7 @@
+import { retainedQueryOptions } from './snapshotResult'
 import { useCallback } from 'react'
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 
 import type { Envelope, ValuationPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
@@ -32,12 +34,12 @@ export function useRefreshValuation(): (symbol: string, customPeers: string[]) =
     async (symbol, customPeers) => {
       // Register the forced load before the ticker/peer observer renders. A new
       // observer joins this request, and loading/errors belong to the same query.
-      await queryClient.fetchQuery({
+      await queryClient.fetchQuery(retainedQueryOptions(queryClient, {
         queryKey: queryKeys.valuation(symbol, customPeers),
         queryFn: () => api.valuation({ symbol, customPeers, force: true }),
         staleTime: 0,
         retry: false,
-      })
+      }))
     },
     [queryClient],
   )

@@ -125,7 +125,10 @@ try {
           assert.equal(agents.data.connected, false)
           assert.equal(agents.data.busy, false)
           const startup = startAgents()
-          assert.equal(startAgents(), startup, 'Desktop startup connection is single-flight')
+          const concurrentStartup = startAgents()
+          // Async host wrappers return distinct promises. The starts counter below
+          // verifies that concurrent calls still share one actual connection.
+          await Promise.all([startup, concurrentStartup])
           const connected = await trusted.webContents.executeJavaScript('window.api.agentsStatus()')
           assert.equal(connected.data.connected, true, 'Status readiness waits for startup connection')
           assert.equal(connected.data.autonomy, false)
@@ -206,6 +209,7 @@ try {
       })
     ` },
     outfile: join(directory, 'main.mjs'), bundle: true, platform: 'node', format: 'esm', packages: 'external',
+    banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" },
     plugins: [{ name: 'fixture-codex-transport', setup(builder) {
       // Exercise the real host/IPC lifecycle without using the user's Codex account.
       builder.onLoad({ filter: /[\\/]codexClient\.ts$/ }, () => ({ loader: 'ts', contents: `

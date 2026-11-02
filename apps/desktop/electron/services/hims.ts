@@ -1,3 +1,5 @@
+import { CHANNELS } from '../shared/contract.js'
+import { publishPageProgress } from './pageProgress.js'
 import type { Envelope, EnvelopeError } from '../shared/contract.js'
 import { HIMS_BLOCKS, HIMS_CIK, HIMS_METRICS, emptyHimsPayload, himsEarningsFilings, himsExhibitUrl, parseHimsMetrics, parseHimsReport } from '../shared/hims.js'
 import type { HimsBlock, HimsEarnings, HimsPayload, HimsRequest } from '../shared/hims.js'
@@ -107,7 +109,7 @@ export async function getHims({ force = false }: HimsRequest = {}, fetchers: Him
       payload.laneFetchedAt[block] = result.value.fetchedAt
       cached ||= result.fromCache
       warnings.forEach(reason => errors.push(err(HIMS_SOURCE, reason, `hims-${block}`, block)))
-    } catch (error) { errors.push(err(HIMS_SOURCE, describeError(error), `hims-${block}`, block)) }
+    } catch (error) { errors.push(err(HIMS_SOURCE, describeError(error), `hims-${block}`, block)) } finally { publishPageProgress(payload, HIMS_SOURCE, errors, CHANNELS.hims) }
   }
   await Promise.all([
     lane('market', TTL.hims, () => fetchers.market('HIMS', force), result => {

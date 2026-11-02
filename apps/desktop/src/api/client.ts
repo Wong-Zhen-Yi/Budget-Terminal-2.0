@@ -1,3 +1,6 @@
+import { CHANNELS } from '@shared/contract'
+import { currentPageQuery, setPagePreview } from './pageProgress'
+import { serviceReadKey } from '@shared/serviceReadKey'
 import type { DesktopApi, MarketCapTier } from '@shared/contract'
 
 declare global {
@@ -8,7 +11,38 @@ declare global {
 
 /** Bootstrap installs either the Electron preload or the authenticated browser bridge. */
 if (!window.api) throw new Error('Budget Terminal service API is unavailable.')
-export const api: DesktopApi = window.api
+const progressiveMethods = new Set(['sofi', 'hood', 'hims', 'mu', 'amzn', 'avgo', 'vst', 'semiconductors', 'bitcoin', 'bmnr', 'projections', 'preMarket', 'gold', 'oil', 'crypto', 'globalMarkets', 'money', 'forexQuotes', 'targets', 'quotes', 'fundamentals', 'priceScreen', 'marketCap', 'tradingVolumes', 'stocks', 'tv'])
+
+export const api: DesktopApi = new Proxy({} as DesktopApi, {
+  get(_target, property: keyof DesktopApi) {
+    if (Object.hasOwn(_target, property)) return Reflect.get(_target, property)
+    const target = window.api
+    const method = target[property]
+    if (typeof method !== 'function') return method
+    return (...args: unknown[]) => {
+      const query = currentPageQuery()
+      const channel = CHANNELS[property as keyof typeof CHANNELS]
+      const result = Reflect.apply(method, target, args)
+      if (!query || !progressiveMethods.has(property) || !channel || !result?.then || property === 'pageProgress' || typeof target.pageProgress !== 'function') return result
+      const requestKey = serviceReadKey(channel, args[0])
+      let stopped = false
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const poll = async () => {
+        try {
+          const preview = await target.pageProgress(requestKey)
+          if (!stopped && preview) setPagePreview(query, preview)
+        } catch { /* The completed request owns error reporting. */ }
+        if (!stopped) timer = setTimeout(() => void poll(), 500)
+      }
+      timer = setTimeout(() => void poll(), 250)
+      return Promise.resolve(result).finally(() => {
+        stopped = true
+        clearTimeout(timer)
+        setPagePreview(query, null)
+      })
+    }
+  },
+})
 
 export const queryKeys = {
   agents: ['agents'] as const,

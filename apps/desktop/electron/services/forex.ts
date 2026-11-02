@@ -1,3 +1,5 @@
+import { progressiveAll, publishPageProgress } from './pageProgress.js'
+import { CHANNELS } from '../shared/contract.js'
 import type { Envelope, NewsArticle, Quote } from '../shared/contract.js'
 import type { ForexRequest, ForexPairRequest, ForexHistoryRequest, ForexQuotesPayload, ForexHistoryPayload, ForexNewsPayload } from '../shared/forex.js'
 import { FOREX_PAIRS, FOREX_DAYS, FOREX_MARKET_MS, FOREX_NEWS_MS, forexPair, selectForexNews, usableForexQuote } from '../shared/forex.js'
@@ -29,14 +31,14 @@ export async function forexLane<T>(key: string, ttl: number, force: boolean, emp
 
 export async function getForexQuotes(request: ForexRequest = {}): Promise<Envelope<ForexQuotesPayload>> {
   return withSourceEnvelope(async () => {
-  const lanes = await Promise.all(FOREX_PAIRS.map(async (pair) => {
+  const lanes = await progressiveAll(FOREX_PAIRS.map(async (pair) => {
     const result = await forexLane<Quote | null>(`forex:quote:${pair.id}`, FOREX_MARKET_MS, Boolean(request.force), null, async () => {
       const quote = await getQuote(pair.symbol, Boolean(request.force))
       if (!usableForexQuote(quote)) throw new Error(`No usable ${pair.id} quote.`)
       return quote
     })
     return { pair, result }
-  }))
+  }), lanes => publishPageProgress({ rows: lanes.flatMap(lane => lane ? [{ pair: lane.pair.id, quote: lane.result.data, freshness: lane.result.meta.freshness, fetchedAt: lane.result.meta.fetchedAt }] : []) }, SOURCE, [], CHANNELS.forexQuotes))
   const envelope = ok<ForexQuotesPayload>({ rows: lanes.map(({ pair, result }) => ({ pair: pair.id, quote: result.data, freshness: result.meta.freshness, fetchedAt: result.meta.fetchedAt })) }, SOURCE)
   envelope.errors = lanes.flatMap(({ pair, result }) => result.errors.map((error) => ({ ...error, symbol: pair.id })))
   envelope.meta.fetchedAt = Math.min(...lanes.map(({ result }) => result.meta.fetchedAt))

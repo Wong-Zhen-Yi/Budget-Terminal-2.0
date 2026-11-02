@@ -1,5 +1,7 @@
+import { fetchRetainedQuery } from './snapshotResult'
 import { useCallback } from 'react'
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 
 import type { Envelope, GoldPayload } from '@shared/contract'
 import { api, queryKeys } from './client'
@@ -20,7 +22,6 @@ export function useGold(): UseQueryResult<Envelope<GoldPayload>> {
 export function useRefreshGold(): () => Promise<void> {
   const queryClient = useQueryClient()
   return useCallback(async () => {
-    const result = await api.gold({ force: true })
-    queryClient.setQueryData(queryKeys.gold, result)
+    await fetchRetainedQuery(queryClient, queryKeys.gold, () => api.gold({ force: true }))
   }, [queryClient])
 }

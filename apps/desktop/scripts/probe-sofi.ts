@@ -1,3 +1,5 @@
+import { readPageProgress, withPageProgress } from '../electron/services/pageProgress.js'
+import { CHANNELS } from '../electron/shared/contract.js'
 import assert from 'node:assert/strict'
 import { readFile, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -100,6 +102,21 @@ try {
   const dates = ['2024-09-30', '2024-12-31', '2025-03-31', '2025-06-30', '2025-09-30', '2025-12-31', '2026-03-31', '2026-06-30']
   const fixtureReports: SofiReports = { quarters: dates.map(endDate => ({ ...fixtureQuarter, endDate })), releases: [], filings: [], notes: [], warnings: [] }
   const fixtureMarket = { stock: null as StocksPayload | null, price: 25, changePct: 2, priceAsOf: Date.now(), warnings: [], stale: false }
+  let releaseReports!: (value: SofiReports) => void
+  cache.delete('sofi:v1:market'); cache.delete('sofi:v1:reports')
+  const progressKey = `${CHANNELS.sofi}:{"force":true}`
+  const loading = withPageProgress(progressKey, () => getSofi({ force: true }, {
+    market: async () => fixtureMarket,
+    reports: () => new Promise(resolve => { releaseReports = resolve }),
+  }))
+  for (let attempt = 0; attempt < 50 && !readPageProgress(progressKey); attempt++) await new Promise(resolve => setTimeout(resolve, 10))
+  const preview = readPageProgress(progressKey)?.data as ReturnType<typeof emptySofiPayload>
+  assert.equal(preview.price, 25, 'Price must populate before reported quarters finish')
+  assert.equal(preview.reports, null)
+  assert.equal(preview.progress.market, 'loaded')
+  releaseReports(fixtureReports)
+  assert.equal((await loading).data.reports?.quarters.length, 8)
+  assert.equal(readPageProgress(progressKey), null, 'Final response replaces the transient preview')
   let calls = 0
   const forces: boolean[] = []
   const fetchers = {

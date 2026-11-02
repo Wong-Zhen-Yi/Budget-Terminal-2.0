@@ -1,3 +1,5 @@
+import { CHANNELS } from '../shared/contract.js'
+import { publishPageProgress } from './pageProgress.js'
 import type { Envelope, EnvelopeError } from '../shared/contract.js'
 import { AMZN_BLOCKS, amznEarningsFilings, amznExhibitUrl, amznPeriodBeforePublication, emptyAmznPayload, parseAmznReport } from '../shared/amzn.js'
 import type { AmznBlock, AmznEarnings, AmznPayload, AmznRequest } from '../shared/amzn.js'
@@ -72,7 +74,7 @@ export async function getAmzn({ force = false }: AmznRequest = {}, fetchers: Amz
       payload.laneFetchedAt[block] = result.value.fetchedAt
       cached ||= result.fromCache
       warnings.forEach(reason => errors.push(err(AMZN_SOURCE, reason, `amzn-${block}`, block)))
-    } catch (error) { errors.push(err(AMZN_SOURCE, describeError(error), `amzn-${block}`, block)) }
+    } catch (error) { errors.push(err(AMZN_SOURCE, describeError(error), `amzn-${block}`, block)) } finally { publishPageProgress(payload, AMZN_SOURCE, errors, CHANNELS.amzn) }
   }
   await Promise.all([
     lane('market', TTL.amzn, () => fetchers.market('AMZN', force), result => {

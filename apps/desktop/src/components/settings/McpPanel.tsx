@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 import type { McpPolicy } from '../../../electron/shared/mcpAccess'
 import { api } from '@/api/client'
 import { Panel } from '@/components/ui/Panel'

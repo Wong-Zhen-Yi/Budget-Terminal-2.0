@@ -1,3 +1,4 @@
+import { progressiveAll, publishPageProgress, readPageProgress, withPageProgress } from '../electron/services/pageProgress.js'
 import assert from 'node:assert/strict'
 import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react-query'
 import { createElement } from 'react'
@@ -11,6 +12,35 @@ import { recordStartupLoad, restoreStartupLoads, startupPageOrder } from '../ele
 import { createProgressReporter } from '../src/api/progressReporter.js'
 import { retryTransientData } from '../electron/shared/dataRetry.js'
 import { observeSource } from '../electron/services/sourceHealth.js'
+import { serviceReadKey } from '../electron/shared/serviceReadKey.js'
+
+assert.equal(serviceReadKey('quotes', { holdings: ['AAPL'], background: true, backgroundOrder: 8 }),
+  serviceReadKey('quotes', { holdings: ['AAPL'], force: false }), 'Foreground and startup reads must share in-flight work')
+assert.equal(serviceReadKey('chart', { symbol: 'AAPL', timeframe: '1 Day' }),
+  serviceReadKey('chart', { timeframe: '1 Day', symbol: 'AAPL' }), 'Object property order cannot duplicate reads')
+assert.notEqual(serviceReadKey('quotes', { holdings: ['AAPL'], force: true }),
+  serviceReadKey('quotes', { holdings: ['AAPL'] }), 'Explicit refresh must keep its own request identity')
+
+// Transient sections must remain request-scoped and disappear on success or failure.
+let releaseSection!: (value: string) => void
+const progressKey = 'fixture:page:{}'
+const progressLoad = withPageProgress(progressKey, () => progressiveAll([
+  Promise.resolve('first'), new Promise<string>(resolve => { releaseSection = resolve }),
+], values => publishPageProgress({ sections: values.filter(Boolean) }, 'fixture', [], 'fixture:page')))
+await new Promise(resolve => setTimeout(resolve, 0))
+assert.deepEqual(readPageProgress(progressKey)?.data, { sections: ['first'] })
+await withPageProgress('fixture:other:{}', async () => {
+  publishPageProgress({ wrong: true }, 'fixture', [], 'fixture:page')
+  assert.equal(readPageProgress('fixture:other:{}'), null, 'Nested services cannot publish the wrong payload schema')
+})
+releaseSection('second')
+assert.deepEqual(await progressLoad, ['first', 'second'])
+assert.equal(readPageProgress(progressKey), null)
+await assert.rejects(withPageProgress(progressKey, async () => {
+  publishPageProgress({ sections: ['first'] }, 'fixture', [], 'fixture:page')
+  throw Error('fixture failure')
+}))
+assert.equal(readPageProgress(progressKey), null, 'Failures must clear transient content')
 
 let progressValue = 0
 const reportedProgress: number[] = []
@@ -71,6 +101,16 @@ let expiryRefreshes = 0
 await warmQuery(expiredClient, { queryKey: ['quotes', 'EXPIRED'], staleTime: Infinity,
   queryFn: async () => { expiryRefreshes += 1; return ok({ price: 100 }, 'fixture') } })
 assert.equal(expiryRefreshes, 1, 'A recently retrieved snapshot whose dependencies expired must refresh')
+const retainedKey = ['quotes', 'RETAINED']
+const retainedSnapshot = ok({ price: 123 }, 'fixture')
+expiredClient.setQueryData(retainedKey, retainedSnapshot)
+for (const freshness of ['partial', 'stale', 'failed'] as const) {
+  await assert.rejects(warmStartupQuery(expiredClient, { queryKey: retainedKey, staleTime: 0,
+    queryFn: async () => ({ ...ok({ price: null }, 'fixture'), meta: { source: 'fixture', freshness, fetchedAt: Date.now() } }),
+  }), StartupLoadError)
+  assert.equal(expiredClient.getQueryData(retainedKey), retainedSnapshot, 'Unhealthy refresh must retain the complete previous snapshot')
+  assert.equal(expiredClient.getQueryState(retainedKey)?.status, 'error', 'Retained content cannot conceal a refresh failure')
+}
 const degradedSnapshot = { ...ok({ price: 100 }, 'fixture'),
   meta: { source: 'fixture', freshness: 'partial', fetchedAt: Date.now(), failureReason: 'Missing observation' } }
 await assert.rejects(warmStartupQuery(expiredClient, { queryKey: ['startupDegraded'], staleTime: 0,
@@ -265,6 +305,19 @@ assert.equal(schedulerTimers.size, 0, 'Unmount must clear every maintenance time
 const stoppedReports = schedulerReports
 scheduler.reconcile([fastTask])
 assert.equal(schedulerReports, stoppedReports)
+schedulerClient.clear()
+
+const retryScheduler = createStartupScheduler({ onChange: () => {}, onSnapshot: () => {} })
+retryScheduler.reconcile([fixtureTask('targeted', 'stocks', undefined, 'failed'), fixtureTask('healthy', 'forex')])
+await settleScheduler()
+retryScheduler.retry('stocks')
+retryScheduler.retry('stocks')
+assert.equal(retryScheduler.snapshot().pages.stocks.refreshing, true, 'Targeted retry must expose refresh activity')
+await settleScheduler()
+assert.equal(schedulerCalls.get('targeted'), 2, 'Repeated retry clicks must share one recovery attempt')
+assert.equal(schedulerCalls.get('healthy'), 1, 'Targeted retry cannot refresh healthy pages')
+assert.equal(retryScheduler.snapshot().failed, 0)
+retryScheduler.stop()
 schedulerClient.clear()
 
 // Replacing a task releases its cache pins, while shared current owners survive.
@@ -1013,7 +1066,7 @@ try {
   const { MuPage } = await import('../src/pages/MuPage.js')
   const { emptyMuPayload } = await import('../electron/shared/mu.js')
   const cacheFailure = ok(emptyMuPayload())
-  cacheFailure.meta.freshness = 'partial'
+  cacheFailure.meta.freshness = 'failed'
   cacheFailure.errors = [{ source: 'cache', reason: 'Micron document request failed: HTTP 403', operation: 'resolve' }]
   cryptoClient.setQueryData(['mu'], cacheFailure)
   const muMarkup = renderToStaticMarkup(createElement(QueryClientProvider, { client: cryptoClient },

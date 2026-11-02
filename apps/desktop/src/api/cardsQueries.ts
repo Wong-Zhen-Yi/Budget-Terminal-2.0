@@ -1,5 +1,7 @@
+import { fetchRetainedQuery, retainedLoader } from './snapshotResult'
 import { useCallback } from 'react'
-import { useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQueries, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 
 import type {
   CardsMutation,
@@ -39,10 +41,11 @@ export function cardsPerformanceKey(request: CardsPerformanceRequest) {
 export function useCardsPerformance(
   requests: CardsPerformanceRequest[],
 ): Array<UseQueryResult<Envelope<CardsPerformancePayload>>> {
+  const client = useQueryClient()
   return useQueries({
     queries: requests.map((request) => ({
       queryKey: cardsPerformanceKey(request),
-      queryFn: () => api.cardsPerformance({ ...request, force: forcing() }),
+      queryFn: retainedLoader(client, cardsPerformanceKey(request), () => api.cardsPerformance({ ...request, force: forcing() })),
       enabled: request.cards.length > 0,
       staleTime: queryFreshness(cardsPerformanceKey(request)),
     })),
@@ -67,8 +70,7 @@ export function useRefreshCards(): (
   const queryClient = useQueryClient()
   return useCallback(async (requests) => {
     await Promise.all(requests.map(async (request) => {
-      const result = await api.cardsPerformance({ ...request, force: true })
-      queryClient.setQueryData(cardsPerformanceKey(request), result)
+      await fetchRetainedQuery(queryClient, cardsPerformanceKey(request), () => api.cardsPerformance({ ...request, force: true }))
     }))
   }, [queryClient])
 }

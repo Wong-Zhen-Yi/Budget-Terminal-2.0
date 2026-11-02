@@ -1,3 +1,6 @@
+import { readPageProgress, withPageProgress } from '../services/pageProgress.js'
+import { serviceReadKey } from '../shared/serviceReadKey.js'
+import { rateGate } from '../services/yahoo/rateGate.js'
 import { mcpExecution } from '../services/mcpContext.js'
 import { getArticles, saveArticles } from '../services/articlesStore.js'
 import type { ArticlesMutation } from '../shared/articles.js'
@@ -104,8 +107,10 @@ export function registerServiceHandlers(register: RegisterService): void {
   const provider = yahooProvider
 
   register(CHANNELS.apiUsage, () => getApiUsageSnapshot())
+  register(CHANNELS.startupPriority, (order: number | null) => rateGate.preferBackgroundOrder(order))
   register(CHANNELS.cacheStatus, () => getCacheStatus())
   register(CHANNELS.configureCache, (settings: CacheSettings) => configureCache(settings))
+  register(CHANNELS.pageProgress, (key: string) => readPageProgress(key))
   register(CHANNELS.heatmapProgress, (etf: string) => getHeatmapProgress(normalizeEtfKey(etf)))
   register(CHANNELS.browserStatus, async () => (await import('../services/browser.js')).browserStatus())
   register(CHANNELS.browserResearch, async (request: unknown) => (await import('../services/browser.js')).browserResearch(request))
@@ -122,14 +127,14 @@ export function registerServiceHandlers(register: RegisterService): void {
   const handle = <Request>(channel: string, run: (request: Request) => unknown): void => {
     register(channel, (request: Request) => {
       const domain = changedDomains.get(channel)
-      const key = `${channel}:${JSON.stringify(request ?? {})}`
+      const key = domain ? `${channel}:${JSON.stringify(request ?? {})}` : serviceReadKey(channel, request)
       const ownScan = Boolean(mcpExecution.getStore()) && (channel === CHANNELS.quantScan || channel === CHANNELS.technicalScan)
       if (!domain && !ownScan && pendingReads.has(key)) return pendingReads.get(key)!
       const result = runWithPriority(
         (request as { background?: boolean } | undefined)?.background
           ? 'background'
           : 'foreground',
-        async () => run(request),
+        async () => withPageProgress(key, async () => run(request)),
         (request as { backgroundOrder?: number } | undefined)?.backgroundOrder,
       )
       if (domain) return result.then((value) => {

@@ -1,3 +1,5 @@
+import { publishPageProgress } from './pageProgress.js'
+import { CHANNELS } from '../shared/contract.js'
 import type { Envelope } from '../shared/contract.js'
 import { describeError, err, failed, meta, ok, partial } from '../shared/envelope.js'
 import { TV_CHANNELS, recentTvVideos, type TvPayload, type TvRequest, type TvVideo } from '../shared/tv.js'
@@ -59,9 +61,16 @@ async function fetchChannel(channel: typeof TV_CHANNELS[number]): Promise<TvVide
 }
 
 export async function getTv(request: TvRequest = {}): Promise<Envelope<TvPayload>> {
+  const previewItems: TvVideo[] = []
+  let previewChannels = 0
   const results = await Promise.allSettled(TV_CHANNELS.map(channel => cache.resolveWithStaleFallback(
     `tv-feed:v1:${channel.id}`, TTL.tv, () => fetchChannel(channel), { force: Boolean(request.force) },
-  )))
+  ).then(hit => {
+    previewItems.push(...hit.value)
+    previewChannels++
+    publishPageProgress({ items: recentTvVideos(previewItems), warnings: [], fetchedAt: Date.now(), channelsLoaded: previewChannels, channelsTotal: TV_CHANNELS.length }, TV_SOURCE, [], CHANNELS.tv)
+    return hit
+  })))
   const warnings: string[] = []
   const items: TvVideo[] = []
   let channelsLoaded = 0

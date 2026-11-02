@@ -49,7 +49,7 @@ try {
         import { TABS } from './electron/shared/contract'
         import { WORKSPACES } from './electron/shared/navigation'
         const renders = {}, effects = {}, ticks = {}
-        const ids = ['a', 'b', 'c', 'd', 'e']
+        const ids = ['a', 'b', 'c', 'd', 'e', 'dictionary', 'settings', 'articles', 'notifications']
         let select, updateShell, hide
         function Page({ id }) {
           renders[id] = (renders[id] || 0) + 1
@@ -60,7 +60,7 @@ try {
             return () => { effects[id]--; clearInterval(timer) }
           }, [])
           return <main><button onClick={() => setValue(v => v + 1)}>{value}</button>
-            {Array.from({length: 1000}, (_, i) => <div key={i}>Row {i}</div>)}
+            <div data-scroll style={{height: 100, overflow: 'auto'}}>{Array.from({length: 1000}, (_, i) => <div key={i}>Row {i}</div>)}</div>
           </main>
         }
         const renderPage = id => <Page id={id} />
@@ -123,6 +123,8 @@ try {
           check(effects.a === 0 && effects.b === 1, 'Hidden effects were not suspended')
           const retainedB = document.querySelector('[data-page-id="b"]')
           retainedB.querySelector('button').click()
+          retainedB.querySelector('[data-scroll]').scrollTop = 230
+          retainedB.querySelector('[data-scroll]').dispatchEvent(new Event('scroll'))
           await settle()
           const stopped = ticks.a
           await settle()
@@ -143,6 +145,16 @@ try {
           await go('b')
           check(document.querySelector('[data-page-id="b"]') !== retainedB, 'Evicted page reused stale DOM')
           check(document.querySelector('[data-page-id="b"] button').textContent === '0', 'Evicted page kept local state')
+          check(document.querySelector('[data-page-id="b"] [data-scroll]').scrollTop === 230, 'Evicted page lost its saved scroll position')
+          await go('dictionary')
+          document.querySelector('[data-page-id="dictionary"] button').click()
+          await settle()
+          const dictionary = document.querySelector('[data-page-id="dictionary"]')
+          await go('a'); await go('d'); await go('e'); await go('settings'); await go('articles'); await go('notifications')
+          await go('dictionary')
+          check(document.querySelector('[data-page-id="dictionary"]') === dictionary, 'Lightweight reader was evicted by expensive pages')
+          check(dictionary.querySelector('button').textContent === '1', 'Retained reader lost selection/control state')
+          check([...document.querySelectorAll('[data-page-id]')].filter(node => ['a','b','c','d','e'].includes(node.dataset.pageId)).length <= 3, 'Light reader retention exceeded the chart budget')
           check(Object.values(effects).reduce((a, b) => a + b, 0) === 1, 'More than one page has active effects')
           return 'PASS: all page and workspace icons, tooltips, selection, sidebar expansion, recent-page retention, resident limit, eviction, shell render isolation, suspended polling, effect resume, hidden-page removal'
         }

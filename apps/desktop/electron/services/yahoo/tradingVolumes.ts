@@ -1,3 +1,5 @@
+import { publishPageProgress } from '../pageProgress.js'
+import { CHANNELS } from '../../shared/contract.js'
 import type { TradingVolumeRow, TradingVolumesPayload } from '../../shared/contract.js'
 import {
   TRADING_VOLUME_LIMIT,
@@ -108,6 +110,7 @@ async function fetchAll(force: boolean): Promise<TradingVolumesPayload> {
   // `_merge_trading_volume_history`: three calendar years back, daily.
   const now = new Date()
   const start = new Date(Date.UTC(now.getUTCFullYear() - 3, now.getUTCMonth(), now.getUTCDate()))
+  publishPageProgress({ rows, asOf: asOfStamp(now), source: SOURCE, missing: [] }, SOURCE, [], CHANNELS.tradingVolumes)
   const { series, missing } = await getCloseVolumeBatch(
     [...rows.map((row) => row.ticker), '^GSPC'],
     start,

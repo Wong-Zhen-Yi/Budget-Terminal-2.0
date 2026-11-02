@@ -1,5 +1,7 @@
+import { fetchRetainedQuery } from './snapshotResult'
 import { useCallback } from 'react'
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useQuery } from '@/api/progressiveQuery'
 
 import type {
   CalendarMonthPayload,
@@ -31,11 +33,8 @@ export function useRefreshCalendarMonth(
 ): () => Promise<void> {
   const queryClient = useQueryClient()
   return useCallback(async () => {
-    const result = await api.calendarMonth({ ...request, force: true })
-    queryClient.setQueryData(
-      queryKeys.calendarMonth(request.tickers, request.year, request.month),
-      result,
-    )
+    await fetchRetainedQuery(queryClient, queryKeys.calendarMonth(request.tickers, request.year, request.month),
+      () => api.calendarMonth({ ...request, force: true }))
   }, [queryClient, request])
 }
 
@@ -58,7 +57,6 @@ export function useRefreshEarningsCalendar(
 ): () => Promise<void> {
   const queryClient = useQueryClient()
   return useCallback(async () => {
-    const result = await api.earningsCalendar({ ...request, force: true })
-    queryClient.setQueryData(queryKeys.earningsCalendar(request.rangeKey), result)
+    await fetchRetainedQuery(queryClient, queryKeys.earningsCalendar(request.rangeKey), () => api.earningsCalendar({ ...request, force: true }))
   }, [queryClient, request])
 }

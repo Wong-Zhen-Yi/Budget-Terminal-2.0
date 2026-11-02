@@ -28,6 +28,7 @@ interface Entry {
   snapshots: Array<{ key: QueryKey; result: unknown }>
   cachedAt?: number
   timer?: ReturnType<typeof setTimeout>
+  refreshing?: boolean
 }
 
 /** A session-long plan: edits replace affected tasks without abandoning other pages. */
@@ -58,6 +59,7 @@ export function createStartupScheduler(options: {
   async function run(entry: Entry, maintenance = false) {
     // Keep only metadata for scheduling; old chart payloads must remain collectible.
     entry.snapshots = []
+    entry.cachedAt = undefined
     const observe: StartupSnapshotObserver = (key, result, error, cached) => {
       if (!current(entry)) return
       const meta = (result as { meta?: unknown } | null)?.meta
@@ -65,12 +67,25 @@ export function createStartupScheduler(options: {
       entry.snapshots = entry.snapshots.filter(snapshot => hashKey(snapshot.key) !== hash)
       entry.snapshots.push({ key, result: meta ? { meta } : undefined })
       const fetchedAt = (result as { meta?: { fetchedAt?: number } } | undefined)?.meta?.fetchedAt
-      if (cached && fetchedAt) entry.cachedAt = Math.min(entry.cachedAt ?? Infinity, fetchedAt)
+      if (fetchedAt) entry.cachedAt = Math.min(entry.cachedAt ?? Infinity, fetchedAt)
       options.onSnapshot(entry.task.tab, key, result, error)
       if (cached) notify()
     }
     observe.owner = entry
     return entry.task.run(observe, maintenance)
+  }
+
+  async function refresh(entry: Entry) {
+    if (!current(entry) || entry.refreshing) return
+    entry.refreshing = true
+    notify()
+    let status: TaskState = { state: 'ready' }
+    try { await run(entry, true) } catch (error) { status = classify(error) }
+    if (!current(entry)) return
+    entry.refreshing = false
+    entry.status = status
+    maintain(entry)
+    notify()
   }
 
   function maintain(entry: Entry) {
@@ -80,14 +95,7 @@ export function createStartupScheduler(options: {
     entry.timer = setTimer(() => {
       entry.timer = undefined
       if (!current(entry)) return
-      void (async () => {
-        let status: TaskState = { state: 'ready' }
-        try { await run(entry, true) } catch (error) { status = classify(error) }
-        if (!current(entry)) return
-        entry.status = status
-        maintain(entry)
-        notify()
-      })()
+      void refresh(entry)
     }, delay)
   }
 
@@ -123,6 +131,15 @@ export function createStartupScheduler(options: {
   }
 
   return {
+    /** Retry only settled unhealthy tasks; leave healthy and in-flight pages alone. */
+    retry(page?: string) {
+      for (const entry of entries.values()) {
+        if (!entry.timing || entry.refreshing || entry.status?.state === 'ready' || (page && entry.task.tab !== page)) continue
+        clearTimer(entry.timer)
+        entry.timer = undefined
+        void refresh(entry)
+      }
+    },
     reconcile(tasks: readonly StartupTask[]) {
       if (stopped) return
       const ids = new Set(tasks.map(task => task.id))
@@ -165,7 +182,8 @@ export function createStartupScheduler(options: {
             ?? tasks.find(entry => entry.status?.state === 'degraded')?.status
           const cachedTimes = tasks.flatMap(entry => entry.cachedAt ? [entry.cachedAt] : [])
           return [page, { ...(loading ? { state: 'loading' as const, reason: tasks.find(entry => entry.retryReason)?.retryReason }
-            : worst ?? { state: 'ready' as const }), ...(cachedTimes.length ? { cachedAt: Math.min(...cachedTimes) } : {}) }]
+            : worst ?? { state: 'ready' as const }), refreshing: tasks.some(entry => entry.refreshing),
+            ...(cachedTimes.length ? { cachedAt: Math.min(...cachedTimes) } : {}) }]
         })),
       }
     },
