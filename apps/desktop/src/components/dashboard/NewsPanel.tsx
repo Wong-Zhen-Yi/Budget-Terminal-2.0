@@ -1,6 +1,5 @@
 import type { NewsItem } from '@shared/contract'
 import { api } from '@/api/client'
-import { Button } from '@/components/ui/Button'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { NEWS_REFRESH_MS } from '@/api/refreshRates'
 import { Panel } from '@/components/ui/Panel'
@@ -19,7 +18,6 @@ export function NewsPanel({
   live = false,
   refreshing = false,
   updatedAt,
-  onRefresh,
 }: {
   items: NewsItem[]
   loading: boolean
@@ -28,7 +26,6 @@ export function NewsPanel({
   live?: boolean
   refreshing?: boolean
   updatedAt?: number
-  onRefresh?: () => void
 }) {
   const columns: Array<Column<NewsItem>> = [
     {
@@ -58,7 +55,7 @@ export function NewsPanel({
         <span className="text-2xs text-text-dim" title={updatedAt ? `Updated ${new Date(updatedAt).toLocaleString()}` : 'Waiting for headlines'}>
           {refreshing ? 'Updating...' : `Auto · ${NEWS_REFRESH_MS / 60_000}m`}
         </span>
-        <Button onClick={onRefresh} disabled={refreshing} aria-label="Refresh live news">Refresh</Button>
+
       </>
     ) : undefined}>
       <DataTable
@@ -68,7 +65,7 @@ export function NewsPanel({
         showIndex
         layout="fixed"
         onRowClick={(item) => void api.openExternal(item.url)}
-        empty={loading ? 'Loading news...' : warning ? 'News unavailable. Refresh to retry.' : 'No recent headlines for these holdings'}
+        empty={loading ? 'Loading news...' : warning ? 'News unavailable. Reload (F5) to retry.' : 'No recent headlines for these holdings'}
       />
     </Panel>
   )

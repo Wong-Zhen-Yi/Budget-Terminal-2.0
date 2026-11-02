@@ -49,7 +49,7 @@ export function MainWorkspace({ onStatus }: { onStatus: (meta: EnvelopeMeta | un
   const loadStatus = query.isFetching
     ? `Loading ${store.symbol}…`
     : failureReason
-      ? `${store.symbol}: ${failureReason} · Press Load or Refresh to retry.`
+      ? `${store.symbol}: ${failureReason} · Press Load or Reload (F5) to retry.`
       : `${freshness} · ${query.data?.meta.source ?? 'Yahoo Finance'}`
   const effectiveSymbol = payload?.symbol ?? store.symbol
   const effectiveInterval = payload?.intervalLabel ?? store.interval
@@ -146,7 +146,7 @@ export function MainWorkspace({ onStatus }: { onStatus: (meta: EnvelopeMeta | un
           <select value={store.interval} onChange={(event) => { store.setInterval(event.target.value as ChartsInterval); setReplayLimit(null) }} className="h-8 border border-border-strong bg-surface-raised px-2 text-2xs text-text">{CHARTS_INTERVALS.map((value) => <option key={value}>{value}</option>)}</select>
           <div className="flex gap-px">{CHARTS_RANGE_OPTIONS[store.interval].map((value) => <Button key={value} variant="toggle" active={store.range === value} onClick={() => { store.setRange(value); setReplayLimit(null) }}>{value}</Button>)}</div>
           <select value={store.chartType} onChange={(event) => store.setChartType(event.target.value as typeof store.chartType)} className="h-8 border border-border-strong bg-surface-raised px-2 text-2xs text-text"><option value="candles">Candles</option><option value="line">Line</option><option value="area">Area</option></select>
-          <Button onClick={() => void refresh()} disabled={query.isFetching}>Refresh</Button>
+
           <Button variant="toggle" active={store.autoFollow} onClick={() => store.setAutoFollow(!store.autoFollow)}>Auto</Button>
           <select value={store.pollSeconds} onChange={(event) => store.setPollSeconds(Number(event.target.value) as 0 | 15 | 30 | 60)} className="h-8 border border-border-strong bg-surface-raised px-2 text-2xs text-text"><option value="0">Polling off</option><option value="15">15 sec</option><option value="30">30 sec</option><option value="60">60 sec</option></select>
           <Button onClick={() => setFocus(true)}>Focus</Button><Button variant="toggle" active={store.sidebarVisible} onClick={() => store.setSidebarVisible(!store.sidebarVisible)}>Sidebar</Button>

@@ -8,14 +8,13 @@ import { SearchInput } from '@/components/ui/SearchInput'
 const QUICK_FUNDS = ['SPY', 'QQQ', 'VOO', 'VTI', 'IVV', 'IWM', 'DIA', 'ARKK', 'GLD', 'TLT', 'BND', 'SCHD']
 const PAGE_SIZE = 60
 
-export function AumRail({ payload, loading, failureReason, filter, onFilterChange, onSelect, onRefresh, refreshing, selected }: {
+export function AumRail({ payload, loading, failureReason, filter, onFilterChange, onSelect, selected }: {
   payload: EtfAumPayload | undefined
   loading: boolean
   failureReason: string
   filter: string
   onFilterChange: (value: string) => void
   onSelect: (ticker: string) => void
-  onRefresh: () => void
   refreshing: boolean
   selected: string
 }) {
@@ -32,7 +31,7 @@ export function AumRail({ payload, loading, failureReason, filter, onFilterChang
     <aside className="etf-browser" aria-label="ETF fund browser">
       <header className="etf-browser-heading">
         <div><span className="etf-eyebrow">Discover</span><h2>Fund browser</h2></div>
-        <Button onClick={onRefresh} disabled={refreshing || loading} title="Refresh the directory. Repeated clicks reuse the cache for at least one minute.">Refresh list</Button>
+
       </header>
       <SearchInput aria-label="Search ETFs" value={filter} onChange={onFilterChange} placeholder="Ticker, fund name or asset class" />
       <label className="etf-category">Asset class

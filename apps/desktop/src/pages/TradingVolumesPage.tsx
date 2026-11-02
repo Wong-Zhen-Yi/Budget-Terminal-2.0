@@ -8,7 +8,7 @@ import {
   removeLowerOutliers,
 } from '@shared/tradingVolumes'
 import { api } from '@/api/client'
-import { useRefreshTradingVolumes, useTradingVolumes } from '@/api/tradingVolumeQueries'
+import { useTradingVolumes } from '@/api/tradingVolumeQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { DotPlot } from '@/components/tradingvolumes/DotPlot'
 import { buildTradingVolumesLlmExport } from '@/components/tradingvolumes/llmExport'
@@ -45,7 +45,6 @@ export function TradingVolumesPage({
   onStatusChange: (panels: PanelStatus[], sourcePath: string) => void
 }) {
   const query = useTradingVolumes()
-  const refresh = useRefreshTradingVolumes()
 
   const interval = useTradingVolumesPage((state) => state.interval)
   const tableWidth = useTradingVolumesPage((state) => state.tableWidth)
@@ -53,7 +52,6 @@ export function TradingVolumesPage({
   const setTableWidth = useTradingVolumesPage((state) => state.setTableWidth)
 
   const [hoveredTicker, setHoveredTicker] = useState<string | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
   const [outliersToRemove, setOutliersToRemove] = useState(0)
   const [outliersHovered, setOutliersHovered] = useState(false)
   const [outliersFocused, setOutliersFocused] = useState(false)
@@ -114,15 +112,6 @@ export function TradingVolumesPage({
       : { text, tone: 'positive' }
   }, [notice, query.data, query.isFetching, payload, ranked, rows, removedCount])
 
-  const onRefresh = useCallback(async () => {
-    setNotice(null)
-    setRefreshing(true)
-    try {
-      await refresh()
-    } finally {
-      setRefreshing(false)
-    }
-  }, [refresh])
 
   const onExport = useCallback(async () => {
     if (!payload?.rows.length) {
@@ -151,7 +140,6 @@ export function TradingVolumesPage({
     [setTableWidth],
   )
 
-  const busy = refreshing || query.isFetching
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
@@ -190,9 +178,7 @@ export function TradingVolumesPage({
           setNotice(null)
         }}>Reset</Button>
 
-        <Button className="ml-2" onClick={() => void onRefresh()} disabled={busy}>
-          {busy ? 'Refreshing...' : 'Refresh'}
-        </Button>
+
         <Button variant="positive" onClick={() => void onExport()}>
           Export for LLM
         </Button>
@@ -239,6 +225,7 @@ export function TradingVolumesPage({
                 Estimated market cap{replay.canReplay ? ' • price-based' : ''}
               </span>
             )}
+
             <Button
               className="ml-auto"
               variant="accent"
@@ -247,7 +234,7 @@ export function TradingVolumesPage({
               title={
                 replay.canReplay
                   ? 'Replay the selected interval using price-based estimated market caps.'
-                  : 'Refresh Trading Volumes to load daily market-cap history.'
+                  : 'Use Reload (F5) to load daily market-cap history.'
               }
             >
               {replay.playing ? 'Stop' : 'Replay'}

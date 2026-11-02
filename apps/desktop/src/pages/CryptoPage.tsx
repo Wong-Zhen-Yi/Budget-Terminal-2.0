@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Candle, CryptoPayload, CryptoQuote, HyperliquidMarket } from '@shared/contract'
 import {
@@ -8,7 +8,7 @@ import {
 import { CRYPTO_CHART_INTERVALS, cryptoChartRequest } from '@shared/cryptoWorkspace'
 import { FRESHNESS } from '@shared/freshness'
 import { api } from '@/api/client'
-import { useCrypto, useCryptoProviderUsage, useRefreshCrypto } from '@/api/cryptoQueries'
+import { useCrypto, useCryptoProviderUsage } from '@/api/cryptoQueries'
 import { useChartsHistory } from '@/api/chartsQueries'
 import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
 import { useCryptoWorkspace } from '@/stores/crypto'
@@ -37,13 +37,12 @@ function Section({ title, subtitle, badge, children, className = '' }: {
 
 export function CryptoPage({ onStatusChange }: { onStatusChange: (panels: PanelStatus[], sourcePath: string) => void }) {
   const query = useCrypto()
-  const refresh = useRefreshCrypto()
   const usage = useCryptoProviderUsage()
   const snapshotNow = useSnapshotClock()
   const now = Math.max(snapshotNow, Date.now())
   const { symbol, interval, selectSymbol, setInterval } = useCryptoWorkspace()
   const history = useChartsHistory(cryptoChartRequest(symbol, interval), 60)
-  const [refreshing, setRefreshing] = useState(false)
+  const refreshing = false
   const [notice, setNotice] = useState('')
   const [search, setSearch] = useState('')
   const payload = query.data?.data
@@ -83,17 +82,6 @@ export function CryptoPage({ onStatusChange }: { onStatusChange: (panels: PanelS
     wasCooling.current = cooldown
   }, [cooldown, query.refetch])
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true)
-    setNotice('')
-    try {
-      const results = await Promise.allSettled([refresh(), history.refetch()])
-      const failed = results.find(result => result.status === 'rejected')
-      if (failed?.status === 'rejected') throw failed.reason
-    } catch (error) {
-      setNotice(`Crypto refresh failed: ${error instanceof Error ? error.message : String(error)}`)
-    } finally { setRefreshing(false) }
-  }, [refresh, history.refetch])
 
   const onCopy = async () => {
     if (!payload) { setNotice('Load crypto market data before copying.'); return }
@@ -108,9 +96,7 @@ export function CryptoPage({ onStatusChange }: { onStatusChange: (panels: PanelS
       <div><div className="crypto-eyebrow">Market intelligence</div><h1>Crypto Workspace</h1><p>Price action, spot quotes and perpetual markets</p></div>
       <div className="crypto-actions"><span className="crypto-currency" title="Quotes and chart prices are shown in USD">USD</span>
         <Button onClick={() => void onCopy()} disabled={!payload}>Copy snapshot</Button>
-        <Button variant="accent" onClick={() => void onRefresh()} disabled={loading || cooldown}>
-          {cooldown ? `Retry in ${cooldownSeconds}s` : loading ? 'Refreshing...' : 'Refresh'}
-        </Button>
+
       </div>
     </header>
 

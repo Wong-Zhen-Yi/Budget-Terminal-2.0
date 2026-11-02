@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useIsRestoring, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { hashKey, useIsRestoring, useQueryClient, type QueryClient } from '@tanstack/react-query'
 
 import { CARD_INTERVALS, MACRO_SYMBOLS, type AppSettings, type PortfolioPayload } from '@shared/contract'
 import { startupPages } from '@shared/navigation'
@@ -48,6 +48,8 @@ import { browserKey, loadBrowser } from './browserQueries'
 import { notificationsKey, loadNotifications } from './notificationsQueries'
 import { errorMessage } from './snapshotHealth'
 import { createProgressReporter } from './progressReporter'
+import { pageQueryKeys } from './pageQueryScope'
+import { markReloadQuery } from './pageProgress'
 import { createStartupScheduler } from './startupScheduler'
 
 /**
@@ -83,6 +85,7 @@ export interface WarmProgress {
   total: number
   label: string
   failed: number
+  reload?: (page: string) => Promise<void>
   degraded: number
   retry?: (page?: string) => void
 }
@@ -1130,7 +1133,7 @@ export function buildTasks(
   })
 }
 
-export function useWarmPages(settings: AppSettings | undefined, settingsSettled: boolean, activeTab: string, recent: string[], settingsError?: unknown): WarmProgress {
+export function useWarmPages(settings: AppSettings | undefined, settingsSettled: boolean, activeTab: string, recent: string[], settingsError?: unknown): WarmProgress & { reload: (page: string) => Promise<void> } {
   const queryClient = useQueryClient()
   const isRestoring = useIsRestoring()
   const portfolioQuery = usePortfolio()
@@ -1143,6 +1146,7 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
   const inputs = useRef({ activeTab, recent, settings, payload, settingsError, portfolioError })
   inputs.current = { activeTab, recent, settings, payload, settingsError, portfolioError }
   const reconcile = useRef<(() => void) | undefined>(undefined)
+  const reload = useRef<((page: string) => Promise<void>) | undefined>(undefined)
   const retry = useRef<((page?: string) => void) | undefined>(undefined)
   const prioritize = useRef<((page: string) => void) | undefined>(undefined)
 
@@ -1228,6 +1232,26 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
             (pageRanks.get(task.tab) ?? 0) + (maintenance ? pageOrder.length : 0), observe),
         })))
       }
+      reload.current = async page => {
+        update()
+        await scheduler!.reload(page, async () => {
+          const keys = pageQueryKeys(page)
+          const reloaded = new Set<string>()
+          await Promise.all(keys.map(async key => {
+            // Join an existing shared read before requesting an explicit fresh answer.
+            const query = queryClient.getQueryCache().find({ queryKey: key, exact: true })
+            if (!query || query.isDisabled()) return
+            try { await query.promise } catch { /* Retry the completed failure below. */ }
+            markReloadQuery(key, true)
+            try {
+              await queryClient.refetchQueries({ queryKey: key, exact: true }, { cancelRefetch: false, throwOnError: true })
+              reloaded.add(hashKey(key))
+            } catch { /* The scheduler retries and publishes this panel's failure. */ }
+            finally { markReloadQuery(key, false) }
+          }))
+          return reloaded
+        })
+      }
       // Coalesce multi-field edits (e.g. symbol + loaded + expiry), then reconcile
       // exact page input identities. Never cancel shared provider requests.
       const schedule = () => {
@@ -1248,6 +1272,7 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
 
     return () => {
       reconcile.current = undefined
+      reload.current = undefined
       retry.current = undefined
       prioritize.current = undefined
       void api.startupPriority(null).catch(() => {})
@@ -1262,5 +1287,5 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
   useEffect(() => { reconcile.current?.() }, [settings, payload, settingsError, portfolioError])
   useEffect(() => { prioritize.current?.(activeTab) }, [activeTab])
 
-  return { ...progress, retry: page => retry.current?.(page) }
+  return { ...progress, reload: (page: string) => reload.current ? reload.current(page) : Promise.reject(new Error('Page loading is still initializing. Try Reload again shortly.')), retry: page => retry.current?.(page) }
 }

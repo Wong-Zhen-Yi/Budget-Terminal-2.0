@@ -5,7 +5,7 @@ import { STOCKS_RANGE_PRESETS } from '@shared/contract'
 import type { StocksRangePreset } from '@shared/contract'
 import { HIMS_METRICS, himsGrowth, himsMargin, himsRevenueMix } from '@shared/hims'
 import type { HimsBlock, HimsMetricId, HimsReport } from '@shared/hims'
-import { useHims, useRefreshHims } from '@/api/himsQueries'
+import { useHims } from '@/api/himsQueries'
 import { api } from '@/api/client'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { LineChart } from '@/components/charts/LineChart'
@@ -31,7 +31,7 @@ function Legend({ labels }: { labels: string[] }) {
 
 function Source({ report }: { report: HimsReport | null | undefined }) {
   return <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-border p-2 text-2xs text-text-muted">
-    {report ? <><button className="text-accent hover:underline" onClick={() => { void api.openExternal(report.sourceUrl) }}>Hims & Hers earnings release ↗</button>{report.supplementalSourceUrl ? <button className="text-accent hover:underline" onClick={() => { void api.openExternal(report.supplementalSourceUrl!) }}>Supplemental SEC metrics ↗</button> : null}<span>{report.period} · published {report.publishedAt || 'date unavailable'}</span></> : <span>Earnings release unavailable · Refresh to retry.</span>}
+    {report ? <><button className="text-accent hover:underline" onClick={() => { void api.openExternal(report.sourceUrl) }}>Hims & Hers earnings release ↗</button>{report.supplementalSourceUrl ? <button className="text-accent hover:underline" onClick={() => { void api.openExternal(report.supplementalSourceUrl!) }}>Supplemental SEC metrics ↗</button> : null}<span>{report.period} · published {report.publishedAt || 'date unavailable'}</span></> : <span>Earnings release unavailable · Reload (F5) to retry.</span>}
   </div>
 }
 
@@ -56,9 +56,8 @@ export function HimsPage({ onStatusChange, onNavigate }: {
   const query = useHims()
   const now = useSnapshotClock()
   const freshness = query.data ? effectiveFreshness(query.data, now, FRESHNESS.hims) : 'unavailable'
-  const refresh = useRefreshHims()
-  const [notice, setNotice] = useState('')
-  const [refreshing, setRefreshing] = useState(false)
+  const notice = ''
+  const refreshing = false
   const [range, setRange] = useState<StocksRangePreset>('1Y')
   const [selectedPeriod, setSelectedPeriod] = useState('')
   const data = query.data?.data
@@ -85,11 +84,6 @@ export function HimsPage({ onStatusChange, onNavigate }: {
   }, [data?.market?.chart.candles, range])
   const dates = useMemo(() => candles.map(candle => new Date(candle.time * 1000).toISOString().slice(0, 10)), [candles])
   useEffect(() => onStatusChange([{ label: 'HIMS', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: busy }], ''), [query.data, busy, onStatusChange])
-  const onRefresh = async () => {
-    setNotice('')
-    setRefreshing(true)
-    try { await refresh() } catch (error) { setNotice(error instanceof Error ? error.message : String(error)) } finally { setRefreshing(false) }
-  }
   const tileIds: HimsMetricId[] = ['revenue', 'subscribers', arpuId, 'ebitda', 'netIncome', 'eps']
   const valuation: Array<[string, string]> = [
     ['Market cap', amount(facts?.marketCap, true)], ['Enterprise value', amount(facts?.enterpriseValue, true)],
@@ -106,7 +100,7 @@ export function HimsPage({ onStatusChange, onNavigate }: {
       {stats?.priceSource ? <span className="text-2xs text-text-muted">{stats.priceSource} · {stats.changeBasis === '24h' ? '24h' : 'daily'}</span> : null}
       <span className={`num text-xs ${stats && stats.change >= 0 ? 'text-up' : 'text-down'}`}>{percent(stats?.change, true)}</span>
       <span className="text-2xs text-text-muted">NYSE · USD · Consumer health platform</span>
-      <Button className="ml-auto" variant="accent" disabled={busy} onClick={onRefresh}>{busy ? loading ? 'Loading HIMS…' : 'Updating HIMS…' : 'Refresh'}</Button>
+
       {['charts', 'fundamentals', 'options', 'valuation'].map(id => <Button key={id} className="capitalize" onClick={() => onNavigate(id, 'HIMS')}>{id}</Button>)}
     </div>
     <div className="flex shrink-0 flex-wrap items-center gap-2 text-2xs text-text-muted">

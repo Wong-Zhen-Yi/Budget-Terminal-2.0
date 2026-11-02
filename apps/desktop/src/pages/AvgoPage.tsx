@@ -1,6 +1,6 @@
 import { effectiveFreshness, feedErrorText, useSnapshotClock } from '@/api/snapshotHealth'
 import { FRESHNESS } from '@shared/freshness'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { LogicalRange } from 'lightweight-charts'
 import { STOCKS_RANGE_PRESETS } from '@shared/contract'
 import type { StocksRangePreset } from '@shared/contract'
@@ -9,7 +9,7 @@ import type { AvgoBlock, AvgoMetric } from '@shared/avgo'
 import type { FundamentalsChartModel } from '@shared/fundamentalsPage'
 import { seriesBarGeometry } from '@shared/fundamentalsPage'
 import { api } from '@/api/client'
-import { useAvgo, useRefreshAvgo } from '@/api/avgoQueries'
+import { useAvgo } from '@/api/avgoQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { Donut, colorForIndex } from '@/components/charts/Donut'
 import { FundamentalsBarChart, FundamentalsChartLegend } from '@/components/fundamentals/FundamentalsBarChart'
@@ -48,9 +48,8 @@ export function AvgoPage({ onStatusChange, onNavigate }: {
   const query = useAvgo()
   const now = useSnapshotClock()
   const freshness = query.data ? effectiveFreshness(query.data, now, FRESHNESS.avgo) : 'unavailable'
-  const refresh = useRefreshAvgo()
   const [notice, setNotice] = useState('')
-  const [refreshing, setRefreshing] = useState(false)
+  const refreshing = false
   const [range, setRange] = useState<StocksRangePreset>('1Y')
   const [logicalRange, setLogicalRange] = useState<LogicalRange | null>(null)
   const [section, setSection] = useState<Section>('Overview')
@@ -77,12 +76,6 @@ export function AvgoPage({ onStatusChange, onNavigate }: {
   const warning = (block: AvgoBlock) => query.data?.errors.filter(error => error.symbol === block).map(error => error.reason).join(' · ') || undefined
   const empty = (block: AvgoBlock) => busy ? 'Loading Broadcom data...' : warning(block) || query.error?.message || `${block} data unavailable`
   const metric = (id: string) => earnings?.metrics.find(row => row.id === id)
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true)
-    setNotice('')
-    try { await refresh() } catch (error) { setNotice(`Refresh failed: ${error instanceof Error ? error.message : String(error)}`) }
-    finally { setRefreshing(false) }
-  }, [refresh])
   const onExport = async () => {
     if (!payload) return
     try {
@@ -146,7 +139,7 @@ export function AvgoPage({ onStatusChange, onNavigate }: {
         {price?.priceSource ? <div className="text-2xs text-text-muted">{price.priceSource}</div> : null}
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button variant="accent" disabled={busy} onClick={() => void onRefresh()}>{busy ? 'Refreshing...' : 'Refresh'}</Button>
+
         <Button disabled={!payload || AVGO_BLOCKS.every(block => payload.progress[block] === 'unavailable')} onClick={() => void onExport()}>Export snapshot</Button>
       </div>
     </header>

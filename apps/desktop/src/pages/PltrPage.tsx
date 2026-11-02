@@ -3,8 +3,8 @@ import { STOCKS_RANGE_PRESETS } from '@shared/contract'
 import type { Envelope, StocksRangePreset } from '@shared/contract'
 import { pltrHistory } from '@shared/pltr'
 import { queryKeys } from '@/api/client'
-import { useStocks, useRefreshStocks } from '@/api/stocksQueries'
-import { useFundamentalsPage, useRefreshFundamentalsPage } from '@/api/fundamentalsPageQueries'
+import { useStocks } from '@/api/stocksQueries'
+import { useFundamentalsPage } from '@/api/fundamentalsPageQueries'
 import { effectiveFreshness, feedErrorText, useSnapshotClock } from '@/api/snapshotHealth'
 import { queryFreshness } from '@/api/queryPersistence'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
@@ -29,13 +29,11 @@ export function PltrPage({ onStatusChange, onNavigate }: {
 }) {
   const marketQuery = useStocks('PLTR', null)
   const financialQuery = useFundamentalsPage('PLTR', null)
-  const refreshMarket = useRefreshStocks()
-  const refreshFinancials = useRefreshFundamentalsPage()
   const now = useSnapshotClock()
   const [range, setRange] = useState<StocksRangePreset>('1Y')
   const [section, setSection] = useState<Section>('Overview')
-  const [notice, setNotice] = useState('')
-  const [refreshing, setRefreshing] = useState(false)
+  const notice = ''
+  const refreshing = false
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([])
   const market = marketQuery.data?.data
   const financials = financialQuery.data?.data.displayCurrency === 'USD' && financialQuery.data.data.currencyVersion === 2 ? financialQuery.data.data : null
@@ -61,13 +59,6 @@ export function PltrPage({ onStatusChange, onNavigate }: {
     ], '')
   }, [marketQuery.data, marketQuery.error, marketQuery.isEnabled, marketQuery.isFetching, financialQuery.data, financialQuery.error, financialQuery.isEnabled, financialQuery.isFetching, onStatusChange])
 
-  const refresh = async () => {
-    setNotice('')
-    setRefreshing(true)
-    const results = await Promise.allSettled([refreshMarket('PLTR'), refreshFinancials('PLTR')])
-    setNotice(results.flatMap(result => result.status === 'rejected' ? [result.reason instanceof Error ? result.reason.message : String(result.reason)] : []).join(' · '))
-    setRefreshing(false)
-  }
   const freshness = (envelope: Envelope<unknown> | undefined, fetching: boolean, lifetime: number) => fetching ? 'loading…' : envelope ? effectiveFreshness(envelope, now, lifetime) : 'unavailable'
   const marketStatus = freshness(marketQuery.data, marketQuery.isFetching, queryFreshness(queryKeys.stocks('PLTR')))
   const financialStatus = freshness(financialQuery.data, financialQuery.isFetching, queryFreshness(queryKeys.fundamentalsPage('PLTR')))
@@ -95,7 +86,7 @@ export function PltrPage({ onStatusChange, onNavigate }: {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="num text-2xl font-semibold">{currency(stats?.price)}</span>
         <span className={`num text-2xs ${stats ? stats.change >= 0 ? 'text-up' : 'text-down' : 'text-text-muted'}`}>{signedCurrencyPrecise(stats?.absChange)} ({percent(stats?.change)})</span>
-        <Button variant="accent" disabled={busy} onClick={() => { void refresh() }}>{busy ? 'Loading PLTR…' : 'Refresh'}</Button>
+
       </div>
     </header>
     <nav className="pltr-tabs shrink-0" aria-label="PLTR research navigation">

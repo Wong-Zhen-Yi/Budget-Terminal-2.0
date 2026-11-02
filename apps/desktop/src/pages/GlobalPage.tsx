@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CLOCK_COUNTRIES, GLOBAL_INTERVALS } from '@shared/contract'
 import { formatMarketTiming } from '@shared/globalMarkets'
 import { api } from '@/api/client'
-import { useGlobalMarkets, useRefreshGlobalMarkets } from '@/api/globalQueries'
+import { useGlobalMarkets } from '@/api/globalQueries'
 import { useSettings } from '@/api/settingsQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { GlobalTable } from '@/components/global/GlobalTable'
@@ -37,14 +37,12 @@ export function GlobalPage({
   onStatusChange: (panels: PanelStatus[], sourcePath: string) => void
 }) {
   const query = useGlobalMarkets()
-  const refresh = useRefreshGlobalMarkets()
   const settingsQuery = useSettings()
   const interval = useGlobalPage((state) => state.interval)
   const mapFullscreen = useGlobalPage((state) => state.mapFullscreen)
   const setInterval = useGlobalPage((state) => state.setInterval)
   const toggleMapFullscreen = useGlobalPage((state) => state.toggleMapFullscreen)
 
-  const [refreshing, setRefreshing] = useState(false)
   const [notice, setNotice] = useState<{ text: string; tone: Tone } | null>(null)
   const [now, setNow] = useState(() => Date.now() / 1000)
 
@@ -96,15 +94,6 @@ export function GlobalPage({
     return { text: `Loaded ${payload.rows.length} global index row(s).`, tone: 'positive' }
   }, [notice, query.data, query.isFetching, payload])
 
-  const onRefresh = useCallback(async () => {
-    setNotice(null)
-    setRefreshing(true)
-    try {
-      await refresh()
-    } finally {
-      setRefreshing(false)
-    }
-  }, [refresh])
 
   const onExport = useCallback(async () => {
     if (!payload || !rows.length) {
@@ -130,13 +119,7 @@ export function GlobalPage({
             {label}
           </Button>
         ))}
-        <Button
-          className="ml-2"
-          onClick={() => void onRefresh()}
-          disabled={refreshing || query.isFetching}
-        >
-          {refreshing ? 'Refreshing...' : 'Refresh'}
-        </Button>
+
         <Button variant="positive" onClick={() => void onExport()}>
           Export for LLM
         </Button>

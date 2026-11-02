@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import type { HeatmapEtfKey, HeatmapInterval } from '@shared/contract'
 import { HEATMAP_INTERVALS } from '@shared/contract'
@@ -16,7 +16,7 @@ import {
   selectHeatmapRow,
   type HeatmapRow,
 } from '@shared/heatmap'
-import { useHeatmap, useHeatmapProgress, useRefreshHeatmap } from '@/api/heatmapQueries'
+import { useHeatmap, useHeatmapProgress } from '@/api/heatmapQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { IndexHeatmap } from '@/components/heatmap/IndexHeatmap'
 import { Button } from '@/components/ui/Button'
@@ -53,8 +53,7 @@ export function HeatmapPage({
   const [selected, setSelected] = useState<HeatmapRow | null>(null)
 
   const query = useHeatmap(etf)
-  const refresh = useRefreshHeatmap()
-  const [refreshing, setRefreshing] = useState(false)
+  const refreshing = false
 
   const loading = query.isFetching || refreshing
   const preview = useHeatmapProgress(etf, loading)
@@ -79,14 +78,6 @@ export function HeatmapPage({
   const summary = useMemo(() => buildHeatmapSummary(payload, interval), [payload, interval])
   const detail = useMemo(() => buildHeatmapDetail(active, interval), [active, interval])
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true)
-    try {
-      await refresh(etf)
-    } finally {
-      setRefreshing(false)
-    }
-  }, [refresh, etf])
 
   /** `_p17_render_interval_result`'s status line, including its loaded-count rescue. */
   const status = useMemo(() => {
@@ -194,9 +185,7 @@ export function HeatmapPage({
               {intervalLabel(entry.key)}
             </Button>
           ))}
-          <Button variant="accent" onClick={() => void onRefresh()} disabled={refreshing || loading}>
-            Refresh
-          </Button>
+
         </div>
       </div>
 
@@ -229,8 +218,8 @@ export function HeatmapPage({
           loading
             ? 'Loading index holdings...'
             : query.error || query.data?.meta.freshness === 'failed'
-              ? 'Heatmap unavailable. Press Refresh to retry.'
-              : 'No index holdings available. Press Refresh to retry.'
+              ? 'Heatmap unavailable. Press Reload (F5) to retry.'
+              : 'No index holdings available. Press Reload (F5) to retry.'
         }
       />
 

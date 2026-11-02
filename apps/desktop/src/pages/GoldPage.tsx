@@ -9,7 +9,7 @@ import type {
 } from '@shared/contract'
 import { buildGoldSnapshot } from '@shared/gold'
 import { api } from '@/api/client'
-import { useGold, useRefreshGold } from '@/api/goldQueries'
+import { useGold } from '@/api/goldQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { Donut, colorForIndex } from '@/components/charts/Donut'
 import { LineChart, type LineSeries } from '@/components/charts/LineChart'
@@ -81,8 +81,7 @@ export function GoldPage({
   onStatusChange: (panels: PanelStatus[], sourcePath: string) => void
 }) {
   const query = useGold()
-  const refresh = useRefreshGold()
-  const [refreshing, setRefreshing] = useState(false)
+  const refreshing = false
   const [notice, setNotice] = useState('')
   const [historyView, setHistoryView] = useState<'table' | 'chart'>('table')
   const payload = query.data?.data
@@ -102,17 +101,6 @@ export function GoldPage({
     return `${loaded}/5 source lanes loaded · WGC ${quarter} · USGS ${payload.mining?.asOf ?? 'unavailable'}`
   }, [notice, busy, payload, latest])
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true)
-    setNotice('')
-    try {
-      await refresh()
-    } catch (error) {
-      setNotice(`Refresh failed: ${error instanceof Error ? error.message : String(error)}`)
-    } finally {
-      setRefreshing(false)
-    }
-  }, [refresh])
 
   const onExport = useCallback(async () => {
     if (!payload) return
@@ -130,9 +118,7 @@ export function GoldPage({
         <span className="ml-auto min-w-0 truncate px-2 text-right text-2xs text-text-muted" title={status}>
           {status}
         </span>
-        <Button variant="accent" onClick={onRefresh} disabled={busy}>
-          {busy ? 'Refreshing...' : 'Refresh'}
-        </Button>
+
         <Button onClick={onExport} disabled={!payload}>Export</Button>
       </div>
 

@@ -1,10 +1,8 @@
-import { retainedQueryOptions } from '@/api/snapshotResult'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 import { DEFEATBETA_SECTIONS, TERMINAL_TABS, statementPeriods, statementValue, terminalDcf, terminalLabel, terminalNumber, terminalYoY } from '@shared/defeatbetaTerminal'
 import type { DefeatBetaSection, TerminalRow, TerminalValue } from '@shared/defeatbetaTerminal'
-import { api, queryKeys } from '@/api/client'
+import { api } from '@/api/client'
 import { useDefeatBetaSections } from '@/api/defeatbetaQueries'
 import { useDefeatBetaTerminal } from '@/stores/defeatbeta'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
@@ -44,7 +42,6 @@ export function DefeatBetaPage({ active, onStatusChange, onNavigate }: {
   const [notice, setNotice] = useState('')
   const input = useRef<HTMLInputElement>(null)
   const queries = useDefeatBetaSections(symbol)
-  const client = useQueryClient()
   const query = (section: DefeatBetaSection) => queries[DEFEATBETA_SECTIONS.indexOf(section)]
   const rows = (section: DefeatBetaSection): TerminalRow[] => query(section).data?.data.rows ?? []
   const statements = rows('statements')
@@ -70,8 +67,6 @@ export function DefeatBetaPage({ active, onStatusChange, onNavigate }: {
   const divide = (a: number | null, b: number | null) => a !== null && b !== null && b > 0 ? a / b : null
   const pe = financialCurrency === 'USD' ? divide(close, value('diluted_eps')) : null
   const epsGrowth = annualDate ? terminalYoY(statements, 'diluted_eps', annualDate, 'annual') : null
-  const busy = queries.some(entry => entry.isFetching)
-  const settled = queries.filter(entry => !entry.isPending).length
   const [g1, setG1] = useState(10)
   const [g2, setG2] = useState(5)
   const [discount, setDiscount] = useState(10)
@@ -100,19 +95,6 @@ export function DefeatBetaPage({ active, onStatusChange, onNavigate }: {
     if (!/^[A-Z][A-Z0-9-]{0,14}$/.test(next)) { setNotice('Enter a US equity ticker, for example AAPL, NVDA or BRK-B.'); return }
     setNotice(''); setBreakdown(''); setSymbol(next)
   }
-  const refresh = async () => {
-    setNotice('')
-    const results = await Promise.allSettled(DEFEATBETA_SECTIONS.map(section => client.fetchQuery(retainedQueryOptions(client, {
-      queryKey: queryKeys.defeatbetaTerminal(symbol, section), staleTime: 0,
-      queryFn: async () => {
-        const result = await api.defeatbetaTerminal({ symbol, section, force: true })
-        if (result.meta.freshness === 'failed') throw new Error(result.meta.failureReason || 'Section unavailable')
-        return result
-      },
-    }))))
-    const failures = results.filter(result => result.status === 'rejected').length
-    if (failures) setNotice(`Refresh failed for ${failures} section(s). Previously loaded data remains visible.`)
-  }
   const sectionState = (section: DefeatBetaSection) => {
     const entry = query(section)
     const publication = entry.data?.data.publishedAt
@@ -139,7 +121,7 @@ export function DefeatBetaPage({ active, onStatusChange, onNavigate }: {
         <input ref={input} aria-label="DefeatBeta ticker" className={`${field} w-28 font-mono uppercase`} value={draft} onChange={event => setDraft(event.target.value)} maxLength={15} />
         <button className={button} type="submit">Load ticker</button>
       </form>
-      <button type="button" className={button} disabled={busy} onClick={() => void refresh()}>{busy ? `Loading ${settled}/12` : 'Refresh dataset'}</button>
+
       <button type="button" className={button} onClick={() => onNavigate('charts', symbol)}>Open charts ↗</button>
       <div className="ml-auto text-right"><p className="text-xs text-text">{symbol} <span className="text-text-muted">{profile?.companyName}</span></p><p className="text-2xs text-text-dim">Published data · / ticker · 1–9, 0 tabs</p></div>
     </div>

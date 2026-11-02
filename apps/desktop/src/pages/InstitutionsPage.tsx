@@ -326,7 +326,7 @@ export function InstitutionsPage({
           {periods.map((period) => <option key={period} value={period}>{period}</option>)}
         </select>
         <Button onClick={() => void loadQuarter()} disabled={busy}>Load Quarter</Button>
-        <Button onClick={() => void loadQuarter()} disabled={busy}>Refresh</Button>
+
         <Button variant="accent" onClick={() => void copyActivity()} disabled={busy || !payload}>
           Export Buys/Sells
         </Button>

@@ -65,7 +65,6 @@ export const NewsToolbar = forwardRef<
     onToggleImages: () => void
     readerOpen: boolean
     onToggleReader: () => void
-    onRefresh: () => void
     onExport: () => void
     busy: boolean
     status: { text: string; tone: Tone }
@@ -118,9 +117,7 @@ export const NewsToolbar = forwardRef<
         Reader
       </Button>
 
-      <Button className="ml-1" onClick={props.onRefresh} disabled={props.busy}>
-        {props.busy ? 'Refreshing...' : 'Refresh'}
-      </Button>
+
       <Button
         variant="positive"
         onClick={props.onExport}

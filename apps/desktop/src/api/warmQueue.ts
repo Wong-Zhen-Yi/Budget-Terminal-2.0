@@ -1,5 +1,5 @@
 import { trackPageQuery } from './pageProgress'
-import type { QueryClient, QueryKey } from '@tanstack/react-query'
+import { hashKey, type QueryClient, type QueryKey } from '@tanstack/react-query'
 import { pinStartupQuery, QUERY_IDLE_MS } from './queryMemory'
 import { queryFreshness, recordCacheDecision } from './queryPersistence'
 import type { Envelope } from '@shared/contract'
@@ -13,7 +13,7 @@ const REQUEST_TIMEOUT_MS = 90_000
 // Include queue time and 429 cooldowns without falsely failing the slower warm-up.
 const STARTUP_TIMEOUT_MS = 1_800_000
 
-export type StartupSnapshotObserver = ((queryKey: QueryKey, result: unknown, error?: unknown, cached?: boolean) => void) & { owner?: object }
+export type StartupSnapshotObserver = ((queryKey: QueryKey, result: unknown, error?: unknown, cached?: boolean) => void) & { owner?: object; force?: boolean; reloaded?: Set<string> }
 
 function cacheLifetime(cached: Envelope<unknown> | undefined, updatedAt: number | undefined, requested: number): number {
   // A service can schedule the next useful check at the next market session.
@@ -50,7 +50,10 @@ export async function warmStartupSnapshot<T>(client: QueryClient, options: Param
     || freshness === 'stale' || freshness === 'partial'
   if (cached !== undefined && cached?.meta?.freshness !== 'failed' && refreshing) observe?.(options.queryKey, cached, undefined, true)
   try {
-    const result = await warmQuery(client, { ...options, gcTime: pinned ? Infinity : QUERY_IDLE_MS }, STARTUP_TIMEOUT_MS)
+    const hash = hashKey(options.queryKey)
+    const force = observe?.force && !observe.reloaded?.has(hash)
+    const result = await warmQuery(client, { ...options, force, staleTime: force ? 0 : options.staleTime, gcTime: pinned ? Infinity : QUERY_IDLE_MS }, STARTUP_TIMEOUT_MS)
+    if (observe?.force) observe.reloaded?.add(hash)
     observe?.(options.queryKey, result)
     return result
   } catch (error) {
@@ -104,6 +107,7 @@ export async function warmQuery<T>(client: QueryClient, options: {
   queryKey: QueryKey
   queryFn: () => Promise<T>
   staleTime: number
+  force?: boolean
   gcTime?: number
 }, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
   const cached = client.getQueryData<Envelope<unknown>>(options.queryKey)
@@ -125,7 +129,7 @@ export async function warmQuery<T>(client: QueryClient, options: {
     retry: false,
     networkMode: 'always',
     queryFn: () => withDeadline(async () => {
-      const result = retainUsableSnapshot(client.getQueryData(options.queryKey), await trackPageQuery(options.queryKey, options.queryFn))
+      const result = retainUsableSnapshot(client.getQueryData(options.queryKey), await trackPageQuery(options.queryKey, options.queryFn, options.force))
       const meta = (result as { meta?: { freshness?: string; failureReason?: string } } | null)?.meta
       // A failed envelope is otherwise cached as success forever by Infinity queries.
       // Keep partial/stale payloads, but let a wholly failed page retry on mount.

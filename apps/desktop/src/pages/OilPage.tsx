@@ -10,7 +10,7 @@ import type {
 } from '@shared/contract'
 import { buildOilSnapshot } from '@shared/oil'
 import { api } from '@/api/client'
-import { useOil, useRefreshOil } from '@/api/oilQueries'
+import { useOil } from '@/api/oilQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { colorForIndex } from '@/components/charts/Donut'
 import { LineChart, type LineSeries } from '@/components/charts/LineChart'
@@ -97,8 +97,7 @@ export function OilPage({
   onStatusChange: (panels: PanelStatus[], sourcePath: string) => void
 }) {
   const query = useOil()
-  const refresh = useRefreshOil()
-  const [refreshing, setRefreshing] = useState(false)
+  const refreshing = false
   const [notice, setNotice] = useState('')
   const [curveView, setCurveView] = useState<'chart' | 'table'>('chart')
   const [historyKey, setHistoryKey] = useState<OilSeriesKey>('crude')
@@ -119,17 +118,6 @@ export function OilPage({
     return `${loaded}/5 source lanes loaded · EIA week ending ${week}${next ? ` · next release ${next}` : ''}`
   }, [notice, busy, payload])
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true)
-    setNotice('')
-    try {
-      await refresh()
-    } catch (error) {
-      setNotice(`Refresh failed: ${error instanceof Error ? error.message : String(error)}`)
-    } finally {
-      setRefreshing(false)
-    }
-  }, [refresh])
 
   const onExport = useCallback(async () => {
     if (!payload) return
@@ -151,9 +139,7 @@ export function OilPage({
         <span className="ml-auto min-w-0 truncate px-2 text-right text-2xs text-text-muted" title={status}>
           {status}
         </span>
-        <Button variant="accent" onClick={onRefresh} disabled={busy}>
-          {busy ? 'Refreshing...' : 'Refresh'}
-        </Button>
+
         <Button onClick={onExport} disabled={!payload}>Export</Button>
       </div>
 

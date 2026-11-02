@@ -1,11 +1,11 @@
 import { effectiveFreshness, feedErrorText, useSnapshotClock } from '@/api/snapshotHealth'
 import { FRESHNESS } from '@shared/freshness'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { LogicalRange } from 'lightweight-charts'
 import { STOCKS_RANGE_PRESETS, type StocksRangePreset } from '@shared/contract'
 import { MU_BLOCKS, buildMuSnapshot, muHistory, type MuBlock, type MuMetric } from '@shared/mu'
 import { api } from '@/api/client'
-import { useMu, useRefreshMu } from '@/api/muQueries'
+import { useMu } from '@/api/muQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { LineChart } from '@/components/charts/LineChart'
 import { colorForIndex } from '@/components/charts/Donut'
@@ -42,9 +42,8 @@ export function MuPage({ onStatusChange, onNavigate }: {
   const query = useMu()
   const now = useSnapshotClock()
   const freshness = query.data ? effectiveFreshness(query.data, now, FRESHNESS.mu) : 'unavailable'
-  const refresh = useRefreshMu()
   const [notice, setNotice] = useState('')
-  const [refreshing, setRefreshing] = useState(false)
+  const refreshing = false
   const [range, setRange] = useState<StocksRangePreset>('1Y')
   const [logicalRange, setLogicalRange] = useState<LogicalRange | null>(null)
   const payload = query.data?.data
@@ -58,12 +57,6 @@ export function MuPage({ onStatusChange, onNavigate }: {
   const empty = (block: MuBlock) => busy ? 'Loading Micron data...' : warning(block) || query.error?.message || `${block} data unavailable`
   const metric = (id: string) => earnings?.metrics.find(row => row.id === id)
   const memoryMetric = (id: string) => memory?.metrics.find(row => row.id === id)
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true)
-    setNotice('')
-    try { await refresh() } catch (error) { setNotice(`Refresh failed: ${error instanceof Error ? error.message : String(error)}`) }
-    finally { setRefreshing(false) }
-  }, [refresh])
   const onExport = async () => {
     if (!payload) return
     try {
@@ -96,7 +89,7 @@ export function MuPage({ onStatusChange, onNavigate }: {
     <div className="flex shrink-0 flex-wrap items-center gap-1">
       <h1 className="pr-2 text-sm font-semibold text-text">MU — Micron Technology</h1>
       <span className="ml-auto text-2xs text-text-muted" role="status">{status}</span>
-      <Button variant="accent" disabled={busy} onClick={() => void onRefresh()}>{busy ? 'Refreshing...' : 'Refresh'}</Button>
+
       <Button disabled={!payload || MU_BLOCKS.every(block => payload.progress[block] === 'unavailable')} onClick={() => void onExport()}>Export snapshot</Button>
       <Button onClick={() => onNavigate('charts', 'MU')}>Charts</Button><Button onClick={() => onNavigate('fundamentals', 'MU')}>Fundamentals</Button>
       <Button onClick={() => void api.openExternal('https://investors.micron.com/overview/default.aspx')}>Investor relations</Button>

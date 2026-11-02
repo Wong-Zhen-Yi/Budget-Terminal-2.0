@@ -13,7 +13,6 @@ import { DEFAULT_TAB_ID, WORKSPACES } from '@shared/navigation'
 import { useWarmPages } from '@/api/prefetch'
 import { useEquityMarketStream } from '@/api/equityStream'
 import { useMcpScreenshot, useScreenshotReady } from '@/api/mcpScreenshot'
-import { useReloadAll } from '@/api/queries'
 import { useSettings, useSettingsMutation } from '@/api/settingsQueries'
 import { PageCache } from '@/components/chrome/PageCache'
 import { LoadingStatus } from '@/components/chrome/LoadingStatus'
@@ -104,7 +103,7 @@ export function App() {
   /** Obscure is a session state, like the reference's `_privacy_obscured`, but it starts on. */
   const [obscured, setObscured] = useState(true)
   const [notice, setNotice] = useState('')
-  const reloadAll = useReloadAll()
+  const reloadInFlight = useRef(false)
 
   const settingsQuery = useSettings()
   const settings = settingsQuery.data?.data
@@ -251,13 +250,18 @@ export function App() {
   }, [agents.data, visibleTabs, handleStocksNavigate, agentCommand])
 
   const reload = useCallback(async () => {
+    if (reloadInFlight.current) return
+    reloadInFlight.current = true
     setReloading(true)
     try {
-      await reloadAll()
+      await warm.reload(activeTabRef.current)
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : String(error))
     } finally {
+      reloadInFlight.current = false
       setReloading(false)
     }
-  }, [reloadAll])
+  }, [warm.reload])
 
   const workspaceTabs = useMemo(() => [
     ...WORKSPACES.flatMap((workspace) =>

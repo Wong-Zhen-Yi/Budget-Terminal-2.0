@@ -7,7 +7,6 @@ import {
   useNewsPage,
   useNewsPreview,
   useNewsTickerSearch,
-  useRefreshNewsPage,
 } from '@/api/newsQueries'
 import { usePortfolio, useQuotes } from '@/api/queries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
@@ -71,7 +70,6 @@ export function NewsPage({
   }, [portfolioQuery.data])
 
   const query = useNewsPage(holdings)
-  const refresh = useRefreshNewsPage(holdings)
 
   const filter = useNewsPageStore((state) => state.filter)
   const sort = useNewsPageStore((state) => state.sort)
@@ -87,7 +85,7 @@ export function NewsPage({
   const [queryText, setQueryText] = useState('')
   const [searchTickers, setSearchTickers] = useState<string[]>([])
   const [selectedId, setSelectedId] = useState('')
-  const [refreshing, setRefreshing] = useState(false)
+  const [refreshing] = useState(false)
   const [notice, setNotice] = useState<{ text: string; tone: Tone } | null>(null)
 
   const gridRef = useRef<HTMLDivElement>(null)
@@ -254,15 +252,6 @@ export function NewsPage({
     [readerOpen, setReaderOpen],
   )
 
-  const onRefresh = useCallback(async () => {
-    setNotice(null)
-    setRefreshing(true)
-    try {
-      await refresh()
-    } finally {
-      setRefreshing(false)
-    }
-  }, [refresh])
 
   const onExport = useCallback(async () => {
     const total = articles.length + searchArticles.length
@@ -357,7 +346,7 @@ export function NewsPage({
         onToggleImages={toggleImages}
         readerOpen={readerOpen}
         onToggleReader={() => setReaderOpen(!readerOpen)}
-        onRefresh={() => void onRefresh()}
+
         onExport={() => void onExport()}
         busy={busy}
         status={status}

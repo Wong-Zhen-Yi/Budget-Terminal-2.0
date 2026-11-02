@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { recentTvVideos, TV_CHANNELS, type TvVideo } from '@shared/tv'
 import { api } from '@/api/client'
-import { useRefreshTv, useTv } from '@/api/tvQueries'
+import { useTv } from '@/api/tvQueries'
 import { useYouTubeThumbnail } from '@/api/youtubeQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import '@/styles/tv.css'
@@ -27,12 +27,11 @@ function Thumbnail({ video }: { video: TvVideo }) {
 
 export function TvPage({ onStatusChange }: { onStatusChange: (panels: PanelStatus[], sourcePath: string) => void }) {
   const query = useTv()
-  const refresh = useRefreshTv()
   const [channel, setChannel] = useState('')
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState('')
-  const [refreshError, setRefreshError] = useState('')
-  const [refreshing, setRefreshing] = useState(false)
+  const refreshError = ''
+  const refreshing = false
   const [now, setNow] = useState(Date.now)
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000)
@@ -60,22 +59,15 @@ export function TvPage({ onStatusChange }: { onStatusChange: (panels: PanelStatu
     : payload ? 'Market feed up to date' : 'Waiting for market coverage…'
   const hasFilters = Boolean(channel || search.trim())
   const emptyTitle = busy ? 'Loading market coverage' : hasFilters && items.length ? 'No matching videos' : 'No recent market videos'
-  const emptyMessage = failure ? 'Use Refresh to retry. The error is shown above.' : hasFilters && items.length
+  const emptyMessage = failure ? 'Use Reload (F5) to retry. The error is shown above.' : hasFilters && items.length
     ? 'Try another channel or search term.' : 'Matching stock market uploads from the last seven days will appear here.'
   const openVideo = (video: TvVideo) => { void api.openExternal(video.url) }
-  const onRefresh = async () => {
-    setRefreshError('')
-    setRefreshing(true)
-    try { await refresh(); setNow(Date.now()) }
-    catch (error) { setRefreshError(error instanceof Error ? error.message : String(error)) }
-    finally { setRefreshing(false) }
-  }
 
   return <div className="tv-workspace" data-tv-page>
     <header className="tv-header">
       <div><div className="tv-eyebrow">Market television</div><h1>TV <span>Latest market coverage</span></h1>
         <p>Stocks, earnings and the economy. Recent YouTube uploads, newest first.</p></div>
-      <button type="button" className="tv-refresh" disabled={busy} onClick={() => void onRefresh()}>{busy ? 'Refreshing…' : 'Refresh'}</button>
+
     </header>
     <div className="tv-controls">
       <div className="tv-channels" role="group" aria-label="TV channels">

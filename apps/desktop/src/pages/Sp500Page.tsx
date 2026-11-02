@@ -43,7 +43,7 @@ function Breakdown({ rows }: { rows: ReturnType<typeof diversification>['sectors
 }
 
 export function Sp500Page({ onStatusChange }: { onStatusChange: (panels: PanelStatus[], sourcePath: string) => void }) {
-  const { queries, breadth, refresh, scan } = useSp500()
+  const { queries, breadth, scan } = useSp500()
   const [constituentsQ, marketQ, historyQ, holdingsQ, valuationQ] = queries
   const [window, setWindow] = useState<Sp500Window>('1Y')
   const [search, setSearch] = useState('')
@@ -78,14 +78,6 @@ export function Sp500Page({ onStatusChange }: { onStatusChange: (panels: PanelSt
   useEffect(() => {
     onStatusChange(queries.map((query, i) => ({ label: `S&P500 ${labels[i]}`, envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching })), '')
   }, [onStatusChange, constituentsQ.data, marketQ.data, historyQ.data, holdingsQ.data, valuationQ.data, busy])
-  // Capture F5 before the application-wide refresh so an explicit breadth action stays separate.
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === 'F5') { event.preventDefault(); event.stopImmediatePropagation(); void refresh() }
-    }
-    globalThis.window.addEventListener('keydown', handler, true)
-    return () => globalThis.window.removeEventListener('keydown', handler, true)
-  }, [refresh])
   const scanAction = async (action: 'start' | 'cancel') => {
     setScanBusy(true)
     try { await scan({ action, id: scanState?.id, force: action === 'start' && scanState?.state !== 'idle' }); setNotice('') }
@@ -121,7 +113,7 @@ export function Sp500Page({ onStatusChange }: { onStatusChange: (panels: PanelSt
   return <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-2 text-text">
     <div className="flex shrink-0 flex-wrap items-center gap-2"><h1 className="text-sm font-semibold">S&P500 — Index dashboard</h1>
       <span className="ml-auto text-2xs text-text-muted">{notice || 'Price returns · SPY weights are an index exposure proxy'}</span>
-      <Button variant="accent" onClick={() => void refresh()} disabled={busy}>{busy ? 'Loading…' : 'Refresh'}</Button>
+
       <Button onClick={() => void copy()}>Copy Snapshot</Button>
     </div>
     {queries.some((query) => query.error) && <p className="text-2xs text-warn">{queries.flatMap((query) => query.error ? [query.error.message] : []).join(' · ')}</p>}
@@ -184,7 +176,7 @@ export function Sp500Page({ onStatusChange }: { onStatusChange: (panels: PanelSt
       ]} />
     </Panel>
     <Panel title="Constituent breadth — current-constituent snapshot" className="shrink-0" actions={<>
-      <Button onClick={() => void scanAction('start')} disabled={running || scanBusy}>{scanState?.state === 'idle' || !scanState ? 'Load Breadth' : 'Refresh Breadth'}</Button>
+      <Button onClick={() => void scanAction('start')} disabled={running || scanBusy}>{scanState?.state === 'idle' || !scanState ? 'Load Breadth' : 'Run Breadth Again'}</Button>
       {running && <Button onClick={() => void scanAction('cancel')} disabled={scanBusy}>Cancel</Button>}</>}>
       <p className="px-3 py-2 text-2xs text-text-muted">{scanState?.state ?? 'idle'} · {scanState?.completed ?? 0}/{scanState?.total ?? 0} processed · {scanState?.failed ?? 0} fetch failures · Session {result?.session || '—'} · Completed {scanState?.completedAt || '—'} · Yahoo Finance / Wikipedia</p>
       {running && <progress className="mx-3 mb-2 h-2" max={scanState.total || 1} value={scanState.completed} aria-label="Breadth scan progress" />}

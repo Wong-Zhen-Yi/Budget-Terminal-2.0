@@ -1,11 +1,10 @@
 import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
 import { FRESHNESS } from '@shared/freshness'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { bitcoinCycle } from '@shared/bitcoin'
-import { useBitcoin, useRefreshBitcoin } from '@/api/bitcoinQueries'
+import { useBitcoin } from '@/api/bitcoinQueries'
 import { api } from '@/api/client'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
-import { Button } from '@/components/ui/Button'
 import { Panel } from '@/components/ui/Panel'
 
 const fmt = (value: number | null | undefined, digits = 0) => value == null || !Number.isFinite(value) ? '—' : value.toLocaleString('en-US', { maximumFractionDigits: digits })
@@ -19,20 +18,14 @@ export function BitcoinPage({ onStatusChange }: { onStatusChange: (panels: Panel
   const query = useBitcoin()
   const now = useSnapshotClock()
   const freshness = query.data ? effectiveFreshness(query.data, now, FRESHNESS.bitcoin) : 'unavailable'
-  const refresh = useRefreshBitcoin()
-  const [refreshing, setRefreshing] = useState(false)
-  const [notice, setNotice] = useState('')
+  const refreshing = false
+  const notice = ''
   const data = query.data?.data
   const stats = data?.stats
   const tip = data?.blocks[0]
   const cycle = tip ? bitcoinCycle(tip.height) : null
   const busy = refreshing || query.isFetching
   useEffect(() => onStatusChange([{ label: 'Bitcoin', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: busy }], ''), [query.data, busy, onStatusChange])
-  const onRefresh = async () => {
-    setRefreshing(true)
-    setNotice('')
-    try { await refresh() } catch (error) { setNotice(String(error)) } finally { setRefreshing(false) }
-  }
   const feeRows: Array<[string, string]> = [
     ['Next block', fmt(data?.fees?.fastestFee, 2)],
     ['~30 minutes', fmt(data?.fees?.halfHourFee, 2)],
@@ -52,7 +45,7 @@ export function BitcoinPage({ onStatusChange }: { onStatusChange: (panels: Panel
     <div className="flex flex-wrap items-center gap-2">
       <h1 className="text-sm font-semibold">Bitcoin — network & mining</h1>
       <span className="ml-auto text-2xs text-text-muted">{busy ? 'Loading Bitcoin network data…' : `${freshness} · fetched ${stamp(query.data?.meta.fetchedAt)}`}</span>
-      <Button variant="accent" disabled={busy} onClick={onRefresh}>{busy ? 'Refreshing…' : 'Refresh'}</Button>
+
     </div>
     {notice ? <p role="status" className="shrink-0 px-2 py-1 text-2xs text-text-muted">{notice}</p> : null}
     {(!query.data || query.data.meta.freshness === 'failed') && (query.error || query.data?.errors.length) ? <p role="alert" className="shrink-0 px-2 py-1 text-2xs text-down">{query.error?.message || query.data?.meta.failureReason}</p> : null}
@@ -91,7 +84,7 @@ export function BitcoinPage({ onStatusChange }: { onStatusChange: (panels: Panel
       </Panel>
     </div>
     <Panel title="Recently mined blocks" className="min-h-[260px] flex-1">
-      <div className="overflow-auto"><table className="w-full text-xs"><thead className="sticky top-0 bg-surface-raised text-left text-text-muted"><tr>{['Height', 'Mined (local time)', 'Transactions', 'Size (MB)', 'Block weight used'].map(label => <th key={label} className="p-2 font-normal">{label}</th>)}</tr></thead><tbody>{data?.blocks.map(block => <tr key={block.id} className="border-t border-border/50 hover:bg-surface-raised"><td className="num p-2"><button className="text-accent hover:underline" onClick={() => { void api.openExternal(`https://mempool.space/block/${block.id}`) }}>{fmt(block.height)}</button></td><td className="p-2">{stamp(block.timestamp * 1000)}</td><td className="num p-2">{fmt(block.tx_count)}</td><td className="num p-2">{fmt(block.size / 1e6, 3)}</td><td className="p-2"><div className="flex items-center gap-2"><div className="h-1.5 w-24 bg-surface-raised"><div className="h-1.5 bg-amber-500/80" style={{ width: `${Math.min(100, block.weight / 4e6 * 100)}%` }} /></div><span className="num">{fmt(block.weight / 4e6 * 100, 1)}%</span></div></td></tr>)}</tbody></table>{!data?.blocks.length && <p className="p-6 text-center text-text-muted">{busy ? 'Loading recently mined blocks…' : 'Recent blocks unavailable. Use Refresh to retry.'}</p>}</div>
+      <div className="overflow-auto"><table className="w-full text-xs"><thead className="sticky top-0 bg-surface-raised text-left text-text-muted"><tr>{['Height', 'Mined (local time)', 'Transactions', 'Size (MB)', 'Block weight used'].map(label => <th key={label} className="p-2 font-normal">{label}</th>)}</tr></thead><tbody>{data?.blocks.map(block => <tr key={block.id} className="border-t border-border/50 hover:bg-surface-raised"><td className="num p-2"><button className="text-accent hover:underline" onClick={() => { void api.openExternal(`https://mempool.space/block/${block.id}`) }}>{fmt(block.height)}</button></td><td className="p-2">{stamp(block.timestamp * 1000)}</td><td className="num p-2">{fmt(block.tx_count)}</td><td className="num p-2">{fmt(block.size / 1e6, 3)}</td><td className="p-2"><div className="flex items-center gap-2"><div className="h-1.5 w-24 bg-surface-raised"><div className="h-1.5 bg-amber-500/80" style={{ width: `${Math.min(100, block.weight / 4e6 * 100)}%` }} /></div><span className="num">{fmt(block.weight / 4e6 * 100, 1)}%</span></div></td></tr>)}</tbody></table>{!data?.blocks.length && <p className="p-6 text-center text-text-muted">{busy ? 'Loading recently mined blocks…' : 'Recent blocks unavailable. Use Reload (F5) to retry.'}</p>}</div>
     </Panel>
     <footer className="flex flex-wrap gap-2 text-2xs text-text-muted"><span>Free public data · no API keys · 60-second cache · refresh on demand.</span><button className="hover:underline" onClick={() => { void api.openExternal('https://www.blockchain.com/explorer/api/charts_api') }}>Blockchain.com API ↗</button><button className="hover:underline" onClick={() => { void api.openExternal('https://mempool.space/docs/api/rest') }}>mempool.space API ↗</button></footer>
   </div>

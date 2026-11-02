@@ -1,3 +1,4 @@
+import { Button } from '@/components/ui/Button'
 import type { EtfArbitragePayload, EtfArbitrageRow } from '@shared/contract'
 import {
   arbitrageStatus,
@@ -7,7 +8,6 @@ import {
   etfSignedPct,
   etfWeight,
 } from '@shared/etf'
-import { Button } from '@/components/ui/Button'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 
 /**
@@ -33,14 +33,14 @@ export function ArbitrageTab({
   loading,
   failureReason,
   hasHoldings,
-  onRefresh,
+  onAnalyze,
   onOpenSymbol,
 }: {
   payload: EtfArbitragePayload | undefined
   loading: boolean
   failureReason: string
   hasHoldings: boolean
-  onRefresh: () => void
+  onAnalyze: () => void
   onOpenSymbol: (symbol: string) => void
 }) {
   const rows = payload?.rows ?? []
@@ -175,7 +175,7 @@ export function ArbitrageTab({
         </span>
         <Button
           variant="accent"
-          onClick={onRefresh}
+          onClick={onAnalyze}
           disabled={loading || !hasHoldings}
           title="Re-fetch ETF and component quotes for the loaded basket."
         >

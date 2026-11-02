@@ -62,7 +62,7 @@ export function BetaDotPlot({ rows, interval }: { rows: RankedTradingVolumeRow[]
       <span>{points.length}/{rows.length} stocks{points.length < rows.length ? ' • others lack matched history or volume' : ''}</span>
     </div>
     <p className="px-2 text-2xs text-text-dim">β = 1: market-like sensitivity; above 1: greater sensitivity; negative: opposite direction. Rolling 60 daily returns; measures market risk, not total risk.</p>
-    {!data.timeline.length ? <div className="flex flex-1 items-center justify-center p-4 text-2xs text-text-dim">Refresh to load Beta history. Requires 60 matching daily returns and S&P 500 data.</div> :
+    {!data.timeline.length ? <div className="flex flex-1 items-center justify-center p-4 text-2xs text-text-dim">Reload (F5) to load Beta history. Requires 60 matching daily returns and S&P 500 data.</div> :
       <svg ref={svgRef} viewBox={`0 0 ${size.width} ${size.height}`} className="min-h-0 w-full flex-1" role="img" aria-label={`Stock Beta dot plot for ${date}`}>
         {Array.from({ length: 6 }, (_, i) => data.low + (data.high - data.low) * i / 5).filter((tick) => Math.abs(y(tick) - y(1)) > 14).map((tick) => <g key={tick}><line x1={65} x2={right} y1={y(tick)} y2={y(tick)} stroke="var(--color-border)" /><text x={58} y={y(tick) + 4} textAnchor="end" fill="var(--color-text-muted)" fontSize={11}>{tick.toFixed(2)}</text></g>)}
         <line x1={65} x2={right} y1={y(1)} y2={y(1)} stroke="var(--color-warn)" strokeDasharray="5 4"><title>β = 1.0</title></line>

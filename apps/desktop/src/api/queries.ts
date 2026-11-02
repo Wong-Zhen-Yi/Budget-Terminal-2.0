@@ -14,22 +14,14 @@ import type {
   TargetsPayload,
   TimeframeLabel,
 } from '@shared/contract'
+import { currentPageForced } from './pageProgress'
 import { api, queryKeys } from './client'
 import { NEWS_REFRESH_MS, QUOTE_REFRESH_MS } from './refreshRates'
 import { queryFreshness } from './queryPersistence'
 
-/**
- * Invalidating a query re-runs its fetcher, but the main process answers that from its
- * own TTL cache — so a Reload would return the same numbers. This window marks the
- * refetches that a Reload triggered so they carry `force` through to Yahoo.
- *
- * Exported because the pages that keep their queries in their own module — the Global
- * page — still have to answer a Reload the same way.
- */
-let forcedReloads = 0
-
+/** True only within the focused page query being explicitly reloaded. */
 export function forcing(): boolean {
-  return forcedReloads > 0
+  return currentPageForced()
 }
 
 export function usePortfolio(): UseQueryResult<Envelope<PortfolioPayload>> {
@@ -139,19 +131,4 @@ export function usePortfolioMutation(): (
     },
     [queryClient],
   )
-}
-
-export function useReloadAll(): () => Promise<void> {
-  const queryClient = useQueryClient()
-  return async () => {
-    forcedReloads += 1
-    try {
-      // `type: 'active'` is not optional. `refetchQueries()` defaults to `type: 'all'`,
-      // and inactive queries now survive an hour rather than five minutes — without the
-      // filter a Reload would fan out over every page visited this session.
-      await queryClient.refetchQueries({ type: 'active' })
-    } finally {
-      forcedReloads -= 1
-    }
-  }
 }

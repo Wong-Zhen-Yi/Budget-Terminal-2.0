@@ -8,7 +8,6 @@ import { useForex } from '@/api/forexQueries'
 import { useForexStore } from '@/stores/forex'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { LineChart } from '@/components/charts/LineChart'
-import { Button } from '@/components/ui/Button'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Panel, PanelMessage } from '@/components/ui/Panel'
 import { directionClass, percent } from '@/lib/format'
@@ -27,8 +26,7 @@ function Freshness({ envelope, error, freshnessMs }: { envelope?: Envelope<unkno
 
 export function ForexPage({ onStatusChange }: { onStatusChange: (panels: PanelStatus[], path: string) => void }) {
   const { pair, range, setPair, setRange } = useForexStore()
-  const { quotes, history, news, refresh } = useForex(pair, range)
-  const [refreshing, setRefreshing] = useState(false)
+  const { quotes, history, news } = useForex(pair, range)
   const [notice, setNotice] = useState('')
   useEffect(() => {
     onStatusChange([
@@ -55,11 +53,7 @@ export function ForexPage({ onStatusChange }: { onStatusChange: (panels: PanelSt
       <h1 className="text-sm font-bold text-text">Forex</h1>
       <span className="text-2xs text-text-dim">Rates & chart · 1 min / News · 5 min</span>
       <span className="text-2xs text-warn" role="status">{notice}</span>
-      <Button className="ml-auto" disabled={refreshing || quotes.isFetching || history.isFetching || news.isFetching} onClick={() => {
-        setRefreshing(true)
-        setNotice('')
-        void refresh().catch((error: unknown) => setNotice(error instanceof Error ? error.message : String(error))).finally(() => setRefreshing(false))
-      }}>{refreshing ? 'Refreshing…' : 'Refresh'}</Button>
+
     </div>
     <div className="flex shrink-0 flex-col gap-2 lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="flex shrink-0 flex-col gap-2 lg:min-h-0">

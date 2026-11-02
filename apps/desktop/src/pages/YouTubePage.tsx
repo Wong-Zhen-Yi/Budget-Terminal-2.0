@@ -3,7 +3,7 @@ import type { YouTubeVideo } from '@shared/contract'
 import { filterYouTubeVideos, normalizeYouTubePageSettings, sortYouTubeVideos, videoKey, YOUTUBE_MAX_AGE_DAYS, YOUTUBE_MIN_VIEW_COUNT } from '@shared/youtube'
 import { usePortfolio } from '@/api/queries'
 import { useSettings, useSettingsMutation } from '@/api/settingsQueries'
-import { useRefreshYouTube, useYouTube, useYouTubeThumbnail } from '@/api/youtubeQueries'
+import { useYouTube, useYouTubeThumbnail } from '@/api/youtubeQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { api } from '@/api/client'
 import '@/styles/youtube.css'
@@ -149,14 +149,13 @@ export function YouTubePage({ onStatusChange }: { onStatusChange: (panels: Panel
     return [...seen]
   }, [portfolioQuery.data])
   const query = useYouTube(tickers)
-  const refresh = useRefreshYouTube(tickers)
   const [filter, setFilter] = useState('')
   const [tickerFilter, setTickerFilter] = useState('')
   const [sortColumn, setSortColumn] = useState<number>(() => normalizeYouTubePageSettings(settingsQuery.data?.data.youtubePage).sortColumn)
   const [sortDescending, setSortDescending] = useState<boolean>(() => normalizeYouTubePageSettings(settingsQuery.data?.data.youtubePage).sortDescending)
   const [manualSelectedKey, setManualSelectedKey] = useState('')
-  const [refreshing, setRefreshing] = useState(false)
-  const [refreshError, setRefreshError] = useState('')
+  const refreshing = false
+  const refreshError = ''
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(1)
   const [inspectorTab, setInspectorTab] = useState<'details' | 'description'>('details')
@@ -230,13 +229,6 @@ export function YouTubePage({ onStatusChange }: { onStatusChange: (panels: Panel
     setSortDescending(next.sortDescending)
     void saveSettings({ type: 'setYouTubePage', value: next })
   }
-  const onRefresh = async () => {
-    setRefreshing(true)
-    setRefreshError('')
-    try { await refresh() }
-    catch (error) { setRefreshError(error instanceof Error ? error.message : String(error)) }
-    finally { setRefreshing(false) }
-  }
   const openVideo = useCallback((video: YouTubeVideo | null) => {
     if (video?.url) void api.openExternal(video.url)
   }, [])
@@ -248,7 +240,7 @@ export function YouTubePage({ onStatusChange }: { onStatusChange: (panels: Panel
   const emptyTitle = hasFilters && sorted.length ? 'No matching videos' : busy ? 'Loading your feed' : 'No videos available'
   const emptyMessage = hasFilters && sorted.length ? 'Try a different ticker or search term.' : !tickers.length
     ? 'Save tickers in a portfolio to see their recent research videos here.'
-    : status.tone === 'negative' ? 'Refresh to try again. Failure details are shown above.'
+    : status.tone === 'negative' ? 'Use Reload (F5) to try again. Failure details are shown above.'
     : 'Videos with at least 1,000 views from the last 90 days will appear here.'
   const currentSort = sortColumn < 0 ? '-1:false' : sortColumn + ':' + sortDescending
   const updatedAt = payload?.fetchedAt ?? 0
@@ -272,7 +264,7 @@ export function YouTubePage({ onStatusChange }: { onStatusChange: (panels: Panel
         <select className="youtube-sort" aria-label="Sort videos" value={currentSort} onChange={event => onSort(event.target.value)}>
           {SORT_OPTIONS.map(option => <option key={option.column + ':' + option.descending} value={option.column + ':' + option.descending}>{option.label}</option>)}
         </select>
-        <button type="button" className="youtube-refresh" onClick={() => void onRefresh()} disabled={busy || !tickers.length}><Icon name="refresh" />{busy ? 'Refreshing…' : 'Refresh'}</button>
+
       </div>
       <div className="youtube-status-line">
         <span className="youtube-count">{visible.length === sorted.length ? sorted.length + ' videos' : visible.length + ' of ' + sorted.length + ' videos'} · {payload?.tickersTotal ?? tickers.length} tickers</span>

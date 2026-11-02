@@ -27,8 +27,6 @@ import {
 import {
   useCalendarMonth,
   useEarningsCalendar,
-  useRefreshCalendarMonth,
-  useRefreshEarningsCalendar,
 } from '@/api/calendarQueries'
 import { api } from '@/api/client'
 import { usePortfolio } from '@/api/queries'
@@ -118,7 +116,6 @@ function MonthlyCalendar({
   loading,
   mainName,
   options,
-  onRefresh,
   notice,
   setNotice,
 }: {
@@ -127,25 +124,13 @@ function MonthlyCalendar({
   loading: boolean
   mainName: string
   options: OptionPosition[]
-  onRefresh: () => Promise<void>
   notice: string
   setNotice: (notice: string) => void
 }) {
   const state = useCalendarPage()
   const today = calendarToday(state.timezone)
   const prefix = monthPrefix(state.year, state.month)
-  const [refreshing, setRefreshing] = useState(false)
-  const refresh = async () => {
-    setRefreshing(true)
-    try {
-      await onRefresh()
-      setNotice('Calendar refreshed.')
-    } catch (error) {
-      setNotice(`Calendar refresh failed: ${error instanceof Error ? error.message : String(error)}`)
-    } finally {
-      setRefreshing(false)
-    }
-  }
+  const refreshing = false
   const exportMonth = useCallback(async () => {
     const inMonth = (date: string) => date.startsWith(prefix)
     const content = buildCalendarExport({
@@ -209,7 +194,7 @@ function MonthlyCalendar({
             className="w-24"
             aria-label="Calendar reference timezone"
           />
-          <Button variant="accent" disabled={loading || refreshing} onClick={() => void refresh()}>{loading || refreshing ? 'Refreshing…' : 'Refresh'}</Button>
+
           <Button onClick={() => void exportMonth()}>Export</Button>
         </div>
       </div>
@@ -325,7 +310,6 @@ function EarningsCalendar({
   const range = useMemo(() => earningsDateRange(state.earningsMode, state.earningsYear, today), [state.earningsMode, state.earningsYear, today])
   const request = useMemo(() => ({ startDate: range.startDate, endDate: range.endDate, rangeKey: range.rangeKey }), [range])
   const query = useEarningsCalendar(request, true)
-  const refresh = useRefreshEarningsCalendar(request)
   const rows = useMemo(
     () => filterEarningsRows(query.data?.data.rows ?? [], state.earningsSearch, state.earningsTiming, state.earningsChangedOnly)
       .map(row => ({ ...row, status: earningsStatus(row, today) })),
@@ -401,7 +385,7 @@ function EarningsCalendar({
               className="no-drag h-8 w-20 border border-border-strong bg-surface-raised px-1 text-2xs text-text outline-none disabled:opacity-40"
             />
           </label>
-          <Button variant="accent" disabled={query.isFetching} onClick={() => void refresh()}>{query.isFetching ? 'Refreshing…' : 'Refresh'}</Button>
+
           <Button onClick={() => void exportWeek()}>Export to LLM</Button>
         </div>
       </div>
@@ -473,7 +457,6 @@ export function CalendarPage({ onStatusChange }: { onStatusChange: (panels: Pane
 
   const monthRequest = useMemo(() => ({ tickers, year: state.year, month: state.month }), [tickers, state.month, state.year])
   const monthQuery = useCalendarMonth(monthRequest, state.subTab === 'calendar')
-  const refreshMonth = useRefreshCalendarMonth(monthRequest)
   const [notice, setNotice] = useState('')
 
   useEffect(() => setNotice(''), [state.subTab])
@@ -511,7 +494,7 @@ export function CalendarPage({ onStatusChange }: { onStatusChange: (panels: Pane
           loading={monthQuery.isFetching}
           mainName={main?.name ?? 'Main Portfolio'}
           options={options}
-          onRefresh={refreshMonth}
+
           notice={notice}
           setNotice={setNotice}
         />

@@ -15,7 +15,6 @@ import { EconomicGroupTable, EconomicOverviewTable } from '@/components/economic
 import { HeadlineStrip } from '@/components/economic/HeadlineStrip'
 import { SeriesChart } from '@/components/economic/SeriesChart'
 import { YieldCurvePanel } from '@/components/economic/YieldCurvePanel'
-import { Button } from '@/components/ui/Button'
 import { Checkbox } from '@/components/ui/Checkbox'
 import { SearchInput } from '@/components/ui/SearchInput'
 import { Select } from '@/components/ui/Select'
@@ -94,7 +93,7 @@ export function EconomicPage({
   const selectSeries = useEconomicPage((state) => state.selectSeries)
 
   const query = useEconomic(true)
-  const { refresh, refreshing } = useRefreshEconomic()
+  const { refreshing } = useRefreshEconomic()
   const payload = query.data?.data
   const busy = refreshing || query.isFetching
 
@@ -138,16 +137,8 @@ export function EconomicPage({
           Headline US macro releases — inflation, labour, growth and the full treasury curve.
           Decision support only.
         </p>
-        <Button variant="accent" onClick={() => void refresh(false)} disabled={busy}>
-          {busy ? 'Fetching...' : 'Refresh'}
-        </Button>
-        <Button
-          onClick={() => void refresh(true)}
-          disabled={busy}
-          title="Re-download every provider, ignoring the cached payload."
-        >
-          Force refresh
-        </Button>
+
+
         <span className="text-2xs text-text-muted">Chart span</span>
         <Select
           aria-label="Chart span"

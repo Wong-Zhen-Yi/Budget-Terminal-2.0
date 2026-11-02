@@ -13,7 +13,6 @@ import { BondCalculator } from '@/components/bonds/BondCalculator'
 import { LineChart } from '@/components/charts/LineChart'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { YieldCurvePanel } from '@/components/economic/YieldCurvePanel'
-import { Button } from '@/components/ui/Button'
 import { Chip, type ChipTone } from '@/components/ui/Chip'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Panel, PanelMessage } from '@/components/ui/Panel'
@@ -359,7 +358,7 @@ export function BondsPage({
   onStatusChange: (panels: PanelStatus[], sourcePath: string) => void
 }) {
   const query = useEconomic(true)
-  const { refresh, refreshing } = useRefreshEconomic()
+  const { refreshing } = useRefreshEconomic()
   const [selectedId, setSelectedId] = useState<string>('DGS10')
   const [lookback, setLookback] = useState('5')
   const payload = query.data?.data
@@ -402,16 +401,8 @@ export function BondsPage({
         <p className="min-w-0 flex-1 truncate text-2xs text-text-muted">
           US Treasury term structure, rate and credit signals, historical yields and bond math.
         </p>
-        <Button variant="accent" onClick={() => void refresh(false)} disabled={busy}>
-          {busy ? 'Fetching...' : 'Refresh'}
-        </Button>
-        <Button
-          onClick={() => void refresh(true)}
-          disabled={busy}
-          title="Re-download every rates provider, ignoring the shared economic cache."
-        >
-          Force refresh
-        </Button>
+
+
       </div>
 
       <p className="shrink-0 truncate text-2xs text-text-muted" title={status}>{status}</p>

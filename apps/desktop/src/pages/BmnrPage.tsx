@@ -11,7 +11,7 @@ import type {
 import { buildBmnrSnapshot } from '@shared/bmnr'
 import { clockTail } from '@shared/crypto'
 import { api } from '@/api/client'
-import { useBmnr, useRefreshBmnr } from '@/api/bmnrQueries'
+import { useBmnr } from '@/api/bmnrQueries'
 import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
 import { FRESHNESS } from '@shared/freshness'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
@@ -108,9 +108,8 @@ export function BmnrPage({
   onStatusChange: (panels: PanelStatus[], sourcePath: string) => void
 }) {
   const query = useBmnr()
-  const refresh = useRefreshBmnr()
   const now = useSnapshotClock()
-  const [refreshing, setRefreshing] = useState(false)
+  const refreshing = false
   const [notice, setNotice] = useState('')
   const [historyView, setHistoryView] = useState<'table' | 'chart'>('table')
 
@@ -150,17 +149,6 @@ export function BmnrPage({
     return parts.join(' · ')
   }, [notice, busy, payload, query.data, freshness])
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true)
-    setNotice('')
-    try {
-      await refresh()
-    } catch (error) {
-      setNotice(`Refresh failed: ${error instanceof Error ? error.message : String(error)}`)
-    } finally {
-      setRefreshing(false)
-    }
-  }, [refresh])
 
   const onExport = useCallback(async () => {
     if (!payload) return
@@ -189,9 +177,7 @@ export function BmnrPage({
         <span className="ml-auto min-w-0 truncate px-2 text-right text-2xs text-text-muted" title={status}>
           {status}
         </span>
-        <Button variant="accent" onClick={onRefresh} disabled={busy}>
-          {busy ? 'Refreshing...' : 'Refresh'}
-        </Button>
+
         <Button onClick={onExport} disabled={!payload}>
           Export
         </Button>

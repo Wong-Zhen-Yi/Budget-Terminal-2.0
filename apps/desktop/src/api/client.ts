@@ -1,5 +1,5 @@
 import { CHANNELS } from '@shared/contract'
-import { currentPageQuery, setPagePreview } from './pageProgress'
+import { currentPageQuery, currentPageForced, setPagePreview } from './pageProgress'
 import { serviceReadKey } from '@shared/serviceReadKey'
 import type { DesktopApi, MarketCapTier } from '@shared/contract'
 
@@ -13,6 +13,19 @@ declare global {
 if (!window.api) throw new Error('Budget Terminal service API is unavailable.')
 const progressiveMethods = new Set(['sofi', 'hood', 'hims', 'mu', 'amzn', 'avgo', 'vst', 'semiconductors', 'bitcoin', 'bmnr', 'projections', 'preMarket', 'gold', 'oil', 'crypto', 'globalMarkets', 'money', 'forexQuotes', 'targets', 'quotes', 'fundamentals', 'priceScreen', 'marketCap', 'tradingVolumes', 'stocks', 'tv'])
 
+const reloadReadMethods = new Set([
+  'defeatbetaTerminal', 'chart', 'options', 'quotes', 'targets', 'news',
+  'fundamentals', 'returns', 'optionQuotes', 'cardsPerformance', 'fx', 'globalMarkets',
+  'preMarket', 'upDown', 'calendarMonth', 'politicsPage', 'earningsCalendar', 'money',
+  'economic', 'ipoUpcoming', 'ipoCompleted', 'institutionActivity', 'stocks', 'fundamentalsPage',
+  'oil', 'newsPage', 'forexQuotes', 'forexHistory', 'forexNews', 'crypto',
+  'etfAum', 'etfHoldings', 'amzn', 'mu', 'avgo', 'semiconductors',
+  'vst', 'sofi', 'hims', 'hood', 'bmnr', 'gold',
+  'youtube', 'tv', 'heatmap', 'tradingVolumes', 'chartsHistory', 'valuation',
+  'projections', 'optionsExpirations', 'optionsChain', 'bitcoin', 'sp500', 'sp500Breadth',
+  'marketCap', 'marketCapSales', 'priceScreen', 'discovery',
+])
+
 export const api: DesktopApi = new Proxy({} as DesktopApi, {
   get(_target, property: keyof DesktopApi) {
     if (Object.hasOwn(_target, property)) return Reflect.get(_target, property)
@@ -22,6 +35,10 @@ export const api: DesktopApi = new Proxy({} as DesktopApi, {
     return (...args: unknown[]) => {
       const query = currentPageQuery()
       const channel = CHANNELS[property as keyof typeof CHANNELS]
+      // Only scoped data reads carry force; background page checks retain service TTLs.
+      if (query && currentPageForced() && reloadReadMethods.has(property) && args[0] && typeof args[0] === 'object') {
+        args[0] = { ...args[0], force: true, background: false }
+      }
       const result = Reflect.apply(method, target, args)
       if (!query || !progressiveMethods.has(property) || !channel || !result?.then || property === 'pageProgress' || typeof target.pageProgress !== 'function') return result
       const requestKey = serviceReadKey(channel, args[0])

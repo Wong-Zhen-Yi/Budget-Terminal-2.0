@@ -1,4 +1,5 @@
 @echo off
+echo Reload (F5) updates the current page first, then checks all other pages. Page refresh buttons have been removed; startup still loads every page.
 echo Pages populate completed sections while remaining data loads; all pages still preload and startup failures remain visible.
 echo Page loading: visible startup status, per-page readiness and targeted retries; saved content and timestamps stay visible during refresh. Opening a page promotes its queued requests with fair background turns. Shared reads avoid duplicate work. Readers retain controls longer and evicted pages restore scroll. All pages still preload.
 echo TV: separate market video page with recent channel uploads, newest-first coverage and five-minute refresh. Feed and images preload at startup.

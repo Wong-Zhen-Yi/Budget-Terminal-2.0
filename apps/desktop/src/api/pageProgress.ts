@@ -1,14 +1,24 @@
 import { hashKey, type QueryKey } from '@tanstack/react-query'
 import type { Envelope } from '@shared/contract'
 
+const reloadQueries = new Set<string>()
+export function markReloadQuery(key: QueryKey, active: boolean) {
+  if (active) reloadQueries.add(hashKey(key))
+  else reloadQueries.delete(hashKey(key))
+}
+let forced = false
+export const currentPageForced = () => forced
+
 let current: string | undefined
 const previews = new Map<string, Envelope<unknown>>()
 const listeners = new Map<string, Set<() => void>>()
 
-export function trackPageQuery<T>(key: QueryKey, run: () => T): T {
+export function trackPageQuery<T>(key: QueryKey, run: () => T, force = forced || reloadQueries.has(hashKey(key))): T {
   const previous = current
+  const previousForce = forced
+  forced = force
   current = hashKey(key)
-  try { return run() } finally { current = previous }
+  try { return run() } finally { current = previous; forced = previousForce }
 }
 
 export const currentPageQuery = () => current

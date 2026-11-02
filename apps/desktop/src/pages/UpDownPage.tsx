@@ -9,7 +9,7 @@ import {
 } from '@shared/upDown'
 import { usePortfolio } from '@/api/queries'
 import { useUpDownTargets } from '@/api/upDownTargetsQueries'
-import { useRefreshUpDown, useUpDown } from '@/api/upDownQueries'
+import { useUpDown } from '@/api/upDownQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { Button } from '@/components/ui/Button'
 import { DataTable, type Column } from '@/components/ui/DataTable'
@@ -57,8 +57,6 @@ export function UpDownPage({
     [activeSource, interval, symbols],
   )
   const query = useUpDown(request)
-  const refresh = useRefreshUpDown(request)
-  const [refreshing, setRefreshing] = useState(false)
   const payload = query.data?.data
   const rows = payload?.source === activeSource && payload.interval === interval ? payload.rows : []
   const targetProgress = useUpDownTargets(
@@ -204,14 +202,6 @@ export function UpDownPage({
     if (save) setSavedCustom(normalized)
   }, [draft, setSavedCustom])
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true)
-    try {
-      await refresh()
-    } finally {
-      setRefreshing(false)
-    }
-  }, [refresh])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
@@ -228,13 +218,7 @@ export function UpDownPage({
             {entry.label}
           </Button>
         ))}
-        <Button
-          variant="accent"
-          onClick={() => void onRefresh()}
-          disabled={refreshing || query.isFetching}
-        >
-          Refresh
-        </Button>
+
         <p className="ml-auto max-w-[48%] truncate text-right text-2xs text-text-muted" title={status}>
           {status}
         </p>

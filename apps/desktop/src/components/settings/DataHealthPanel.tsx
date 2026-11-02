@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 
 import { TABS } from '@shared/contract'
 import { SectionHeader } from '@/components/settings/SettingsSection'
@@ -13,7 +13,7 @@ const PAGE_LABELS = new Map(TABS.map((tab) => [tab.id, tab.label]))
 /** One line per panel, worst first, in the copyable plain-text form the reference uses. */
 function buildReport(records: HealthRecord[]): string {
   if (!records.length) {
-    return 'No market data has been loaded in this session yet.\nOpen a page, then refresh this report.'
+    return 'No market data has been loaded in this session yet.\nUse Reload (F5) to check page data.'
   }
   const lines = [
     'Budget Terminal data health',
@@ -44,10 +44,7 @@ export function DataHealthPanel({ onStatus }: { onStatus: (message: string) => v
   const clear = useDataHealth((state) => state.clear)
   const startup = useDataHealth((state) => state.startup)
 
-  // The body is a snapshot taken on demand, so it does not shift under the reader every
-  // time the quote timer ticks. The summary line above it stays live.
-  const [report, setReport] = useState(currentReport)
-  const refresh = useCallback(() => setReport(currentReport()), [])
+  const report = useMemo(currentReport, [records, startup])
 
   const sorted = useMemo(() => sortRecords(records), [records, now])
   const current = sorted.filter((record) => !record.previousSession)
@@ -69,14 +66,11 @@ export function DataHealthPanel({ onStatus }: { onStatus: (message: string) => v
         />
         <div className="flex items-center gap-2">
           <span className={`text-2xs ${degraded.length ? 'text-down' : 'text-up'}`}>{summary}</span>
-          <Button className="ml-auto" onClick={refresh}>
-            Refresh
-          </Button>
+
           <Button
             variant="accent"
             onClick={async () => {
               const text = currentReport()
-              setReport(text)
               try {
                 await navigator.clipboard.writeText(text)
                 onStatus('Data health report copied to clipboard.')
@@ -91,8 +85,6 @@ export function DataHealthPanel({ onStatus }: { onStatus: (message: string) => v
             variant="danger"
             onClick={() => {
               clear()
-              // `clear` has already run, so this re-reads an empty store.
-              setReport(currentReport())
               onStatus('Data health history cleared.')
             }}
           >

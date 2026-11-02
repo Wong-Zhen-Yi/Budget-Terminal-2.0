@@ -1,13 +1,11 @@
-import { retainedQueryOptions } from '@/api/snapshotResult'
 import { useEffect, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 import {
   buildScorecardRow, parseScorecardSymbols, scorecardBarDomain, SCORECARD_METRICS,
   type ScorecardMetricKey, type ScorecardRow,
 } from '@shared/scorecard'
 import { queryKeys } from '@/api/client'
 import { queryFreshness } from '@/api/queryPersistence'
-import { loadScorecardCompany, useScorecardCompanies } from '@/api/scorecardQueries'
+import { useScorecardCompanies } from '@/api/scorecardQueries'
 import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { Button } from '@/components/ui/Button'
@@ -33,13 +31,11 @@ export function ScorecardPage({ onStatusChange, onNavigate }: {
   const state = useScorecard()
   const { symbols, columns: selectedColumns, chartMetric, comparisons, selectedId } = state
   const queries = useScorecardCompanies(symbols)
-  const client = useQueryClient()
   const now = useSnapshotClock()
   const [draft, setDraft] = useState(symbols.join(', '))
   const [name, setName] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  const [refreshing, setRefreshing] = useState(false)
   const selected = comparisons.find(entry => entry.id === selectedId)
   const symbolSignature = symbols.join(',')
   useEffect(() => setDraft(symbols.join(', ')), [symbolSignature])
@@ -66,21 +62,6 @@ export function ScorecardPage({ onStatusChange, onNavigate }: {
     setMessage(''); setError('')
     if (draftSymbols.error) { setError(draftSymbols.error); return }
     state.setSymbols(draftSymbols.symbols)
-  }
-  const refresh = async () => {
-    setRefreshing(true); setMessage(''); setError('')
-    try {
-      const results = await Promise.allSettled(symbols.map(symbol => client.fetchQuery(retainedQueryOptions(client, {
-        queryKey: queryKeys.fundamentalsPage(symbol), queryFn: () => loadScorecardCompany(symbol, { force: true }), staleTime: 0,
-      }))))
-      const failures = results.filter(result => result.status === 'rejected').length
-      const degraded = results.filter((result, index) => result.status === 'fulfilled' && (
-        ['partial', 'stale', 'failed'].includes(effectiveFreshness(result.value, Date.now(), queryFreshness(queryKeys.fundamentalsPage(symbols[index]))))
-        || result.value.errors.length > 0 || result.value.data.warnings.length > 0)).length
-      if (failures) setError(`${failures} compan${failures === 1 ? 'y' : 'ies'} could not refresh. Retained values and source issues are shown below.`)
-      else if (degraded) setMessage(`Refreshed with source issues for ${degraded} compan${degraded === 1 ? 'y' : 'ies'}. Review Source details.`)
-      else setMessage('All company financials refreshed.')
-    } finally { setRefreshing(false) }
   }
   const save = () => {
     setError(''); setMessage('')
@@ -119,7 +100,7 @@ export function ScorecardPage({ onStatusChange, onNavigate }: {
       <form className="scorecard-tickers" onSubmit={event => { event.preventDefault(); compare() }}>
         <label htmlFor="scorecard-tickers">Company tickers</label>
         <div><input id="scorecard-tickers" value={draft} onChange={event => setDraft(event.target.value.toUpperCase())} maxLength={90} spellCheck={false} autoComplete="off" placeholder="AMZN, MSFT, GOOGL" />
-          <Button type="submit" variant="accent">Compare</Button><Button onClick={() => void refresh()} disabled={loading || refreshing}>{loading || refreshing ? 'Loading…' : 'Refresh'}</Button></div>
+          <Button type="submit" variant="accent">Compare</Button></div>
       </form>
       <form className="scorecard-save" onSubmit={event => { event.preventDefault(); save() }}>
         <label htmlFor="scorecard-name">Save or update by name</label>

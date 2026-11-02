@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { arbitrageClipboard, buildDonut, filterHoldings, holdingsClipboard, etfWeight } from '@shared/etf'
 import { FRESHNESS } from '@shared/freshness'
 import { api } from '@/api/client'
-import { useEtfArbitrage, useEtfAum, useEtfHoldings, useRefreshEtfArbitrage, useRefreshEtfAum, useRefreshEtfHoldings } from '@/api/etfQueries'
+import { useEtfArbitrage, useEtfAum, useEtfHoldings, useRefreshEtfArbitrage } from '@/api/etfQueries'
 import { ArbitrageTab } from '@/components/etf/ArbitrageTab'
 import { AumRail } from '@/components/etf/AumRail'
 import { HoldingsTab } from '@/components/etf/HoldingsTab'
@@ -26,9 +26,7 @@ export function EtfPage({ onStatusChange, onNavigate }: {
   const holdingsQuery = useEtfHoldings(ticker)
   const arbitrageQuery = useEtfArbitrage(ticker)
   const aumQuery = useEtfAum()
-  const refreshHoldings = useRefreshEtfHoldings()
-  const refreshArbitrage = useRefreshEtfArbitrage()
-  const refreshAum = useRefreshEtfAum()
+  const analyzeBasket = useRefreshEtfArbitrage()
   const fund = holdingsQuery.data?.data.ticker === ticker ? holdingsQuery.data.data : undefined
   const arbitrage = arbitrageQuery.data?.data.ticker === ticker ? arbitrageQuery.data.data : undefined
   const holdings = useMemo(() => fund?.holdings ?? [], [fund])
@@ -92,13 +90,13 @@ export function EtfPage({ onStatusChange, onNavigate }: {
         <div className="etf-cache-badge"><span />Cache-first research<small>24h fund snapshots · no automatic basket polling</small></div>
       </header>
       <div className="etf-workspace-body">
-        <AumRail payload={aumQuery.data?.data} loading={aumQuery.isFetching} failureReason={aumFailure} filter={aumFilter} onFilterChange={setAumFilter} onSelect={select} onRefresh={() => void perform(refreshAum)} refreshing={aumQuery.isFetching} selected={ticker} />
+        <AumRail payload={aumQuery.data?.data} loading={aumQuery.isFetching} failureReason={aumFailure} filter={aumFilter} onFilterChange={setAumFilter} onSelect={select}  refreshing={aumQuery.isFetching} selected={ticker} />
         <main className="etf-detail">
           <form className="etf-ticker-form" onSubmit={event => { event.preventDefault(); select(draft) }}>
             <label htmlFor="etf-ticker">Open a fund</label>
             <input id="etf-ticker" aria-label="ETF ticker" value={draft} maxLength={15} onChange={event => setDraft(event.target.value.toUpperCase())} placeholder="SPY, QQQ, VOO…" autoComplete="off" spellCheck={false} />
             <Button type="submit" variant="accent">Open ETF</Button>
-            <Button onClick={() => void perform(() => refreshHoldings(ticker))} disabled={holdingsQuery.isFetching} title="Request an updated fund snapshot. Cached for at least one minute even on manual refresh.">{holdingsQuery.isFetching ? 'Loading…' : 'Refresh holdings'}</Button>
+
           </form>
           <section className="etf-fund-hero" aria-label="Selected ETF">
             <div className="etf-symbol-mark">{ticker}</div>
@@ -120,7 +118,7 @@ export function EtfPage({ onStatusChange, onNavigate }: {
           </> : <div className="etf-basket-view">
             <p className="etf-analysis-note">On-demand Yahoo Finance quotes, shared with other pages and cached for at least 2 minutes. Opening this view does not call Yahoo. This is a return comparison, not a tradable NAV premium; partial holdings can make the gap misleading.</p>
             {arbitrageQuery.data || arbitrageQuery.error ? <DataFreshness envelope={arbitrageQuery.data} loading={arbitrageQuery.isFetching} error={arbitrageQuery.error} freshnessMs={FRESHNESS.etfArbitrage} /> : null}
-            <ArbitrageTab payload={arbitrage} loading={arbitrageQuery.isFetching} failureReason={message(arbitrageQuery.error) || arbitrageQuery.data?.meta.failureReason || ''} hasHoldings={holdings.length > 0} onRefresh={() => void perform(() => refreshArbitrage(ticker))} onOpenSymbol={symbol => onNavigate?.('charts', symbol)} />
+            <ArbitrageTab payload={arbitrage} loading={arbitrageQuery.isFetching} failureReason={message(arbitrageQuery.error) || arbitrageQuery.data?.meta.failureReason || ''} hasHoldings={holdings.length > 0} onAnalyze={() => void perform(() => analyzeBasket(ticker))} onOpenSymbol={symbol => onNavigate?.('charts', symbol)} />
           </div>}
           <footer className="etf-policy">Saved across restarts · Refresh cooldown: 1 min for funds / 2 min for quotes · Failed providers pause for 5 min · Last good data retained on errors</footer>
         </main>

@@ -17,7 +17,6 @@ import {
   useCards,
   useCardsMutation,
   useCardsPerformance,
-  useRefreshCards,
 } from '@/api/cardsQueries'
 import { usePortfolio, usePortfolioMutation } from '@/api/queries'
 import { BasketDialog } from '@/components/cards/BasketDialog'
@@ -52,7 +51,6 @@ export function CardsPage({
   const portfolioQuery = usePortfolio()
   const mutateCards = useCardsMutation()
   const mutatePortfolio = usePortfolioMutation()
-  const refreshCards = useRefreshCards()
   const state = cardsQuery.data?.data
   const portfolios = portfolioQuery.data?.data.portfolios ?? []
   const models = useMemo(
@@ -75,7 +73,6 @@ export function CardsPage({
   }, [models, state])
   const performanceQueries = useCardsPerformance(requests)
   const [notice, setNotice] = useState('')
-  const [refreshing, setRefreshing] = useState(false)
   const [editorOpen, setEditorOpen] = useState(false)
   const [editing, setEditing] = useState<CardModel | null>(null)
   const [basket, setBasket] = useState<CardModel | null>(null)
@@ -122,16 +119,6 @@ export function CardsPage({
     return result
   }, [mutateCards])
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true)
-    setNotice('Refreshing card performance...')
-    try {
-      await refreshCards(requests)
-      setNotice('Card performance updated.')
-    } finally {
-      setRefreshing(false)
-    }
-  }, [refreshCards, requests])
 
   const clearDrag = () => {
     setDraggingId('')
@@ -195,9 +182,7 @@ export function CardsPage({
           </div>
         </details>
         <Button variant="accent" onClick={() => { setEditing(null); setEditorOpen(true) }}>New Card</Button>
-        <Button onClick={() => void onRefresh()} disabled={refreshing || !requests.length}>
-          {refreshing ? 'Refreshing...' : 'Refresh'}
-        </Button>
+
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">

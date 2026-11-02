@@ -4,7 +4,6 @@ import { MONEY_SERIES, moneyGrowth, moneyValue, moneyWindow } from '@shared/mone
 import { useMoney, useRefreshMoney } from '@/api/moneyQueries'
 import { LineChart } from '@/components/charts/LineChart'
 import { Panel } from '@/components/ui/Panel'
-import { Button } from '@/components/ui/Button'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 
 const percent = (value: number | null | undefined) => value == null ? '—' : `${value.toFixed(2)}%`
@@ -34,21 +33,17 @@ function Chart({ row, years, growth, loading }: {
 
 export function MoneyPage({ onStatusChange }: { onStatusChange: (panels: PanelStatus[], sourcePath: string) => void }) {
   const query = useMoney(true)
-  const { refresh, refreshing } = useRefreshMoney()
+  const { refreshing } = useRefreshMoney()
   const [years, setYears] = useState(5)
   const [growth, setGrowth] = useState<1 | 12>(12)
   const [selected, setSelected] = useState('M1SL')
-  const [refreshError, setRefreshError] = useState('')
+  const refreshError = ''
   const busy = query.isFetching || refreshing
   const rows: MoneySeries[] = MONEY_SERIES.map((definition) => query.data?.data.rows.find((row) => row.seriesId === definition.seriesId) ?? { ...definition, history: [], fetchedAt: null, status: 'unavailable', error: null })
   const byId = (id: string) => rows.find((row) => row.seriesId === id)!
   const m2 = byId('M2SL')
   const selectedRow = byId(selected)
   const change = (row: MoneySeries) => row.history.length < 2 ? null : row.history.at(-1)![1] - row.history.at(-2)![1]
-  const doRefresh = async (force: boolean) => {
-    setRefreshError('')
-    try { await refresh(force) } catch (error) { setRefreshError(error instanceof Error ? error.message : String(error)) }
-  }
   useEffect(() => {
     onStatusChange([{ label: 'Money', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching }], '')
   }, [onStatusChange, query.data, query.isFetching])
@@ -58,8 +53,8 @@ export function MoneyPage({ onStatusChange }: { onStatusChange: (panels: PanelSt
       <h1 className="text-sm font-semibold text-text">Money</h1>
       <p className="flex-1 text-2xs text-text-muted">US money supply and Federal Reserve liquidity</p>
       <label className="text-2xs text-text-muted">History <select aria-label="History range" className="border border-border bg-surface p-1 text-text" value={years} onChange={(event) => setYears(Number(event.target.value))}>{[1, 3, 5, 10].map((year) => <option key={year} value={year}>{year}Y</option>)}</select></label>
-      <Button variant="accent" disabled={busy} onClick={() => void doRefresh(false)}>{busy ? 'Fetching…' : 'Refresh'}</Button>
-      <Button disabled={busy} onClick={() => void doRefresh(true)}>Force refresh</Button>
+
+
     </div>
     <p role="status" className="text-2xs text-text-muted">{refreshError || query.error?.message || (busy ? 'Loading FRED observations…' : query.data?.meta.failureReason || 'FRED · Federal Reserve · Monetary values in USD billions. Dates refer to observations, not download time.')}</p>
     <div className="grid shrink-0 grid-cols-2 gap-2 md:grid-cols-3 2xl:grid-cols-6">

@@ -190,9 +190,10 @@ try {
     window.fixtureHandler = (method, request) => { calls.push({ method, request }); return Promise.resolve(fixture(method, request)) }
     window.runReadinessProbe = async () => {
       const element = document.getElementById('root')
+      const reloadOnly = ${JSON.stringify(process.argv.includes('--reload'))}
       const agentsOnly = ${JSON.stringify(process.argv.includes('--agents'))}
       const refreshOnly = ${JSON.stringify(process.argv.includes('--refresh'))}
-      for (const scenario of refreshOnly ? ['persisted'] : agentsOnly ? ['empty'] : ['empty', 'populated', 'persisted']) {
+      for (const scenario of reloadOnly ? ['populated'] : refreshOnly ? ['persisted'] : agentsOnly ? ['empty'] : ['empty', 'populated', 'persisted']) {
         console.log('Completed-startup scenario: ' + scenario)
         populated = scenario !== 'empty'
         const restored = scenario === 'persisted'
@@ -284,10 +285,11 @@ try {
           rendered.unmount(); client.clear()
           return 'PASS: all pages ready at startup, Agents and Notifications ready on first visit, autonomy off and global agent navigation to Charts/MSFT'
         }
-        for (const tab of TABS.filter(tab => tab.implemented)) {
+        for (const tab of TABS.filter(tab => tab.implemented && (!reloadOnly || tab.id === 'amzn'))) {
           const before = calls.length
           await selectPage(tab)
           check(!document.body.innerText.includes('This page could not render'), 'Completed page crashed: ' + tab.id)
+          check(![...visiblePage(tab.id).querySelectorAll('button')].some(button => /^(Force )?Refresh(?:$| list$| holdings$| dataset$)/i.test(button.textContent.trim())), 'Page still has a Refresh button: ' + tab.id)
           if (restored && ['stocks', 'dashboard'].includes(tab.id)) {
             const text = visiblePage(tab.id).innerText
             check(text.includes('123.45 EUR') && text.includes('-2.50 EUR') && !text.includes('$123.45'), 'Foreign quote header mislabeled: ' + tab.id)
@@ -349,6 +351,18 @@ try {
           }
         }
         if (scenario === 'populated') {
+          await selectPage(TABS.find(tab => tab.id === 'amzn'))
+          const beforeReload = calls.length
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F5' }))
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F5', repeat: true }))
+          await wait()
+          const reloadDeadline = Date.now() + 15000
+          while ([...document.querySelectorAll('button')].some(button => button.textContent === 'Reloading...') && Date.now() < reloadDeadline) await wait()
+          const reloadCalls = calls.slice(beforeReload)
+          check(reloadCalls.filter(call => call.method === 'amzn' && call.request.force).length === 1, 'F5 must force the focused page exactly once')
+          check(!reloadCalls.some(call => call.method !== 'amzn' && call.request?.force), 'Background page checks must retain service caches')
+          check(!document.body.innerText.includes('Reloading...'), 'Reload must finish')
+          await paint(); await window.captureFixture('focused-reload')
           const old = client.getQueryData(['quotes', 'AAPL'])
           client.setQueryData(['quotes', 'AAPL'], { ...old, meta: { ...old.meta, freshness: 'stale', failureReason: 'Synthetic provider outage; previous snapshot preserved', fetchedAt: Date.now() - 120000 } })
           window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true })); await wait()
@@ -436,6 +450,7 @@ try {
         memory.stop(); rendered.unmount(); client.clear(); useDataHealth.setState({ startup: null }); calls = []
         await wait()
       }
+      if (reloadOnly) return 'PASS: F5 reloads the focused page once, checks other pages without force, and preserves all-page startup'
       return 'PASS: all ' + TABS.filter(tab => tab.implemented).length + ' routes after completed startup, empty and populated portfolios, persisted Options/ETF/video selections, initial News/video media and no first-visit loads; visible subtab/select/filter/sort sweep recorded separately'
     }
   ` }, bundle: true, jsx: 'automatic', write: false, format: 'iife', loader: { '.png': 'dataurl', '.css': 'empty' },

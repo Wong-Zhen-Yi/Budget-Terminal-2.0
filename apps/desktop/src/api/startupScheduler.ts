@@ -29,6 +29,7 @@ interface Entry {
   cachedAt?: number
   timer?: ReturnType<typeof setTimeout>
   refreshing?: boolean
+  running?: Promise<unknown>
 }
 
 /** A session-long plan: edits replace affected tasks without abandoning other pages. */
@@ -49,6 +50,7 @@ export function createStartupScheduler(options: {
   let completedAt = startedAt
   let stopped = false
   let pending = 0
+  let reloaded: Set<string> | undefined
   const notify = () => options.onChange(pending === 0)
   const current = (entry: Entry) => !stopped && entries.get(entry.task.id) === entry
   const classify = (error: unknown): TaskState => ({
@@ -56,7 +58,7 @@ export function createStartupScheduler(options: {
     reason: errorMessage(error),
   })
 
-  async function run(entry: Entry, maintenance = false) {
+  async function run(entry: Entry, maintenance = false, force = false) {
     // Keep only metadata for scheduling; old chart payloads must remain collectible.
     entry.snapshots = []
     entry.cachedAt = undefined
@@ -72,15 +74,17 @@ export function createStartupScheduler(options: {
       if (cached) notify()
     }
     observe.owner = entry
+    observe.force = force
+    observe.reloaded = reloaded
     return entry.task.run(observe, maintenance)
   }
 
-  async function refresh(entry: Entry) {
+  async function refresh(entry: Entry, force = false) {
     if (!current(entry) || entry.refreshing) return
     entry.refreshing = true
     notify()
     let status: TaskState = { state: 'ready' }
-    try { await run(entry, true) } catch (error) { status = classify(error) }
+    try { await run(entry, true, force) } catch (error) { status = classify(error) }
     if (!current(entry)) return
     entry.refreshing = false
     entry.status = status
@@ -95,7 +99,7 @@ export function createStartupScheduler(options: {
     entry.timer = setTimer(() => {
       entry.timer = undefined
       if (!current(entry)) return
-      void refresh(entry)
+      entry.running = refresh(entry)
     }, delay)
   }
 
@@ -130,14 +134,34 @@ export function createStartupScheduler(options: {
     notify()
   }
 
+  let reloadPromise: Promise<void> | undefined
   return {
+    /** Finish the focused page before checking every other prepared page. */
+    reload(page: string, reloadMounted?: () => Promise<Set<string>>) {
+      if (reloadPromise) return reloadPromise
+      const check = async (entry: Entry, force: boolean) => {
+        await entry.running
+        if (!current(entry)) return
+        clearTimer(entry.timer)
+        entry.timer = undefined
+        entry.running = refresh(entry, force)
+        await entry.running
+      }
+      reloadPromise = (async () => {
+        reloaded = await reloadMounted?.() ?? new Set()
+        const plan = [...entries.values()]
+        await Promise.all(plan.filter(entry => entry.task.tab === page).map(entry => check(entry, true)))
+        await Promise.all(plan.filter(entry => entry.task.tab !== page).map(entry => check(entry, false)))
+      })().finally(() => { reloadPromise = undefined; reloaded = undefined })
+      return reloadPromise
+    },
     /** Retry only settled unhealthy tasks; leave healthy and in-flight pages alone. */
     retry(page?: string) {
       for (const entry of entries.values()) {
         if (!entry.timing || entry.refreshing || entry.status?.state === 'ready' || (page && entry.task.tab !== page)) continue
         clearTimer(entry.timer)
         entry.timer = undefined
-        void refresh(entry)
+        entry.running = refresh(entry)
       }
     },
     reconcile(tasks: readonly StartupTask[]) {
@@ -160,7 +184,7 @@ export function createStartupScheduler(options: {
       }
       // Register the whole plan before starting any work, so no page can briefly
       // appear complete while its remaining tasks are still being registered.
-      for (const entry of added) void start(entry)
+      for (const entry of added) entry.running = start(entry)
       notify()
     },
     snapshot() {

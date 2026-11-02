@@ -307,6 +307,37 @@ scheduler.reconcile([fastTask])
 assert.equal(schedulerReports, stoppedReports)
 schedulerClient.clear()
 
+// Reload must finish the focused page before it checks healthy or failed siblings.
+const reloadEvents: string[] = []
+let releaseReload!: () => void
+const reloadWait = new Promise<void>(resolve => { releaseReload = resolve })
+const reloadScheduler = createStartupScheduler({ onChange: () => {}, onSnapshot: () => {} })
+reloadScheduler.reconcile(['focused', 'other', 'failed'].map(tab => ({ id: tab, tab, label: tab, refresh: false,
+  run: async (observe, maintenance) => {
+    if (!maintenance) return
+    reloadEvents.push(tab + ':' + Boolean(observe.force))
+    if (tab === 'focused') await reloadWait
+    if (tab === 'failed') throw new Error('Fixture reload failure')
+  },
+})))
+await settleScheduler()
+const firstReload = reloadScheduler.reload('focused')
+assert.equal(reloadScheduler.reload('other'), firstReload, 'Repeated F5 must join the same reload')
+await settleScheduler()
+assert.deepEqual(reloadEvents, ['focused:true'])
+assert.equal(reloadScheduler.snapshot().pages.focused.refreshing, true)
+releaseReload()
+await firstReload
+assert.deepEqual(reloadEvents, ['focused:true', 'other:false', 'failed:false'])
+assert.equal(reloadScheduler.snapshot().pages.failed.state, 'failed')
+assert.match(reloadScheduler.snapshot().pages.failed.reason!, /Fixture reload failure/)
+assert.equal(reloadScheduler.snapshot().done, 3)
+reloadEvents.length = 0
+await reloadScheduler.reload('failed')
+assert.equal(reloadEvents[0], 'failed:true', 'A failing focused page must still finish its attempt first')
+assert.equal(reloadEvents.length, 3, 'A failing focused page must not block checks of other pages')
+reloadScheduler.stop()
+
 const retryScheduler = createStartupScheduler({ onChange: () => {}, onSnapshot: () => {} })
 retryScheduler.reconcile([fixtureTask('targeted', 'stocks', undefined, 'failed'), fixtureTask('healthy', 'forex')])
 await settleScheduler()
@@ -1075,7 +1106,7 @@ try {
   assert.doesNotMatch(muMarkup, /undefined:|null:/)
   console.log('Focus warning renderer checks passed: generic cache failures keep their source without an undefined lane prefix.')
   const { useSignalsLatest } = await import('../src/api/signalsQueries.js')
-  const { useReloadAll } = await import('../src/api/queries.js')
+  const { markReloadQuery } = await import('../src/api/pageProgress.js')
   const { signalsHealth } = await import('../src/api/signalsHealth.js')
   const { StatusBar } = await import('../src/components/chrome/StatusBar.js')
   const closedTime = Date.parse('2026-10-10T20:00:00Z')
@@ -1094,13 +1125,13 @@ try {
   fixtureApi.signals = async (request: SignalsRequest) => { requests.push(request); return savedSignals }
   try {
     cryptoClient.setQueryData(['signals'], savedSignals)
-    let reload!: () => Promise<void>
-    function SignalsReloadFixture() { useSignalsLatest(); reload = useReloadAll(); return null }
+    function SignalsReloadFixture() { useSignalsLatest(); return null }
     renderToStaticMarkup(createElement(QueryClientProvider, { client: cryptoClient }, createElement(SignalsReloadFixture)))
     const query = cryptoClient.getQueryCache().find({ queryKey: ['signals'] })!
     const observer = new QueryObserver(cryptoClient, { ...query.options, queryKey: ['signals'], staleTime: Infinity })
     const unsubscribe = observer.subscribe(() => {})
-    try { await reload() } finally { unsubscribe(); observer.destroy() }
+    markReloadQuery(['signals'], true)
+    try { await observer.refetch() } finally { markReloadQuery(['signals'], false); unsubscribe(); observer.destroy() }
     assert.equal(requests.length, 1, 'Explicit F5 must perform one scan without relying on the session timer')
     assert.deepEqual(requests[0], { forceMarketRefresh: true, forceUniverseRefresh: true })
     assert.doesNotMatch(renderToStaticMarkup(createElement(StatusBar, { sourcePath: '', panels: [{ label: 'Day Trading',

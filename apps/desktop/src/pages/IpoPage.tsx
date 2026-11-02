@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 
 import type { IpoCompletedPayload, IpoUpcomingPayload } from '@shared/contract'
 import {
@@ -12,7 +12,7 @@ import {
   type IpoStatusTone,
 } from '@shared/ipo'
 import { api } from '@/api/client'
-import { useCompletedIpos, useRefreshIpos, useUpcomingIpos } from '@/api/ipoQueries'
+import { useCompletedIpos, useUpcomingIpos } from '@/api/ipoQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { CompletedIpoTable } from '@/components/ipo/CompletedIpoTable'
 import { UpcomingIpoTable } from '@/components/ipo/UpcomingIpoTable'
@@ -65,8 +65,7 @@ export function IpoPage({
 
   const upcomingQuery = useUpcomingIpos()
   const completedQuery = useCompletedIpos(completedYear)
-  const refresh = useRefreshIpos()
-  const [refreshing, setRefreshing] = useState(false)
+  const refreshing = false
 
   const upcoming = upcomingQuery.data?.data
   const completed = completedQuery.data?.data
@@ -98,7 +97,7 @@ export function IpoPage({
     if (upcomingFailure && !upcoming?.rows.length) return { text: `IPO refresh failed: ${upcomingFailure}`, tone: 'negative' }
     if (!upcoming) {
       return {
-        text: 'No cached IPO calendar yet. Use Refresh to fetch upcoming IPOs.',
+        text: 'No cached IPO calendar yet. Use Reload (F5) to fetch upcoming IPOs.',
         tone: 'warning',
       }
     }
@@ -142,18 +141,7 @@ export function IpoPage({
   const upcomingCache = cacheLabel(upcoming, upcomingFailure)
   const completedCache = cacheLabel(completed, completedFailure)
 
-  /** `_p21_refresh_ipo_calendar(force=True)` — one button, both feeds. */
-  const onRefresh = useCallback(async () => {
-    if (refreshing) return
-    setRefreshing(true)
-    try {
-      await refresh(completedYear)
-    } finally {
-      setRefreshing(false)
-    }
-  }, [refresh, refreshing, completedYear])
 
-  const busy = upcomingBusy || completedBusy
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-2">
@@ -170,14 +158,7 @@ export function IpoPage({
         >
           {status.text}
         </span>
-        <Button
-          variant="accent"
-          onClick={() => void onRefresh()}
-          disabled={busy}
-          title="Refresh IPO calendars and pending filings, with backup sources."
-        >
-          {busy ? 'Refreshing...' : 'Refresh'}
-        </Button>
+
       </div>
 
       {/* `setStretchFactor(0, 2)` / `setStretchFactor(1, 3)`: completed narrower. */}

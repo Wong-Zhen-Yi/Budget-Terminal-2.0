@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useSemiconductors, useRefreshSemiconductors } from '@/api/semiconductorsQueries'
+import { useSemiconductors } from '@/api/semiconductorsQueries'
 import { api } from '@/api/client'
 import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
 import { FRESHNESS } from '@shared/freshness'
@@ -32,14 +32,13 @@ export function SemiconductorsPage({ onStatusChange, onNavigate }: {
   onNavigate: (tabId: string, symbol?: string) => void
 }) {
   const query = useSemiconductors()
-  const refresh = useRefreshSemiconductors()
   const now = useSnapshotClock()
   const [group, setGroup] = useState<SemiconductorGroup | 'all'>('all')
   const [search, setSearch] = useState('')
   const [symbol, setSymbol] = useState('NVDA')
   const [compare, setCompare] = useState(['NVDA', 'AMD', 'AVGO', 'MU'])
   const [range, setRange] = useState<'1M' | '3M' | 'YTD' | '1Y'>('1Y')
-  const [notice, setNotice] = useState('')
+  const notice = ''
   const [view, setView] = useState<'supply' | 'companies' | 'compare' | 'news'>('supply')
   const [feed, setFeed] = useState<'news' | 'earnings'>('news')
   const [detailed, setDetailed] = useState(false)
@@ -78,10 +77,6 @@ export function SemiconductorsPage({ onStatusChange, onNavigate }: {
 
   useEffect(() => onStatusChange([{ label: 'Semiconductors', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: busy, freshnessMs }], ''),
     [onStatusChange, query.data, query.error, query.isEnabled, busy, freshnessMs])
-  const onRefresh = async () => {
-    setNotice('')
-    try { await refresh() } catch (error) { setNotice(`Refresh failed: ${error instanceof Error ? error.message : String(error)}`) }
-  }
   const selectGroup = (next: SemiconductorGroup | 'all') => {
     setGroup(next)
     setSearch('')
@@ -199,7 +194,7 @@ export function SemiconductorsPage({ onStatusChange, onNavigate }: {
         <div title={`${overview.unchanged} unchanged · ${overview.quoteCount}/${overview.count} daily quotes`}><strong className="num">{overview.quoteCount ? <><span className="text-up">{overview.advancing} ↑</span> / <span className="text-down">{overview.declining} ↓</span></> : '--'}</strong><span>Daily breadth</span></div>
         <div title={`${overview.quoteCount}/${overview.count} observations · equal weight`}><strong className="num">{signed(overview.daily)}</strong><span>Equal-weight daily return</span></div>
       </div>
-      <div className="semi-load-status"><Button variant="accent" disabled={busy} onClick={() => void onRefresh()}>{busy ? 'Refreshing...' : 'Refresh'}</Button><span role="status">{notice || (busy ? 'Loading company quotes, profiles, adjusted histories and news…' : query.error ? `Load failed: ${query.error.message}` : `${freshness} · ${rows.filter(row => row.market).length}/${rows.length} market snapshots`)}</span></div>
+      <div className="semi-load-status"><span role="status">{notice || (busy ? 'Loading company quotes, profiles, adjusted histories and news…' : query.error ? `Load failed: ${query.error.message}` : `${freshness} · ${rows.filter(row => row.market).length}/${rows.length} market snapshots`)}</span></div>
     </div>
     {notice ? <p role="status" className="shrink-0 px-2 py-1 text-2xs text-text-muted">{notice}</p> : null}
     {(!query.data || query.data.meta.freshness === 'failed') && query.error ? <p role="alert" className="shrink-0 px-2 py-1 text-2xs text-down">{query.error.message}</p> : null}

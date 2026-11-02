@@ -72,6 +72,7 @@ export function TabBar({
 
       <button
         type="button"
+        title="Reload the current page first, then check all other pages"
         onClick={onReload}
         disabled={reloading}
         className={`no-drag h-9 shrink-0 border border-border-strong bg-surface-raised px-3 text-2xs text-text hover:bg-surface-hover disabled:opacity-50 ${isMac ? 'rounded-lg' : ''}`}

@@ -4,7 +4,7 @@ import { SOFI_METRICS } from '@shared/sofi'
 import type { SofiMetric, SofiQuarter, SofiUnit } from '@shared/sofi'
 import { STOCKS_RANGE_PRESETS } from '@shared/contract'
 import type { StocksRangePreset } from '@shared/contract'
-import { useSofi, useRefreshSofi } from '@/api/sofiQueries'
+import { useSofi } from '@/api/sofiQueries'
 import { api } from '@/api/client'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { LineChart } from '@/components/charts/LineChart'
@@ -44,9 +44,8 @@ function Trend({ title, quarters, metrics, unit, warning, loading }: {
 
 export function SofiPage({ onStatusChange }: { onStatusChange: (panels: PanelStatus[], sourcePath: string) => void }) {
   const query = useSofi()
-  const refresh = useRefreshSofi()
   const [range, setRange] = useState<StocksRangePreset>('1Y')
-  const [notice, setNotice] = useState('')
+  const notice = ''
   const payload = query.data?.data
   const reports = payload?.reports
   const quarters = reports?.quarters ?? []
@@ -78,10 +77,6 @@ export function SofiPage({ onStatusChange }: { onStatusChange: (panels: PanelSta
     return all.filter(candle => candle.time * 1000 >= start.getTime())
   }, [payload?.market?.chart.candles, range])
 
-  const onRefresh = async () => {
-    setNotice('')
-    try { await refresh() } catch (error) { setNotice(`Refresh failed: ${error instanceof Error ? error.message : String(error)}`) }
-  }
   const sourceTitle = (metric: SofiMetric, quarter: SofiQuarter | undefined) => {
     const source = quarter?.sources[metric]
     return source ? `Period ended ${quarter!.endDate}\nPublished ${source.publishedAt || 'date unavailable'}\n${source.url}` : 'Reported value unavailable'
@@ -95,7 +90,7 @@ export function SofiPage({ onStatusChange }: { onStatusChange: (panels: PanelSta
     <div className="flex shrink-0 flex-wrap items-center gap-2">
       <h1 className="text-sm font-semibold text-text">SOFI — SoFi Technologies</h1>
       <span className="ml-auto text-2xs text-text-muted">{status}</span>
-      <Button variant="accent" onClick={() => void onRefresh()} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</Button>
+
     </div>
     {notice ? <p role="status" className="shrink-0 px-2 py-1 text-2xs text-text-muted">{notice}</p> : null}
     {(!query.data || query.data.meta.freshness === 'failed') && (query.isError || query.data?.errors.length) ? <p role="alert" className="shrink-0 px-2 py-1 text-2xs text-down">{query.error?.message || query.data?.meta.failureReason}</p> : null}

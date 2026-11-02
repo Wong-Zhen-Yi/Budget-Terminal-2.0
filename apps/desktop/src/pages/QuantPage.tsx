@@ -206,7 +206,7 @@ export function QuantPage({ onStatusChange }: { onStatusChange: (panels: PanelSt
       <div className={`quant-status quant-tone-${status.tone}`} role="status" aria-live="polite">
         <span className={`quant-status-dot ${scan.isPending || latest.isPending ? 'is-busy' : ''}`} />
         <span>{status.text}</span>
-        <button type="button" className="quant-text-button" disabled={scan.isPending} title="Re-source the universe from scratch, ignoring the cached shortlist" onClick={() => { setNotice(null); scan.mutate({ forceUniverseRefresh: true }) }}>Force universe refresh <span aria-hidden="true">↗</span></button>
+
       </div>
 
       <nav className="quant-workspace-nav" aria-label="Quant research views">

@@ -5,7 +5,7 @@ import type { LogicalRange } from 'lightweight-charts'
 import { STOCKS_RANGE_PRESETS, type StocksRangePreset } from '@shared/contract'
 import type { AmznBlock, AmznReport } from '@shared/amzn'
 import { api } from '@/api/client'
-import { useAmzn, useRefreshAmzn } from '@/api/amznQueries'
+import { useAmzn } from '@/api/amznQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { LineChart } from '@/components/charts/LineChart'
 import { Donut, colorForIndex } from '@/components/charts/Donut'
@@ -32,9 +32,8 @@ export function AmznPage({ onStatusChange, onNavigate }: {
   const query = useAmzn()
   const now = useSnapshotClock()
   const freshness = query.data ? effectiveFreshness(query.data, now, FRESHNESS.amzn) : 'unavailable'
-  const refresh = useRefreshAmzn()
-  const [notice, setNotice] = useState('')
-  const [refreshing, setRefreshing] = useState(false)
+  const notice = ''
+  const refreshing = false
   const [range, setRange] = useState<StocksRangePreset>('1Y')
   const [logicalRange, setLogicalRange] = useState<LogicalRange | null>(null)
   const payload = query.data?.data
@@ -48,12 +47,6 @@ export function AmznPage({ onStatusChange, onNavigate }: {
   const mix = latest?.revenueCategories.every(category => category.revenue !== null)
     ? latest.revenueCategories.map(category => ({ label: category.name, value: category.revenue! })) : []
   useEffect(() => onStatusChange([{ label: 'AMZN', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: busy }], ''), [onStatusChange, query.data, busy])
-  const onRefresh = async () => {
-    setNotice('')
-    setRefreshing(true)
-    try { await refresh() } catch (error) { setNotice(`Refresh failed: ${error instanceof Error ? error.message : String(error)}`) }
-    finally { setRefreshing(false) }
-  }
   const laneStatus = (block: AmznBlock) => {
     const time = payload?.laneFetchedAt[block]
     return <div className="shrink-0 border-t border-border px-2 py-1 text-2xs text-text-muted">{block} · {payload?.progress[block] ?? (busy ? 'loading' : 'unavailable')}{time ? ` · fetched ${new Date(time).toLocaleString()}` : ''}</div>
@@ -71,7 +64,7 @@ export function AmznPage({ onStatusChange, onNavigate }: {
     <div className="flex shrink-0 flex-wrap items-center gap-1">
       <h1 className="pr-2 text-sm font-semibold text-text">AMZN · Amazon.com</h1>
       <span className="ml-auto text-2xs text-text-muted" role="status">{busy ? 'Loading AMZN...' : query.error ? `AMZN load failed: ${query.error.message}` : `${freshness} · ${latest?.period ?? 'earnings unavailable'}`}</span>
-      <Button variant="accent" disabled={busy} onClick={() => void onRefresh()}>{busy ? 'Refreshing...' : 'Refresh'}</Button>
+
       {['charts', 'fundamentals', 'options', 'valuation'].map(id => <Button key={id} className="capitalize" onClick={() => onNavigate(id, 'AMZN')}>{id}</Button>)}
       <Button onClick={() => void api.openExternal('https://ir.aboutamazon.com/overview/default.aspx')}>Investor relations</Button>
     </div>

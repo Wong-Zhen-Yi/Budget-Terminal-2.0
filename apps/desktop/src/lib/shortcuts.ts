@@ -24,7 +24,7 @@ export function shortcutsForPlatform(isMac: boolean): ReadonlyArray<ShortcutRow>
       behavior:
         'Step to the previous or next visible main tab. Ignored while a text field, table or dropdown has focus.',
     },
-    { keys: isMac ? '⌘R' : 'F5', behavior: 'Refresh the page that is currently open in the main workspace.' },
+    { keys: isMac ? '⌘R' : 'F5', behavior: 'Reload the current page first, then check all other pages.' },
     {
       keys: '`',
       behavior:

@@ -5,7 +5,7 @@ import { STOCKS_RANGE_PRESETS } from '@shared/contract'
 import type { StocksRangePreset } from '@shared/contract'
 import { hoodHistory, hoodRevenueMix } from '@shared/hood'
 import type { HoodBlock, HoodMetric, HoodReport } from '@shared/hood'
-import { useHood, useRefreshHood } from '@/api/hoodQueries'
+import { useHood } from '@/api/hoodQueries'
 import { api } from '@/api/client'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { LineChart } from '@/components/charts/LineChart'
@@ -30,7 +30,7 @@ const findMetric = (report: HoodReport | null | undefined, id: string) => report
 
 function Source({ report }: { report: HoodReport | null | undefined }) {
   return <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-border p-2 text-2xs text-text-muted">
-    {report ? <><button className="text-accent hover:underline" onClick={() => { void api.openExternal(report.sourceUrl) }}>Robinhood report ↗</button><span>Published {report.publishedAt || 'date unavailable'}</span><span>Period {report.period}</span></> : <span>Robinhood report unavailable · use Refresh to retry.</span>}
+    {report ? <><button className="text-accent hover:underline" onClick={() => { void api.openExternal(report.sourceUrl) }}>Robinhood report ↗</button><span>Published {report.publishedAt || 'date unavailable'}</span><span>Period {report.period}</span></> : <span>Robinhood report unavailable · use Reload (F5) to retry.</span>}
   </div>
 }
 
@@ -53,9 +53,8 @@ export function HoodPage({ onStatusChange, onNavigate }: {
   const query = useHood()
   const now = useSnapshotClock()
   const freshness = query.data ? effectiveFreshness(query.data, now, FRESHNESS.hood) : 'unavailable'
-  const refresh = useRefreshHood()
-  const [notice, setNotice] = useState('')
-  const [refreshing, setRefreshing] = useState(false)
+  const notice = ''
+  const refreshing = false
   const [range, setRange] = useState<StocksRangePreset>('1Y')
   const data = query.data?.data
   const busy = refreshing || query.isFetching
@@ -73,11 +72,6 @@ export function HoodPage({ onStatusChange, onNavigate }: {
   }, [data?.market?.chart.candles, range])
   const dates = useMemo(() => candles.map(candle => new Date(candle.time * 1000).toISOString().slice(0, 10)), [candles])
   useEffect(() => onStatusChange([{ label: 'HOOD', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: busy }], ''), [query.data, busy, onStatusChange])
-  const onRefresh = async () => {
-    setNotice('')
-    setRefreshing(true)
-    try { await refresh() } catch (error) { setNotice(error instanceof Error ? error.message : String(error)) } finally { setRefreshing(false) }
-  }
   const tiles = [
     ['Funded customers', metricValue(findMetric(data?.monthly, 'customers')), reportPeriod(data?.monthly)],
     ['Total platform assets', metricValue(findMetric(data?.monthly, 'assets')), reportPeriod(data?.monthly)],
@@ -93,7 +87,7 @@ export function HoodPage({ onStatusChange, onNavigate }: {
       {stats?.priceSource ? <span className="text-2xs text-text-muted">{stats.priceSource} · {stats.changeBasis === '24h' ? '24h' : 'daily'}</span> : null}
       <span className={`num text-xs ${stats && stats.change >= 0 ? 'text-up' : 'text-down'}`}>{stats ? `${stats.change >= 0 ? '+' : ''}${stats.change.toFixed(2)}%` : '—'}</span>
       <span className="text-2xs text-text-muted">Market cap {amount(data?.financials?.facts.marketCap, true)}</span>
-      <Button className="ml-auto" variant="accent" disabled={busy} onClick={onRefresh}>{busy ? 'Loading HOOD…' : 'Refresh'}</Button>
+
       {['charts', 'fundamentals', 'options', 'valuation'].map(id => <Button key={id} className="capitalize" onClick={() => onNavigate(id, 'HOOD')}>{id}</Button>)}
     </div>
     <div className="shrink-0 text-2xs text-text-muted">{busy ? 'Loading Robinhood dashboard…' : `${freshness} · fetched ${data?.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : 'unavailable'}`} · USD · market price from daily bars{stats && data?.market?.chart.candles.at(-1) ? ` as of ${new Date(data.market.chart.candles.at(-1)!.time * 1000).toISOString().slice(0, 10)}` : ''}</div>

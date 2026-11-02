@@ -1,6 +1,6 @@
 import { effectiveFreshness, feedErrorText, useSnapshotClock } from '@/api/snapshotHealth'
 import { FRESHNESS } from '@shared/freshness'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { LogicalRange } from 'lightweight-charts'
 import { STOCKS_RANGE_PRESETS } from '@shared/contract'
 import type { StocksRangePreset } from '@shared/contract'
@@ -9,7 +9,7 @@ import type { FundamentalsChartModel } from '@shared/fundamentalsPage'
 import { VST_BLOCKS, vstHistory, buildVstSnapshot } from '@shared/vst'
 import type { VstBlock } from '@shared/vst'
 import { api } from '@/api/client'
-import { useVst, useRefreshVst } from '@/api/vstQueries'
+import { useVst } from '@/api/vstQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { Donut, colorForIndex } from '@/components/charts/Donut'
 import { StocksChart } from '@/components/stocks/StocksChart'
@@ -31,9 +31,8 @@ export function VstPage({ onStatusChange, onNavigate }: {
   const query = useVst()
   const now = useSnapshotClock()
   const freshness = query.data ? effectiveFreshness(query.data, now, FRESHNESS.vst) : 'unavailable'
-  const refresh = useRefreshVst()
   const [notice, setNotice] = useState('')
-  const [refreshing, setRefreshing] = useState(false)
+  const refreshing = false
   const [range, setRange] = useState<StocksRangePreset>('1Y')
   const [logicalRange, setLogicalRange] = useState<LogicalRange | null>(null)
   const payload = query.data?.data
@@ -80,12 +79,6 @@ export function VstPage({ onStatusChange, onNavigate }: {
   const warning = (block: VstBlock) => query.data?.errors.filter(error => error.symbol === block).map(error => error.reason).join(' · ') || undefined
   const empty = (block: VstBlock) => busy ? 'Loading Vistra data...' : warning(block) || query.error?.message || `${block} data unavailable`
   const metric = (id: string) => earnings?.metrics.find(row => row.id === id)?.value
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true)
-    setNotice('')
-    try { await refresh() } catch (error) { setNotice(`Refresh failed: ${error instanceof Error ? error.message : String(error)}`) }
-    finally { setRefreshing(false) }
-  }, [refresh])
   const onExport = async () => {
     if (!payload) return
     try {
@@ -111,7 +104,7 @@ export function VstPage({ onStatusChange, onNavigate }: {
     <div className="flex shrink-0 flex-wrap items-center gap-1">
       <h1 className="pr-2 text-sm font-semibold text-text">VST — Vistra Energy</h1>
       <span className="ml-auto text-2xs text-text-muted" role="status">{status}</span>
-      <Button variant="accent" disabled={busy} onClick={() => void onRefresh()}>{busy ? 'Refreshing...' : 'Refresh'}</Button>
+
       <Button disabled={!payload || VST_BLOCKS.every(block => payload.progress[block] === 'unavailable')} onClick={() => void onExport()}>Export snapshot</Button>
       <Button onClick={() => onNavigate('charts', 'VST')}>Charts</Button><Button onClick={() => onNavigate('fundamentals', 'VST')}>Fundamentals</Button>
       <Button onClick={() => void api.openExternal('https://investor.vistracorp.com/')}>Investor relations</Button>

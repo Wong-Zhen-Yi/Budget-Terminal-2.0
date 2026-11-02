@@ -17,6 +17,7 @@ function platformName(platform) {
 function launch({ development = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
   log.log('Pages populate completed sections while remaining data loads; all pages still preload and startup failures remain visible.')
   log.log('Page loading: visible startup status, per-page readiness and targeted retries; saved content and timestamps stay visible during refresh. Opening a page promotes its queued requests with fair background turns. Shared reads avoid duplicate work. Readers retain controls longer and evicted pages restore scroll. All pages still preload.')
+  log.log('Reload (F5) updates the current page first, then checks all other pages. Page refresh buttons have been removed; startup still loads every page.')
   const os = platformName(platform)
   log.log('YouTube Research Terminal: compact table, right-side inspector and pagination without scrollbars. Warning-count status and warning controls are removed. All videos and images still preload at startup.')
   log.log('TV: separate market video page with recent channel uploads, newest-first coverage and five-minute refresh. Feed and images preload at startup.')

@@ -142,7 +142,7 @@ export function MarketCapPage({ onStatusChange, onNavigate }: {
   }, [onStatusChange, query.data, query.isFetching, sales.data, sales.isFetching])
 
   const warning = mismatched
-    ? 'The cached ranking does not match this range. Refresh to load matching companies.'
+    ? 'The cached ranking does not match this range. Reload (F5) to load matching companies.'
     : query.error?.message ?? query.data?.meta.failureReason
 
   const salesDegraded = sales.isError || Boolean(sales.data?.errors.length)
@@ -240,16 +240,7 @@ export function MarketCapPage({ onStatusChange, onNavigate }: {
             onChange={setSearch}
             className="w-56"
           />
-          <Button
-            variant="accent"
-            onClick={() => {
-              void query.refresh()
-              void sales.refresh()
-            }}
-            disabled={query.isFetching}
-          >
-            {query.isFetching ? 'Loading...' : 'Refresh'}
-          </Button>
+
         </div>
       </div>
 

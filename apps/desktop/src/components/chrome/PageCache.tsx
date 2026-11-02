@@ -1,3 +1,4 @@
+import { PageQueryScope } from '@/api/pageQueryScope'
 import {
   Activity,
   Component,
@@ -56,7 +57,7 @@ function PageFrame({ tabId, active, positions, children }: {
       element = parent
     }
     if (element === root.current) positions.set(path.join('.'), { path, top: target.scrollTop, left: target.scrollLeft })
-  }}>{children}</div>
+  }}><PageQueryScope.Provider value={tabId}>{children}</PageQueryScope.Provider></div>
 }
 
 class PageErrorBoundary extends Component<{
