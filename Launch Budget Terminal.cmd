@@ -1,6 +1,6 @@
 @echo off
 echo TV: separate market video page with recent channel uploads, newest-first coverage and five-minute refresh. Feed and images preload at startup.
-echo Dictionary Reading Room: category browsing, readable articles, section navigation, saved terms, recent history and formula copying. All 405 terms remain available offline.
+echo Dictionary Reading Room: category browsing, readable articles, section navigation, saved terms, recent history and formula copying. All 405 terms remain available offline. Dictionary candlestick charts render at full size across all pattern examples.
 echo YouTube Research Terminal: compact table, right-side inspector and pagination without scrollbars. Warning-count status and warning controls are removed. All videos and images still preload at startup.
 echo Crypto: removed the snapshot summary banner. Refresh errors, rate limits and startup loading remain visible.
 echo Agents fix: Windows detects both current and older Codex npm executable layouts at startup and reconnect.

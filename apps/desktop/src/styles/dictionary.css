@@ -15,7 +15,7 @@
   outline: 2px solid var(--color-accent-hover);
   outline-offset: 3px;
 }
-.dictionary-page svg { flex: none; width: 19px; height: 19px; }
+.dictionary-page svg[aria-hidden="true"] { flex: none; width: 19px; height: 19px; }
 .dictionary-header { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 14px 28px; padding-bottom: 18px; }
 .dictionary-title { flex: 0 0 255px; }
 .dictionary-title h1 { margin: 0 0 3px; font-size: 28px; font-weight: 650; letter-spacing: -.025em; line-height: 1.2; }

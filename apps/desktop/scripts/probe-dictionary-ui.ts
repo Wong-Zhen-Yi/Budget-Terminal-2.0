@@ -121,11 +121,35 @@ try {
         await search(pattern.term)
         await click(findButton(pattern.term, terms()))
         check(document.querySelector('.dictionary-pattern svg[role="img"]'), 'Candlestick chart disappeared')
+        const checkDiagram = () => {
+          const svg = document.querySelector('.dictionary-pattern svg[role="img"]')
+          check(svg, 'Candlestick chart missing')
+          const bounds = svg.getBoundingClientRect()
+          check(bounds.width > 100 && bounds.height > 100, 'Candlestick chart collapsed to icon size')
+          check(Math.abs(bounds.width - Number(svg.getAttribute('width'))) < 1 && Math.abs(bounds.height - Number(svg.getAttribute('height'))) < 1, 'Chart viewport clips measured candle geometry')
+          check(svg.querySelectorAll('rect').length > 0, 'Chart contains no candles')
+        }
+        checkDiagram()
         const examples = [...document.querySelectorAll('.dictionary-pattern-toolbar button')]
         check(examples.length > 1, 'Chart example controls disappeared')
         await click(examples[1])
         check(examples[1].getAttribute('aria-pressed') === 'true', 'Chart example selection failed')
+        checkDiagram()
         await window.captureFixture('dictionary-pattern')
+        flushSync(() => host.render(<div style={{ display: 'none', flex: 1, minWidth: 0 }}><DictionaryPage key={renderKey++} onStatusChange={() => { statuses++ }} /></div>))
+        await settle()
+        await search('Ascending Channel')
+        document.querySelector('.dictionary-page').parentElement.style.display = 'flex'
+        await settle()
+        checkDiagram()
+        for (const entry of DICTIONARY_ENTRIES.filter(entry => entry.chartPatternId)) {
+          await search(entry.term)
+          await click(findButton(entry.term, terms()))
+          for (const button of document.querySelectorAll('.dictionary-pattern-toolbar button')) {
+            await click(button)
+            checkDiagram()
+          }
+        }
         await search('CPI Release')
         await click(findButton('CPI Release', terms()))
         for (const section of getDictionaryEntry('cpi-release').sections) {
@@ -180,7 +204,7 @@ try {
     const fs = require('fs'), path = require('path')
     app.setPath('userData', ${JSON.stringify(join(directory, 'userData'))})
     app.whenReady().then(async () => {
-      const window = new BrowserWindow({ show: false, width: 1600, height: 1000, useContentSize: true, webPreferences: { backgroundThrottling: false, preload: ${JSON.stringify(join(directory, 'preload.cjs'))} } })
+      const window = new BrowserWindow({ show: false, width: 1600, height: 1000, useContentSize: true, webPreferences: { backgroundThrottling: false, offscreen: true, preload: ${JSON.stringify(join(directory, 'preload.cjs'))} } })
       window.webContents.on('console-message', event => console.log(event.message))
       ipcMain.handle('capture-fixture', async (_event, name) => {
         if (!/^[a-z-]+$/.test(name)) throw Error('Invalid screenshot name')
