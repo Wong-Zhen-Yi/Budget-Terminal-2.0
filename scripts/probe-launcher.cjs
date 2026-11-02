@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const { spawnSync } = require('node:child_process')
 const { join, resolve } = require('node:path')
-const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = require('node:fs')
+const { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { launch: runLaunch } = require('./launch.cjs')
 const { dev } = require('./dev.cjs')
@@ -13,8 +13,18 @@ const { supportedNodeVersion, supportedNpmVersion, runtimeEnvironment, assertCer
 const { version: electronVersion } = require('electron/package.json')
 
 const log = { log() {}, error() {} }
+for (const [file, command] of [
+  ['Launch Budget Terminal.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -Dev/],
+  ['Launch Budget Terminal.command', /^node scripts\/launch\.cjs --dev$/m],
+  ['Launch Budget Terminal.sh', /^exec node scripts\/launch\.cjs --dev$/m],
+]) {
+  const source = readFileSync(resolve(__dirname, '..', file), 'utf8').replace(/\r\n/g, '\n')
+  assert.match(source, command, `${file} must open live mode on double click`)
+  assert.match(source, /Live updates enabled/, `${file} must explain automatic updates`)
+  assert(!source.includes('Building and verifying the latest production app'), `${file} must describe its current launch mode`)
+}
 function assertCurrentStartupMessages(messages) {
-  assert(messages.some(message => message.includes('Page loading: visible startup status') && message.includes('targeted retries') && message.includes('All pages still preload')), 'Every launch mode announces visible page loading and recovery')
+  assert(messages.some(message => message.includes('Page Loading Status banner removed.') && message.includes('diagnostics remain in Settings') && message.includes('All pages still preload')), 'Every launch mode announces banner removal and diagnostics in Settings')
   assert(messages.some(message => message.includes('Dictionary Reading Room:') && message.includes('saved terms') && message.includes('offline')), 'Every launch mode announces the offline Dictionary Reading Room')
   assert(messages.some(message => message.includes('MCP startup fix:') && message.includes('TV are classified correctly') && message.includes('Agent startup errors no longer block')), 'Every launch mode must announce the MCP/TV startup fix')
   assert(messages.some(message => message.includes('Stock data reuse:') && message.includes('next regular session') && message.includes('All pages still preload')), 'Every launch mode must announce session-aware stock caching')

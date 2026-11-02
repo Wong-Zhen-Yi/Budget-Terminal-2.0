@@ -10,6 +10,8 @@ const require = createRequire(import.meta.url)
 const root = resolve(import.meta.dirname, '..')
 const directory = await mkdtemp(join(tmpdir(), 'budget-page-progress-ui-'))
 try {
+  const appSource = await readFile(join(root, 'src/App.tsx'), 'utf8')
+  assert.ok(!appSource.includes('LoadingStatus'), 'The global startup diagnostics banner must stay removed')
   const bundle = await build({
     stdin: {
       resolveDir: root,
@@ -20,7 +22,7 @@ try {
         import { useQuery } from './src/api/progressiveQuery'
         import { trackPageQuery } from './src/api/pageProgress'
         import { api } from './src/api/client'
-        import { LoadingStatus } from './src/components/chrome/LoadingStatus'
+        import { PageReadiness } from './src/components/chrome/PageReadiness'
         import { useDataHealth } from './src/stores/dataHealth'
         const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
         const check = (ok, message) => { if (!ok) throw Error(message) }
@@ -28,7 +30,6 @@ try {
         let finish
         let preview = null
         let key
-        let retries = []
         window.api = Object.freeze({
           bitcoin: () => new Promise(resolve => { finish = resolve }),
           pageProgress: async request => { key = request; return preview },
@@ -36,7 +37,7 @@ try {
         const queryKey = ['bitcoin']
         function Demo() {
           const query = useQuery({ queryKey, queryFn: () => api.bitcoin({ background: true }) })
-          return <><LoadingStatus page="bitcoin" panels={[{label: 'Bitcoin', envelope: query.data, error: query.error, loading: query.isFetching}]} retry={page => retries.push(page)} /><main aria-busy={query.isFetching}><h1>Bitcoin</h1><p>{query.data?.data.sections.join(' / ') ?? 'Waiting'}</p><span>{query.isFetching ? 'Loading remaining data' : 'Complete'}</span></main></>
+          return <><PageReadiness page="bitcoin" /><PageReadiness page="forex" /><main aria-busy={query.isFetching}><h1>Bitcoin</h1><p>{query.data?.data.sections.join(' / ') ?? 'Waiting'}</p><span>{query.isFetching ? 'Loading remaining data' : 'Complete'}</span></main></>
         }
         window.runProbe = async () => {
           // Start in the background, then mount while that same query is pending.
@@ -60,25 +61,18 @@ try {
             bitcoin: {state: 'ready'}, forex: {state: 'failed', reason: 'Fixture provider unavailable'},
           }})
           await wait(100)
-          const status = document.querySelector('[aria-label="Page loading status"]')
-          check(status.getClientRects().length > 0 && status.innerText.includes('Pages 1/2 ready'), 'Startup status must be visible outside Settings')
-          status.querySelector('[aria-expanded]').click()
-          await wait(100)
-          check(status.innerText.includes('Fixture provider unavailable'), 'Expanded details must expose unresolved failures')
-          const retryButton = [...status.querySelectorAll('button')].find(button => button.textContent === 'Retry Forex')
-          check(retryButton, 'Targeted retry button missing')
-          retryButton.click()
-          check(retries[0] === 'forex', 'Retry must target the selected failed page')
+          check(!document.querySelector('[aria-label="Page loading status"]'), 'Global startup diagnostics banner must not render')
+          const failed = document.querySelector('[data-page-readiness="forex"]')
+          check(failed.innerText === 'Failed' && failed.title === 'Fixture provider unavailable', 'Page readiness must retain failure state and reason')
           const before = client.getQueryData(queryKey)
           const refresh = client.refetchQueries({queryKey})
           await wait(300)
           check(document.querySelector('main').innerText.includes('Mining stats / Fees'), 'Refresh hid previous sections')
-          check(status.innerText.includes('Refreshing') && status.innerText.includes('Data retrieved'), 'Retained content needs refresh and timestamp labels')
           finish({data: {sections: []}, meta: {source: 'fixture', freshness: 'failed', fetchedAt: Date.now(), failureReason: 'Fixture refresh failed'}, errors: []})
           await refresh; await wait(150)
           check(client.getQueryData(queryKey) === before && client.getQueryState(queryKey).status === 'error', 'Failed manual refresh must retain content and expose error')
-          check(document.querySelector('main').innerText.includes('Fees') && status.innerText.includes('Fixture refresh failed'), 'Refresh failure erased data or hid its reason')
-          return 'PASS: progressive sections, shared preview identity, visible loading details, targeted retry, timestamps, retained refresh content and failure visibility'
+          check(document.querySelector('main').innerText.includes('Fees'), 'Refresh failure erased data')
+          return 'PASS: progressive sections, shared preview identity, no global diagnostics banner, per-page failure visibility and retained refresh content'
         }
 
       `,

@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react'
 import { SETTINGS_TAB_ID } from '@shared/contract'
 import { WORKSPACES, workspaceFor } from '@shared/navigation'
 import { NavigationIcon } from './NavigationIcon'
-import { PageReadiness } from './LoadingStatus'
+import { PageReadiness } from './PageReadiness'
 
 interface NavigationTab {
   id: string

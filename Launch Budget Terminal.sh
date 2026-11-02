@@ -1,14 +1,15 @@
 #!/bin/sh
+echo "Hyperliquid: live crypto candles share the equity connection, including overnight updates and reconnect recovery; market tables retain 24h change and volume."
 echo 'Reload (F5) updates the current page first, then checks all other pages. Page refresh buttons have been removed; startup still loads every page.'
 echo "Pages populate completed sections while remaining data loads; all pages still preload and startup failures remain visible."
-echo "Page loading: visible startup status, per-page readiness and targeted retries; saved content and timestamps stay visible during refresh. Opening a page promotes its queued requests with fair background turns. Shared reads avoid duplicate work. Readers retain controls longer and evicted pages restore scroll. All pages still preload."
+echo "Page Loading Status banner removed. Startup progress, failures and diagnostics remain in Settings; page readiness indicators remain available. Opening a page promotes its queued requests with fair background turns. Shared reads avoid duplicate work. Readers retain controls longer and evicted pages restore scroll. All pages still preload."
 echo "TV: separate market video page with recent channel uploads, newest-first coverage and five-minute refresh. Feed and images preload at startup."
 echo "Dictionary Reading Room: category browsing, readable articles, section navigation, saved terms, recent history and formula copying. All 405 terms remain available offline. Dictionary candlestick charts render at full size across all pattern examples."
 echo "YouTube Research Terminal: compact table, right-side inspector and pagination without scrollbars. Warning-count status and warning controls are removed. All videos and images still preload at startup."
 echo "Crypto: removed the snapshot summary banner. Refresh errors, rate limits and startup loading remain visible."
 echo "Agents fix: Windows detects both current and older Codex npm executable layouts at startup and reconnect."
 echo "Telegram: the connection button sits beside Trackers in the Agents toolbar; startup checks private chat access; delivery errors stay visible and identify chat, token, blocked-bot or gateway problems. Agents offers Check private chat without sending a message."
-echo "Saved-data warning banners removed throughout the app, including ETF, IPO, Valuation, company pages and charts. Startup progress and failure details are visible above page content and in Settings."
+echo "Saved-data warning banners removed throughout the app, including ETF, IPO, Valuation, company pages and charts. Startup progress and failure details are available in Settings."
 echo "Branding: Fold logo is active in the title bar, app icon and launcher shortcuts."
 echo "MCP startup fix: desktop-only cache controls, heatmap progress and TV are classified correctly. Agent startup errors no longer block the app from opening."
 echo "Cache startup: saved pages stay usable during background refresh. Settings controls 256 MiB page snapshots, 2 GiB market data, a separate 512 MiB image budget and 30-day retention. All pages still preload."
@@ -23,7 +24,7 @@ echo "Stock data reuse: checked Yahoo U.S. closing quotes and history stay cache
 echo "Agents chat: the message composer fills resizable dashboard and dropdown panes at every zoom level."
 echo "Data health: all startup pages report current results and refresh after expiry. Chart history keeps its own freshness; SPY security IDs and Robinhood monthly reports are handled correctly."
 echo "MCP prices use the shared live Hyperliquid feed for mapped stocks. Fast quote reads skip macro and sector lookups by default; projected responses preserve perp market labels and Yahoo fallback details."
-echo "Portfolio charts stay prepared across all books: Dashboard, Stocks and selected Main/Multi views load at startup, refresh in the background and prepare new holdings automatically. The bottom status strip is hidden; background loading, chart refresh and monitoring continue. Readiness and failures are visible above page content and in Settings."
+echo "Portfolio charts stay prepared across all books: Dashboard, Stocks and selected Main/Multi views load at startup, refresh in the background and prepare new holdings automatically. The bottom status strip is hidden; background loading, chart refresh and monitoring continue. Readiness and failures are available in Settings."
 echo "Chart ticker switches reuse cached history and refresh its recent tail. Interactive requests have priority and reserved Hyperliquid rate budget; live marks keep chart zoom steady."
 echo "Portfolio Move Position: select stocks and a destination, then confirm. Shares, average prices and weight settings are preserved; existing destination tickers are protected."
 echo "Settings API Usage Dashboard shows live provider requests and searchable page-by-page API purposes."
@@ -52,9 +53,9 @@ if ! command -v node >/dev/null 2>&1; then
 fi
 
 echo "Settings API usage now shows startup health and a compact live provider table, with an expandable API and page directory. Failed and incomplete pages appear first in its startup status list."
-echo "Building and verifying the latest production app, including Yahoo pacing, Trading Volumes hover highlights and the median-centered Beta chart."
+echo "Live updates enabled: UI edits apply automatically; Electron edits rebuild and restart or reload. Keep this terminal open."
 echo "All implemented pages preload at startup; progress and failures remain visible. Keep this terminal open."
 echo "Settings Page Load Order includes Export for AI for a local startup diagnostic text report. Nothing is uploaded automatically."
 echo "Includes bounded 4 MB News images, corrected daily S&P500 holdings freshness and expiry-aware WTI contract selection."
 echo "Pre-Market futures recover through daily history when hourly feeds fail or return stale data; genuine outages remain visible."
-exec node scripts/launch.cjs
+exec node scripts/launch.cjs --dev

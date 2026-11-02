@@ -149,6 +149,16 @@ async function offline(): Promise<void> {
     return Response.json([cryptoMetadata, [cryptoContext]])
   }, () => now, undefined, client)
   await cryptoClient.getMarkets()
+  client.watchCryptoCandles('BTC', '1h')
+  client.watchCryptoCandles('UNKNOWN', '1h')
+  assert.ok(sockets[0].sent.some(item => (item.subscription as { coin?: string }).coin === 'BTC'))
+  assert.ok(!sockets[0].sent.some(item => (item.subscription as { coin?: string }).coin === 'UNKNOWN'))
+  sockets[0].message({ channel: 'candle', data: { ...bar, s: 'BTC', c: '111' } })
+  await new Promise(resolve => setTimeout(resolve, 300))
+  assert.equal(update?.candles[0].symbol, 'BTC-PERP')
+  assert.equal(client.getLatestCandle('BTC-PERP', '1h')?.close, 111)
+  sockets[0].message({ channel: 'candle', data: { ...bar, s: 'BTC', t: barTime - 3600_000, c: '109' } })
+  assert.equal(client.getLatestCandle('BTC-PERP', '1h')?.close, 111, 'Older stream bars cannot rewind history')
   assert.equal(sockets.length, 1, 'Crypto and equities must share one connection')
   assert.equal(sockets[0].sent.filter(item => (item.subscription as { type?: string } | undefined)?.type === 'allDexsAssetCtxs').length, 1)
   sockets[0].message({ channel: 'allDexsAssetCtxs', data: { ctxs: [['', [cryptoContext]]] } })
@@ -157,6 +167,7 @@ async function offline(): Promise<void> {
   await cryptoClient.getMarkets()
   assert.equal(cryptoRequests, 1, 'Healthy live contexts must avoid periodic REST polling')
   now += 16_000
+  assert.equal(client.getLatestCandle('BTC-PERP', '1h'), undefined, 'Stale candles must not override REST history')
   assert.equal(client.getCryptoMarkets(), null, 'Stale contexts must not be returned as live')
   await cryptoClient.getMarkets()
   assert.equal(cryptoRequests, 2, 'Stalled feeds must recover through REST')
@@ -164,6 +175,7 @@ async function offline(): Promise<void> {
   assert.equal(client.getCryptoMarkets(), null, 'Universe changes require metadata refresh before index alignment')
   sockets[0].message({ channel: 'allDexsAssetCtxs', data: { ctxs: [['', [cryptoContext]]] } })
   sockets[0].close()
+  assert.equal(client.getLatestCandle('BTC-PERP', '1h'), undefined)
   assert.equal(client.getCryptoMarkets(), null, 'Disconnect discards crypto observations')
   assert.equal((await client.getQuote('AAPL')).price, 110, 'Disconnect must discard the old stream observation')
   await new Promise(resolve => setTimeout(resolve, 1100))
@@ -171,6 +183,7 @@ async function offline(): Promise<void> {
   sockets[1].open()
   assert.ok(sockets[1].sent.some(item => (item.subscription as { type: string }).type === 'candle'), 'Reconnect restores candle subscriptions')
   assert.ok(sockets[1].sent.some(item => (item.subscription as { type: string }).type === 'allDexsAssetCtxs'), 'Reconnect restores shared crypto contexts')
+  assert.ok(sockets[1].sent.some(item => (item.subscription as { coin?: string }).coin === 'BTC'), 'Reconnect restores crypto candles')
   stop()
   client.close()
   await assert.rejects(client.getCandles('AAPL', new Date(now - 6_000 * 60_000), '1m'), /5,000/)
@@ -347,6 +360,12 @@ async function offline(): Promise<void> {
   applyEquityMarketUpdate(queryClient, { quotes: [], candles: [{ symbol: 'AAPL', market, interval: '1h', candle: { ...candle, close: 200 } }] })
   assert.equal(queryClient.getQueryData<ReturnType<typeof ok<ChartPayload>>>(['chart', 'AAPL', '1 Hour'])?.data.candles[0].close, 110, 'A stock chart must reject perp candles')
   assert.equal(mergeStreamCandle([candle], { ...candle, time: candle.time - 1 })[0], candle)
+  const cryptoChart = { ...chart, symbol: 'BTC-PERP', stats: { ...chart.stats!, market: 'BTC' } }
+  queryClient.setQueryData(['chartsHistory', 'BTC-PERP'], ok(cryptoChart, 'Hyperliquid crypto perp (BTC)'))
+  applyEquityMarketUpdate(queryClient, { quotes: [], candles: [{ symbol: 'BTC-PERP', market: 'BTC', interval: '1h', candle: { ...candle, close: 112 } }] })
+  const streamedCryptoChart = queryClient.getQueryData<ReturnType<typeof ok<ChartPayload>>>(['chartsHistory', 'BTC-PERP'])!.data
+  assert.equal(streamedCryptoChart.candles.at(-1)?.close, 112)
+  assert.equal(streamedCryptoChart.stats?.price, 112, 'Crypto chart price follows actual venue candles')
   queryClient.clear()
   console.log('PASS: explicit mappings, mark/24h units, shared snapshots, streaming, reconnect, candle validation, rate limits, quote/history fallbacks, portfolio values and renderer cache provenance.')
 }
@@ -367,16 +386,19 @@ async function live(): Promise<void> {
   assert.ok(fourHour.candles.every(candle => candle.time % (4 * 3600) === 0), 'Native perp bars use UTC opening timestamps')
   const crypto = await hyperliquidClient.getMarkets()
   assert.ok(crypto.markets.some(row => row.symbol === 'BTC'))
+  hyperliquidEquities.watchCryptoCandles('BTC', '1h')
   const streamed = new Promise<void>((resolve, reject) => {
     let quoteSeen = false
     let candleSeen = false
     let cryptoSeen = false
+    let cryptoCandleSeen = false
     const timer = setTimeout(() => reject(new Error('Live equity stream timed out')), 15_000)
     const stop = hyperliquidEquities.subscribe(update => {
       quoteSeen ||= update.quotes.some(quote => quote.symbol === 'NVDA')
       candleSeen ||= update.candles.some(event => event.symbol === 'NVDA')
       cryptoSeen ||= Boolean(update.hyperliquid?.markets.some(row => row.symbol === 'BTC'))
-      if (quoteSeen && candleSeen && cryptoSeen) {
+      cryptoCandleSeen ||= update.candles.some(event => event.symbol === 'BTC-PERP')
+      if (quoteSeen && candleSeen && cryptoSeen && cryptoCandleSeen) {
         clearTimeout(timer)
         stop()
         resolve()

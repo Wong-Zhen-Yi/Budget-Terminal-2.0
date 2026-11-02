@@ -83,7 +83,7 @@ export class HyperliquidEquities {
   private readonly quotes = new Map<string, Quote>()
   private readonly watched = new Set<string>()
   private readonly listeners = new Set<(update: EquityMarketUpdate) => void>()
-  private readonly candleWatches = new Map<string, { symbol: string; interval: string }>()
+  private readonly candleWatches = new Map<string, { symbol: string; market: string; interval: string }>()
   private readonly changedCandles = new Map<string, EquityMarketUpdate['candles'][number]>()
   private readonly latestCandles = new Map<string, { candle: Candle; receivedAt: number }>()
   private socket: WebSocket | null = null
@@ -167,15 +167,32 @@ export class HyperliquidEquities {
 
   private sendCandleSubscription(symbol: string, interval: string): void {
     const apiInterval = interval === '1wk' ? '1w' : interval === '1mo' ? '1M' : interval
-    this.socket?.send(JSON.stringify({ method: 'subscribe', subscription: { type: 'candle', coin: equityMarket(symbol), interval: apiInterval } }))
+    this.socket?.send(JSON.stringify({ method: 'subscribe', subscription: { type: 'candle', coin: this.candleWatches.get(`${symbol}:${interval}`)?.market, interval: apiInterval } }))
   }
 
   watchCandles(symbol: string, interval: string): void {
     const key = `${symbol}:${interval}`
     if (!equityMarket(symbol) || !INTERVAL_MS[interval] || this.candleWatches.has(key)) return
-    this.candleWatches.set(key, { symbol, interval })
+    this.candleWatches.set(key, { symbol, market: equityMarket(symbol)!, interval })
     this.watch(symbol)
     if (this.socket?.readyState === 1) this.sendCandleSubscription(symbol, interval)
+  }
+
+  /** Only subscribe to native crypto assets verified against current venue metadata. */
+  watchCryptoCandles(market: string, interval: string): void {
+    const universe = record(this.cryptoMetadata).universe
+    if (!Array.isArray(universe) || !universe.some(asset => record(asset).name === market && record(asset).isDelisted !== true)) return
+    const symbol = `${market}-PERP`
+    const key = `${symbol}:${interval}`
+    if (!INTERVAL_MS[interval] || this.candleWatches.has(key)) return
+    this.candleWatches.set(key, { symbol, market, interval })
+    this.connect()
+    if (this.socket?.readyState === 1) this.sendCandleSubscription(symbol, interval)
+  }
+
+  getLatestCandle(symbol: string, interval: string): Candle | undefined {
+    const latest = this.latestCandles.get(`${symbol}:${interval}`)
+    return this.socket?.readyState === 1 && latest && this.now() - latest.receivedAt <= QUOTE_MAX_AGE ? latest.candle : undefined
   }
 
   private publish(): void {
@@ -245,10 +262,11 @@ export class HyperliquidEquities {
         for (const value of Array.isArray(message.data) ? message.data : [message.data]) {
           const row = record(value)
           const market = typeof row.s === 'string' ? row.s : ''
-          const symbol = market.split(':')[1]
           const interval = row.i === '1w' ? '1wk' : row.i === '1M' ? '1mo' : String(row.i)
+          const watch = [...this.candleWatches.values()].find(entry => entry.market === market && entry.interval === interval)
+          if (!watch) continue
+          const { symbol } = watch
           const key = `${symbol}:${interval}`
-          if (!symbol || EQUITY_MARKETS[symbol] !== market || !this.candleWatches.has(key)) continue
           try {
             const candle = parseEquityCandles([row], market, interval)[0]
             if ((this.latestCandles.get(key)?.candle.time ?? 0) > candle.time) continue

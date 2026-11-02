@@ -28,7 +28,7 @@ Follow existing TypeScript style: two-space indentation, single quotes, and no s
 Keep renderer access behind `window.api`, shared calculations free of React/Electron imports, service responses within `Envelope<T>`, and Yahoo requests behind the shared rate gate.
 
 ## Startup Page Readiness
-When Budget Terminal opens, start loading every implemented page, including pages the user has not visited. Once startup loading completes, switching to any page must show its ready content without a first-visit load. Do not limit startup loading to the active page, favorites, or recent pages, and do not defer a page's initial data load until its tab is selected. Keep startup progress and failures visible so a page that could not load is not silently treated as ready. Preserve this behavior when changing navigation, caching, query hooks, or data services.
+When Budget Terminal opens, start loading every implemented page, including pages the user has not visited. Once startup loading completes, switching to any page must show its ready content without a first-visit load. Do not limit startup loading to the active page, favorites, or recent pages, and do not defer a page's initial data load until its tab is selected. Keep startup progress and failures visible in Settings so a page that could not load is not silently treated as ready. Preserve this behavior when changing navigation, caching, query hooks, or data services.
 
 ## Testing Guidelines
 Tests are standalone `tsx` probes using Node assertions or explicit checks; no coverage threshold is configured. Extend the matching `probe-<area>.ts`. Run typecheck and relevant offline probes for code changes, live probes for provider changes, and a UI smoke test for visible changes. Persistence probes must redirect `APPDATA` and `LOCALAPPDATA` to temporary directories.
@@ -39,3 +39,6 @@ Use concise, imperative commit subjects, matching history: `Improve charts load 
 ## User notes
 update all double click launchers everytime a change is made
 This is a public repo make sure that there are no private information like passwords, emails and API keys especially for the browser page
+
+## No Global Diagnostics Banners
+The **Page Loading Status banner** (also called the **startup diagnostics banner**, formerly the `LoadingStatus` component) is the full-width strip above page content showing "Pages X/Y ready", "Page needs attention", "Showing saved content", retrieval timestamps, raw errors, and retry buttons. The user has repeatedly requested its removal. Do not restore it or add an equivalent global diagnostics strip. Keep detailed startup progress, failures, and diagnostics in Settings. Preserve startup preloading for every implemented page and the existing page readiness indicators. The bottom status strip must also remain hidden.

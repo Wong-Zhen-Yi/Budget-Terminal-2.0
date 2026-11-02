@@ -24,6 +24,7 @@ try {
         import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
         import { CryptoPage } from './src/pages/CryptoPage'
         import { queryKeys } from './src/api/client'
+        import { fetchRetainedQuery } from './src/api/snapshotResult'
         import { applyEquityMarketUpdate } from './src/api/equityStream'
         import { buildTasks } from './src/api/prefetch'
         const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } })
@@ -57,7 +58,7 @@ try {
             const candles = Array.from({length: 60}, (_, index) => ({time: Math.floor(Date.now()/3600000)*3600 - (60-index)*3600,
               open: base+index, close: base+index+1, high: base+index+2, low: base+index-1, volume: 42+index}))
             return { data: { symbol: request.symbol, interval: request.interval === '4 Hours' ? '4h' : '1h', candles,
-              stats: { source: 'Hyperliquid crypto perp ('+request.symbol.replace('-PERP','')+')' } },
+              stats: { market: request.symbol.replace('-PERP',''), source: 'Hyperliquid crypto perp ('+request.symbol.replace('-PERP','')+')' } },
               meta: { freshness: 'fresh', source: 'Hyperliquid crypto perp', fetchedAt: Date.now() }, errors: [] }
           },
           crypto: async request => {
@@ -83,6 +84,12 @@ try {
           check(chartCalls === 1, 'First visit re-fetched prepared chart history')
           check(document.querySelector('.crypto-chart-canvas').dataset.candleCount === '60', 'Prepared candles missing')
           check(document.querySelectorAll('canvas').length > 0, 'Candlestick canvas did not render')
+          const historyQuery = client.getQueryCache().getAll().find(query => query.queryKey[0] === 'chartsHistory' && query.state.data?.data.symbol === 'BTC-PERP')
+          check(historyQuery, 'Prepared crypto history missing')
+          const lastBar = historyQuery.state.data.data.candles.at(-1)
+          applyEquityMarketUpdate(client, { quotes: [], candles: [{ symbol: 'BTC-PERP', market: 'BTC', interval: '1h', candle: { ...lastBar, time: lastBar.time + 3600, close: lastBar.close + 1, high: lastBar.high + 1 } }] })
+          await settle()
+          check(document.querySelector('.crypto-chart-canvas').dataset.candleCount === '61', 'Live crypto candle did not reach rendered chart')
           check(document.querySelectorAll('[title^="Rank:"]').length === 30, 'Missing heatmap tiles')
           check(text().includes('BTC-PERP') && text().includes('+0.00125%'), 'Missing Hyperliquid market or incorrect funding units')
           check(text().includes('-0.00200%'), 'Negative funding must keep its sign')
@@ -113,42 +120,38 @@ try {
           check(chartCalls === countBeforeSearch, 'Search sent a history request')
           Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '')
           input.dispatchEvent(new Event('input', {bubbles:true})); await settle()
-          ;[...document.querySelectorAll('button')].find(button => button.textContent === 'Copy snapshot').click(); await settle()
-          check(copied.includes('BTC') && copied.includes('ETH'), 'Copy snapshot lost watchlist data')
-          document.querySelector('.crypto-news-item').click(); await settle()
-          check(opened === 'https://example.com/crypto', 'News link failed')
           const spotSnapshot = client.getQueryData(queryKeys.crypto)
           client.setQueryData(queryKeys.crypto, { ...spotSnapshot, data: { ...spotSnapshot.data,
             quotes: { ...spotSnapshot.data.quotes, BTC: { ...spotSnapshot.data.quotes.BTC, source: 'Hyperliquid crypto perp' } } } })
           await settle()
           check(document.querySelector('.crypto-ribbon').textContent.includes('BTC PERP'), 'Perpetual fallback must be labelled in the headline ribbon')
           client.setQueryData(queryKeys.crypto, spotSnapshot)
-          const refresh = () => [...document.querySelectorAll('button')].find(b => b.textContent === 'Refresh').click()
+          const refresh = () => fetchRetainedQuery(client, queryKeys.crypto, () => window.api.crypto({ force: true })).catch(() => {})
           mode = 'partial'
-          refresh()
+          await refresh()
           await settle()
           check(forced, 'Refresh must force request')
           check(!text().includes('stages ready'), 'Partial load restored the snapshot summary banner')
           check(text().includes('Only 5/30 cryptocurrencies available'), 'Missing provider failure detail')
           mode = 'hyperliquid-failed'
-          refresh()
+          await refresh()
           await settle()
           check(text().includes('Hyperliquid HTTP 429'), 'Missing Hyperliquid failure')
           check(!text().includes('stages ready'), 'Hyperliquid outage restored the snapshot summary banner')
-          check(perps.textContent.includes('No matching perpetual markets') && text().includes('Snapshot coverage 30/30'), 'Hyperliquid outage must preserve other data')
+          check(perps.textContent.includes('BTC-PERP') && text().includes('Snapshot coverage 30/30'), 'Hyperliquid outage must preserve other data')
           mode = 'reject'
-          refresh()
+          await refresh()
           await settle()
-          check(text().includes('Crypto refresh failed: IPC disconnected'), 'Missing rejected refresh error')
+          check(text().includes('Crypto data refresh failed: IPC disconnected'), 'Missing rejected refresh error')
           mode = 'success'
-          refresh()
+          await refresh()
           await settle()
           check(text().includes('Snapshot coverage 30/30'), 'Refresh did not recover')
           check(!text().includes('IPC disconnected'), 'Recovered page retained error')
           client.setQueryData(['apiUsage'], {sampledAt:Date.now(), providers:[{id:'coingecko',throttled:true,cooldownMs:42000}]})
           await settle()
           const cooldownButton = [...document.querySelectorAll('button')].find(button => button.textContent.startsWith('Retry in'))
-          check(cooldownButton?.disabled && text().includes('CoinGecko rate limited'), 'Cooldown must disable refresh and remain visible')
+          check(!cooldownButton && text().includes('CoinGecko rate limited'), 'Cooldown must remain visible without restoring a refresh button')
           check(document.querySelector('.crypto-chart-canvas').dataset.candleCount === '60' && text().includes('Crypto market fixture headline'), 'Cooldown erased healthy data')
           client.setQueryData(['apiUsage'], {sampledAt:Date.now(),providers:[]}); await settle()
           const snapshot = client.getQueryData(queryKeys.crypto)
@@ -161,6 +164,10 @@ try {
           document.querySelector('[aria-label="Chart BTC perpetual"]').click()
           ;[...document.querySelectorAll('button')].find(button => button.textContent === '1h').click()
           await settle()
+          ;[...document.querySelectorAll('button')].find(button => button.textContent === 'Copy snapshot').click(); await settle()
+          check(copied.includes('BTC') && copied.includes('ETH'), 'Copy snapshot lost watchlist data')
+          document.querySelector('.crypto-news-item').click(); await settle()
+          check(opened === 'https://example.com/crypto', 'News link failed')
           const lastCell = document.querySelector('.crypto-heatmap-cell:last-child')
           check(lastCell.getBoundingClientRect().bottom <= document.querySelector('.crypto-breadth').getBoundingClientRect().bottom, 'The last heatmap row is clipped')
           return 'PASS: prepared startup chart, watchlist/timeframes, real candlestick rendering, market search/sort, source separation, copy/news actions, cooldown, partial readiness and recovery'

@@ -6,7 +6,6 @@ import { AgentsPage } from '@/pages/AgentsPage'
 import { useAgents, useAgentCommand } from '@/api/agentsQueries'
 import { Sp500Page } from '@/pages/Sp500Page'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 
 import { SETTINGS_TAB_ID, TABS } from '@shared/contract'
 import { DEFAULT_TAB_ID, WORKSPACES } from '@shared/navigation'
@@ -15,7 +14,6 @@ import { useEquityMarketStream } from '@/api/equityStream'
 import { useMcpScreenshot, useScreenshotReady } from '@/api/mcpScreenshot'
 import { useSettings, useSettingsMutation } from '@/api/settingsQueries'
 import { PageCache } from '@/components/chrome/PageCache'
-import { LoadingStatus } from '@/components/chrome/LoadingStatus'
 import { NumberPrivacy } from '@/components/ui/NumberPrivacy'
 import { StatusBar, type PanelStatus } from '@/components/chrome/StatusBar'
 import { PortfolioChartsStatus } from '@/components/chrome/PortfolioChartsStatus'
@@ -86,7 +84,6 @@ import { useNavigation } from '@/stores/navigation'
 const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
 
 export function App() {
-  const queryClient = useQueryClient()
   useEquityMarketStream()
   const isMac = window.api.platform === 'darwin'
   const [selectedTab, setActiveTab] = useState(DEFAULT_TAB_ID)
@@ -395,12 +392,6 @@ export function App() {
           saving={savingSidebar || !settings}
         />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <LoadingStatus page={activeTab} panels={panels} retry={page => {
-            warm.retry?.(page)
-            if (!page || page === activeTab) void queryClient.refetchQueries({ type: 'active', predicate: query => query.state.status === 'error' })
-            if (!page || page === 'settings') void settingsQuery.refetch()
-            if (!page || page === 'portfolio') void queryClient.refetchQueries({ queryKey: ['portfolio'], exact: true })
-          }} />
           {activeTab !== 'agents' && <WorkspaceHeader tabs={visibleTabs} activeTab={activeTab} onSelectTab={setActiveTab}
             isMac={isMac}
             favorite={favorites.includes(activeTab)} onToggleFavorite={() => void toggleFavorite()}

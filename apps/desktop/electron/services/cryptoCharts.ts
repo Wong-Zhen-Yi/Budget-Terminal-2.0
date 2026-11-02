@@ -3,7 +3,7 @@ import { cryptoPerpSymbol } from '../shared/cryptoWorkspace.js'
 import { cache, type TtlCache } from './cache.js'
 import { hyperliquidClient } from './hyperliquid.js'
 import { hyperliquidRateGate } from './hyperliquidRateGate.js'
-import { parseEquityCandles } from './hyperliquidEquities.js'
+import { hyperliquidEquities, parseEquityCandles } from './hyperliquidEquities.js'
 import { trackApiRequest } from './apiUsage.js'
 import { observeSource } from './sourceHealth.js'
 import { requestPriority } from './yahoo/client.js'
@@ -68,7 +68,14 @@ export class CryptoChartsClient {
         return { candles, market: market.symbol }
       }), requestPriority())
     }, { force: request.force })
-    const { candles, market } = result.value
+    const { market } = result.value
+    const streamInterval = interval.api === '1w' ? '1wk' : interval.api === '1M' ? '1mo' : interval.api
+    hyperliquidEquities.watchCryptoCandles(market, streamInterval)
+    let candles = result.value.candles
+    const latest = hyperliquidEquities.getLatestCandle(`${market}-PERP`, streamInterval)
+    if (latest && latest.time >= candles.at(-1)!.time) {
+      candles = latest.time === candles.at(-1)!.time ? [...candles.slice(0, -1), latest] : [...candles, latest].slice(-5_000)
+    }
     const source = `Hyperliquid crypto perp (${market})`
     if (request.range === 'Max' || requestedStart < start) {
       observeSource({ fetchedAt: end - result.ageSeconds * 1_000, stale: result.stale, fromCache: result.fromCache,

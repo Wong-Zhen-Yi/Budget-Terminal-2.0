@@ -7,6 +7,7 @@ import { sofiBookRatios, type SofiPayload } from '@shared/sofi'
 import { markBmnrPayload } from '@shared/bmnr'
 import type { SemiconductorsPayload } from '@shared/semiconductors'
 import { equityPriceSource } from '@shared/equityMarkets'
+import { cryptoPerpSymbol } from '@shared/cryptoWorkspace'
 import { markCryptoPerpetuals } from '@shared/hyperliquid'
 
 /** Update the live mark without pretending the underlying history is a perp series. */
@@ -137,7 +138,7 @@ export function applyEquityMarketUpdate(client: QueryClient, update: EquityMarke
       if (quote) next = { ...next, stats: { ...payload.stats, price: quote.price, change: quote.change, absChange: quote.absChange,
         priceSource: quote.source, priceBasis: quote.priceBasis, changeBasis: quote.changeBasis } }
       for (const event of update.candles) {
-        if (event.symbol !== payload.symbol || event.market !== payload.stats.market || event.interval !== payload.interval) continue
+        if (event.symbol !== payload.symbol || event.market !== payload.stats.market || event.interval !== (payload.interval === '1w' ? '1wk' : payload.interval === '1M' ? '1mo' : payload.interval)) continue
         const candles = mergeStreamCandle(next.candles, event.candle)
         if (candles === next.candles) continue
         const closes = candles.map(row => row.close)
@@ -148,7 +149,9 @@ export function applyEquityMarketUpdate(client: QueryClient, update: EquityMarke
         if (payload.interval === '1d' && candles.length >= 200) indicators.ma200 = toPoints(candles, sma(closes, 200))
         if (payload.interval === '1d' && candles.length >= 50 && 'ma50' in indicators) indicators.ma50 = toPoints(candles, sma(closes, 50))
         const last = candles.at(-1)!
-        next = { ...next, candles, indicators, stats: { ...next.stats!, open: last.open, high: last.high, low: last.low, close: last.close, volume: last.volume } } as typeof next
+        const previous = candles.at(-2) ?? last
+        const cryptoStats = cryptoPerpSymbol(payload.symbol) ? { price: last.close, absChange: last.close - previous.close, change: (last.close / previous.close - 1) * 100 } : {}
+        next = { ...next, candles, indicators, stats: { ...next.stats!, ...cryptoStats, open: last.open, high: last.high, low: last.low, close: last.close, volume: last.volume } } as typeof next
       }
       data = next
     }

@@ -101,7 +101,7 @@ Prefer a launcher? Open the file for your operating system from the checkout:
 | [Launch Budget Terminal.cmd](Launch%20Budget%20Terminal.cmd) | [Launch Budget Terminal.command](Launch%20Budget%20Terminal.command) | [Launch Budget Terminal.sh](Launch%20Budget%20Terminal.sh) |
 
 Each launcher checks the runtime, installs dependencies, verifies Electron, builds
-the latest source, and opens the production app. Keep its terminal open while using
+MCP tools, and opens the app with live code updates. Keep its terminal open while using
 Budget Terminal. Build or startup errors stay visible in the launcher window.
 
 On Windows, the double-click launcher finds a supported Node.js installation even
@@ -114,14 +114,14 @@ command uses this same runtime recovery, even if your shell has an older Node.js
 Other command-line `npm` commands still use the Node.js installation configured in
 your shell.
 
-For live code updates on Windows, double-click
-[Launch Budget Terminal Live.cmd](Launch%20Budget%20Terminal%20Live.cmd) or run
+For live code updates, double-click the launcher for your operating system or run
 `npm run dev` from the repository root. Close any existing Budget Terminal window
 first (the app allows only one running instance). Live mode checks dependencies,
 verifies Electron and builds MCP tools before starting `electron-vite dev --watch`.
 UI edits update automatically; Electron main/preload edits trigger rebuilds and
-restarts or reloads. Keep the terminal open. The normal launcher still builds and
-opens a fixed production snapshot; it does not watch source changes.
+restarts or reloads. Keep the terminal open. Close and relaunch an existing production
+window once to enable live updates. For a fixed production build, run
+`node scripts/launch.cjs` instead.
 
 These Node minimums include the October 2026 eMudhra certificate compromise fix.
 Electron **45.1.0** includes the corresponding native SPKI blocklist for
