@@ -1,4 +1,5 @@
 #!/bin/sh
+echo "Agents includes the new quick prompt: Summarize my portfolio during latest trading day."
 echo "Hyperliquid: live crypto candles share the equity connection, including overnight updates and reconnect recovery; market tables retain 24h change and volume."
 echo 'Reload (F5) updates the current page first, then checks all other pages. Page refresh buttons have been removed; startup still loads every page.'
 echo "Pages populate completed sections while remaining data loads; all pages still preload and startup failures remain visible."

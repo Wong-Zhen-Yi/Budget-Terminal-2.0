@@ -133,9 +133,10 @@ try {
         check(telegramSize.height < innerHeight / 2, 'Expanded Telegram setup leaves space for chat')
         await click('Telegram · Off')
         const suggestions = [...document.querySelectorAll('.agents-suggestions button')]
-        check(suggestions.length === 2, 'Quiet startup retains the two portfolio quick prompts')
+        check(suggestions.length === 3, 'Quiet startup shows all three portfolio quick prompts')
         check(!document.querySelector('.agents-transcript').textContent.includes('Codex connected.'), 'Startup must not show a connection announcement in chat')
         check(agentQuickPrompts[0].prompt === 'Summarize portfolio news' && agentQuickPrompts[1].prompt === 'Brief me on my portfolio for the day', 'Quick prompts retain their original one-line text')
+        check(agentQuickPrompts[2].prompt === 'Summarize my portfolio during latest trading day', 'Latest trading day quick prompt uses the requested text')
         for (const embeddedMode of [false, true]) {
           embedded = embeddedMode; render(); await settle()
           const buttons = [...document.querySelectorAll('.agents-suggestions button')]
@@ -270,7 +271,7 @@ try {
         const selectedModel = document.getElementById('agent-model').value
         await click('New chat')
         check(state.connected && document.body.innerText.includes('Connected'), 'New chat stays connected')
-        check(document.querySelectorAll('.agents-message').length === 0 && document.querySelectorAll('.agents-suggestions button').length === 2, 'New chat returns to the quick prompts')
+        check(document.querySelectorAll('.agents-message').length === 0 && document.querySelectorAll('.agents-suggestions button').length === 3, 'New chat returns to the quick prompts')
         check(document.getElementById('agent-model').value === selectedModel && !document.getElementById('agent-thinking').disabled, 'New chat preserves model settings')
         check(!document.querySelector('.agents-image-previews') && document.getElementById('agent-message').value === '', 'New chat clears unsent draft and images')
         check(commands.length === beforeNewChat + 1 && commands.at(-1).type === 'newChat', 'New chat never sends a reconnect command')
