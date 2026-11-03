@@ -1,3 +1,4 @@
+import { fitStockChart, layoutIndicatorPanes } from '@/charts/stockChartLayout'
 import { useEffect, useRef } from 'react'
 import {
   CandlestickSeries,
@@ -72,7 +73,7 @@ export function PriceChart({ payload, indicators }: PriceChartProps) {
         horzLines: { color: COLORS.grid },
       },
       rightPriceScale: { borderColor: COLORS.border },
-      timeScale: { borderColor: COLORS.border, rightOffset: 4 },
+      timeScale: { borderColor: COLORS.border, minBarSpacing: 0.001, lockVisibleTimeRangeOnResize: true },
       crosshair: { mode: CrosshairMode.Normal },
     })
 
@@ -164,7 +165,7 @@ export function PriceChart({ payload, indicators }: PriceChartProps) {
     series.rsi.setData(toLine(payload.indicators.rsi))
     series.rsiMa.setData(toLine(payload.indicators.rsiMa))
 
-    chart.timeScale().fitContent()
+    fitStockChart(chart, payload.candles.length)
   }, [payload?.candles, payload?.indicators])
 
   // lightweight-charts keeps its bar spacing when the canvas resizes, so a narrower pane
@@ -176,7 +177,7 @@ export function PriceChart({ payload, indicators }: PriceChartProps) {
     let frame = 0
     const observer = new ResizeObserver(() => {
       cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(() => chartRef.current?.timeScale().fitContent())
+      frame = requestAnimationFrame(() => fitStockChart(chartRef.current, seriesRef.current?.candles.data().length ?? 0))
     })
     observer.observe(container)
     return () => {
@@ -196,10 +197,10 @@ export function PriceChart({ payload, indicators }: PriceChartProps) {
     series.rsi.applyOptions({ visible: indicators.rsi })
     series.rsiMa.applyOptions({ visible: indicators.rsi })
 
-    // A hidden series still reserves its pane, so collapse the pane too.
-    const panes = chart.panes()
-    panes[PANE.volume]?.setHeight(indicators.volume ? 90 : 1)
-    panes[PANE.rsi]?.setHeight(indicators.rsi ? 90 : 1)
+    layoutIndicatorPanes(chart, [
+      { series: [series.volume], visible: indicators.volume, height: 90 },
+      { series: [series.rsi, series.rsiMa], visible: indicators.rsi, height: 90 },
+    ])
   }, [indicators])
 
   return <div ref={containerRef} className="min-h-0 flex-1" />

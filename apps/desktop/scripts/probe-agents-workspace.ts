@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { mock } from 'node:test'
 import { AgentWorkspace, agentWorkspacePath } from '../electron/services/agentWorkspace.js'
 import { AgentsService } from '../electron/services/agents.js'
+import { resetTelegramConversation, telegramResearchCommand, telegramHistoryAction, telegramHistorySnapshot } from '../electron/services/telegramResearch.js'
 import type { CodexPacket, CodexTransport } from '../electron/services/codexClient.js'
 import type { AgentTrackerReport } from '../electron/shared/agentWorkspace.js'
 
@@ -116,6 +117,52 @@ try {
   await restarted.command({ type: 'connect' })
   assert.deepEqual(restarted.snapshot().messages, restoredMessages, 'Reconnecting after launch must preserve the transcript without adding a notice')
   assert(requests.at(-1)!.params.baseInstructions.includes('Persist this latest chat'))
+
+  // A fresh lazy Telegram worker must honor /new before its first question after restart.
+  restarted.close()
+  const telegramStore = workspace({ path: join(directory, 'telegram-agents.json') })
+  await telegramStore.initialize()
+  telegramStore.createConversation()
+  telegramStore.recordConversation([{ id: 'old-message', role: 'user', text: 'OLD_TELEGRAM_CONTEXT', at: Date.now() }], null, null)
+  await telegramStore.flush()
+  const oldTelegramId = telegramStore.snapshot().currentChatId!
+  const telegramReloaded = workspace({ path: join(directory, 'telegram-agents.json') })
+  await telegramReloaded.initialize()
+  const beforeHistoryView = requests.length
+  const viewedId = await telegramHistoryAction(telegramReloaded, { type: 'telegramViewChat', id: oldTelegramId }, true)
+  const telegramHistory = telegramHistorySnapshot(telegramReloaded, viewedId, true)
+  assert.equal(telegramHistory.history[0].id, oldTelegramId, 'Saved Telegram history loads without a configured bot or Codex connection')
+  assert.equal(telegramHistory.selected?.messages[0].text, 'OLD_TELEGRAM_CONTEXT')
+  assert.equal(telegramReloaded.snapshot().currentChatId, oldTelegramId, 'Viewing does not change the selected Telegram chat')
+  assert.equal(requests.length, beforeHistoryView, 'History viewing never starts Codex or inference')
+  await assert.rejects(() => telegramHistoryAction(telegramReloaded, { type: 'telegramViewChat', id: 'missing' }, false), /no longer exists/)
+  await assert.rejects(() => telegramHistoryAction(telegramReloaded, { type: 'telegramDeleteChat', id: oldTelegramId }, true), /finish/)
+  await assert.rejects(() => telegramHistoryAction(telegramReloaded, { type: 'telegramDeleteChat', id: oldTelegramId }, false), /active chat/)
+  assert.equal(await telegramHistoryAction(telegramReloaded, { type: 'telegramViewChat', id: null }, false), null)
+  const telegramWorker = new AgentsService({ executable: 'unused', cwd: directory, workspace: telegramReloaded, remoteResearch: true, routes: new Map(), clientFactory: receiver => { receive = receiver; return client } })
+  services.push(telegramWorker)
+  await resetTelegramConversation(telegramWorker)
+  assert.notEqual(telegramWorker.snapshot().currentChatId, oldTelegramId)
+  const freshTelegramId = telegramWorker.snapshot().currentChatId!
+  assert.equal(telegramHistorySnapshot(telegramReloaded, oldTelegramId, false).selected?.id, oldTelegramId, 'Viewing an older chat never resumes it')
+  assert.deepEqual(telegramWorker.snapshot().messages, [])
+  await telegramWorker.command({ type: 'connect' })
+  assert(!requests.at(-1)!.params.baseInstructions.includes('OLD_TELEGRAM_CONTEXT'), '/new before first message must exclude saved context')
+  assert.match(await telegramResearchCommand(telegramWorker, 'history', ''), new RegExp(oldTelegramId))
+  assert.match(await telegramResearchCommand(telegramWorker, 'resume', 'missing'), /does not exist/)
+  assert.match(await telegramResearchCommand(telegramWorker, 'resume', oldTelegramId), /Resumed/)
+  assert(requests.at(-1)!.params.baseInstructions.includes('OLD_TELEGRAM_CONTEXT'), '/resume explicitly restores that chat context')
+  assert.match(await telegramResearchCommand(telegramWorker, 'models', ''), /fixture/)
+  assert.match(await telegramResearchCommand(telegramWorker, 'model', 'unknown'), /Unknown model/)
+  assert.match(await telegramResearchCommand(telegramWorker, 'model', 'fixture'), /context is retained/)
+  assert.match(await telegramResearchCommand(telegramWorker, 'status', ''), /connected/)
+  assert.deepEqual(telegramWorker.snapshot().messages.map(message => message.text), ['OLD_TELEGRAM_CONTEXT'])
+  telegramWorker.close()
+  await telegramHistoryAction(telegramReloaded, { type: 'telegramDeleteChat', id: freshTelegramId }, false)
+  assert(!telegramHistorySnapshot(telegramReloaded, freshTelegramId, false).selected, 'Deleted transcripts disappear from the viewer')
+  assert(!JSON.parse(await readFile(join(directory, 'telegram-agents.json'), 'utf8')).conversations.some((chat: { id: string }) => chat.id === freshTelegramId), 'Telegram history deletion is persisted')
+  assert(restored.conversation(), 'Telegram history changes leave desktop history intact')
+  console.log('PASS: desktop Telegram history loads without Codex, views without switching context, and safely persists deletion')
 
   const worker = new AgentsService({ executable: 'unused', cwd: directory, workspace: restored, trackerId: tracker.tracker.id, routes: new Map(), clientFactory: receiver => { receive = receiver; return client } })
   services.push(worker)

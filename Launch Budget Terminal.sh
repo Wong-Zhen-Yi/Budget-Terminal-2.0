@@ -1,4 +1,5 @@
 #!/bin/sh
+echo "Stock charts leave 35 percent of the plot to the right of the latest bar; disabled indicator panes release their space."
 echo "Agents includes the new quick prompt: Summarize my portfolio during latest trading day."
 echo "Hyperliquid: live crypto candles share the equity connection, including overnight updates and reconnect recovery; market tables retain 24h change and volume."
 echo 'Reload (F5) updates the current page first, then checks all other pages. Page refresh buttons have been removed; startup still loads every page.'
@@ -9,7 +10,7 @@ echo "Dictionary Reading Room: category browsing, readable articles, section nav
 echo "YouTube Research Terminal: compact table, right-side inspector and pagination without scrollbars. Warning-count status and warning controls are removed. All videos and images still preload at startup."
 echo "Crypto: removed the snapshot summary banner. Refresh errors, rate limits and startup loading remain visible."
 echo "Agents fix: Windows detects both current and older Codex npm executable layouts at startup and reconnect."
-echo "Telegram: the connection button sits beside Trackers in the Agents toolbar; startup checks private chat access; delivery errors stay visible and identify chat, token, blocked-bot or gateway problems. Agents offers Check private chat without sending a message."
+echo "Telegram: desktop Agents History lists Telegram and desktop chats by recency, with transcript viewing and confirmed deletion of older Telegram chats. Context stays separate. /new and /reset start fresh; /status, /history, /resume, /models and /model are available in the private slash menu."
 echo "Saved-data warning banners removed throughout the app, including ETF, IPO, Valuation, company pages and charts. Startup progress and failure details are available in Settings."
 echo "Branding: Fold logo is active in the title bar, app icon and launcher shortcuts."
 echo "MCP startup fix: desktop-only cache controls, heatmap progress and TV are classified correctly. Agent startup errors no longer block the app from opening."

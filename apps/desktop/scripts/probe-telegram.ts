@@ -10,10 +10,12 @@ let fail = false
 let updates: unknown[] = []
 let dispatched = 0
 let resets = 0
+const commands: { command: string; argument: string }[] = []
 const adapter = new TelegramService({
   load: async () => stored,
   save: async config => { stored = structuredClone(config) },
   reset: async () => { resets++ },
+  command: async (command, argument) => { commands.push({ command, argument }); return `${command} command result` },
   reply: async text => { dispatched++; assert.equal(text, 'research'); return 'research result' },
   fetch: (async (url, init) => {
     const method = String(url).split('/').pop()!
@@ -60,18 +62,58 @@ let seeded = false
   const body = JSON.parse(String(init?.body))
   if (String(url).endsWith('/getUpdates') && body.timeout && !seeded) {
     seeded = true
-    updates = [update(1, 999), update(2, 123, 'group'), update(3, 123, 'private', now - 600), update(4, 123)]
+    updates = [update(1, 999), update(2, 123, 'group'), update(3, 123, 'private', now - 600),
+      ...['/help', '/new@fixture_bot', '/reset', '/status', '/history', '/resume saved-id', '/models', '/model fixture', '/model', '/unknown', '/new@other_bot', '/new research', 'research'].map((text, index) => update(index + 4, 123, 'private', now, text))]
   }
   return originalFetch(url, init)
 }) as typeof fetch
 await adapter.configure({ chatId: '123', enabled: true, receive: true })
-for (let i = 0; i < 100 && !requests.some(request => request.body.text === 'research result'); i++) await new Promise(resolve => setTimeout(resolve, 5))
-assert.equal(dispatched, 1, 'Only the allowed user in the private home chat may dispatch a fresh message')
-assert.equal((stored as { offset: number }).offset, 5)
-assert(resets >= 2)
+for (let i = 0; i < 100 && requests.filter(request => request.body.text === 'research result').length < 2; i++) await new Promise(resolve => setTimeout(resolve, 5))
+assert.equal(dispatched, 2, 'Only questions and /new questions reach research; commands and other bot mentions do not')
+assert.equal((stored as { offset: number }).offset, 17)
+assert.equal(resets, 5, 'Configuration, /new, /reset and /new question reset exactly once each')
+assert.deepEqual(commands, [
+  { command: 'status', argument: '' }, { command: 'history', argument: '' }, { command: 'resume', argument: 'saved-id' },
+  { command: 'models', argument: '' }, { command: 'model', argument: 'fixture' }, { command: 'model', argument: '' },
+])
+const menu = requests.find(request => request.method === 'setMyCommands')!
+assert.deepEqual(menu.body.scope, { type: 'chat', chat_id: '123' })
+assert((menu.body.commands as { command: string }[]).some(command => command.command === 'new'))
+assert(requests.some(request => String(request.body.text).includes('Unknown command')))
+assert(requests.some(request => String(request.body.text).includes('/resume')))
 await adapter.disconnect()
 assert.equal(stored, null)
 assert.equal(adapter.snapshot().configured, false)
+let failurePolls = 0
+const failureMessages: string[] = []
+const failedCommands = new TelegramService({
+  load: async () => ({ token, chatId: '123', enabled: true, receive: true, offset: 0 }),
+  save: async () => {},
+  reset: async () => { throw new Error('private reset failure ' + token) },
+  command: async () => { throw new Error('private command failure ' + token) },
+  reply: async () => { assert.fail('A failed reset must never send its question with old context') },
+  fetch: (async (url, init) => {
+    const method = String(url).split('/').pop()
+    const body = JSON.parse(String(init?.body))
+    let result: unknown = { username: 'fixture_bot' }
+    if (method === 'getChat') result = { id: 123, type: 'private' }
+    if (method === 'getUpdates') {
+      if (failurePolls++) await new Promise<void>((_resolve, reject) => {
+        init!.signal!.addEventListener('abort', () => reject(new Error('cancelled')), { once: true })
+      })
+      result = [update(1, 123, 'private', now, '/new research'), update(2, 123, 'private', now, '/status')]
+    }
+    if (method === 'sendMessage') failureMessages.push(body.text)
+    return new Response(JSON.stringify({ ok: true, result }))
+  }) as typeof fetch,
+})
+await failedCommands.initialize()
+for (let i = 0; i < 100 && failureMessages.length < 2; i++) await new Promise(resolve => setTimeout(resolve, 5))
+assert.equal(failureMessages.length, 2)
+assert.match(failureMessages[0], /Could not confirm a new chat/)
+assert.match(failureMessages[1], /command could not complete/)
+assert(!failureMessages.join('').includes(token))
+await failedCommands.close()
 for (const [code, description, expected] of [
   [400, 'Bad Request: chat not found', /personal numeric user ID/],
   [403, 'Forbidden: bot was blocked by the user', /Unblock/],
@@ -108,4 +150,6 @@ for (const [code, description, expected] of [
 }
 console.log('PASS: Telegram configuration, redaction, Unicode splitting, no send retries, private allowlist, stale-message rejection, persisted offset and cancellation')
 console.log('PASS: private-chat validation, actionable errors retained across successful polling, and safe agent diagnostics')
+console.log('PASS: private command menu, bot mentions, reset aliases, /new question, history/model routing and unknown-command rejection')
+console.log('PASS: failed reset never dispatches a question with old context; command errors never expose private details')
 

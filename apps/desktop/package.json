@@ -77,6 +77,7 @@
     "probe:calendar": "tsx scripts/probe-calendar.ts",
     "probe:calendar-ui": "tsx scripts/probe-calendar-ui.ts",
     "probe:charts": "tsx scripts/probe-charts.ts",
+    "probe:stock-chart-layout-ui": "tsx scripts/probe-stock-chart-layout-ui.ts",
     "probe:charts-ui": "tsx scripts/probe-charts-ui.ts",
     "probe:dictionary": "tsx scripts/probe-dictionary.ts",
     "probe:dictionary-ui": "tsx scripts/probe-dictionary-ui.ts",

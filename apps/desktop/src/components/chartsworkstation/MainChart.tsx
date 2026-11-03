@@ -1,3 +1,4 @@
+import { fitStockChart, layoutIndicatorPanes } from '@/charts/stockChartLayout'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AreaSeries,
@@ -88,6 +89,7 @@ export function MainChart({
   } | null>(null)
   const priceLines = useRef<IPriceLine[]>([])
   const candlesRef = useRef(new Map<number, Candle>())
+  const fittedContext = useRef('')
   const propsRef = useRef({ drawings, drawingTool, onDrawingsChange, onDrawingToolComplete })
   propsRef.current = { drawings, drawingTool, onDrawingsChange, onDrawingToolComplete }
   const [pending, setPending] = useState<DrawingAnchor | null>(null)
@@ -115,7 +117,7 @@ export function MainChart({
       },
       grid: { vertLines: { color: COLORS.grid }, horzLines: { color: COLORS.grid } },
       rightPriceScale: { borderColor: COLORS.border, scaleMargins: { top: 0.08, bottom: 0.08 } },
-      timeScale: { borderColor: COLORS.border, rightOffset: 4 },
+      timeScale: { borderColor: COLORS.border, minBarSpacing: 0.001, lockVisibleTimeRangeOnResize: true },
       crosshair: { mode: CrosshairMode.Normal },
     })
     const candles = chart.addSeries(CandlestickSeries, {
@@ -159,6 +161,7 @@ export function MainChart({
       chart.remove()
       chartRef.current = null
       seriesRef.current = null
+      fittedContext.current = ''
     }
   }, [onHover])
 
@@ -176,9 +179,13 @@ export function MainChart({
     series.ma200.setData((payload?.indicators.ma200 ?? []).filter((point) => point.time <= lastShownTime).map(pointData))
     series.rsi.setData((payload?.indicators.rsi ?? []).filter((point) => point.time <= lastShownTime).map(pointData))
     series.rsiMa.setData((payload?.indicators.rsiMa ?? []).filter((point) => point.time <= lastShownTime).map(pointData))
-    if (shownCandles.length && (autoFollow || replayLimit !== null)) requestAnimationFrame(() => chart.timeScale().fitContent())
+    const context = `${payload?.symbol}:${payload?.intervalLabel}:${payload?.rangeLabel}`
+    if (shownCandles.length && (fittedContext.current !== context || autoFollow || replayLimit !== null)) {
+      fittedContext.current = context
+      requestAnimationFrame(() => fitStockChart(chart, shownCandles.length))
+    }
     setRevision((value) => value + 1)
-  }, [payload?.indicators, shownCandles, lastShownTime, autoFollow, replayLimit])
+  }, [payload?.symbol, payload?.intervalLabel, payload?.rangeLabel, payload?.indicators, shownCandles, lastShownTime, autoFollow, replayLimit])
 
   useEffect(() => {
     const series = seriesRef.current
@@ -192,8 +199,10 @@ export function MainChart({
     series.ma200.applyOptions({ visible: indicators.ma200 })
     series.rsi.applyOptions({ visible: indicators.rsi })
     series.rsiMa.applyOptions({ visible: indicators.rsi })
-    chart.panes()[1]?.setHeight(indicators.volume ? 90 : 1)
-    chart.panes()[2]?.setHeight(indicators.rsi ? 100 : 1)
+    layoutIndicatorPanes(chart, [
+      { series: [series.volume], visible: indicators.volume, height: 90 },
+      { series: [series.rsi, series.rsiMa], visible: indicators.rsi, height: 100 },
+    ])
   }, [chartType, indicators])
 
   useEffect(() => {

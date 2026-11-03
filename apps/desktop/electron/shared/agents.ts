@@ -2,7 +2,7 @@ import type { AgentImageArtifact } from './agentImageArtifacts.js'
 import type { AgentPortfolioProposal } from './agentPortfolio.js'
 import type { AgentWorkspaceState } from './agentWorkspace.js'
 import type { AgentRun } from './agentRuns.js'
-import type { TelegramCommand, TelegramState } from './telegram.js'
+import type { TelegramCommand, TelegramHistoryState, TelegramState } from './telegram.js'
 
 export interface AgentImage { name: string; dataUrl: string }
 
@@ -27,6 +27,7 @@ export type AgentActivity = 'idle' | 'connecting' | 'thinking' | 'researching' |
 
 export interface AgentsState extends AgentWorkspaceState {
   telegram?: TelegramState
+  telegramHistory?: TelegramHistoryState
   runLimitMinutes?: number
   activity?: AgentActivity
   imageGeneration?: boolean | null

@@ -1,3 +1,4 @@
+import { fitStockChart } from '@/charts/stockChartLayout'
 import { useEffect, useRef } from 'react'
 import {
   CandlestickSeries,
@@ -28,7 +29,7 @@ export function MiniChart({ payload, style, active }: { payload: ChartsHistoryPa
       layout: { background: { type: ColorType.Solid, color: '#0d1420' }, textColor: '#7d8ea6', fontSize: 11 },
       grid: { vertLines: { color: '#141d2c' }, horzLines: { color: '#141d2c' } },
       rightPriceScale: { borderColor: '#1e2b3f' },
-      timeScale: { borderColor: '#1e2b3f', rightOffset: 4 },
+      timeScale: { borderColor: '#1e2b3f', minBarSpacing: 0.001, lockVisibleTimeRangeOnResize: true },
     })
     const candles = chart.addSeries(CandlestickSeries, { upColor: '#26c281', downColor: '#f0554e', wickUpColor: '#26c281', wickDownColor: '#f0554e', borderVisible: false })
     const line = chart.addSeries(LineSeries, { color: '#4f8cff', lineWidth: 2, priceLineVisible: false })
@@ -59,7 +60,7 @@ export function MiniChart({ payload, style, active }: { payload: ChartsHistoryPa
     series.candles.applyOptions({ visible: style === 'candles' })
     series.line.applyOptions({ visible: style === 'line' })
     if (rows.length) series.priceLine.applyOptions({ price: rows.at(-1)!.close })
-    requestAnimationFrame(() => chart.timeScale().fitContent())
+    requestAnimationFrame(() => fitStockChart(chart, rows.length))
   }, [payload, style])
 
   return <div ref={containerRef} className="min-h-44 flex-1" />

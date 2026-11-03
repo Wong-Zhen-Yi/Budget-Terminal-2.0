@@ -2,6 +2,20 @@ import { z } from 'zod'
 import type { TelegramState } from '../shared/telegram.js'
 import { TelegramError } from '../shared/telegram.js'
 
+export const telegramCommands = [
+  { command: 'help', description: 'Show commands and conversation behavior' },
+  { command: 'new', description: 'Start a fresh chat: /new [question]' },
+  { command: 'reset', description: 'Start a fresh chat (alias for /new)' },
+  { command: 'status', description: 'Show the current chat and model' },
+  { command: 'history', description: 'List saved Telegram chats' },
+  { command: 'resume', description: 'Resume a saved chat: /resume <chat ID>' },
+  { command: 'models', description: 'List available Codex models' },
+  { command: 'model', description: 'Show or change model: /model [model ID]' },
+]
+export type TelegramResearchCommand = 'status' | 'history' | 'resume' | 'models' | 'model'
+const help = 'Budget Terminal research agent.\n' + telegramCommands.map(command => `/${command.command} — ${command.description}`).join('\n')
+  + '\nMessages retain context in the current Telegram chat, including after app restart. /new keeps old chats in history but starts without their conversation context. Keep the desktop app open. Saved-data edits require the desktop app. Commands run after any current answer finishes.'
+
 export const telegramConfigSchema = z.object({
   token: z.string().regex(/^\d+:[A-Za-z0-9_-]{20,}$/),
   chatId: z.string().regex(/^[1-9]\d{0,15}$/),
@@ -14,6 +28,7 @@ interface Options {
   save: (config: TelegramConfig | null) => Promise<void>
   reply: (text: string, signal: AbortSignal) => Promise<string>
   reset: () => Promise<void>
+  command?: (command: TelegramResearchCommand, argument: string) => Promise<string>
   fetch?: typeof fetch
 }
 
@@ -90,7 +105,12 @@ export class TelegramService {
       const me = await this.api<{ username: string }>('getMe', {})
       this.state.bot = me.username; this.state.connected = true
       await this.checkChat()
-      if (config.receive) this.loop = this.poll(this.controller.signal)
+      if (config.receive) {
+        // Only publish the menu in the authorized private chat.
+        try { await this.api('setMyCommands', { commands: telegramCommands, scope: { type: 'chat', chat_id: config.chatId } }) }
+        catch { this.state.error = 'Telegram command menu could not be updated. Typed commands still work.' }
+        this.loop = this.poll(this.controller.signal)
+      }
     } catch (error) { this.state.error = (error as Error).message }
   }
   async checkChat() {
@@ -143,10 +163,28 @@ export class TelegramService {
           const message = update.message
           if (!message || message.chat.type !== 'private' || String(message.chat.id) !== config.chatId || String(message.from?.id) !== config.chatId || message.from?.is_bot) continue
           if (Date.now() / 1000 - message.date > 300) continue
-          const text = message.text?.trim()
+          let text = message.text?.trim()
           if (!text) { await this.send('Text messages are supported. Send your research question as text.', signal); continue }
-          if (text === '/start' || text === '/help') { await this.send('Budget Terminal research agent. Ask a question, /new to reset this Telegram conversation. Keep the desktop app open. Saved-data edits require the desktop app.', signal); continue }
-          if (text === '/new') { await this.options.reset(); await this.send('Started a new Telegram conversation.', signal); continue }
+          if (text.startsWith('/')) {
+            const match = /^\/([a-z_]+)(?:@([a-z\d_]+))?(?:\s+([\s\S]*))?$/i.exec(text)
+            if (match?.[2] && match[2].toLowerCase() !== this.state.bot.toLowerCase()) continue
+            const command = match?.[1].toLowerCase()
+            const argument = match?.[3]?.trim() ?? ''
+            if (command === 'start' || command === 'help') { await this.send(help, signal); continue }
+            if (command === 'new' || command === 'reset') {
+              try { await this.options.reset() }
+              catch { await this.send('Could not confirm a new chat. Use /status to check the selected conversation and check local history and Codex in the desktop app.', signal); continue }
+              await this.send('Started a new Telegram conversation without previous conversation context. Old chats remain in /history.', signal)
+              if (!argument) continue
+              text = argument
+            } else if (command && ['status', 'history', 'resume', 'models', 'model'].includes(command) && this.options.command) {
+              let result: string
+              try { result = await this.options.command(command as TelegramResearchCommand, argument) }
+              catch { result = 'Telegram command could not complete. Check Codex and local history in the desktop app. No research request was sent.' }
+              await this.send(result.slice(0, 20_000), signal)
+              continue
+            } else { await this.send('Unknown command. Send /help to see available commands.', signal); continue }
+          }
           await this.api('sendChatAction', { chat_id: config.chatId, action: 'typing' }, signal)
           let reply: string
           try { reply = await this.options.reply(text, signal) }

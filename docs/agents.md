@@ -8,6 +8,22 @@ Ask the built-in desktop agent “Send this summary to Telegram” to deliver te
 
 Optionally enable **Receive research questions from Telegram**. Only fresh text from the configured user in their private bot chat reaches Codex. Other users, groups and bot senders are ignored. `/help` explains the commands; `/new` starts a separate Telegram conversation. Remote research history is stored locally in `telegram-agents.json`, separate from desktop chat. Remote tools allow research reads; saved-record edits, screenshots, browser control, notifications and messaging tools require desktop interaction. Images, files and voice are not supported by this first integration.
 
+Questions retain context within the selected Telegram conversation. After restarting the app, the saved transcript is restored as bounded conversation context; the live Codex thread itself is not persisted. `/new` (or `/reset`) creates a fresh conversation without the previous transcript, even before the first question after restart. Old chats remain saved and are included again only when explicitly resumed. Model choice and the standard research instructions still apply to a new chat.
+
+| Command | Behavior |
+| --- | --- |
+| `/start`, `/help` | Show command help without changing context. |
+| `/new [question]`, `/reset [question]` | Start a fresh conversation, optionally asking its first question immediately. |
+| `/status` | Show the selected chat ID, message count, Codex connection and model. |
+| `/history` | List saved Telegram chats and their full IDs; mark the current chat with `*`. |
+| `/resume <chat ID>` | Select an existing Telegram chat and restore its saved conversation context. |
+| `/models` | Connect to Codex if needed and list available model IDs. |
+| `/model [model ID]` | Show the current model, or change it while retaining conversation context. |
+
+The command menu is registered only for the configured private chat using Telegram's [setMyCommands API](https://core.telegram.org/bots/api#setmycommands). `/command@YourBot` also works; commands addressed to another bot are ignored. Unknown slash commands receive help guidance and are never sent to research. Commands are processed in order after any current answer finishes; they do not interrupt research. Each channel has a 100-chat limit. Desktop and Telegram transcripts remain separate.
+
+**Agents > History** lists desktop and Telegram conversations together, sorted by their latest update and labeled by channel. Saved Telegram chats load at app startup even with Telegram disconnected and Codex unavailable. Click a Telegram title to view its transcript and run diagnostics inside History. Viewing does not change either channel's current conversation or send a message. Continue that conversation in Telegram with `/resume <chat ID>`. The transcript updates as the desktop polls agent status. Older Telegram chats can be deleted with confirmation; deletion is blocked while Telegram research is running, and the active Telegram chat is protected until you send `/new` or resume another chat. Telegram history load/save errors are shown in History and contribute to startup failure reporting.
+
 Keep the desktop app open and Codex signed in. A saved enabled connection reconnects when the app starts, independently of page selection. Enabling or changing settings discards pending bot updates, and messages older than five minutes are skipped. Update offsets are saved before dispatch to avoid replaying research after a crash; interrupted requests must be sent again. Do not run another polling gateway with the same token. **Disconnect and forget token** cancels polling and deletes saved credentials; it retains local research history. Reconnecting starts a new remote conversation.
 
 This follows [Hermes's Telegram gateway pattern](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/messaging/telegram.md): bot credentials, long polling, sender authorization and a home destination. It uses the [Telegram Bot API](https://core.telegram.org/bots/api) directly, without requiring Hermes or a public webhook server. It does not reproduce Hermes's voice, media, group, topic or streaming features.

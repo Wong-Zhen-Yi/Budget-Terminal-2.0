@@ -15,6 +15,7 @@ function platformName(platform) {
 }
 
 function launch({ development = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
+  log.log('Stock charts leave 35 percent of the plot to the right of the latest bar; disabled indicator panes release their space.')
   log.log('Pages populate completed sections while remaining data loads; all pages still preload and startup failures remain visible.')
   log.log('Page Loading Status banner removed. Startup progress, failures and diagnostics remain in Settings; page readiness indicators remain available. Opening a page promotes its queued requests with fair background turns. Shared reads avoid duplicate work. Readers retain controls longer and evicted pages restore scroll. All pages still preload.')
   log.log('Reload (F5) updates the current page first, then checks all other pages. Page refresh buttons have been removed; startup still loads every page.')
@@ -101,7 +102,7 @@ function launch({ development = false, platform = process.platform, nodeVersion 
   log.log('Performance updates: Quant pair calculations and SQLite persistence run in workers. Extra query memory is bounded, prepared startup pages stay available, and large tables render visible rows.')
   log.log('Startup dependency fixes: Up/Down price targets preload before page readiness; Cards warms every interval after a partial result; News splits multi-ticker article labels into valid quote requests.')
   log.log('Settings API usage now shows startup health and a compact live provider table, with an expandable API and page directory. Failed and incomplete pages appear first in its startup status list.')
-  log.log('Telegram: the connection button sits beside Trackers in the Agents toolbar; startup checks private chat access; delivery errors stay visible and identify chat, token, blocked-bot or gateway problems. Agents offers Check private chat without sending a message.')
+  log.log('Telegram: desktop Agents History lists Telegram and desktop chats by recency, with transcript viewing and confirmed deletion of older Telegram chats. Context stays separate. /new and /reset start fresh; /status, /history, /resume, /models and /model are available in the private slash menu.')
   log.log('Installing dependencies...')
   const install = npm(['install', '--no-audit', '--no-fund', '--strict-ssl=true'])
   if (install.error || install.status !== 0) {

@@ -104,6 +104,8 @@ try {
         }
         if (command.type === 'openChat') { state.currentChatId = command.id; state.messages = structuredClone(historyMessages.get(command.id) || []); state.portfolioProposal = null }
         if (command.type === 'deleteChat') state.history = state.history.filter(chat => chat.id !== command.id)
+        if (command.type === 'telegramViewChat') state.telegramHistory.selected = command.id ? { id: command.id, title: 'Telegram research', messages: [{ id: 'telegram-user', role: 'user', text: 'Telegram question', at: Date.now() }, { id: 'telegram-answer', role: 'assistant', text: 'Telegram saved answer', at: Date.now() }] } : null
+        if (command.type === 'telegramDeleteChat') { state.telegramHistory.history = state.telegramHistory.history.filter(chat => chat.id !== command.id); state.telegramHistory.selected = null }
         if (command.type === 'readNotifications') state.notifications.forEach(notification => { if (!command.id || command.id === notification.id) notification.read = true })
         if (command.type === 'deleteNotification') state.notifications = state.notifications.filter(notification => notification.id !== command.id)
         if (command.type === 'trackerEnabled') { const tracker = state.trackers.find(tracker => tracker.id === command.id); tracker.enabled = command.enabled; tracker.nextRunAt = command.enabled ? Date.now() + 900000 : null }
@@ -285,6 +287,23 @@ try {
         check(document.getElementById('agent-message').value === '', 'Opening history clears the old draft')
         const savedArticle = [...document.querySelectorAll('.agents-saved-item')].find(item => item.textContent.includes('Saved research'))
         check(savedArticle.querySelectorAll('button')[1].disabled, 'Active chat cannot be deleted')
+        const desktopChatId = state.currentChatId
+        const desktopTranscript = JSON.stringify(state.messages)
+        state.telegramHistory = { history: [{ id: 'telegram-saved', title: 'Telegram research', createdAt: Date.now(), updatedAt: Date.now() + 1000, model: 'fixture-fast', thinking: null, messageCount: 2 }], currentChatId: 'telegram-current', busy: true, selected: null, error: '' }
+        client.setQueryData(['agents'], envelope()); await settle()
+        check(document.querySelector('[aria-label="Chat history"] .agents-saved-item small').textContent.startsWith('Telegram'), 'Telegram and desktop history are combined by recency with channel labels')
+        await click('View Telegram chat: Telegram research')
+        check(document.querySelector('[aria-label="Telegram chat transcript"]').textContent.includes('Telegram saved answer'), 'Telegram history opens its actual transcript even during remote research')
+        check(state.currentChatId === desktopChatId && JSON.stringify(state.messages) === desktopTranscript, 'Viewing Telegram history leaves the desktop chat and context unchanged')
+        check(document.querySelector('[aria-label="Chat history"] .agents-saved-item').querySelectorAll('button')[1].disabled, 'Telegram history deletion is disabled during research')
+        await click('Close Telegram transcript')
+        check(!document.querySelector('[aria-label="Telegram chat transcript"]'), 'Telegram transcript can be closed')
+        state.telegramHistory.busy = false; client.setQueryData(['agents'], envelope()); await settle()
+        const telegramRow = document.querySelector('[aria-label="Chat history"] .agents-saved-item')
+        telegramRow.querySelectorAll('button')[1].click(); await settle()
+        check(state.telegramHistory.history.length === 1, 'Telegram deletion requires confirmation')
+        await click('Confirm delete chat')
+        check(!state.telegramHistory.history.length && state.history.length > 0, 'Deleting Telegram history preserves desktop chats')
         await click('History')
         check(!document.querySelector('.agents-workspace-tabs [aria-label=Notifications]'), 'Notifications must live in their own page')
         await click('Trackers')

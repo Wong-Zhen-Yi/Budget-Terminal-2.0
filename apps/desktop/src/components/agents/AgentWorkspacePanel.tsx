@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import type { AgentsCommand, AgentsState } from '@shared/agents'
 import { TelegramSettings } from './TelegramSettings'
+import { AgentMessages } from './AgentMessages'
+
+const ignoreImage = () => {}
 
 export function AgentWorkspacePanel({ agent, locked, perform, setDraft, showTelegram = false, pending = false }: {
   agent?: AgentsState
@@ -17,10 +20,16 @@ export function AgentWorkspacePanel({ agent, locked, perform, setDraft, showTele
   const recoverable = latestRun && ['failed', 'partial', 'stopped'].includes(latestRun.status)
   const date = (at: number) => new Date(at).toLocaleString()
   const switchTab = (value: typeof tab) => { setTab(tab === value ? null : value); setConfirm('') }
-  const remove = (type: 'deleteChat' | 'deleteTracker', id: string) => {
-    if (confirm !== id) { setConfirm(id); return }
+  const remove = (type: 'deleteChat' | 'deleteTracker' | 'telegramDeleteChat', id: string) => {
+    const key = `${type}:${id}`
+    if (confirm !== key) { setConfirm(key); return }
     void perform({ type, id }).then(success => { if (success) setConfirm('') })
   }
+  const history = [
+    ...(agent?.history ?? []).map(chat => ({ chat, telegram: false })),
+    ...(agent?.telegramHistory?.history ?? []).map(chat => ({ chat, telegram: true })),
+  ].sort((a, b) => b.chat.updatedAt - a.chat.updatedAt)
+  const telegramChat = agent?.telegramHistory?.selected
 
   return <section className="agents-workspace" aria-label="Saved Agents workspace">
     <div className="agents-workspace-tabs">
@@ -33,13 +42,23 @@ export function AgentWorkspacePanel({ agent, locked, perform, setDraft, showTele
     {tab && <div className="agents-workspace-content" aria-label={tab === 'history' ? 'Chat history' : tab === 'telegram' ? 'Telegram settings' : 'Saved trackers'}>
       {tab === 'telegram' && <TelegramSettings state={agent?.telegram} perform={perform} pending={pending} />}
       {tab === 'history' && <>
-        <p>Chats and run diagnostics are saved locally across app restarts. Continue research recovers bounded saved evidence with edits disabled. Up to 100 chats; each retains its latest 300 messages.</p>
-        {!agent?.history?.length && <p>No saved chats yet.</p>}
-        {agent?.history?.map(chat => <article key={chat.id} className="agents-saved-item">
-          <div className="agents-saved-heading"><button disabled={locked || !!agent.autonomy || chat.id === agent.currentChatId} aria-current={chat.id === agent.currentChatId ? 'true' : undefined} onClick={() => void perform({ type: 'openChat', id: chat.id })}>{chat.title || 'New chat'}{chat.id === agent.currentChatId ? ' · Current' : ''}</button>
-            <button disabled={locked || chat.id === agent.currentChatId} title={chat.id === agent.currentChatId ? 'Open a different chat before deleting this one' : 'Delete saved chat'} onClick={() => remove('deleteChat', chat.id)}>{confirm === chat.id ? 'Confirm delete chat' : 'Delete chat'}</button>
-          </div><small>{date(chat.updatedAt)} · {chat.messageCount} messages{chat.model ? ` · ${chat.model}` : ''}</small>
-        </article>)}
+        <p>Desktop and Telegram chats are saved locally across app restarts. Telegram transcripts can be viewed here; continue them in Telegram with /resume. Each channel keeps up to 100 chats with the latest 300 messages each. Continue research recovers bounded saved evidence with edits disabled.</p>
+        {agent?.telegramHistory?.error && <p role="alert">{agent.telegramHistory.error}</p>}
+        {!history.length && <p>No saved chats yet.</p>}
+        {history.map(({ chat, telegram }) => {
+          const current = telegram ? chat.id === agent?.telegramHistory?.currentChatId : chat.id === agent?.currentChatId
+          const deleteType = telegram ? 'telegramDeleteChat' : 'deleteChat'
+          return <article key={`${telegram ? 'telegram' : 'desktop'}:${chat.id}`} className="agents-saved-item">
+            <div className="agents-saved-heading"><button disabled={telegram ? pending : locked || !!agent?.autonomy || current} aria-label={telegram ? `View Telegram chat: ${chat.title || 'New chat'}` : undefined} aria-current={current ? 'true' : undefined} onClick={() => void perform({ type: telegram ? 'telegramViewChat' : 'openChat', id: chat.id })}>{chat.title || 'New chat'}{current ? ' · Current' : ''}</button>
+              <button disabled={pending || (telegram ? !!agent?.telegramHistory?.busy : locked) || current} title={current ? telegram ? 'Send /new in Telegram before deleting its active chat' : 'Open a different chat before deleting this one' : 'Delete saved chat'} onClick={() => remove(deleteType, chat.id)}>{confirm === `${deleteType}:${chat.id}` ? 'Confirm delete chat' : 'Delete chat'}</button>
+            </div><small>{telegram ? 'Telegram' : 'Desktop'} · {date(chat.updatedAt)} · {chat.messageCount} messages{chat.model ? ` · ${chat.model}` : ''}</small>
+            {telegram && telegramChat?.id === chat.id && <section aria-label="Telegram chat transcript">
+              <div className="agents-saved-heading"><p>Viewing Telegram history. Continue this conversation in Telegram with <code>/resume {chat.id}</code>.</p><button disabled={pending} onClick={() => void perform({ type: 'telegramViewChat', id: null })}>Close Telegram transcript</button></div>
+              <AgentMessages messages={telegramChat.messages} imagesLocked onUseImage={ignoreImage} />
+              {!telegramChat.messages.length && <p>No messages in this Telegram chat yet.</p>}
+            </section>}
+          </article>
+        })}
       </>}
       {tab === 'trackers' && <>
         <div className="agents-saved-heading"><p>Codex writes the instructions; you review and Start. Checks use read-only research tools and your Codex account while the app is open. All trackers pause on relaunch. No arbitrary scripts or trades.</p>
@@ -54,7 +73,7 @@ export function AgentWorkspacePanel({ agent, locked, perform, setDraft, showTele
           {tracker.error && <p className="agents-saved-warning" role="status">{tracker.error}</p>}
           {tracker.memory && <details><summary>Saved check context</summary><p className="agents-saved-text">{tracker.memory}</p></details>}
           <div className="agents-saved-actions"><button disabled={locked && !tracker.enabled} onClick={() => void perform({ type: 'trackerEnabled', id: tracker.id, enabled: !tracker.enabled })}>{tracker.enabled ? 'Pause tracker' : 'Start tracker'}</button>
-            <button disabled={tracker.enabled || tracker.running} onClick={() => remove('deleteTracker', tracker.id)}>{confirm === tracker.id ? 'Confirm delete tracker' : 'Delete tracker'}</button>
+            <button disabled={tracker.enabled || tracker.running} onClick={() => remove('deleteTracker', tracker.id)}>{confirm === `deleteTracker:${tracker.id}` ? 'Confirm delete tracker' : 'Delete tracker'}</button>
           </div>
         </article>)}
       </>}

@@ -1,3 +1,4 @@
+import { fitStockChart } from '@/charts/stockChartLayout'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { CandlestickSeries, ColorType, createChart, CrosshairMode, LineSeries } from 'lightweight-charts'
 import type { IChartApi, ISeriesApi, LogicalRange, UTCTimestamp } from 'lightweight-charts'
@@ -83,7 +84,7 @@ function HistoryPlot({ candles, interval, range, onRangeChange, symbol, unit }: 
       grid: { vertLines: { color: '#182334' }, horzLines: { color: '#182334' } },
       rightPriceScale: { borderColor: '#28364a', scaleMargins: { top: 0.08, bottom: 0.08 } },
       // fitContent must fit decades of daily bars too, not silently clamp the view to ~1000 bars.
-      timeScale: { borderColor: '#28364a', minBarSpacing: 0.001, rightOffset: 0 },
+      timeScale: { borderColor: '#28364a', minBarSpacing: 0.001, lockVisibleTimeRangeOnResize: true },
       crosshair: { mode: CrosshairMode.Normal },
       handleScroll: { mouseWheel: false, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
     })
@@ -143,7 +144,7 @@ function HistoryPlot({ candles, interval, range, onRangeChange, symbol, unit }: 
 
   function reset() {
     onRangeChange('Max')
-    api.current?.timeScale().fitContent()
+    fitStockChart(api.current, candles.length)
   }
 
   const current = hovered ?? candles.at(-1)
@@ -185,8 +186,7 @@ function HistoryPlot({ candles, interval, range, onRangeChange, symbol, unit }: 
 
 function fitHistory(chart: IChartApi, candles: Candle[], range: ViewRange) {
   if (!candles.length || range === 'Custom') return
-  if (range === 'Max') chart.timeScale().fitContent()
-  else chart.timeScale().setVisibleLogicalRange({ from: agentHistoryStart(candles, range) - 0.5, to: candles.length - 0.5 })
+  fitStockChart(chart, candles.length, range === 'Max' ? 0 : agentHistoryStart(candles, range))
 }
 
 function HistoryTable({ candles, intraday, title }: { candles: Candle[]; intraday: boolean; title: string }) {

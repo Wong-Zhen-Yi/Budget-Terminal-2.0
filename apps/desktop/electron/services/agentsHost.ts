@@ -1,6 +1,7 @@
 import { app, safeStorage } from 'electron'
 import { readFile, writeFile, rename, rm } from 'node:fs/promises'
 import { TelegramService, telegramConfigSchema } from './telegram.js'
+import { resetTelegramConversation, telegramResearchCommand, telegramHistoryAction, telegramHistorySnapshot } from './telegramResearch.js'
 import { notificationCenter } from './notificationsHost.js'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
@@ -26,6 +27,18 @@ let telegramStartup: Promise<void> | null = null
 let telegramChanging = false
 let remote: AgentsService | null = null
 let remoteWorkspace: AgentWorkspace | null = null
+let viewedTelegramChat: string | null = null
+function telegramWorkspace() {
+  return remoteWorkspace ??= new AgentWorkspace({ path: join(app.getPath('userData'), 'telegram-agents.json') })
+}
+function telegramWorker() {
+  if (!remote) {
+    const cwd = join(app.getPath('userData'), 'agents')
+    mkdirSync(cwd, { recursive: true })
+    remote = new AgentsService({ executable: executable(), cwd, workspace: telegramWorkspace(), remoteResearch: true, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool })
+  }
+  return remote
+}
 function telegramAgent() {
   if (!telegram) {
     const path = join(app.getPath('userData'), 'telegram-settings.bin')
@@ -43,15 +56,10 @@ function telegramAgent() {
         await writeFile(path + '.tmp', bytes, { mode: 0o600 })
         await rename(path + '.tmp', path)
       },
-      reset: async () => { if (remote) await remote.command({ type: 'newChat' }) },
+      reset: () => resetTelegramConversation(telegramWorker()),
+      command: (command, argument) => telegramResearchCommand(telegramWorker(), command, argument),
       reply: async (text, signal) => {
-        if (!remote) {
-          const cwd = join(app.getPath('userData'), 'agents')
-          mkdirSync(cwd, { recursive: true })
-          remoteWorkspace = new AgentWorkspace({ path: join(app.getPath('userData'), 'telegram-agents.json') })
-          remote = new AgentsService({ executable: executable(), cwd, workspace: remoteWorkspace, remoteResearch: true, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool })
-        }
-        const worker = remote
+        const worker = telegramWorker()
         const cancel = () => worker.close()
         signal.addEventListener('abort', cancel, { once: true })
         try {
@@ -68,8 +76,16 @@ function telegramAgent() {
   }
   return telegram
 }
-function startTelegram() { return telegramStartup ??= telegramAgent().initialize() }
-function snapshot() { return { ...agent().snapshot(), telegram: telegramAgent().snapshot() } }
+function startTelegram() {
+  return telegramStartup ??= Promise.all([
+    telegramAgent().initialize(),
+    telegramWorkspace().initialize().catch(() => { /* Keep corrupt history untouched and report it in the history panel. */ }),
+  ]).then(() => {})
+}
+function snapshot() {
+  return { ...agent().snapshot(), telegram: telegramAgent().snapshot(),
+    telegramHistory: telegramHistorySnapshot(telegramWorkspace(), viewedTelegramChat, !!remote?.snapshot().busy) }
+}
 async function checkTracker(tracker: AgentTracker, signal: AbortSignal) {
   const cwd = join(app.getPath('userData'), 'agents')
   const worker = new AgentsService({ executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, workspace: workspace!, trackerId: tracker.id })
@@ -130,11 +146,17 @@ export async function agentsStatus() {
   await startTelegram()
   try { await startup } catch { /* The snapshot retains startup/storage failures. */ }
   const state = snapshot()
-  const error = state.error || state.storageError || state.telegram.error
+  const error = state.error || state.storageError || state.telegram.error || state.telegramHistory.error
   return error ? failed(state, error, 'Codex agent') : ok(state, 'Codex agent')
 }
 export async function agentsCommand(command: AgentsCommand) {
   await startTelegram()
+  if (command?.type === 'telegramViewChat' || command?.type === 'telegramDeleteChat') {
+    try {
+      viewedTelegramChat = await telegramHistoryAction(telegramWorkspace(), command, !!remote?.snapshot().busy)
+      return ok(snapshot(), 'Telegram history')
+    } catch (error) { return failed(snapshot(), error instanceof Error ? error.message : 'Telegram history could not be opened.', 'Telegram history') }
+  }
   if (command?.type === 'telegramConfigure' || command?.type === 'telegramTest' || command?.type === 'telegramCheck' || command?.type === 'telegramDisconnect') {
     if (telegramChanging) return failed(snapshot(), 'Telegram settings are already being updated.', 'Telegram')
     telegramChanging = true
@@ -170,7 +192,7 @@ export function closeAgents() {
   lifecycle++
   void telegram?.close()
   remote?.close(); remote = null
-  void remoteWorkspace?.close(); remoteWorkspace = null
+  void remoteWorkspace?.close(); remoteWorkspace = null; viewedTelegramChat = null; telegramStartup = null
   service?.close(); service = null; startup = null
   const closing = workspace; workspace = null
   void closing?.close().catch(error => console.warn('Agents could not save on close:', error))

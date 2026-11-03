@@ -1,3 +1,4 @@
+import { fitStockChart } from '@/charts/stockChartLayout'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, LineSeries } from 'lightweight-charts'
 import { createChart } from 'lightweight-charts'
@@ -33,7 +34,7 @@ export function DefeatBetaPriceChart({ symbol, rows, count, onCount }: { symbol:
     if (!chart || !points.length) return
     applyingRange.current = true
     chart.priceScale('right', 0).applyOptions({ autoScale: true })
-    chart.timeScale().setVisibleLogicalRange({ from: Math.max(-0.5, points.length - (count || points.length) - 0.5), to: points.length + 0.5 })
+    fitStockChart(chart, points.length, Math.max(0, points.length - (count || points.length)))
     applyingRange.current = false
     setCustomView(false)
     setHovered(null)
@@ -48,7 +49,7 @@ export function DefeatBetaPriceChart({ symbol, rows, count, onCount }: { symbol:
         panes: { separatorColor: COLORS.border, separatorHoverColor: '#2c3e59' } },
       grid: { vertLines: { visible: false }, horzLines: { color: '#192336' } },
       rightPriceScale: { borderColor: COLORS.border, minimumWidth: 76, scaleMargins: { top: 0.1, bottom: 0.08 } },
-      timeScale: { borderColor: COLORS.border, lockVisibleTimeRangeOnResize: true, timeVisible: false, rightOffset: 1, minBarSpacing: 0.01 },
+      timeScale: { borderColor: COLORS.border, lockVisibleTimeRangeOnResize: true, timeVisible: false, minBarSpacing: 0.001 },
       crosshair: { mode: CrosshairMode.Normal, vertLine: { color: '#56677f' }, horzLine: { color: '#56677f' } },
     })
     const candles = chart.addSeries(CandlestickSeries, { upColor: COLORS.up, downColor: COLORS.down,

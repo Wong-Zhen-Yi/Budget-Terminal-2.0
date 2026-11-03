@@ -1,3 +1,4 @@
+import { stockChartRange } from '@/charts/stockChartLayout'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   CandlestickSeries,
@@ -114,7 +115,7 @@ export function ProjectionsChart({
       },
       grid: { vertLines: { color: COLORS.grid }, horzLines: { color: COLORS.grid } },
       rightPriceScale: { borderColor: COLORS.border, scaleMargins: { top: 0.08, bottom: 0.08 } },
-      timeScale: { borderColor: COLORS.border, rightOffset: 6 },
+      timeScale: { borderColor: COLORS.border, minBarSpacing: 0.001, lockVisibleTimeRangeOnResize: true },
       crosshair: { mode: CrosshairMode.Normal },
     })
     const candleSeries = chart.addSeries(
@@ -215,12 +216,13 @@ export function ProjectionsChart({
       const lastProjection = Math.max(
         ...PROJECTION_SIDES.map((side) => timed.series[side].at(-1)?.time ?? -Infinity),
       )
-      chart.timeScale().setVisibleRange({
-        from: candles[left].time as UTCTimestamp,
-        to: (Number.isFinite(lastProjection)
-          ? lastProjection
-          : candles[right].time) as UTCTimestamp,
-      })
+      const range = stockChartRange(candles.length, left)
+      const times = new Set(candles.map(candle => candle.time))
+      for (const side of PROJECTION_SIDES) {
+        for (const point of timed.series[side]) times.add(point.time)
+      }
+      const projectionEnd = [...times].sort((a, b) => a - b).findIndex(time => time === lastProjection)
+      chart.timeScale().setVisibleLogicalRange({ ...range, to: Math.max(range.to, projectionEnd + 0.5) })
     }
   }, [candles, timed])
 

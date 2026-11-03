@@ -1,3 +1,4 @@
+import { fitStockChart, layoutIndicatorPanes } from '@/charts/stockChartLayout'
 import { useEffect, useRef } from 'react'
 import {
   CandlestickSeries,
@@ -119,7 +120,7 @@ export function StocksChart({
         borderColor: COLORS.border,
         scaleMargins: { top: 0.08, bottom: 0.08 },
       },
-      timeScale: { borderColor: COLORS.border, rightOffset: 4, lockVisibleTimeRangeOnResize: true },
+      timeScale: { borderColor: COLORS.border, minBarSpacing: 0.001, lockVisibleTimeRangeOnResize: true },
       crosshair: { mode: CrosshairMode.Normal },
     })
     const candles = chart.addSeries(
@@ -230,7 +231,7 @@ export function StocksChart({
         setRange(anchoredRange(count, span))
       } else if (state.logicalRange) setRange(state.logicalRange)
       else {
-        chart.timeScale().fitContent()
+        fitStockChart(chart, count)
         requestAnimationFrame(() => { applyingRange.current = false })
       }
     })
@@ -247,8 +248,7 @@ export function StocksChart({
     const series = seriesRef.current
     if (!chart || !series) return
     series.mfi.applyOptions({ visible: mfiEnabled })
-    const panes = chart.panes()
-    panes[1]?.setHeight(mfiEnabled ? 120 : 1)
+    layoutIndicatorPanes(chart, [{ series: [series.mfi], visible: mfiEnabled, height: 120 }])
   }, [mfiEnabled])
 
   useEffect(() => {

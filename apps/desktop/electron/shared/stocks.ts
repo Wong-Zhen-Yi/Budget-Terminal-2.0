@@ -12,7 +12,7 @@ export const STOCKS_MFI_PERIOD = 14
 export const STOCKS_MFI_OVERBOUGHT = 80
 export const STOCKS_MFI_OVERSOLD = 20
 export const STOCKS_DEFAULT_VISIBLE_BARS = 120
-export const STOCKS_AUTO_ANCHOR = 0.85
+export const STOCKS_AUTO_ANCHOR = 0.65
 
 export interface StocksRawFacts {
   companyName?: unknown
