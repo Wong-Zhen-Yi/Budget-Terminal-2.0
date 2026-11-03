@@ -102,7 +102,7 @@ function launch({ development = false, platform = process.platform, nodeVersion 
   log.log('Performance updates: Quant pair calculations and SQLite persistence run in workers. Extra query memory is bounded, prepared startup pages stay available, and large tables render visible rows.')
   log.log('Startup dependency fixes: Up/Down price targets preload before page readiness; Cards warms every interval after a partial result; News splits multi-ticker article labels into valid quote requests.')
   log.log('Settings API usage now shows startup health and a compact live provider table, with an expandable API and page directory. Failed and incomplete pages appear first in its startup status list.')
-  log.log('Telegram: desktop Agents History lists Telegram and desktop chats by recency, with transcript viewing and confirmed deletion of older Telegram chats. Context stays separate. /new and /reset start fresh; /status, /history, /resume, /models and /model are available in the private slash menu.')
+  log.log('Telegram: two commands - /new starts a fresh chat; /model opens model buttons, followed by supported reasoning buttons. Desktop Agents History keeps Telegram transcripts visible with separate context. Replies use natural plain text without asterisks, heading symbols or em dashes. Desktop and Telegram agents can search and read the live public web for investor relations, filings and other research, with source links and saved run details.')
   log.log('Installing dependencies...')
   const install = npm(['install', '--no-audit', '--no-fund', '--strict-ssl=true'])
   if (install.error || install.status !== 0) {

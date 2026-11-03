@@ -119,7 +119,8 @@ try {
   assert.deepEqual(start.environments, [])
   assert.equal(start.config['mcp_servers.unrelated.enabled'], false)
   assert.equal(start.config['features.shell_tool'], false)
-  assert.equal(start.config.web_search, 'disabled', 'Native web search remains disabled')
+  assert.equal(start.config.web_search, 'live', 'Native live web research is available without opening the shared Browser')
+  assert(start.baseInstructions.includes('official investor relations site') && start.baseInstructions.includes('Cite direct source URLs'), 'Web research should verify primary sources and produce usable links')
   assert(start.baseInstructions.includes('To search for websites, use action search with query'), 'General agent instructions retain browser search')
   assert(start.baseInstructions.includes('call the relevant news tool again in the current turn')
     && start.baseInstructions.includes('fetchedAt is the retrieval time, not the publication date')
@@ -138,6 +139,13 @@ try {
   assert.equal(calls.at(-1)!.params.model, 'fixture-fast')
   assert.equal(calls.at(-1)!.params.effort, 'high')
   assert.equal(service.snapshot().activity, 'thinking', 'New runs begin thinking, not done')
+  receiver({ method: 'item/started', params: { threadId: 'thread-1', item: { id: 'web-source-1', type: 'webSearch' } } })
+  receiver({ method: 'item/started', params: { threadId: 'thread-1', item: { id: 'web-source-1', type: 'webSearch' } } })
+  assert.equal(service.snapshot().activity, 'researching', 'Native web research contributes to visible agent activity')
+  assert.equal(service.snapshot().messages.findLast(message => message.run)?.run?.tools.filter(tool => tool.name === 'web_search').length, 1, 'Duplicate native events do not double-count diagnostics')
+  receiver({ method: 'item/completed', params: { threadId: 'thread-1', item: { id: 'web-source-1', type: 'webSearch' } } })
+  assert.equal(service.snapshot().messages.findLast(message => message.run)?.run?.tools[0].status, 'succeeded')
+  assert.equal(service.snapshot().activity, 'thinking')
   await assert.rejects(() => service.command({ type: 'configure', model: 'fixture-fast', thinking: 'low' }), /working/)
   assert(service.snapshot().busy)
   await assert.rejects(() => service.command({ type: 'send', text: 'overlap' }), /working/)
@@ -479,6 +487,25 @@ try {
       }
     } finally { live.close() }
   }
+  if (process.argv.includes('--live-web')) {
+    const { findCodex } = await import('../../../scripts/codex-runtime.cjs')
+    const executable = findCodex({ environment: { ...process.env, ...previous } }) ?? 'codex'
+    const live = new AgentsService({ executable, cwd: directory, routes: new Map(), remoteResearch: true })
+    try {
+      await live.command({ type: 'connect' })
+      assert.equal(live.snapshot().connected, true, live.snapshot().error)
+      await live.command({ type: 'send', text: 'Web research integration check. Use native web search to find and open an official Apple investor relations quarterly earnings release. Do not use Budget Terminal tools or the shared Browser. Return its title, publication date and direct source URL, plus one sentence describing what the page covers. Do not rely on memory or search snippets alone.' })
+      const deadline = Date.now() + 120_000
+      while (live.snapshot().busy && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100))
+      assert.equal(live.snapshot().busy, false, 'Live web research timed out')
+      assert.equal(live.snapshot().error, '')
+      const run = live.snapshot().messages.findLast(message => message.run)?.run
+      assert(run?.tools.some(tool => tool.name === 'web_search' && tool.status === 'succeeded'), 'Real Codex must invoke native web research')
+      const answer = live.snapshot().messages.filter(message => message.role === 'assistant').map(message => message.text).join('\n')
+      assert(/https:\/\/(?:(?:www|investor)\.)?apple\.com\//i.test(answer), 'The answer must include a direct official Apple source link: ' + answer.slice(0, 3000))
+      console.log('PASS: real Telegram-mode agent uses native live web research and returns an official investor relations source link')
+    } finally { live.close() }
+  }
 } finally {
   service.close()
   let delivered = ''
@@ -493,10 +520,20 @@ try {
   const remoteAgent = new AgentsService({ executable: 'unused', cwd: directory, routes, remoteResearch: true, clientFactory: receive => { receiver = receive; return client } })
   try {
     await remoteAgent.command({ type: 'connect' })
-    const tools = calls.findLast(call => call.method === 'thread/start')!.params.dynamicTools
+    const remoteStart = calls.findLast(call => call.method === 'thread/start')!.params
+    const tools = remoteStart.dynamicTools
+    assert.equal(remoteStart.config.web_search, 'live', 'Telegram research can use hosted public web research')
+    assert(remoteStart.baseInstructions.includes('native web search') && !remoteStart.baseInstructions.includes('To search for websites, use action search'), 'Telegram should use native web research rather than inaccessible shared Browser tools')
     assert(tools.length > 0 && tools.every((tool: { name: string }) => catalog.some(entry => entry.tool.name === tool.name && entry.tool.annotations?.readOnlyHint)))
     await remoteAgent.command({ type: 'send', text: 'Research only' })
     for (const name of ['budget_terminal_mutate_portfolio', 'budget_terminal_screenshot', 'budget_terminal_browser_research', 'terminal_telegram_send', 'terminal_notify', 'terminal_save_tracker']) await assert.rejects(remoteAgent.callTool(name, {}), /research reads only/)
+    receiver({ method: 'item/started', params: { threadId: nextThreadId, item: { id: 'remote-web', type: 'webSearch' } } })
+    assert.equal(remoteAgent.snapshot().activity, 'researching')
+    remoteAgent.close()
+    const stopped = remoteAgent.snapshot()
+    assert.equal(stopped.messages.findLast(message => message.run)?.run?.tools.find(tool => tool.name === 'web_search')?.status, 'cancelled')
+    receiver({ method: 'item/completed', params: { threadId: nextThreadId, item: { id: 'remote-web', type: 'webSearch' } } })
+    assert.deepEqual(remoteAgent.snapshot(), stopped, 'Late web events cannot update a stopped conversation')
     console.log('PASS: embedded agent Telegram delivery and remote research tool isolation')
   } finally { remoteAgent.close() }
   process.env.APPDATA = previous.APPDATA

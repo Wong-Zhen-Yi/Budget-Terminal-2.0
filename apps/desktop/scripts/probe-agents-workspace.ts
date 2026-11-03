@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { mock } from 'node:test'
 import { AgentWorkspace, agentWorkspacePath } from '../electron/services/agentWorkspace.js'
 import { AgentsService } from '../electron/services/agents.js'
-import { resetTelegramConversation, telegramResearchCommand, telegramHistoryAction, telegramHistorySnapshot } from '../electron/services/telegramResearch.js'
+import { resetTelegramConversation, telegramResearchCommand, telegramHistoryAction, telegramHistorySnapshot, telegramModelChoices } from '../electron/services/telegramResearch.js'
 import type { CodexPacket, CodexTransport } from '../electron/services/codexClient.js'
 import type { AgentTrackerReport } from '../electron/shared/agentWorkspace.js'
 
@@ -38,7 +38,10 @@ try {
       requests.push({ method, params })
       if (method === 'account/read') return { account: {} }
       if (method === 'config/read') return { config: { mcp_servers: { untrusted: {} } } }
-      if (method === 'model/list') return { data: [{ model: 'fixture', displayName: 'Fixture', defaultReasoningEffort: 'low', supportedReasoningEfforts: [{ reasoningEffort: 'low', description: 'Quick' }] }] }
+      if (method === 'model/list') return { data: [
+        { model: 'fixture', displayName: 'Fixture', defaultReasoningEffort: 'low', supportedReasoningEfforts: [{ reasoningEffort: 'low', description: 'Quick' }, { reasoningEffort: 'high', description: 'Deeper' }] },
+        { model: 'fixture-other', displayName: 'Other fixture', defaultReasoningEffort: 'medium', supportedReasoningEfforts: [{ reasoningEffort: 'medium', description: 'Balanced' }] },
+      ] }
       if (method === 'thread/start') { thread = 'thread-' + (++sequence); return { thread: { id: thread }, model: 'fixture' } }
       return { turn: { id: 'turn' } }
     },
@@ -148,14 +151,34 @@ try {
   assert.deepEqual(telegramWorker.snapshot().messages, [])
   await telegramWorker.command({ type: 'connect' })
   assert(!requests.at(-1)!.params.baseInstructions.includes('OLD_TELEGRAM_CONTEXT'), '/new before first message must exclude saved context')
-  assert.match(await telegramResearchCommand(telegramWorker, 'history', ''), new RegExp(oldTelegramId))
-  assert.match(await telegramResearchCommand(telegramWorker, 'resume', 'missing'), /does not exist/)
-  assert.match(await telegramResearchCommand(telegramWorker, 'resume', oldTelegramId), /Resumed/)
-  assert(requests.at(-1)!.params.baseInstructions.includes('OLD_TELEGRAM_CONTEXT'), '/resume explicitly restores that chat context')
-  assert.match(await telegramResearchCommand(telegramWorker, 'models', ''), /fixture/)
+  await telegramWorker.command({ type: 'openChat', id: oldTelegramId })
+  assert(requests.at(-1)!.params.baseInstructions.includes('OLD_TELEGRAM_CONTEXT'))
+  assert.deepEqual(await telegramModelChoices(telegramWorker), [
+    { id: 'fixture', name: 'Fixture', current: true, reasoning: [
+      { id: 'default', name: 'Model default (low)', current: true }, { id: 'low', name: 'low', current: false }, { id: 'high', name: 'high', current: false },
+    ] },
+    { id: 'fixture-other', name: 'Other fixture', current: false, reasoning: [
+      { id: 'default', name: 'Model default (medium)', current: true }, { id: 'medium', name: 'medium', current: false },
+    ] },
+  ])
   assert.match(await telegramResearchCommand(telegramWorker, 'model', 'unknown'), /Unknown model/)
   assert.match(await telegramResearchCommand(telegramWorker, 'model', 'fixture'), /context is retained/)
-  assert.match(await telegramResearchCommand(telegramWorker, 'status', ''), /connected/)
+  assert((await telegramModelChoices(telegramWorker))[0].reasoning.some(mode => mode.id === 'high'))
+  assert.match(await telegramResearchCommand(telegramWorker, 'reasoning', 'invalid'), /Unsupported reasoning/)
+  assert.equal(telegramWorker.snapshot().thinking, null, 'Invalid reasoning does not change settings')
+  assert.match(await telegramResearchCommand(telegramWorker, 'reasoning', 'high'), /Reasoning: high/)
+  assert.equal(telegramWorker.snapshot().thinking, 'high')
+  assert.equal(telegramReloaded.conversation()?.thinking, 'high', 'Reasoning choice is saved with the conversation')
+  await telegramResearchCommand(telegramWorker, 'model', 'fixture')
+  assert.equal(telegramWorker.snapshot().thinking, 'high', 'Model choice keeps compatible reasoning')
+  await telegramResearchCommand(telegramWorker, 'model', 'fixture-other')
+  assert.equal(telegramWorker.snapshot().thinking, null, 'Incompatible reasoning falls back to the new model default')
+  assert((await telegramModelChoices(telegramWorker)).find(model => model.current)?.reasoning.some(mode => mode.id === 'medium'))
+  assert.match(await telegramResearchCommand(telegramWorker, 'reasoning', 'high'), /Unsupported reasoning/)
+  await telegramResearchCommand(telegramWorker, 'reasoning', 'medium')
+  await telegramResearchCommand(telegramWorker, 'reasoning', 'default')
+  assert.equal(telegramWorker.snapshot().thinking, null)
+  assert.equal(telegramWorker.snapshot().model, 'fixture-other')
   assert.deepEqual(telegramWorker.snapshot().messages.map(message => message.text), ['OLD_TELEGRAM_CONTEXT'])
   telegramWorker.close()
   await telegramHistoryAction(telegramReloaded, { type: 'telegramDeleteChat', id: freshTelegramId }, false)

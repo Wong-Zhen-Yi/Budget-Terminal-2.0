@@ -49,7 +49,7 @@ export class CodexClient {
   async start() {
     const child = spawn(this.executable, ['app-server', '--listen', 'stdio://',
       '-c', 'features.shell_tool=false', '-c', 'features.unified_exec=false',
-      '-c', 'features.plugins=false', '-c', 'agents.enabled=false', '-c', 'web_search="disabled"'],
+      '-c', 'features.plugins=false', '-c', 'agents.enabled=false', '-c', 'web_search="live"'],
     { cwd: this.cwd, windowsHide: true, stdio: 'pipe' })
     this.process = child
     // Always drain stderr; it may contain runtime diagnostics, never expose credentials.

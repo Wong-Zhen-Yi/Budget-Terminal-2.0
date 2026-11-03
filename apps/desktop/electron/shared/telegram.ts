@@ -1,5 +1,13 @@
 import type { AgentConversation, AgentConversationSummary } from './agentWorkspace.js'
 
+/** Keep Telegram prose readable without changing URL fragments or numeric facts. */
+export function formatTelegramText(text: string) {
+  return text.split(/(https?:\/\/[^\s<>*]+)/g).map((part, index) => index % 2 ? part : part
+    .replace(/[*#]/g, '')
+    .replace(/[ \t]*—[ \t]*/g, ', '))
+    .join('').split('\n').map(line => line.trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}
+
 export interface TelegramState {
   configured: boolean
   enabled: boolean

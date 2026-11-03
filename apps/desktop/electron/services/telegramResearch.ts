@@ -39,29 +39,39 @@ export async function resetTelegramConversation(worker: AgentsService) {
   if (state.error || state.storageError) throw new Error('Telegram conversation could not be reset.')
 }
 
+export async function telegramModelChoices(worker: AgentsService) {
+  await worker.initialize()
+  if (!worker.snapshot().connected) await worker.command({ type: 'connect' })
+  const state = worker.snapshot()
+  if (!state.connected) throw new Error('Codex is unavailable.')
+  return state.models.map(model => {
+    const thinking = model.thinkingModes.some(mode => mode.id === state.thinking) ? state.thinking : null
+    return { id: model.id, name: model.name, current: model.id === state.model,
+      reasoning: [
+        { id: 'default', name: `Model default (${model.defaultThinking})`, current: thinking === null },
+        ...model.thinkingModes.map(mode => ({ id: mode.id, name: mode.id, current: mode.id === thinking })),
+      ],
+    }
+  })
+}
+
 export async function telegramResearchCommand(worker: AgentsService, command: TelegramResearchCommand, argument: string) {
   await worker.initialize()
-  if (command === 'history') {
-    const state = worker.snapshot()
-    return 'Telegram chats (most recent first):\n' + state.history.map(chat => `${chat.id === state.currentChatId ? '* ' : ''}${chat.id}\n${chat.title} (${chat.messageCount} messages)`).join('\n\n') + '\n\nUse /resume <chat ID>. * marks the current chat.'
-  }
-  if (command === 'resume') {
-    if (!argument) return 'Usage: /resume <chat ID>. Use /history to find an ID.'
-    if (!worker.snapshot().history.some(chat => chat.id === argument)) return 'That Telegram chat does not exist. Use /history to find its full ID.'
-    const state = await worker.command({ type: 'openChat', id: argument })
-    if (state.error || state.storageError) throw new Error('Telegram chat could not be resumed.')
-    return `Resumed Telegram chat ${argument}. Its saved conversation context will be included in future questions.`
-  }
-  if (command === 'models' || (command === 'model' && argument)) {
-    if (!worker.snapshot().connected) await worker.command({ type: 'connect' })
-    if (!worker.snapshot().connected) throw new Error('Codex is unavailable.')
-    if (command === 'models') return 'Available models:\n' + worker.snapshot().models.map(model => `${model.id} — ${model.name}`).join('\n') + '\n\nUse /model <model ID>.'
-    const model = worker.snapshot().models.find(model => model.id === argument)
-    if (!model) return 'Unknown model. Use /models to see available IDs.'
-    await worker.command({ type: 'configure', model: model.id, thinking: null })
-    return `Telegram model: ${model.id}. Conversation context is retained.`
-  }
+  if (!worker.snapshot().connected) await worker.command({ type: 'connect' })
   const state = worker.snapshot()
-  const chat = state.history.find(chat => chat.id === state.currentChatId)
-  return `Telegram chat: ${chat?.id ?? 'none'}\nTitle: ${chat?.title ?? 'New chat'}\nMessages: ${chat?.messageCount ?? 0}\nCodex: ${state.connected ? 'connected' : 'disconnected'}\nModel: ${state.model ?? 'account default'}\nContext is retained in this chat. /new starts without previous conversation context.`
+  if (!state.connected) throw new Error('Codex is unavailable.')
+  if (command === 'model') {
+    if (!argument) return 'Send /model and tap a model to choose it.'
+    const model = state.models.find(model => model.id === argument)
+    if (!model) return 'Unknown model. Send /model to choose an available model.'
+    const thinking = model.thinkingModes.some(mode => mode.id === state.thinking) ? state.thinking : null
+    await worker.command({ type: 'configure', model: model.id, thinking })
+    return `Model: ${model.id}\nReasoning: ${thinking ?? model.defaultThinking}\nConversation context is retained.`
+  }
+  const model = state.models.find(model => model.id === state.model)
+  if (!model) throw new Error('The current model is unavailable.')
+  if (!argument) return 'Send /model to choose a model and its reasoning level.'
+  if (argument !== 'default' && !model.thinkingModes.some(mode => mode.id === argument)) return `Unsupported reasoning for ${model.id}. Send /model to choose its reasoning level.`
+  await worker.command({ type: 'configure', model: model.id, thinking: argument === 'default' ? null : argument })
+  return `Reasoning: ${argument === 'default' ? model.defaultThinking + ' (model default)' : argument}\nModel: ${model.id}\nConversation context is retained.`
 }

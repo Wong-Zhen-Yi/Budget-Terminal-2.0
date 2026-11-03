@@ -1,7 +1,7 @@
 import { app, safeStorage } from 'electron'
 import { readFile, writeFile, rename, rm } from 'node:fs/promises'
 import { TelegramService, telegramConfigSchema } from './telegram.js'
-import { resetTelegramConversation, telegramResearchCommand, telegramHistoryAction, telegramHistorySnapshot } from './telegramResearch.js'
+import { resetTelegramConversation, telegramResearchCommand, telegramHistoryAction, telegramHistorySnapshot, telegramModelChoices } from './telegramResearch.js'
 import { notificationCenter } from './notificationsHost.js'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
@@ -58,6 +58,7 @@ function telegramAgent() {
       },
       reset: () => resetTelegramConversation(telegramWorker()),
       command: (command, argument) => telegramResearchCommand(telegramWorker(), command, argument),
+      models: () => telegramModelChoices(telegramWorker()),
       reply: async (text, signal) => {
         const worker = telegramWorker()
         const cancel = () => worker.close()

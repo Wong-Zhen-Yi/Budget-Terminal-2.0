@@ -183,6 +183,25 @@ try {
   assert.equal(toolBudget.run().tools.length, 80, 'Persist bounded diagnostics at the hard tool cap')
   assert(!toolBudget.service.snapshot().busy && !toolBudget.service.snapshot().connected)
 
+  const webBudget = await fixture()
+  await webBudget.service.command({ type: 'send', text: 'Bound native web research' })
+  webBudget.emit({ method: 'item/completed', params: { item: { id: 'failed-web', type: 'webSearch', status: 'failed' } } })
+  webBudget.answer()
+  assert.equal(webBudget.run().status, 'partial', 'A failed web item preserves the answer with incomplete coverage')
+  await webBudget.service.command({ type: 'send', text: 'Share the app and web tool budget' })
+  for (let i = 0; i < 40; i++) await webBudget.service.callTool('terminal_pages', {})
+  for (let i = 0; i < 40; i++) {
+    const item = { id: 'web-' + i, type: 'webSearch' }
+    webBudget.emit({ method: 'item/started', params: { item } })
+    webBudget.emit({ method: 'item/completed', params: { item } })
+  }
+  assert(webBudget.run().wrappingUp, 'Native web calls trigger early final-answer steering')
+  webBudget.emit({ method: 'item/started', params: { item: { id: 'web-over-limit', type: 'webSearch' } } })
+  assert.equal(webBudget.run().status, 'failed')
+  assert.equal(webBudget.run().tools.length, 80, 'Native and dynamic tools share bounded run diagnostics')
+  assert(!webBudget.service.snapshot().busy && !webBudget.service.snapshot().connected)
+  console.log('PASS: native web failure coverage, mixed web/app tool budget, early steering and hard cancellation')
+
   const restartPath = join(directory, 'restart.json')
   const beforeRestart = await fixture(restartPath)
   await beforeRestart.service.command({ type: 'send', text: 'Recover after relaunch' })

@@ -10,7 +10,7 @@ echo Dictionary Reading Room: category browsing, readable articles, section navi
 echo YouTube Research Terminal: compact table, right-side inspector and pagination without scrollbars. Warning-count status and warning controls are removed. All videos and images still preload at startup.
 echo Crypto: removed the snapshot summary banner. Refresh errors, rate limits and startup loading remain visible.
 echo Agents fix: Windows detects both current and older Codex npm executable layouts at startup and reconnect.
-echo Telegram: desktop Agents History lists Telegram and desktop chats by recency, with transcript viewing and confirmed deletion of older Telegram chats. Context stays separate. /new and /reset start fresh; /status, /history, /resume, /models and /model are available in the private slash menu.
+echo Telegram: two commands - /new starts a fresh chat; /model opens model buttons, followed by supported reasoning buttons. Desktop Agents History keeps Telegram transcripts visible with separate context. Replies use natural plain text without asterisks, heading symbols or em dashes. Desktop and Telegram agents can search and read the live public web for investor relations, filings and other research, with source links and saved run details.
 echo Saved-data warning banners removed throughout the app, including ETF, IPO, Valuation, company pages and charts. Startup progress and failure details are available in Settings.
 echo Branding: Fold logo is active in the title bar, app icon and launcher shortcuts.
 echo MCP startup fix: desktop-only cache controls, heatmap progress and TV are classified correctly. Agent startup errors no longer block the app from opening.

@@ -1,18 +1,13 @@
 import { z } from 'zod'
+import { randomBytes } from 'node:crypto'
 import type { TelegramState } from '../shared/telegram.js'
-import { TelegramError } from '../shared/telegram.js'
+import { formatTelegramText, TelegramError } from '../shared/telegram.js'
 
 export const telegramCommands = [
-  { command: 'help', description: 'Show commands and conversation behavior' },
   { command: 'new', description: 'Start a fresh chat: /new [question]' },
-  { command: 'reset', description: 'Start a fresh chat (alias for /new)' },
-  { command: 'status', description: 'Show the current chat and model' },
-  { command: 'history', description: 'List saved Telegram chats' },
-  { command: 'resume', description: 'Resume a saved chat: /resume <chat ID>' },
-  { command: 'models', description: 'List available Codex models' },
-  { command: 'model', description: 'Show or change model: /model [model ID]' },
+  { command: 'model', description: 'Choose a model, then its reasoning level' },
 ]
-export type TelegramResearchCommand = 'status' | 'history' | 'resume' | 'models' | 'model'
+export type TelegramResearchCommand = 'model' | 'reasoning'
 const help = 'Budget Terminal research agent.\n' + telegramCommands.map(command => `/${command.command} — ${command.description}`).join('\n')
   + '\nMessages retain context in the current Telegram chat, including after app restart. /new keeps old chats in history but starts without their conversation context. Keep the desktop app open. Saved-data edits require the desktop app. Commands run after any current answer finishes.'
 
@@ -22,13 +17,22 @@ export const telegramConfigSchema = z.object({
   enabled: z.boolean(), receive: z.boolean(), offset: z.number().int().nonnegative().default(0),
 }).strict()
 export type TelegramConfig = z.infer<typeof telegramConfigSchema>
-interface Update { update_id: number; message?: { date: number; text?: string; chat: { id: number; type: string }; from?: { id: number; is_bot?: boolean } } }
+interface TelegramMessage { message_id?: number; date: number; text?: string; chat: { id: number; type: string }; from?: { id: number; is_bot?: boolean } }
+interface Update {
+  update_id: number
+  message?: TelegramMessage
+  callback_query?: { id: string; data?: string; from: { id: number; is_bot?: boolean }; message?: TelegramMessage }
+}
+export interface TelegramPickerChoice { id: string; name: string; current: boolean }
+export interface TelegramModelChoice extends TelegramPickerChoice { reasoning: TelegramPickerChoice[] }
+type InlineKeyboard = { inline_keyboard: { text: string; callback_data: string }[][] }
 interface Options {
   load: () => Promise<unknown>
   save: (config: TelegramConfig | null) => Promise<void>
   reply: (text: string, signal: AbortSignal) => Promise<string>
   reset: () => Promise<void>
   command?: (command: TelegramResearchCommand, argument: string) => Promise<string>
+  models?: () => Promise<TelegramModelChoice[]>
   fetch?: typeof fetch
 }
 
@@ -40,6 +44,7 @@ export class TelegramService {
   private loop: Promise<void> | null = null
   private sending = false
   private deliveryError = ''
+  private modelPicker: { nonce: string; choices: TelegramPickerChoice[]; kind: 'model' | 'reasoning'; modelId?: string; expiresAt: number; messageId?: number } | null = null
   constructor(private options: Options) {}
   snapshot() { return { ...this.state } }
   async initialize() {
@@ -87,7 +92,7 @@ export class TelegramService {
     this.controller = new AbortController()
     // New configuration drops queued commands so enabling never executes old instructions.
     if (config.enabled && config.receive) {
-      const pending = await this.api<Update[]>('getUpdates', { offset: -1, timeout: 0, allowed_updates: ['message'] }, undefined, config)
+      const pending = await this.api<Update[]>('getUpdates', { offset: -1, timeout: 0, allowed_updates: ['message', 'callback_query'] }, undefined, config)
       config.offset = pending.length ? pending[pending.length - 1].update_id + 1 : 0
     }
     await this.options.save(config)
@@ -124,35 +129,85 @@ export class TelegramService {
       // Keep polling available: /start can make a previously unknown private chat accessible.
     }
   }
-  async send(text: string, signal = this.controller.signal) {
+  async send(text: string, signal = this.controller.signal, keyboard?: InlineKeyboard) {
     if (!this.config?.enabled) throw new Error('Telegram messaging is disabled. Configure it in Agents.')
     if (!text.trim() || text.length > 20_000) throw new Error('Telegram messages must contain 1–20,000 characters.')
+    text = formatTelegramText(text)
+    if (!text) throw new Error('Telegram messages must contain readable text.')
     if (this.sending) throw new Error('Another Telegram message is being delivered. Wait before sending again.')
     this.sending = true
     const config = this.config
     signal = AbortSignal.any([signal, this.controller.signal])
     let sent = 0
+    let messageId: number | undefined
     try {
       // Plain text avoids Markdown parse failures. Array.from preserves surrogate pairs.
       const characters = Array.from(text)
       for (let at = 0; at < characters.length; at += 3500) {
-        await this.api('sendMessage', { chat_id: config.chatId, text: characters.slice(at, at + 3500).join(''), link_preview_options: { is_disabled: true } }, signal, config)
+        const result = await this.api<{ message_id?: number }>('sendMessage', { chat_id: config.chatId, text: characters.slice(at, at + 3500).join(''), link_preview_options: { is_disabled: true },
+          ...(keyboard && at + 3500 >= characters.length ? { reply_markup: keyboard } : {}) }, signal, config)
+        messageId = result.message_id
         sent++
       }
       this.deliveryError = ''; this.state.error = ''
-      return { sent: true, parts: sent }
+      return { sent: true, parts: sent, messageId }
     } catch (error) {
       this.deliveryError = `${(error as Error).message} ${sent} parts confirmed sent.`
       this.state.error = this.deliveryError
       throw new TelegramError(this.state.error)
     } finally { this.sending = false }
   }
+  private async showModelPicker(signal: AbortSignal) {
+    this.modelPicker = null
+    if (!this.options.models) throw new Error('Model choices are unavailable.')
+    const models = await this.options.models()
+    if (!models.length) { await this.send('No models are available. Check Codex in the desktop app.', signal); return }
+    await this.showPicker('Choose a model below. Next, choose its reasoning level.', models, 'model', signal)
+  }
+  private async showPicker(text: string, choices: TelegramPickerChoice[], kind: 'model' | 'reasoning', signal: AbortSignal, modelId?: string) {
+    const picker = { nonce: randomBytes(12).toString('hex'), choices, kind, modelId, expiresAt: Date.now() + 5 * 60_000, messageId: undefined as number | undefined }
+    const result = await this.send(text, signal, {
+      inline_keyboard: choices.map((choice, index) => [{ text: formatTelegramText(`${choice.name || choice.id}${choice.current ? ' (current)' : ''}`), callback_data: `m:${picker.nonce}:${index}` }]),
+    })
+    picker.messageId = result.messageId
+    this.modelPicker = picker
+  }
+  private async selectModel(query: NonNullable<Update['callback_query']>, signal: AbortSignal) {
+    const config = this.config!
+    const message = query.message
+    if (query.from.is_bot || String(query.from.id) !== config.chatId || message?.chat.type !== 'private' || String(message.chat.id) !== config.chatId) return
+    const picker = this.modelPicker
+    const match = /^m:([a-f\d]{24}):(\d+)$/.exec(query.data ?? '')
+    const choice = match && picker?.nonce === match[1] ? picker.choices[Number(match[2])] : undefined
+    if (!picker || !choice || !picker.messageId || message.message_id !== picker.messageId || Date.now() > picker.expiresAt) {
+      await this.api('answerCallbackQuery', { callback_query_id: query.id, text: 'This menu has expired. Send /model for new buttons.' }, signal)
+      return
+    }
+    this.modelPicker = null
+    await this.api('answerCallbackQuery', { callback_query_id: query.id, text: picker.kind === 'model' ? 'Selecting model.' : 'Selecting reasoning.' }, signal)
+    try {
+      if (!this.options.command || !this.options.models) throw new Error('Model selection unavailable.')
+      if (picker.kind === 'model') {
+        await this.options.command('model', choice.id)
+        const selected = (await this.options.models()).find(model => model.id === choice.id && model.current)
+        if (!selected) throw new Error('Model selection could not be verified.')
+        await this.showPicker(`Model: ${selected.name || selected.id}. Choose its reasoning level below.`, selected.reasoning, 'reasoning', signal, selected.id)
+      } else {
+        const selected = (await this.options.models()).find(model => model.id === picker.modelId && model.current)
+        if (!selected?.reasoning.some(mode => mode.id === choice.id)) throw new Error('Reasoning selection is no longer valid.')
+        const result = await this.options.command('reasoning', choice.id)
+        await this.send(result.slice(0, 20_000), signal)
+      }
+    } catch { await this.send('Could not complete model and reasoning selection. Check Codex in the desktop app, then send /model to try again.', signal) }
+    try { await this.api('editMessageReplyMarkup', { chat_id: config.chatId, message_id: picker.messageId, reply_markup: { inline_keyboard: [] } }, signal) }
+    catch { /* Consumed tokens remain invalid even if Telegram cannot remove the buttons. */ }
+  }
   private async poll(signal: AbortSignal) {
     let failures = 0
     while (!signal.aborted) {
       try {
         const config = this.config!
-        const updates = await this.api<Update[]>('getUpdates', { offset: config.offset, timeout: 25, limit: 10, allowed_updates: ['message'] }, signal)
+        const updates = await this.api<Update[]>('getUpdates', { offset: config.offset, timeout: 25, limit: 10, allowed_updates: ['message', 'callback_query'] }, signal)
         this.state.connected = true; this.state.error = this.deliveryError; failures = 0
         for (const update of updates) {
           if (signal.aborted) return
@@ -160,6 +215,7 @@ export class TelegramService {
           // Persist acknowledgement before dispatch: never replay a remote action after restart.
           config.offset = update.update_id + 1
           await this.options.save(config)
+          if (update.callback_query) { await this.selectModel(update.callback_query, signal); continue }
           const message = update.message
           if (!message || message.chat.type !== 'private' || String(message.chat.id) !== config.chatId || String(message.from?.id) !== config.chatId || message.from?.is_bot) continue
           if (Date.now() / 1000 - message.date > 300) continue
@@ -170,20 +226,21 @@ export class TelegramService {
             if (match?.[2] && match[2].toLowerCase() !== this.state.bot.toLowerCase()) continue
             const command = match?.[1].toLowerCase()
             const argument = match?.[3]?.trim() ?? ''
-            if (command === 'start' || command === 'help') { await this.send(help, signal); continue }
-            if (command === 'new' || command === 'reset') {
+            if (command === 'start') { await this.send(help, signal); continue }
+            if (command === 'new') {
+              this.modelPicker = null
               try { await this.options.reset() }
-              catch { await this.send('Could not confirm a new chat. Use /status to check the selected conversation and check local history and Codex in the desktop app.', signal); continue }
-              await this.send('Started a new Telegram conversation without previous conversation context. Old chats remain in /history.', signal)
+              catch { await this.send('Could not confirm a new chat. Check local history and Codex in the desktop app.', signal); continue }
+              await this.send('Started a new Telegram conversation without previous conversation context. Old chats remain in desktop Agents History.', signal)
               if (!argument) continue
               text = argument
-            } else if (command && ['status', 'history', 'resume', 'models', 'model'].includes(command) && this.options.command) {
-              let result: string
-              try { result = await this.options.command(command as TelegramResearchCommand, argument) }
-              catch { result = 'Telegram command could not complete. Check Codex and local history in the desktop app. No research request was sent.' }
-              await this.send(result.slice(0, 20_000), signal)
+            } else if (command === 'model') {
+              try {
+                await this.showModelPicker(signal)
+              }
+              catch { await this.send('Telegram command could not complete. Check Codex and local history in the desktop app. No research request was sent.', signal) }
               continue
-            } else { await this.send('Unknown command. Send /help to see available commands.', signal); continue }
+            } else { await this.send('Available commands: /new, /model.', signal); continue }
           }
           await this.api('sendChatAction', { chat_id: config.chatId, action: 'typing' }, signal)
           let reply: string
@@ -216,5 +273,5 @@ export class TelegramService {
     this.config = null
     this.state = { configured: false, enabled: false, receive: false, connected: false, bot: '', chatId: '', error: '' }
   }
-  async close() { this.controller.abort(); await this.loop; this.loop = null; this.state.connected = false }
+  async close() { this.modelPicker = null; this.controller.abort(); await this.loop; this.loop = null; this.state.connected = false }
 }

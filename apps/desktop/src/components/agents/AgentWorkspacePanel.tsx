@@ -42,7 +42,7 @@ export function AgentWorkspacePanel({ agent, locked, perform, setDraft, showTele
     {tab && <div className="agents-workspace-content" aria-label={tab === 'history' ? 'Chat history' : tab === 'telegram' ? 'Telegram settings' : 'Saved trackers'}>
       {tab === 'telegram' && <TelegramSettings state={agent?.telegram} perform={perform} pending={pending} />}
       {tab === 'history' && <>
-        <p>Desktop and Telegram chats are saved locally across app restarts. Telegram transcripts can be viewed here; continue them in Telegram with /resume. Each channel keeps up to 100 chats with the latest 300 messages each. Continue research recovers bounded saved evidence with edits disabled.</p>
+        <p>Desktop and Telegram chats are saved locally across app restarts. Telegram transcripts can be viewed here. Each channel keeps up to 100 chats with the latest 300 messages each. Continue research recovers bounded saved evidence with edits disabled.</p>
         {agent?.telegramHistory?.error && <p role="alert">{agent.telegramHistory.error}</p>}
         {!history.length && <p>No saved chats yet.</p>}
         {history.map(({ chat, telegram }) => {
@@ -53,7 +53,7 @@ export function AgentWorkspacePanel({ agent, locked, perform, setDraft, showTele
               <button disabled={pending || (telegram ? !!agent?.telegramHistory?.busy : locked) || current} title={current ? telegram ? 'Send /new in Telegram before deleting its active chat' : 'Open a different chat before deleting this one' : 'Delete saved chat'} onClick={() => remove(deleteType, chat.id)}>{confirm === `${deleteType}:${chat.id}` ? 'Confirm delete chat' : 'Delete chat'}</button>
             </div><small>{telegram ? 'Telegram' : 'Desktop'} · {date(chat.updatedAt)} · {chat.messageCount} messages{chat.model ? ` · ${chat.model}` : ''}</small>
             {telegram && telegramChat?.id === chat.id && <section aria-label="Telegram chat transcript">
-              <div className="agents-saved-heading"><p>Viewing Telegram history. Continue this conversation in Telegram with <code>/resume {chat.id}</code>.</p><button disabled={pending} onClick={() => void perform({ type: 'telegramViewChat', id: null })}>Close Telegram transcript</button></div>
+              <div className="agents-saved-heading"><p>Viewing saved Telegram history. New Telegram messages continue its current chat.</p><button disabled={pending} onClick={() => void perform({ type: 'telegramViewChat', id: null })}>Close Telegram transcript</button></div>
               <AgentMessages messages={telegramChat.messages} imagesLocked onUseImage={ignoreImage} />
               {!telegramChat.messages.length && <p>No messages in this Telegram chat yet.</p>}
             </section>}
