@@ -55,7 +55,6 @@ export const FRESHNESS = {
   etfHoldings: 24 * 60 * 60_000,
   etfArbitrage: 2 * 60_000,
   youtube: 6 * 60 * 60_000,
-  tv: 5 * 60_000,
   heatmap: 30 * 60_000,
   upDown: 15 * 60_000,
   marketCap: 5 * 60_000,

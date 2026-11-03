@@ -417,7 +417,7 @@ const policyScheduler = createStartupScheduler({
   clearTimer: ((id: number) => { policyTimers.delete(id) }) as unknown as typeof clearTimeout,
 })
 const policyTasks = refreshPlan.filter(task => task.refreshIntervalMs !== undefined || task.tab === 'backtest')
-assert.equal(policyTasks.find(task => task.tab === 'tv')?.refreshIntervalMs, 300_000, 'TV must refresh recent uploads every five minutes')
+assert(!policyTasks.some(task => task.tab === 'tv'), 'Removed TV page must not preload or refresh')
 policyScheduler.reconcile(policyTasks.map(task => ({ ...task, run: async observe => {
   policyCalls.set(task.id, (policyCalls.get(task.id) ?? 0) + 1)
   observe(['quotes'], { ...ok({}, 'fixture'), meta: {

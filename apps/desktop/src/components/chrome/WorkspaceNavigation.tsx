@@ -3,7 +3,6 @@ import { useEffect, useRef } from 'react'
 import { SETTINGS_TAB_ID } from '@shared/contract'
 import { WORKSPACES, workspaceFor } from '@shared/navigation'
 import { NavigationIcon } from './NavigationIcon'
-import { PageReadiness } from './PageReadiness'
 
 interface NavigationTab {
   id: string
@@ -124,7 +123,7 @@ export function WorkspaceHeader({ tabs, activeTab, onSelectTab, favorite, onTogg
       {pages.length ? <nav aria-label="Workspace pages" className="workspace-pages mt-2 flex flex-wrap gap-1">
         {pages.map((tab) => <button key={tab.id} type="button" disabled={!tab.implemented}
           aria-current={tab.id === activeTab ? 'page' : undefined} onClick={() => onSelectTab(tab.id)}
-          className={pageButton + (isMac ? 'rounded-lg ' : '') + (tab.id === activeTab ? selectedStyle : idleStyle)}>{tab.label}<PageReadiness page={tab.id} /></button>)}
+          className={pageButton + (isMac ? 'rounded-lg ' : '') + (tab.id === activeTab ? selectedStyle : idleStyle)}>{tab.label}</button>)}
       </nav> : null}
     </header>
   )

@@ -175,3 +175,12 @@
     .youtube-fitted-text p { font-size: 11px; line-height: 16px; }
   }
 }
+.youtube-player-dialog { width: min(1100px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 16px; border: 1px solid #304661; border-radius: 8px; color: #e0e8f4; background: #101925; }
+.youtube-player-dialog::backdrop { background: #030812d9; }
+.youtube-player-dialog header { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
+.youtube-player-dialog h2 { flex: 1; margin: 0; font-size: 16px; }
+.youtube-player-dialog button { display: flex; padding: 8px; color: #e0e8f4; cursor: pointer; }
+.youtube-player-dialog button:focus-visible { outline: 2px solid #74aaff; }
+.youtube-player-dialog svg { width: 20px; height: 20px; }
+.youtube-player-dialog iframe { display: block; width: 100%; height: min(62vw, 65vh); min-height: 200px; border: 0; background: #000; }
+.youtube-player-dialog p { margin: 12px 0 0; color: #93a4bc; font-size: 12px; }

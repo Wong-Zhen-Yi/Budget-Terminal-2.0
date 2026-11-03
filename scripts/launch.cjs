@@ -21,7 +21,7 @@ function launch({ development = false, platform = process.platform, nodeVersion 
   log.log('Hyperliquid: live crypto candles share the equity connection, including overnight updates and reconnect recovery; market tables retain 24h change and volume.')
   const os = platformName(platform)
   log.log('YouTube Research Terminal: compact table, right-side inspector and pagination without scrollbars. Warning-count status and warning controls are removed. All videos and images still preload at startup.')
-  log.log('TV: separate market video page with recent channel uploads, newest-first coverage and five-minute refresh. Feed and images preload at startup.')
+  log.log('TV page removed. YouTube videos play inside the app with player controls and fullscreen. All remaining pages still preload at startup.')
   if (!os) {
     log.error(`Budget Terminal supports Windows, macOS, and Linux; found ${platform}.`)
     return 1

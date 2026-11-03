@@ -9,8 +9,6 @@
     "npm": ">=10.9.8"
   },
   "scripts": {
-    "probe:tv": "tsx scripts/probe-tv.ts",
-    "probe:tv-ui": "tsx scripts/probe-tv-ui.ts",
     "probe:youtube-ui": "tsx scripts/probe-youtube-ui.ts",
     "probe:api-usage-ui": "tsx scripts/probe-api-usage-ui.ts",
     "probe:hyperliquid": "tsx scripts/probe-hyperliquid-equities.ts",

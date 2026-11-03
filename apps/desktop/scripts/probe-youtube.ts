@@ -1,3 +1,4 @@
+import { isYouTubeEmbedUrl, youtubeEmbedUrl } from '../electron/shared/youtubePlayer.js'
 import assert from 'node:assert/strict'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -18,6 +19,11 @@ import {
   parseYouTubeSearchHtml,
   parseYouTubeWatchHtml,
 } from '../electron/services/youtube.js'
+
+assert.equal(youtubeEmbedUrl('abcdefghijk'), 'https://www.youtube-nocookie.com/embed/abcdefghijk?autoplay=1&playsinline=1&rel=0')
+for (const value of ['', '../watch?v=x', 'https://example.com', 'abc?x=12345']) assert.equal(youtubeEmbedUrl(value), null)
+assert(isYouTubeEmbedUrl(youtubeEmbedUrl('abcdefghijk')!))
+for (const value of ['https://www.youtube-nocookie.com.evil.test/embed/abcdefghijk', 'http://www.youtube-nocookie.com/embed/abcdefghijk', 'https://www.youtube-nocookie.com/watch?v=abcdefghijk', 'not a URL']) assert(!isYouTubeEmbedUrl(value))
 
 function video(patch: Partial<YouTubeVideo>): YouTubeVideo {
   return {

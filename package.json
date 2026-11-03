@@ -11,8 +11,6 @@
     "apps/desktop"
   ],
   "scripts": {
-    "probe:tv": "npm run --workspace budget-terminal-desktop probe:tv --",
-    "probe:tv-ui": "npm run --workspace budget-terminal-desktop probe:tv-ui --",
     "probe:hyperliquid": "npm run --workspace budget-terminal-desktop probe:hyperliquid --",
     "preinstall": "node scripts/runtime.cjs",
     "prepare": "git config core.hooksPath .githooks || exit 0",

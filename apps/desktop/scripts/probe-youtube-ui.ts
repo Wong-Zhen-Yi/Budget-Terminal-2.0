@@ -32,7 +32,7 @@ try {
       const portfolio = { portfolios: [{ id: 'fixture', tickers: ['NVDA', 'AAPL', 'MSFT'], holdings: {} }], activeId: 'fixture', mainId: 'fixture' }
       const titles = ['NVIDIA earnings: what matters next', 'Apple’s next growth cycle', 'Microsoft cloud: the quarterly picture', 'Alphabet and the cloud opportunity', 'A closer look at technology', 'The week ahead for your portfolio', 'Research notes: the latest quarter', 'Technology earnings in context']
       const videos = titles.map((title, i) => ({
-        videoId: 'fixture' + i, ticker: ['NVDA', 'AAPL', 'MSFT'][i % 3], title,
+        videoId: 'fixture000' + i, ticker: ['NVDA', 'AAPL', 'MSFT'][i % 3], title,
         channel: ['Market Lens', 'Equity Brief', 'The Research Desk'][i % 3],
         viewCount: 100000 - i * 1000, viewCountText: (100 - i) + 'K', publishedText: '2026-10-30',
         publishedDays: i + 1, publishedDaysText: String(i + 1), durationText: '18:42',
@@ -57,14 +57,14 @@ try {
       }
       window.api.youtubeThumbnail = async request => {
         thumbnails++
-        return failImage && request.videoId === 'fixture1'
+        return failImage && request.videoId === 'fixture0001'
           ? { ...envelope({ dataUri: '', resolvedUrl: '' }, 'failed'), errors: [{ reason: 'Image unavailable' }] }
           : envelope({ dataUri: image, resolvedUrl: '' })
       }
       const host = createRoot(document.getElementById('root'))
       const render = () => host.render(<QueryClientProvider client={client}><YouTubePage onStatusChange={() => {}} /></QueryClientProvider>)
       const task = () => buildTasks(portfolio, settings, { stocks: 'NVDA', fundamentals: 'NVDA' }, { year: 2026, month: 10, earningsYear: 2026, ipoYear: 2026 }).find(task => task.tab === 'youtube')
-      const refresh = async next => { mode = next; button('Refresh').click(); await settle() }
+      const refresh = async next => { mode = next; void client.refetchQueries({ queryKey: queryKeys.youtube(['NVDA', 'AAPL', 'MSFT']), exact: true }); await settle() }
       window.runProbe = async () => {
         await task().run(client, 7)
         check(lastRequest.background && lastRequest.backgroundOrder === 7, 'Startup lost background priority')
@@ -75,8 +75,20 @@ try {
         check(document.querySelectorAll('.youtube-video-row[aria-selected=true]').length === 1, 'Shared video selection count: ' + document.querySelectorAll('.youtube-video-row[aria-selected=true]').length + '; ' + rows().map(row => row.outerHTML.slice(0, 150)).join(' | '))
         rows()[1].click(); await settle()
         check(document.querySelector('.youtube-focus .youtube-ticker').textContent === 'AAPL', 'Shared video selected the wrong ticker')
-        button('Watch on YouTube').click(); check(opened === videos[0].url, 'Watch URL wrong')
-        document.querySelector('.youtube-preview').click(); check(opened === videos[0].url, 'Preview URL wrong')
+        check(!document.querySelector('.youtube-player-dialog'), 'Player must wait for an explicit play action')
+        button('Play video').click(); await settle()
+        check(document.querySelector('.youtube-player-dialog').open, 'Play did not open an in-app dialog')
+        check(document.querySelector('.youtube-player-dialog iframe').src.includes('/embed/' + videos[0].videoId), 'Player video ID wrong')
+        check(!opened, 'Play opened the external browser')
+        document.querySelector('[aria-label="Close video player"]').click(); await settle()
+        check(!document.querySelector('iframe'), 'Close must stop and remove playback')
+        document.querySelector('.youtube-preview').click(); await settle()
+        check(document.querySelector('.youtube-player-dialog iframe'), 'Preview must play in app')
+        document.querySelector('.youtube-player-dialog').dispatchEvent(new Event('cancel')); await settle()
+        check(!document.querySelector('iframe'), 'Escape must stop playback')
+        rows()[2].dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); await settle()
+        check(document.querySelector('iframe').src.includes('/embed/' + videos[1].videoId), 'Double click played the wrong video')
+        document.querySelector('[aria-label="Close video player"]').click(); await settle()
         const tickerFilter = document.querySelector('[aria-label="Filter by portfolio ticker"]')
         tickerFilter.value = 'MSFT'; tickerFilter.dispatchEvent(new Event('change', { bubbles: true })); await settle()
         check(rows().length === 2 && rows().every(row => row.querySelector('.youtube-ticker').textContent === 'MSFT'), 'Ticker filter must match exactly')
@@ -92,14 +104,14 @@ try {
         sort.value = '3:false'; sort.dispatchEvent(new Event('change', { bubbles: true })); await settle()
         check(lastMutation.type === 'setYouTubePage' && !lastMutation.value.sortDescending && rows()[0].textContent.includes(videos[7].title), 'Sort was not applied and saved')
         await refresh('partial')
-        check(text().includes('Some results are unavailable') && rows().length === 9, 'Partial result hid videos or its availability state')
+        check(text().includes('Refresh returned partial data') && rows().length === 9, 'Partial result hid videos or its availability state')
         await refresh('warnings')
         check(rows().length === 9 && !text().toLowerCase().includes('warning') && !document.querySelector('.youtube-warnings, .youtube-warning-panel'), 'Warning status or controls remain visible')
         check(!document.querySelector('.youtube-status'), 'Warning-only results must not claim everything is up to date')
-        await refresh('stale'); check(text().includes('Showing stale results') && rows().length === 9, 'Stale data hidden or treated as fresh')
+        await refresh('stale'); check(text().includes('Refresh returned stale data') && rows().length === 9, 'Stale data hidden or treated as fresh')
         await refresh('failed'); check(text().includes('Provider unavailable') && rows().length === 9, 'Failure details or retained feed missing')
         await refresh('throws'); check(text().includes('Network unavailable') && rows().length === 9, 'Rejected refresh unhandled')
-        await refresh('waiting'); check(document.querySelector('.youtube-refresh').disabled && rows().length === 9, 'Loading should retain feed and disable refresh')
+        await refresh('waiting'); check(document.querySelector('.youtube-feed').getAttribute('aria-busy') === 'true' && rows().length === 9, 'Loading should retain the feed')
         mode = 'fresh'; release(); await settle()
         await refresh('empty'); check(rows().length === 0 && text().includes('No videos available'), 'Empty response not shown')
         await refresh('fresh')
@@ -110,16 +122,16 @@ try {
         const failedClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
         let failure = ''
         try { await task().run(failedClient) } catch (error) { failure = error.message; check(error.state === 'degraded', 'Image failure must degrade readiness') }
-        check(failure.includes('thumbnail') && failedClient.getQueryData(queryKeys.youtubeThumbnail('fixture7', '')), 'Image failure passed silently or blocked other images')
+        check(failure.includes('thumbnail') && failedClient.getQueryData(queryKeys.youtubeThumbnail('fixture0007', '')), 'Image failure passed silently or blocked other images')
         failImage = false
         client.setQueryData(queryKeys.portfolio, envelope({ ...portfolio, portfolios: [] })); await settle()
-        check(text().includes('Add portfolio tickers') && document.querySelector('.youtube-refresh').disabled, 'No-holdings state missing')
+        check(text().includes('Add portfolio tickers') && !document.querySelector('.youtube-refresh'), 'No-holdings state missing')
         client.setQueryData(queryKeys.portfolio, envelope(portfolio)); await settle()
         const many = Array.from({length: 43}, (_, i) => ({...videos[i % 8], videoId: 'many' + i, title: videos[i % 8].title + ' #' + i, descriptionSnippet: videos[i % 8].descriptionSnippet.repeat(20)}))
         for (const video of many) client.setQueryData(queryKeys.youtubeThumbnail(video.videoId, ''), envelope({dataUri: image, resolvedUrl: ''}))
         client.setQueryData(queryKeys.youtube(portfolio.portfolios[0].tickers), envelope({items: many, warnings: [], fetchedAt: Date.now(), tickersTotal: 3})); await settle()
         button('Details').click(); await settle()
-        return 'PASS: startup warming/deduplication, first visit/revisit, shared-video selection, filters, saved sort, watch links, loading, stale/partial/failed/empty results, refresh rejection, image failure and no holdings'
+        return 'PASS: startup warming/deduplication, first visit/revisit, shared-video selection, filters, saved sort, in-app playback/close/Escape/double click, loading, stale/partial/failed/empty results, refresh rejection, image failure and no holdings'
       }
       window.checkLayout = async () => {
         check(document.documentElement.scrollWidth <= innerWidth, 'Horizontal overflow')
@@ -171,11 +183,17 @@ try {
   })
   await writeFile(join(scratch, 'renderer.js'), bundle.outputFiles[0].text)
   await writeFile(join(scratch, 'index.html'), '<html><head><meta charset="UTF-8"><link rel="stylesheet" href="theme.css"></head><body><div style="height:143px;background:#0d1420;padding:24px;color:#7d8ea6">Budget Terminal · YouTube layout verification</div><div id="root" style="height:calc(100vh - 143px);display:flex"></div><script>window.api = { platform: "win32" };</script><script src="renderer.js"></script></body></html>')
+  await build({ entryPoints: [join(root, 'electron/services/youtubePlayer.ts')], bundle: true, platform: 'node', format: 'cjs', external: ['electron'], outfile: join(scratch, 'player.cjs') })
+  const shellHtml = await readFile(join(root, 'src/index.html'), 'utf8')
+  const policy = shellHtml.match(/content="(default-src[^"\n]+)"/)?.[1]
+  assert(policy)
+  await writeFile(join(scratch, 'player.html'), `<meta http-equiv="Content-Security-Policy" content="${policy}"><iframe title="YouTube playback verification" style="width:800px;height:450px" allow="autoplay; encrypted-media; fullscreen" src="https://www.youtube-nocookie.com/embed/M7lc1UVf-VE?autoplay=1&playsinline=1&rel=0"></iframe>`)
   await writeFile(join(scratch, 'main.cjs'), `
     const { app, BrowserWindow } = require('electron'); const fs = require('fs');
     app.setPath('userData', ${JSON.stringify(join(scratch, 'userData'))});
     app.whenReady().then(async () => {
-      const window = new BrowserWindow({ show: false, width: 1920, height: 1080, useContentSize: true, webPreferences: { backgroundThrottling: false } });
+      const window = new BrowserWindow({ show: false, width: 1920, height: 1080, useContentSize: true, webPreferences: { backgroundThrottling: false, autoplayPolicy: 'no-user-gesture-required' } });
+      window.webContents.session.webRequest.onBeforeRequest({ urls: ['https://www.youtube-nocookie.com/*'] }, (_, callback) => callback({ cancel: true }));
       window.webContents.on('console-message', event => console.log(event.message));
       try {
         await window.loadFile(${JSON.stringify(join(scratch, 'index.html'))});
@@ -186,6 +204,24 @@ try {
           await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true });
           await new Promise(resolve => setTimeout(resolve, 100));
           fs.writeFileSync(${JSON.stringify(join(root, 'out/youtube-smoke-'))} + width + '.png', (await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG());
+        }
+        if (${process.argv.includes('--live')}) {
+          window.webContents.session.webRequest.onBeforeRequest(null);
+          require('./player.cjs').configureYouTubePlayer(window);
+          let identified = false;
+          window.webContents.session.webRequest.onSendHeaders({ urls: ['https://www.youtube-nocookie.com/embed/*'] }, details => {
+            identified = Object.entries(details.requestHeaders).some(([key, value]) => key.toLowerCase() === 'referer' && value === 'https://budget-terminal.app/');
+          });
+          await window.loadFile(${JSON.stringify(join(scratch, 'player.html'))});
+          let state;
+          for (let attempt = 0; attempt < 25; attempt++) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            const frame = window.webContents.mainFrame.frames.find(frame => frame.url.startsWith('https://www.youtube-nocookie.com/embed/'));
+            if (frame) state = await frame.executeJavaScript('JSON.stringify({ ready: document.querySelector("video")?.readyState, time: document.querySelector("video")?.currentTime, text: document.body.innerText.slice(0, 500) })').then(JSON.parse).catch(() => null);
+            if (state?.time > 0) break;
+          }
+          if (!identified || !(state?.time > 0)) throw Error('Live player did not start: ' + JSON.stringify({ identified, state }));
+          console.log('PASS: live YouTube playback, production CSP and public app Referer; playback time ' + state.time);
         }
         app.exit(0);
       } catch (error) { console.error(error); app.exit(1); }

@@ -11,7 +11,7 @@ declare global {
 
 /** Bootstrap installs either the Electron preload or the authenticated browser bridge. */
 if (!window.api) throw new Error('Budget Terminal service API is unavailable.')
-const progressiveMethods = new Set(['sofi', 'hood', 'hims', 'mu', 'amzn', 'avgo', 'vst', 'semiconductors', 'bitcoin', 'bmnr', 'projections', 'preMarket', 'gold', 'oil', 'crypto', 'globalMarkets', 'money', 'forexQuotes', 'targets', 'quotes', 'fundamentals', 'priceScreen', 'marketCap', 'tradingVolumes', 'stocks', 'tv'])
+const progressiveMethods = new Set(['sofi', 'hood', 'hims', 'mu', 'amzn', 'avgo', 'vst', 'semiconductors', 'bitcoin', 'bmnr', 'projections', 'preMarket', 'gold', 'oil', 'crypto', 'globalMarkets', 'money', 'forexQuotes', 'targets', 'quotes', 'fundamentals', 'priceScreen', 'marketCap', 'tradingVolumes', 'stocks'])
 
 const reloadReadMethods = new Set([
   'defeatbetaTerminal', 'chart', 'options', 'quotes', 'targets', 'news',
@@ -21,7 +21,7 @@ const reloadReadMethods = new Set([
   'oil', 'newsPage', 'forexQuotes', 'forexHistory', 'forexNews', 'crypto',
   'etfAum', 'etfHoldings', 'amzn', 'mu', 'avgo', 'semiconductors',
   'vst', 'sofi', 'hims', 'hood', 'bmnr', 'gold',
-  'youtube', 'tv', 'heatmap', 'tradingVolumes', 'chartsHistory', 'valuation',
+  'youtube', 'heatmap', 'tradingVolumes', 'chartsHistory', 'valuation',
   'projections', 'optionsExpirations', 'optionsChain', 'bitcoin', 'sp500', 'sp500Breadth',
   'marketCap', 'marketCapSales', 'priceScreen', 'discovery',
 ])
@@ -141,7 +141,6 @@ export const queryKeys = {
   newsPreview: (url: string) => ['newsPreview', url] as const,
   newsThumbnail: (url: string) => ['newsThumbnail', url] as const,
   youtube: (tickers: string[]) => ['youtube', [...tickers].sort().join(',')] as const,
-  tv: ['tv'] as const,
   youtubeThumbnail: (videoId: string, thumbnailUrl: string) =>
     ['youtubeThumbnail', videoId, thumbnailUrl] as const,
   fundamentals: (tickers: string[]) => ['fundamentals', [...tickers].sort().join(','), 'pe-peg-v2'] as const,

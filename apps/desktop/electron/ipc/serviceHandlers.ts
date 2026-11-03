@@ -8,7 +8,6 @@ import { getBitcoin } from '../services/bitcoin.js'
 import { getDefeatBetaTerminal } from '../services/defeatbeta/terminal.js'
 import type { DefeatBetaTerminalRequest } from '../shared/defeatbetaTerminal.js'
 import type { SofiRequest } from '../shared/sofi.js'
-import type { TvRequest } from '../shared/tv.js'
 import type { HimsRequest } from '../shared/hims.js'
 import type { HoodRequest } from '../shared/hood.js'
 import type { MuRequest } from '../shared/mu.js'
@@ -315,7 +314,6 @@ export function registerServiceHandlers(register: RegisterService): void {
   handle(CHANNELS.youtube, (request: YouTubeRequest) =>
     provider.youtube(request),
   )
-  handle(CHANNELS.tv, (request: TvRequest) => provider.tv(request))
   handle(CHANNELS.youtubeThumbnail, (request: YouTubeThumbnailRequest) =>
     provider.youtubeThumbnail(request),
   )

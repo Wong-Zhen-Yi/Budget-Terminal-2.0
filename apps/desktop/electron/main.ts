@@ -7,6 +7,8 @@ import { loadRenderer } from './services/rendererStartup.js'
 import { isTrustedRendererUrl } from './shared/ipcSecurity.js'
 import { isSafeExternalUrl } from './services/urls.js'
 import { configureBrowserWindow } from './services/browser.js'
+import { configureYouTubePlayer } from './services/youtubePlayer.js'
+import { isYouTubeEmbedUrl } from './shared/youtubePlayer.js'
 import { desktopWindowSize } from './shared/windowSize.js'
 import { configureRendererCacheShutdown } from './services/rendererCacheShutdown.js'
 import { assertDesktopCertificateSecurity } from './shared/certificateSecurity.js'
@@ -56,6 +58,7 @@ function createWindow(): BrowserWindow {
   })
 
   configureBrowserWindow(window)
+  configureYouTubePlayer(window)
   configureRendererCacheShutdown(window)
 
   // Paint once, rather than showing an empty frame and then the UI.
@@ -68,10 +71,14 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' }
   })
   window.webContents.on('will-navigate', (event) => event.preventDefault())
-  window.webContents.session.setPermissionRequestHandler((contents, permission, callback) =>
-    callback(permission === 'clipboard-sanitized-write' && isTrustedRendererUrl(contents.getURL(), rendererUrl)))
-  window.webContents.session.setPermissionCheckHandler((contents, permission) =>
-    permission === 'clipboard-sanitized-write' && Boolean(contents && isTrustedRendererUrl(contents.getURL(), rendererUrl)))
+  window.webContents.session.setPermissionRequestHandler((contents, permission, callback, details) =>
+    callback(isTrustedRendererUrl(contents.getURL(), rendererUrl) && (
+      permission === 'clipboard-sanitized-write' || (permission === 'fullscreen' && isYouTubeEmbedUrl(details.requestingUrl))
+    )))
+  window.webContents.session.setPermissionCheckHandler((contents, permission, _origin, details) =>
+    Boolean(contents && isTrustedRendererUrl(contents.getURL(), rendererUrl)) && (
+      permission === 'clipboard-sanitized-write' || (permission === 'fullscreen' && isYouTubeEmbedUrl(details.requestingUrl ?? ''))
+    ))
 
   // Missing files during a rebuild get a bounded retry and an actionable error.
   void loadRenderer(window, join(dirname, '../renderer/index.html'),

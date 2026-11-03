@@ -22,7 +22,7 @@ try {
         import { useQuery } from './src/api/progressiveQuery'
         import { trackPageQuery } from './src/api/pageProgress'
         import { api } from './src/api/client'
-        import { PageReadiness } from './src/components/chrome/PageReadiness'
+        import { WorkspaceHeader } from './src/components/chrome/WorkspaceNavigation'
         import { useDataHealth } from './src/stores/dataHealth'
         const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
         const check = (ok, message) => { if (!ok) throw Error(message) }
@@ -37,7 +37,7 @@ try {
         const queryKey = ['bitcoin']
         function Demo() {
           const query = useQuery({ queryKey, queryFn: () => api.bitcoin({ background: true }) })
-          return <><PageReadiness page="bitcoin" /><PageReadiness page="forex" /><main aria-busy={query.isFetching}><h1>Bitcoin</h1><p>{query.data?.data.sections.join(' / ') ?? 'Waiting'}</p><span>{query.isFetching ? 'Loading remaining data' : 'Complete'}</span></main></>
+          return <><WorkspaceHeader tabs={[{id: 'bitcoin', label: 'Bitcoin', implemented: true}, {id: 'sofi', label: 'SOFI', implemented: true}]} activeTab="bitcoin" onSelectTab={() => {}} favorite={false} onToggleFavorite={() => {}} saving={false} isMac={false} /><main aria-busy={query.isFetching}><h1>Bitcoin</h1><p>{query.data?.data.sections.join(' / ') ?? 'Waiting'}</p><span>{query.isFetching ? 'Loading remaining data' : 'Complete'}</span></main></>
         }
         window.runProbe = async () => {
           // Start in the background, then mount while that same query is pending.
@@ -58,12 +58,13 @@ try {
           check(document.body.innerText.includes('Complete') && document.body.innerText.includes('Fees'), 'Final content must replace preview without disappearing')
           check(client.getQueryState(queryKey).status === 'success', 'Only the final response completes startup')
           useDataHealth.getState().setStartup({durationMs: 100, planned: 2, timings: [], pages: {
-            bitcoin: {state: 'ready'}, forex: {state: 'failed', reason: 'Fixture provider unavailable'},
+            bitcoin: {state: 'ready'}, sofi: {state: 'failed', reason: 'Fixture provider unavailable'},
           }})
           await wait(100)
           check(!document.querySelector('[aria-label="Page loading status"]'), 'Global startup diagnostics banner must not render')
-          const failed = document.querySelector('[data-page-readiness="forex"]')
-          check(failed.innerText === 'Failed' && failed.title === 'Fixture provider unavailable', 'Page readiness must retain failure state and reason')
+          check([...document.querySelectorAll('[aria-label="Workspace pages"] button')].map(button => button.textContent).join('|') === 'Bitcoin|SOFI', 'Page labels show only page names for ready and failed pages')
+          check(!document.querySelector('[data-page-readiness]'), 'Page labels must not show readiness notes')
+          check(useDataHealth.getState().startup.pages.sofi.reason === 'Fixture provider unavailable', 'Startup failure details remain available for Settings')
           const before = client.getQueryData(queryKey)
           const refresh = client.refetchQueries({queryKey})
           await wait(300)
@@ -72,7 +73,7 @@ try {
           await refresh; await wait(150)
           check(client.getQueryData(queryKey) === before && client.getQueryState(queryKey).status === 'error', 'Failed manual refresh must retain content and expose error')
           check(document.querySelector('main').innerText.includes('Fees'), 'Refresh failure erased data')
-          return 'PASS: progressive sections, shared preview identity, no global diagnostics banner, per-page failure visibility and retained refresh content'
+          return 'PASS: progressive sections, shared preview identity, clean page labels, retained Settings diagnostics, no global diagnostics banner and retained refresh content'
         }
 
       `,

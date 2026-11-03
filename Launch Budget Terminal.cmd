@@ -3,8 +3,8 @@ echo Agents includes the new quick prompt: Summarize my portfolio during latest 
 echo Hyperliquid: live crypto candles share the equity connection, including overnight updates and reconnect recovery; market tables retain 24h change and volume.
 echo Reload (F5) updates the current page first, then checks all other pages. Page refresh buttons have been removed; startup still loads every page.
 echo Pages populate completed sections while remaining data loads; all pages still preload and startup failures remain visible.
-echo Page Loading Status banner removed. Startup progress, failures and diagnostics remain in Settings; page readiness indicators remain available. Opening a page promotes its queued requests with fair background turns. Shared reads avoid duplicate work. Readers retain controls longer and evicted pages restore scroll. All pages still preload.
-echo TV: separate market video page with recent channel uploads, newest-first coverage and five-minute refresh. Feed and images preload at startup.
+echo Page Loading Status banner removed. Startup progress, failures and diagnostics remain in Settings; page labels show only page names. Opening a page promotes its queued requests with fair background turns. Shared reads avoid duplicate work. Readers retain controls longer and evicted pages restore scroll. All pages still preload.
+echo TV page removed. YouTube videos play inside the app with player controls and fullscreen. All remaining pages still preload at startup.
 echo Dictionary Reading Room: category browsing, readable articles, section navigation, saved terms, recent history and formula copying. All 405 terms remain available offline. Dictionary candlestick charts render at full size across all pattern examples.
 echo YouTube Research Terminal: compact table, right-side inspector and pagination without scrollbars. Warning-count status and warning controls are removed. All videos and images still preload at startup.
 echo Crypto: removed the snapshot summary banner. Refresh errors, rate limits and startup loading remain visible.

@@ -1,5 +1,4 @@
 import type { BrowserControl, BrowserRequest, BrowserResult, BrowserState, BrowserViewport } from './browser.js'
-import type { TvPayload, TvRequest } from './tv.js'
 import type { McpDiagnostics, McpPolicy } from './mcpAccess.js'
 export type { BrowserRequest } from './browser.js'
 import type { AgentImage, AgentsCommand, AgentsState } from './agents.js'
@@ -1363,7 +1362,6 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'institutions', label: 'Institutions', implemented: true },
   { id: 'politics', label: 'Politics', implemented: true },
   { id: 'youtube', label: 'YouTube', implemented: true },
-  { id: 'tv', label: 'TV', implemented: true },
   { id: 'dictionary', label: 'Dictionary', implemented: true },
   { id: 'bonds', label: 'Bonds', implemented: true },
   { id: 'money', label: 'Money', implemented: true },
@@ -3583,7 +3581,6 @@ export const CHANNELS = {
   quantScan: 'quant:scan',
   quantPair: 'quant:pair',
   youtube: 'youtube:read',
-  tv: 'tv:read',
   youtubeThumbnail: 'youtube:thumbnail',
   fundamentals: 'dashboard:fundamentals',
   fundamentalsPage: 'fundamentals:read',
@@ -3808,7 +3805,6 @@ export interface DesktopApi {
   quantScan(request: QuantScanRequest): Promise<Envelope<QuantScanPayload | null>>
   quantPair(request: QuantPairRequest): Promise<Envelope<QuantPairDetail | null>>
   youtube(request: YouTubeRequest): Promise<Envelope<YouTubePayload>>
-  tv(request: TvRequest): Promise<Envelope<TvPayload>>
   youtubeThumbnail(
     request: YouTubeThumbnailRequest,
   ): Promise<Envelope<YouTubeThumbnailPayload>>

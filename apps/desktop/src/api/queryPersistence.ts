@@ -103,7 +103,6 @@ export function queryFreshness(queryKey: QueryKey): number {
   if (root === 'quant') return 12 * 60 * 60_000
   if (root === 'technicalScreen') return 12 * 60 * 60_000
   if (root === 'youtube') return FRESHNESS.youtube
-  if (root === 'tv') return FRESHNESS.tv
   return 15 * 60_000
 }
 

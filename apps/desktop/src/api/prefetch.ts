@@ -853,28 +853,6 @@ export function buildTasks(
     })
   }
 
-  tasks.push({
-    tab: 'tv', label: 'Market TV',
-    run: async (client, backgroundOrder, onSnapshot) => {
-      const result = await warmStartupSnapshot(client, {
-        queryKey: queryKeys.tv,
-        queryFn: () => api.tv({ background: true, backgroundOrder }),
-        staleTime: queryFreshness(queryKeys.tv),
-      }, onSnapshot)
-      const images = await Promise.allSettled(result.data.items.map(video => warmStartupQuery(client, {
-        queryKey: queryKeys.youtubeThumbnail(video.videoId, video.thumbnailUrl),
-        queryFn: () => api.youtubeThumbnail({ videoId: video.videoId, thumbnailUrl: video.thumbnailUrl }),
-        staleTime: Infinity,
-      }, onSnapshot)))
-      assertStartupReady(result)
-      const failures = images.filter(image => image.status === 'rejected')
-      if (failures.length) throw new StartupLoadError(
-        failures.length + ' TV thumbnail(s) could not load: ' + errorMessage(failures[0].reason), 'degraded',
-      )
-      return result
-    },
-  })
-
   // The default index only. Warming the other two would triple the cost for maps nobody
   // has asked to see, and the per-index cache makes switching to one free on the second
   // visit anyway.
