@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import type { Envelope, NewsArticle } from '@shared/contract'
+import type { NewsArticle } from '@shared/contract'
 import { buildNewsExportText, parseSearchSymbols, splitNewsGroups } from '@shared/news'
 import { api } from '@/api/client'
 import {
@@ -14,7 +14,6 @@ import { useCardColumns, useProgressiveCount } from '@/components/news/hooks'
 import { NewsHero } from '@/components/news/NewsHero'
 import { NewsReader } from '@/components/news/NewsReader'
 import { NewsSection } from '@/components/news/NewsSection'
-import { NewsSourceStrip } from '@/components/news/NewsSourceStrip'
 import { NewsTickerSearchBar } from '@/components/news/NewsTickerSearchBar'
 import { NewsToolbar, type Tone } from '@/components/news/NewsToolbar'
 import { Splitter } from '@/components/ui/Splitter'
@@ -35,24 +34,9 @@ import { newsHero, newsQuoteTickers } from '@/api/initialContent'
  * highest-scoring recent story is promoted to a hero above the grid (`NewsHero`).
  */
 
-/** The section labels the envelope's per-block errors are keyed by, from the orchestrator. */
-const PORTFOLIO_SECTION = 'Portfolio Spotlight'
-const MARKET_SECTION = 'Market & Macro'
-
 /** Keeps both panes usable however far the divider is dragged. */
 const MIN_GRID = 420
 const MIN_READER = 300
-
-/** A story older than this is never promoted to the hero, whatever it scored. */
-/** `warningOf` from `PreMarketPage`: the per-block error a panel looks itself up by. */
-function warningOf(envelope: Envelope<unknown> | undefined, block: string): string | undefined {
-  if (!envelope) return undefined
-  const failed = envelope.errors.find((entry) => entry.symbol === block)
-  if (failed) return failed.reason
-  const { freshness, failureReason } = envelope.meta
-  if (freshness === 'failed') return failureReason || freshness
-  return undefined
-}
 
 export function NewsPage({
   onStatusChange,
@@ -177,14 +161,6 @@ export function NewsPage({
     )
   }, [onStatusChange, query.data, query.isFetching])
 
-  const feedErrors = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const error of query.data?.errors ?? []) {
-      if (error.operation === 'newsFeed' && error.symbol) map.set(error.symbol, error.reason)
-    }
-    return map
-  }, [query.data])
-
   const counts = useMemo(() => {
     const portfolio = articles.filter((article) => article.category === 'portfolio').length
     return { all: articles.length, portfolio, market_macro: articles.length - portfolio }
@@ -204,10 +180,8 @@ export function NewsPage({
 
     const shown = visibleSearch.length + groups.portfolio.length + groups.market.length
     const base = `${shown} visible of ${articles.length + searchArticles.length} article(s)`
-    const degraded = query.data?.errors.filter((error) => error.operation === 'newsFeed').length ?? 0
-    return degraded
-      ? { text: `${base} — ${degraded} source(s) unavailable`, tone: 'warning' }
-      : { text: base, tone: 'positive' }
+    // Feed coverage and startup health are reported in Settings.
+    return { text: base, tone: 'positive' }
   }, [
     notice,
     query.isFetching,
@@ -366,8 +340,6 @@ export function NewsPage({
         active={searchTickers.length > 0}
       />
 
-      {payload ? <NewsSourceStrip lanes={payload.lanes} errors={feedErrors} /> : null}
-
       <div className="flex min-h-0 flex-1 gap-2">
         <div
           ref={gridRef}
@@ -413,7 +385,6 @@ export function NewsPage({
             onSelect={selectArticle}
             onOpen={openArticle}
             showImages={showImages}
-            warning={warningOf(query.data, PORTFOLIO_SECTION)}
             empty={
               loading
                 ? 'Loading portfolio news...'
@@ -434,7 +405,6 @@ export function NewsPage({
             onSelect={selectArticle}
             onOpen={openArticle}
             showImages={showImages}
-            warning={warningOf(query.data, MARKET_SECTION)}
             empty={loading ? 'Loading market news...' : 'No market headlines matched.'}
             now={now}
           />

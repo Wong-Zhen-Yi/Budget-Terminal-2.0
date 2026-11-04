@@ -69,6 +69,7 @@ function launch({ development = false, platform = process.platform, nodeVersion 
     return 1
   }
 
+  log.log('News: removed partial-feed status indicators from the page. Feed coverage and startup diagnostics remain in Settings; all pages still preload.')
   log.log(`Starting Budget Terminal for ${os}...`)
   log.log('Dictionary Reading Room: category browsing, readable articles, section navigation, saved terms, recent history and formula copying. All 405 terms remain available offline. Dictionary candlestick charts render at full size across all pattern examples.')
   log.log('Crypto: removed the snapshot summary banner. Refresh errors, rate limits and startup loading remain visible.')

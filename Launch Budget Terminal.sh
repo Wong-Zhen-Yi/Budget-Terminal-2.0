@@ -1,4 +1,5 @@
 #!/bin/sh
+echo 'News: removed partial-feed status indicators from the page. Feed coverage and startup diagnostics remain in Settings; all pages still preload.'
 echo "Stock charts leave 35 percent of the plot to the right of the latest bar; disabled indicator panes release their space."
 echo "Agents includes the new quick prompt: Summarize my portfolio during latest trading day."
 echo "Hyperliquid: live crypto candles share the equity connection, including overnight updates and reconnect recovery; market tables retain 24h change and volume."
