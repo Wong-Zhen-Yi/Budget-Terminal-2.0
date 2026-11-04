@@ -1,4 +1,5 @@
 @echo off
+rem GitHub guide refreshed: README.md covers all 58 desktop pages, public data routing, and desktop versus terminal launch commands.
 rem Current dark navy and blue colour scheme is locked in AGENTS.md; palette changes require an explicit user request.
 echo Public API routing: Coinbase and Binance spot quotes, shared CoinGecko metadata, World Bank and IMF annual context. Key-based APIs remain inactive.
 echo MCP: public Polymarket reads registered; all implemented pages support screenshot access.

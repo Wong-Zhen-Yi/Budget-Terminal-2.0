@@ -92,4 +92,5 @@ Detailed startup failures are in desktop Settings; terminal Settings tracks its
 own workspace requests. The desktop global loading banner and bottom status
 strip remain hidden.
 
-On macOS/Linux use `npm run tui`, or the TUI `.command`/`.sh` launchers.
+On macOS/Linux use `npm run tui` after installing dependencies. Double-click
+launchers are provided for Windows only; use `npm run dev` for the desktop window.

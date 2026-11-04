@@ -28,8 +28,9 @@
 
 ## One workspace, from research to records
 
-Double-click **Launch Budget Terminal.cmd** to open the TUI and install `BT`, then
-open a new PowerShell window and type `BT`. See [terminal UI controls and setup](docs/terminal-ui.md).
+Open the desktop app with `npm run dev`, or double-click **Launch Budget Terminal.cmd**
+for the PowerShell terminal interface and the `BT` command. Install dependencies
+first. See [Quick start](#quick-start) and [terminal UI controls](docs/terminal-ui.md).
 
 Budget Terminal brings public market data and your saved financial records into an
 Electron app built with React and TypeScript. Move from a market overview to company
@@ -42,10 +43,12 @@ research pages.
 | **🔎 Research companies** | Review fundamentals, valuation, institutional activity, [DefeatBeta Terminal](docs/defeatbeta-terminal.md), and focused company and semiconductor pages. |
 | **🌐 Browse the sources** | Use the embedded [Browser](docs/browser.md) with shared Chromium tabs, source text reading, and agent research access enabled by default with Disable and Stop controls. Login profiles stay outside source/Git, with ignore rules and commit/push checks against accidental publication. |
 | **📈 Study price action** | Work with charts, technical indicators, options chains, quantitative tools, and backtests. |
+| **Explore prediction markets** | Search Polymarket events and inspect outcome probabilities, price history, order-book depth, and activity through public read-only data. |
 | **💼 Track your money** | Manage portfolios, personal finance, Cards, and projections with local saved records and backups. |
-| **⚡ Open ready pages** | Every implemented page starts loading at launch, with startup progress and failures visible. |
+| **⚡ Open ready pages** | Every implemented page starts loading at launch. Startup progress, failures, and diagnostic logs stay in Settings. |
 | **Saved pages at launch** | Use cached content while every page refreshes. Settings controls separate page, market-data and image budgets, retention and cache diagnostics. |
 | **🔗 Extend your workspace** | Connect local research tools through MCP while keeping the workspace in the desktop app. |
+| **Work with Agents** | Use the embedded Codex workspace for research and local alerts, with autonomous mode off by default. |
 
 ## Screenshots
 
@@ -86,7 +89,7 @@ git clone https://github.com/Wong-Zhen-Yi/Budget-Terminal-2.0.git
 cd Budget-Terminal-2.0
 ```
 
-### 2. Install and launch
+### 2. Install and open the desktop app
 
 Use **Node.js 24 LTS and npm 11** for a new installation. Supported versions are
 Node.js **22.23.4+, 24.22.1+, or 26.12.1+**, with **npm 10.9.8+**, as defined in
@@ -97,13 +100,19 @@ npm install
 npm run dev
 ```
 
-Prefer a Windows launcher? Open [Launch Budget Terminal.cmd](Launch%20Budget%20Terminal.cmd)
-from the checkout. Double-click launchers are provided for Windows only.
+### 3. Optional: use the terminal interface
+
+On Windows, open [Launch Budget Terminal.cmd](Launch%20Budget%20Terminal.cmd)
+from the checkout. It opens the terminal interface, backed by Electron, rather
+than the desktop window. Double-click launchers are provided for Windows only.
 
 The main launcher checks the runtime, installs or refreshes the per-user `BT`
 command, and opens the TUI. Install dependencies with `npm install` first.
 Keep its terminal open while using Budget Terminal. Build or startup errors stay
 visible in the launcher window. `BT` in a new PowerShell window opens the same TUI.
+On macOS and Linux, run `npm run tui` after installing dependencies.
+
+### Launch behavior and troubleshooting
 
 On Windows, the double-click launcher finds a supported Node.js installation even
 when an older version comes first on PATH. If none is available, it downloads
@@ -162,20 +171,26 @@ application updates are not configured.
 
 ## Explore the workspaces
 
-The current navigation includes **57 implemented pages**, including Settings.
+The current navigation includes **58 implemented pages**, including Settings.
 
 | Workspace | Pages |
 | :--- | :--- |
-| **Overview** | Dashboard, News, Calendar, YouTube, Dictionary |
-| **Markets** | Pre-Market, Heatmap, Up/Down, Trading Volumes, Beta, Market Cap, Price, ETF, S&P500, Forex, Crypto, Gold, Oil |
-| **Research** | Stocks, Discovery, Fundamentals, Scorecard, Valuation, Institutions |
-| **Focus** | BMNR, Bitcoin, HOOD, HIMS, SOFI, MU, AMZN, AVGO, Semiconductors, VST |
+| **Overview** | Dashboard, Dashboard 2.0, News, Calendar, YouTube, Dictionary |
+| **Markets** | Pre-Market, Heatmap, Up/Down, Trading Volumes, Beta, Market Cap, Price, ETF, S&P500, Forex, Crypto, Polymarket, Gold, Oil |
+| **Research** | Browser, Stocks, Discovery, Fundamentals, Scorecard, DefeatBeta Terminal, Valuation, Institutions |
+| **Focus** | BMNR, Bitcoin, PLTR, HOOD, HIMS, SOFI, MU, AMZN, AVGO, Semiconductors, VST |
 | **Trading** | Charts, Options, Technical Indicators, Quant, Backtest |
 | **Macro & events** | Global, Economic, Bonds, Money, IPO, Politics |
 | **My money** | Portfolio, Personal Finance, Cards, Projections |
 | **Articles** | Articles |
+| **Agents** | Agents |
 | **Notifications** | Notifications |
 | **Settings** | Settings |
+
+**Polymarket** provides searchable market cards, topic filters, outcome probability
+charts, order-book depth, and activity, plus an explorer for public datasets.
+It loads at startup and is available through local MCP read tools. The workspace
+uses public, unauthenticated data and does not place orders.
 
 **Crypto Workspace** uses a chart-focused layout with a selectable spot watchlist,
 equity/ETF proxies, Top 30 breadth, market context, news and searchable perpetual
@@ -201,9 +216,12 @@ contracts, displayed separately from spot quotes. No trading actions are exposed
 
 Mapped crypto-equity proxies use the shared perpetual mark directly. Yahoo stock
 volume and market cap have an independent 15-minute cache; manual Refresh reloads
-that metadata. CoinGecko spot quotes remain primary. If a coin's spot price is
-unavailable, a labelled Hyperliquid perpetual can supply price and venue volume
-before trying Yahoo, without inventing a global market cap.
+that metadata. Supported USD spot quotes prefer Coinbase or Binance, with Binance
+USDT quotes converted using a shared Coinbase USDT/USD rate. Other eligible venues
+and the existing CoinGecko/Yahoo routes provide fallbacks. CoinGecko supplies shared
+top-30 market metadata. A labelled Hyperliquid perpetual can supply fallback price
+and venue volume without inventing a global market cap. See
+[public data routing](docs/public-data-routing.md) for source order and app budgets.
 
 **Stock quotes and charts** prefer explicitly mapped Hyperliquid equity perpetuals.
 These USD **mark prices** also value portfolio positions, gains and allocations.
@@ -293,15 +311,23 @@ The current comparison loads at startup, including when Scorecard is unvisited.
   access, pairing, and the built-in web server are no longer included.
 - **Local MCP tools.** Connect research and saved-record tools to supported local
   clients. Write tools edit local records, not broker orders. See the [MCP setup guide](docs/local-mcp.md).
+- **Optional encrypted credentials.** Settings → Integrations can store AllTick,
+  Finnhub, and Financial Modeling Prep API keys encrypted locally. These integrations
+  remain inactive, even with saved keys; current data services use public endpoints.
+  Browser login profiles, Agent history, and credentials belong outside the checkout.
 
 ## Documentation
 
-- [Market data provider policy](docs/defeatbeta-backup.md) — Yahoo Finance market data, explicit source failures, and the dedicated DefeatBeta research page.
+- [Market data provider policy](docs/defeatbeta-backup.md) — Yahoo Finance fundamentals and history, source failures, and the dedicated DefeatBeta research page.
 - [DefeatBeta Terminal](docs/defeatbeta-terminal.md) — ten research tabs, published datasets, startup loading, and valuation assumptions.
 
 | Guide | What's inside |
 | :--- | :--- |
 | [Data, startup & backups](docs/user-guide.md) | All-page readiness, feed health, saved-data locations, migration, and backup behavior. |
+| [Terminal interface](docs/terminal-ui.md) | Windows launcher, PowerShell `BT`, keyboard controls, and terminal charts. |
+| [Public data routing](docs/public-data-routing.md) | Coinbase/Binance spot quotes, CoinGecko metadata, World Bank/IMF annual context, and provider budgets. |
+| [Browser](docs/browser.md) | Embedded Chromium tabs, source reading, research controls, and local login profiles. |
+| [Diagnostic logging](docs/diagnostic-logging.md) | Settings log viewer, retention, export, and privacy. |
 | [Local MCP](docs/local-mcp.md) | Client registration, research tools, record edits, screenshots, and bridge security. |
 | [Development](docs/development.md) | Architecture, verification commands, security checks, and data-layer conventions. |
 | [Semiconductors](docs/semiconductors.md) | Semiconductor supply-chain research and data sources. |
@@ -324,7 +350,16 @@ See the [development guide](docs/development.md#verification) for additional che
 `@tanstack/react-virtual` remains pinned to **3.13.12**: version 3.14.24 fails
 the 10,000-row table sorting check. Run `probe:performance-ui` in the desktop
 workspace before changing that pin.
-Keep credentials, personal financial records, and generated bundles out of commits.
+Keep credentials, personal financial records, browser profiles, Agent history, and
+generated bundles out of commits.
+
+### Diagnostic logs
+
+Persistent local diagnostics are enabled automatically. Open **Settings → Diagnostics**
+or press **Ctrl+Shift+L** inside Budget Terminal for live logs, filtering, record
+inspection, and JSONL export. Retained records remain available across restarts.
+Startup progress and failures stay in Settings; the global Page Loading Status
+banner and bottom status strip remain hidden. See [Diagnostic logging](docs/diagnostic-logging.md).
 
 ---
 
@@ -332,7 +367,3 @@ Keep credentials, personal financial records, and generated bundles out of commi
   <strong>Budget Terminal 2.0</strong><br>
   Markets, research, and personal finance in one desktop workspace.
 </p>
-
-### Diagnostic logs
-
-Persistent local diagnostics are enabled automatically. Open **Settings → Diagnostics** or press **Ctrl+Shift+L** inside Budget Terminal for live logs, filtering, record inspection and JSONL export. Retained records remain available across restarts. See [Diagnostic logging](docs/diagnostic-logging.md) for event coverage, retention and privacy details.
