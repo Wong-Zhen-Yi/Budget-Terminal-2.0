@@ -8,10 +8,11 @@ echo Polymarket: redesigned market cards, probability charts, depth and activity
 echo Diagnostic logs: open Settings - Diagnostics in the desktop app, or press Ctrl+Shift+L.
 title Budget Terminal
 cd /d "%~dp0" || exit /b 1
-echo Budget Terminal opens in this terminal. Type BT in PowerShell to launch it directly.
+echo Checking the optional BT command for PowerShell...
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\install-bt.ps1"
-if errorlevel 1 goto :failed
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\launch-windows.ps1" -Tui %*
+if errorlevel 1 echo BT setup failed. Run npm run setup:tui to retry. Continuing to the desktop app.
+echo Opening the Budget Terminal desktop app. Keep this launcher window open while using the app.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\launch-windows.ps1" %*
 if errorlevel 1 goto :failed
 exit /b 0
 

@@ -24,13 +24,14 @@ for (const platform of ['win32', 'darwin', 'linux']) {
   assert(!calls.some(([, args]) => args.some(arg => String(arg).includes('logViewer'))), 'No separate diagnostic application')
 }
 for (const [file, command] of [
-  ['Launch Budget Terminal.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -Tui %\*/],
+  ['Launch Budget Terminal.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" %\*/],
 ]) {
   const source = readFileSync(resolve(__dirname, '..', file), 'utf8').replace(/\r\n/g, '\n')
-  assert.match(source, command, `${file} must open the TUI and forward arguments on double click`)
-  assert.match(source, /install-bt\.ps1/, `${file} must install or refresh the PowerShell BT command`)
-  assert(source.indexOf('install-bt.ps1') < source.indexOf('launch-windows.ps1'), 'Install BT before opening the TUI')
-  assert(!source.includes('-Dev'), `${file} must use the terminal entry point`)
+  assert.match(source, command, `${file} must open the desktop app and forward arguments on double click`)
+  assert(!source.includes('-Tui'), `${file} must not select the TUI`)
+  assert.match(source, /powershell\.exe[^\r\n]*install-bt\.ps1"/, `${file} must check or install the PowerShell BT command`)
+  assert(source.indexOf('install-bt.ps1') < source.indexOf('launch-windows.ps1'), 'Check BT installation before opening the desktop app')
+  assert(!source.includes('-Dev'), `${file} must build and open the production desktop app`)
 }
 function assertCurrentStartupMessages(messages) {
   assert(messages.some(message => message.includes('MCP upgraded:') && message.includes('durable write recovery')), 'Every launch mode announces MCP upgrades')

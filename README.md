@@ -150,16 +150,19 @@ npm install
 npm run dev
 ```
 
-### 3. Optional: use the terminal interface
+### 3. Launch the desktop app
 
 On Windows, open [Launch Budget Terminal.cmd](Launch%20Budget%20Terminal.cmd)
-from the checkout. It opens the terminal interface, backed by Electron, rather
-than the desktop window. Double-click launchers are provided for Windows only.
+from the checkout. It checks dependencies, builds the latest source, and opens
+the Electron desktop window. It also checks that the per-user `BT` command is
+installed and current, installing or refreshing it when needed without opening
+the TUI. Double-click launchers are provided for Windows only.
 
-The main launcher checks the runtime, installs or refreshes the per-user `BT`
-command, and opens the TUI. Install dependencies with `npm install` first.
 Keep its terminal open while using Budget Terminal. Build or startup errors stay
-visible in the launcher window. `BT` in a new PowerShell window opens the same TUI.
+visible in the launcher window.
+
+`BT` in a new PowerShell window opens the TUI independently of the desktop launcher.
+To install or repair the command manually on Windows, run `npm run setup:tui`.
 On macOS and Linux, run `npm run tui` after installing dependencies.
 
 ### Launch behavior and troubleshooting

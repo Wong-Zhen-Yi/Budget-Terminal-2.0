@@ -27,9 +27,15 @@ if ($Uninstall) {
   return
 }
 $launcher = Join-Path $PSScriptRoot 'launch-windows.ps1'
-New-Item -ItemType Directory -Path $bin -Force | Out-Null
 # Quote the checkout path; keep machine-specific paths outside the public repository.
 $content = "@echo off`r`npowershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$launcher`" -Tui %*`r`nexit /b %errorlevel%`r`n"
+if ((Test-Path -LiteralPath $shim -PathType Leaf) -and
+    [IO.File]::ReadAllText($shim, [Text.Encoding]::Default) -eq $content -and
+    @($userPath -split ';' | Where-Object { $_ -and $_.TrimEnd('\') -ieq $bin.TrimEnd('\') }).Count -gt 0) {
+  Write-Host 'BT is installed. Type BT in a new PowerShell window to open the TUI when needed.'
+  return
+}
+New-Item -ItemType Directory -Path $bin -Force | Out-Null
 [IO.File]::WriteAllText($shim, $content, [Text.Encoding]::Default)
 [Environment]::SetEnvironmentVariable('Path', ((@($bin) + $entries) -join ';'), 'User')
 Publish-PathChange
