@@ -7,6 +7,10 @@ export type Subscribe = <Payload>(channel: string, listener: (payload?: Payload)
 
 export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS.Platform): DesktopApi {
   return {
+    diagnosticLogs: () => invoke('diagnostics:read'),
+    diagnosticLogAction: action => invoke('diagnostics:action', action),
+    diagnosticsInitial: () => invoke('diagnostics:initial'),
+    onOpenDiagnostics: listener => subscribe('diagnostics:open', listener),
     reportDiagnostics: (report) => { void invoke('diagnostics:report', report).catch(() => undefined) },
     onEquityMarketChanged: listener => subscribe<EquityMarketUpdate>(CHANNELS.equityMarketChanged, payload => {
       if (payload) listener(payload)

@@ -28,7 +28,7 @@
 
 ## One workspace, from research to records
 
-Prefer PowerShell? Double-click **Launch Budget Terminal TUI.cmd** once, then
+Double-click **Launch Budget Terminal.cmd** to open the TUI and install `BT`, then
 open a new PowerShell window and type `BT`. See [terminal UI controls and setup](docs/terminal-ui.md).
 
 Budget Terminal brings public market data and your saved financial records into an
@@ -100,9 +100,10 @@ npm run dev
 Prefer a Windows launcher? Open [Launch Budget Terminal.cmd](Launch%20Budget%20Terminal.cmd)
 from the checkout. Double-click launchers are provided for Windows only.
 
-Each launcher checks the runtime, installs dependencies, verifies Electron, builds
-MCP tools, and opens the app with live code updates. Keep its terminal open while using
-Budget Terminal. Build or startup errors stay visible in the launcher window.
+The main launcher checks the runtime, installs or refreshes the per-user `BT`
+command, and opens the TUI. Install dependencies with `npm install` first.
+Keep its terminal open while using Budget Terminal. Build or startup errors stay
+visible in the launcher window. `BT` in a new PowerShell window opens the same TUI.
 
 On Windows, the double-click launcher finds a supported Node.js installation even
 when an older version comes first on PATH. If none is available, it downloads
@@ -114,7 +115,7 @@ command uses this same runtime recovery, even if your shell has an older Node.js
 Other command-line `npm` commands still use the Node.js installation configured in
 your shell.
 
-For live code updates, double-click the Windows launcher or run
+For the desktop app with live code updates, run
 `npm run dev` from the repository root. Close any existing Budget Terminal window
 first (the app allows only one running instance). Live mode checks dependencies,
 verifies Electron and builds MCP tools before starting `electron-vite dev --watch`.
@@ -334,4 +335,4 @@ Keep credentials, personal financial records, and generated bundles out of commi
 
 ### Diagnostic logs
 
-Persistent local diagnostics are enabled automatically. Open **Launch Diagnostic Logs** for the independent viewer, or press **Ctrl+Shift+L** inside Budget Terminal. The viewer supports live updates, filtering, record inspection and JSONL export, including after the app closes. See [Diagnostic logging](docs/diagnostic-logging.md) for event coverage, retention and privacy details.
+Persistent local diagnostics are enabled automatically. Open **Settings → Diagnostics** or press **Ctrl+Shift+L** inside Budget Terminal for live logs, filtering, record inspection and JSONL export. Retained records remain available across restarts. See [Diagnostic logging](docs/diagnostic-logging.md) for event coverage, retention and privacy details.

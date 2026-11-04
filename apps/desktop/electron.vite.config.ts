@@ -21,7 +21,6 @@ export default defineConfig({
       outDir: 'out/main',
       lib: { entry: {
         main: resolve(root, 'electron/main.ts'),
-        logViewer: resolve(root, 'electron/logViewer.ts'),
         quantWorker: resolve(root, 'electron/workers/quantWorker.ts'),
         cacheWorker: resolve(root, 'electron/workers/cacheWorker.ts'),
       } },
@@ -34,7 +33,7 @@ export default defineConfig({
   preload: {
     build: {
       outDir: 'out/preload',
-      lib: { entry: { preload: resolve(root, 'electron/preload.ts'), logViewer: resolve(root, 'electron/logViewerPreload.ts') } },
+      lib: { entry: { preload: resolve(root, 'electron/preload.ts') } },
       rollupOptions: { output: { format: 'cjs', entryFileNames: '[name].cjs' } },
     },
     resolve: {

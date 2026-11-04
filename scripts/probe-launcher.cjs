@@ -16,21 +16,21 @@ const log = { log() {}, error() {} }
 for (const platform of ['win32', 'darwin', 'linux']) {
   const calls = []
   assert.equal(launch({ logs: true, platform, nodeVersion: '24.22.1', log,
-    locateCodex() { assert.fail('The log viewer must not initialize Agents') },
-    spawn(command, args, options) { calls.push([command, args, options]); return { status: 0 } },
+    locateCodex() { return null },
+    spawn(command, args, options) { calls.push([command, args, options]); return { status: 0, stdout: '10.9.8' } },
   }), 0)
-  assert.equal(calls.length, 2, 'Viewer launch must only build its own bundles and start Electron')
-  assert(calls[0][1][0].endsWith('build-log-viewer.cjs'))
-  assert(calls[1][1][0].endsWith('logViewer.js'))
-  assert.equal(calls[1][2].windowsHide, false, 'The Electron GUI process must not inherit a hidden startup window')
+  assert(calls.some(([, args]) => args.some(arg => String(arg).includes('preview'))), 'Diagnostics launcher must start the main application')
+  assert(calls.every(([, , options]) => options.env.BUDGET_TERMINAL_OPEN_DIAGNOSTICS === '1'), 'Launch request must reach the main application')
+  assert(!calls.some(([, args]) => args.some(arg => String(arg).includes('logViewer'))), 'No separate diagnostic application')
 }
 for (const [file, command] of [
-  ['Launch Budget Terminal.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -Dev/],
+  ['Launch Budget Terminal.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -Tui %\*/],
 ]) {
   const source = readFileSync(resolve(__dirname, '..', file), 'utf8').replace(/\r\n/g, '\n')
-  assert.match(source, command, `${file} must open live mode on double click`)
-  assert.match(source, /Live updates enabled/, `${file} must explain automatic updates`)
-  assert(!source.includes('Building and verifying the latest production app'), `${file} must describe its current launch mode`)
+  assert.match(source, command, `${file} must open the TUI and forward arguments on double click`)
+  assert.match(source, /install-bt\.ps1/, `${file} must install or refresh the PowerShell BT command`)
+  assert(source.indexOf('install-bt.ps1') < source.indexOf('launch-windows.ps1'), 'Install BT before opening the TUI')
+  assert(!source.includes('-Dev'), `${file} must use the terminal entry point`)
 }
 function assertCurrentStartupMessages(messages) {
   assert(messages.some(message => message.includes('MCP upgraded:') && message.includes('durable write recovery')), 'Every launch mode announces MCP upgrades')
@@ -141,7 +141,7 @@ const buildDirectory = mkdtempSync(join(tmpdir(), 'budget-launcher-build-'))
 try {
   const directory = join(buildDirectory, 'desktop with spaces # %')
   assert.throws(() => verifyDesktopBuild(directory), /desktop build is incomplete/)
-  for (const file of ['out/main/main.js', 'out/main/logViewer.js', 'out/preload/logViewer.cjs', 'out/main/quantWorker.js', 'out/main/cacheWorker.js', 'out/preload/preload.cjs', 'out/renderer/assets/entry.js', 'out/renderer/assets/theme.css']) {
+  for (const file of ['out/main/main.js', 'out/main/quantWorker.js', 'out/main/cacheWorker.js', 'out/preload/preload.cjs', 'out/renderer/assets/entry.js', 'out/renderer/assets/theme.css']) {
     mkdirSync(resolve(directory, file, '..'), { recursive: true })
     writeFileSync(join(directory, file), 'fixture')
   }

@@ -3700,7 +3700,22 @@ export interface FxRequest extends BackgroundRequest {
 
 export type WindowAction = 'minimize' | 'maximize' | 'close'
 
+export interface DiagnosticEntry {
+  time: string
+  session: string
+  pid: number
+  level: 'debug' | 'info' | 'warn' | 'error'
+  area: string
+  event: string
+  details: Record<string, string | number | boolean>
+}
+export interface DiagnosticSnapshot { entries: DiagnosticEntry[]; files: number; bytes: number }
+
 export interface DesktopApi {
+  diagnosticLogs: () => Promise<Envelope<DiagnosticSnapshot>>
+  diagnosticLogAction: (action: 'folder' | 'export') => Promise<Envelope<{ message: string }>>
+  diagnosticsInitial: () => Promise<boolean>
+  onOpenDiagnostics: (listener: () => void) => () => void
   reportDiagnostics: (report: { kind: 'pages'; pages: { page: string; state: string }[] } | { kind: 'error' | 'unhandled-rejection'; line?: number; column?: number }) => void
   onEquityMarketChanged(listener: (update: EquityMarketUpdate) => void): () => void
   browserStatus(): Promise<Envelope<BrowserState>>

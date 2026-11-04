@@ -1,7 +1,10 @@
-import { app, ipcMain, type BrowserWindow } from 'electron'
-import { fileURLToPath } from 'node:url'
+import { app, dialog, ipcMain, shell, type BrowserWindow } from 'electron'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { writeFile } from 'node:fs/promises'
+import type { Envelope } from '../shared/contract.js'
+import { isTrustedRendererUrl } from '../shared/ipcSecurity.js'
 import { TABS } from '../shared/contract.js'
-import { diagnosticLog as log, faultCode } from './diagnosticLog.js'
+import { diagnosticLog as log, faultCode, diagnosticDirectory, readDiagnosticLogs } from './diagnosticLog.js'
 import { rateGate } from './yahoo/rateGate.js'
 
 /** No raw console arguments, provider responses, browser content, or exception messages are persisted. */
@@ -42,7 +45,7 @@ export function startDiagnostics(): void {
   app.once('will-quit', () => { clearInterval(timer); clearInterval(lagTimer); log.write('info', 'app', 'shutdown-complete') })
 }
 
-export function observeDiagnosticWindow(window: BrowserWindow): void {
+export function observeDiagnosticWindow(window: BrowserWindow, rendererUrl: string): void {
   const contents = window.webContents
   const pageStates = new Map<string, string>()
   let lastReport = 0
@@ -60,16 +63,40 @@ export function observeDiagnosticWindow(window: BrowserWindow): void {
   contents.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown' && input.key.toLowerCase() === 'l' && input.control && input.shift) {
       event.preventDefault()
-      // Launch an independent process; it never takes the application's single-instance lock.
-      void import('node:child_process').then(({ spawn }) => {
-        const child = spawn(process.execPath, [fileURLToPath(new URL('./logViewer.js', import.meta.url))], {
-          detached: true, stdio: 'ignore', windowsHide: false,
-          env: Object.fromEntries(Object.entries(process.env).filter(([name]) => name !== 'ELECTRON_RUN_AS_NODE')),
-        })
-        child.on('error', () => log.write('error', 'diagnostics', 'viewer-launch-failed'))
-        child.unref()
-      })
+      contents.send('diagnostics:open')
     }
+  })
+  const documentUrl = (url: string) => {
+    try { return url.startsWith('file:') ? pathToFileURL(fileURLToPath(url)).href : url }
+    catch { return '' }
+  }
+  const trusted = (event: Electron.IpcMainInvokeEvent) => event.sender === contents && event.senderFrame === contents.mainFrame && isTrustedRendererUrl(documentUrl(event.senderFrame.url), documentUrl(rendererUrl))
+  const envelope = <T>(data: T, failureReason?: string): Envelope<T> => ({ data,
+    meta: { source: 'Local diagnostic logs', freshness: failureReason ? 'failed' : 'fresh', fetchedAt: Date.now(), ...(failureReason ? { failureReason } : {}) }, errors: [] })
+  ipcMain.handle('diagnostics:initial', event => trusted(event) && process.env.BUDGET_TERMINAL_OPEN_DIAGNOSTICS === '1')
+  ipcMain.handle('diagnostics:read', event => {
+    if (!trusted(event)) throw new Error('Untrusted diagnostics request')
+    try { return envelope(readDiagnosticLogs(diagnosticDirectory())) }
+    catch { return envelope({ entries: [], files: 0, bytes: 0 }, 'Cannot read log storage. Check folder permissions.') }
+  })
+  ipcMain.handle('diagnostics:action', async (event, action: unknown) => {
+    if (!trusted(event)) throw new Error('Untrusted diagnostics request')
+    if (action === 'folder') {
+      try {
+        const error = await shell.openPath(diagnosticDirectory())
+        return envelope({ message: error ? 'Log folder is unavailable.' : 'Log folder opened.' }, error ? 'Log folder is unavailable.' : undefined)
+      } catch { return envelope({ message: 'Log folder is unavailable.' }, 'Log folder is unavailable.') }
+    }
+    if (action !== 'export') throw new Error('Unknown diagnostics action')
+    const { canceled, filePath } = await dialog.showSaveDialog(window, { title: 'Export diagnostic snapshot',
+      defaultPath: `BudgetTerminal-diagnostics-${new Date().toISOString().slice(0, 10)}.jsonl`,
+      filters: [{ name: 'Diagnostic JSON Lines', extensions: ['jsonl'] }] })
+    if (canceled || !filePath) return envelope({ message: 'Export cancelled.' })
+    try {
+      const { entries } = readDiagnosticLogs(diagnosticDirectory())
+      await writeFile(filePath, entries.map(entry => JSON.stringify(entry)).join('\n') + '\n', { mode: 0o600 })
+      return envelope({ message: `Exported ${entries.length} records from the retained snapshot.` })
+    } catch { return envelope({ message: 'Export failed. Check disk space and file permissions.' }, 'Export failed.') }
   })
   const listener = (event: Electron.IpcMainInvokeEvent, request: unknown) => {
     if (event.sender !== contents || event.senderFrame !== contents.mainFrame || !request || typeof request !== 'object') return
@@ -95,5 +122,7 @@ export function observeDiagnosticWindow(window: BrowserWindow): void {
     }
   }
   ipcMain.handle('diagnostics:report', listener)
-  contents.once('destroyed', () => ipcMain.removeHandler('diagnostics:report'))
+  contents.once('destroyed', () => {
+    for (const channel of ['diagnostics:report', 'diagnostics:initial', 'diagnostics:read', 'diagnostics:action']) ipcMain.removeHandler(channel)
+  })
 }

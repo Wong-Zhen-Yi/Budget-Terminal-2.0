@@ -1,6 +1,6 @@
 # Budget Terminal in PowerShell
 
-Double-click **Launch Budget Terminal TUI.cmd** once to install the per-user `BT`
+Double-click **Launch Budget Terminal.cmd** once to install the per-user `BT`
 command and open the terminal interface. Open a new PowerShell window and type:
 
 ```powershell
@@ -16,10 +16,10 @@ after moving it. Remove it with `powershell -NoProfile -ExecutionPolicy Bypass
 The TUI reuses a running desktop app. If none is running, it builds changed
 sources and starts Electron with a hidden renderer so all implemented desktop
 pages still preload. Closing the TUI gracefully closes its own background
-instance; an existing desktop stays open. Opening the normal desktop launcher
+instance; an existing desktop stays open. Running `npm run dev`
 reveals the background instance and keeps it alive after the TUI closes.
 Initial builds and provider requests can take time. Dependencies must already
-be installed (`npm install`, or use the normal desktop launcher first).
+be installed (`npm install`).
 
 Workspaces: Portfolio, Markets, Charts, News, Crypto, Finance, Research and Settings.
 Every data workspace starts loading immediately. Left/Right switches workspaces;

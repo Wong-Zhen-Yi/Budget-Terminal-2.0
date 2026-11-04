@@ -46,7 +46,7 @@ async function main() {
       while (true) {
         if (startupError) throw startupError
         try { await invokeBridge('budget_terminal_connection_status', {}, { timeoutMs: 2000 }); break } catch {
-          if (backend.exitCode !== null || Date.now() > deadline) throw new Error('Services did not start. Close any Budget Terminal startup error dialog and check Launch Diagnostic Logs, then retry BT. If the desktop is open, enable read-only Local MCP in Settings.')
+          if (backend.exitCode !== null || Date.now() > deadline) throw new Error('Services did not start. Close any Budget Terminal startup error dialog and check Settings > Diagnostics in the desktop app, then retry BT. If the desktop is open, enable read-only Local MCP in Settings.')
           await new Promise(resolve => setTimeout(resolve, 500))
         }
       }

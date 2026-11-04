@@ -79,6 +79,7 @@ import { useFundamentalsStore } from '@/stores/fundamentals'
 import { useOptionsPage } from '@/stores/options'
 import { useStocksPage } from '@/stores/stocks'
 import { useValuationPage } from '@/stores/valuation'
+import { useSettingsNavigation } from '@/stores/settingsNavigation'
 import { useNavigation } from '@/stores/navigation'
 
 const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
@@ -87,6 +88,16 @@ export function App() {
   useEquityMarketStream()
   const isMac = window.api.platform === 'darwin'
   const [selectedTab, setActiveTab] = useState(DEFAULT_TAB_ID)
+  useEffect(() => {
+    let disposed = false
+    const open = () => {
+      useSettingsNavigation.getState().openDiagnostics()
+      setActiveTab('settings')
+    }
+    const unsubscribe = window.api.onOpenDiagnostics(open)
+    void window.api.diagnosticsInitial().then(requested => { if (requested && !disposed) open() }).catch(() => undefined)
+    return () => { disposed = true; unsubscribe() }
+  }, [])
   const { command: screenshot, complete: completeScreenshot } = useMcpScreenshot()
   const screenshotPage = screenshot?.page ?? null
   const activeTab = screenshotPage ?? selectedTab
@@ -603,7 +614,7 @@ function renderPage({
     ) : tabId === 'institutions' ? (
       <InstitutionsPage onStatusChange={onStatusChange} />
     ) : tabId === SETTINGS_TAB_ID ? (
-      <SettingsPage onStatusChange={onStatusChange} />
+      <SettingsPage active={active} onStatusChange={onStatusChange} />
     ) : (
       <PlaceholderPage tabId={tabId} />
     )

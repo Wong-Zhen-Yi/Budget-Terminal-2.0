@@ -15,7 +15,7 @@ function platformName(platform) {
 }
 
 function launch({ development = false, logs = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
-  log.log('Persistent diagnostic logging retains up to the last 15 days. Open Launch Diagnostic Logs for the independent viewer, or press Ctrl+Shift+L in the app. No global diagnostics banner is added.')
+  log.log('Persistent diagnostic logging retains up to the last 15 days. Open Settings > Diagnostics or press Ctrl+Shift+L. No global diagnostics banner is added.')
   log.log('Stock charts leave 35 percent of the plot to the right of the latest bar; disabled indicator panes release their space.')
   log.log('Pages populate completed sections while remaining data loads; all pages still preload and startup failures remain visible.')
   log.log('Page Loading Status banner removed. Startup progress, failures and diagnostics remain in Settings; page readiness indicators remain available. Opening a page promotes its queued requests with fair background turns. Shared reads avoid duplicate work. Readers retain controls longer and evicted pages restore scroll. All pages still preload.')
@@ -40,16 +40,7 @@ function launch({ development = false, logs = false, platform = process.platform
     log.error(error.message)
     return 1
   }
-  if (logs) {
-    log.log('Diagnostic Logs uses a visible separate window and software rendering; repeat launches focus the existing viewer.')
-    log.log('Building the independent Diagnostic Logs viewer. The main application can stay open.')
-    const build = spawn(process.execPath, [require('node:path').join(root, 'scripts/build-log-viewer.cjs')], { cwd: root, env, stdio: 'inherit' })
-    if (build.error || build.status !== 0) return build.status || 1
-    const viewer = spawn(require('electron'), [require('node:path').join(root, 'apps/desktop/out/main/logViewer.js')], {
-      cwd: root, env, stdio: 'inherit', windowsHide: false,
-    })
-    return viewer.error ? 1 : viewer.status ?? 1
-  }
+  if (logs) env.BUDGET_TERMINAL_OPEN_DIAGNOSTICS = '1'
 
   log.log('Checking Codex for the Agents page...')
   const codexPath = locateCodex({ platform, environment: env })

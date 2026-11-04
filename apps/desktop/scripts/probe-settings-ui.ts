@@ -18,6 +18,7 @@ try {
     import { DEFAULT_BACKTEST_PAGE_SETTINGS } from './electron/shared/backtest'
     import { DEFAULT_QUANT_PAGE_SETTINGS } from './electron/shared/quant'
     import { DEFAULT_YOUTUBE_PAGE_SETTINGS } from './electron/shared/youtube'
+    import { useSettingsNavigation } from './src/stores/settingsNavigation'
     import { useDataHealth } from './src/stores/dataHealth'
     const check = (value, message) => { if (!value) throw Error(message) }
     const wait = ms => new Promise(resolve => setTimeout(resolve, ms))
@@ -40,12 +41,15 @@ try {
     } } })
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } })
     const host = createRoot(document.getElementById('root'))
-    const render = () => host.render(<QueryClientProvider client={client}><SettingsPage onStatusChange={() => {}} /></QueryClientProvider>)
+    const render = () => host.render(<QueryClientProvider client={client}><SettingsPage active={true} onStatusChange={() => {}} /></QueryClientProvider>)
     render()
     window.runProbe = async () => {
       await wait(250)
       check(visible(document.querySelector('.app-dashboard')) && document.querySelectorAll('.app-dash-card').length === 18, 'Settings must open on its dashboard')
-      check(document.querySelectorAll('[data-settings-card]').length === 10, 'Expected all ten settings panels mounted')
+      check(document.querySelectorAll('[data-settings-card]').length === 11, 'Expected all eleven settings panels mounted')
+      useSettingsNavigation.getState().openDiagnostics(); await wait(80)
+      check(visible(card('logs')), 'Diagnostics navigation must reveal the log panel')
+      choose('dashboard'); await wait(80)
       check(!document.body.innerText.includes('/private/'), 'Local file paths must start hidden')
       check(!document.querySelector('[title="/private/settings.json"]'), 'Footer path strip returned')
       check(document.querySelector('table[aria-label="Startup status"]').textContent.includes('Failed'), 'Startup failures missing')

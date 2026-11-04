@@ -19,6 +19,8 @@ import { UserDataPanel } from '@/components/settings/UserDataPanel'
 import { ApiUsagePanel } from '@/components/settings/ApiUsagePanel'
 import { CachePanel } from '@/components/settings/CachePanel'
 import { McpPanel } from '@/components/settings/McpPanel'
+import { DiagnosticLogsPanel } from '@/components/settings/DiagnosticLogsPanel'
+import { useSettingsNavigation } from '@/stores/settingsNavigation'
 import { AppDashboard } from '@/components/settings/AppDashboard'
 import '@/styles/settings.css'
 
@@ -61,8 +63,10 @@ type StatusTone = 'muted' | 'positive' | 'negative'
 
 /** All panels stay mounted when filtering, so diagnostics and prepared data keep updating. */
 export function SettingsPage({
+  active,
   onStatusChange,
 }: {
+  active: boolean
   onStatusChange: (panels: PanelStatus[], sourcePath: string) => void
 }) {
   const settingsQuery = useSettings()
@@ -81,6 +85,13 @@ export function SettingsPage({
   const [busy, setBusy] = useState<MaintenanceAction | null>(null)
   const [category, setCategory] = useState<Category>('dashboard')
   const [search, setSearch] = useState('')
+  const diagnosticsRequest = useSettingsNavigation(state => state.diagnosticsRequest)
+  useEffect(() => {
+    if (!diagnosticsRequest) return
+    setCategory('diagnostics')
+    setSearch('')
+    scrollRef.current?.scrollTo({ top: 0 })
+  }, [diagnosticsRequest])
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const chooseCategory = (next: Category) => {
@@ -185,6 +196,11 @@ export function SettingsPage({
         { id: 'maintenance', category: 'data', column: 'secondary', terms: 'maintenance reset cache clear remove delete user data portfolios cards finance', content:
           <UserDataPanel mode="maintenance" onRun={onRunMaintenance} busy={busy} sourcePath={holdingsPath} /> },
       ],
+    },
+    {
+      id: 'logs', title: 'Application logs', hint: 'Search local diagnostic events and inspect previous sessions.',
+      cards: [{ id: 'logs', category: 'diagnostics', terms: 'application diagnostic logs events search severity area session export folder pause live',
+        content: <DiagnosticLogsPanel active={active && (category === 'diagnostics' || category === 'all')} /> }],
     },
     {
       id: 'startup', title: 'Startup & providers', hint: 'Detailed loading progress and request pressure live here in Settings.',

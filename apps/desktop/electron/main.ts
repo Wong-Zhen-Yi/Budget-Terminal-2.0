@@ -40,7 +40,7 @@ if (process.env.BUDGET_TERMINAL_DATA_DIR) {
   app.setPath('userData', profile)
   app.setPath('sessionData', profile)
 }
-const ownsInstance = app.requestSingleInstanceLock()
+const ownsInstance = app.requestSingleInstanceLock({ openDiagnostics: process.env.BUDGET_TERMINAL_OPEN_DIAGNOSTICS === '1' })
 if (!ownsInstance) app.quit()
 
 let disposeIpc: (() => void) | null = null
@@ -81,7 +81,7 @@ function createWindow(): BrowserWindow {
   })
 
   configureBrowserWindow(window)
-  observeDiagnosticWindow(window)
+  observeDiagnosticWindow(window, rendererUrl)
   configureYouTubePlayer(window)
   configureRendererCacheShutdown(window)
 
@@ -117,8 +117,9 @@ function createWindow(): BrowserWindow {
 }
 
 if (ownsInstance) {
-  app.on('second-instance', (_event, argv) => {
+  app.on('second-instance', (_event, argv, _directory, additionalData) => {
     if (argv.includes('--tui-backend')) return
+    if ((additionalData as { openDiagnostics?: boolean })?.openDiagnostics) process.env.BUDGET_TERMINAL_OPEN_DIAGNOSTICS = '1'
     terminalBackend = false
     const window = BrowserWindow.getAllWindows()[0]
     if (!window) {
@@ -130,6 +131,7 @@ if (ownsInstance) {
     if (window.isMinimized()) window.restore()
     window.show()
     window.focus()
+    if ((additionalData as { openDiagnostics?: boolean })?.openDiagnostics) window.webContents.send('diagnostics:open')
   })
 }
 

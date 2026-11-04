@@ -38,7 +38,7 @@ export function faultCode(error: unknown): string {
 }
 
 export function diagnosticDirectory(): string {
-  // Same location for the app and the independent viewer; never inside the repo.
+  // Local diagnostic storage; never inside the repo.
   // Match configureDataPaths' LOCALAPPDATA fallback before it mutates the environment.
   const local = process.env.LOCALAPPDATA || (process.platform === 'win32'
     ? join(homedir(), 'AppData', 'Local') : join(homedir(), '.budget-terminal', 'cache'))

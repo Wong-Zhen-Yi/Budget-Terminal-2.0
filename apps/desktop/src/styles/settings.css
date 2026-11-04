@@ -123,3 +123,15 @@
   .settings-card .terminal-panel .grid-cols-2 { grid-template-columns: minmax(0, 1fr); }
   .settings-card .terminal-panel .col-span-2 { grid-column: auto; }
 }
+
+.diagnostic-logs { padding: 12px; display: flex; flex-direction: column; gap: 12px; min-width: 0; font-size: 12px; }
+.diagnostic-log-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+.diagnostic-log-controls label { display: flex; flex-direction: column; gap: 4px; min-width: 0; max-width: 100%; }
+.diagnostic-log-controls input, .diagnostic-log-controls select, .diagnostic-logs button { border: 1px solid var(--color-border); background: var(--color-surface-raised); padding: 6px 8px; color: inherit; border-radius: 4px; max-width: 100%; }
+.diagnostic-logs button { cursor: pointer; }
+.diagnostic-logs button:disabled { opacity: .5; }
+.diagnostic-log-table { max-height: 440px; overflow: auto; }
+.diagnostic-log-table table { width: 100%; border-collapse: collapse; text-align: left; }
+.diagnostic-log-table th, .diagnostic-log-table td { padding: 6px; border-bottom: 1px solid var(--color-border); vertical-align: top; overflow-wrap: anywhere; max-width: 340px; }
+.diagnostic-log-table th { position: sticky; top: 0; background: var(--color-surface); }
+.diagnostic-logs pre { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
