@@ -7,11 +7,12 @@
  * page; they are expected to agree.
  */
 import assert from 'node:assert/strict'
-import { weightedMove, buildPortfolioSeries, computeRiskMetrics, computeExposure, toReturnSeries } from '../electron/shared/analytics.js'
+import { weightedMove, buildPortfolioSeries, computeRiskMetrics, computeExposure, toReturnSeries, buildPortfolioDailyCandles } from '../electron/shared/analytics.js'
 import { buildPositionRows } from '../electron/shared/portfolioMath.js'
 import { sectorFor } from '../electron/shared/sectors.js'
 import type { MetricsLookback, ReturnTimeframe } from '../electron/shared/contract.js'
 import { yahooProvider } from '../electron/services/provider.js'
+import { adjustedDailyBars } from '../electron/services/yahoo/history.js'
 
 const timeframe = (process.argv[2] ?? '1mo') as ReturnTimeframe
 const lookback = (process.argv[3] ?? '1y') as MetricsLookback
@@ -148,6 +149,25 @@ async function main(): Promise<void> {
 }
 
 function offline(): void {
+  const adjusted = adjustedDailyBars([
+    { time: Date.parse('2026-01-02') / 1000, open: 100, high: 120, low: 90, close: 110, adjclose: 55, volume: 1 },
+    { time: Date.parse('2026-01-02') / 1000 + 3600, open: 100, high: 120, low: 90, close: 112, adjclose: 56, volume: 1 },
+    { time: Date.parse('2026-01-05') / 1000, open: null, high: 120, low: 90, close: 110, adjclose: 55, volume: 1 },
+  ])
+  assert.deepEqual(adjusted, [{ date: '2026-01-02', open: 50, high: 60, low: 45, close: 56 }], 'Adjusted OHLC scales consistently, keeps the latest duplicate day and omits missing OHLC')
+  const bar = (date: string, open: number, high: number, low: number, close: number) => ({ date, open, high, low, close })
+  const daily = buildPortfolioDailyCandles([{ ticker: 'A', shares: 2 }, { ticker: 'B', shares: 1 }], {
+    A: [bar('2026-01-02', 100, 120, 90, 110), bar('2026-01-05', 110, 115, 95, 100), bar('2026-01-06', 100, 110, 90, 100)],
+    B: [bar('2026-01-02', 50, 55, 40, 45), bar('2026-01-05', 45, 50, 40, 48)],
+  }, 10)
+  assert.deepEqual(daily.candles.map(({ open, high, low, close, endIndex }) => ({ open, high, low, close, endIndex })), [
+    { open: 260, high: 305, low: 230, close: 275, endIndex: 0 },
+    { open: 275, high: 290, low: 240, close: 258, endIndex: 1 },
+  ], 'One candle per shared trading day with share-weighted OHLC and constant cash')
+  assert.deepEqual(daily.series.values, daily.candles.map(candle => candle.close))
+  assert.ok(daily.candles.every(candle => candle.startDate === candle.endDate))
+  assert.deepEqual(buildPortfolioDailyCandles([], {}).candles, [])
+  assert.deepEqual(buildPortfolioDailyCandles([{ ticker: 'MISSING', shares: 1 }], {}).excluded, ['MISSING'])
   const { series, included, excluded } = buildPortfolioSeries([{ ticker: 'A', shares: 2 }, { ticker: 'B', shares: 1 }],
     { A: { dates: ['2026-01-01', '2026-01-02', '2026-01-03'], values: [100, 90, 110] } }, 10)
   assert.deepEqual(series.values, [210, 190, 230])
@@ -167,7 +187,18 @@ function offline(): void {
   console.log('PASS: fixed-share series, constant-cash returns, security-only exposure coverage, explicit missing history, optional benchmark and weighted moves')
 }
 offline()
-if (!process.argv.includes('--offline')) main().catch((error) => {
+async function dailyCandlesLive(): Promise<void> {
+  const result = await yahooProvider.momentum({ positions: [{ ticker: 'AAPL', shares: 2 }], cashAmount: 10, timeframe: '1mo', force: true })
+  assert.equal(result.errors.length, 0, 'Live daily OHLC must load without provider errors')
+  const { candles, dates, values } = result.data
+  assert.ok(candles.length > 1)
+  assert.equal(candles.length, dates.length)
+  assert.deepEqual(candles.map(candle => candle.close), values)
+  assert.ok(candles.every((candle, index) => candle.startDate === dates[index] && candle.endDate === dates[index]
+    && candle.high >= Math.max(candle.open, candle.close) && candle.low <= Math.min(candle.open, candle.close)))
+  console.log(`PASS: live AAPL momentum has ${candles.length} daily adjusted OHLC candles with aligned portfolio values`)
+}
+if (!process.argv.includes('--offline')) (process.argv.includes('--daily-candles-live') ? dailyCandlesLive() : main()).catch((error) => {
   console.error(error)
   process.exit(1)
 })

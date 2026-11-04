@@ -19,7 +19,7 @@ const STORE = 'clients'
 const CLIENT_KEY = 'remote-query-client'
 
 // Local records and private agent state are managed by their own stores.
-const LOCAL_ROOTS = new Set(['browser', 'agents', 'agentImages', 'notifications', 'articles', 'portfolio', 'cards', 'settings', 'personalFinance'])
+const LOCAL_ROOTS = new Set(['browser', 'agents', 'agentImages', 'notifications', 'articles', 'portfolio', 'cards', 'settings', 'personalFinance', 'mcpStatus', 'appMetrics'])
 const LARGE_ROOTS = new Set(['newsThumbnail', 'youtubeThumbnail', 'newsPreview', 'apiUsage', 'cacheStatus'])
 
 export const RENDERER_CACHE_BUSTER = `budget-terminal-renderer-v${CACHE_SCHEMA_VERSION}-equity-perps-v2`

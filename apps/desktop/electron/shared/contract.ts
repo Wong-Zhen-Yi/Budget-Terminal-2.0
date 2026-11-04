@@ -1199,6 +1199,10 @@ export interface ReturnsPayload {
 
 export interface MomentumPayload {
   dates: string[]
+  /** One daily candle; summed holding highs/lows are portfolio range bounds. */
+  candles: Array<{ startDate: string; endDate: string; endIndex: number; open: number; high: number; low: number; close: number }>
+  /** Fixed current holdings plus included cash, valued at each daily adjusted close. */
+  values: number[]
   /** Portfolio return, in percent, against the first day of the window. */
   returns: number[]
   emaPeriod: number
@@ -3466,11 +3470,18 @@ export interface ApiProviderUsage {
   throttled: boolean
   cooldownMs: number
   updatedAt: number
+  /** Last 200 completed requests in this process, including failed requests. */
+  latencyMs?: { p50: number; p95: number; samples: number }
 }
 
 export interface ApiUsageSnapshot {
   providers: ApiProviderUsage[]
   sampledAt: number
+}
+
+export interface AppMetrics {
+  memory: Array<{ at: number; mainMiB: number; rendererMiB: number; otherMiB: number }>
+  backup: { state: 'available' | 'not-created' | 'unavailable'; bytes?: number; savedAt?: number }
 }
 
 export interface PoliticsPageRequest extends BackgroundRequest {
@@ -3484,6 +3495,7 @@ export interface PoliticsExportRequest {
 }
 
 export const CHANNELS = {
+  appMetrics: 'system:app-metrics',
   browserStatus: 'browser:status',
   browserResearch: 'browser:research',
   browserControl: 'browser:control',
@@ -3710,6 +3722,7 @@ export interface DesktopApi {
   onSavedDataChanged(listener: (event: SavedDataChanged) => void): () => void
   readonly platform: NodeJS.Platform
   apiUsage(): Promise<ApiUsageSnapshot>
+  appMetrics(): Promise<Envelope<AppMetrics>>
   startupPriority(order: number | null): Promise<void>
   cacheStatus(): Promise<Envelope<import('./cachePolicy.js').CacheStatus>>
   configureCache(settings: import('./cachePolicy.js').CacheSettings): Promise<Envelope<import('./cachePolicy.js').CacheStatus>>

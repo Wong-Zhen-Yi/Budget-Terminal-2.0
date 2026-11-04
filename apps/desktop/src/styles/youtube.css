@@ -175,12 +175,13 @@
     .youtube-fitted-text p { font-size: 11px; line-height: 16px; }
   }
 }
-.youtube-player-dialog { width: min(1100px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 16px; border: 1px solid #304661; border-radius: 8px; color: #e0e8f4; background: #101925; }
-.youtube-player-dialog::backdrop { background: #030812d9; }
-.youtube-player-dialog header { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
-.youtube-player-dialog h2 { flex: 1; margin: 0; font-size: 16px; }
-.youtube-player-dialog button { display: flex; padding: 8px; color: #e0e8f4; cursor: pointer; }
-.youtube-player-dialog button:focus-visible { outline: 2px solid #74aaff; }
-.youtube-player-dialog svg { width: 20px; height: 20px; }
-.youtube-player-dialog iframe { display: block; width: 100%; height: min(62vw, 65vh); min-height: 200px; border: 0; background: #000; }
-.youtube-player-dialog p { margin: 12px 0 0; color: #93a4bc; font-size: 12px; }
+.youtube-preview-slot { display: flex; min-width: 0; min-height: 0; }
+.youtube-player { position: fixed; z-index: 40; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #304661; border-radius: 6px; background: #000; color: #e0e8f4; }
+.youtube-player[hidden] { display: none; }
+.youtube-player--pip { right: 16px; bottom: 16px; width: min(420px, calc(100vw - 32px)); height: min(272px, calc(100vh - 100px)); box-shadow: 0 8px 32px #0009; resize: both; min-width: 240px; min-height: 170px; max-width: calc(100vw - 32px); max-height: calc(100vh - 100px); }
+.youtube-player header { display: flex; flex-shrink: 0; align-items: center; gap: 6px; height: 30px; padding: 0 6px 0 10px; background: #101925; }
+.youtube-player header span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.youtube-player button { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 28px; height: 28px; border: 0; border-radius: 3px; background: transparent; color: #e0e8f4; cursor: pointer; font-size: 20px; }
+.youtube-player button:hover { background: #294466; }
+.youtube-player button:focus-visible { outline: 2px solid #74aaff; }
+.youtube-player iframe { display: block; width: 100%; flex: 1; min-height: 0; border: 0; background: #000; }

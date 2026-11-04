@@ -132,6 +132,21 @@ export function buildTasks(
       queryKey: ['cacheStatus'], queryFn: () => api.cacheStatus(), staleTime: Infinity,
     }, onSnapshot),
   }, {
+    tab: 'settings', label: 'Runtime diagnostics', refresh: false,
+    run: (client, _backgroundOrder, onSnapshot) => warmStartupQuery(client, {
+      queryKey: ['appMetrics'], queryFn: () => api.appMetrics(), staleTime: Infinity,
+    }, onSnapshot),
+  }, {
+    tab: 'settings', label: 'Provider diagnostics', refresh: false,
+    run: (client, _backgroundOrder, onSnapshot) => warmStartupQuery(client, {
+      queryKey: ['apiUsage'], queryFn: () => api.apiUsage(), staleTime: Infinity,
+    }, onSnapshot),
+  }, {
+    tab: 'settings', label: 'MCP diagnostics', refresh: false,
+    run: (client, _backgroundOrder, onSnapshot) => warmStartupQuery(client, {
+      queryKey: ['mcpStatus'], queryFn: () => api.mcpStatus(), staleTime: Infinity,
+    }, onSnapshot),
+  }, {
     tab: 'browser', label: 'Browser Chromium session',
     run: (client, _backgroundOrder, onSnapshot) => warmStartupQuery(client, { queryKey: browserKey, queryFn: loadBrowser, staleTime: Infinity }, onSnapshot),
   }, {

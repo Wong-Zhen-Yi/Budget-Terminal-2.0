@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { PrivateNumber } from '@/components/ui/NumberPrivacy'
+import { PrivateNumber, useNumberPrivacy } from '@/components/ui/NumberPrivacy'
+import type { PortfolioCandle } from '@shared/analytics'
 
 export interface LineSeries {
   /** `null` breaks the line rather than plotting a point, keeping the x alignment. */
@@ -10,6 +11,8 @@ export interface LineSeries {
 }
 
 interface LineChartProps {
+  /** Optional OHLC bars aligned with the line observations. */
+  candles?: PortfolioCandle[]
   /** X labels, one per point; only a handful are drawn. */
   labels: string[]
   series: LineSeries[]
@@ -46,6 +49,7 @@ const BARE_PAD = { top: 8, right: 8, bottom: 8, left: 8 }
  * smeared differently in every panel.
  */
 export function LineChart({
+  candles = [],
   labels,
   series,
   format,
@@ -55,6 +59,7 @@ export function LineChart({
   axisLabels = true,
   ticks = 8,
 }: LineChartProps) {
+  const maskNumbers = useNumberPrivacy()
   const containerRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
 
@@ -72,25 +77,26 @@ export function LineChart({
 
   const width = size.width || viewBox?.width || WIDTH
   const height = size.height || viewBox?.height || HEIGHT
-  const pad = axisLabels ? PAD : BARE_PAD
+  const pad = axisLabels ? { ...PAD, right: candles.length ? 104 : PAD.right } : BARE_PAD
 
   const plot = useMemo(() => {
-    const all = series
+    const all = [...candles.flatMap((candle) => [candle.low, candle.high]), ...series
       .flatMap((entry) => entry.values)
-      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))]
     if (!all.length) return null
 
     // A returns chart is meaningless without its zero line; a price chart is unreadable
     // with one.
-    const minimum = baseline === 'zero' ? Math.min(...all, 0) : Math.min(...all)
-    const maximum = baseline === 'zero' ? Math.max(...all, 0) : Math.max(...all)
+    const margin = candles.length ? (Math.max(...all) - Math.min(...all) || Math.abs(all[0]) * 0.02 || 1) * 0.08 : 0
+    const minimum = baseline === 'zero' ? Math.min(...all, 0) : Math.min(...all) - margin
+    const maximum = baseline === 'zero' ? Math.max(...all, 0) : Math.max(...all) + margin
     const span = maximum - minimum || 1
     const innerWidth = width - pad.left - pad.right
     const innerHeight = height - pad.top - pad.bottom
-    const count = Math.max(...series.map((entry) => entry.values.length))
+    const count = Math.max(candles.length, ...series.map((entry) => entry.values.length))
 
     const x = (index: number) =>
-      pad.left + (count > 1 ? (index / (count - 1)) * innerWidth : innerWidth / 2)
+      pad.left + (candles.length ? ((index + 0.5) / count) * innerWidth : count > 1 ? (index / (count - 1)) * innerWidth : innerWidth / 2)
     const y = (value: number) => pad.top + ((maximum - value) / span) * innerHeight
 
     const gridValues = [
@@ -122,7 +128,7 @@ export function LineChart({
           .join(' '),
       })),
     }
-  }, [series, baseline, width, height, pad.left, pad.right, pad.top, pad.bottom])
+  }, [series, candles, baseline, width, height, pad.left, pad.right, pad.top, pad.bottom])
 
   if (!plot) {
     return (
@@ -181,6 +187,19 @@ export function LineChart({
             strokeDasharray="4 4"
           />
         ) : null}
+
+        {candles.map((candle, index) => {
+          const color = candle.close >= candle.open ? '#25b991' : '#ed6572'
+          const candleWidth = Math.max(1, Math.min(18, (width - pad.left - pad.right) / candles.length * 0.65))
+          return (
+            <g key={candle.startDate} data-candle="portfolio">
+              <title>{maskNumbers ? `${candle.startDate} – ${candle.endDate}: ****` : `${candle.startDate} – ${candle.endDate}: Open ${format(candle.open)}, High ${format(candle.high)}, Low ${format(candle.low)}, Close ${format(candle.close)}`}</title>
+              <line x1={plot.x(index)} x2={plot.x(index)} y1={plot.y(candle.high)} y2={plot.y(candle.low)} stroke={color} />
+              <rect x={plot.x(index) - candleWidth / 2} y={Math.min(plot.y(candle.open), plot.y(candle.close))}
+                width={candleWidth} height={Math.max(1, Math.abs(plot.y(candle.open) - plot.y(candle.close)))} fill={color} />
+            </g>
+          )
+        })}
 
         {plot.paths.map((entry) => (
           <path

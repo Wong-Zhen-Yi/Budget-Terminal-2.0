@@ -2,10 +2,11 @@ import { useState } from 'react'
 
 import type { PositionInput, ReturnTimeframe } from '@shared/contract'
 import { RETURN_TIMEFRAMES } from '@shared/contract'
+import { ema } from '@shared/analytics'
 import { useMomentum } from '@/api/portfolioQueries'
 import { LineChart } from '@/components/charts/LineChart'
 import { Button } from '@/components/ui/Button'
-import { percent } from '@/lib/format'
+import { currency, percent } from '@/lib/format'
 import { DataFreshness } from '@/components/ui/DataFreshness'
 import { FRESHNESS } from '@shared/freshness'
 import { useNumberPrivacy } from '@/components/ui/NumberPrivacy'
@@ -17,13 +18,16 @@ interface MomentumTabProps {
   valuationComplete: boolean
 }
 
-/** Portfolio return since the start of the window, against its own EMA. */
+/** Portfolio value candles built from daily adjusted holding OHLC. */
 export function MomentumTab({ positions, cashAmount, visible, valuationComplete }: MomentumTabProps) {
   const maskNumbers = useNumberPrivacy()
   const [timeframe, setTimeframe] = useState<ReturnTimeframe>('1mo')
   const query = useMomentum(positions, cashAmount, timeframe, visible)
   const data = query.data?.data
   const complete = valuationComplete && Boolean(data && !data.excludedTickers.length)
+  const values = data?.values ?? []
+  const candles = complete ? data?.candles ?? [] : []
+  const valueEma = ema(values, data?.emaPeriod ?? 10)
 
   const last = data?.returns.at(-1) ?? null
   const lastEma = data?.ema.at(-1) ?? null
@@ -35,6 +39,7 @@ export function MomentumTab({ positions, cashAmount, visible, valuationComplete 
     const holdingCount = data.includedTickers.filter(ticker => ticker !== 'CASH').length
     const parts = [
       `Since ${data.startDate}`,
+      `Value ${maskNumbers ? '****' : currency(values.at(-1))}`,
       `Portfolio ${maskNumbers ? '****' : percent(last, 1)}`,
       `${maskNumbers ? '****' : holdingCount} included holding${holdingCount === 1 ? '' : 's'}${data.includedTickers.includes('CASH') ? ' · cash included' : ''}`,
     ]
@@ -64,14 +69,21 @@ export function MomentumTab({ positions, cashAmount, visible, valuationComplete 
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col border border-border bg-surface p-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-2 pb-2 text-2xs text-text-muted">
+          <span>Portfolio value · Daily candles</span>
+          <span style={{ color: '#25b991' }}>Green: close ≥ open</span>
+          <span style={{ color: '#ed6572' }}>Red: close &lt; open</span>
+          <span style={{ color: '#e0a34a' }}>{data?.emaPeriod ?? 10}-day EMA</span>
+        </div>
         <LineChart
-          labels={(complete ? data?.dates ?? [] : []).map((date) => date.slice(5))}
+          candles={candles}
+          labels={candles.map((candle) => candle.startDate)}
+          baseline="auto"
           series={
-            complete && data && data.returns.length
+            candles.length && data
               ? [
-                  { values: data.returns, color: '#4f8ff0', label: 'Portfolio' },
                   {
-                    values: data.ema,
+                    values: candles.map((candle) => valueEma[candle.endIndex]),
                     color: '#e0a34a',
                     dashed: true,
                     label: `${data.emaPeriod}-day EMA`,
@@ -79,11 +91,12 @@ export function MomentumTab({ positions, cashAmount, visible, valuationComplete 
                 ]
               : []
           }
-          format={(value) => `${value.toFixed(0)}%`}
+          format={(value) => currency(value, 0)}
           empty={query.isLoading ? 'Loading momentum...' : summary()}
         />
       </div>
 
+      <p className="shrink-0 text-center text-2xs text-text-dim">One candle per trading day using adjusted holding OHLC. Wicks sum holding highs/lows as range bounds; peaks may occur at different times. Current shares and included cash are held constant.</p>
       <p className="shrink-0 text-center text-2xs text-text-muted">{summary()}</p>
     </div>
   )

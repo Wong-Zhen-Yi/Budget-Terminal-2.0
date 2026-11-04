@@ -34,7 +34,7 @@ try {
       obscuredTabs: ['portfolio'], backtestPage: DEFAULT_BACKTEST_PAGE_SETTINGS, signalsPage: { filter: 'all', setup: 'all', search: '' },
       quantPage: DEFAULT_QUANT_PAGE_SETTINGS, youtubePage: DEFAULT_YOUTUBE_PAGE_SETTINGS, sourcePath: '/private/settings.json',
       automaticBackup: { path: '/private/backup.json', savedAt: Date.now() } }
-    window.fixtureCache = { settings: DEFAULT_CACHE_SETTINGS, service: { market: { bytes: 2000000, entries: 15, expiredEntries: 0, evictions: 0 }, assets: { bytes: 1000000, entries: 4, expiredEntries: 0, evictions: 0 } } }
+    window.fixtureCache = { settings: DEFAULT_CACHE_SETTINGS, service: { hits: 9, misses: 1, errors: 0, market: { bytes: 2000000, entries: 15, expiredEntries: 0, evictions: 0 }, assets: { bytes: 1000000, entries: 4, expiredEntries: 0, evictions: 0 } } }
     useDataHealth.setState({ startup: { durationMs: 1200, planned: 3, timings: [], pageOrder: ['dashboard', 'stocks', 'calendar'], pages: {
       dashboard: { state: 'ready' }, stocks: { state: 'loading' }, calendar: { state: 'failed', reason: 'Provider request timed out' },
     } } })
@@ -44,6 +44,7 @@ try {
     render()
     window.runProbe = async () => {
       await wait(250)
+      check(visible(document.querySelector('.app-dashboard')) && document.querySelectorAll('.app-dash-card').length === 18, 'Settings must open on its dashboard')
       check(document.querySelectorAll('[data-settings-card]').length === 10, 'Expected all ten settings panels mounted')
       check(!document.body.innerText.includes('/private/'), 'Local file paths must start hidden')
       check(!document.querySelector('[title="/private/settings.json"]'), 'Footer path strip returned')
@@ -88,6 +89,17 @@ try {
       check(!visible(card('mcp')) && visible(card('privacy')), 'Privacy category failed')
       choose('integrations'); await wait(80)
       check(visible(card('mcp')) && !visible(card('privacy')), 'Integrations category failed')
+      const categories = card('mcp').querySelector('fieldset[aria-label="MCP access categories"]')
+      check(categories.querySelectorAll('input').length === 7, 'MCP category controls missing')
+      const portfolioAccess = [...categories.querySelectorAll('label')].find(label => label.textContent.includes('Saved portfolios')).querySelector('input')
+      portfolioAccess.click(); await wait(100)
+      check(window.fixtureMcpPolicy.permissions.portfolioRead === false && !portfolioAccess.checked, 'MCP category change did not persist')
+      check(window.fixtureMcpPolicy.readOnly === true && window.fixtureMcpPolicy.requireApproval === true, 'Category change altered approval defaults')
+      window.refuseMcpPolicy = true
+      portfolioAccess.click(); await wait(100)
+      check(!portfolioAccess.checked && card('mcp').textContent.includes('Could not save MCP permissions'), 'Failed MCP permission save changed access or hid the failure')
+      window.refuseMcpPolicy = false
+
       check(document.querySelector('table[aria-label="Provider usage"]') === retained, 'Provider polling panel remounted')
       choose('diagnostics'); await wait(80)
       check(visible(card('api')) && visible(card('load-order')) && visible(card('health')) && !visible(card('backups')), 'Diagnostics category failed')
@@ -120,6 +132,7 @@ try {
     window.renderErrors = []
     addEventListener('error', event => window.renderErrors.push(event.message))
     addEventListener('unhandledrejection', event => window.renderErrors.push(String(event.reason)))
+    window.fixtureMcpPolicy = { readOnly: true, requireApproval: true, browserRequireApproval: false }
     window.maintenanceCalls = []
     const envelope = data => ({ data, meta: { source: 'UI fixture', fetchedAt: Date.now(), freshness: 'fresh' }, errors: [] })
     window.api = {
@@ -130,10 +143,16 @@ try {
         return envelope({ ...window.fixtureSettings })
       },
       maintenance: async action => { window.maintenanceCalls.push(action); return envelope({ performed: false, message: 'Fixture action completed' }) },
-      onPortfolioChanged: () => () => {}, portfolio: async () => envelope({ sourcePath: '/private/portfolio.json' }),
+      onPortfolioChanged: () => () => {}, portfolio: async () => envelope({ portfolios: [], activeId: null, mainId: null, sourcePath: '/private/portfolio.json' }),
       apiUsage: async () => ({ sampledAt: Date.now(), providers: [{ id: 'yahoo', label: 'Yahoo Finance', requestCount: 4, percent: 2, windowSeconds: 60, inFlight: 1, queued: 2, softLimit: 240, throttled: false, cooldownMs: 0 }] }),
       cacheStatus: async () => envelope(window.fixtureCache),
-      mcpStatus: async () => ({ available: true, tools: 100, diagnostics: { policy: { readOnly: true, requireApproval: true, browserRequireApproval: false }, activity: [] } }),
+      mcpStatus: async () => ({ available: true, tools: 100, diagnostics: { policy: window.fixtureMcpPolicy, activity: [] } }),
+      configureMcp: async policy => {
+        if (window.refuseMcpPolicy) throw Error('Fixture permission save failure')
+        window.fixtureMcpPolicy = policy
+        return window.api.mcpStatus()
+      },
+      appMetrics: async () => envelope({ memory: [], backup: { state: 'not-created' } }),
     }
   `)
   await writeFile(join(directory, 'index.html'), '<meta charset="utf-8"><link rel="stylesheet" href="theme.css"><style>#root{display:flex;height:100%}</style><div id="root"></div><script src="fixture.js"></script><script src="renderer.js"></script>')

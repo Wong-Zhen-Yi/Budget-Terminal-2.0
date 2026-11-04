@@ -1,4 +1,4 @@
-param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs)
+param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Tui, [Parameter(ValueFromRemainingArguments=$true)][string[]]$TuiArguments)
 
 $ErrorActionPreference = 'Stop'
 $runtimeCheck = Join-Path $PSScriptRoot 'runtime.cjs'
@@ -85,6 +85,10 @@ function Start-BudgetTerminal {
     # The selected complete toolchain also owns npm.cmd and all nested scripts.
     $env:PATH = (Split-Path -Parent $node) + [IO.Path]::PathSeparator + $env:PATH
     if ($RuntimeOnly) { Write-Output $node; return }
+    if ($Tui) {
+      & $node (Join-Path $PSScriptRoot 'tui.cjs') @TuiArguments
+      exit $LASTEXITCODE
+    }
     Write-Host 'Reload (F5) updates the current page first, then checks all other pages. Page refresh buttons have been removed; startup still loads every page.'
     Write-Host "Using Node.js $(& $node --version)."
     $launchArguments = @()

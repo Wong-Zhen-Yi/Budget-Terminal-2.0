@@ -118,6 +118,52 @@ export interface PortfolioSeries {
   values: number[]
 }
 
+export interface PortfolioCandle {
+  startDate: string
+  endDate: string
+  open: number
+  high: number
+  low: number
+  close: number
+  endIndex: number
+}
+
+export interface DailyValueBar {
+  date: string
+  open: number
+  high: number
+  low: number
+  close: number
+}
+
+/** Daily portfolio OHLC; summed highs/lows bound the range rather than synchronized extremes. */
+export function buildPortfolioDailyCandles(
+  positions: Array<{ ticker: string; shares: number }>,
+  histories: Record<string, DailyValueBar[]>,
+  cashAmount = 0,
+): { candles: PortfolioCandle[]; series: PortfolioSeries; included: string[]; excluded: string[] } {
+  const byTicker = new Map(Object.entries(histories).map(([ticker, bars]) => [ticker,
+    new Map(bars.filter(bar => [bar.open, bar.high, bar.low, bar.close].every(Number.isFinite)
+      && bar.low > 0 && bar.low <= Math.min(bar.open, bar.close)
+      && bar.high >= Math.max(bar.open, bar.close))
+      .map(bar => [bar.date, bar])),
+  ]))
+  const closes = Object.fromEntries([...byTicker].map(([ticker, bars]) => [ticker, {
+    dates: [...bars.keys()].sort(),
+    values: [...bars.keys()].sort().map(date => bars.get(date)!.close),
+  }]))
+  const result = buildPortfolioSeries(positions, closes, cashAmount)
+  const held = positions.filter(position => result.included.includes(position.ticker))
+  const candles = result.series.dates.map((date, endIndex) => {
+    const total = (field: 'open' | 'high' | 'low' | 'close') => held.reduce(
+      (sum, position) => sum + byTicker.get(position.ticker)!.get(date)![field] * position.shares,
+      Math.max(0, cashAmount),
+    )
+    return { startDate: date, endDate: date, endIndex, open: total('open'), high: total('high'), low: total('low'), close: total('close') }
+  })
+  return { ...result, candles }
+}
+
 /**
  * Combine per-ticker close series into one portfolio value series.
  *

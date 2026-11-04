@@ -3,8 +3,13 @@ import type { Envelope } from '../electron/shared/contract.js'
 import type { ScreenshotPayload } from '../electron/shared/screenshot.js'
 import type { BrowserResult } from '../electron/shared/browser.js'
 import { failed } from './catalog.js'
+import { errorDetails, McpError } from './errors.js'
 
 export function toolResult(name: string, result: unknown): CallToolResult {
+  if (failed(result)) result = { ...(result as Record<string, unknown>), error: errorDetails(new McpError(
+    'Budget Terminal returned a failed result. Inspect the source errors and coverage.', 'SERVICE_FAILED', false,
+    'Use other evidence or check provider diagnostics in Settings. Inspect saved records before repeating a write.',
+  )) }
   if (name === 'budget_terminal_browser_research' && (result as Envelope<BrowserResult> | null)?.data?.screenshot) {
     const capture = result as Envelope<BrowserResult>
     const { base64, ...image } = capture.data.screenshot!

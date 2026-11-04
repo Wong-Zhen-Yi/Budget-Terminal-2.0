@@ -49,6 +49,10 @@ async function refresh() {
   if (busy) return
   busy = true
   try {
+    if (!window.logs?.read) {
+      element('read-error').textContent = 'The log reader did not start. Close this viewer and reopen it from Launch Diagnostic Logs.'
+      throw Error('Log reader unavailable')
+    }
     const result = await window.logs.read()
     if (result.error) throw Error(result.error)
     const next = JSON.stringify(result.entries)
@@ -60,8 +64,14 @@ async function refresh() {
       render()
     }
     if (!entries.length) { element('empty').hidden = false; element('counts').textContent = 'No application logs yet. Start Budget Terminal to begin recording.' }
+    element('read-error').hidden = true
+    element('read-error').textContent = ''
     element('updated').textContent = `Last read ${new Date().toLocaleTimeString()} · ${result.files} retained files · local logs only · nothing uploaded`
-  } catch { element('notice').textContent = 'Unable to read logs. Check the log folder and its permissions, then Refresh.' }
+  } catch {
+    element('read-error').textContent ||= 'Unable to read logs. Check the log folder and its permissions, then Refresh.'
+    element('read-error').hidden = false
+    if (!entries.length) { element('counts').textContent = 'Log loading failed'; element('empty').hidden = true }
+  }
   finally { busy = false }
 }
 for (const id of ['search', 'level', 'area', 'session']) element(id).addEventListener('input', render)

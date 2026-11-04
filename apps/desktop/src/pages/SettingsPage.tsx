@@ -19,9 +19,11 @@ import { UserDataPanel } from '@/components/settings/UserDataPanel'
 import { ApiUsagePanel } from '@/components/settings/ApiUsagePanel'
 import { CachePanel } from '@/components/settings/CachePanel'
 import { McpPanel } from '@/components/settings/McpPanel'
+import { AppDashboard } from '@/components/settings/AppDashboard'
 import '@/styles/settings.css'
 
 const categories = [
+  { id: 'dashboard', label: 'App dashboard', icon: '▥' },
   { id: 'all', label: 'All settings', icon: '▦' },
   { id: 'workspace', label: 'Workspace', icon: '☷' },
   { id: 'privacy', label: 'Privacy', icon: '◇' },
@@ -77,7 +79,7 @@ export function SettingsPage({
     tone: 'muted',
   })
   const [busy, setBusy] = useState<MaintenanceAction | null>(null)
-  const [category, setCategory] = useState<Category>('all')
+  const [category, setCategory] = useState<Category>('dashboard')
   const [search, setSearch] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -211,7 +213,7 @@ export function SettingsPage({
   ))
 
   return (
-    <div className="settings-page">
+    <div className={`settings-page${category === 'dashboard' ? ' settings-page--dashboard' : ''}`}>
       <aside className="settings-sidebar">
         <p className="settings-eyebrow">Preferences</p>
         <nav aria-label="Settings categories">{navigation('side')}</nav>
@@ -219,7 +221,15 @@ export function SettingsPage({
           <p>Workspace preferences save as you change them.</p><p>Cache limits use an explicit Apply action.</p>
         </div>
       </aside>
-      <div className="settings-scroll" ref={scrollRef}>
+      <div className="settings-dashboard-host" hidden={category !== 'dashboard'}>
+        <label className="settings-dashboard-mobile-nav">Settings view
+          <select aria-label="Settings view" value={category} onChange={event => chooseCategory(event.target.value as Category)}>
+            {categories.map(entry => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
+          </select>
+        </label>
+        <AppDashboard settings={settings} />
+      </div>
+      <div className="settings-scroll" ref={scrollRef} hidden={category === 'dashboard'}>
         <div className="settings-content">
           <p className="settings-eyebrow">Workspace / Settings</p>
           <header className="settings-heading">

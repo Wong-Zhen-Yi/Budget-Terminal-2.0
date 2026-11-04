@@ -1,6 +1,7 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { readFile } from 'node:fs/promises'
+import { McpError, type ErrorCode } from './errors.js'
 
 export const BRIDGE_VERSION = 1
 export const APP_CLOSED = 'Open Budget Terminal to use this tool.'
@@ -14,7 +15,7 @@ export interface RuntimeDescriptor { version: number; port: number; token: strin
 
 export async function invokeBridge(name: string, args: unknown, options: { signal?: AbortSignal; progress?: (completed: number, total?: number) => void; timeoutMs?: number } = {}): Promise<unknown> {
   let runtime: RuntimeDescriptor
-  try { runtime = JSON.parse(await readFile(runtimePath(), 'utf8')) as RuntimeDescriptor } catch { throw new Error(APP_CLOSED) }
+  try { runtime = JSON.parse(await readFile(runtimePath(), 'utf8')) as RuntimeDescriptor } catch { throw new McpError(APP_CLOSED, 'APP_CLOSED', true, 'Open Budget Terminal, then retry.') }
   if (runtime.version !== BRIDGE_VERSION) throw new Error('Budget Terminal MCP version mismatch. Rebuild the app and MCP server.')
   if (!Number.isInteger(runtime.port) || runtime.port < 1 || runtime.port > 65535 || !/^[a-f0-9]{64}$/.test(runtime.token)) throw new Error('Invalid Budget Terminal MCP runtime descriptor.')
   let response: Response
@@ -25,8 +26,8 @@ export async function invokeBridge(name: string, args: unknown, options: { signa
     })
   } catch (error) {
     const cause = (error as { cause?: { code?: string } }).cause?.code
-    if (cause === 'ECONNREFUSED') throw new Error(APP_CLOSED)
-    throw new Error('Budget Terminal connection interrupted. A write may have completed; read the saved record before trying again.')
+    if (cause === 'ECONNREFUSED') throw new McpError(APP_CLOSED, 'APP_CLOSED', true, 'Open Budget Terminal, then retry.')
+    throw new McpError('Budget Terminal connection interrupted. A write may have completed; read the saved record before trying again.', options.signal?.aborted ? 'CANCELLED' : 'CONNECTION_INTERRUPTED')
   }
   let payload: unknown
   try {
@@ -44,15 +45,18 @@ export async function invokeBridge(name: string, args: unknown, options: { signa
           buffer = buffer.slice(end + 1)
           if (event.progress !== undefined) options.progress?.(event.progress, event.total)
           if ('result' in event) { payload = event.result; received = true }
-          if (event.error) { payload = { error: event.error }; received = true }
+          if (event.error) { payload = event; received = true }
         }
         if (done) break
       }
       if (!received) throw new Error('Incomplete bridge stream')
     } else payload = await response.json()
   } catch {
-    throw new Error('Budget Terminal response interrupted. A write may have completed; read the saved record before trying again.')
+    throw new McpError('Budget Terminal response interrupted. A write may have completed; read the saved record before trying again.', 'CONNECTION_INTERRUPTED')
   }
-  if (!response.ok || (payload && typeof payload === 'object' && 'error' in payload)) throw new Error((payload as { error?: string }).error ?? `Budget Terminal request failed (${response.status}).`)
+  if (!response.ok || (payload && typeof payload === 'object' && 'error' in payload)) {
+    const details = payload as { error?: string; code?: ErrorCode; retryable?: boolean; nextStep?: string }
+    throw new McpError(details.error ?? `Budget Terminal request failed (${response.status}).`, details.code ?? 'SERVICE_FAILED', details.retryable, details.nextStep)
+  }
   return payload
 }

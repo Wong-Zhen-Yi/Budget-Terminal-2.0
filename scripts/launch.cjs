@@ -22,6 +22,7 @@ function launch({ development = false, logs = false, platform = process.platform
   log.log('Reload (F5) updates the current page first, then checks all other pages. Page refresh buttons have been removed; startup still loads every page.')
   log.log('Hyperliquid: live crypto candles share the equity connection, including overnight updates and reconnect recovery; market tables retain 24h change and volume.')
   const os = platformName(platform)
+  log.log('YouTube: videos play in the thumbnail area. Picture in picture keeps playback running while you navigate; return and close controls stay available.')
   log.log('YouTube Research Terminal: compact table, right-side inspector and pagination without scrollbars. Warning-count status and warning controls are removed. All videos and images still preload at startup.')
   log.log('TV page removed. YouTube videos play inside the app with player controls and fullscreen. All remaining pages still preload at startup.')
   if (!os) {
@@ -40,11 +41,12 @@ function launch({ development = false, logs = false, platform = process.platform
     return 1
   }
   if (logs) {
+    log.log('Diagnostic Logs uses a visible separate window and software rendering; repeat launches focus the existing viewer.')
     log.log('Building the independent Diagnostic Logs viewer. The main application can stay open.')
     const build = spawn(process.execPath, [require('node:path').join(root, 'scripts/build-log-viewer.cjs')], { cwd: root, env, stdio: 'inherit' })
     if (build.error || build.status !== 0) return build.status || 1
     const viewer = spawn(require('electron'), [require('node:path').join(root, 'apps/desktop/out/main/logViewer.js')], {
-      cwd: root, env, stdio: 'inherit', windowsHide: true,
+      cwd: root, env, stdio: 'inherit', windowsHide: false,
     })
     return viewer.error ? 1 : viewer.status ?? 1
   }
@@ -80,6 +82,7 @@ function launch({ development = false, logs = false, platform = process.platform
     return 1
   }
 
+  log.log('MCP upgraded: typed results, research workflows, stable paging, structured errors, durable write recovery and category permissions in Settings. All pages still preload.')
   log.log('News: removed partial-feed status indicators from the page. Feed coverage and startup diagnostics remain in Settings; all pages still preload.')
   log.log(`Starting Budget Terminal for ${os}...`)
   log.log('Dictionary Reading Room: category browsing, readable articles, section navigation, saved terms, recent history and formula copying. All 405 terms remain available offline. Dictionary candlestick charts render at full size across all pattern examples.')
@@ -157,7 +160,7 @@ function launch({ development = false, logs = false, platform = process.platform
   log.log('Temporary data failures retry with backoff. Stuck Yahoo workers restart automatically, and incomplete cached results can recover without waiting for their normal expiry. Startup retry progress and unresolved failures stay visible in Settings.')
   log.log('Data caching now saves remote snapshots incrementally across launches, even while pages poll. Startup restores saved data before warming all pages; fresh data is reused, and only expired or missing data refreshes. Pending cache saves finish before the window closes.')
   log.log('MCP research now supports summaries, field selection and pagination; scans and captures report progress and accept cancellation. Settings includes token-free client setup, data-folder validation and optional website-content approval. Portfolio, Cards, finance and settings writes require current revisions to protect concurrent edits.')
-  log.log('MCP defaults to read-only, with optional native approval for saved-record edits, privacy-safe activity and a connection test in Settings > Data > Local MCP. Mutation request IDs protect exact same-session retries; read saved records before retrying after an app restart.')
+  log.log('MCP defaults to read-only, with optional native approval for saved-record edits, privacy-safe activity and a connection test in Settings > Data > Local MCP. Mutation request IDs are journaled privately across restarts; check operation status and saved records after interruption.')
   log.log('Updating MCP bundles safely: unchanged files are left alone, changed files are replaced atomically, and temporary Windows file locks are retried. No MCP clients are forcibly stopped.')
   const build = npm(['run', 'build'])
   if (build.error || build.status !== 0) {

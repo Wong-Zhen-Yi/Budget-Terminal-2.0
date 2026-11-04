@@ -68,6 +68,7 @@ export async function startMcpHost(): Promise<() => Promise<void>> {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') policyError = 'MCP permissions could not be loaded. Read-only defaults are active; save permissions locally to recover.'
     }
     dispatcher = new McpDispatcher({
+      journalPath: join(dirname(descriptorPath), 'write-journal.json'),
       routes: createServiceRoutes(captureTerminalScreenshot), policy, policyError,
       persistPolicy: async value => {
         // The bridge creates this directory with owner-only permissions before IPC can save here.

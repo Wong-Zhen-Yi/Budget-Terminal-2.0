@@ -1,4 +1,7 @@
 import { diagnosticRequest } from '../services/diagnosticLog.js'
+import * as electron from 'electron'
+import { createAppMetricsReader } from '../services/appMetrics.js'
+import { automaticBackupStatus } from '../services/automaticBackup.js'
 import { readPageProgress, withPageProgress } from '../services/pageProgress.js'
 import { serviceReadKey } from '../shared/serviceReadKey.js'
 import { rateGate } from '../services/yahoo/rateGate.js'
@@ -101,7 +104,8 @@ const changedDomains = new Map<string, SavedDataDomain>([
 const pendingReads = new Map<string, Promise<unknown>>()
 
 export type RegisterService = <Request>(channel: string, run: (request: Request) => unknown) => void
-const diagnosticPollingChannels = new Set<string>([CHANNELS.apiUsage, CHANNELS.pageProgress, CHANNELS.heatmapProgress, CHANNELS.startupPriority])
+const diagnosticPollingChannels = new Set<string>([CHANNELS.apiUsage, CHANNELS.appMetrics, CHANNELS.pageProgress, CHANNELS.heatmapProgress, CHANNELS.startupPriority])
+const readAppMetrics = createAppMetricsReader({ processes: () => electron.app.getAppMetrics(), backup: automaticBackupStatus })
 
 /** Register provider routes for Electron IPC. */
 export function registerServiceHandlers(registerRoute: RegisterService): void {
@@ -113,6 +117,7 @@ export function registerServiceHandlers(registerRoute: RegisterService): void {
   const provider = yahooProvider
 
   register(CHANNELS.apiUsage, () => getApiUsageSnapshot())
+  register(CHANNELS.appMetrics, readAppMetrics)
   register(CHANNELS.startupPriority, (order: number | null) => rateGate.preferBackgroundOrder(order))
   register(CHANNELS.cacheStatus, () => getCacheStatus())
   register(CHANNELS.configureCache, (settings: CacheSettings) => configureCache(settings))

@@ -18,6 +18,7 @@ try {
     stdin: { resolveDir: root, loader: 'tsx', contents: `
       import { createRoot } from 'react-dom/client'
       import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+      import { YouTubePlayer } from './src/components/youtube/YouTubePlayer'
       import { YouTubePage } from './src/pages/YouTubePage'
       import { buildTasks } from './src/api/prefetch'
       import { queryKeys } from './src/api/client'
@@ -62,7 +63,10 @@ try {
           : envelope({ dataUri: image, resolvedUrl: '' })
       }
       const host = createRoot(document.getElementById('root'))
-      const render = () => host.render(<QueryClientProvider client={client}><YouTubePage onStatusChange={() => {}} /></QueryClientProvider>)
+      const render = (pageActive = true) => host.render(<QueryClientProvider client={client}>
+        {pageActive ? <YouTubePage onStatusChange={() => {}} /> : <button id="other-page">Other page action</button>}
+        <YouTubePlayer pageActive={pageActive} onReturn={() => render()} />
+      </QueryClientProvider>)
       const task = () => buildTasks(portfolio, settings, { stocks: 'NVDA', fundamentals: 'NVDA' }, { year: 2026, month: 10, earningsYear: 2026, ipoYear: 2026 }).find(task => task.tab === 'youtube')
       const refresh = async next => { mode = next; void client.refetchQueries({ queryKey: queryKeys.youtube(['NVDA', 'AAPL', 'MSFT']), exact: true }); await settle() }
       window.runProbe = async () => {
@@ -77,15 +81,34 @@ try {
         check(document.querySelector('.youtube-focus .youtube-ticker').textContent === 'AAPL', 'Shared video selected the wrong ticker')
         check(!document.querySelector('.youtube-player-dialog'), 'Player must wait for an explicit play action')
         button('Play video').click(); await settle()
-        check(document.querySelector('.youtube-player-dialog').open, 'Play did not open an in-app dialog')
-        check(document.querySelector('.youtube-player-dialog iframe').src.includes('/embed/' + videos[0].videoId), 'Player video ID wrong')
+        check(document.querySelector('.youtube-player--inline'), 'Play did not replace the thumbnail')
+        check(!document.querySelector('dialog'), 'Playback must not block app interaction')
+        const frame = document.querySelector('iframe')
+        const slotBounds = document.querySelector('.youtube-preview-slot').getBoundingClientRect()
+        const playerBounds = document.querySelector('.youtube-player').getBoundingClientRect()
+        check(Math.abs(slotBounds.left - playerBounds.left) < 2 && Math.abs(slotBounds.height - playerBounds.height) < 2, 'Player is outside thumbnail area')
+        document.querySelector('[aria-label="Picture in picture"]').click(); await settle()
+        check(document.querySelector('.youtube-player--pip') && document.querySelector('iframe') === frame, 'PiP restarted the iframe')
+        render(false); await settle()
+        check(document.querySelector('.youtube-player--pip') && document.querySelector('iframe') === frame, 'Page eviction interrupted playback')
+        check(document.querySelector('#other-page'), 'Other page cannot be used during playback')
+        document.querySelector('#other-page').click()
+        document.querySelector('[aria-label="Return to video"]').click(); await settle()
+        check(document.querySelector('.youtube-player--inline') && document.querySelector('iframe') === frame, 'Returning restarted playback')
+        render(false); await settle()
+        check(document.querySelector('.youtube-player--pip') && document.querySelector('iframe') === frame, 'Navigation must automatically float playback')
+        document.querySelector('[aria-label="Return to video"]').click(); await settle()
+        check(document.querySelector('.youtube-player iframe').src.includes('/embed/' + videos[0].videoId), 'Player video ID wrong')
         check(!opened, 'Play opened the external browser')
         document.querySelector('[aria-label="Close video player"]').click(); await settle()
         check(!document.querySelector('iframe'), 'Close must stop and remove playback')
         document.querySelector('.youtube-preview').click(); await settle()
-        check(document.querySelector('.youtube-player-dialog iframe'), 'Preview must play in app')
-        document.querySelector('.youtube-player-dialog').dispatchEvent(new Event('cancel')); await settle()
-        check(!document.querySelector('iframe'), 'Escape must stop playback')
+        check(document.querySelector('.youtube-player iframe'), 'Preview must play in app')
+        rows()[2].click(); await settle()
+        check(document.querySelector('.youtube-player--pip'), 'Inspecting another video must preserve current playback')
+        document.querySelector('[aria-label="Return to video"]').click(); await settle()
+        check(document.querySelector('.youtube-player--inline'), 'Return must restore the playing selection')
+        document.querySelector('[aria-label="Close video player"]').click(); await settle()
         rows()[2].dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); await settle()
         check(document.querySelector('iframe').src.includes('/embed/' + videos[1].videoId), 'Double click played the wrong video')
         document.querySelector('[aria-label="Close video player"]').click(); await settle()
@@ -127,11 +150,19 @@ try {
         client.setQueryData(queryKeys.portfolio, envelope({ ...portfolio, portfolios: [] })); await settle()
         check(text().includes('Add portfolio tickers') && !document.querySelector('.youtube-refresh'), 'No-holdings state missing')
         client.setQueryData(queryKeys.portfolio, envelope(portfolio)); await settle()
-        const many = Array.from({length: 43}, (_, i) => ({...videos[i % 8], videoId: 'many' + i, title: videos[i % 8].title + ' #' + i, descriptionSnippet: videos[i % 8].descriptionSnippet.repeat(20)}))
+        const many = Array.from({length: 43}, (_, i) => ({...videos[i % 8], videoId: 'many' + String(i).padStart(7, '0'), title: videos[i % 8].title + ' #' + i, descriptionSnippet: videos[i % 8].descriptionSnippet.repeat(20)}))
         for (const video of many) client.setQueryData(queryKeys.youtubeThumbnail(video.videoId, ''), envelope({dataUri: image, resolvedUrl: ''}))
         client.setQueryData(queryKeys.youtube(portfolio.portfolios[0].tickers), envelope({items: many, warnings: [], fetchedAt: Date.now(), tickersTotal: 3})); await settle()
+        document.querySelector('[aria-label="Next video page"]').click(); await settle()
+        const laterSelection = document.querySelector('.youtube-focus h2').textContent
+        button('Play video').click(); await settle()
+        const laterFrame = document.querySelector('iframe')
+        render(false); await settle()
+        document.querySelector('[aria-label="Return to video"]').click(); await settle()
+        check(document.querySelector('.youtube-focus h2').textContent === laterSelection && document.querySelector('.youtube-player--inline') && document.querySelector('iframe') === laterFrame, 'Return lost a video beyond the first page')
+        document.querySelector('[aria-label="Close video player"]').click(); await settle()
         button('Details').click(); await settle()
-        return 'PASS: startup warming/deduplication, first visit/revisit, shared-video selection, filters, saved sort, in-app playback/close/Escape/double click, loading, stale/partial/failed/empty results, refresh rejection, image failure and no holdings'
+        return 'PASS: startup warming/deduplication, first visit/revisit, shared-video selection, filters, saved sort, inline playback, PiP, navigation/eviction continuity, return/close/double click, loading, stale/partial/failed/empty results, refresh rejection, image failure and no holdings'
       }
       window.checkLayout = async () => {
         check(document.documentElement.scrollWidth <= innerWidth, 'Horizontal overflow')

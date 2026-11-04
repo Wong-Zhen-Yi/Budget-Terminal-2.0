@@ -63,7 +63,7 @@ export function observeDiagnosticWindow(window: BrowserWindow): void {
       // Launch an independent process; it never takes the application's single-instance lock.
       void import('node:child_process').then(({ spawn }) => {
         const child = spawn(process.execPath, [fileURLToPath(new URL('./logViewer.js', import.meta.url))], {
-          detached: true, stdio: 'ignore', windowsHide: true,
+          detached: true, stdio: 'ignore', windowsHide: false,
           env: Object.fromEntries(Object.entries(process.env).filter(([name]) => name !== 'ELECTRON_RUN_AS_NODE')),
         })
         child.on('error', () => log.write('error', 'diagnostics', 'viewer-launch-failed'))

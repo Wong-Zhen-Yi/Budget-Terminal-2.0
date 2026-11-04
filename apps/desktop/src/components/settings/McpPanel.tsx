@@ -5,6 +5,8 @@ import type { McpPolicy } from '../../../electron/shared/mcpAccess'
 import { api } from '@/api/client'
 import { Panel } from '@/components/ui/Panel'
 import { mutationDomains, operations, toolName, type Operation } from '../../../mcp/operations'
+import { permissionLabels } from '../../../mcp/permissions'
+import type { McpPermission } from '../../../electron/shared/mcpAccess'
 
 const groups = [
   { title: 'Markets & screens', hint: 'Quotes, indexes, ETFs, currencies, crypto, commodities and market screens.' },
@@ -79,7 +81,17 @@ export function McpPanel() {
         Ask before agents read or capture website content (including app screenshots)
       </label>
       <p className="text-text-muted">New installs and unreadable permissions default to read-only. Approvals show the exact edit in a native dialog, default to Deny and expire after 60 seconds. Changing permissions cancels pending approval; edits already executing cannot be undone. These controls do not restrict manual editing or the existing reviewed portfolio-import flow.</p>
+      <fieldset className="space-y-2" aria-label="MCP access categories">
+        <legend className="font-semibold">Allowed categories</legend>
+        {(Object.keys(permissionLabels) as McpPermission[]).map(category => <label key={category} className="flex items-center gap-2">
+          <input type="checkbox" checked={policy?.permissions?.[category] ?? true} disabled={!data?.available || !policy || permissions.isPending}
+            onChange={event => policy && permissions.mutate({ ...policy, permissions: { ...policy.permissions, [category]: event.target.checked } })} />
+          {permissionLabels[category]}
+        </label>)}
+        <p className="text-text-muted">Category access also applies to embedded agents and research workflows. App screenshots require all private read categories and Browser access because any page may be visible. Read-only and local approval still apply to edits.</p>
+      </fieldset>
       {diagnostics?.policyError && <p role="alert" className="text-down">{diagnostics.policyError}</p>}
+      {diagnostics?.journalError && <p role="alert" className="text-down">{diagnostics.journalError}</p>}
       {permissions.error && <p role="alert" className="text-down">Could not save MCP permissions. {permissions.error.message}</p>}
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className="rounded border border-border px-2 py-1" disabled={!data?.available || test.isPending}
@@ -102,7 +114,7 @@ export function McpPanel() {
     <details className="mt-3 rounded border border-border p-2 text-2xs">
       <summary className="cursor-pointer font-semibold text-text">Recent MCP activity · {active} active</summary>
       <p className="mt-1 text-text-muted">Last 100 calls, this session only. Arguments, results, website URLs, client IDs and error details are never logged. Connection heartbeats are excluded.</p>
-      <p className="mt-1 text-text-muted">Write receipts: {diagnostics?.writeReceipts ?? 0}/{diagnostics?.writeReceiptLimit ?? 500}. Reusing a mutation requestId with the same arguments replays its receipt instead of editing twice. Receipts are lost on app restart; read saved records before retrying after a restart.</p>
+      <p className="mt-1 text-text-muted">Write receipts: {diagnostics?.writeReceipts ?? 0}/{diagnostics?.writeReceiptLimit ?? 500}. The private journal survives restarts and blocks duplicate IDs. Check operation status and read saved records after interruption. Uncertain outcomes never execute automatically again. At capacity, inspect records and archive the journal locally before making more edits.</p>
       {!diagnostics?.activity.length ? <p className="mt-2 text-text-muted">No MCP calls recorded this session.</p> :
         <div className="mt-2 max-h-64 overflow-auto"><table className="w-full text-left" aria-label="Recent MCP activity">
           <thead><tr><th className="pr-2">Time</th><th className="pr-2">Tool</th><th className="pr-2">Source</th><th className="pr-2">Status</th><th>Duration</th><th>Control</th></tr></thead>

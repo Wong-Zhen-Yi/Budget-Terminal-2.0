@@ -19,8 +19,27 @@ startDiagnostics()
 
 const dirname = fileURLToPath(new URL('.', import.meta.url))
 const isDev = !app.isPackaged
+let terminalBackend = process.argv.includes('--tui-backend')
+// Windows GUI executables cannot reliably inherit stdin. Watch the owning Node
+// process instead, including when its terminal is closed or crashes.
+if (terminalBackend) {
+  const parent = Number(process.argv.find(value => value.startsWith('--tui-parent='))?.split('=')[1])
+  if (Number.isInteger(parent) && parent > 0) {
+    const monitor = setInterval(() => {
+      if (!terminalBackend) { clearInterval(monitor); return }
+      try { process.kill(parent, 0) } catch { clearInterval(monitor); app.quit() }
+    }, 1000)
+    monitor.unref()
+  }
+}
 
 if (process.platform === 'darwin') app.setName('Budget Terminal')
+// Isolate Electron's instance lock and browser profile with explicit data overrides.
+if (process.env.BUDGET_TERMINAL_DATA_DIR) {
+  const profile = join(process.env.BUDGET_TERMINAL_DATA_DIR, 'electron-profile')
+  app.setPath('userData', profile)
+  app.setPath('sessionData', profile)
+}
 const ownsInstance = app.requestSingleInstanceLock()
 if (!ownsInstance) app.quit()
 
@@ -67,7 +86,7 @@ function createWindow(): BrowserWindow {
   configureRendererCacheShutdown(window)
 
   // Paint once, rather than showing an empty frame and then the UI.
-  window.once('ready-to-show', () => window.show())
+  window.once('ready-to-show', () => { if (!terminalBackend) window.show() })
 
   // Nothing in this app should ever navigate the shell or spawn a window; news links
   // go to the system browser through the explicit IPC channel instead.
@@ -97,7 +116,9 @@ function createWindow(): BrowserWindow {
 }
 
 if (ownsInstance) {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv) => {
+    if (argv.includes('--tui-backend')) return
+    terminalBackend = false
     const window = BrowserWindow.getAllWindows()[0]
     if (!window) {
       // macOS keeps the process alive after its window closes. Reuse that process;
@@ -161,12 +182,13 @@ if (ownsInstance) app.whenReady().then(async () => {
     createWindow()
   } catch (error) {
     diagnosticLog.write('error', 'app', 'startup-failed', { code: faultCode(error) })
-    dialog.showErrorBox('Budget Terminal could not start', error instanceof Error ? error.message : String(error))
+    if (!terminalBackend) dialog.showErrorBox('Budget Terminal could not start', error instanceof Error ? error.message : String(error))
     app.quit()
     return
   }
 
   app.on('activate', () => {
+    terminalBackend = false
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })

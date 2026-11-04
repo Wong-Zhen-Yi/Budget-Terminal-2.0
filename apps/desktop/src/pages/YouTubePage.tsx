@@ -5,7 +5,7 @@ import { usePortfolio } from '@/api/queries'
 import { useSettings, useSettingsMutation } from '@/api/settingsQueries'
 import { useYouTube, useYouTubeThumbnail } from '@/api/youtubeQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
-import { youtubeEmbedUrl } from '@shared/youtubePlayer'
+import { useYouTubePlayer } from '@/stores/youtubePlayer'
 import '@/styles/youtube.css'
 
 const SORT_OPTIONS = [
@@ -62,19 +62,6 @@ function VideoThumbnail({ video, preview = false }: { video: YouTubeVideo | null
       {preview && video?.url && <span className="youtube-play"><Icon name="play" /></span>}
     </span>
   )
-}
-
-function VideoPlayer({ video, onClose }: { video: YouTubeVideo; onClose: () => void }) {
-  const dialog = useRef<HTMLDialogElement>(null)
-  useEffect(() => {
-    dialog.current?.showModal()
-  }, [])
-  return <dialog ref={dialog} className="youtube-player-dialog" aria-label={'Playing ' + video.title} onCancel={onClose}>
-    <header><h2>{video.title}</h2><button type="button" onClick={onClose} aria-label="Close video player" autoFocus><Icon name="close" /></button></header>
-    <iframe key={video.videoId} src={youtubeEmbedUrl(video.videoId) ?? undefined} title={video.title}
-      allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" />
-    <p>YouTube playback controls include fullscreen. Press Escape or close the player to return to your feed.</p>
-  </dialog>
 }
 
 function MetaRow({ label, value }: { label: string; value: string }) {
@@ -162,7 +149,11 @@ export function YouTubePage({ onStatusChange }: { onStatusChange: (panels: Panel
     return [...seen]
   }, [portfolioQuery.data])
   const query = useYouTube(tickers)
-  const [playingVideo, setPlayingVideo] = useState<YouTubeVideo | null>(null)
+  const playingVideo = useYouTubePlayer(state => state.video)
+  const returnRequest = useYouTubePlayer(state => state.returnRequest)
+  const handledReturn = useRef(0)
+  const play = useYouTubePlayer(state => state.play)
+  const setSlot = useYouTubePlayer(state => state.setSlot)
   const [filter, setFilter] = useState('')
   const [tickerFilter, setTickerFilter] = useState('')
   const [sortColumn, setSortColumn] = useState<number>(() => normalizeYouTubePageSettings(settingsQuery.data?.data.youtubePage).sortColumn)
@@ -218,6 +209,21 @@ export function YouTubePage({ onStatusChange }: { onStatusChange: (panels: Panel
   const start = currentPage * pageSize
   const pageItems = visible.slice(start, start + pageSize)
   const selected = pageItems.find(item => rowKey(item) === manualSelectedKey) ?? pageItems[0] ?? null
+  const playerSlot = useCallback((element: HTMLDivElement | null) => setSlot(element, selected?.videoId ?? ''), [setSlot, selected?.videoId])
+  useEffect(() => {
+    if (!playingVideo || !returnRequest || handledReturn.current === returnRequest) return
+    handledReturn.current = returnRequest
+    setFilter('')
+    setTickerFilter('')
+    setManualSelectedKey(rowKey(playingVideo))
+    const index = sorted.findIndex(item => rowKey(item) === rowKey(playingVideo))
+    // A remounted page has not committed its measured page size yet.
+    const area = tableArea.current
+    const rowHeight = area ? Number.parseFloat(getComputedStyle(area).getPropertyValue('--youtube-row-height')) || 50 : 50
+    const headerHeight = area?.querySelector('thead')?.getBoundingClientRect().height ?? 32
+    const count = area ? Math.max(1, Math.floor((area.clientHeight - headerHeight - 1) / rowHeight)) : pageSize
+    setPage(index < 0 ? 0 : Math.floor(index / count))
+  }, [returnRequest, playingVideo, sorted, pageSize])
   const busy = refreshing || query.isFetching
   const hasFilters = Boolean(filter.trim() || activeTicker)
   const status = useMemo<{ text: string; tone: 'muted' | 'positive' | 'warning' | 'negative' }>(() => {
@@ -244,8 +250,8 @@ export function YouTubePage({ onStatusChange }: { onStatusChange: (panels: Panel
     void saveSettings({ type: 'setYouTubePage', value: next })
   }
   const openVideo = useCallback((video: YouTubeVideo | null) => {
-    if (video && youtubeEmbedUrl(video.videoId)) setPlayingVideo(video)
-  }, [])
+    if (video) { setManualSelectedKey(rowKey(video)); play(video) }
+  }, [play])
   const clearFilters = () => {
     setFilter('')
     setTickerFilter('')
@@ -261,7 +267,6 @@ export function YouTubePage({ onStatusChange }: { onStatusChange: (panels: Panel
 
   return (
     <div className="youtube-workspace" data-youtube-page>
-      {playingVideo && <VideoPlayer video={playingVideo} onClose={() => setPlayingVideo(null)} />}
       <header className="youtube-header">
         <div><h1>YouTube</h1><p>Research videos for your portfolio</p></div>
         <span className="youtube-coverage">Last {YOUTUBE_MAX_AGE_DAYS} days · {YOUTUBE_MIN_VIEW_COUNT.toLocaleString()}+ views</span>
@@ -329,9 +334,11 @@ export function YouTubePage({ onStatusChange }: { onStatusChange: (panels: Panel
 
         <section className="youtube-focus" aria-label="Selected video">
           <div className="youtube-eyebrow">Selected video{selected && <span className="youtube-ticker">{selected.ticker}</span>}</div>
-          <button type="button" className="youtube-preview" onClick={() => openVideo(selected)} disabled={!selected?.url} aria-label={selected ? 'Watch ' + selected.title + ' in app' : 'No video selected'}><VideoThumbnail key={selected ? videoKey(selected) : 'empty'} video={selected} preview /></button>
+          <div ref={playerSlot} className="youtube-preview-slot">
+            <button type="button" className="youtube-preview" onClick={() => openVideo(selected)} disabled={!selected?.url} aria-label={selected ? 'Watch ' + selected.title + ' in app' : 'No video selected'}><VideoThumbnail key={selected ? videoKey(selected) : 'empty'} video={selected} preview /></button>
+          </div>
           <div className="youtube-title-row"><h2 title={selected?.title}>{selected?.title || emptyTitle}</h2><span className="youtube-channel" title={selected?.channel}>{selected?.channel || (selected ? 'Channel unavailable' : emptyMessage)}</span></div>
-          {selected ? <button type="button" className="youtube-watch" onClick={() => openVideo(selected)} disabled={!selected.url}>Play video<Icon name="play" /></button> : <button type="button" className="youtube-watch-placeholder" onClick={clearFilters} disabled={!hasFilters}>{hasFilters ? 'Clear filters' : 'Waiting for videos'}</button>}
+          {selected ? <button type="button" className="youtube-watch" onClick={() => openVideo(selected)} disabled={!selected.url}>{playingVideo?.videoId === selected.videoId ? 'Return to video' : 'Play video'}<Icon name="play" /></button> : <button type="button" className="youtube-watch-placeholder" onClick={clearFilters} disabled={!hasFilters}>{hasFilters ? 'Clear filters' : 'Waiting for videos'}</button>}
           <div className="youtube-inspector-tabs" role="group" aria-label="Video information">
             <button type="button" aria-pressed={inspectorTab === 'details'} onClick={() => setInspectorTab('details')}>Details</button>
             <button type="button" aria-pressed={inspectorTab === 'description'} onClick={() => setInspectorTab('description')}>Description</button>

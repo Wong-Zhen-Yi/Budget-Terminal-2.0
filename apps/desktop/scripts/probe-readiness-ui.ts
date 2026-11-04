@@ -145,6 +145,7 @@ try {
       if (method === 'signals' || method === 'quantScan' || method === 'technicalScan') return ok(null)
       if (method === 'mcpStatus') return { available: true, tools: 1 }
       if (method === 'apiUsage') return { providers: [], sampledAt: Date.now() }
+      if (method === 'appMetrics') return ok({ memory: [{ at: Date.now(), mainMiB: 100, rendererMiB: 200, otherMiB: 50 }], backup: { state: 'not-created' } })
       let result = structuredClone(window.fixtureTemplates[method])
       if (!result || !('data' in result)) return result
       if (!result.data) result.data = {}
@@ -303,7 +304,7 @@ try {
           // Expiry maintenance runs throughout navigation and uses a rank behind
           // every initial page. It is independent of a first-visit data request.
           const maintenance = call => call.request?.background && call.request.backgroundOrder >= TABS.filter(tab => tab.implemented).length
-          const initial = calls.slice(before).filter(call => !maintenance(call) && !['startupPriority', 'mcpStatus', 'apiUsage', 'mutateSettings', 'browserViewport', 'notificationsStatus'].includes(call.method))
+          const initial = calls.slice(before).filter(call => !maintenance(call) && !['startupPriority', 'mcpStatus', 'apiUsage', 'appMetrics', 'mutateSettings', 'browserViewport', 'notificationsStatus'].includes(call.method))
           check(initial.length === 0, 'First-visit request on ' + scenario + '/' + tab.id + ': ' + JSON.stringify(initial))
           if (scenario === 'populated' && tab.id === 'portfolio') {
             const page = visiblePage(tab.id)
@@ -319,7 +320,7 @@ try {
               check(button, 'Missing Portfolio subtab: ' + label)
               button.click(); await wait(); await paint()
               check(headings().includes(label), 'Portfolio subtab panel missing: ' + label)
-              const subtabRequests = calls.slice(beforeSubtab).filter(call => !maintenance(call) && !['startupPriority', 'mcpStatus', 'apiUsage', 'mutateSettings', 'notificationsStatus'].includes(call.method))
+              const subtabRequests = calls.slice(beforeSubtab).filter(call => !maintenance(call) && !['startupPriority', 'mcpStatus', 'apiUsage', 'appMetrics', 'mutateSettings', 'notificationsStatus'].includes(call.method))
               check(subtabRequests.length === 0, 'Portfolio subtab made a first-visit request: ' + label + ': ' + JSON.stringify(subtabRequests))
               const panel = [...page.querySelectorAll('section')].find(panel => panel.querySelector('h2')?.textContent.trim() === label)
               check(panel.getBoundingClientRect().width >= page.getBoundingClientRect().width - 20, 'Portfolio subtab must use the full width: ' + label)
@@ -339,6 +340,11 @@ try {
             }
           }
           if (tab.id === 'settings') {
+            const settingsPage = visiblePage(tab.id)
+            check(settingsPage.querySelectorAll('.app-dash-card').length === 18, 'Settings dashboard must prepare all 18 charts')
+            check(settingsPage.querySelector('.app-dashboard').getBoundingClientRect().height > 0, 'App dashboard must be the default Settings view')
+            settingsPage.querySelector('[data-settings-category="all"]').click()
+            await wait()
             check(visiblePage(tab.id).querySelectorAll('meter').length === 3, 'Cache diagnostics must be ready on first visit')
             check(visiblePage(tab.id).querySelector('input[type="number"]')?.value === '256', 'Saved cache limits must be available without a first-visit load')
             check(!visiblePage(tab.id).innerText.includes('Remote'), 'Settings must not offer remote access')

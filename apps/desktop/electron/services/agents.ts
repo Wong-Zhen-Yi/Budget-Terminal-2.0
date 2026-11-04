@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { catalog, connectionTool, failed, validateCall } from '../../mcp/catalog.js'
 import { dynamicToolResult } from '../../mcp/toolResult.js'
+import { McpError, errorDetails } from '../../mcp/errors.js'
 import type { Operation } from '../../mcp/operations.js'
 import { marketResearchInstructions, newsResearchInstructions, optionsResearchInstructions } from '../../mcp/operations.js'
 import { TABS } from '../shared/contract.js'
@@ -590,7 +591,7 @@ export class AgentsService {
             client.write({ id: packet.id, result: dynamicToolResult(packet.params?.tool ?? '', result) })
           }
         }).catch(error => {
-          if (generation === this.generation && this.activeRun === run && this.state.busy) client.write({ id: packet.id, result: { contentItems: [{ type: 'inputText', text: `${agentFailureReason(error)} Use other evidence and produce a partial answer with missing coverage disclosed. Do not loop on this failed source.` }], success: false } })
+          if (generation === this.generation && this.activeRun === run && this.state.busy) client.write({ id: packet.id, result: { contentItems: [{ type: 'inputText', text: error instanceof McpError ? JSON.stringify(errorDetails(error)) : `${agentFailureReason(error)} Use other evidence and produce a partial answer with missing coverage disclosed. Do not loop on this failed source.` }], success: false } })
         })
       } else {
         // No approvals, shell execution, external tools or user-configured integrations are granted here.

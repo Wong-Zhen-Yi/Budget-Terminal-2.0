@@ -2,6 +2,8 @@ import { responseJsonSchema, responseSchema } from './response.js'
 import Ajv from 'ajv'
 import type { Tool } from '@modelcontextprotocol/sdk/types.js'
 import schemas from './schemas.json'
+import { outputSchema } from './output.js'
+import { McpError } from './errors.js'
 import { operations, mutationDomains, newsRefreshOperations, optionsRefreshOperations, priceRefreshOperations, toolName, type Operation } from './operations.js'
 
 const validator = new Ajv({ strict: false, allErrors: true })
@@ -16,7 +18,8 @@ export const catalog = Object.entries(operations).map(([operation, description])
         ? 'Always refreshes the current quote snapshot, even if request.force is omitted or false; a fresh shared Hyperliquid stream observation takes precedence over REST. Preserve instrument labels, asOf timestamps and fallback/stale warnings.'
         : 'Prefer cached data and narrow symbols/dates before forcing a refresh.'
   const tool: Tool = {
-    name: toolName(operation), description: mutation ? `${description} Supply a unique requestId for each intended edit; reuse it only when retrying exactly the same edit in the same app session. Read saved records before retrying after an app restart. For portfolios, cards, personal finance and settings, supply expectedRevision from the latest read meta.revision.` : !mutation && !['screenshot', 'browserResearch'].includes(operation) ? `${description} Returns structured data with source/freshness metadata and partial-data warnings; coverage depends on the provider. Use response.mode summary for an overview, or response.collection with offset/limit and fields for large collections. Default JSON data budget: 256 KiB; omitted data is marked explicitly. ${freshness}` : description,
+    outputSchema: outputSchema(operation),
+    name: toolName(operation), description: mutation ? `${description} Supply a unique requestId for each intended edit; reuse it only when retrying exactly the same edit in the same app session. After interruption or restart, check operation_status and read saved records. Durable receipts block duplicate execution. For portfolios, cards, personal finance and settings, supply expectedRevision from the latest read meta.revision.` : !mutation && !['screenshot', 'browserResearch'].includes(operation) ? `${description} Returns structured data with source/freshness metadata and partial-data warnings; coverage depends on the provider. Use response.snapshot new for stable paging (reuse the returned snapshotId), response.filter for equality filters and sortBy/descending for ranking. These shape loaded data; narrow request symbols or workflow sections to reduce provider work. Use response.mode summary for a preview, or response.collection with offset/limit and fields for large collections. Default JSON data budget: 256 KiB; omitted data is marked explicitly. ${freshness}` : description,
     // A wrapper keeps every MCP tool's root schema an object, including mutation unions.
     inputSchema: {
       type: 'object',
@@ -43,20 +46,26 @@ export const connectionTool: Tool = {
   name: 'budget_terminal_connection_status',
   description: 'Check whether the running Budget Terminal app can accept MCP calls.',
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  outputSchema: { type: 'object', anyOf: [
+    { type: 'object', required: ['available', 'version', 'tools', 'policy'], properties: { available: { type: 'boolean' }, version: { type: 'integer' }, tools: { type: 'integer' }, policy: { type: 'object' } } },
+    { type: 'object', required: ['error'], properties: { error: { type: 'object' } } },
+  ] },
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 }
 
 export function validateCall(name: string, args: unknown) {
   const entry = catalog.find((item) => item.tool.name === name)
-  if (!entry) throw new Error('Unknown Budget Terminal tool')
-  if (!entry.validate(args)) throw new Error(`Invalid tool arguments: ${validator.errorsText(entry.validate.errors)}`)
+  if (!entry) throw new McpError('Unknown Budget Terminal tool', 'UNKNOWN_TOOL')
+  if (!entry.validate(args)) throw new McpError(`Invalid tool arguments: ${validator.errorsText(entry.validate.errors)}`, 'INVALID_ARGUMENTS')
   const { request, requestId, expectedRevision, response } = args as { request: unknown; requestId?: string; expectedRevision?: string; response?: unknown }
   // Enforce this once for external MCP clients and embedded manual/autonomous agents.
   // Copy the validated request so caller-owned arguments remain unchanged.
   const researchRequest = entry.operation === 'quotes'
     ? { includeMacro: false, includeSectors: false, ...(request as object), force: true }
     : newsRefreshOperations.has(entry.operation) || optionsRefreshOperations.has(entry.operation) ? { ...(request as object), force: true } : request
-  return { operation: entry.operation, request: researchRequest, requestId, expectedRevision, response: response === undefined ? undefined : responseSchema.parse(response) }
+  const selected = response === undefined ? undefined : responseSchema.safeParse(response)
+  if (selected && !selected.success) throw new McpError('Invalid response controls. Check the tool input schema.', 'INVALID_ARGUMENTS')
+  return { operation: entry.operation, request: researchRequest, requestId, expectedRevision, response: selected?.data }
 }
 
 export function failed(result: unknown): boolean {

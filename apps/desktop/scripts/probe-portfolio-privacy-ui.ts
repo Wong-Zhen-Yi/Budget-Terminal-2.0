@@ -50,7 +50,10 @@ try {
         window.api.optionQuotes = async ({ positions }) => envelope({ quotes: Object.fromEntries(positions.map(position => [position.rowId,
           { currentPrice: 8.5, volume: 555, openInterest: 333, impliedVolatility: .45 }])), expiries: {} })
         window.api.returns = async () => envelope({ returns: { DEMO: 12.5 } })
-        window.api.momentum = async () => envelope({ includedTickers: ['DEMO'], excludedTickers: [], dates: ['2026-10-01', '2026-10-02'], returns: [0, 12.5], ema: [0, 6.25], emaPeriod: 20, startDate: '2026-10-01' })
+        window.api.momentum = async () => envelope({ includedTickers: ['DEMO'], excludedTickers: [], dates: ['2026-10-01', '2026-10-02', '2026-10-05'], values: [10000, 11250, 11000], candles: [
+          { startDate: '2026-10-01', endDate: '2026-10-01', endIndex: 0, open: 10000, high: 10500, low: 9500, close: 10000 },
+          { startDate: '2026-10-02', endDate: '2026-10-02', endIndex: 1, open: 10000, high: 11500, low: 9800, close: 11250 },
+          { startDate: '2026-10-05', endDate: '2026-10-05', endIndex: 2, open: 11250, high: 11400, low: 10800, close: 11000 }], returns: [0, 12.5, 10], ema: [0, 6.25, 7], emaPeriod: 20, startDate: '2026-10-01' })
         window.api.analytics = async () => envelope({ includedTickers: ['DEMO'], excludedTickers: [], metrics: { beta: 1.23, alpha: 12.5 }, historyPoints: 200,
           startDate: '2026-01-01', endDate: '2026-10-01', benchmarkSymbol: 'SPY' })
         window.api.mutatePortfolio = async mutation => {
@@ -90,6 +93,10 @@ try {
           await click('Options'); maskedCells(); noAmounts()
           for (const tab of ['Portfolio Weight', 'Dip Finder', 'Pie Chart', 'Portfolio Heatmap', 'Momentum Tracker', 'Portfolio Metrics']) {
             await click(tab); noAmounts()
+            if (tab === 'Momentum Tracker') {
+              check(document.querySelectorAll('[data-candle="portfolio"]').length === 3, 'Momentum renders one portfolio value candle per trading day')
+              check([...document.querySelectorAll('[data-candle] title')].every(node => node.textContent.includes('****') && !node.textContent.includes('$')), 'Candle OHLC tooltips respect privacy')
+            }
             check(body().includes('****'), tab + ' displays masked values')
           }
           await click('Stocks')
@@ -120,6 +127,10 @@ try {
           check(document.querySelector('input[aria-label="Brokerage cash"]').value === '23456.78', 'Reveal shows current cash')
           check(document.querySelector('input[aria-label="DEMO shares"]').value === '17', 'Reveal restores shares editor')
           check(body().includes('$145.50'), 'Reveal restores table values')
+          await click('Momentum Tracker')
+          check(body().includes('Value $11,000.00') && body().includes('Daily candles'), 'Momentum shows portfolio value in currency')
+          check(document.querySelector('[data-candle] title').textContent.includes('Open $10,000'), 'Revealed candles expose OHLC')
+          await click('Stocks')
           const cash = document.querySelector('input[aria-label="Brokerage cash"]')
           cash.dispatchEvent(new FocusEvent('focusin', { bubbles: true })); await settle()
           Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(cash, '30000')
@@ -161,7 +172,10 @@ try {
           fx = { usdSgd: null }; client.setQueryData(['fx'], envelope(fx)); await settle()
           check(body().includes('FX required') && !body().includes('67,890.12'), 'FX failures remain visible without exposing balances')
           fx = { usdSgd: 1.3142, collectedAt: Date.now() }; client.setQueryData(['fx'], envelope(fx)); await settle(); checkFinance()
-          return 'PASS: Portfolio all eight tabs; Personal Finance cash, debt, margin, bills, totals, goals, chart labels, FX failures, live updates and reveal/edit/hide; scoped privacy'
+          financePage = false; hidden = false; render(); await settle()
+          await click('Momentum Tracker')
+          check(document.querySelector('[data-candle="portfolio"]').getBoundingClientRect().height > 5, 'Value candles remain visible in the page layout')
+          return 'PASS: Portfolio all eight tabs; daily value candles, EMA and OHLC privacy; Personal Finance cash, debt, margin, bills, totals, goals, chart labels, FX failures, live updates and reveal/edit/hide; scoped privacy'
         }
       `,
     },

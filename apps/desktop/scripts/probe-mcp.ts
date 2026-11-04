@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { QueryClient } from '@tanstack/react-query'
+import outputSchemas from '../mcp/output-schemas.json'
+import { featureOperations } from '../mcp/features.js'
 import { catalog, failed, validateCall } from '../mcp/catalog.js'
 import { mutationDomains, newsRefreshOperations, optionsRefreshOperations, priceRefreshOperations, operations, toolName, type Operation } from '../mcp/operations.js'
 import { mock } from 'node:test'
@@ -62,6 +64,8 @@ function example(schema: unknown, root: unknown): unknown {
   if (value.enum) return value.enum[0]
   if (value.anyOf || value.oneOf) return example((value.anyOf ?? value.oneOf)![0], root)
   if (value.allOf) return Object.assign({}, ...value.allOf.map((item: unknown) => example(item, root)))
+  if (Array.isArray(value.type)) return example({ ...value, type: value.type[0] }, root)
+  if (Object.keys(value).length === 0) return null
   if (value.type === 'object') return Object.fromEntries((value.required ?? []).map((key) => [key, example(value.properties![key], root)]))
   if (value.type === 'array') return Array.isArray(value.items)
     ? value.items.map((item: unknown) => example(item, root))
@@ -94,7 +98,7 @@ try {
   assert.equal((await pluginClient.listTools()).tools.length, tools.length)
   const events: SavedDataDomain[][] = []
   const routes = new Map<Operation, (request: unknown) => unknown>()
-  for (const entry of catalog) routes.set(entry.operation, (request) => ({ data: { operation: entry.operation, request }, meta: { freshness: 'cached', source: 'probe', fetchedAt: 123 }, errors: [] }))
+  for (const entry of catalog) routes.set(entry.operation, (request) => ({ data: { operation: entry.operation, request }, meta: { freshness: 'cached', source: 'probe', fetchedAt: 123 }, errors: [], response: { mode: 'full', maxBytes: 262144, omitted: false, sampled: false } }))
   bridge = await startBridge({ dispatcher: new McpDispatcher({ routes, policy: { readOnly: false, requireApproval: false } }), onChanged: (domains) => events.push(domains) })
   assert.equal(bridge.status.connected, false)
   assert.equal(bridge.status.active, false)
@@ -117,6 +121,7 @@ try {
     validateCall(entry.tool.name, args)
     assert.throws(() => validateCall(entry.tool.name, { ...args, surprise: true }), /Invalid/)
     assert.throws(() => validateCall(entry.tool.name, { request: { ...(args.request as object), background: true } }), /Invalid/)
+    if (featureOperations.has(entry.operation)) continue // Workflow behavior has dedicated multi-service probes.
     const result = await client.callTool({ name: entry.tool.name, arguments: args })
     assert.equal(result.isError, false, entry.operation)
     const structured = result.structuredContent as Record<string, unknown>
@@ -164,8 +169,11 @@ try {
   assert.throws(() => validateCall(toolName('mutatePortfolio'), { request: { type: 'setCash', portfolioId: 'p', cashBalance: 'bad' } }), /Invalid/)
   assert.throws(() => validateCall(toolName('mutateSettings'), { request: { type: 'setQuantPage', value: {} } }), /Invalid/)
   routes.set('stocks', () => ({ data: null, meta: { freshness: 'failed', source: 'probe', fetchedAt: 123 }, errors: [{ reason: 'offline' }] }))
-  assert.equal((await client.callTool({ name: toolName('stocks'), arguments: { request: { symbol: 'TEST' } } })).isError, true)
-  routes.set('stocks', () => ({ data: {}, meta: { freshness: 'partial', source: 'probe', fetchedAt: 123 }, errors: [{ reason: 'coverage' }] }))
+  const failedStock = await client.callTool({ name: toolName('stocks'), arguments: { request: { symbol: 'TEST' } } })
+  assert.equal(failedStock.isError, true)
+  assert.equal((failedStock.structuredContent as { error: { code: string } }).error.code, 'SERVICE_FAILED')
+  const stockExample = example(outputSchemas.stocks, outputSchemas.stocks) as { data: unknown }
+  routes.set('stocks', () => ({ data: stockExample.data, meta: { freshness: 'partial', source: 'probe', fetchedAt: 123 }, errors: [{ reason: 'coverage', source: 'probe', operation: 'fetch' }] }))
   const partial = await client.callTool({ name: toolName('stocks'), arguments: { request: { symbol: 'TEST' } } })
   assert.equal(partial.isError, false, JSON.stringify(partial))
 
@@ -174,7 +182,7 @@ try {
     mcpProgress(1, 2)
     await new Promise(resolve => setTimeout(resolve, 15))
     mcpProgress(2, 2)
-    return { data: { ready: true }, meta: { freshness: 'fresh', source: 'fixture' }, errors: [] }
+    return example(outputSchemas.stocks, outputSchemas.stocks)
   })
   const progress: number[] = []
   await client.callTool({ name: toolName('stocks'), arguments: { request: { symbol: 'TEST' } } }, undefined, { onprogress: value => progress.push(value.progress) })
@@ -231,7 +239,7 @@ try {
     assert.throws(() => validateCall(toolName(operation), { request: {} }), /Unknown/)
   }
   bridge = await startBridge({ dispatcher: new McpDispatcher({ routes: serviceRoutes, policy: { readOnly: false, requireApproval: false } }), onChanged: (domains) => events.push(domains) })
-  async function call<Key extends Exclude<Operation, 'screenshot'>>(operation: Key, request: unknown = {}): Promise<Awaited<ReturnType<DesktopApi[Key]>>> {
+  async function call<Key extends Extract<Operation, keyof DesktopApi>>(operation: Key, request: unknown = {}): Promise<Awaited<ReturnType<DesktopApi[Key]>>> {
     const domain = mutationDomains[operation as keyof typeof mutationDomains]
     const current = domain && domain !== 'articles' ? await invokeBridge(toolName(domain), { request: {} }) as { meta: { revision: string } } : undefined
     const result = await invokeBridge(toolName(operation), { request, ...(domain ? { requestId: randomUUID(), ...(current ? { expectedRevision: current.meta.revision } : {}) } : {}) })
@@ -267,6 +275,16 @@ try {
       assert.equal(prices.data.holdings.NVDA.changeBasis, '24h')
     }
     assert.equal(yahooPriceCalls, 0, 'Compact mapped MCP prices must not wait for Yahoo macros or company reference data')
+    const overview = await client.callTool({ name: toolName('companyOverview'), arguments: { request: { symbol: 'NVDA', sections: ['quotes'] } } })
+    assert.equal(overview.isError, false, JSON.stringify(overview))
+    assert(JSON.stringify(overview.structuredContent).includes('equity-perp-mark'), 'Workflow must retain instrument provenance across stdio')
+    const snap = await client.callTool({ name: toolName('quotes'), arguments: { request: { holdings: ['NVDA'] }, response: { snapshot: 'new', fields: ['holdings'] } } })
+    const snapshotId = (snap.structuredContent as { snapshotId: string }).snapshotId
+    assert.match(snapshotId, /^[a-f0-9]{32}$/)
+    const replayedSnapshot = await client.callTool({ name: toolName('quotes'), arguments: { request: { holdings: ['NVDA'] }, response: { snapshot: snapshotId, fields: ['holdings'] } } })
+    assert.deepEqual(replayedSnapshot.structuredContent, snap.structuredContent)
+    const invalidField = await client.callTool({ name: toolName('quotes'), arguments: { request: { holdings: ['NVDA'] }, response: { fields: ['holdigns'] } } })
+    assert.equal((invalidField.structuredContent as { error: { code: string } }).error.code, 'INVALID_ARGUMENTS')
     const history = await client.callTool({ name: toolName('chartsHistory'), arguments: {
       request: { symbol: 'NVDA', interval: '4 Hours', range: '1D' }, response: { fields: ['candles'] },
     } })
@@ -339,7 +357,7 @@ try {
   let finishWrite!: () => void
   let startedWrite!: () => void
   const started = new Promise<void>((resolveStarted) => { startedWrite = resolveStarted })
-  routes.set('mutateSettings', async () => { startedWrite(); await new Promise<void>((done) => { finishWrite = done }); return { data: {}, meta: { freshness: 'fresh' }, errors: [] } })
+  routes.set('mutateSettings', async () => { startedWrite(); await new Promise<void>((done) => { finishWrite = done }); return example(outputSchemas.mutateSettings, outputSchemas.mutateSettings) })
   bridge = await startBridge({ dispatcher: new McpDispatcher({ routes, policy: { readOnly: false, requireApproval: false } }), onChanged: () => {} })
   const writing = invokeBridge(toolName('mutateSettings'), { request: { type: 'setTime12h', value: true }, requestId: randomUUID(), expectedRevision: 'a'.repeat(64) })
   await started

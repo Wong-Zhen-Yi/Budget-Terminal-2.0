@@ -147,7 +147,7 @@ export const queryKeys = {
   fundamentalsPage: (symbol: string) => ['fundamentalsPage', symbol, 'usd-v2'] as const,
   returns: (tickers: string[], window: string) =>
     ['returns', window, [...tickers].sort().join(',')] as const,
-  momentum: (signature: string, timeframe: string) => ['momentum', timeframe, signature] as const,
+  momentum: (signature: string, timeframe: string) => ['momentum', timeframe, signature, 'portfolio-daily-ohlc-v1'] as const,
   analytics: (signature: string, benchmark: string, lookback: string) =>
     ['analytics', benchmark, lookback, signature] as const,
   optionQuotes: (signature: string) => ['optionQuotes', signature] as const,

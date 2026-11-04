@@ -5,15 +5,33 @@ import { writeFile } from 'node:fs/promises'
 import { diagnosticDirectory, readDiagnosticLogs } from './services/diagnosticLog.js'
 
 // Independent Electron entry: no app services, provider requests, data-session lock or main-window imports.
+// This text-only window does not need GPU rendering or the GPU's shared disk caches.
+app.disableHardwareAcceleration()
 app.setName('Budget Terminal Logs')
-app.setPath('userData', join(app.getPath('appData'), 'BudgetTerminalLogViewer'))
+const profile = join(app.getPath('appData'), 'BudgetTerminalLogViewer')
+app.setPath('userData', profile)
+app.setPath('sessionData', profile)
+const ownsInstance = app.requestSingleInstanceLock()
+if (!ownsInstance) app.quit()
+let viewer: BrowserWindow | null = null
+function revealViewer(): void {
+  if (!viewer || viewer.isDestroyed()) return
+  if (viewer.isMinimized()) viewer.restore()
+  viewer.show()
+  viewer.focus()
+}
+if (ownsInstance) app.on('second-instance', revealViewer)
 const directory = diagnosticDirectory()
 const dirname = fileURLToPath(new URL('.', import.meta.url))
 const html = join(dirname, '../../resources/log-viewer.html')
-app.whenReady().then(async () => {
+if (ownsInstance) app.whenReady().then(async () => {
   const window = new BrowserWindow({ width: 1250, height: 820, minWidth: 580, minHeight: 460,
+    show: false,
     title: 'Budget Terminal — Diagnostic Logs', backgroundColor: '#0b111b', autoHideMenuBar: true,
     webPreferences: { preload: join(dirname, '../preload/logViewer.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false } })
+  viewer = window
+  window.once('ready-to-show', revealViewer)
+  window.once('closed', () => { viewer = null })
   const trusted = (event: Electron.IpcMainInvokeEvent) => event.sender === window.webContents &&
     event.senderFrame === window.webContents.mainFrame && pathToFileURL(fileURLToPath(event.senderFrame.url)).href === pathToFileURL(html).href
   const handle = (channel: string, run: () => unknown) => ipcMain.handle(channel, event => {
@@ -43,5 +61,6 @@ app.whenReady().then(async () => {
   window.webContents.on('will-navigate', event => event.preventDefault())
   window.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
   await window.loadFile(html)
+  revealViewer()
 }).catch(() => { dialog.showErrorBox('Log viewer could not open', 'Rebuild the app and try opening Diagnostic Logs again.'); app.quit() })
 app.on('window-all-closed', () => app.quit())

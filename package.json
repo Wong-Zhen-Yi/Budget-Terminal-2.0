@@ -11,6 +11,9 @@
     "apps/desktop"
   ],
   "scripts": {
+    "tui": "node scripts/tui.cjs",
+    "setup:tui": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-bt.ps1",
+    "probe:tui": "npm run --workspace budget-terminal-desktop probe:tui",
     "probe:hyperliquid": "npm run --workspace budget-terminal-desktop probe:hyperliquid --",
     "preinstall": "node scripts/runtime.cjs",
     "prepare": "git config core.hooksPath .githooks || exit 0",

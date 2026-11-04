@@ -1,0 +1,76 @@
+.settings-page--dashboard .settings-sidebar { flex-basis: 155px; padding: 18px 10px; }
+.settings-page--dashboard .settings-sidebar-note { display: none; }
+.settings-page--dashboard .settings-sidebar nav button { padding: 10px 8px; gap: 8px; font-size: 12px; }
+.settings-dashboard-host { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.settings-dashboard-mobile-nav { display: none; }
+.settings-dashboard-host[hidden] { display: none; }
+.app-dashboard { flex: 1; min-width: 0; min-height: 0; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.app-dash-footnote { color: var(--color-text-muted); font-size: 11px; }
+.app-dash-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; flex: 0 0 auto; }
+.app-dash-kpis > div { border: 1px solid var(--color-border-strong); background: var(--color-surface); border-radius: 5px; padding: 8px 14px; display: flex; flex-direction: column; gap: 4px; }
+.app-dash-kpis span { font-size: 11px; color: var(--color-text-muted); }
+.app-dash-kpis strong { font-size: 24px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.app-dash-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.app-dash-column { display: grid; grid-template-rows: 24px repeat(3, minmax(0, 1fr)); min-height: 0; min-width: 0; gap: 8px; }
+.app-dash-column > h2 { margin: 0; display: flex; align-items: center; gap: 6px; font-size: clamp(10px, .85vw, 14px); font-weight: 600; line-height: 1.1; }
+.app-dash-column > h2 > span { color: #48c8ed; }
+.app-dash-card { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid var(--color-border-strong); border-radius: 5px; background: var(--color-surface); }
+.app-dash-card h3 { flex: 0 0 auto; margin: 0; font-size: clamp(10px, .85vw, 13px); line-height: 1.2; font-weight: 600; }
+.app-dash-plot { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+.app-dash-card p { flex: 0 0 auto; margin: 0; color: var(--color-text-muted); font-size: 9px; line-height: 1.25; }
+.app-dash-empty { color: var(--color-text-muted); text-align: center; font-size: 11px; line-height: 1.8; }
+.app-dash-donut { display: flex; align-items: center; min-height: 0; gap: 3px; }
+.app-dash-donut svg { width: 48%; max-height: 130px; flex-shrink: 0; overflow: visible; }
+.app-dash-donut text { fill: var(--color-text-muted); font: 10px var(--font-mono); }
+.app-dash-donut .app-dash-total { fill: var(--color-text); font-size: 17px; font-weight: 600; }
+.app-dash-donut ul { flex: 1; min-width: 0; list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 5px; }
+.app-dash-donut li { display: flex; align-items: center; gap: 4px; font-size: clamp(8px, .65vw, 11px); line-height: 1.2; }
+.app-dash-donut li i { width: 7px; height: 7px; flex-shrink: 0; border-radius: 1px; }
+.app-dash-donut li span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.app-dash-donut li b { font-weight: 400; font-variant-numeric: tabular-nums; }
+.app-dash-bars { display: flex; flex-direction: column; justify-content: center; gap: 7px; min-height: 0; }
+.app-dash-bar { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1fr) auto; gap: 5px; align-items: center; font-size: clamp(8px, .67vw, 11px); }
+.app-dash-bar > span { overflow-wrap: anywhere; }
+.app-dash-bar > div { height: 10px; background: var(--color-border); }
+.app-dash-bar i { display: block; height: 100%; }
+.app-dash-bar > .app-dash-latency { background: transparent; display: flex; flex-direction: column; gap: 2px; }
+.app-dash-latency i { height: 4px; flex-shrink: 0; }
+.app-dash-bar-signed { position: relative; }
+.app-dash-bar-signed::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; border-left: 1px solid var(--color-text-muted); }
+.app-dash-bar b { font-variant-numeric: tabular-nums; font-weight: 400; }
+.app-dash-bars small, .app-dash-line small, .app-dash-config small { display: block; text-align: center; font-size: 9px; line-height: 1.25; color: var(--color-text-muted); }
+.app-dash-line { display: flex; flex-direction: column; min-height: 0; gap: 3px; }
+.app-dash-line > div { display: flex; justify-content: center; gap: 12px; font-size: 10px; }
+.app-dash-line svg { width: 100%; min-height: 0; max-height: 145px; }
+.app-dash-line text { fill: var(--color-text-muted); font: 10px var(--font-mono); }
+.app-dash-config { font-size: 10px; margin: 7px 0; }
+.app-dash-config > div { display: flex; height: 18px; background: #425a70; margin: 5px 0; }
+.app-dash-config i { background: #20c9ad; color: #07141c; font-style: normal; text-align: center; }
+.app-dash-config b { flex: 1; text-align: center; font-weight: 400; }
+.app-dash-footnote { margin: 0; font-size: 10px; line-height: 1.2; }
+.app-dash-error { color: var(--color-down); font-size: 11px; margin: 0; }
+@media (max-height: 850px) {
+  .app-dashboard { padding: 10px; gap: 8px; }
+  .app-dash-card { padding: 7px; gap: 4px; }
+  .app-dash-kpis strong { font-size: 20px; }
+  .app-dash-bars { gap: 4px; }
+  .app-dash-donut li { gap: 3px; }
+  .app-dash-donut ul { gap: 3px; }
+}
+/* Preserve legibility on small windows rather than clipping inaccessible charts. */
+@container settings (max-width: 1150px) {
+  .settings-dashboard-host { overflow-y: auto; }
+  .app-dashboard { flex: none; width: 100%; min-height: 1150px; }
+  .app-dash-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .app-dash-column > h2, .app-dash-card h3 { font-size: 12px; }
+  .app-dash-bar, .app-dash-donut li { font-size: 10px; }
+}
+@container settings (max-width: 650px) {
+  .app-dashboard { min-height: 2150px; }
+  .app-dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app-dash-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container settings (max-width: 760px) {
+  .settings-dashboard-mobile-nav { display: flex; align-items: center; gap: 12px; padding: 8px 12px; font-size: 12px; }
+  .settings-dashboard-mobile-nav select { background: var(--color-surface); color: var(--color-text); border: 1px solid var(--color-border-strong); padding: 5px; }
+}

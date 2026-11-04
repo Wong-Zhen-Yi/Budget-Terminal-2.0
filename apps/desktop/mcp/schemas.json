@@ -1,4 +1,90 @@
 {
+  "companyOverview": {
+    "$ref": "#/definitions/Input_companyOverview",
+    "definitions": {
+      "Input_companyOverview": {
+        "$ref": "#/definitions/CompanyOverviewRequest"
+      },
+      "CompanyOverviewRequest": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "quotes",
+                "fundamentals",
+                "news"
+              ]
+            }
+          }
+        },
+        "required": [
+          "symbol"
+        ],
+        "additionalProperties": false,
+        "description": "MCP-only requests; no additional renderer or maintenance privileges."
+      }
+    }
+  },
+  "portfolioBriefing": {
+    "$ref": "#/definitions/Input_portfolioBriefing",
+    "definitions": {
+      "Input_portfolioBriefing": {
+        "$ref": "#/definitions/PortfolioBriefingRequest"
+      },
+      "PortfolioBriefingRequest": {
+        "type": "object",
+        "properties": {
+          "portfolioId": {
+            "type": "string"
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "quotes",
+                "news"
+              ]
+            }
+          }
+        },
+        "required": [
+          "portfolioId"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "operationStatus": {
+    "$ref": "#/definitions/Input_operationStatus",
+    "definitions": {
+      "Input_operationStatus": {
+        "$ref": "#/definitions/OperationStatusRequest"
+      },
+      "OperationStatusRequest": {
+        "type": "object",
+        "properties": {
+          "tool": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool",
+          "requestId"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
   "browserStatus": {
     "$ref": "#/definitions/Input_browserStatus",
     "definitions": {

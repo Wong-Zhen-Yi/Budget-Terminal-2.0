@@ -17,11 +17,12 @@ for (const platform of ['win32', 'darwin', 'linux']) {
   const calls = []
   assert.equal(launch({ logs: true, platform, nodeVersion: '24.22.1', log,
     locateCodex() { assert.fail('The log viewer must not initialize Agents') },
-    spawn(command, args) { calls.push([command, args]); return { status: 0 } },
+    spawn(command, args, options) { calls.push([command, args, options]); return { status: 0 } },
   }), 0)
   assert.equal(calls.length, 2, 'Viewer launch must only build its own bundles and start Electron')
   assert(calls[0][1][0].endsWith('build-log-viewer.cjs'))
   assert(calls[1][1][0].endsWith('logViewer.js'))
+  assert.equal(calls[1][2].windowsHide, false, 'The Electron GUI process must not inherit a hidden startup window')
 }
 for (const [file, command] of [
   ['Launch Budget Terminal.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -Dev/],
@@ -34,6 +35,7 @@ for (const [file, command] of [
   assert(!source.includes('Building and verifying the latest production app'), `${file} must describe its current launch mode`)
 }
 function assertCurrentStartupMessages(messages) {
+  assert(messages.some(message => message.includes('MCP upgraded:') && message.includes('durable write recovery')), 'Every launch mode announces MCP upgrades')
   assert(messages.some(message => message.includes('Page Loading Status banner removed.') && message.includes('diagnostics remain in Settings') && message.includes('All pages still preload')), 'Every launch mode announces banner removal and diagnostics in Settings')
   assert(messages.some(message => message.includes('Dictionary Reading Room:') && message.includes('saved terms') && message.includes('offline')), 'Every launch mode announces the offline Dictionary Reading Room')
   assert(messages.some(message => message.includes('MCP startup fix:') && message.includes('TV are classified correctly') && message.includes('Agent startup errors no longer block')), 'Every launch mode must announce the MCP/TV startup fix')

@@ -45,6 +45,7 @@ const PROVIDERS: Record<string, ProviderDefinition> = {
 }
 
 interface ProviderState {
+  durations: number[]
   requestTimes: number[]
   inFlight: number
   throttledUntil: number
@@ -102,6 +103,8 @@ export class ApiUsageTracker {
       }
       throw error
     } finally {
+      state.durations.push(Math.max(0, this.now() - startedAt))
+      if (state.durations.length > 200) state.durations.shift()
       state.inFlight = Math.max(0, state.inFlight - 1)
       state.updatedAt = this.now()
     }
@@ -117,6 +120,7 @@ export class ApiUsageTracker {
       this.prune(state, definition, sampledAt)
       const throttled = state.throttledUntil > sampledAt
       const requestCount = state.requestTimes.length
+      const durations = [...state.durations].sort((a, b) => a - b)
       providers.push({
         id: providerId,
         label: definition.label,
@@ -130,6 +134,10 @@ export class ApiUsageTracker {
         throttled,
         cooldownMs: Math.max(0, state.throttledUntil - sampledAt),
         updatedAt: state.updatedAt,
+        ...(durations.length ? { latencyMs: {
+          p50: durations[Math.ceil(durations.length * .5) - 1],
+          p95: durations[Math.ceil(durations.length * .95) - 1], samples: durations.length,
+        } } : {}),
       })
     }
 
@@ -140,6 +148,7 @@ export class ApiUsageTracker {
     const current = this.states.get(providerId)
     if (current) return current
     const created: ProviderState = {
+      durations: [],
       requestTimes: [],
       inFlight: 0,
       throttledUntil: 0,

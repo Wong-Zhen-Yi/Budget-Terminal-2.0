@@ -28,6 +28,9 @@
 
 ## One workspace, from research to records
 
+Prefer PowerShell? Double-click **Launch Budget Terminal TUI.cmd** once, then
+open a new PowerShell window and type `BT`. See [terminal UI controls and setup](docs/terminal-ui.md).
+
 Budget Terminal brings public market data and your saved financial records into an
 Electron app built with React and TypeScript. Move from a market overview to company
 fundamentals, charts, options, and valuation while carrying the same ticker between

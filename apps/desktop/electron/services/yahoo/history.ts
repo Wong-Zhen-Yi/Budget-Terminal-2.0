@@ -1,5 +1,34 @@
 import type { HeatmapInterval, MetricsLookback, ReturnTimeframe } from '../../shared/contract.js'
 import { getYahooSeries, type YahooSeriesRow } from './series.js'
+import type { DailyValueBar } from '../../shared/analytics.js'
+
+/** Apply the adjusted-close factor to every OHLC field, preserving candle shape. */
+export function adjustedDailyBars(rows: YahooSeriesRow[]): DailyValueBar[] {
+  const bars = new Map<string, DailyValueBar>()
+  for (const row of rows) {
+    const { open, high, low, close } = row
+    if (open === null || high === null || low === null || close === null || close <= 0
+      || ![open, high, low, close, row.time].every(Number.isFinite)) continue
+    const factor = row.adjclose !== null ? row.adjclose / close : 1
+    if (!Number.isFinite(factor) || factor <= 0) continue
+    const date = new Date(row.time * 1000).toISOString().slice(0, 10)
+    bars.set(date, { date, open: open * factor, high: high * factor, low: low * factor, close: close * factor })
+  }
+  return [...bars.values()].sort((left, right) => left.date.localeCompare(right.date))
+}
+
+export async function getDailyBarsBatch(
+  symbols: string[],
+  window: ReturnTimeframe,
+  force = false,
+): Promise<Record<string, DailyValueBar[]>> {
+  const unique = [...new Set(symbols)]
+  const settled = await Promise.allSettled(unique.map(async symbol => {
+    const result = await getYahooSeries({ symbol, start: windowStart(window), interval: '1d', force, adjusted: true })
+    return adjustedDailyBars(result.rows)
+  }))
+  return Object.fromEntries(settled.flatMap((result, index) => result.status === 'fulfilled' ? [[unique[index], result.value]] : []))
+}
 
 /**
  * Daily close history, shared by Dip Finder, the Heatmap, Momentum Tracker and

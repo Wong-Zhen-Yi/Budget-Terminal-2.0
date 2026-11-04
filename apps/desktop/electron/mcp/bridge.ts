@@ -7,7 +7,8 @@ import { promisify } from 'node:util'
 import { catalog, connectionTool, failed, validateCall } from '../../mcp/catalog.js'
 import { BRIDGE_VERSION, runtimePath } from '../../mcp/runtime.js'
 import { mutationDomains } from '../../mcp/operations.js'
-import { McpAccessError, type McpDispatcher } from './dispatcher.js'
+import type { McpDispatcher } from './dispatcher.js'
+import { errorDetails } from '../../mcp/errors.js'
 import type { McpStatus, SavedDataDomain } from '../shared/contract.js'
 
 export interface BridgeOptions {
@@ -92,7 +93,8 @@ export async function startBridge({ dispatcher, onChanged, descriptorPath = runt
       }
       let validated: ReturnType<typeof validateCall>
       try { validated = validateCall(call.name, call.arguments) } catch (error) {
-        return send(400, { error: error instanceof Error ? error.message : 'Invalid call.' })
+        const details = errorDetails(error)
+        return send(400, { ...details, error: details.message })
       }
       lastSeen = Date.now()
       activeCalls += 1
@@ -103,7 +105,7 @@ export async function startBridge({ dispatcher, onChanged, descriptorPath = runt
           onChanged(domain === 'settings' ? ['settings'] : [domain, 'settings'])
         }
         send(200, result)
-      } catch (error) { send(500, { error: error instanceof McpAccessError ? error.message : 'Budget Terminal service failed. Read saved records before repeating a write.' }) }
+      } catch (error) { const details = errorDetails(error); send(500, { ...details, error: details.message }) }
       finally {
         activeCalls -= 1
         lastSeen = Date.now()
@@ -134,6 +136,7 @@ export async function startBridge({ dispatcher, onChanged, descriptorPath = runt
       if (!sid) throw new Error('Could not identify the runtime descriptor owner.')
       await execute('icacls.exe', [directory, '/inheritance:r', '/grant:r', `*${sid}:(OI)(CI)F`], { windowsHide: true })
     } else await chmod(directory, 0o700)
+    await dispatcher.initialize()
     const temporary = `${descriptorPath}.${process.pid}.tmp`
     await writeFile(temporary, JSON.stringify({ version: BRIDGE_VERSION, port, token, pid: process.pid }), { mode: 0o600 })
     await rename(temporary, descriptorPath)

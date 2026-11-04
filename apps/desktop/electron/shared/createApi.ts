@@ -34,6 +34,7 @@ export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS
     }),
     platform,
     apiUsage: () => invoke(CHANNELS.apiUsage),
+    appMetrics: () => invoke(CHANNELS.appMetrics),
     startupPriority: order => invoke(CHANNELS.startupPriority, order),
     cacheStatus: () => invoke(CHANNELS.cacheStatus),
     configureCache: settings => invoke(CHANNELS.configureCache, settings),

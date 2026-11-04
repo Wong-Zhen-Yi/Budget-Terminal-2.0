@@ -71,6 +71,7 @@ import { EconomicPage } from '@/pages/EconomicPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { StocksPage } from '@/pages/StocksPage'
 import { StockDiscoveryPage } from '@/pages/StockDiscoveryPage'
+import { YouTubePlayer } from '@/components/youtube/YouTubePlayer'
 import { YouTubePage } from '@/pages/YouTubePage'
 import { useDataHealth } from '@/stores/dataHealth'
 import { useChartsStore } from '@/stores/charts'
@@ -417,6 +418,9 @@ export function App() {
 
         </div>
       </div>
+
+      <YouTubePlayer pageActive={activeTab === 'youtube'} onReturn={() => setActiveTab('youtube')}
+        suppressed={Boolean(screenshotPage) || (obscured && (settings?.obscuredTabs ?? []).includes('youtube'))} />
 
       {/* Keep chart observers and diagnostic polling mounted without a visible bottom strip. */}
       <div hidden>

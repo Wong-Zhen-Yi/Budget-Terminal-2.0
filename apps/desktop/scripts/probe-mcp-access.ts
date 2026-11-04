@@ -222,12 +222,13 @@ try {
   const perp = { symbol: 'NVDA', market: 'xyz:NVDA', price: 120, currency: 'USD', source: 'Hyperliquid equity perp (xyz:NVDA)',
     priceSource: 'Hyperliquid equity perp (xyz:NVDA)', priceBasis: 'equity-perp-mark', changeBasis: '24h', asOf: 123,
     fallbackReason: 'Fixture fallback explanation' }
-  for (const options of [{ fields: ['price'] }, { mode: 'summary' as const }, { fields: ['missing'] }]) {
+  for (const options of [{ fields: ['price'] }, { mode: 'summary' as const }]) {
     const result = shapeResponse(ok(perp, 'fixture'), options) as { response: { provenance: typeof perp[] } }
     const identity = result.response.provenance.find(row => row.market === 'xyz:NVDA')!
     assert.equal(identity.symbol, 'NVDA')
     for (const field of ['currency', 'source', 'priceSource', 'priceBasis', 'changeBasis', 'asOf', 'fallbackReason'] as const) assert.equal(identity[field], perp[field], `Projection dropped the ${field} instrument label`)
   }
+  assert.throws(() => shapeResponse(ok(perp, 'fixture'), { fields: ['missing'] }), /Unknown response field/)
   const bounded = shapeResponse(research, { maxBytes: 4096 }) as { data: { omitted: boolean } }
   assert.equal(bounded.data.omitted, true)
   const summary = shapeResponse(research, { mode: 'summary' }) as typeof research

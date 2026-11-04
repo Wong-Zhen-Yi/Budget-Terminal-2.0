@@ -118,6 +118,15 @@ async function probeApiUsage(): Promise<void> {
   assert.equal(yahoo.queued, gate.waiting.foreground + gate.waiting.background)
   assert.equal(yahoo.backgroundRequestsPerSecond, gate.backgroundRate)
   console.log('API usage rolling-window, steady startup pace, idle decay and throttle checks passed')
+  const latency = new ApiUsageTracker(undefined, () => now)
+  assert.equal(latency.snapshot().providers[0].latencyMs, undefined)
+  for (let index = 1; index <= 220; index++) {
+    await latency.track('yahoo', async () => { now += index })
+  }
+  assert.deepEqual(latency.snapshot().providers[0].latencyMs, { p50: 120, p95: 210, samples: 200 })
+  await assert.rejects(latency.track('yahoo', async () => { now += 1000; throw Error('fixture failure') }))
+  assert.equal(latency.snapshot().providers[0].latencyMs!.samples, 200, 'Failed calls are measured without growing the buffer')
+  console.log('API latency quantiles and bounded samples passed')
 }
 
 async function main(): Promise<void> {

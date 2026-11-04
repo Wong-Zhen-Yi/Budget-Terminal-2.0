@@ -6,7 +6,7 @@ import type { ScreenshotPayload, ScreenshotRequest } from '../shared/screenshot.
 import type { Envelope } from '../shared/contract.js'
 
 // Local diagnostics, cache maintenance are desktop-only.
-const desktopOnlyChannels = [CHANNELS.startupPriority, CHANNELS.cacheStatus, CHANNELS.configureCache, CHANNELS.pageProgress, CHANNELS.heatmapProgress]
+const desktopOnlyChannels = [CHANNELS.appMetrics, CHANNELS.startupPriority, CHANNELS.cacheStatus, CHANNELS.configureCache, CHANNELS.pageProgress, CHANNELS.heatmapProgress]
 
 export function createServiceRoutes(screenshot: (request: ScreenshotRequest) => Promise<Envelope<ScreenshotPayload>> = async () =>
   failed({ screenshots: [] }, 'Screenshot capture requires an Electron window.', 'Electron page capture'),
@@ -20,6 +20,10 @@ export function createServiceRoutes(screenshot: (request: ScreenshotRequest) => 
   }
   const routes = new Map<Operation, (request: unknown) => unknown>()
   for (const operation of Object.keys(operations) as Operation[]) {
+    if (operation === 'companyOverview' || operation === 'portfolioBriefing' || operation === 'operationStatus') {
+      routes.set(operation, () => { throw new Error('MCP feature requires the shared dispatcher.') })
+      continue
+    }
     if (operation === 'screenshot') {
       routes.set(operation, (request) => screenshot(request as ScreenshotRequest))
       continue

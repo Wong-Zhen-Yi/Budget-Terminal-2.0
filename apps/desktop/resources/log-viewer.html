@@ -18,6 +18,7 @@
 </section>
 <div class="summary"><span id="counts" role="status">Reading logs…</span><span>Newest first · up to 5,000 retained records</span></div>
 <p id="notice" role="status"></p>
+<p id="read-error" role="alert" hidden></p>
 <main><div class="table-wrap"><table><thead><tr><th>Time</th><th>Level</th><th>Area</th><th>Event</th><th>Technical details</th></tr></thead><tbody id="rows"></tbody></table><p id="empty" hidden>No records match these filters.</p></div><aside><h2>Record details</h2><p>Select a row to inspect its full record.</p><pre id="detail">No record selected.</pre><h2>What is recorded</h2><p>Startup and shutdown, page readiness, service timing and freshness, classified errors, renderer failures, process exits and main-process memory.</p><p>Request and response payloads, chat text, holdings, browser addresses, credentials and raw error messages are excluded.</p><p>Storage is bounded to approximately 64 MiB and 15 days, with 4 MiB file rotation. Export includes the retained snapshot, including records hidden by filters.</p><p>Logs show observed symptoms. A healthy log does not prove every feature is working. Abrupt termination may have no final shutdown record.</p></aside></main>
 <footer id="updated">Logs are local. Nothing is uploaded automatically.</footer>
 <script src="log-viewer.js"></script>

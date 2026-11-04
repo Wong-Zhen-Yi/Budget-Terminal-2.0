@@ -159,6 +159,7 @@ import type {
 import { DEFAULT_CLOCK_COUNTRY, DEFAULT_OBSCURED_TABS, MACRO_SYMBOLS, TABS } from '../shared/contract.js'
 import {
   buildPortfolioSeries,
+  buildPortfolioDailyCandles,
   computeExposure,
   computeRiskMetrics,
   ema,
@@ -277,7 +278,7 @@ import {
 import { getTradingVolumes, TRADING_VOLUMES_SOURCE } from './yahoo/tradingVolumes.js'
 import { getStocks, refreshStocksQuote, STOCKS_SOURCE } from './yahoo/stocks.js'
 import { getDiscoverySnapshot, getDiscoveryUniverse } from './yahoo/discovery.js'
-import { getCloses, getClosesBatch, periodReturn } from './yahoo/history.js'
+import { getCloses, getClosesBatch, getDailyBarsBatch, periodReturn } from './yahoo/history.js'
 import { getOptionQuotes } from './yahoo/optionQuotes.js'
 import { getNews } from './yahoo/news.js'
 import {
@@ -1002,6 +1003,8 @@ const providerImplementation: MarketDataProvider = {
     const emaPeriod = timeframe === '1mo' ? 10 : timeframe === '1y' ? 50 : 20
     const emptyMomentum: MomentumPayload = {
       dates: [],
+      candles: [],
+      values: [],
       returns: [],
       emaPeriod,
       ema: [],
@@ -1012,12 +1015,12 @@ const providerImplementation: MarketDataProvider = {
     }
     try {
       const held = positions.filter((position) => position.shares > 0)
-      const batch = await getClosesBatch(
+      const batch = await getDailyBarsBatch(
         held.map((position) => position.ticker),
         timeframe,
         force,
       )
-      const { series, included, excluded } = buildPortfolioSeries(held, batch.closes, cashAmount)
+      const { series, candles, included, excluded } = buildPortfolioDailyCandles(held, batch, cashAmount)
       if (series.dates.length < 2) {
         return ok(
           { ...emptyMomentum, excludedTickers: excluded, reason: 'No common historical window' },
@@ -1028,6 +1031,8 @@ const providerImplementation: MarketDataProvider = {
       return ok(
         {
           dates: series.dates,
+          candles,
+          values: series.values,
           returns,
           emaPeriod,
           ema: ema(returns, emaPeriod),

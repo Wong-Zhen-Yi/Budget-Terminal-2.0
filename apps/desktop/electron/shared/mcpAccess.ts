@@ -3,7 +3,10 @@ export interface McpPolicy {
   readOnly: boolean
   requireApproval: boolean
   browserRequireApproval?: boolean
+  /** Omitted categories retain existing access; explicit false denies access. */
+  permissions?: Partial<Record<McpPermission, boolean>>
 }
+export type McpPermission = 'marketResearch' | 'portfolioRead' | 'personalFinanceRead' | 'savedContentRead' | 'screenshots' | 'browserContent' | 'recordEdits'
 
 export type McpCallSource = 'external' | 'agent'
 export interface McpActivity {
@@ -22,4 +25,5 @@ export interface McpDiagnostics {
   activity: McpActivity[]
   writeReceipts: number
   writeReceiptLimit: number
+  journalError?: string
 }

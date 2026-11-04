@@ -97,14 +97,11 @@ or later calls using the same tool, ID and arguments share/replay the original
 outcome without another edit or approval. Reusing an ID with different arguments
 is refused. Failed or uncertain attempts are not automatically executed again.
 Large results replay a small receipt instructing the client to read saved records.
-A session retains up to 500 write receipts; it refuses new IDs at capacity rather
-than evicting IDs and risking duplicate edits.
+The private journal retains up to 500 write receipts across restarts; it refuses new IDs at capacity rather than evicting IDs and risking duplicate edits.
 
-**Receipts are in-memory and do not survive app restart.** They are not an
-exactly-once guarantee across sessions. After restart, always read saved records
-before retrying an interrupted write, even if you still have its request ID. Read
-tools do not accept `requestId`. Source, freshness and partial-data errors remain
-part of tool output.
+**A private write journal survives app restart.** It records only hashed tool/request IDs, argument fingerprints, outcome states and timestamps in the restricted `.mcp/write-journal.json` file. Arguments, financial records, article content and provider errors are never stored there. Before execution the journal durably records an uncertain outcome; completion updates it atomically. A crash between saving the record and updating the journal remains uncertain, so this is not an exactly-once guarantee.
+
+After interruption, call `budget_terminal_operation_status` with `request: { "tool": "budget_terminal_mutate_settings", "requestId": "original-id" }`, then read the saved records. States are completed, failed, refused, uncertain or unknown. An existing ID never executes again after restart; its small receipt instructs the caller to read records. Unknown does not prove an edit never happened. An unreadable journal blocks writes and reports its failure in Settings. At capacity, inspect records, disconnect clients and close the app before archiving the private journal locally; archived IDs no longer provide deduplication protection. The journal is excluded from backups and exports. Read tools do not accept a top-level `requestId`.
 
 
 ## Concurrent edit protection
@@ -261,3 +258,29 @@ checks the status panel, all-page startup navigation, and PNG capture of all pag
 with hidden, minimized and covered windows. The MCP probe uses only
 temporary data/cache/backup folders and deterministic provider substitutes for
 research routing. Live feed availability is not asserted by those offline probes.
+
+## Research workflows and output contracts
+
+Every tool advertises an output schema. Full results describe the shared service types; response-shaped results, failed envelopes, native image metadata and structured errors have explicit variants. Rebuild and reconnect clients to refresh both input and output schemas.
+
+Start common research with:
+- `budget_terminal_company_overview`: `request: { "symbol": "AAPL" }` coordinates current quotes, fundamentals and refreshed news.
+- `budget_terminal_portfolio_briefing`: `request: { "portfolioId": "saved-id" }` reads that portfolio and fetches quotes and news only for its symbols.
+
+Use optional `sections` to avoid unnecessary provider work: company sections are quotes, fundamentals and news; portfolio sections are quotes and news. An omitted section never starts a provider call. Evidence retains each section's envelope, source timestamps and coverage warnings. Stale or failed sections make the briefing partial. Portfolio briefings do not return other portfolios. Existing individual tools remain available.
+
+## Stable paging, filters and ranking
+
+Add `response: { "collection": "items", "snapshot": "new", "limit": 25 }` to a read to retain a stable snapshot. Reuse the returned top-level `snapshotId` as `response.snapshot` with the same tool and request for later offsets. Subsequent pages reuse the captured result without calling providers, including news/options refreshes. Treat timestamps as the snapshot's observation times, not a new live refresh. Snapshots last five minutes, hold at most eight results and 16 MiB total, and reject individual results above 4 MiB. They are private, session-only, cleared on policy changes and may be evicted; an expired ID produces an explicit error rather than silently fetching different rows.
+
+`response.filter` matches top-level row fields by exact scalar equality. `sortBy` and `descending` sort before pagination, with nulls last. Unknown fields are rejected; valid optional fields may be absent in a provider result. Summary mode still samples rows and must not be used for analytical rankings.
+
+Initial filtering and pagination shape service results after retrieval and do not reduce provider work. Narrow existing request symbols/dates or workflow sections first. Stable subsequent pages avoid repeat fetches.
+
+## Category permissions and structured errors
+
+Settings > Local MCP independently controls market research, portfolio/Card reads, personal-finance reads, saved articles/settings, screenshots, browser content/actions and record edits. Omitted category values retain existing access for compatibility; read-only remains the default and still blocks edits and browser actions. Workflows enforce permissions for their child tools. Screenshots require all private read categories and browser access to prevent visual disclosure of denied data. Revoking access also invalidates snapshots; a read finishing after category revocation cannot return its result.
+
+Errors return `structuredContent.error` with `code`, `message`, `retryable` and `nextStep`, plus the same details in text and `isError: true`. Codes include APP_CLOSED, INVALID_ARGUMENTS, UNKNOWN_TOOL, STALE_REVISION, APPROVAL_DENIED, ACCESS_DENIED, RATE_LIMITED, CANCELLED, CONNECTION_INTERRUPTED, JOURNAL_UNAVAILABLE and SERVICE_FAILED. Retry guidance never authorizes repeating an uncertain write. Provider failed/partial envelopes keep their original source errors.
+
+`npm run probe:mcp` includes deterministic workflow scenarios covering selective calls, retained news dates and source warnings, snapshot reuse, category enforcement for both callers, journal recovery and stale UI revisions. These verify the tool workflows; they do not benchmark a language model's tool-selection accuracy or live provider latency.
