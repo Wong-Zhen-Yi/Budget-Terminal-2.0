@@ -8,31 +8,36 @@
  */
 export interface ShortcutRow {
   keys: string
+  label: string
   behavior: string
 }
 
 export function shortcutsForPlatform(isMac: boolean): ReadonlyArray<ShortcutRow> {
   return [
-    { keys: isMac ? '⌘K' : 'Ctrl+K', behavior: 'Open or close page search. Search by page or workspace name.' },
+    { keys: isMac ? '⌘K' : 'Ctrl+K', label: 'Page search', behavior: 'Open or close page search. Search by page or workspace name.' },
     {
       keys: 'Ctrl+Tab',
+      label: 'Next page',
       behavior:
         'Switch to the next visible main tab and wrap through the current navigation order.',
     },
     {
       keys: '← / →',
+      label: 'Previous / next page',
       behavior:
         'Step to the previous or next visible main tab. Ignored while a text field, table or dropdown has focus.',
     },
-    { keys: isMac ? '⌘R' : 'F5', behavior: 'Reload the current page first, then check all other pages.' },
+    { keys: isMac ? '⌘R' : 'F5', label: 'Reload pages', behavior: 'Reload the current page first, then check all other pages.' },
     {
       keys: '`',
+      label: 'Focus page search',
       behavior:
         'Open or refocus the page search. If a text input is focused, exit it first and then open search.',
     },
-    { keys: isMac ? '⌘⇧H' : 'Ctrl+Shift+H', behavior: 'Obscure or reveal the pages selected in Privacy settings.' },
+    { keys: isMac ? '⌘⇧H' : 'Ctrl+Shift+H', label: 'Toggle Obscure', behavior: 'Obscure or reveal the pages selected in Privacy settings.' },
     {
       keys: 'Esc',
+      label: 'Close search / exit input',
       behavior: 'Close the page search, or exit the active text input without changing pages.',
     },
   ]

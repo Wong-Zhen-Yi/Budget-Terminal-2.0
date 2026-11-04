@@ -1,4 +1,3 @@
-import { SectionHeader } from '@/components/settings/SettingsSection'
 import { Panel } from '@/components/ui/Panel'
 import { shortcutsForPlatform } from '@/lib/shortcuts'
 
@@ -8,10 +7,11 @@ export function ShortcutsPanel() {
   return (
     <Panel title="Keyboard Shortcuts">
       <div className="flex flex-col gap-2 p-2">
-        <SectionHeader
-          title="Navigation"
-          hint="Reference for the app-wide shortcuts and the built-in page picker."
-        />
+        <dl className="settings-shortcuts">{shortcuts.map(row => <div key={row.keys}>
+          <dt>{row.label}</dt><dd><kbd>{row.keys}</kbd></dd>
+        </div>)}</dl>
+        <details className="settings-shortcut-details">
+        <summary>Shortcut details</summary>
         <table className="w-full border-collapse text-2xs">
           <thead>
             <tr className="text-left text-text">
@@ -32,6 +32,7 @@ export function ShortcutsPanel() {
             ))}
           </tbody>
         </table>
+        </details>
       </div>
     </Panel>
   )

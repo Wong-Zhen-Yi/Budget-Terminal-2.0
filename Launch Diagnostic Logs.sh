@@ -1,4 +1,5 @@
 #!/bin/sh
+echo "Settings layout: tighter spacing, compact shortcuts and stacked backup controls. Filtered panels use the full content width; all pages still preload."
 echo "News refreshes every five minutes while the page is open; news source caches use the same cadence."
 echo "Settings redesign: grouped navigation, search, privacy, backups and maintenance. All pages still preload; diagnostics stay in Settings."
 cd "$(dirname "$0")" || exit 1

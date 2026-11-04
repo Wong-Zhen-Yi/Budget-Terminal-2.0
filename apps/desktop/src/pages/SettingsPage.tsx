@@ -35,7 +35,7 @@ interface SettingsCard {
   category: Category
   terms: string
   content: ReactNode
-  wide?: boolean
+  column?: 'secondary'
 }
 
 const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
@@ -155,7 +155,7 @@ export function SettingsPage({
             onSetHidden={(id, hidden) => void write({ type: 'setTabHidden', id, hidden }, 'Page navigation updated.')}
             onMove={(id, direction) => void write({ type: 'moveTab', id, direction }, 'Page navigation order updated.')}
             onReset={() => void write({ type: 'resetNavigation' }, 'Page navigation reset.')} /> },
-        { id: 'clock', category: 'workspace', terms: 'general clock keyboard shortcuts country market timezone time format 12 hour', content:
+        { id: 'clock', category: 'workspace', column: 'secondary', terms: 'general clock keyboard shortcuts country market timezone time format 12 hour', content:
           <div className="settings-stack">
             <ClockPanel country={settings.clockCountry} time12h={settings.time12h}
               onSetCountry={(code) => void write({ type: 'setClockCountry', code }, 'Clock market updated.')}
@@ -170,32 +170,32 @@ export function SettingsPage({
         { id: 'privacy', category: 'privacy', terms: 'obscure privacy protected pages hide mask blur portfolio finance shortcut', content:
           <PrivacyPanel tabs={privacyTabs} obscured={settings.obscuredTabs}
             onSetObscured={(id, obscured) => void write({ type: 'setTabObscured', id, obscured }, 'Privacy settings updated.')} /> },
-        { id: 'mcp', category: 'integrations', terms: 'local mcp chatgpt codex tools connection permissions read only approval browser client setup activity', content: <McpPanel /> },
+        { id: 'mcp', category: 'integrations', column: 'secondary', terms: 'local mcp chatgpt codex tools connection permissions read only approval browser client setup activity', content: <McpPanel /> },
       ],
     },
     {
       id: 'data', title: 'Data & storage', hint: 'Keep useful data close and your saved work protected.',
       cards: [
         { id: 'cache', category: 'data', terms: 'cache retention disk memory snapshots market images previews limits startup', content: <CachePanel /> },
-        { id: 'backups', category: 'data', terms: 'automatic backups saved data export import restore storage location portfolios cards finance', content:
+        { id: 'backups', category: 'data', column: 'secondary', terms: 'automatic backups saved data export import restore storage location portfolios cards finance', content:
           <UserDataPanel mode="backups" onRun={onRunMaintenance} busy={busy} sourcePath={holdingsPath}
             lastBackupAt={settings.lastBackupAt} automaticBackup={settings.automaticBackup} /> },
+        { id: 'maintenance', category: 'data', column: 'secondary', terms: 'maintenance reset cache clear remove delete user data portfolios cards finance', content:
+          <UserDataPanel mode="maintenance" onRun={onRunMaintenance} busy={busy} sourcePath={holdingsPath} /> },
       ],
     },
     {
       id: 'startup', title: 'Startup & providers', hint: 'Detailed loading progress and request pressure live here in Settings.',
       cards: [
-        { id: 'api', category: 'diagnostics', terms: 'startup providers api usage requests rate limit queue directory health failures loading progress', wide: true, content: <ApiUsagePanel /> },
-        { id: 'load-order', category: 'diagnostics', terms: 'startup page load order timings priority failures export ai report', wide: true, content: <PageLoadOrderPanel /> },
+        { id: 'api', category: 'diagnostics', terms: 'startup providers api usage requests rate limit queue directory health failures loading progress', content: <ApiUsagePanel /> },
+        { id: 'load-order', category: 'diagnostics', terms: 'startup page load order timings priority failures export ai report', content: <PageLoadOrderPanel /> },
       ],
     },
     {
-      id: 'maintenance', title: 'Diagnostics & maintenance', hint: 'Inspect feed health and recover safely when something needs attention.',
+      id: 'health', title: 'Data health', hint: 'Inspect current feed results and previous-session observations.',
       cards: [
         { id: 'health', category: 'diagnostics', terms: 'data health feed fresh stale errors failed previous session report copy clear history', content:
           <DataHealthPanel onStatus={(text) => setStatus({ text, tone: 'positive' })} /> },
-        { id: 'maintenance', category: 'data', terms: 'maintenance reset cache clear remove delete user data portfolios cards finance', content:
-          <UserDataPanel mode="maintenance" onRun={onRunMaintenance} busy={busy} sourcePath={holdingsPath} /> },
       ],
     },
   ]
@@ -241,8 +241,12 @@ export function SettingsPage({
             <header className="settings-group-heading"><span aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
               <div><h2 id={`settings-group-${group.id}`}>{group.title}</h2><p>{group.hint}</p></div>
             </header>
-            <div className="settings-grid">{group.cards.map(card => <div key={card.id} hidden={!matches(card)}
-              className={`settings-card${card.wide ? ' settings-card--wide' : ''}`} data-settings-card={card.id}>{card.content}</div>)}</div>
+            <div className="settings-grid">{[undefined, 'secondary'].map(column => {
+              const cards = group.cards.filter(card => card.column === column)
+              return <div key={column ?? 'primary'} className="settings-column" hidden={!cards.some(matches)}>
+                {cards.map(card => <div key={card.id} hidden={!matches(card)} className="settings-card" data-settings-card={card.id}>{card.content}</div>)}
+              </div>
+            })}</div>
           </section>)}
           {resultCount === 0 && <div className="settings-empty"><h2>No settings match your search.</h2>
             <p>Try a different term or search across all categories.</p>

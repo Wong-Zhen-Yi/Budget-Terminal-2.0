@@ -23,7 +23,7 @@ try {
     const wait = ms => new Promise(resolve => setTimeout(resolve, ms))
     const visible = node => !!node && node.getClientRects().length > 0
     const card = id => document.querySelector('[data-settings-card="' + id + '"]')
-    const choose = id => document.querySelector('.settings-tabs [data-settings-category="' + id + '"]').click()
+    const choose = id => [...document.querySelectorAll('[data-settings-category="' + id + '"]')].find(visible).click()
     const clickText = (scope, text) => [...scope.querySelectorAll('button')].find(button => button.textContent === text).click()
     const setSearch = async value => {
       const input = document.querySelector('input[aria-label="Search settings"]')
@@ -52,6 +52,11 @@ try {
       choose('workspace'); await wait(80)
       check(visible(card('navigation')) && !visible(card('api')), 'Category filtering failed')
       check(card('api') === original, 'Filtering remounted diagnostics')
+      const shortcutDetails = document.querySelector('.settings-shortcut-details')
+      check(!shortcutDetails.open && document.querySelectorAll('.settings-shortcuts kbd').length === 7, 'Compact shortcut reference missing')
+      shortcutDetails.querySelector('summary').click(); await wait(80)
+      check(shortcutDetails.open && visible(shortcutDetails.querySelector('table')), 'Full shortcut explanations inaccessible')
+      shortcutDetails.querySelector('summary').click(); await wait(80)
       const clock = card('clock').querySelector('input[type=checkbox]')
       clock.click(); await wait(80)
       check(window.fixtureSettings.time12h === false && !clock.checked, 'Clock mutation did not persist and update the control')
@@ -63,11 +68,14 @@ try {
       choose('all'); await wait(80)
       await setSearch('backup')
       check(visible(card('backups')) && !visible(card('navigation')), 'Settings search failed')
+      const backupGrid = card('backups').closest('.settings-grid').getBoundingClientRect()
+      check(Math.abs(card('backups').getBoundingClientRect().width - backupGrid.width) < 2, 'Single search result leaves an empty column')
       await setSearch('no-such-setting')
       check(visible(document.querySelector('.settings-empty')), 'No-results recovery missing')
       clickText(document.querySelector('.settings-empty'), 'Show all settings'); await wait(80)
       check(visible(card('navigation')) && visible(card('api')), 'Reset search failed')
       choose('data'); await wait(80)
+      check(card('maintenance').getBoundingClientRect().top - card('backups').getBoundingClientRect().bottom <= 16, 'Maintenance leaves a large gap below backups')
       clickText(card('maintenance'), 'Clear All User Data and Cards'); await wait(80)
       check(document.querySelector('[role=dialog]') && window.maintenanceCalls.length === 0, 'Destructive action bypassed confirmation')
       clickText(document.querySelector('[role=dialog]'), 'Cancel'); await wait(80)
@@ -95,6 +103,10 @@ try {
       check(scroll.scrollWidth <= scroll.clientWidth + 1, 'Settings content overflows horizontally at ' + innerWidth)
       check(scroll.clientHeight > 100 && scroll.scrollHeight > scroll.clientHeight, 'Settings lost its own scrollport')
       check([...document.querySelectorAll('.settings-card')].filter(visible).every(node => node.getBoundingClientRect().right <= innerWidth + 1), 'Card clipped horizontally')
+      for (const grid of [...document.querySelectorAll('.settings-grid')].filter(visible)) {
+        const columns = [...grid.children].filter(visible)
+        if (columns.length === 1) check(Math.abs(columns[0].getBoundingClientRect().width - grid.getBoundingClientRect().width) < 2, 'Single visible column must fill its group')
+      }
       return 'PASS: responsive Settings at ' + innerWidth + 'px'
     }
     window.finish = () => { host.unmount(); client.clear() }
