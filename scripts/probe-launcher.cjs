@@ -26,8 +26,6 @@ for (const platform of ['win32', 'darwin', 'linux']) {
 }
 for (const [file, command] of [
   ['Launch Budget Terminal.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -Dev/],
-  ['Launch Budget Terminal.command', /^node scripts\/launch\.cjs --dev$/m],
-  ['Launch Budget Terminal.sh', /^exec node scripts\/launch\.cjs --dev$/m],
 ]) {
   const source = readFileSync(resolve(__dirname, '..', file), 'utf8').replace(/\r\n/g, '\n')
   assert.match(source, command, `${file} must open live mode on double click`)

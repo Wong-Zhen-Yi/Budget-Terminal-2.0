@@ -97,11 +97,8 @@ npm install
 npm run dev
 ```
 
-Prefer a launcher? Open the file for your operating system from the checkout:
-
-| Windows | macOS | Linux |
-| :--- | :--- | :--- |
-| [Launch Budget Terminal.cmd](Launch%20Budget%20Terminal.cmd) | [Launch Budget Terminal.command](Launch%20Budget%20Terminal.command) | [Launch Budget Terminal.sh](Launch%20Budget%20Terminal.sh) |
+Prefer a Windows launcher? Open [Launch Budget Terminal.cmd](Launch%20Budget%20Terminal.cmd)
+from the checkout. Double-click launchers are provided for Windows only.
 
 Each launcher checks the runtime, installs dependencies, verifies Electron, builds
 MCP tools, and opens the app with live code updates. Keep its terminal open while using
@@ -117,7 +114,7 @@ command uses this same runtime recovery, even if your shell has an older Node.js
 Other command-line `npm` commands still use the Node.js installation configured in
 your shell.
 
-For live code updates, double-click the launcher for your operating system or run
+For live code updates, double-click the Windows launcher or run
 `npm run dev` from the repository root. Close any existing Budget Terminal window
 first (the app allows only one running instance). Live mode checks dependencies,
 verifies Electron and builds MCP tools before starting `electron-vite dev --watch`.
@@ -134,15 +131,6 @@ runtimes patched and fully restart the app after updating. Startup rejects
 certificate-verification bypasses, and the launcher forces npm certificate checks.
 See the [certificate security notes](docs/certificate-security.md) for verification
 and guidance for separate Python environments.
-
-On Steam Deck, use Desktop Mode and run `npm run setup:linux` once to add Budget
-Terminal to the application menu. The launcher finds Node in `~/.local/bin` even
-when opened from Dolphin. It builds the latest source on each launch, and the
-window fits the display's available work area, including the Deck's 1280×800 screen.
-For Gaming Mode, add Budget Terminal from the application menu as a non-Steam game
-and leave Proton compatibility disabled. A keyboard and mouse or Steam Input's
-trackpad mouse controls are useful for the research tables. No SteamOS system
-partition changes are required. All implemented pages still load at startup.
 
 The launcher also checks Codex for the **Agents** page and passes the detected
 executable to the app. It detects the Windows Codex desktop installation, native

@@ -1,4 +1,5 @@
 @echo off
+echo Double-click launchers are provided for Windows only.
 echo Recovery fixes: valuation retries degraded results, blocked news images cool down, semiconductor rows populate from saved data, and startup diagnostics retain important events. All pages still preload; details remain in Settings.
 echo MCP upgraded: typed results, research workflows, stable paging, structured errors, durable write recovery and category permissions in Settings. All pages still preload.
 echo Settings dashboard: heading removed; real memory, provider latency and automatic backup size charts. Request activity supports partially measured provider queues.
