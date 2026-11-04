@@ -1,3 +1,4 @@
+import { diagnosticRequest } from '../services/diagnosticLog.js'
 import { readPageProgress, withPageProgress } from '../services/pageProgress.js'
 import { serviceReadKey } from '../shared/serviceReadKey.js'
 import { rateGate } from '../services/yahoo/rateGate.js'
@@ -100,9 +101,15 @@ const changedDomains = new Map<string, SavedDataDomain>([
 const pendingReads = new Map<string, Promise<unknown>>()
 
 export type RegisterService = <Request>(channel: string, run: (request: Request) => unknown) => void
+const diagnosticPollingChannels = new Set<string>([CHANNELS.apiUsage, CHANNELS.pageProgress, CHANNELS.heatmapProgress, CHANNELS.startupPriority])
 
 /** Register provider routes for Electron IPC. */
-export function registerServiceHandlers(register: RegisterService): void {
+export function registerServiceHandlers(registerRoute: RegisterService): void {
+  const register = <Request>(channel: string, run: (request: Request) => unknown): void => {
+    // High-frequency progress polling is deliberately excluded.
+    registerRoute(channel, (request: Request) => diagnosticPollingChannels.has(channel)
+      ? run(request) : diagnosticRequest(channel, () => run(request)))
+  }
   const provider = yahooProvider
 
   register(CHANNELS.apiUsage, () => getApiUsageSnapshot())

@@ -56,7 +56,7 @@ export function McpPanel() {
   const diagnostics = data?.diagnostics
   const policy = diagnostics?.policy
   const active = diagnostics?.activity.filter(entry => entry.durationMs === undefined).length ?? 0
-  return <Panel title="Local MCP" className="p-3">
+  return <Panel title="Local MCP">
     <p className={`mt-1 text-2xs ${data?.available ? 'text-up' : 'text-down'}`}>
       {data?.available ? `Ready · ${data.tools} tools for ChatGPT / Codex` : data?.error ?? error?.message ?? 'Checking connection…'}
     </p>
@@ -99,7 +99,7 @@ export function McpPanel() {
         }}>Copy client configuration</button><span className="ml-2" role="status">{copyMessage}</span>
       </>}
     </details>
-    <details className="mt-3 rounded border border-border p-2 text-2xs" open>
+    <details className="mt-3 rounded border border-border p-2 text-2xs">
       <summary className="cursor-pointer font-semibold text-text">Recent MCP activity · {active} active</summary>
       <p className="mt-1 text-text-muted">Last 100 calls, this session only. Arguments, results, website URLs, client IDs and error details are never logged. Connection heartbeats are excluded.</p>
       <p className="mt-1 text-text-muted">Write receipts: {diagnostics?.writeReceipts ?? 0}/{diagnostics?.writeReceiptLimit ?? 500}. Reusing a mutation requestId with the same arguments replays its receipt instead of editing twice. Receipts are lost on app restart; read saved records before retrying after a restart.</p>
@@ -117,7 +117,8 @@ export function McpPanel() {
     </details>
     <p className="mt-2 text-2xs text-text-muted">Cancellation stops pending approvals and new scan/capture work. Shared provider requests already in flight may finish. An executing edit may still complete; cancellation does not roll it back.</p>
     {cancel.error && <p role="alert" className="text-down text-2xs">Could not cancel the request.</p>}
-    <h3 className="mt-3 text-xs font-semibold text-text">MCP capabilities · {capabilities.length}</h3>
+    <details className="mt-3 rounded border border-border p-2 text-2xs">
+    <summary className="cursor-pointer font-semibold text-text">Manage tools · {capabilities.length} MCP capabilities</summary>
     <div className="mt-2 grid gap-2 md:grid-cols-2" aria-label="MCP capabilities">
       {groups.map((group, index) => {
         const entries = capabilities.filter((entry) => entry.group === index)
@@ -132,6 +133,7 @@ export function McpPanel() {
         </details>
       })}
     </div>
+    </details>
     <p className="mt-2 text-2xs text-text-muted">Edits update local records and automatic backups. Broker orders, bulk backup import/export, clearing all user data and cache reset stay outside MCP.</p>
   </Panel>
 }

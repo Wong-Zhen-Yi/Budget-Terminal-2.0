@@ -22,7 +22,7 @@ export function ClockPanel({
   const zone = CLOCK_COUNTRIES.find((entry) => entry.code === country)?.zone ?? 'America/New_York'
 
   return (
-    <Panel title="Preferences">
+    <Panel title="Clock preferences">
       <div className="flex flex-col gap-2 p-2">
         <SectionHeader title="Clock" hint="Set the top-bar market country and display format." />
         <div className="flex items-center gap-2">

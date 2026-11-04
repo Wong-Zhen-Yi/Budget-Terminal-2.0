@@ -14,30 +14,23 @@ import type {
 import { api, queryKeys } from './client'
 import { forcing } from './queries'
 import { queryFreshness } from './queryPersistence'
+import { FRESHNESS } from '@shared/freshness'
 
-/**
- * The News page's queries.
- *
- * `refetchInterval` is deliberately `false`, like Trading Volumes and unlike every other
- * page module. The reference has no timer either — `init_page34` creates none, and refresh
- * is Reload or the page's own button. Two reasons to keep it that way: one load is every
- * holding plus seven macro symbols through the rate gate plus six RSS fetches, and a
- * background refetch would reshuffle the card grid out from under whoever is mid-article
- * in the reader.
- */
+/** Refresh the mounted News page on the same five-minute cadence as its source caches. */
 export function useNewsPage(tickers: string[]): UseQueryResult<Envelope<NewsPagePayload>> {
   return useQuery({
     queryKey: queryKeys.newsPage(tickers),
     queryFn: () => api.newsPage({ tickers, force: forcing() }),
     enabled: tickers.length > 0,
-    refetchInterval: false,
+    refetchInterval: FRESHNESS.newsPage,
+    refetchIntervalInBackground: false,
     staleTime: queryFreshness(queryKeys.newsPage(tickers)),
   })
 }
 
 /**
  * The page's own Refresh, which passes `force` outright rather than relying on the Reload
- * window — without it the main process would answer from its own 15-minute TTL cache and
+ * window — without it the main process would answer from its own five-minute TTL cache and
  * the button would look dead.
  */
 export function useRefreshNewsPage(tickers: string[]): () => Promise<void> {

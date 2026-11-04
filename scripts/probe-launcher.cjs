@@ -13,6 +13,16 @@ const { supportedNodeVersion, supportedNpmVersion, runtimeEnvironment, assertCer
 const { version: electronVersion } = require('electron/package.json')
 
 const log = { log() {}, error() {} }
+for (const platform of ['win32', 'darwin', 'linux']) {
+  const calls = []
+  assert.equal(launch({ logs: true, platform, nodeVersion: '24.22.1', log,
+    locateCodex() { assert.fail('The log viewer must not initialize Agents') },
+    spawn(command, args) { calls.push([command, args]); return { status: 0 } },
+  }), 0)
+  assert.equal(calls.length, 2, 'Viewer launch must only build its own bundles and start Electron')
+  assert(calls[0][1][0].endsWith('build-log-viewer.cjs'))
+  assert(calls[1][1][0].endsWith('logViewer.js'))
+}
 for (const [file, command] of [
   ['Launch Budget Terminal.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -Dev/],
   ['Launch Budget Terminal.command', /^node scripts\/launch\.cjs --dev$/m],
@@ -131,7 +141,7 @@ const buildDirectory = mkdtempSync(join(tmpdir(), 'budget-launcher-build-'))
 try {
   const directory = join(buildDirectory, 'desktop with spaces # %')
   assert.throws(() => verifyDesktopBuild(directory), /desktop build is incomplete/)
-  for (const file of ['out/main/main.js', 'out/main/quantWorker.js', 'out/main/cacheWorker.js', 'out/preload/preload.cjs', 'out/renderer/assets/entry.js', 'out/renderer/assets/theme.css']) {
+  for (const file of ['out/main/main.js', 'out/main/logViewer.js', 'out/preload/logViewer.cjs', 'out/main/quantWorker.js', 'out/main/cacheWorker.js', 'out/preload/preload.cjs', 'out/renderer/assets/entry.js', 'out/renderer/assets/theme.css']) {
     mkdirSync(resolve(directory, file, '..'), { recursive: true })
     writeFileSync(join(directory, file), 'fixture')
   }

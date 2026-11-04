@@ -340,3 +340,7 @@ Keep credentials, personal financial records, and generated bundles out of commi
   <strong>Budget Terminal 2.0</strong><br>
   Markets, research, and personal finance in one desktop workspace.
 </p>
+
+### Diagnostic logs
+
+Persistent local diagnostics are enabled automatically. Open **Launch Diagnostic Logs** for the independent viewer, or press **Ctrl+Shift+L** inside Budget Terminal. The viewer supports live updates, filtering, record inspection and JSONL export, including after the app closes. See [Diagnostic logging](docs/diagnostic-logging.md) for event coverage, retention and privacy details.

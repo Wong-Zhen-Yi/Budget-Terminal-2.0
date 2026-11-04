@@ -1,4 +1,6 @@
 #!/bin/sh
+echo "News refreshes every five minutes while the page is open; news source caches use the same cadence."
+echo "Settings redesign: grouped navigation, search, privacy, backups and maintenance. All pages still preload; diagnostics stay in Settings."
 echo 'News: removed partial-feed status indicators from the page. Feed coverage and startup diagnostics remain in Settings; all pages still preload.'
 echo "Stock charts leave 35 percent of the plot to the right of the latest bar; disabled indicator panes release their space."
 echo "Agents includes the new quick prompt: Summarize my portfolio during latest trading day."
@@ -61,4 +63,5 @@ echo "All implemented pages preload at startup; progress and failures remain vis
 echo "Settings Page Load Order includes Export for AI for a local startup diagnostic text report. Nothing is uploaded automatically."
 echo "Includes bounded 4 MB News images, corrected daily S&P500 holdings freshness and expiry-aware WTI contract selection."
 echo "Pre-Market futures recover through daily history when hourly feeds fail or return stale data; genuine outages remain visible."
+echo "Persistent diagnostic logging retains up to the last 15 days. Open Launch Diagnostic Logs for the independent viewer, or press Ctrl+Shift+L in the app."
 exec node scripts/launch.cjs --dev

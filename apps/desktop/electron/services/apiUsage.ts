@@ -1,5 +1,6 @@
 import type { ApiProviderUsage, ApiUsageSnapshot } from '../shared/contract.js'
 import { rateGate } from './yahoo/rateGate.js'
+import { diagnosticLog, diagnosticRequestContext, faultCode } from './diagnosticLog.js'
 
 interface ProviderDefinition {
   label: string
@@ -161,7 +162,17 @@ export class ApiUsageTracker {
 export const apiUsageTracker = new ApiUsageTracker()
 
 export function trackApiRequest<T>(providerId: string, task: () => Promise<T>): Promise<T> {
-  return apiUsageTracker.track(providerId, task)
+  if (!Object.hasOwn(PROVIDERS, providerId)) return apiUsageTracker.track(providerId, task)
+  const started = performance.now()
+  const requestId = diagnosticRequestContext.getStore()
+  const context: Record<string, number> = requestId === undefined ? {} : { requestId }
+  return apiUsageTracker.track(providerId, task).then(result => {
+    diagnosticLog.write('debug', 'provider', 'request-complete', { ...context, provider: providerId, durationMs: Math.round(performance.now() - started) })
+    return result
+  }, error => {
+    diagnosticLog.write('warn', 'provider', 'request-failed', { ...context, provider: providerId, durationMs: Math.round(performance.now() - started), code: faultCode(error) })
+    throw error
+  })
 }
 
 export function getApiUsageSnapshot(): ApiUsageSnapshot {

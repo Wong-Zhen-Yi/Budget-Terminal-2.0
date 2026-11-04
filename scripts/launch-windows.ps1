@@ -1,4 +1,4 @@
-param([switch]$RuntimeOnly, [switch]$Dev)
+param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs)
 
 $ErrorActionPreference = 'Stop'
 $runtimeCheck = Join-Path $PSScriptRoot 'runtime.cjs'
@@ -89,6 +89,7 @@ function Start-BudgetTerminal {
     Write-Host "Using Node.js $(& $node --version)."
     $launchArguments = @()
     if ($Dev) { $launchArguments += '--dev' }
+    if ($Logs) { $launchArguments += '--logs' }
     & $node (Join-Path $PSScriptRoot 'launch.cjs') @launchArguments
     exit $LASTEXITCODE
   } catch {

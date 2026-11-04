@@ -84,6 +84,8 @@
     "mcp": "node apps/desktop/out/mcp/server.mjs",
     "probe:mcp": "npm run probe:mcp --workspace budget-terminal-desktop",
     "probe:amzn": "npm run --workspace budget-terminal-desktop probe:amzn --",
-    "probe:amzn-ui": "npm run --workspace budget-terminal-desktop probe:amzn-ui --"
+    "probe:amzn-ui": "npm run --workspace budget-terminal-desktop probe:amzn-ui --",
+    "probe:diagnostics": "npm run --workspace budget-terminal-desktop probe:diagnostics --",
+    "probe:diagnostics-ui": "npm run --workspace budget-terminal-desktop probe:diagnostics-ui --"
   }
 }

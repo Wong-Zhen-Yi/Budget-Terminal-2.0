@@ -12,6 +12,10 @@ import { isYouTubeEmbedUrl } from './shared/youtubePlayer.js'
 import { desktopWindowSize } from './shared/windowSize.js'
 import { configureRendererCacheShutdown } from './services/rendererCacheShutdown.js'
 import { assertDesktopCertificateSecurity } from './shared/certificateSecurity.js'
+import { startDiagnostics, observeDiagnosticWindow } from './services/diagnosticHost.js'
+import { diagnosticLog, faultCode } from './services/diagnosticLog.js'
+
+startDiagnostics()
 
 const dirname = fileURLToPath(new URL('.', import.meta.url))
 const isDev = !app.isPackaged
@@ -58,6 +62,7 @@ function createWindow(): BrowserWindow {
   })
 
   configureBrowserWindow(window)
+  observeDiagnosticWindow(window)
   configureYouTubePlayer(window)
   configureRendererCacheShutdown(window)
 
@@ -155,6 +160,7 @@ if (ownsInstance) app.whenReady().then(async () => {
     void startAgents().catch(error => console.warn('Codex startup connection failed:', error))
     createWindow()
   } catch (error) {
+    diagnosticLog.write('error', 'app', 'startup-failed', { code: faultCode(error) })
     dialog.showErrorBox('Budget Terminal could not start', error instanceof Error ? error.message : String(error))
     app.quit()
     return
@@ -172,6 +178,7 @@ app.on('window-all-closed', () => {
 let finishingQuit = false
 let drainedQuit = false
 app.on('before-quit', (event) => {
+  diagnosticLog.write('info', 'app', 'shutdown-requested')
   if (drainedQuit || (!stopMcp && !flushAgents && !flushNotifications && !closeCache && !backupPending?.())) return
   event.preventDefault()
   if (finishingQuit) return

@@ -3689,6 +3689,7 @@ export interface FxRequest extends BackgroundRequest {
 export type WindowAction = 'minimize' | 'maximize' | 'close'
 
 export interface DesktopApi {
+  reportDiagnostics: (report: { kind: 'pages'; pages: { page: string; state: string }[] } | { kind: 'error' | 'unhandled-rejection'; line?: number; column?: number }) => void
   onEquityMarketChanged(listener: (update: EquityMarketUpdate) => void): () => void
   browserStatus(): Promise<Envelope<BrowserState>>
   browserResearch(request: BrowserRequest): Promise<Envelope<BrowserResult>>

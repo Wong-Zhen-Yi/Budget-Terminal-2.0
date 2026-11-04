@@ -35,7 +35,7 @@ export function NavigationPanel({
   const index = tabs.findIndex((tab) => tab.id === selected)
 
   return (
-    <Panel title="Page Navigation">
+    <Panel title="Pages & navigation">
       <div className="flex flex-col gap-2 p-2">
         <SectionHeader
           title="Visible Pages"
@@ -51,7 +51,10 @@ export function NavigationPanel({
                   tabIndex={0}
                   onClick={() => setSelected(tab.id)}
                   onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') setSelected(tab.id)
+                    if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+                      event.preventDefault()
+                      setSelected(tab.id)
+                    }
                   }}
                   className={`flex h-8 cursor-pointer items-center gap-2 px-2 ${
                     tab.id === selected ? 'bg-accent-dim' : 'hover:bg-surface-hover'
@@ -89,6 +92,7 @@ export function NavigationPanel({
             Reset Order
           </Button>
         </div>
+        <p className="text-2xs text-text-muted">Hiding a page only changes navigation. Every implemented page still loads at startup.</p>
       </div>
     </Panel>
   )

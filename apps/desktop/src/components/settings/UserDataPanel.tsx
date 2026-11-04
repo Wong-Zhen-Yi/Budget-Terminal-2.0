@@ -37,6 +37,7 @@ export function UserDataPanel({
   sourcePath,
   lastBackupAt,
   automaticBackup,
+  mode = 'all',
 }: {
   onRun: (action: MaintenanceAction) => void
   busy: MaintenanceAction | null
@@ -44,6 +45,7 @@ export function UserDataPanel({
   sourcePath: string
   lastBackupAt?: number
   automaticBackup?: AutomaticBackupStatus
+  mode?: 'all' | 'backups' | 'maintenance'
 }) {
   const [pending, setPending] = useState<MaintenanceAction | null>(null)
   const confirmation = pending ? CONFIRMATIONS[pending] : undefined
@@ -56,16 +58,17 @@ export function UserDataPanel({
   }
 
   return (
-    <Panel title="User Data">
+    <Panel title={mode === 'maintenance' ? 'Maintenance' : 'Backups & saved data'} className={mode === 'maintenance' ? 'settings-maintenance' : ''}>
       <div className="flex flex-col gap-2 p-2">
         <SectionHeader
-          title="Backups and Maintenance"
-          hint="Export or restore one JSON file holding portfolios, personal finance, Cards and these settings."
+          title={mode === 'maintenance' ? 'Recover safely' : 'Protect your saved work'}
+          hint={mode === 'maintenance' ? 'Review the scope before resetting or removing data. Both actions require confirmation.' : 'Export or restore one JSON file holding portfolios, personal finance, Cards and these settings.'}
         />
+        {mode !== 'maintenance' && <>
         {automaticBackup ? (
           <div className="text-2xs text-text-muted">
             <p>Automatic backup updates the same file after every saved change.</p>
-            <p className="break-all">{automaticBackup.path}</p>
+            <details className="settings-path"><summary>Show backup location</summary><p className="break-all select-text">{automaticBackup.path}</p></details>
             {automaticBackup.error ? (
               <p role="alert" className="text-warn">Automatic backup failed: {automaticBackup.error}</p>
             ) : null}
@@ -76,7 +79,9 @@ export function UserDataPanel({
           {latestBackupAt ? `Last backup prepared: ${timestampLabel(latestBackupAt)}.` : 'No backup export recorded yet.'}
           {' Keep a copy outside this computer.'}
         </p>
+        </>}
         <div className="grid grid-cols-2 gap-2">
+          {mode !== 'maintenance' && <>
           <Button
             variant="accent"
             className="col-span-2"
@@ -93,16 +98,20 @@ export function UserDataPanel({
           >
             {busy === 'importUserData' ? 'Importing...' : 'Import User Data and Cards'}
           </Button>
+          </>}
+          {mode !== 'backups' && <>
           <Button variant="danger" disabled={busy !== null} onClick={() => start('clearUserData')}>
             {busy === 'clearUserData' ? 'Clearing...' : 'Clear All User Data and Cards'}
           </Button>
           <Button variant="danger" disabled={busy !== null} onClick={() => start('resetCache')}>
             {busy === 'resetCache' ? 'Resetting...' : 'Reset Cache'}
           </Button>
+          </>}
         </div>
-        <p className="truncate text-2xs text-text-dim" title={sourcePath}>
-          Store: {sourcePath || 'not resolved'}
-        </p>
+        {mode !== 'backups' && <p className="text-2xs text-text-muted">Reset Cache keeps saved work. Clear User Data keeps settings and creates a rollback copy first.</p>}
+        {mode !== 'maintenance' && <details className="settings-path"><summary>Show saved data location</summary>
+          <p className="break-all select-text">{sourcePath || 'Not resolved'}</p>
+        </details>}
       </div>
 
       {pending && confirmation ? (

@@ -14,7 +14,8 @@ function platformName(platform) {
   return null
 }
 
-function launch({ development = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
+function launch({ development = false, logs = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
+  log.log('Persistent diagnostic logging retains up to the last 15 days. Open Launch Diagnostic Logs for the independent viewer, or press Ctrl+Shift+L in the app. No global diagnostics banner is added.')
   log.log('Stock charts leave 35 percent of the plot to the right of the latest bar; disabled indicator panes release their space.')
   log.log('Pages populate completed sections while remaining data loads; all pages still preload and startup failures remain visible.')
   log.log('Page Loading Status banner removed. Startup progress, failures and diagnostics remain in Settings; page readiness indicators remain available. Opening a page promotes its queued requests with fair background turns. Shared reads avoid duplicate work. Readers retain controls longer and evicted pages restore scroll. All pages still preload.')
@@ -38,6 +39,16 @@ function launch({ development = false, platform = process.platform, nodeVersion 
     log.error(error.message)
     return 1
   }
+  if (logs) {
+    log.log('Building the independent Diagnostic Logs viewer. The main application can stay open.')
+    const build = spawn(process.execPath, [require('node:path').join(root, 'scripts/build-log-viewer.cjs')], { cwd: root, env, stdio: 'inherit' })
+    if (build.error || build.status !== 0) return build.status || 1
+    const viewer = spawn(require('electron'), [require('node:path').join(root, 'apps/desktop/out/main/logViewer.js')], {
+      cwd: root, env, stdio: 'inherit', windowsHide: true,
+    })
+    return viewer.error ? 1 : viewer.status ?? 1
+  }
+
   log.log('Checking Codex for the Agents page...')
   const codexPath = locateCodex({ platform, environment: env })
   if (codexPath) {
@@ -123,7 +134,6 @@ function launch({ development = false, platform = process.platform, nodeVersion 
   log.log('Startup Yahoo pacing is now 3 requests per second (up from 1), without bursts, with up to 3 background requests in flight and a reserved foreground slot. All pages still preload; foreground requests take priority and rate limits trigger automatic backoff. Settings API Usage shows Yahoo rolling request counts, active requests and queued work, not a provider-reported quota or loading progress.')
   log.log('Pre-Market futures now try daily history when hourly refresh fails or returns stale data. Healthy daily fallbacks clear old degradation; retained stale prices keep their warnings. All pages still preload at startup.')
   log.log('Trading Volumes circles the matching dot and shows its ticker label when you hover over a ticker in the volume table. Beta centers the ticker cluster horizontally using median dollar volume, keeping all outliers visible and the log scale fixed during replay.')
-
   if (development) {
     log.log('Building local MCP tools before starting live development...')
     const mcp = npm(['run', 'build:mcp'])
@@ -173,6 +183,6 @@ function launch({ development = false, platform = process.platform, nodeVersion 
   return 0
 }
 
-if (require.main === module) process.exitCode = launch({ development: process.argv.includes('--dev') })
+if (require.main === module) process.exitCode = launch({ development: process.argv.includes('--dev'), logs: process.argv.includes('--logs') })
 
 module.exports = { launch, platformName }

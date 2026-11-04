@@ -89,3 +89,6 @@ conf/
 # Private Telegram bot credentials and remote conversation history.
 **/telegram-settings.bin*
 **/telegram-agents.json*
+
+# Local diagnostic exports (never commit private activity metadata).
+BudgetTerminal-diagnostics-*.jsonl
