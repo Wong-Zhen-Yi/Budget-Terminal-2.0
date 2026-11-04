@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -19,7 +19,7 @@ try {
       const fs = require('node:fs')
       const mkdirSync = fs.mkdirSync
       fs.mkdirSync = (path, ...args) => {
-        if (path === ${JSON.stringify(join(directory, 'profile', 'agents'))}) throw Error('Fixture Agent startup failure')
+        if (path === ${JSON.stringify(join(directory, 'data', 'electron-profile', 'agents'))}) throw Error('Fixture Agent startup failure')
         return mkdirSync(path, ...args)
       }
       require('node:module').syncBuiltinESMExports()
@@ -74,7 +74,13 @@ try {
     })
     assert.equal(output.code, 0, output.text)
     assert.match(output.text, /PASS: built desktop opens/)
-    if (agentFailure) assert.match(output.text, /Codex startup connection failed:.*Fixture Agent startup failure/)
+    if (agentFailure) {
+      const logs = join(directory, 'local', 'BudgetTerminal', 'logs')
+      const records = (await Promise.all((await readdir(logs)).filter(name => name.endsWith('.jsonl'))
+        .map(name => readFile(join(logs, name), 'utf8')))).join('\n').split('\n').filter(Boolean).map(line => JSON.parse(line))
+      assert(records.some(record => record.event === 'startup-stage-failed' && record.details.stage === 'agents'), 'Optional agent startup failure must record a fixed diagnostic stage')
+      assert(!JSON.stringify(records).includes('Fixture Agent startup failure'), 'Startup diagnostics must exclude raw exception messages')
+    }
     console.log(output.text.trim())
   }
 } finally {

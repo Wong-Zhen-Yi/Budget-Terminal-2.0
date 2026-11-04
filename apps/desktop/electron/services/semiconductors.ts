@@ -87,6 +87,22 @@ export async function getSemiconductors({ force = false }: SemiconductorsRequest
   const payload = emptySemiconductorsPayload(companies)
   const errors: EnvelopeError[] = []
   let cached = false
+  // Publish the entire saved grid before any provider refresh can delay it.
+  // Preview reads must not become dependencies of the final refreshed envelope.
+  await Promise.all(payload.rows.map(async row => {
+    await Promise.all((['market', 'profile', 'news'] as const).map(async block => {
+      const saved = await storage.get<LaneData<SemiconductorMarket | SemiconductorProfile | NewsArticle[]>>(
+        `semiconductors:v2:${row.company.symbol}:${block}`, { allowStale: true, observe: false })
+      if (!saved) return
+      if (block === 'market') row.market = saved.value.value as SemiconductorMarket
+      else if (block === 'profile') row.profile = saved.value.value as SemiconductorProfile
+      else row.news = saved.value.value as NewsArticle[]
+      row.fetchedAt[block] = saved.value.fetchedAt
+      row.progress[block] = saved.snapshot?.stale || (saved.snapshot?.expiresAt ?? Infinity) < Date.now()
+        ? 'stale' : saved.value.warnings.length ? 'partial' : 'loaded'
+    }))
+  }))
+  publishPageProgress(payload, SOURCE, errors, CHANNELS.semiconductors)
   const lane = async <T>(row: SemiconductorRow, block: Lane, ttl: number, loader: () => Promise<{ value: T; warnings: string[] }>, apply: (value: T) => void) => {
     try {
       const result = await storage.resolveWithStaleFallback<LaneData<T>>(`semiconductors:v2:${row.company.symbol}:${block}`, ttl,
@@ -100,18 +116,18 @@ export async function getSemiconductors({ force = false }: SemiconductorsRequest
       warnings.forEach(reason => errors.push(err(SOURCE, reason, `semiconductors-${block}`, row.company.symbol)))
     } catch (error) { errors.push(err(SOURCE, describeError(error), `semiconductors-${block}`, row.company.symbol)) } finally { publishPageProgress(payload, SOURCE, errors, CHANNELS.semiconductors) }
   }
-  // Bound the number of stock tasks; the shared rate gate additionally paces every
-  // individual Yahoo request and reserves foreground capacity during startup.
-  let cursor = 0
-  await Promise.all(Array.from({ length: Math.min(4, payload.rows.length) }, async () => {
-    while (cursor < payload.rows.length) {
-      const row = payload.rows[cursor++]
-      await Promise.all([
-        lane(row, 'market', TTL.semiconductors, () => fetchers.market(row.company.symbol, force), value => { row.market = value }),
-        lane(row, 'profile', TTL.profile, async () => ({ value: await fetchers.profile(row.company.symbol), warnings: [] }), value => { row.profile = value }),
-        lane(row, 'news', TTL.news, async () => ({ value: await fetchers.news(row.company.symbol), warnings: [] }), value => { row.news = value }),
-      ])
-    }
+  // Four workers per lane let slow news finish independently of market/profile
+  // work. The shared Yahoo gate still admits every individual provider request.
+  await Promise.all((['market', 'profile', 'news'] as const).map(async block => {
+    let cursor = 0
+    await Promise.all(Array.from({ length: Math.min(4, payload.rows.length) }, async () => {
+      while (cursor < payload.rows.length) {
+        const row = payload.rows[cursor++]
+        if (block === 'market') await lane(row, block, TTL.semiconductors, () => fetchers.market(row.company.symbol, force), value => { row.market = value })
+        else if (block === 'profile') await lane(row, block, TTL.profile, async () => ({ value: await fetchers.profile(row.company.symbol), warnings: [] }), value => { row.profile = value })
+        else await lane(row, block, TTL.news, async () => ({ value: await fetchers.news(row.company.symbol), warnings: [] }), value => { row.news = value })
+      }
+    }))
   }))
   payload.fetchedAt = Date.now()
   const usable = payload.rows.some(row => row.market || row.profile)

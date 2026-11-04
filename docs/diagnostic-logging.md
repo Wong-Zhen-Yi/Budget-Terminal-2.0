@@ -6,7 +6,8 @@ The diagnostic launcher builds only the viewer and does not clear application bu
 
 ## Events
 
-- Session start, runtime versions, platform, shutdown requests and completion, and startup failures.
+- Session start, runtime versions, platform, shutdown requests and completion, and startup failures with fixed stage names.
+- Valuation stage timings and classified failures, plus whether a snapshot attempted a reload or reused cached warnings. No ticker symbols, payloads or raw failure messages are logged.
 - Service request IDs, operation names, start/completion/failure, elapsed time, freshness, error counts and failure categories. Starts without completions help locate interrupted work; requests still running after 30 seconds emit a warning.
 - Tracked provider request durations and classified failures, plus Yahoo queue depth, rate and cooldown samples.
 - Startup page state transitions, including failure and recovery. States are sampled once per second; transient intermediate states may be coalesced.
@@ -19,7 +20,7 @@ Service IDs are unique within a process session. Tracked provider records carry 
 
 Files live in `%LOCALAPPDATA%\BudgetTerminal\logs` on Windows. Other platforms use `LOCALAPPDATA` when set, otherwise `~/.budget-terminal/cache`, followed by `BudgetTerminal/logs`. The fallback matches the application data-path setup so the app and viewer agree before and after startup. Application settings, browser profiles and source files are separate. Logs are local and are never uploaded automatically or included in application user-data backups.
 
-Each process writes its own session JSONL files. Files rotate at 4 MiB. On session creation and rotation, old log files are pruned to approximately 64 MiB and 15 days. Multiple simultaneously active writers may temporarily exceed this budget. Logging is rate-limited to 100 records per second with a 200-record burst; subsequent records and memory samples report the cumulative dropped count. Disk failures do not crash the application; the memory sampler reports storage availability and emits a terminal warning while unavailable. Complete JSONL records are written synchronously, so routine exits do not need an asynchronous flush. Abrupt OS termination can still lose a final record.
+Each process writes its own session JSONL files. Files rotate at 4 MiB. On session creation and rotation, old log files are pruned to approximately 64 MiB and 15 days. Multiple simultaneously active writers may temporarily exceed this budget. Debug events and important events (info, warning and error) have separate budgets, each allowing 100 records per second with a 200-record burst. Debug storms cannot consume the reserved completion, failure and page-transition budget. Subsequent records report cumulative drops split into debug and important events. Disk failures do not crash the application; the memory sampler reports storage availability and emits a terminal warning while unavailable. Complete JSONL records are written synchronously, so routine exits do not need an asynchronous flush. Abrupt OS termination can still lose a final record.
 
 Only explicitly selected technical metadata is recorded. Logging excludes request arguments, response data, portfolio and financial values, chat content, browser URLs/content/cookies, raw exception messages and stacks, arbitrary console arguments, file paths, emails, passwords and tokens. Error text is inspected transiently to choose a fixed category, then discarded. The embedded Browser's console and navigation are not captured. Logs can still reveal when you use the application and which pages or operations are active; review exported diagnostics before sharing them.
 

@@ -24,6 +24,8 @@ const MAX_AGE = 15 * 86400_000
 export function faultCode(error: unknown): string {
   const text = error instanceof Error ? `${error.name} ${error.message}` : typeof error === 'string' ? error : ''
   const codes: [RegExp, string][] = [
+    [/ERR_MODULE_NOT_FOUND|MODULE_NOT_FOUND|Cannot find (?:module|package)/i, 'module-unavailable'],
+    [/already (?:open|running|in use|using this data folder)|data.*lock|lock.*data/i, 'data-locked'],
     [/429|rate.?limit|too many requests/i, 'rate-limited'], [/timeout|timed out|deadline/i, 'timeout'],
     [/401|403|unauthori|forbidden|sign.?in/i, 'access-denied'], [/404|not found/i, 'not-found'],
     [/certificate|CERT_|TLS|SSL/i, 'certificate'], [/ENOSPC|disk full/i, 'disk-full'],
@@ -51,24 +53,39 @@ export class DiagnosticLog {
   private readonly stamp = new Date().toISOString().replace(/[:.Z]/g, '-')
   private failure = ''
   private dropped = 0
+  private droppedDebug = 0
+  private droppedImportant = 0
   private tokens = 200
+  private importantTokens = 200
   private refill = Date.now()
 
   constructor(readonly directory: string, private readonly maxFile = MAX_FILE, private readonly maxTotal = MAX_TOTAL) {}
 
-  status(): { failure: string; dropped: number } { return { failure: this.failure, dropped: this.dropped } }
+  status() { return { failure: this.failure, dropped: this.dropped, droppedDebug: this.droppedDebug, droppedImportant: this.droppedImportant } }
 
   /** Call sites supply fixed event names and explicitly selected technical metadata only. */
   write(level: LogLevel, area: string, event: string, details: LogEntry['details'] = {}): void {
     const now = Date.now()
     this.tokens = Math.min(200, this.tokens + (now - this.refill) / 10)
+    this.importantTokens = Math.min(200, this.importantTokens + (now - this.refill) / 10)
     this.refill = now
-    if (this.tokens < 1) { this.dropped++; return }
-    this.tokens--
+    // Debug floods cannot consume the reserved budget for completions, failures,
+    // lifecycle events and page transitions. Both lanes remain bounded.
+    const important = level !== 'debug'
+    if ((important ? this.importantTokens : this.tokens) < 1) {
+      this.dropped++
+      if (important) this.droppedImportant++
+      else this.droppedDebug++
+      return
+    }
+    if (important) this.importantTokens--
+    else this.tokens--
     try {
       mkdirSync(this.directory, { recursive: true, mode: 0o700 })
       const line = JSON.stringify({ time: new Date(now).toISOString(), session: this.session, pid: process.pid,
-        level, area, event, details: { ...details, ...(this.dropped ? { dropped: this.dropped } : {}) } } satisfies LogEntry) + '\n'
+        level, area, event, details: { ...details, ...(this.dropped ? {
+          dropped: this.dropped, droppedDebug: this.droppedDebug, droppedImportant: this.droppedImportant,
+        } : {}) } } satisfies LogEntry) + '\n'
       if (!this.file || this.bytes + Buffer.byteLength(line) > this.maxFile) {
         this.file = join(this.directory, `session-${this.stamp}-${this.session}-${this.part++}.jsonl`)
         this.bytes = 0

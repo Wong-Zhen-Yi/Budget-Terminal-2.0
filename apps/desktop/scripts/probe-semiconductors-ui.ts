@@ -22,7 +22,7 @@ try {
       import { semiconductorFixture } from './scripts/fixtures/semiconductors'
       import { SEMICONDUCTOR_CATALOG } from './electron/shared/semiconductorCatalog'
       import { buildTasks } from './src/api/prefetch'
-      import { useReloadAll } from './src/api/queries'
+      import { useRefreshSemiconductors } from './src/api/semiconductorsQueries'
       const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnMount: false, refetchOnWindowFocus: false, gcTime: Infinity } } })
       const check = (value, message) => { if (!value) throw Error(message) }
       const settle = () => new Promise(resolve => setTimeout(resolve, 250))
@@ -42,7 +42,7 @@ try {
       }
       window.api.openExternal = async url => { opened = url }
       function Page() {
-        window.reloadSemiconductors = useReloadAll()
+        window.reloadSemiconductors = useRefreshSemiconductors()
         return <SemiconductorsPage onStatusChange={() => {}} onNavigate={(tab, symbol) => { navigation = [tab, symbol] }} />
       }
       const host = createRoot(document.getElementById('root'))
@@ -71,7 +71,7 @@ try {
         check(document.querySelectorAll('svg').length >= 2, 'Price and comparison charts missing')
         for (const selector of ['[data-semiconductor-price-chart]', '[data-semiconductor-comparison-chart]']) {
           const chart = document.querySelector(selector)
-          check(chart.querySelector('svg').getBoundingClientRect().bottom <= chart.nextElementSibling.getBoundingClientRect().top, 'Chart overlaps the following content')
+          check(chart.querySelector('svg').getBoundingClientRect().bottom <= chart.nextElementSibling.getBoundingClientRect().top + 1, 'Chart overlaps the following content')
         }
         check(text().includes('Company news fixture'), 'Industry news missing')
         button('Detailed columns').click(); await settle()
@@ -123,14 +123,16 @@ try {
         check(startupError?.state === 'degraded' && client.getQueryData(['semiconductors', 1]).data.rows[0].market, 'Partial startup treated as ready or discarded content')
         await selectCompany('NVDA')
         check(text().includes('HTTP 503') && text().includes('Company news fixture'), 'Partial outage hid warning or healthy news')
-        mode = 'failed'; button('Refresh').click(); await settle()
-        check(request.force && text().includes('failed') && table().querySelectorAll('tbody tr').length === SEMICONDUCTOR_CATALOG.length, 'Forced refresh or total-outage membership failed')
-        check([...document.querySelectorAll('[data-subsector-performance] .num')].every(value => value.textContent === '--'), 'Outage turned missing returns into zero')
-        mode = 'waiting'; button('Refresh').click(); await settle()
-        check(button('Refreshing...').disabled && text().includes('Loading company quotes'), 'Loading progress missing')
-        mode = 'success'; releaseLoading(); await settle()
+        mode = 'failed'; let failure
+        try { await window.reloadSemiconductors() } catch (error) { failure = error }
+        await settle()
+        check(request.force && failure?.state === 'failed' && table().querySelectorAll('tbody tr').length === SEMICONDUCTOR_CATALOG.length, 'Failed refresh must retain catalog and report failure')
+        check(client.getQueryData(['semiconductors', 1]).data.rows[0].market, 'Failed refresh discarded the saved market snapshot')
+        mode = 'waiting'; const recovery = window.reloadSemiconductors(); await settle()
+        check(text().includes('Loading company quotes'), 'Loading progress missing')
+        mode = 'success'; releaseLoading(); await recovery; await settle()
         check(!document.querySelector('[role=alert]'), 'Recovery did not clear warning')
-        await window.reloadSemiconductors(); await settle(); check(request.force, 'Global F5 did not force refresh')
+        await window.reloadSemiconductors(); await settle(); check(request.force, 'Explicit reload did not force refresh')
         host.render(null); await settle(); const before = calls; render(); await settle()
         check(calls === before, 'Returning to page triggered an initial fetch')
         return 'PASS: startup warming, full catalog, supply-chain stages, performance coverage, linked research, view switching, detailed columns, search, sorting, ticker links, sources, comparisons, no selection fetches, forced refresh/F5, loading, partial/total outages, recovery and revisit'

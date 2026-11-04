@@ -17,6 +17,7 @@ try {
   const { TtlCache, cache } = await import('../electron/services/cache.js')
   const { getSemiconductors } = await import('../electron/services/semiconductors.js')
   const { withSourceEnvelope } = await import('../electron/services/sourceHealth.js')
+  const { withPageProgress, readPageProgress } = await import('../electron/services/pageProgress.js')
   const companies = SEMICONDUCTOR_CATALOG
   assert.equal(new Set(companies.map(company => company.symbol)).size, companies.length)
   for (const company of companies) {
@@ -99,6 +100,36 @@ try {
   assert.equal(failed.meta.freshness, 'failed')
   assert.equal(failed.data.rows.length, targets.length, 'Outages must retain catalog membership')
   assert(failed.data.rows.every(entry => Object.values(entry.progress).every(state => state === 'unavailable')))
+  // A slow news lane cannot hold back later companies' market/profile refreshes.
+  // Saved rows must already be visible while those providers remain pending.
+  const previewStorage = new TtlCache()
+  const previewTargets = companies.slice(0, 6)
+  await getSemiconductors({}, fetchers, previewStorage, previewTargets)
+  let releaseNews!: () => void
+  let releaseMarket!: () => void
+  const newsGate = new Promise<void>(resolve => { releaseNews = resolve })
+  const marketGate = new Promise<void>(resolve => { releaseMarket = resolve })
+  let marketsCompleted = 0
+  let profilesCompleted = 0
+  const pending = withPageProgress('semiconductors:read:probe', () => getSemiconductors({ force: true }, {
+    market: async () => { await marketGate; marketsCompleted++; return { value: row.market!, warnings: [] } },
+    profile: async () => { profilesCompleted++; return row.profile! },
+    news: async () => { await newsGate; return row.news },
+  }, previewStorage, previewTargets))
+  try {
+    for (let attempt = 0; attempt < 100 && profilesCompleted < previewTargets.length; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 1))
+    }
+    const preview = readPageProgress('semiconductors:read:probe')?.data as typeof first.data | undefined
+    assert(preview?.rows.every(entry => entry.market && entry.profile && entry.news.length), 'All saved lanes must be published before pending refreshes complete')
+    assert.equal(marketsCompleted, 0)
+    assert.equal(profilesCompleted, previewTargets.length, 'Slow news/market requests cannot block the profile lane')
+    releaseMarket()
+    for (let attempt = 0; attempt < 100 && marketsCompleted < previewTargets.length; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 1))
+    }
+    assert.equal(marketsCompleted, previewTargets.length, 'Slow news cannot block the market lane')
+  } finally { releaseMarket(); releaseNews(); await pending }
   // The shared cache protects failed providers with a ten-second retry cooldown,
   // including forced refreshes. Advance time instead of sleeping in the probe.
   const clock = Date.now

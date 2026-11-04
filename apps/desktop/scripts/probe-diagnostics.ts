@@ -45,6 +45,18 @@ try {
   const flooded = new DiagnosticLog(join(directory, 'flood'))
   for (let index = 0; index < 3000; index++) flooded.write('debug', 'test', 'flood')
   assert(flooded.status().dropped > 0, 'A log storm must be bounded')
+  flooded.write('error', 'app', 'startup-failed', { stage: 'services' })
+  flooded.write('info', 'startup', 'page-state', { page: 'news', state: 'ready' })
+  flooded.write('info', 'service', 'request-complete', { id: 1 })
+  const protectedEvents = readDiagnosticLogs(join(directory, 'flood')).entries
+  for (const event of ['startup-failed', 'page-state', 'request-complete']) {
+    assert(protectedEvents.some(entry => entry.event === event), `${event} must survive a debug flood`)
+  }
+  assert(flooded.status().droppedDebug > 0 && flooded.status().droppedImportant === 0)
+  for (let index = 0; index < 3000; index++) flooded.write('warn', 'test', 'important-flood')
+  assert(flooded.status().droppedImportant > 0, 'Important events still need a bounded rate')
+  assert.equal(faultCode(new Error('Cannot find package fixture')), 'module-unavailable')
+  assert.equal(faultCode(new Error('Application data is already in use')), 'data-locked')
   assert.equal(faultCode('HTTP 429 Authorization: Bearer fake-private-token'), 'rate-limited')
   assert.equal(faultCode(new Error('fetch failed https://private.invalid/?key=fixture')), 'network')
   assert.equal(faultCode('personal-fixture@example.invalid'), 'unknown')

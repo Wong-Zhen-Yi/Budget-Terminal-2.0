@@ -23,7 +23,9 @@ import {
   peerSymbols,
   type PeerInfo,
 } from '../../shared/valuationPeers.js'
-import { cache, TTL } from '../cache.js'
+import { cache, TTL, type TtlCache } from '../cache.js'
+import { captureSources, observeSource } from '../sourceHealth.js'
+import { diagnosticLog, diagnosticRequestContext, faultCode } from '../diagnosticLog.js'
 import { fetchRiskFreeSnapshot } from '../riskFree.js'
 import { paced, yahoo } from './client.js'
 import { withYahooSummary } from './requests.js'
@@ -163,8 +165,35 @@ async function retryInterrupted<T>(request: () => Promise<T>): Promise<T> {
     return await request()
   } catch (error) {
     const name = error instanceof Error ? error.name : ''
-    if (!/^(AbortError|TimeoutError)$/.test(name) && !/\b(aborted|timed out)\b/i.test(describeError(error))) throw error
+    // paced() already retries timeouts. Only retry transport aborts here; there is
+    // no caller cancellation signal on these shared, single-flight service reads.
+    if (name !== 'AbortError' && !/\baborted\b/i.test(describeError(error))) throw error
+    await new Promise(resolve => setTimeout(resolve, 250 + Math.floor(Math.random() * 100)))
     return request()
+  }
+}
+
+type ValuationStage = 'info' | 'statements' | 'history' | 'market' | 'peers' | 'quote'
+async function valuationStage<T>(stage: ValuationStage, run: () => Promise<T>): Promise<T> {
+  const started = performance.now()
+  const requestId = diagnosticRequestContext.getStore()
+  const context = { stage, ...(requestId === undefined ? {} : { requestId }) }
+  try {
+    const { value, snapshot } = await captureSources(run)
+    if (snapshot) observeSource(snapshot)
+    const result = value as { failures?: EnvelopeError[]; errors?: EnvelopeError[]; warnings?: string[] } | null
+    const failures = [...(snapshot?.failures ?? []), ...(result?.failures ?? result?.errors ?? []).map(error => error.reason), ...(result?.warnings ?? [])]
+    diagnosticLog.write(failures.length ? 'warn' : 'info', 'valuation', 'stage-complete', {
+      ...context, durationMs: Math.round(performance.now() - started), fromCache: snapshot?.fromCache ?? false,
+      stale: snapshot?.stale ?? false, errors: failures.length,
+      ...(failures.length ? { codes: [...new Set(failures.map(faultCode))].join(',') } : {}),
+    })
+    return value
+  } catch (error) {
+    diagnosticLog.write('warn', 'valuation', 'stage-failed', {
+      ...context, durationMs: Math.round(performance.now() - started), code: faultCode(error),
+    })
+    throw error
   }
 }
 
@@ -678,13 +707,13 @@ async function fetchUncached(
   },
 ): Promise<{ payload: ValuationPayload; errors: EnvelopeError[] }> {
   const errors: EnvelopeError[] = []
-  const info = await fetchers.info(symbol, force)
+  const info = await valuationStage('info', () => fetchers.info(symbol, force))
   const analyst = analystEstimates(analystCache.get(symbol) ?? [])
 
   const [statementsResult, historyResult, marketResult] = await Promise.allSettled([
-    fetchers.statements(symbol, force),
-    fetchers.history(symbol, force),
-    fetchers.market(force),
+    valuationStage('statements', () => fetchers.statements(symbol, force)),
+    valuationStage('history', () => fetchers.history(symbol, force)),
+    valuationStage('market', () => fetchers.market(force)),
   ])
 
   let annual: FundamentalSeriesMap | null = null
@@ -744,7 +773,7 @@ async function fetchUncached(
     throw new Error(`No quote data found for '${symbol}'. Check the ticker symbol.`)
   }
 
-  const peers = await fetchers.peers(symbol, info, customPeers, force)
+  const peers = await valuationStage('peers', () => fetchers.peers(symbol, info, customPeers, force))
   const trends = buildTrends(annualMap, metrics)
   const suggestions = deriveValuationSuggestions(metrics, trends, metrics.basisType, {
     market,
@@ -800,21 +829,31 @@ export async function getValuation(
   symbolInput: string,
   customPeersInput: string[] = [],
   force = false,
+  dependencies = { storage: cache as TtlCache, load: fetchUncached, quote: getQuote },
 ): Promise<ValuationFetchResult> {
   const symbol = symbolInput.trim().toUpperCase()
   if (!symbol) throw new Error('Enter a ticker to load valuation data.')
   const customPeers = normalizePeerSymbols(customPeersInput, symbol)
-  const resolved = await cache.resolveWithStaleFallback(
-    `valuation:equity-perps-v1:${symbol}:${customPeers.join(',')}`,
-    TTL.profile,
-    () => fetchUncached(symbol, customPeers, force),
+  let attempted = false
+  const resolved = await dependencies.storage.resolveWithStaleFallback(
+    `valuation:equity-perps-v2:${symbol}:${customPeers.join(',')}`,
+    result => result.errors.length ? 10_000 : TTL.profile,
+    () => { attempted = true; return dependencies.load(symbol, customPeers, force) },
     { force },
   )
   const priceErrors: EnvelopeError[] = []
-  const quote = equityMarket(symbol) ? await getQuote(symbol, force).catch(error => {
+  const quote = equityMarket(symbol) ? await valuationStage('quote', () => dependencies.quote(symbol, force)).catch(error => {
     priceErrors.push({ source: 'market prices', operation: 'quote', symbol, reason: `Current price refresh failed: ${describeError(error)}` })
     return undefined
   }) : undefined
+  diagnosticLog.write(resolved.stale || resolved.value.errors.length || priceErrors.length ? 'warn' : 'info', 'valuation', 'snapshot', {
+    ...(diagnosticRequestContext.getStore() === undefined ? {} : { requestId: diagnosticRequestContext.getStore()! }),
+    attempted, fromCache: resolved.fromCache, stale: resolved.stale,
+    cachedErrors: resolved.fromCache ? resolved.value.errors.length : 0,
+    errors: resolved.value.errors.length + priceErrors.length,
+    codes: [...new Set([...resolved.value.errors.map(error => faultCode(error.reason)),
+      ...(resolved.snapshot?.failures ?? []).map(faultCode), ...priceErrors.map(error => faultCode(error.reason))])].join(','),
+  })
   return {
     payload: quote ? { ...resolved.value.payload, metrics: { ...resolved.value.payload.metrics, price: quote.price },
       sources: { ...resolved.value.payload.sources, quote: `${quote.source}; Yahoo stock monthly history` } } : resolved.value.payload,

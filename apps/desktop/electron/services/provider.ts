@@ -933,8 +933,10 @@ const providerImplementation: MarketDataProvider = {
   },
 
   async newsThumbnail({ url }) {
-    const { payload, errors } = await getNewsThumbnail(url)
-    return errors.length ? partial(payload, errors, 'news image') : ok(payload, 'news image')
+    const { payload, errors, retryAt } = await getNewsThumbnail(url)
+    const result = errors.length ? partial(payload, errors, 'news image') : ok(payload, 'news image')
+    if (retryAt !== undefined) result.meta.expiresAt = retryAt
+    return result
   },
 
   async fundamentals({ tickers, force }) {

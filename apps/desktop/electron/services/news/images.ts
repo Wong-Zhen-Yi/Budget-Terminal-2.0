@@ -34,10 +34,12 @@ const MAX_IMAGE_BYTES = 4 * 1024 * 1024
  */
 const MAX_CACHED_BYTES = 24 * 1024 * 1024
 const IMAGE_TIMEOUT_MS = 5_000
+const BLOCKED_IMAGE_TTL_MS = 30 * 60_000
 
 interface CachedImage {
   dataUri: string
   bytes: number
+  blockedStatus?: number
 }
 
 /**
@@ -54,7 +56,7 @@ function remember(key: string, bytes: number): void {
   held.set(key, bytes)
   heldBytes += bytes
 
-  while (heldBytes > MAX_CACHED_BYTES && held.size > 1) {
+  while ((heldBytes > MAX_CACHED_BYTES || held.size > 1000) && held.size > 1) {
     const oldest = held.keys().next().value
     if (oldest === undefined) break
     heldBytes -= held.get(oldest) as number
@@ -92,7 +94,7 @@ async function fetchDataUri(url: string): Promise<CachedImage> {
  */
 export async function getNewsThumbnail(
   url: string,
-): Promise<{ payload: NewsThumbnailPayload; errors: EnvelopeError[] }> {
+): Promise<{ payload: NewsThumbnailPayload; errors: EnvelopeError[]; retryAt?: number }> {
   const blank: NewsThumbnailPayload = { url, dataUri: '', bytes: 0 }
   if (!isSafeExternalUrl(url)) {
     return {
@@ -103,11 +105,22 @@ export async function getNewsThumbnail(
 
   const key = `news-image:${url}`
   try {
-    const image = await cache
-      .resolve<CachedImage>(key, TTL.newsImage, () => fetchDataUri(url), {})
-      .then((result) => result.value)
+    const resolved = await cache
+      .resolve<CachedImage>(key, image => image.blockedStatus ? BLOCKED_IMAGE_TTL_MS : TTL.newsImage, async () => {
+        try { return await fetchDataUri(url) } catch (error) {
+          // Expected publisher denials get a bounded negative cache. Keep a fixed
+          // reason, never publisher response text, and retry after the cooldown.
+          if (error instanceof Error && /^HTTP (401|403)$/.test(error.message)) {
+            return { dataUri: '', bytes: 0, blockedStatus: Number(error.message.slice(5)) }
+          }
+          throw error
+        }
+      }, {})
+    const image = resolved.value
     remember(key, image.bytes)
-    return { payload: { url, ...image }, errors: [] }
+    return { payload: { url, dataUri: image.dataUri, bytes: image.bytes },
+      ...(image.blockedStatus ? { retryAt: resolved.snapshot?.expiresAt } : {}),
+      errors: image.blockedStatus ? [err('news image', `HTTP ${image.blockedStatus}: publisher denied image access; retry after the image cooldown.`, 'newsThumbnail', url)] : [] }
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
     return { payload: blank, errors: [err('news image', reason, 'newsThumbnail', url)] }

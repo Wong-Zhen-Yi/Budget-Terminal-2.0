@@ -137,6 +137,23 @@ export async function runNewsSecurityChecks(): Promise<void> {
     assert((await getNewsThumbnail('http://publisher.example/not-image')).errors.some(error => error.reason.includes('Not an image')))
     responseFor = () => ({ status: 503 })
     assert((await getNewsThumbnail('http://publisher.example/image-outage')).errors.some(error => error.reason.includes('503')), 'Publisher failures must stay visible')
+    responseFor = () => ({ status: 403 })
+    const deniedUrl = 'http://publisher.example/denied-image'
+    const denied = await getNewsThumbnail(deniedUrl)
+    assert(denied.errors.some(error => error.reason.includes('403')))
+    const deniedRequests = destinations.length
+    await getNewsThumbnail(deniedUrl)
+    assert.equal(destinations.length, deniedRequests, 'Denied thumbnails must use the negative cache')
+    const clock = Date.now
+    try {
+      Date.now = () => clock() + 30 * 60_000 + 1
+      responseFor = () => ({ status: 200, contentType: 'image/png', body: 'recovered' })
+      const recovered = await getNewsThumbnail(deniedUrl)
+      assert.equal(recovered.errors.length, 0)
+      assert(recovered.payload.dataUri, 'The publisher image must recover after the cooldown')
+      assert.equal(destinations.length, deniedRequests + 1)
+    } finally { Date.now = clock }
+    await cache.delete('news-image:' + deniedUrl)
     for (const name of ['valid-hero.png', 'oversized.png', 'not-image', 'image-outage']) cache.delete('news-image:http://publisher.example/' + name)
   } finally { mock.restoreAll(); syncBuiltinESMExports() }
   console.log('PASS: news public-address validation, DNS rebinding/mixed answers, real loopback blocking, redirects, publisher images, caching and byte limits')

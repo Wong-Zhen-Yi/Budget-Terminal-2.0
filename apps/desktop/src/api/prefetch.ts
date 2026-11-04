@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { hashKey, useIsRestoring, useQueryClient, type QueryClient } from '@tanstack/react-query'
 
 import { CARD_INTERVALS, MACRO_SYMBOLS, type AppSettings, type PortfolioPayload } from '@shared/contract'
+import type { Envelope, NewsThumbnailPayload } from '@shared/contract'
 import { startupPages } from '@shared/navigation'
 import { startupPageOrder } from '@shared/startupLoading'
 import { SP500_PARTS } from '@shared/sp500'
@@ -587,6 +588,8 @@ export function buildTasks(
           staleTime: queryFreshness(queryKeys.fundamentalsPage(symbols.fundamentals)),
         }, onSnapshot),
     })
+  } else {
+    tasks.push({ tab: 'fundamentals', label: 'Fundamentals selection screen', refresh: false, run: async () => undefined })
   }
 
   // The EIA weekly grid and the OPEC archive are long-cached in main and the dated futures
@@ -616,18 +619,29 @@ export function buildTasks(
         const tickers = newsQuoteTickers(result.data.articles)
         const preferences = useNewsPageStore.getState()
         const requests: Array<Promise<unknown>> = []
+        const images: Array<Promise<Envelope<NewsThumbnailPayload>>> = []
         if (tickers.length) requests.push(warmStartupQuery(client, {
           queryKey: queryKeys.quotes(tickers),
           queryFn: () => api.quotes({ holdings: tickers, background: true, backgroundOrder }),
           staleTime: queryFreshness(queryKeys.quotes(tickers)),
         }, onSnapshot))
         if (preferences.showImages) for (const url of initialNewsImages(result.data.articles, preferences.filter, preferences.sort)) {
-          requests.push(warmStartupQuery(client, {
+          // Prepare optional images without letting a publisher denial overwrite
+          // article-feed readiness. Image envelopes retain their own diagnostics.
+          const assetObserver = Object.assign(() => {}, { owner: onSnapshot?.owner, force: onSnapshot?.force, reloaded: onSnapshot?.reloaded })
+          images.push(warmStartupSnapshot(client, {
             queryKey: queryKeys.newsThumbnail(url),
             queryFn: () => api.newsThumbnail({ url }), staleTime: Infinity,
-          }, onSnapshot))
+          }, assetObserver))
         }
-        const outcomes = await Promise.allSettled(requests)
+        const [outcomes, imageOutcomes] = await Promise.all([Promise.allSettled(requests), Promise.allSettled(images)])
+        const imageErrors = imageOutcomes.flatMap(outcome => outcome.status === 'rejected'
+          ? ['Image request could not complete.'] : outcome.value.errors.map(error => error.reason))
+        useDataHealth.getState().record('news', [{ label: 'News images', loading: false, freshnessMs: 30 * 60_000,
+          envelope: { data: null, errors: [...new Set(imageErrors)].map(reason => ({ source: 'news image', operation: 'thumbnail', reason })),
+            meta: { source: 'news images', fetchedAt: Date.now(), freshness: imageErrors.length ? 'partial' : 'fresh',
+              ...(imageErrors.length ? { failureReason: `${imageErrors.length} image issue(s); article feeds are tracked separately.` } : {}) } },
+        }])
         const failure = outcomes.find((entry) => entry.status === 'rejected' && !(entry.reason instanceof StartupLoadError && entry.reason.state === 'degraded'))
           ?? outcomes.find((entry) => entry.status === 'rejected')
         if (failure?.status === 'rejected') throw failure.reason
@@ -964,6 +978,8 @@ export function buildTasks(
         staleTime: queryFreshness(queryKeys.optionsChain(options.symbol, options.expiry)),
       }, onSnapshot),
     })
+  } else {
+    tasks.push({ tab: 'options', label: 'Options selection screen', refresh: false, run: async () => undefined })
   }
 
   tasks.push({
@@ -1181,6 +1197,14 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
           state: idlePages.has(page) ? 'idle' as const : 'ready' as const,
           reason: idlePages.has(page) ? 'Awaiting configured inputs' : 'Local or shared initial state',
         }]))
+        for (const [page, awaitingSelection] of [
+          ['fundamentals', !useFundamentalsStore.getState().symbol],
+          ['options', !useOptionsPage.getState().loaded || !useOptionsPage.getState().symbol],
+        ] as const) {
+          if (awaitingSelection && pages[page]?.state === 'ready') {
+            pages[page] = { ...pages[page], reason: 'Selection screen prepared; awaiting ticker selection' }
+          }
+        }
         pages.beta = { ...pages['trading-volumes'], reason: pages['trading-volumes']?.reason ?? 'Shares Trading Volumes startup data' }
         let localFailures = 0
         for (const [page, error] of [['settings', inputs.current.settingsError], ['portfolio', inputs.current.portfolioError]] as const) {

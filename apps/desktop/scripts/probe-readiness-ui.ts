@@ -180,6 +180,12 @@ try {
         data.tickersTotal = request.tickers?.length ?? 0; data.fetchedCount = data.tickersTotal
       }
       if (method === 'newsThumbnail' || method === 'youtubeThumbnail') data.dataUri = image
+      if (method === 'newsThumbnail' && populated) {
+        data.dataUri = ''
+        result.meta.freshness = 'partial'
+        result.meta.expiresAt = Date.now() + 30 * 60_000
+        result.errors = [{ source: 'news image', operation: 'newsThumbnail', reason: 'HTTP 403: publisher denied image access' }]
+      }
       if (method === 'discoveryUniverse') data.symbols = ['AAPL']
       if (method === 'discovery') { data.symbol = 'AAPL'; data.price = 100; data.previousClose = 99 }
       if (method === 'heatmap') data.etf = request.etf
@@ -194,6 +200,7 @@ try {
       const reloadOnly = ${JSON.stringify(process.argv.includes('--reload'))}
       const agentsOnly = ${JSON.stringify(process.argv.includes('--agents'))}
       const refreshOnly = ${JSON.stringify(process.argv.includes('--refresh'))}
+      const startupOnly = ${JSON.stringify(process.argv.includes('--startup-only'))}
       for (const scenario of reloadOnly ? ['populated'] : refreshOnly ? ['persisted'] : agentsOnly ? ['empty'] : ['empty', 'populated', 'persisted']) {
         console.log('Completed-startup scenario: ' + scenario)
         populated = scenario !== 'empty'
@@ -202,7 +209,7 @@ try {
         fixtureSettings = { ...settings, youtubePage: { sortColumn: restored ? 3 : -1, sortDescending: restored },
           backtestPage: restored ? { ...DEFAULT_BACKTEST_PAGE_SETTINGS, rows: [{ symbol: 'MSFT', weight: 100 }] } : DEFAULT_BACKTEST_PAGE_SETTINGS }
         useStocksPage.getState().setSymbol(restored ? 'MSFT' : 'AAPL')
-        useFundamentalsStore.getState().setSymbol(restored ? 'MSFT' : 'AAPL')
+        useFundamentalsStore.getState().setSymbol(scenario === 'empty' ? '' : restored ? 'MSFT' : 'AAPL')
         useChartsStore.setState({ symbol: restored ? 'MSFT' : 'AAPL', interval: restored ? '1 Week' : '1 Day', range: restored ? '5Y' : '1Y' })
         useDashboard.setState({ symbol: restored ? 'MSFT' : 'AAPL', timeframe: restored ? '1 Week' : '1 Day' })
         useValuationPage.getState().setTicker(restored ? 'MSFT' : 'AAPL')
@@ -222,12 +229,21 @@ try {
         const startup = useDataHealth.getState().startup
         check(startup && startup.timings.length === startup.planned, 'Startup failed to complete: ' + scenario)
         check(Object.keys(startup.pages).length === TABS.filter(tab => tab.implemented).length, 'Startup omitted a page state')
+        if (scenario === 'empty') {
+          for (const id of ['fundamentals', 'options']) {
+            check(startup.pages[id].state === 'ready', id + ' selection screen must be prepared at startup')
+            check(startup.pages[id].reason.includes('awaiting ticker selection'), id + ' must explain the empty selection in Settings')
+          }
+          check(!calls.some(call => call.method === 'optionsChain' && !call.request.symbol), 'Empty Options must not issue a blank-symbol request')
+        }
         for (let extra = 0; extra < 2000; extra++) client.setQueryData(['history', 'memory-stress-' + extra], { values: Array(100).fill(extra) })
         await memory.sweep()
         check(client.getQueryCache().findAll({ queryKey: ['history'] }).length <= 20, 'Extra memory did not converge before page visits')
         check(!startup.timings.some(task => task.state !== 'ready'), 'Fixture startup failed: ' + JSON.stringify(startup.timings.filter(task => task.state !== 'ready')))
         if (!populated) check(client.getQueryData(['quotes', ''])?.data.macro[MACRO_SYMBOLS[0].label]?.price === 100, 'Empty portfolio macro quotes missing')
         if (populated) {
+          check(startup.pages.news.state === 'ready', 'Publisher image denials must not degrade healthy article feeds')
+          check(useDataHealth.getState().records['news:News images']?.freshness === 'partial', 'Image denials must remain visible separately in Settings')
           check(client.getQueryData(['quotes', 'MSFT']), 'News article quote set was not warmed')
           check(client.getQueryData(['newsThumbnail', 'https://example.com/fixture.png']), 'Initial News media was not warmed')
           check(client.getQueryData(['youtubeThumbnail', 'fixture1', 'https://example.com/video.png']), 'Selected video media was not warmed')
@@ -378,7 +394,7 @@ try {
           check(visiblePage('dashboard').querySelector('[aria-label="Synthetic provider outage; previous snapshot preserved"]'), 'Stale fixture did not expose the panel outage warning')
           await window.captureFixture('completed-stale-dashboard')
         }
-        if (scenario === 'persisted') {
+        if (scenario === 'persisted' && !startupOnly) {
           for (const tab of TABS.filter(tab => tab.implemented)) {
             console.log('Interaction fixture: ' + tab.id)
             await selectPage(tab)
@@ -457,6 +473,7 @@ try {
         await wait()
       }
       if (reloadOnly) return 'PASS: F5 reloads the focused page once, checks other pages without force, and preserves all-page startup'
+      if (startupOnly) return 'PASS: every route is prepared for empty, populated and restored sessions; empty selection screens, thumbnail cooldowns, first visits and F5 reload verified'
       return 'PASS: all ' + TABS.filter(tab => tab.implemented).length + ' routes after completed startup, empty and populated portfolios, persisted Options/ETF/video selections, initial News/video media and no first-visit loads; visible subtab/select/filter/sort sweep recorded separately'
     }
   ` }, bundle: true, jsx: 'automatic', write: false, format: 'iife', loader: { '.png': 'dataurl', '.css': 'empty' },

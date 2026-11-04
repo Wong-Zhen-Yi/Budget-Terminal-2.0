@@ -108,6 +108,7 @@ function createWindow(): BrowserWindow {
   void loadRenderer(window, join(dirname, '../renderer/index.html'),
     isDev ? process.env.ELECTRON_RENDERER_URL : undefined).catch((error) => {
     if (window.isDestroyed()) return
+    diagnosticLog.write('error', 'app', 'startup-failed', { stage: 'renderer-load', code: faultCode(error) })
     console.error('Budget Terminal interface failed to load:', error)
     dialog.showErrorBox('Budget Terminal could not load its interface', error instanceof Error ? error.message : String(error))
     app.quit()
@@ -133,8 +134,10 @@ if (ownsInstance) {
 }
 
 if (ownsInstance) app.whenReady().then(async () => {
+  let stage = 'certificate-security'
   try {
     assertDesktopCertificateSecurity(process.versions.electron, process.env, name => app.commandLine.hasSwitch(name))
+    stage = 'platform-ui'
     if (process.platform === 'darwin') {
       app.dock?.setIcon(join(app.getAppPath(), 'resources/budget-terminal-icon.png'))
     }
@@ -149,39 +152,56 @@ if (ownsInstance) app.whenReady().then(async () => {
         { role: 'windowMenu' },
       ]))
     }
+    stage = 'data-session'
     releaseDataSession = acquireDataSession(app.getAppPath())
+    stage = 'notifications'
     const notifications = await import('./services/notificationsHost.js')
     notifications.configureDesktopNotifications()
     flushNotifications = notifications.closeNotifications
-    void notifications.notificationCenter.initialize().catch(error => console.warn('Notifications startup failed:', error))
+    void notifications.notificationCenter.initialize().catch(error => {
+      diagnosticLog.write('warn', 'app', 'startup-stage-failed', { stage: 'notifications', code: faultCode(error) })
+      console.warn('Notifications startup failed:', error)
+    })
+    stage = 'automatic-backup'
     const backup = await import('./services/automaticBackup.js')
     backup.configureAutomaticBackup(app.getPath('downloads'))
     backupPending = backup.automaticBackupPending
     flushBackup = backup.flushAutomaticBackup
     // Create a baseline only when absent; keep the last backup if local data has gone missing.
-    await backup.initializeAutomaticBackup().catch((error) => console.warn('Automatic backup failed:', error))
+    await backup.initializeAutomaticBackup().catch((error) => {
+      diagnosticLog.write('warn', 'app', 'startup-stage-failed', { stage: 'automatic-backup', code: faultCode(error) })
+      console.warn('Automatic backup failed:', error)
+    })
     // Resolve paths and take ownership before a service opens its persistent cache.
+    stage = 'services'
     const { registerIpcHandlers } = await import('./ipc/handlers.js')
     const { cache } = await import('./services/cache.js')
     closeYahooWorker = (await import('./services/yahoo/client.js')).closeYahooWorker
     closeDefeatBetaDecoder = (await import('./services/defeatbeta/decoder.js')).closeDefeatBetaDecoder
     closeCache = () => cache.close()
     closeQuantWorker = (await import('./services/quantWorker.js')).closeQuantWorker
+    stage = 'ipc-registration'
     disposeIpc = registerIpcHandlers((event) => {
       const frame = event.senderFrame
       return Boolean(frame && frame === event.sender.mainFrame &&
         BrowserWindow.fromWebContents(event.sender) && isTrustedRendererUrl(frame.url, rendererUrl))
     })
+    stage = 'mcp-host'
     const { startMcpHost } = await import('./mcp/host.js')
     stopMcp = await startMcpHost()
+    stage = 'agents'
     const agents = await import('./services/agentsHost.js')
     const { startAgents } = agents
     flushAgents = agents.flushAgents
     // Connect the signed-in Codex runtime without delaying the window or starting inference.
-    void startAgents().catch(error => console.warn('Codex startup connection failed:', error))
+    void startAgents().catch(error => {
+      diagnosticLog.write('warn', 'app', 'startup-stage-failed', { stage: 'agents', code: faultCode(error) })
+      console.warn('Codex startup connection failed:', error)
+    })
+    stage = 'window-create'
     createWindow()
   } catch (error) {
-    diagnosticLog.write('error', 'app', 'startup-failed', { code: faultCode(error) })
+    diagnosticLog.write('error', 'app', 'startup-failed', { stage, code: faultCode(error) })
     if (!terminalBackend) dialog.showErrorBox('Budget Terminal could not start', error instanceof Error ? error.message : String(error))
     app.quit()
     return

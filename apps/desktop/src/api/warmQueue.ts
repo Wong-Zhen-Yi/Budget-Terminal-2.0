@@ -114,7 +114,11 @@ export async function warmQuery<T>(client: QueryClient, options: {
   const lifetime = queryFreshness(options.queryKey)
   const freshness = cached?.meta && effectiveFreshness(cached, Date.now(), lifetime)
   const state = client.getQueryState(options.queryKey)
-  const needsRecovery = state?.status === 'error' || freshness === 'stale' || freshness === 'partial' || freshness === 'failed'
+  // Publisher-denied images have an explicit retry deadline. Keep their fallback
+  // tile prepared without issuing another IPC/network read on every maintenance pass.
+  const imageCooldown = options.queryKey[0] === 'newsThumbnail' && freshness === 'partial'
+    && (cached?.meta?.expiresAt ?? 0) > Date.now()
+  const needsRecovery = !imageCooldown && (state?.status === 'error' || freshness === 'stale' || freshness === 'partial' || freshness === 'failed')
   const staleTime = cacheLifetime(cached, state?.dataUpdatedAt, Math.min(options.staleTime, lifetime))
   const expired = needsRecovery || !state?.dataUpdatedAt || Date.now() - state.dataUpdatedAt >= staleTime
   recordCacheDecision(String(options.queryKey[0]), cached === undefined ? 'missing'

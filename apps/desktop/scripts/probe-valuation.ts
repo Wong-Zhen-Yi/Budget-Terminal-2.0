@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   assumptionsFromSuggestions,
   calculateFairValueDetails,
@@ -413,7 +416,9 @@ async function liveCheck(symbol: string): Promise<void> {
 }
 
 async function loadingChecks(): Promise<void> {
-  const { valuationTesting, emptyValuation } = await import('../electron/services/yahoo/valuation.js')
+  const { valuationTesting, emptyValuation, getValuation } = await import('../electron/services/yahoo/valuation.js')
+  const { TtlCache } = await import('../electron/services/cache.js')
+  const { diagnosticDirectory, readDiagnosticLogs } = await import('../electron/services/diagnosticLog.js')
   const { yahoo } = await import('../electron/services/yahoo/client.js')
   const { captureSources } = await import('../electron/services/sourceHealth.js')
   const { emptyFundamentalsPagePayload } = await import('../electron/services/yahoo/fundamentalsPage.js')
@@ -462,6 +467,43 @@ async function loadingChecks(): Promise<void> {
   })
   assert(stale.errors.some(error => error.operation === 'statements' && error.reason.includes('cached')), 'stale statements must remain visible')
   assert(emptyValuation('MISSING').generatedAt === 0, 'a failed load must not look completed')
+  const storage = new TtlCache()
+  let loads = 0
+  const dependencies = {
+    storage,
+    load: async () => { loads++; return loads === 1 ? partial : { payload: partial.payload, errors: [] } },
+    quote: async () => { throw Error('Unmapped probe must not request a live quote') },
+  }
+  await getValuation('VALUATION-RECOVERY-PROBE', [], false, dependencies)
+  await getValuation('VALUATION-RECOVERY-PROBE', [], false, dependencies)
+  assert(loads === 1, 'partial result must coalesce reads during its short retry window')
+  const clock = Date.now
+  try {
+    Date.now = () => clock() + 10_001
+    const recovered = await getValuation('VALUATION-RECOVERY-PROBE', [], false, dependencies)
+    assert(Number(loads) === 2 && !recovered.errors.length && !recovered.stale, 'partial payload warnings must clear on the next successful retry')
+  } finally { Date.now = clock }
+  let interruptedLoads = 0
+  const interrupted = {
+    ...dependencies,
+    load: async () => {
+      interruptedLoads++
+      if (interruptedLoads === 2) throw new DOMException('Fixture transport aborted', 'AbortError')
+      return { payload: partial.payload, errors: [] }
+    },
+  }
+  await getValuation('VALUATION-INTERRUPTION-PROBE', [], false, interrupted)
+  const saved = await getValuation('VALUATION-INTERRUPTION-PROBE', [], true, interrupted)
+  assert(saved.stale && saved.payload.metrics.price === 100, 'cancelled refresh must retain the useful snapshot and mark it stale')
+  try {
+    Date.now = () => clock() + 10_001
+    const recovered = await getValuation('VALUATION-INTERRUPTION-PROBE', [], true, interrupted)
+    assert(!recovered.stale && !recovered.errors.length, 'successful refresh must clear the cancelled-source state')
+  } finally { Date.now = clock }
+  const events = readDiagnosticLogs(diagnosticDirectory()).entries
+  assert(events.some(entry => entry.area === 'valuation' && entry.event === 'snapshot' && entry.details.cachedErrors === partial.errors.length), 'cached warnings must be distinguishable from new loads')
+  assert(events.some(entry => entry.area === 'valuation' && entry.details.stage === 'info'), 'valuation diagnostics must identify stages')
+  await storage.close()
 }
 
 async function main(): Promise<void> {
@@ -478,4 +520,14 @@ async function main(): Promise<void> {
   await liveCheck(symbol)
 }
 
-await main()
+const scratch = mkdtempSync(join(tmpdir(), 'budget-valuation-'))
+const savedEnvironment = { APPDATA: process.env.APPDATA, LOCALAPPDATA: process.env.LOCALAPPDATA }
+process.env.APPDATA = join(scratch, 'roaming')
+process.env.LOCALAPPDATA = join(scratch, 'local')
+try { await main() } finally {
+  for (const key of ['APPDATA', 'LOCALAPPDATA'] as const) {
+    if (savedEnvironment[key] === undefined) delete process.env[key]
+    else process.env[key] = savedEnvironment[key]
+  }
+  rmSync(scratch, { recursive: true, force: true })
+}
