@@ -52,8 +52,11 @@ research pages.
 
 ## Screenshots
 
-Screenshots of the current app using an isolated demo profile. Holdings, prices,
-headlines, and indicator values are illustrative sample data.
+Explore eight views across markets, research, charting, portfolios, and learning.
+The captures use isolated demo profiles or isolated page components with synthetic
+fixtures. Holdings, prices, probabilities, headlines, and indicator values are
+illustrative sample data, not live quotes or personal records. See
+[capture details](docs/assets/screenshots/README.md).
 
 ### Dashboard
 
@@ -61,6 +64,53 @@ Market snapshots, portfolio holdings, price action, analyst targets, and options
 in one workspace.
 
 ![Budget Terminal Dashboard with demo holdings, a candlestick chart, market snapshots, and options tables](docs/assets/screenshots/dashboard.png)
+
+### Polymarket — prediction market research
+
+Discover events and inspect outcome probabilities, price history, order-book depth,
+and market activity in a read-only workspace.
+
+![Polymarket demo showing searchable market cards, an outcome probability chart, bid and ask depth, and recent activity](docs/assets/screenshots/polymarket.png)
+
+<details>
+<summary><strong>Semiconductors — supply chain and sector research</strong></summary>
+
+Explore industry stages, filter companies by subsector, compare performance, and
+follow company research and earnings context.
+
+![Semiconductors demo showing supply-chain stages, a chip-design company table, subsector performance, and linked research panels](docs/assets/screenshots/semiconductors.png)
+
+</details>
+
+<details>
+<summary><strong>Crypto — spot watchlist, perpetual charts, and market breadth</strong></summary>
+
+Keep spot quotes, a candlestick and volume chart, equity proxies, market breadth,
+and venue-specific perpetual funding and open interest together.
+
+![Crypto demo showing a spot watchlist, BTC perpetual candlesticks and volume, a top-30 breadth grid, and perpetual market statistics](docs/assets/screenshots/crypto.png)
+
+</details>
+
+<details>
+<summary><strong>Scorecard — compare companies and valuation metrics</strong></summary>
+
+Compare annual financials, margins, valuation multiples, and signed revenue growth
+across companies. Choose metrics and save named comparisons locally.
+
+![Scorecard demo comparing AMZN, MSFT, and GOOGL financial and valuation metrics with a signed revenue-growth bar chart](docs/assets/screenshots/scorecard.png)
+
+</details>
+
+<details>
+<summary><strong>Dictionary — offline learning and illustrated chart patterns</strong></summary>
+
+Search 405 offline entries, save terms, and study chart patterns with diagrams,
+confirmation criteria, invalidation conditions, and a reading outline.
+
+![Dictionary Reading Room showing an Ascending Channel entry, an illustrated candlestick pattern, topic navigation, saved terms, and a reading outline](docs/assets/screenshots/dictionary.png)
+
+</details>
 
 <details>
 <summary><strong>Charts — price action and technical tools</strong></summary>
