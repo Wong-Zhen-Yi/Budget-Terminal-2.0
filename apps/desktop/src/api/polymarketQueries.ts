@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { useQuery } from '@/api/progressiveQuery'
-import { api } from './client'
+import { api, queryKeys } from './client'
 import { warmStartupQuery, type StartupSnapshotObserver } from './warmQueue'
 import { POLYMARKET_TTL, type Json, type PolymarketRequest } from '@shared/polymarket'
 
@@ -21,6 +21,12 @@ export function list(value: Json | undefined): string[] {
   if (typeof value === 'string') { try { return list(JSON.parse(value)) } catch { return [] } }
   return Array.isArray(value) ? value.map(String) : []
 }
+/** Restrict provider images to Polymarket's public image CDN. */
+export function marketImageUrl(market: Record<string, Json>): string {
+  const url = typeof market.image === 'string' ? market.image : typeof market.icon === 'string' ? market.icon : ''
+  return /^https:\/\/(polymarket-upload\.s3\.[a-z0-9-]+\.amazonaws\.com|polymarket\.com)\//.test(url) ? url : ''
+}
+
 export function marketDetails(market: Record<string, Json>): PolymarketRequest[] {
   const token = list(market.clobTokenIds)[0]
   const condition = String(market.conditionId ?? '')
@@ -46,5 +52,12 @@ export async function warmPolymarket(client: QueryClient, onSnapshot?: StartupSn
   }
   const [markets] = await Promise.all([load(marketRequest), load(boardRequest)])
   const first = rows(markets.data.value)[0]
-  if (first) await Promise.all(marketDetails(first).map(load))
+  const images = [...new Set(rows(markets.data.value).map(marketImageUrl).filter(Boolean))]
+  // Optional imagery uses the existing bounded main-process thumbnail proxy and CSP.
+  const prepareImages = async () => {
+    for (let offset = 0; offset < images.length; offset += 4) await Promise.allSettled(images.slice(offset, offset + 4).map(url =>
+      client.prefetchQuery({ queryKey: queryKeys.newsThumbnail(url), queryFn: () => api.newsThumbnail({ url }), staleTime: Infinity }),
+    ))
+  }
+  await Promise.all([first ? Promise.all(marketDetails(first).map(load)) : Promise.resolve(), prepareImages()])
 }

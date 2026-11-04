@@ -39,7 +39,7 @@ function monthly(start: string, values: number[]): EconomicPoint[] {
 }
 
 function catalogChecks(): void {
-  assert(ECONOMIC_SERIES.length === 49, `catalog should carry 49 series, saw ${ECONOMIC_SERIES.length}`)
+  assert(ECONOMIC_SERIES.length === 51, `catalog should carry 51 series, saw ${ECONOMIC_SERIES.length}`)
   assert(new Set(ECONOMIC_SERIES.map((s) => s.seriesId)).size === ECONOMIC_SERIES.length, 'series ids must be unique')
   assert(YIELD_CURVE_SERIES.length === 11, 'eleven tenors should draw the treasury curve')
   assert(

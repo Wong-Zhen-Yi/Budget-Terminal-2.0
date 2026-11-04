@@ -11,6 +11,7 @@
     "apps/desktop"
   ],
   "scripts": {
+    "probe:public-providers": "npm run --workspace budget-terminal-desktop probe:public-providers --",
     "tui": "node scripts/tui.cjs",
     "setup:tui": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-bt.ps1",
     "probe:tui": "npm run --workspace budget-terminal-desktop probe:tui",

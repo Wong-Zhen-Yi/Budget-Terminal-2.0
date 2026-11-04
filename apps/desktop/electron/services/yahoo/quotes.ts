@@ -5,6 +5,7 @@ import { observeSource } from '../sourceHealth.js'
 import { equityMarket } from '../../shared/equityMarkets.js'
 import { hyperliquidEquities } from '../hyperliquidEquities.js'
 import { regularMarketRefreshAt } from '../../shared/marketRefresh.js'
+import { diversifiedData } from '../diversifiedData.js'
 
 interface QuoteChartResult {
   quotes: Array<{ date: Date; close: number | null }>
@@ -123,7 +124,8 @@ async function resolveQuote(symbol: string, force = false): Promise<CachedResult
       return { ...fallback, value: { ...fallback.value, source: 'Yahoo Finance (Hyperliquid fallback)', fallbackReason: reason } }
     }
   }
-  return resolveYahooQuote(symbol, force)
+  const alternative = await diversifiedData.spot(symbol)
+  return alternative ?? resolveYahooQuote(symbol, force)
 }
 
 export interface QuoteBatch {

@@ -34,6 +34,7 @@ import { CoinGeckoClient, coinGeckoClient } from '../electron/services/coingecko
 import { CryptoChartsClient } from '../electron/services/cryptoCharts.js'
 import { cache, TtlCache } from '../electron/services/cache.js'
 import { cryptoChartRequest } from '../electron/shared/cryptoWorkspace.js'
+import { diversifiedData } from '../electron/services/diversifiedData.js'
 
 const directCoinGecko = async (url: string): Promise<unknown> => {
   const response = await fetch(url)
@@ -268,6 +269,30 @@ async function checkCryptoHyperliquidStage(): Promise<void> {
     assert.equal(partial.payload.progress.quotes, 'loaded', 'Other stages must survive a Hyperliquid outage')
     assert.equal(partial.payload.quotes.BTC.price, 110)
     assert.ok(partial.errors.some(error => error.symbol === 'Hyperliquid Perpetuals' && /429/.test(error.reason)))
+    // Exercise the full page with venue prices and a shared cached CoinGecko metadata request.
+    let marketRequests = 0
+    let fakeNow = Date.now()
+    const shared = new CoinGeckoClient(async input => {
+      if (String(input).includes('/coins/markets')) {
+        marketRequests += 1
+        return Response.json([{ id: 'bitcoin', symbol: 'btc', current_price: 100, price_change_percentage_24h: 1, market_cap: 900, total_volume: 88 }])
+      }
+      return Response.json({ data: {} })
+    }, () => fakeNow, async delay => { fakeNow += delay }, new TtlCache())
+    primary.mock.mockImplementation(url => shared.getJson(url))
+    const spot = mock.method(diversifiedData, 'spot', async (symbol: string) => symbol === 'BTC-USD' ? {
+      value: { symbol, price: 120, change: 20, absChange: 20, currency: 'USD', source: 'Coinbase spot (USD, rolling 24h)' },
+      fromCache: false, stale: false as const, ageSeconds: 0,
+    } : null)
+    try {
+      const publicSpot = await getCrypto(true)
+      assert.equal(publicSpot.payload.quotes.BTC.price, 120)
+      assert.equal(publicSpot.payload.quotes.BTC.changePct, 20)
+      assert.match(publicSpot.payload.quotes.BTC.source, /Coinbase spot/)
+      assert.equal(publicSpot.payload.quotes.BTC.marketCap, 900)
+      assert.equal(publicSpot.payload.quotes.BTC.volumeSource, 'CoinGecko')
+      assert.equal(marketRequests, 1, 'Heatmap and quote metadata must share one CoinGecko upstream request')
+    } finally { spot.mock.restore() }
     console.log('Crypto Hyperliquid integration passed: stage readiness, shared cache, force refresh and isolated provider failure.')
   } finally {
     primary.mock.restore()

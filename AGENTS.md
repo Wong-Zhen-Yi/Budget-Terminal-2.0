@@ -27,6 +27,36 @@ Follow existing TypeScript style: two-space indentation, single quotes, and no s
 
 Keep renderer access behind `window.api`, shared calculations free of React/Electron imports, service responses within `Envelope<T>`, and Yahoo requests behind the shared rate gate.
 
+## Locked Colour Scheme
+Preserve the current Budget Terminal dark colour scheme. Do not replace the palette, introduce a light mode, or recolour existing pages, navigation, controls, or charts unless the user explicitly requests a colour change. New UI must use the existing palette and semantic colour roles.
+
+The shared palette in `apps/desktop/src/styles/theme.css` is the source of truth:
+
+| Role | CSS token | Locked value |
+| --- | --- | --- |
+| Background | `--color-bg` | `#080b12` |
+| Surface | `--color-surface` | `#0d1420` |
+| Raised surface | `--color-surface-raised` | `#121b2b` |
+| Hover surface | `--color-surface-hover` | `#172233` |
+| Border | `--color-border` | `#1e2b3f` |
+| Strong border | `--color-border-strong` | `#2c3e59` |
+| Primary text | `--color-text` | `#d5dee9` |
+| Muted text | `--color-text-muted` | `#7d8ea6` |
+| Dim text | `--color-text-dim` | `#56677f` |
+| Blue accent | `--color-accent` | `#2f6fd0` |
+| Accent hover | `--color-accent-hover` | `#3b82e8` |
+| Dim accent | `--color-accent-dim` | `#1b3f7a` |
+| Positive / up | `--color-up` | `#26c281` |
+| Negative / down | `--color-down` | `#f0554e` |
+| Warning / flat market | `--color-warn` | `#d6b25e` |
+| Positive background | `--color-up-bg` | `#0f2a20` |
+| Negative background | `--color-down-bg` | `#2d1517` |
+
+Reuse these tokens instead of adding competing hard-coded theme colours. Preserve existing page-specific and chart-series colours and their meanings; do not use this guideline to proactively recolour them. Keep the dark navy surfaces, cool light text, blue interactive accents, green gains, red losses, and amber warnings consistent across future changes.
+
+## Page Layout
+Pages should always aim to fit neatly within a single application viewport without scrollbars or large unused empty spaces (voids), unless explicitly specified otherwise. Keep content readable, balanced, and well spaced when designing or changing a page. Apply this guideline to future UI work; do not proactively redesign existing pages solely to enforce it.
+
 ## Startup Page Readiness
 When Budget Terminal opens, start loading every implemented page, including pages the user has not visited. Once startup loading completes, switching to any page must show its ready content without a first-visit load. Do not limit startup loading to the active page, favorites, or recent pages, and do not defer a page's initial data load until its tab is selected. Keep startup progress and failures visible in Settings so a page that could not load is not silently treated as ready. Preserve this behavior when changing navigation, caching, query hooks, or data services.
 

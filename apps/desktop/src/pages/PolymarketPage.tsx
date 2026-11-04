@@ -1,116 +1,112 @@
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
-import { POLYMARKET_ENDPOINTS, POLYMARKET_TTL, type Json, type PolymarketRequest } from '@shared/polymarket'
-import { boardRequest, list, marketDetails, marketRequest, object, rows, usePolymarket } from '@/api/polymarketQueries'
-import { api } from '@/api/client'
+import type { UseQueryResult } from '@tanstack/react-query'
+import type { Envelope } from '@shared/contract'
+import { POLYMARKET_TTL, type Json, type PolymarketRequest, type PolymarketResult } from '@shared/polymarket'
+import { boardRequest, list, marketRequest, object, rows, usePolymarket } from '@/api/polymarketQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
-import { Panel } from '@/components/ui/Panel'
-import { Button } from '@/components/ui/Button'
+import { PolymarketExplorer } from './PolymarketExplorer'
+import { MarketChart, MarketImage, MarketBook, MarketActivity, formatMoney, formatNumber, probability } from './polymarket/MarketViews'
+import '@/styles/polymarket.css'
 
-const inputClass = 'h-8 min-w-0 border border-border-strong bg-surface-raised px-2 text-xs text-text'
-const display = (value: Json | undefined): string => value == null ? '—' : typeof value === 'object' ? JSON.stringify(value) : String(value)
-const number = (value: Json | undefined) => value == null || value === '' || !Number.isFinite(Number(value)) ? '—' : Intl.NumberFormat('en', { maximumFractionDigits: 2, notation: 'compact' }).format(Number(value))
+type RecordData = Record<string, Json>
+const topics = ['Trending', 'Politics', 'Sports', 'Crypto', 'Finance', 'Economy', 'Tech']
+const ranges = [['1h', '1H'], ['1d', '1D'], ['1w', '1W'], ['1m', '1M'], ['max', 'ALL']]
+const fallback: PolymarketRequest = { endpoint: 'clob:/time' }
 
-function DataView({ value }: { value: Json | undefined }) {
-  const [raw, setRaw] = useState(false)
-  const data = rows(value)
-  const keys = [...new Set(data.flatMap(row => Object.keys(row)))]
-  return <div className="flex min-h-0 flex-col gap-2 p-3">
-    <div className="flex items-center gap-3 text-xs text-text-muted"><span>{data.length ? `${data.length} records` : 'Response'}</span><Button onClick={() => setRaw(!raw)}>{raw ? 'Table' : 'Full JSON'}</Button><Button onClick={() => void api.writeClipboard(JSON.stringify(value ?? null, null, 2))}>Copy JSON</Button></div>
-    <div className="max-h-96 overflow-auto">
-      {raw || !data.length || !keys.length ? <pre className="whitespace-pre-wrap break-all text-xs">{value == null ? 'No data returned.' : JSON.stringify(value, null, 2)}</pre> : <table className="w-full text-left text-xs"><thead><tr>{keys.map(key => <th key={key} className="sticky top-0 border-b border-border bg-surface-raised p-2">{key}</th>)}</tr></thead><tbody>{data.map((row, index) => <tr key={index}>{keys.map(key => <td key={key} className="max-w-80 border-b border-border p-2 align-top"><div className="max-h-28 overflow-auto break-words" title={display(row[key])}>{display(row[key])}</div></td>)}</tr>)}</tbody></table>}
-    </div>
-  </div>
+function useRead(label: string, request: PolymarketRequest, enabled: boolean, live: boolean, report: (status: PanelStatus) => void) {
+  const query = usePolymarket(request, enabled, live && enabled)
+  useEffect(() => report({ label, envelope: query.data, loading: query.isFetching, error: query.error, enabled, freshnessMs: POLYMARKET_TTL }),
+    [label, query.data, query.isFetching, query.error, enabled, report])
+  return query
 }
-
-function OrderBook({ value }: { value: Json | undefined }) {
-  const book = object(value)
-  const side = (name: 'bids' | 'asks') => {
-    const levels = Array.isArray(book[name]) ? book[name].map(item => object(item)).sort((a, b) => name === 'bids' ? Number(b.price) - Number(a.price) : Number(a.price) - Number(b.price)) : []
-    return <div className="min-w-0"><h3 className="mb-2 text-xs font-semibold">{name === 'bids' ? 'Bids · buyers' : 'Asks · sellers'}</h3><div className="max-h-56 overflow-auto"><table className="w-full text-right text-xs"><thead><tr><th>Price</th><th>Shares</th></tr></thead><tbody>{levels.map((level, i) => <tr key={i} className="border-b border-border"><td className={name === 'bids' ? 'p-1 text-up' : 'p-1 text-down'}>{(Number(level.price) * 100).toFixed(2)}¢</td><td className="p-1">{number(level.size)}</td></tr>)}</tbody></table>{!levels.length && <p className="p-2 text-xs text-text-muted">No resting orders.</p>}</div></div>
-  }
-  return <><div className="grid grid-cols-2 gap-4 p-3">{side('bids')}{side('asks')}</div><details className="p-3 text-xs"><summary>Full order book and trading constraints</summary><DataView value={value}/></details></>
-}
-
-function ProbabilityChart({ value }: { value: Json | undefined }) {
-  const points = rows(value).map(row => ({ t: Number(row.timestamp ?? row.t), p: Number(row.price ?? row.p) })).filter(point => Number.isFinite(point.t) && Number.isFinite(point.p)).sort((a, b) => a.t - b.t)
-  if (!points.length) return <p className="p-4 text-xs text-text-muted">No price history available for this outcome and range.</p>
-  const first = points[0].t
-  const last = points[points.length - 1].t
-  const path = points.map((point, i) => `${i ? 'L' : 'M'}${48 + (point.t - first) / Math.max(1, last - first) * 690},${170 - point.p * 145}`).join(' ')
-  return <div className="p-3"><svg viewBox="0 0 760 205" role="img" aria-label="Outcome probability over time" className="w-full text-text-muted">
-    {[0, .5, 1].map(p => <g key={p}><line x1="48" x2="738" y1={170 - p * 145} y2={170 - p * 145} stroke="currentColor" opacity=".15"/><text x="0" y={174 - p * 145} fill="currentColor" fontSize="11">{p * 100}%</text></g>)}
-    <path d={path} fill="none" stroke="#60a5fa" strokeWidth="2"/><text x="48" y="196" fill="currentColor" fontSize="11">{new Date(first * 1000).toLocaleString()}</text><text x="738" y="196" textAnchor="end" fill="currentColor" fontSize="11">{new Date(last * 1000).toLocaleString()}</text>
-  </svg></div>
-}
-
-function Feed({ title, request, active, onStatus, chart = false }: { title: string; request: PolymarketRequest; active: boolean; onStatus: (status: PanelStatus) => void; chart?: boolean }) {
-  const query = usePolymarket(request, true, active)
-  useEffect(() => onStatus({ label: title, envelope: query.data, loading: query.isFetching, error: query.error, freshnessMs: POLYMARKET_TTL }), [title, query.data, query.isFetching, query.error, onStatus])
-  return <Panel title={title} warning={query.data?.meta.failureReason} actions={<Button onClick={() => void query.refetch()}>Refresh</Button>}>
-    {query.isPending ? <p className="p-4 text-xs">Loading {title.toLowerCase()}…</p> : (query.isError && !query.data) || query.data?.meta.freshness === 'failed' ? <div className="p-4 text-xs">This dataset is unavailable. Retry with Refresh; details are in Settings.</div> : chart ? <><ProbabilityChart value={query.data?.data.value}/><details className="p-2 text-xs"><summary>History records</summary><DataView value={query.data?.data.value}/></details></> : request.endpoint === 'clob:/book' ? <OrderBook value={query.data?.data.value}/> : <DataView value={query.data?.data.value}/>}
-  </Panel>
+function Empty({ query, children }: { query: UseQueryResult<Envelope<PolymarketResult>>; children: ReactNode }) {
+  return !query.data ? <div className="poly-empty">{query.isFetching ? 'Getting market data…' : query.isError ? 'This data is unavailable. Retry with Refresh; details are in Settings.' : 'Choose a market to explore.'}</div> : <>{children}</>
 }
 
 export function PolymarketPage({ active, onStatusChange }: { active: boolean; onStatusChange: (panels: PanelStatus[], sourcePath: string) => void }) {
   const client = useQueryClient()
   const [view, setView] = useState('markets')
+  const [topic, setTopic] = useState('Trending')
   const [page, setPage] = useState(0)
   const [closed, setClosed] = useState(false)
-  const [filter, setFilter] = useState('')
-  const [selected, setSelected] = useState<Record<string, Json> | null>(null)
+  const [search, setSearch] = useState('')
+  const [submittedSearch, setSubmittedSearch] = useState('')
+  const [selected, setSelected] = useState<RecordData | null>(null)
   const [outcome, setOutcome] = useState(0)
   const [interval, setInterval] = useState('1w')
   const [auto, setAuto] = useState(false)
-  const [endpointId, setEndpointId] = useState('data:/v2/leaderboard')
-  const [draft, setDraft] = useState<Record<string, string>>({ limit: '25', time_period: 'day' })
-  const [request, setRequest] = useState<PolymarketRequest>(boardRequest)
-  const [endpointFilter, setEndpointFilter] = useState('')
-  const endpoint = POLYMARKET_ENDPOINTS.find(item => item.id === endpointId)!
-  const marketReq = useMemo(() => ({ ...marketRequest, params: { ...marketRequest.params, closed: String(closed), offset: String(page * 25) } }), [page, closed])
-  const markets = usePolymarket(marketReq, true, active && auto)
-  const explorer = usePolymarket(request, true, active && auto && view === 'explorer')
-  const marketRows = rows(markets.data?.data.value)
-  const market = selected ?? marketRows[0] ?? {}
-  const token = list(market.clobTokenIds)[outcome]
-  const details = marketDetails(market)
-  const book = details.find(item => item.endpoint === 'clob:/book')
-  const history = details.find(item => item.endpoint === 'data:/v2/prices-history')
+  const [detailTab, setDetailTab] = useState('Activity')
   const [statuses, setStatuses] = useState<Record<string, PanelStatus>>({})
-  const receiveStatus = useMemo(() => (status: PanelStatus) => setStatuses(previous => ({ ...previous, [status.label]: status })), [])
-  useEffect(() => {
-    onStatusChange([
-      { label: 'Markets', envelope: markets.data, loading: markets.isFetching, error: markets.error, freshnessMs: POLYMARKET_TTL },
-      { label: 'Public explorer', envelope: explorer.data, loading: explorer.isFetching, error: explorer.error, freshnessMs: POLYMARKET_TTL },
-      ...Object.values(statuses),
-    ], 'https://docs.polymarket.com/market-data/overview')
-  }, [markets.data, markets.isFetching, markets.error, explorer.data, explorer.isFetching, explorer.error, statuses, onStatusChange])
-  const pagination = object(object(explorer.data?.data.value).pagination)
-  const nextCursor = pagination.next_cursor ?? object(explorer.data?.data.value).next_cursor
-  const shown = marketRows.filter(row => display(row.question).toLowerCase().includes(filter.toLowerCase()))
-  const refreshAll = () => { void client.refetchQueries({ queryKey: ['polymarket'], type: 'active' }) }
-  return <div className="flex min-h-0 flex-1 flex-col overflow-auto p-3 text-text">
-    <div className="mb-3 flex flex-wrap items-center gap-2"><h1 className="mr-4 text-lg font-semibold">Polymarket</h1>{['markets', 'explorer'].map(item => <Button key={item} onClick={() => setView(item)}>{item === 'markets' ? 'Market workspace' : `Public data explorer (${POLYMARKET_ENDPOINTS.length})`}</Button>)}<label className="ml-auto flex items-center gap-2 text-xs"><input type="checkbox" checked={auto} onChange={e => setAuto(e.target.checked)}/>Auto-refresh · 30s</label><Button onClick={refreshAll}>Refresh all</Button></div>
-    <p className="mb-3 text-xs text-text-muted">Public prediction-market data · No account or API key required · Prices reflect market-implied probabilities. Refreshes are snapshots; streaming feeds are separate.</p>
-    {view === 'markets' ? <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(300px,1fr)_minmax(0,2fr)]">
-      <Panel title="Discover markets"><div className="flex flex-wrap gap-2 p-3"><input aria-label="Filter loaded markets" placeholder="Filter these 25 markets" className={`${inputClass} flex-1`} value={filter} onChange={e => setFilter(e.target.value)}/><select aria-label="Market status" className={inputClass} value={String(closed)} onChange={e => { setClosed(e.target.value === 'true'); setPage(0); setSelected(null); setOutcome(0) }}><option value="false">Active</option><option value="true">Closed</option></select></div>
-        <div className="max-h-[750px] overflow-auto">{markets.isPending ? <p className="p-4">Loading markets…</p> : !shown.length ? <p className="p-4 text-xs">{markets.isError || markets.data?.meta.freshness === 'failed' ? 'Markets unavailable. Retry with Refresh all; details are in Settings.' : 'No markets on this page match the filter.'}</p> : shown.map(row => <button key={display(row.id)} className={`block w-full border-b border-border p-3 text-left hover:bg-surface-raised ${row.id === market.id ? 'bg-surface-raised' : ''}`} onClick={() => { setSelected(row); setOutcome(0) }}><div className="mb-2 text-sm font-medium">{display(row.question)}</div><div className="flex flex-wrap gap-3 text-xs text-text-muted">{list(row.outcomes).map((name, i) => <span key={i}>{name} {list(row.outcomePrices)[i] == null ? '—' : `${(Number(list(row.outcomePrices)[i]) * 100).toFixed(1)}%`}</span>)}</div><div className="mt-2 text-xs text-text-muted">Volume ${number(row.volume)} · Liquidity ${number(row.liquidity)} · Ends {typeof row.endDate === 'string' ? new Date(row.endDate).toLocaleDateString() : '—'}</div></button>)}</div>
-        <div className="flex items-center justify-between gap-2 p-3 text-xs"><Button disabled={page === 0} onClick={() => { setPage(page - 1); setSelected(null); setOutcome(0) }}>Previous</Button><span>Page {page + 1}</span><Button disabled={marketRows.length < 25} onClick={() => { setPage(page + 1); setSelected(null); setOutcome(0) }}>Next</Button></div>
-      </Panel>
-      <div className="flex min-w-0 flex-col gap-3">
-        <Panel title={display(market.question)}><p className="whitespace-pre-wrap p-3 text-sm">{display(market.description)}</p><div className="flex flex-wrap gap-2 px-3 pb-3"><select aria-label="Outcome" value={outcome} className={inputClass} onChange={e => setOutcome(Number(e.target.value))}>{list(market.outcomes).map((name, i) => <option key={i} value={i}>{name}</option>)}</select><select aria-label="History range" value={interval} className={inputClass} onChange={e => setInterval(e.target.value)}>{['1h', '1d', '1w', '1m', 'max'].map(value => <option key={value}>{value}</option>)}</select><Button onClick={() => { setView('explorer'); setEndpointId('gamma:/public-search'); setDraft({ q: '' }) }}>Search all events & markets</Button></div><details className="p-3 text-xs"><summary>All market metadata, rules and identifiers</summary><DataView value={market}/></details></Panel>
-        {book && token && <Feed key={`book-${token}`} title="Order book · selected outcome" request={{ ...book, params: { token_id: token } }} active={active && auto} onStatus={receiveStatus}/>}
-        {history && token && <Feed key={`history-${token}-${interval}`} title="Probability history · selected outcome" request={{ ...history, params: { token_id: token, interval } }} active={active && auto} onStatus={receiveStatus} chart/>}
-        {details.filter(item => item !== book && item !== history).map(item => <Feed key={`${item.endpoint}-${market.id}`} title={item.endpoint.split('/').pop() === 'oi' ? 'Open interest' : item.endpoint.endsWith('trades') ? 'Recent trades' : 'Top holders'} request={item} active={active && auto} onStatus={receiveStatus}/>)}
+  const report = useCallback((status: PanelStatus) => setStatuses(previous => ({ ...previous, [status.label]: status })), [])
+  const live = active && auto
+  const tag = useRead('Category', { endpoint: 'gamma:/tags/slug/{slug}', params: { slug: topic.toLowerCase() } }, topic !== 'Trending', false, report)
+  const tagId = object(tag.data?.data.value).id
+  const request = useMemo<PolymarketRequest>(() => ({ ...marketRequest, params: { ...marketRequest.params, closed: String(closed), offset: String(page * 25), ...(topic !== 'Trending' && tagId != null ? { tag_id: String(tagId) } : {}) } }), [closed, page, topic, tagId])
+  const markets = useRead('Markets', request, topic === 'Trending' || tagId != null, live, report)
+  const searchQuery = useRead('Market search', { endpoint: 'gamma:/public-search', params: { q: submittedSearch } }, Boolean(submittedSearch), false, report)
+  const sourceRows = rows(markets.data?.data.value)
+  const foundRows = useMemo(() => {
+    const events = object(searchQuery.data?.data.value).events
+    return Array.isArray(events) ? events.flatMap(event => {
+      const value = object(event).markets
+      return Array.isArray(value) ? value.map(item => object(item)) : []
+    }) : []
+  }, [searchQuery.data])
+  const shown = submittedSearch ? foundRows : topic !== 'Trending' && tagId == null ? [] : sourceRows
+  const market = selected ?? shown[0] ?? {}
+  const names = list(market.outcomes)
+  const prices = list(market.outcomePrices)
+  const token = list(market.clobTokenIds)[outcome]
+  const condition = String(market.conditionId ?? '')
+  const book = useRead('Order book', token ? { endpoint: 'clob:/book', params: { token_id: token } } : fallback, Boolean(token), live, report)
+  const history = useRead('Probability history', token ? { endpoint: 'data:/v2/prices-history', params: { token_id: token, interval } } : fallback, Boolean(token), live, report)
+  const trades = useRead('Recent trades', { endpoint: 'data:/v2/trades', params: { condition, limit: '25' } }, Boolean(condition), live, report)
+  const interest = useRead('Open interest', { endpoint: 'data:/v2/oi', params: { condition } }, Boolean(condition), live, report)
+  const holders = useRead('Top holders', { endpoint: 'data:/v2/holders', params: { condition, limit: '20' } }, Boolean(condition), live, report)
+  const board = useRead('Leaderboard', boardRequest, true, live, report)
+  useEffect(() => { onStatusChange(Object.values(statuses), 'https://docs.polymarket.com/market-data/overview') }, [statuses, onStatusChange])
+  const pick = (row: RecordData, index = 0) => { setSelected(row); setOutcome(index) }
+  const reset = () => { setPage(0); setSelected(null); setOutcome(0) }
+  const chartPoints = rows(history.data?.data.value)
+  const lastPoint = chartPoints[chartPoints.length - 1]
+  const lastPrice = lastPoint?.price
+  const chance = prices[outcome] == null ? lastPrice : Number(prices[outcome])
+  const dayChange = market.oneDayPriceChange == null ? null : Number(market.oneDayPriceChange) * (outcome === 1 ? -100 : 100)
+  const oi = rows(interest.data?.data.value)[0]?.value
+  const currentQuery = submittedSearch ? searchQuery : markets
+  const end = typeof market.endDate === 'string' ? new Date(market.endDate) : null
+  return <div className="poly-page">
+    <header className="poly-header">
+      <div className="poly-brand"><svg viewBox="0 0 28 28" aria-hidden="true"><path d="M3 5h22v18H3zM3 16l7-5 7 4 8-9M10 11v12M17 15v8"/></svg><h1>Polymarket</h1><span>Prediction markets</span></div>
+      <div className="poly-header-actions"><label className="poly-auto"><input type="checkbox" checked={auto} onChange={e => setAuto(e.target.checked)}/>Auto-refresh · 30s</label><button className="poly-button" onClick={() => void client.refetchQueries({ queryKey: ['polymarket'], type: 'active' })}>↻ Refresh</button></div>
+    </header>
+    <div className="poly-navigation"><nav aria-label="Polymarket views">{[['markets', 'Markets'], ['explorer', 'Data explorer']].map(([id, label]) => <button key={id} aria-pressed={view === id} onClick={() => setView(id)}>{label}</button>)}</nav><span className="poly-readonly">Public data · Read only</span></div>
+    {view === 'explorer' ? <div className="poly-explorer"><div className="poly-section-heading"><div><h2>Public data explorer</h2><p>Markets, wallets, leaderboards and every public dataset. Full records when you need them.</p></div></div><PolymarketExplorer market={market} token={token} active={live} onStatus={report}/></div> : <>
+      <div className="poly-discovery-bar"><nav aria-label="Market categories">{topics.map(item => <button key={item} aria-pressed={topic === item && !submittedSearch} onClick={() => { setTopic(item); setSubmittedSearch(''); setSearch(''); reset() }}>{item === 'Trending' ? '↗ ' : ''}{item}</button>)}</nav><form className="poly-search" onSubmit={e => { e.preventDefault(); setSubmittedSearch(search.trim()); reset() }}><span aria-hidden="true">⌕</span><input aria-label="Search markets" placeholder="Search all markets" value={search} onChange={e => { setSearch(e.target.value); if (!e.target.value) { setSubmittedSearch(''); reset() } }}/><button type="submit" aria-label="Submit market search">↵</button></form></div>
+      <div className="poly-workspace">
+      <section className="poly-discover"><div className="poly-section-heading"><div><h2>{submittedSearch ? `Results for “${submittedSearch}”` : topic === 'Trending' ? 'Trending markets' : `${topic} markets`}</h2><p>{submittedSearch ? `${shown.length} markets found` : 'Explore the questions moving the crowd.'}</p></div><select aria-label="Market status" value={String(closed)} onChange={e => { setClosed(e.target.value === 'true'); reset() }}><option value="false">Active markets</option><option value="true">Closed markets</option></select></div>
+        {currentQuery.isFetching && !shown.length ? <div className="poly-skeletons">{[0, 1, 2].map(i => <div key={i}/>)}</div> : !shown.length ? <div className="poly-empty">{currentQuery.isError || (topic !== 'Trending' && tag.isError) ? 'Markets unavailable. Retry with Refresh; details are in Settings.' : 'No matching markets. Try another topic or search.'}</div> : <div className="poly-market-grid">{shown.map(row => <article className="poly-market-card" key={String(row.id)} data-selected={row.id === market.id}>
+          <button className="poly-card-question" onClick={() => pick(row)}><MarketImage market={row}/><h3>{String(row.question ?? 'Untitled market')}</h3></button><div className="poly-card-outcomes">{list(row.outcomes).slice(0, 2).map((name, i) => <button key={i} className={i === 1 ? 'poly-no' : 'poly-yes'} onClick={() => pick(row, i)}><span>{name}</span><strong>{probability(list(row.outcomePrices)[i])}</strong></button>)}</div><div className="poly-card-footer"><span>{formatMoney(row.volume)} Vol.</span><span>{formatNumber(row.liquidity)} liquidity</span><button aria-label={`Explore ${String(row.question)}`} onClick={() => pick(row)}>↗</button></div>
+        </article>)}</div>}
+        {!submittedSearch && <div className="poly-pagination"><button disabled={page === 0} onClick={() => { setPage(page - 1); setSelected(null); setOutcome(0) }}>← Previous</button><span>Page {page + 1}</span><button disabled={sourceRows.length < 25} onClick={() => { setPage(page + 1); setSelected(null); setOutcome(0) }}>Next →</button></div>}
+      </section>
+      <div className="poly-analysis">
+      <div className="poly-detail-layout">
+        <main className="poly-feature">
+          <div className="poly-question"><MarketImage market={market}/><div><div className="poly-eyebrow">{closed ? 'Closed market' : 'Market spotlight'}<span>•</span>{end && Number.isFinite(end.getTime()) ? `Ends ${end.toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })}` : 'Prediction market'}</div><h2>{String(market.question ?? (currentQuery.isFetching ? 'Finding the next market…' : 'No markets to display'))}</h2></div></div>
+          <div className="poly-probability"><strong>{probability(chance)}</strong><div><span>Chance of {names[outcome] ?? 'outcome'}</span>{dayChange != null && Number.isFinite(dayChange) && <small className={dayChange >= 0 ? 'poly-positive' : 'poly-negative'}>{dayChange >= 0 ? '↗ +' : '↘ '}{dayChange.toFixed(1)} pts today</small>}</div><div className="poly-outcomes">{names.map((name, i) => <button key={i} className={i === 1 ? 'poly-no' : 'poly-yes'} aria-pressed={outcome === i} onClick={() => setOutcome(i)}>{name}<strong>{prices[i] == null ? '—' : `${(Number(prices[i]) * 100).toFixed(1)}¢`}</strong></button>)}</div></div>
+          <div className="poly-chart-toolbar"><span className="poly-chart-legend"><i/>{names[outcome] ?? 'Outcome'} probability</span><div aria-label="History range">{ranges.map(([value, label]) => <button key={value} aria-pressed={interval === value} onClick={() => setInterval(value)}>{label}</button>)}</div></div>
+          <Empty query={history}><MarketChart value={history.data?.data.value}/></Empty>
+          <div className="poly-market-metrics"><div><span>Total volume</span><strong>{formatMoney(market.volume)}</strong></div><div><span>24h volume</span><strong>{formatMoney(market.volume24hr)}</strong></div><div><span>Liquidity</span><strong>{formatMoney(market.liquidity)}</strong></div><div><span>Open interest</span><strong>{interest.error ? 'Unavailable' : formatMoney(oi)}</strong></div></div>
+        </main>
+        <aside className="poly-book-panel"><div className="poly-card-heading"><h3>Order book</h3><span>{names[outcome] ?? 'Outcome'}</span></div><Empty query={book}><MarketBook value={book.data?.data.value}/></Empty><div className="poly-book-note"><strong>Market-implied probability</strong><p>Outcome prices reflect what traders are willing to pay. Winning shares settle at $1.</p></div></aside>
       </div>
-    </div> : <div className="flex min-w-0 flex-col gap-3">
-      <Panel title="Explore every documented public GET dataset"><div className="grid gap-3 p-3 md:grid-cols-2"><label className="flex flex-col gap-1 text-xs">Find a dataset<input aria-label="Find a dataset" className={inputClass} placeholder="Wallet, trades, tags, rewards, sports…" value={endpointFilter} onChange={e => setEndpointFilter(e.target.value)}/></label><label className="flex min-w-0 flex-col gap-1 text-xs">Dataset<select aria-label="Dataset" className={inputClass} value={endpointId} onChange={e => { setEndpointId(e.target.value); setDraft({}) }}>{POLYMARKET_ENDPOINTS.filter(item => item.id === endpointId || `${item.label} ${item.id}`.toLowerCase().includes(endpointFilter.toLowerCase())).map(item => <option key={item.id} value={item.id}>{item.group.toUpperCase()} · {item.label}</option>)}</select></label></div>
-      <form className="p-3" onSubmit={e => { e.preventDefault(); setRequest({ endpoint: endpointId, params: Object.fromEntries(Object.entries(draft).filter(([, value]) => value.trim())) }) }}><div className="grid gap-3 md:grid-cols-3">{endpoint.params.map(param => <label key={param.name} title={param.description} className="flex min-w-0 flex-col gap-1 text-xs">{param.name}{param.required ? ' *' : ''}<input aria-label={param.name} className={inputClass} required={param.required} value={draft[param.name] ?? ''} placeholder={param.choices?.map(String).join(' / ') ?? (param.type === 'array' ? 'Comma-separated values' : 'Provider default')} onChange={e => setDraft({ ...draft, [param.name]: e.target.value })}/><span className="line-clamp-2 text-text-muted">{param.description}</span></label>)}</div><div className="mt-3 flex gap-2"><Button type="submit">Load dataset</Button><Button type="button" onClick={() => setDraft(previous => ({ ...previous, ...Object.fromEntries(Object.entries({ token_id: token ?? '', condition: String(market.conditionId ?? ''), event_id: String(object(Array.isArray(market.events) ? market.events[0] : null).id ?? '') }).filter(([name]) => endpoint.params.some(param => param.name === name))) }))}>Use selected market identifiers</Button></div></form>
-      <p className="px-3 pb-3 text-xs text-text-muted">Blank fields use provider defaults. Enter a public wallet address in user for wallet datasets. Array parameters accept comma-separated values. Pages retain the original filters. No credentials or trading actions are supported.</p></Panel>
-      <Panel title={POLYMARKET_ENDPOINTS.find(item => item.id === request.endpoint)?.label ?? 'Results'} warning={explorer.data?.meta.failureReason} actions={<Button onClick={() => void explorer.refetch()}>Refresh</Button>}>
-        <p className="break-all p-3 text-xs text-text-muted">{explorer.data?.data.url}</p>{explorer.isPending ? <p className="p-4">Loading dataset…</p> : (explorer.isError && !explorer.data) || explorer.data?.meta.freshness === 'failed' ? <p className="p-4 text-xs">Dataset unavailable or parameters need attention. Check the parameter hints and Settings diagnostics, then retry.</p> : <DataView value={explorer.data?.data.value}/>}
-        <div className="flex flex-wrap gap-2 p-3"><Button disabled={!nextCursor} onClick={() => setRequest({ ...request, params: { ...request.params, [endpoint.group === 'clob' ? 'next_cursor' : 'cursor']: String(nextCursor) } })}>Next cursor page</Button><Button disabled={!POLYMARKET_ENDPOINTS.find(item => item.id === request.endpoint)?.params.some(p => p.name === 'offset')} onClick={() => setRequest({ ...request, params: { ...request.params, offset: String(Number(request.params?.offset ?? 0) + Number(request.params?.limit ?? 25)), limit: request.params?.limit ?? '25' } })}>Next offset page</Button><Button onClick={() => setRequest({ ...request, params: Object.fromEntries(Object.entries(request.params ?? {}).filter(([key]) => key !== 'cursor' && key !== 'offset' && key !== 'next_cursor')) })}>First page</Button></div>
-      </Panel>
-    </div>}
+      <section className="poly-activity-panel"><div className="poly-tab-heading"><nav aria-label="Market details">{['Activity', 'Order book', 'Top holders', 'Rules', 'Leaderboard'].map(label => <button key={label} aria-pressed={detailTab === label} onClick={() => setDetailTab(label)}>{label}</button>)}</nav><span>{detailTab === 'Activity' ? 'Latest matched trades' : detailTab === 'Top holders' ? 'Public market positions' : detailTab === 'Leaderboard' ? 'Daily profit & loss' : 'Resolution criteria'}</span></div>
+        {detailTab === 'Order book' ? <div className="poly-expanded-book"><Empty query={book}><MarketBook value={book.data?.data.value}/></Empty></div> : detailTab === 'Rules' ? <div className="poly-rules"><p>{String(market.description ?? 'No resolution criteria supplied.')}</p><dl><div><dt>Condition ID</dt><dd>{condition || '—'}</dd></div><div><dt>Selected outcome ID</dt><dd>{token ?? '—'}</dd></div></dl></div> : <Empty query={detailTab === 'Activity' ? trades : detailTab === 'Top holders' ? holders : board}><MarketActivity value={(detailTab === 'Activity' ? trades : detailTab === 'Top holders' ? holders : board).data?.data.value} kind={detailTab} outcome={names[outcome]} token={token}/></Empty>}
+      </section>
+      </div>
+      </div>
+    </>}
   </div>
 }

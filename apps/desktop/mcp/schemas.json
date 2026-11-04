@@ -250,6 +250,38 @@
       }
     }
   },
+  "polymarket": {
+    "$ref": "#/definitions/Input_polymarket",
+    "definitions": {
+      "Input_polymarket": {
+        "$ref": "#/definitions/PolymarketRequest"
+      },
+      "PolymarketRequest": {
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "type": "string"
+          },
+          "params": {
+            "$ref": "#/definitions/Record%3Cstring%2Cstring%3E"
+          },
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "endpoint"
+        ],
+        "additionalProperties": false
+      },
+      "Record<string,string>": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        }
+      }
+    }
+  },
   "screenshot": {
     "$ref": "#/definitions/Input_screenshot",
     "definitions": {

@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fetchSeriesCsv } from './fred.js'
+import { publicMacro } from './publicMacro.js'
 export { fetchSeriesCsv, parseFredCsv } from './fred.js'
 
 import type {
@@ -124,9 +125,9 @@ const STALE_TTL_MS = 7 * 24 * 60 * 60_000
  * payload shape changes, so an entry written by an older shape is dropped rather than
  * rendered.
  */
-const CACHE_VERSION = 2
+const CACHE_VERSION = 3
 
-export const ECONOMIC_SOURCE = 'US Treasury, BLS, NY Fed, UMich and FRED'
+export const ECONOMIC_SOURCE = 'US Treasury, BLS, NY Fed, UMich, FRED, World Bank and IMF'
 
 export interface EconomicFetchResult {
   payload: EconomicPayload
@@ -567,6 +568,14 @@ async function resolveUmich(catalog: readonly EconomicSeries[]): Promise<Resolve
 }
 
 const BATCH_RESOLVERS: Partial<Record<EconomicProvider, (catalog: readonly EconomicSeries[]) => Promise<Resolved>>> = {
+  'world-bank': async members => {
+    const points = await publicMacro.series('world-bank')
+    return new Map(members.map(series => [series.seriesId, points]))
+  },
+  imf: async members => {
+    const points = await publicMacro.series('imf')
+    return new Map(members.map(series => [series.seriesId, points]))
+  },
   treasury: resolveTreasury,
   bls: resolveBls,
   nyfed: resolveNyfed,
@@ -668,7 +677,7 @@ async function buildPayload(groups: EconomicGroup[]): Promise<EconomicPayload> {
     else for (const [key, points] of result.resolved) resolved.set(key, points)
   }
 
-  const fallback = catalog.filter((series) => !resolved.get(series.seriesId)?.length)
+  const fallback = catalog.filter((series) => series.provider !== 'world-bank' && series.provider !== 'imf' && !resolved.get(series.seriesId)?.length)
   for (const [key, points] of await fetchFallback(fallback, unreachable)) resolved.set(key, points)
 
   // A provider whose series were all recovered from FRED is not worth reporting as down: the

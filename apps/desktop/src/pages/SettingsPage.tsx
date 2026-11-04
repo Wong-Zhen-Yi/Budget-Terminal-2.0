@@ -185,7 +185,7 @@ export function SettingsPage({
           <PrivacyPanel tabs={privacyTabs} obscured={settings.obscuredTabs}
             onSetObscured={(id, obscured) => void write({ type: 'setTabObscured', id, obscured }, 'Privacy settings updated.')} /> },
         { id: 'mcp', category: 'integrations', column: 'secondary', terms: 'local mcp chatgpt codex tools connection permissions read only approval browser client setup activity', content: <McpPanel /> },
-        { id: 'market-api-keys', category: 'integrations', terms: 'alltick finnhub financial modeling modelling prep fmp api keys credentials inactive providers', content: <MarketApiKeysPanel /> },
+        { id: 'market-api-keys', category: 'integrations', terms: 'alltick finnhub financial modeling modelling prep fmp binance coinbase world bank imf sdmx api keys credentials inactive providers', content: <MarketApiKeysPanel /> },
       ],
     },
     {

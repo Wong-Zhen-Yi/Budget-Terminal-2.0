@@ -523,6 +523,154 @@
       }
     }
   },
+  "polymarket": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$ref": "#/definitions/Output_polymarket",
+    "definitions": {
+      "Output_polymarket": {
+        "$ref": "#/definitions/McpOutputEnvelope%3CPolymarketResult%3E"
+      },
+      "McpOutputEnvelope<PolymarketResult>": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/definitions/PolymarketResult"
+          },
+          "meta": {
+            "$ref": "#/definitions/McpOutputEnvelopeMeta"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/McpOutputEnvelopeError"
+            }
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "errors"
+        ],
+        "additionalProperties": false
+      },
+      "PolymarketResult": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "$ref": "#/definitions/Json"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "Json": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/Json"
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/definitions/Json"
+            }
+          }
+        ]
+      },
+      "McpOutputEnvelopeMeta": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "string",
+            "description": "MCP saved-domain revision for compare-and-swap edits; omitted on ordinary research."
+          },
+          "source": {
+            "type": "string"
+          },
+          "freshness": {
+            "$ref": "#/definitions/McpOutputFreshness"
+          },
+          "fetchedAt": {
+            "type": "number"
+          },
+          "asOf": {
+            "type": "number",
+            "description": "Provider observation timestamp, distinct from successful retrieval time."
+          },
+          "expiresAt": {
+            "type": "number",
+            "description": "Earliest source cache expiry, including dependencies of a derived payload."
+          },
+          "cacheAgeSeconds": {
+            "type": "number"
+          },
+          "failureReason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "freshness",
+          "fetchedAt"
+        ],
+        "additionalProperties": false
+      },
+      "McpOutputFreshness": {
+        "type": "string",
+        "enum": [
+          "fresh",
+          "cached",
+          "stale",
+          "partial",
+          "failed"
+        ]
+      },
+      "McpOutputEnvelopeError": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "symbol": {
+            "type": "string",
+            "description": "The symbol the failure belongs to — or, on the pages whose panels share one envelope, the block label that panel looks itself up by (`warningOf` on Pre-Market and News)."
+          }
+        },
+        "required": [
+          "source",
+          "reason",
+          "operation"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
   "screenshot": {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "$ref": "#/definitions/Output_screenshot",
@@ -1579,7 +1727,7 @@
             "$ref": "#/definitions/McpOutputChartsCompareRange"
           },
           "series": {
-            "$ref": "#/definitions/Record%3Cstring%2Cdef-interface-523195628-29066-29151-523195628-0-144750%5B%5D%3E"
+            "$ref": "#/definitions/Record%3Cstring%2Cdef-interface-523195628-29162-29247-523195628-0-144941%5B%5D%3E"
           },
           "sources": {
             "$ref": "#/definitions/Record%3Cstring%2Cstring%3E"
@@ -1618,7 +1766,7 @@
           "1M"
         ]
       },
-      "Record<string,def-interface-523195628-29066-29151-523195628-0-144750[]>": {
+      "Record<string,def-interface-523195628-29162-29247-523195628-0-144941[]>": {
         "type": "object",
         "additionalProperties": {
           "type": "array",
@@ -3748,9 +3896,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "McpOutputFundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CMcpOutputFundamentalSeriesKey%2Cdef-interface-523195628-24121-24375-523195628-0-144750%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CMcpOutputFundamentalSeriesKey%2Cdef-interface-523195628-24217-24471-523195628-0-144941%5B%5D%3E"
       },
-      "Record<McpOutputFundamentalSeriesKey,def-interface-523195628-24121-24375-523195628-0-144750[]>": {
+      "Record<McpOutputFundamentalSeriesKey,def-interface-523195628-24217-24471-523195628-0-144941[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -13705,9 +13853,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-21863-22099-150963582-0-126973%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-21939-22175-150963582-0-127076%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-21863-22099-150963582-0-126973[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-21939-22175-150963582-0-127076[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -15085,9 +15233,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-21863-22099-150963582-0-126973%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-21939-22175-150963582-0-127076%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-21863-22099-150963582-0-126973[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-21939-22175-150963582-0-127076[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -16515,9 +16663,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-21863-22099-150963582-0-126973%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-21939-22175-150963582-0-127076%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-21863-22099-150963582-0-126973[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-21939-22175-150963582-0-127076[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -17955,9 +18103,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-21863-22099-150963582-0-126973%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-21939-22175-150963582-0-127076%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-21863-22099-150963582-0-126973[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-21939-22175-150963582-0-127076[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -19759,9 +19907,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-21863-22099-150963582-0-126973%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-21939-22175-150963582-0-127076%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-21863-22099-150963582-0-126973[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-21939-22175-150963582-0-127076[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -21114,9 +21262,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-21863-22099-150963582-0-126973%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-21939-22175-150963582-0-127076%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-21863-22099-150963582-0-126973[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-21939-22175-150963582-0-127076[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -26818,6 +26966,8 @@
       "McpOutputEconomicProvider": {
         "type": "string",
         "enum": [
+          "world-bank",
+          "imf",
           "fred",
           "bls",
           "treasury",

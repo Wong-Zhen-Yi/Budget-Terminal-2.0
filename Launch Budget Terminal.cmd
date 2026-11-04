@@ -1,6 +1,9 @@
 @echo off
+rem Current dark navy and blue colour scheme is locked in AGENTS.md; palette changes require an explicit user request.
+echo Public API routing: Coinbase and Binance spot quotes, shared CoinGecko metadata, World Bank and IMF annual context. Key-based APIs remain inactive.
+echo MCP: public Polymarket reads registered; all implemented pages support screenshot access.
 echo AllTick, Finnhub and Financial Modeling Prep: encrypted API key settings added; providers remain inactive.
-echo Polymarket: public market workspace and API explorer; all pages preload at startup.
+echo Polymarket: redesigned market cards, probability charts, depth and activity; public datasets and startup preloading retained.
 echo Diagnostic logs: open Settings - Diagnostics in the desktop app, or press Ctrl+Shift+L.
 title Budget Terminal
 cd /d "%~dp0" || exit /b 1

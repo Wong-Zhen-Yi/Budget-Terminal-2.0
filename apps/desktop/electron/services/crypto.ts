@@ -40,6 +40,7 @@ import { getQuote } from './yahoo/quotes.js'
 import { observeSource } from './sourceHealth.js'
 import { hyperliquidEquities } from './hyperliquidEquities.js'
 import { markCryptoPerpetuals } from '../shared/hyperliquid.js'
+import { diversifiedData } from './diversifiedData.js'
 
 /**
  * The Crypto page's data, ported from `CryptoMarketWorker` (`workers/crypto.py`).
@@ -253,21 +254,16 @@ const EMPTY_QUOTE: RawQuote = {
 
 /** `_fetch_coingecko_quotes`: the five named coins in one call, keyed back to the label. */
 async function fetchCoinGeckoQuotes(): Promise<Record<string, RawQuote>> {
-  const ids = Object.values(COINGECKO_IDS)
-  const body = await getJson(marketsUrl({ ids: ids.join(','), per_page: String(ids.length) }))
-  const rows = Array.isArray(body) ? (body as CoinGeckoRow[]) : []
-  const byId = new Map(rows.map((row) => [String(row?.id ?? ''), row]))
-
+  // Share the heatmap's single top-30 request instead of a second paced CoinGecko call.
+  const body = await getJson(marketsUrl({ per_page: String(CRYPTO_HEATMAP_LIMIT) }))
+  const tiles = Array.isArray(body) ? body as CoinGeckoRow[] : []
   const quotes: Record<string, RawQuote> = {}
   for (const [label, id] of Object.entries(COINGECKO_IDS)) {
-    const row = byId.get(id)
+    const row = tiles.find(tile => tile.id === id)
     if (!row) continue
     quotes[label] = {
       price: firstNumber(row.current_price),
-      changePct: firstNumber(
-        row.price_change_percentage_24h_in_currency,
-        row.price_change_percentage_24h,
-      ),
+      changePct: firstNumber(row.price_change_percentage_24h_in_currency, row.price_change_percentage_24h),
       volume: firstNumber(row.total_volume),
       marketCap: firstNumber(row.market_cap),
       source: COINGECKO_SOURCE,
@@ -341,15 +337,21 @@ async function fetchYahooQuote(symbol: string, force = false): Promise<RawQuote>
 }
 
 /**
- * CoinGecko spot quotes stay primary; missing spot prices prefer labelled perps.
+ * Public venue spot quotes share CoinGecko metadata; missing spot prices prefer labelled perps.
  * Stock metadata and volume remain separate from mapped perpetual prices.
  */
 async function fetchQuotes(force: boolean, perpetuals: Promise<HyperliquidPayload | null>): Promise<Record<string, CryptoQuote>> {
-  const live = await fetchCoinGeckoQuotes().catch(() => ({}) as Record<string, RawQuote>)
+  const [live, spots] = await Promise.all([
+    fetchCoinGeckoQuotes().catch(() => ({}) as Record<string, RawQuote>),
+    Promise.all(CRYPTO_TICKERS.map(async entry => [entry.label, await diversifiedData.spot(entry.symbol)] as const)).then(rows => new Map(rows)),
+  ])
 
   const symbols = [...CRYPTO_TICKERS, ...PROXY_TICKERS]
   const fallbacks = await Promise.all(symbols.map(async (entry): Promise<RawQuote> => {
     const preferred = live[entry.label]
+    const spot = spots.get(entry.label)?.value
+    if (spot) return { price: spot.price, changePct: spot.change, volume: preferred?.volume ?? null,
+      marketCap: preferred?.marketCap ?? null, source: spot.source!, marketCapSource: preferred?.source, volumeSource: preferred?.source }
     // A CoinGecko outage must not fan out into two Yahoo requests per coin.
     // Venue volume is labelled; perpetuals never supply a global market cap.
     if (entry.symbol.endsWith('-USD') && preferred?.price == null) {
@@ -367,15 +369,16 @@ async function fetchQuotes(force: boolean, perpetuals: Promise<HyperliquidPayloa
   symbols.forEach((entry, index) => {
     const fallback = fallbacks[index]
     const preferred = live[entry.label]
+    const spot = spots.get(entry.label)?.value
     rows[entry.label] = {
       label: entry.label,
       symbol: entry.symbol,
       name: entry.name,
-      price: firstNumber(preferred?.price, fallback.price),
-      changePct: fallback.source === 'Hyperliquid crypto perp' ? fallback.changePct : firstNumber(preferred?.changePct, fallback.changePct),
+      price: firstNumber(spot?.price, preferred?.price, fallback.price),
+      changePct: spot ? spot.change : fallback.source === 'Hyperliquid crypto perp' ? fallback.changePct : firstNumber(preferred?.changePct, fallback.changePct),
       volume: firstNumber(preferred?.volume, fallback.volume),
       marketCap: firstNumber(preferred?.marketCap, fallback.marketCap),
-      source: preferred?.price != null ? preferred.source : fallback.source || YAHOO_SOURCE,
+      source: spot?.source ?? (preferred?.price != null ? preferred.source : fallback.source || YAHOO_SOURCE),
       volumeSource: preferred?.volume != null ? preferred.source : fallback.volumeSource,
       marketCapSource: preferred?.marketCap != null ? preferred.source : fallback.marketCapSource,
       metadataAsOf: fallback.metadataAsOf,
@@ -562,7 +565,7 @@ async function fetchCrypto(force: boolean): Promise<CryptoFetchResult> {
  */
 export function getCrypto(force = false): Promise<CryptoFetchResult> {
   return cache
-    .resolve('crypto:page:shared-hyperliquid-v2', TTL.crypto, () => fetchCrypto(force), { force })
+    .resolve('crypto:page:public-spot-v3', TTL.crypto, () => fetchCrypto(force), { force })
     .then((result) => {
       const live = hyperliquidEquities.getCryptoMarkets()
       return live ? { ...result.value, payload: markCryptoPerpetuals(result.value.payload, live) } : result.value

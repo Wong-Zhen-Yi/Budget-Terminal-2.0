@@ -11,6 +11,10 @@ interface ProviderDefinition {
 }
 
 const PROVIDERS: Record<string, ProviderDefinition> = {
+  coinbase: { label: 'Coinbase', softLimit: 90, windowMs: 60_000, fallbackCooldownMs: 60_000 },
+  binance: { label: 'Binance', softLimit: 60, windowMs: 60_000, fallbackCooldownMs: 60_000 },
+  'world-bank': { label: 'World Bank', softLimit: 20, windowMs: 60_000, fallbackCooldownMs: 60_000 },
+  imf: { label: 'IMF', softLimit: 20, windowMs: 60_000, fallbackCooldownMs: 60_000 },
   yahoo: {
     label: 'Yahoo',
     softLimit: 240,

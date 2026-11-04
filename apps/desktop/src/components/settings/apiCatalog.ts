@@ -1,3 +1,5 @@
+import { MARKET_API_PROVIDERS } from '@shared/marketApiKeys'
+
 export interface ApiUse {
   pages: string[]
   purpose: string
@@ -12,9 +14,11 @@ const use = (pages: string, purpose: string): ApiUse => ({ pages: pages.split('|
 
 /** Public service inventory. Dependencies include fallback and shared data consumers, not request attribution. */
 export const API_CATALOG: ApiDefinition[] = [
-  { id: 'alltick', label: 'AllTick', inactive: true, uses: [] },
-  { id: 'finnhub', label: 'Finnhub', inactive: true, uses: [] },
-  { id: 'fmp', label: 'Financial Modeling Prep', inactive: true, uses: [] },
+  ...MARKET_API_PROVIDERS.map(provider => ({ id: provider.id, label: provider.label, inactive: true, uses: [] })),
+  { id: 'coinbase', label: 'Coinbase', uses: [use('crypto', 'Supported USD spot quotes and a shared USDT/USD conversion rate. Separate from perpetuals and global market cap.')] },
+  { id: 'binance', label: 'Binance', uses: [use('crypto', 'Supported spot quotes converted from USDT to USD, with Coinbase and CoinGecko fallbacks.')] },
+  { id: 'world-bank', label: 'World Bank', uses: [use('economic', 'Annual US CPI inflation, distinct from monthly releases.')] },
+  { id: 'imf', label: 'IMF', uses: [use('economic', 'Annual US GDP growth through the IMF WEO actual-data cutoff; forecasts excluded.')] },
   { id: 'yahoo', label: 'Yahoo Finance', uses: [
     use('dashboard|dashboard-2|portfolio|global|pre-market|trading-volumes|heatmap|cards|up-down|stocks|stock-discovery|price|market-cap', 'Quotes, market snapshots, screeners and price/history fallbacks.'),
     use('charts|technical-screen|quant|backtest|beta|projections', 'Historical bars, technical indicators, correlations, simulations and projections.'),

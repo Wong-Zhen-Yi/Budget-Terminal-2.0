@@ -9,6 +9,7 @@
     "npm": ">=10.9.8"
   },
   "scripts": {
+    "probe:public-providers": "tsx scripts/probe-public-providers.ts",
     "probe:settings-dashboard-ui": "tsx scripts/probe-settings-dashboard-ui.ts",
     "probe:tui": "tsx scripts/probe-tui.ts",
     "probe:settings-ui": "tsx scripts/probe-settings-ui.ts",

@@ -21,6 +21,8 @@ import { ECONOMIC_GROUPS } from './contract.js'
  */
 
 export const PROVIDER_LABELS: Record<EconomicProvider, string> = {
+  'world-bank': 'World Bank',
+  imf: 'IMF',
   fred: 'FRED',
   bls: 'BLS',
   treasury: 'US Treasury',
@@ -73,6 +75,18 @@ export function sourceLabel(series: EconomicSeries): string {
 
 /** The catalog. Ordering inside a group is the display order on that group's tab. */
 export const ECONOMIC_SERIES: readonly EconomicSeries[] = [
+  {
+    seriesId: 'WB_US_CPI_ANNUAL', label: 'US CPI inflation (annual)', group: 'Inflation', units: 'percent',
+    frequency: 'annual', transform: 'level', decimals: 2, higherIsBetter: false,
+    provider: 'world-bank', providerKey: 'USA / FP.CPI.TOTL.ZG',
+    note: 'World Bank annual CPI inflation; separate from monthly US CPI releases.',
+  },
+  {
+    seriesId: 'IMF_US_GDP_ANNUAL', label: 'US real GDP growth (annual actuals)', group: 'Growth', units: 'percent',
+    frequency: 'annual', transform: 'level', decimals: 2, higherIsBetter: true,
+    provider: 'imf', providerKey: 'WEO / USA / NGDP_RPCH',
+    note: 'IMF WEO annual growth through its latest actual-data year. Forecasts and estimates beyond that cutoff are excluded; separate from quarterly GDP.',
+  },
   // ------------------------------------------------------------------ inflation
   {
     seriesId: 'CPIAUCSL', label: 'CPI (YoY)', group: 'Inflation', units: 'percent',

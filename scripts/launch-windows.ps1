@@ -1,8 +1,11 @@
 param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Tui, [Parameter(ValueFromRemainingArguments=$true)][string[]]$TuiArguments)
 
 $ErrorActionPreference = 'Stop'
+# Current dark navy and blue colour scheme is locked in AGENTS.md; palette changes require an explicit user request.
+# Public API routing: Coinbase/Binance spot quotes, shared CoinGecko metadata, World Bank/IMF annual context. Key-based APIs remain inactive.
+# MCP: public Polymarket reads registered; all implemented pages support screenshot access.
 # AllTick, Finnhub and Financial Modeling Prep: encrypted API key settings added; providers remain inactive.
-# Polymarket: public market workspace and API explorer; all pages preload at startup.
+# Polymarket: redesigned market cards, probability charts, depth and activity; public datasets and startup preloading retained.
 $runtimeCheck = Join-Path $PSScriptRoot 'runtime.cjs'
 $nodeVersion = '24.22.1'
 # Official https://nodejs.org/dist/v24.22.1/SHASUMS256.txt

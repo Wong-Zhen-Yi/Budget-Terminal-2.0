@@ -95,6 +95,17 @@ try {
       check(visible(card('mcp')) && !visible(card('privacy')), 'Integrations category failed')
       const keys = card('market-api-keys')
       check(visible(keys) && keys.querySelectorAll('input[type=password]').length === 3, 'Masked API key controls missing')
+      for (const provider of ['binance', 'coinbase', 'world-bank', 'imf']) {
+        const entry = keys.querySelector('[data-api-provider="' + provider + '"]')
+        check(visible(entry) && entry.textContent.includes('Public endpoints enabled'), 'Public provider missing: ' + provider)
+        check(!entry.querySelector('input'), 'Unnecessary credentials requested: ' + provider)
+      }
+      await setSearch('world bank')
+      check(visible(keys) && !visible(card('mcp')), 'New API settings are not searchable')
+      await setSearch('')
+      for (const label of ['Binance', 'Coinbase', 'World Bank', 'IMF']) {
+        check([...card('api').querySelectorAll('.api-usage__dependency > summary')].some(entry => entry.textContent.includes(label) && !entry.textContent.includes('Inactive')), 'API directory entry missing: ' + label)
+      }
       const keyInput = keys.querySelector('input')
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(keyInput, 'fixture-only-key')
       keyInput.dispatchEvent(new Event('input', { bubbles: true })); await wait(80)

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { MARKET_API_PROVIDERS } from '@shared/marketApiKeys'
+import { MARKET_API_PROVIDERS, MARKET_DATA_PROVIDERS } from '@shared/marketApiKeys'
 import type { MarketApiKeyMutation, MarketApiKeyStatus, MarketApiProvider } from '@shared/marketApiKeys'
 import { Button } from '@/components/ui/Button'
 import { Panel } from '@/components/ui/Panel'
@@ -37,9 +37,9 @@ export function MarketApiKeysPanel() {
     finally { setBusy(false) }
   }
 
-  return <Panel title="Market data API keys">
+  return <Panel title="Market data APIs">
     <div className="flex flex-col gap-3 p-2">
-      <p className="text-2xs text-text-muted">AllTick, Finnhub and Financial Modeling Prep are inactive. Keys are stored encrypted on this device for future use. Saving a key does not validate it or fetch data.</p>
+      <p className="text-2xs text-text-muted">Public APIs diversify spot quotes and annual economic data with separate budgets, caching and cooldowns. AllTick, Finnhub and Financial Modeling Prep remain inactive, including when a key is saved. Keys stay encrypted on this device.</p>
       {status && !status.encryptionAvailable ? <p role="alert">OS credential encryption is unavailable. Enable your system keyring to save keys.</p> : null}
       {MARKET_API_PROVIDERS.map(provider => <form key={provider.id} className="market-api-key" onSubmit={event => {
         event.preventDefault()
@@ -55,6 +55,11 @@ export function MarketApiKeysPanel() {
           <Button disabled={busy || !status?.configured[provider.id] || !status.encryptionAvailable} onClick={() => void update({ type: 'remove', provider: provider.id })}>Remove</Button>
         </div>
       </form>)}
+      {MARKET_DATA_PROVIDERS.filter(provider => provider.access !== 'key').map(provider => <section key={provider.id} data-api-provider={provider.id} className="border-t border-border pt-2">
+        <h3 className="text-xs">{provider.label} <span className="text-text-muted">· Public endpoints enabled</span></h3>
+        <p className="text-2xs text-text-muted">{'description' in provider ? provider.description : ''}</p>
+      </section>)}
+      <p className="text-2xs text-text-muted">Budgets are conservative app limits, not account quotas. Daily budgets apply to this app session. A provider cooldown is never bypassed by Refresh. Live request counts and failures appear in Diagnostics → API usage.</p>
       {message ? <p className="text-2xs" role={error ? 'alert' : 'status'}>{message}</p> : null}
       {!status ? <Button disabled={busy} onClick={() => void load()}>Retry key settings</Button> : null}
     </div>

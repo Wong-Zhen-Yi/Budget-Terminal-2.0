@@ -1,4 +1,5 @@
 import type { PolymarketRequest, PolymarketResult } from './polymarket.js'
+export type { PolymarketRequest, PolymarketResult } from './polymarket.js'
 import type { BrowserControl, BrowserRequest, BrowserResult, BrowserState, BrowserViewport } from './browser.js'
 import type { McpDiagnostics, McpPolicy } from './mcpAccess.js'
 export type { BrowserRequest } from './browser.js'
@@ -1392,6 +1393,8 @@ export const ECONOMIC_TRANSFORMS = [
 export type EconomicTransform = (typeof ECONOMIC_TRANSFORMS)[number]
 
 export const ECONOMIC_PROVIDERS = [
+  'world-bank',
+  'imf',
   'fred',
   'bls',
   'treasury',
