@@ -84,6 +84,8 @@ function launch({ development = false, logs = false, platform = process.platform
   log.log('Cache startup: saved pages stay usable during background refresh. Settings controls 256 MiB page snapshots, 2 GiB market data, a separate 512 MiB image budget and 30-day retention. All pages still preload.')
   log.log('Refresh schedule: Heatmap every 30 minutes; company snapshots and Personal Finance FX hourly; Dashboard headlines every 5 minutes. Backtest preloads once with no automatic refresh.')
   log.log('Startup loading: completed pages refresh while slower pages load, recovered warnings clear, and changed selections preload without restarting unrelated pages.')
+  log.log('Polymarket: public market workspace and API explorer; all pages preload at startup.')
+  log.log('AllTick, Finnhub and Financial Modeling Prep: encrypted API key settings added; providers remain inactive and make no data requests.')
   log.log('Page headers: removed the equity price source subtitle from every page.')
   log.log('Agents connects quietly at startup; connection status and errors stay visible in the Agents toolbar.')
   log.log('Yahoo load reduction: mapped crypto-equity prices skip Yahoo charts, stock metadata is cached for 15 minutes, and crypto perpetuals share the live equity socket with REST fallback. All pages still preload.')

@@ -1,3 +1,4 @@
+import type { PolymarketRequest, PolymarketResult } from './polymarket.js'
 import type { BrowserControl, BrowserRequest, BrowserResult, BrowserState, BrowserViewport } from './browser.js'
 import type { McpDiagnostics, McpPolicy } from './mcpAccess.js'
 export type { BrowserRequest } from './browser.js'
@@ -1364,6 +1365,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'backtest', label: 'Backtest', implemented: true },
   { id: 'ipo', label: 'IPO', implemented: true },
   { id: 'institutions', label: 'Institutions', implemented: true },
+  { id: 'polymarket', label: 'Polymarket', implemented: true },
   { id: 'politics', label: 'Politics', implemented: true },
   { id: 'youtube', label: 'YouTube', implemented: true },
   { id: 'dictionary', label: 'Dictionary', implemented: true },
@@ -3514,6 +3516,8 @@ export const CHANNELS = {
   screenshotReady: 'mcp:screenshot-ready',
   savedDataChanged: 'user-data:changed',
   apiUsage: 'system:api-usage',
+  marketApiKeys: 'settings:market-api-keys',
+  marketApiKeysMutate: 'settings:market-api-keys-mutate',
   startupPriority: 'system:startup-priority',
   cacheStatus: 'system:cache-status',
   configureCache: 'system:cache-configure',
@@ -3587,6 +3591,7 @@ export const CHANNELS = {
   institutionTickerActivity: 'institutions:ticker-activity',
   ipoUpcoming: 'ipo:upcoming',
   ipoCompleted: 'ipo:completed',
+  polymarket: 'polymarket:read',
   politicsPage: 'politics:page',
   politicsExport: 'politics:export',
   backtest: 'backtest:run',
@@ -3737,6 +3742,8 @@ export interface DesktopApi {
   onSavedDataChanged(listener: (event: SavedDataChanged) => void): () => void
   readonly platform: NodeJS.Platform
   apiUsage(): Promise<ApiUsageSnapshot>
+  marketApiKeys(): Promise<Envelope<import('./marketApiKeys.js').MarketApiKeyStatus>>
+  mutateMarketApiKeys(request: import('./marketApiKeys.js').MarketApiKeyMutation): Promise<Envelope<import('./marketApiKeys.js').MarketApiKeyStatus>>
   appMetrics(): Promise<Envelope<AppMetrics>>
   startupPriority(order: number | null): Promise<void>
   cacheStatus(): Promise<Envelope<import('./cachePolicy.js').CacheStatus>>
@@ -3828,6 +3835,7 @@ export interface DesktopApi {
   ): Promise<Envelope<InstitutionTickerActivityPayload>>
   ipoUpcoming(request: IpoUpcomingRequest): Promise<Envelope<IpoUpcomingPayload>>
   ipoCompleted(request: IpoCompletedRequest): Promise<Envelope<IpoCompletedPayload>>
+  polymarket(request: PolymarketRequest): Promise<Envelope<PolymarketResult>>
   politicsPage(request: PoliticsPageRequest): Promise<Envelope<PoliticsPagePayload>>
   politicsExport(request: PoliticsExportRequest): Promise<Envelope<PoliticsExportPayload>>
   backtest(request: BacktestRequest): Promise<Envelope<BacktestPayload>>

@@ -27,6 +27,7 @@ function panelLabels(page: string, key: QueryKey): string[] {
   if (root === 'newsThumbnail' || root === 'youtubeThumbnail' || root === 'newsPreview') return []
   if (root === 'fundamentalsPage' && page === 'scorecard') return [`Scorecard ${key[1]}`]
   if (root === 'chartsHistory' && (page === 'agents' || page === 'dashboard-2')) return [`Agent chart ${key[1]}`]
+  if (root === 'polymarket') return [`Polymarket ${String(key[1])}`]
   if (root === 'agents') return ['Agents']
   if (root === 'cardsPerformance') {
     try { return [`Cards ${JSON.parse(String(key[1])).interval}`] } catch { return ['Cards performance'] }

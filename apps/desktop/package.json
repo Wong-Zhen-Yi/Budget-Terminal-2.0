@@ -146,7 +146,9 @@
     "probe:performance-ui": "tsx scripts/probe-performance-ui.ts",
     "probe:workers-build": "tsx scripts/probe-workers-build.ts",
     "probe:diagnostics": "tsx scripts/probe-diagnostics.ts",
-    "probe:diagnostics-ui": "tsx scripts/probe-diagnostics-ui.ts"
+    "probe:diagnostics-ui": "tsx scripts/probe-diagnostics-ui.ts",
+    "probe:polymarket": "tsx scripts/probe-polymarket.ts",
+    "probe:polymarket-ui": "tsx scripts/probe-polymarket-ui.ts"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

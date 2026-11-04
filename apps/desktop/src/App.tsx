@@ -1,3 +1,4 @@
+import { PolymarketPage } from '@/pages/PolymarketPage'
 import { ArticlesPage } from '@/pages/ArticlesPage'
 import { NotificationsPage } from '@/pages/NotificationsPage'
 import { useNotifications, useNotificationCommand } from '@/api/notificationsQueries'
@@ -601,6 +602,8 @@ function renderPage({
       <ProjectionsPage onStatusChange={onStatusChange} />
     ) : tabId === 'ipo' ? (
       <IpoPage onStatusChange={onStatusChange} />
+    ) : tabId === 'polymarket' ? (
+      <PolymarketPage active={active} onStatusChange={onStatusChange} />
     ) : tabId === 'politics' ? (
       <PoliticsPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'backtest' ? (

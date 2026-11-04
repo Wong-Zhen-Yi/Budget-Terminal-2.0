@@ -6,7 +6,7 @@ import type { ScreenshotPayload, ScreenshotRequest } from '../shared/screenshot.
 import type { Envelope } from '../shared/contract.js'
 
 // Local diagnostics, cache maintenance are desktop-only.
-const desktopOnlyChannels = [CHANNELS.appMetrics, CHANNELS.startupPriority, CHANNELS.cacheStatus, CHANNELS.configureCache, CHANNELS.pageProgress, CHANNELS.heatmapProgress]
+const desktopOnlyChannels = [CHANNELS.marketApiKeys, CHANNELS.marketApiKeysMutate, CHANNELS.appMetrics, CHANNELS.startupPriority, CHANNELS.cacheStatus, CHANNELS.configureCache, CHANNELS.pageProgress, CHANNELS.heatmapProgress]
 
 export function createServiceRoutes(screenshot: (request: ScreenshotRequest) => Promise<Envelope<ScreenshotPayload>> = async () =>
   failed({ screenshots: [] }, 'Screenshot capture requires an Electron window.', 'Electron page capture'),

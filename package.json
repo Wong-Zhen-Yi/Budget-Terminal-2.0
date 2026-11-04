@@ -88,6 +88,8 @@
     "probe:amzn": "npm run --workspace budget-terminal-desktop probe:amzn --",
     "probe:amzn-ui": "npm run --workspace budget-terminal-desktop probe:amzn-ui --",
     "probe:diagnostics": "npm run --workspace budget-terminal-desktop probe:diagnostics --",
-    "probe:diagnostics-ui": "npm run --workspace budget-terminal-desktop probe:diagnostics-ui --"
+    "probe:diagnostics-ui": "npm run --workspace budget-terminal-desktop probe:diagnostics-ui --",
+    "probe:polymarket": "npm run --workspace budget-terminal-desktop probe:polymarket --",
+    "probe:polymarket-ui": "npm run --workspace budget-terminal-desktop probe:polymarket-ui --"
   }
 }

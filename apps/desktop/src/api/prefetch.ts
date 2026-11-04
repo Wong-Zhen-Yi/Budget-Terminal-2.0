@@ -1,3 +1,4 @@
+import { warmPolymarket } from './polymarketQueries'
 import { useEffect, useRef, useState } from 'react'
 import { hashKey, useIsRestoring, useQueryClient, type QueryClient } from '@tanstack/react-query'
 
@@ -480,6 +481,9 @@ export function buildTasks(
       }, onSnapshot),
   })
 
+  tasks.push({ tab: 'polymarket', label: 'Polymarket public data',
+    run: (client, _backgroundOrder, onSnapshot) => warmPolymarket(client, onSnapshot),
+  })
   tasks.push({
     tab: 'politics',
     label: 'Politics',

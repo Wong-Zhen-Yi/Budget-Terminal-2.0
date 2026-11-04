@@ -1,4 +1,6 @@
 @echo off
+echo AllTick, Finnhub and Financial Modeling Prep: encrypted API key settings added; providers remain inactive.
+echo Polymarket: public market workspace and API explorer; all pages preload at startup.
 echo Diagnostic logs: open Settings - Diagnostics in the desktop app, or press Ctrl+Shift+L.
 title Budget Terminal
 cd /d "%~dp0" || exit /b 1

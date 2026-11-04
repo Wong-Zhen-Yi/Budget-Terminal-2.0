@@ -31,6 +31,7 @@ export function isRemoteQueryKey(queryKey: QueryKey): boolean {
 
 export function shouldPersistRemoteQuery(query: Query): boolean {
   const root = String(query.queryKey[0] ?? '')
+  if (root === 'polymarket') return false // Wallet lookups remain session-only.
   if (!isRemoteQueryKey(query.queryKey) || LARGE_ROOTS.has(root)) return false
   // A failed refresh can have perfectly usable previous data. Do not erase that
   // snapshot from disk just because the latest IPC request failed.
@@ -84,6 +85,7 @@ export function queryFreshness(queryKey: QueryKey): number {
   if (root === 'economic' || root === 'money') return FRESHNESS.economic
   if (root === 'institutions') return FRESHNESS.institutions
   if (root.startsWith('ipo')) return FRESHNESS.ipo
+  if (root === 'polymarket') return 30_000
   if (root === 'politicsPage') return FRESHNESS.politics
   if (root === 'etfAum') return FRESHNESS.etfAum
   if (root === 'etfHoldings') return FRESHNESS.etfHoldings

@@ -56,7 +56,7 @@ export function ApiUsagePanel() {
   const entries = API_CATALOG.map(api => ({ ...api, uses: api.uses.filter(use =>
     (!page || use.pages.includes(page)) &&
     `${api.label} ${use.purpose} ${use.pages.map(id => labels.get(id) ?? id).join(' ')}`.toLowerCase().includes(term),
-  ) })).filter(api => api.uses.length)
+  ) })).filter(api => api.uses.length || (api.inactive && !page && `${api.label} inactive`.toLowerCase().includes(term)))
 
   return <section className="api-usage" aria-labelledby="api-usage-title">
     <header className="api-usage__header">
@@ -129,7 +129,8 @@ export function ApiUsagePanel() {
         </div>
         <p className="api-usage__hint">{entries.length} of {API_CATALOG.length} API / feed groups shown. Personal Finance, Dictionary and local settings do not require an external market-data API. Live counts cover instrumented providers only and reset when the app restarts.</p>
         {entries.map(api => <details key={api.id} className="api-usage__dependency">
-          <summary>{api.label}<span className="api-usage__secondary">View page dependencies</span></summary>
+          <summary>{api.label}<span className="api-usage__secondary">{api.inactive ? 'Inactive' : 'View page dependencies'}</span></summary>
+          {api.inactive ? <p className="api-usage__hint">No data requests. Configure a key in Integrations for future use.</p> : null}
           <div className="api-usage__table-scroll"><table className="api-usage__table">
             <thead><tr><th scope="col">Pages</th><th scope="col">Purpose</th></tr></thead>
             <tbody>{api.uses.map((use, index) => <tr key={index}><td>{use.pages.filter(id => !page || id === page).map(id => labels.get(id) ?? id).join(', ')}</td><td>{use.purpose}</td></tr>)}</tbody>

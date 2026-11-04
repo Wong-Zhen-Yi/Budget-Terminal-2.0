@@ -1,6 +1,8 @@
 param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Tui, [Parameter(ValueFromRemainingArguments=$true)][string[]]$TuiArguments)
 
 $ErrorActionPreference = 'Stop'
+# AllTick, Finnhub and Financial Modeling Prep: encrypted API key settings added; providers remain inactive.
+# Polymarket: public market workspace and API explorer; all pages preload at startup.
 $runtimeCheck = Join-Path $PSScriptRoot 'runtime.cjs'
 $nodeVersion = '24.22.1'
 # Official https://nodejs.org/dist/v24.22.1/SHASUMS256.txt

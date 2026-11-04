@@ -19,6 +19,7 @@ import { UserDataPanel } from '@/components/settings/UserDataPanel'
 import { ApiUsagePanel } from '@/components/settings/ApiUsagePanel'
 import { CachePanel } from '@/components/settings/CachePanel'
 import { McpPanel } from '@/components/settings/McpPanel'
+import { MarketApiKeysPanel } from '@/components/settings/MarketApiKeysPanel'
 import { DiagnosticLogsPanel } from '@/components/settings/DiagnosticLogsPanel'
 import { useSettingsNavigation } from '@/stores/settingsNavigation'
 import { AppDashboard } from '@/components/settings/AppDashboard'
@@ -184,6 +185,7 @@ export function SettingsPage({
           <PrivacyPanel tabs={privacyTabs} obscured={settings.obscuredTabs}
             onSetObscured={(id, obscured) => void write({ type: 'setTabObscured', id, obscured }, 'Privacy settings updated.')} /> },
         { id: 'mcp', category: 'integrations', column: 'secondary', terms: 'local mcp chatgpt codex tools connection permissions read only approval browser client setup activity', content: <McpPanel /> },
+        { id: 'market-api-keys', category: 'integrations', terms: 'alltick finnhub financial modeling modelling prep fmp api keys credentials inactive providers', content: <MarketApiKeysPanel /> },
       ],
     },
     {

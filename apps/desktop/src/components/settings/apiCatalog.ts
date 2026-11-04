@@ -6,11 +6,15 @@ export interface ApiDefinition {
   id: string
   label: string
   uses: ApiUse[]
+  inactive?: boolean
 }
 const use = (pages: string, purpose: string): ApiUse => ({ pages: pages.split('|'), purpose })
 
 /** Public service inventory. Dependencies include fallback and shared data consumers, not request attribution. */
 export const API_CATALOG: ApiDefinition[] = [
+  { id: 'alltick', label: 'AllTick', inactive: true, uses: [] },
+  { id: 'finnhub', label: 'Finnhub', inactive: true, uses: [] },
+  { id: 'fmp', label: 'Financial Modeling Prep', inactive: true, uses: [] },
   { id: 'yahoo', label: 'Yahoo Finance', uses: [
     use('dashboard|dashboard-2|portfolio|global|pre-market|trading-volumes|heatmap|cards|up-down|stocks|stock-discovery|price|market-cap', 'Quotes, market snapshots, screeners and price/history fallbacks.'),
     use('charts|technical-screen|quant|backtest|beta|projections', 'Historical bars, technical indicators, correlations, simulations and projections.'),

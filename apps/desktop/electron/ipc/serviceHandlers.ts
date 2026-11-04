@@ -1,3 +1,5 @@
+import { getPolymarket } from '../services/polymarket.js'
+import type { PolymarketRequest } from '../shared/polymarket.js'
 import { diagnosticRequest } from '../services/diagnosticLog.js'
 import * as electron from 'electron'
 import { createAppMetricsReader } from '../services/appMetrics.js'
@@ -117,6 +119,8 @@ export function registerServiceHandlers(registerRoute: RegisterService): void {
   const provider = yahooProvider
 
   register(CHANNELS.apiUsage, () => getApiUsageSnapshot())
+  register(CHANNELS.marketApiKeys, async () => (await import('../services/marketApiKeysHost.js')).marketApiKeys.read())
+  register(CHANNELS.marketApiKeysMutate, async (request: unknown) => (await import('../services/marketApiKeysHost.js')).marketApiKeys.mutate(request))
   register(CHANNELS.appMetrics, readAppMetrics)
   register(CHANNELS.startupPriority, (order: number | null) => rateGate.preferBackgroundOrder(order))
   register(CHANNELS.cacheStatus, () => getCacheStatus())
@@ -296,6 +300,7 @@ export function registerServiceHandlers(registerRoute: RegisterService): void {
   handle(CHANNELS.ipoCompleted, (request: IpoCompletedRequest) =>
     provider.ipoCompleted(request),
   )
+  handle(CHANNELS.polymarket, (request: PolymarketRequest) => getPolymarket(request))
   handle(CHANNELS.politicsPage, (request: PoliticsPageRequest) =>
     provider.politicsPage(request),
   )

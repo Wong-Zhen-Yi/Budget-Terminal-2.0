@@ -16,7 +16,7 @@ const progressiveMethods = new Set(['sofi', 'hood', 'hims', 'mu', 'amzn', 'avgo'
 const reloadReadMethods = new Set([
   'defeatbetaTerminal', 'chart', 'options', 'quotes', 'targets', 'news',
   'fundamentals', 'returns', 'optionQuotes', 'cardsPerformance', 'fx', 'globalMarkets',
-  'preMarket', 'upDown', 'calendarMonth', 'politicsPage', 'earningsCalendar', 'money',
+  'polymarket', 'preMarket', 'upDown', 'calendarMonth', 'politicsPage', 'earningsCalendar', 'money',
   'economic', 'ipoUpcoming', 'ipoCompleted', 'institutionActivity', 'stocks', 'fundamentalsPage',
   'oil', 'newsPage', 'forexQuotes', 'forexHistory', 'forexNews', 'crypto',
   'etfAum', 'etfHoldings', 'amzn', 'mu', 'avgo', 'semiconductors',

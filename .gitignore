@@ -88,6 +88,7 @@ conf/
 
 # Private Telegram bot credentials and remote conversation history.
 **/telegram-settings.bin*
+**/market-api-keys.bin*
 **/telegram-agents.json*
 
 # Local diagnostic exports (never commit private activity metadata).
