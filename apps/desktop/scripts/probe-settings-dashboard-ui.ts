@@ -57,7 +57,7 @@ try {
     window.clearInterval = id => { cleared = true; return clear(id) }
     let settings = { hiddenTabs: [], obscuredTabs: ['portfolio', 'personal-finance'], lastBackupAt: Date.now() }
     const root = createRoot(document.getElementById('root'))
-    const render = () => root.render(<QueryClientProvider client={client}><div className="settings-page settings-page--dashboard"><aside className="settings-sidebar"><p>Preferences</p><nav><button>App dashboard</button><button>All settings</button></nav></aside><div className="settings-dashboard-host"><AppDashboard settings={settings} /></div></div></QueryClientProvider>)
+    const render = () => root.render(<QueryClientProvider client={client}><div className="settings-page"><header className="settings-toolbar"><nav className="settings-tabs"><button aria-pressed="true">App dashboard</button><button>Workspace</button><button>Privacy</button><button>Data &amp; storage</button><button>Integrations</button><button>Diagnostics</button></nav></header><div className="settings-dashboard-host"><AppDashboard settings={settings} /></div></div></QueryClientProvider>)
     render()
     window.checkLayout = async () => {
       await wait()

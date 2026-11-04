@@ -1,4 +1,5 @@
 @echo off
+rem Settings: compact sizing, horizontal categories, no redundant Preferences label, All settings page or introductory header.
 rem GitHub showcase refreshed: README.md includes eight demo screenshots across markets, research, charts, portfolios, and learning.
 rem Current dark navy and blue colour scheme is locked in AGENTS.md; palette changes require an explicit user request.
 echo Public API routing: Coinbase and Binance spot quotes, shared CoinGecko metadata, World Bank and IMF annual context. Key-based APIs remain inactive.

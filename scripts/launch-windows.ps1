@@ -85,6 +85,7 @@ function Get-BudgetNode {
 }
 
 function Start-BudgetTerminal {
+  # Settings uses compact horizontal categories without the redundant Preferences label, overview or introductory header.
   try {
     $node = Get-BudgetNode
     # The selected complete toolchain also owns npm.cmd and all nested scripts.

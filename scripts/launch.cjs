@@ -17,6 +17,7 @@ function platformName(platform) {
 }
 
 function launch({ development = false, logs = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
+  log.log('Settings: consistent compact sizing and horizontal category views. The redundant Preferences label, All settings view and introductory header are removed.')
   log.log('Persistent diagnostic logging retains up to the last 15 days. Open Settings > Diagnostics or press Ctrl+Shift+L. No global diagnostics banner is added.')
   log.log('Stock charts leave 35 percent of the plot to the right of the latest bar; disabled indicator panes release their space.')
   log.log('Pages populate completed sections while remaining data loads; all pages still preload and startup failures remain visible.')

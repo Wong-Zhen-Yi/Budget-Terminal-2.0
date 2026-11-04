@@ -26,13 +26,12 @@ import { AppDashboard } from '@/components/settings/AppDashboard'
 import '@/styles/settings.css'
 
 const categories = [
-  { id: 'dashboard', label: 'App dashboard', icon: '▥' },
-  { id: 'all', label: 'All settings', icon: '▦' },
-  { id: 'workspace', label: 'Workspace', icon: '☷' },
-  { id: 'privacy', label: 'Privacy', icon: '◇' },
-  { id: 'data', label: 'Data & storage', icon: '▤' },
-  { id: 'integrations', label: 'Integrations', icon: '⌘' },
-  { id: 'diagnostics', label: 'Diagnostics', icon: '⌁' },
+  { id: 'dashboard', label: 'App dashboard' },
+  { id: 'workspace', label: 'Workspace' },
+  { id: 'privacy', label: 'Privacy' },
+  { id: 'data', label: 'Data & storage' },
+  { id: 'integrations', label: 'Integrations' },
+  { id: 'diagnostics', label: 'Diagnostics' },
 ] as const
 type Category = (typeof categories)[number]['id']
 interface SettingsCard {
@@ -97,6 +96,7 @@ export function SettingsPage({
 
   const chooseCategory = (next: Category) => {
     setCategory(next)
+    setSearch('')
     scrollRef.current?.scrollTo({ top: 0 })
   }
 
@@ -202,7 +202,7 @@ export function SettingsPage({
     {
       id: 'logs', title: 'Application logs', hint: 'Search local diagnostic events and inspect previous sessions.',
       cards: [{ id: 'logs', category: 'diagnostics', terms: 'application diagnostic logs events search severity area session export folder pause live',
-        content: <DiagnosticLogsPanel active={active && (category === 'diagnostics' || category === 'all')} /> }],
+        content: <DiagnosticLogsPanel active={active && category === 'diagnostics'} /> }],
     },
     {
       id: 'startup', title: 'Startup & providers', hint: 'Detailed loading progress and request pressure live here in Settings.',
@@ -220,44 +220,30 @@ export function SettingsPage({
     },
   ]
   const terms = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
-  const matches = (card: SettingsCard) => (category === 'all' || card.category === category) &&
+  const matches = (card: SettingsCard) => card.category === category &&
     terms.every(term => `${card.terms} ${categories.find(entry => entry.id === card.category)?.label}`.toLowerCase().includes(term))
   const resultCount = groups.flatMap(group => group.cards).filter(matches).length
-  const navigation = (location: string) => categories.map(entry => (
+  const navigation = categories.map(entry => (
     <button key={entry.id} type="button" aria-pressed={category === entry.id}
       onClick={() => chooseCategory(entry.id)} data-settings-category={entry.id}>
-      {location === 'side' && <span aria-hidden="true">{entry.icon}</span>}{entry.label}
+      {entry.label}
     </button>
   ))
 
   return (
-    <div className={`settings-page${category === 'dashboard' ? ' settings-page--dashboard' : ''}`}>
-      <aside className="settings-sidebar">
-        <p className="settings-eyebrow">Preferences</p>
-        <nav aria-label="Settings categories">{navigation('side')}</nav>
-        <div className="settings-sidebar-note"><strong>Your terminal, your way.</strong>
-          <p>Workspace preferences save as you change them.</p><p>Cache limits use an explicit Apply action.</p>
-        </div>
-      </aside>
-      <div className="settings-dashboard-host" hidden={category !== 'dashboard'}>
-        <label className="settings-dashboard-mobile-nav">Settings view
-          <select aria-label="Settings view" value={category} onChange={event => chooseCategory(event.target.value as Category)}>
-            {categories.map(entry => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
-          </select>
+    <div className="settings-page">
+      <header className="settings-toolbar">
+        <nav className="settings-tabs" aria-label="Settings categories">{navigation}</nav>
+        <label className={`settings-search${category === 'dashboard' ? ' settings-search--inactive' : ''}`} aria-hidden={category === 'dashboard'}><span aria-hidden="true">⌕</span>
+          <input type="search" aria-label="Search settings" placeholder="Search settings…" value={search} disabled={category === 'dashboard'}
+            onChange={event => { setSearch(event.target.value); scrollRef.current?.scrollTo({ top: 0 }) }} />
         </label>
+      </header>
+      <div className="settings-dashboard-host" hidden={category !== 'dashboard'}>
         <AppDashboard settings={settings} />
       </div>
       <div className="settings-scroll" ref={scrollRef} hidden={category === 'dashboard'}>
         <div className="settings-content">
-          <p className="settings-eyebrow">Workspace / Settings</p>
-          <header className="settings-heading">
-            <div><h1>Make the terminal yours.</h1><p>Organize your workspace, protect your data, and keep every page running smoothly.</p></div>
-            <label className="settings-search"><span aria-hidden="true">⌕</span>
-              <input type="search" aria-label="Search settings" placeholder="Search settings…" value={search}
-                onChange={event => { setSearch(event.target.value); scrollRef.current?.scrollTo({ top: 0 }) }} />
-            </label>
-          </header>
-          <nav className="settings-tabs" aria-label="Filter settings">{navigation('top')}</nav>
           {settingsQuery.error && <p role="alert" className="settings-error">Settings could not load. {settingsQuery.error.message}</p>}
           {status.text && <div className={`settings-feedback settings-feedback--${status.tone}`}>
             <span role={status.tone === 'negative' ? 'alert' : 'status'}>{status.text}</span>
@@ -277,8 +263,8 @@ export function SettingsPage({
             })}</div>
           </section>)}
           {resultCount === 0 && <div className="settings-empty"><h2>No settings match your search.</h2>
-            <p>Try a different term or search across all categories.</p>
-            <button type="button" onClick={() => { setSearch(''); chooseCategory('all') }}>Show all settings</button>
+            <p>Try a different term or choose another category.</p>
+            <button type="button" onClick={() => setSearch('')}>Clear search</button>
           </div>}
         </div>
       </div>

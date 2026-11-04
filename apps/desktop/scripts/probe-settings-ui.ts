@@ -46,6 +46,11 @@ try {
     window.runProbe = async () => {
       await wait(250)
       check(visible(document.querySelector('.app-dashboard')) && document.querySelectorAll('.app-dash-card').length === 18, 'Settings must open on its dashboard')
+      check(!document.querySelector('[data-settings-category="all"]') && !document.querySelector('.settings-heading'), 'Redundant overview or introductory header returned')
+      const dashboardPadding = getComputedStyle(document.querySelector('.app-dashboard')).padding
+      const toolbar = document.querySelector('.settings-toolbar').getBoundingClientRect()
+      const tabs = [...document.querySelectorAll('[data-settings-category]')]
+      check(tabs.length === 6 && tabs.every(tab => visible(tab) && tab.getBoundingClientRect().top === tabs[0].getBoundingClientRect().top), 'Preferences must form one horizontal row')
       check(document.querySelectorAll('[data-settings-card]').length === 12, 'Expected all twelve settings panels mounted')
       useSettingsNavigation.getState().openDiagnostics(); await wait(80)
       check(visible(card('logs')), 'Diagnostics navigation must reveal the log panel')
@@ -55,6 +60,9 @@ try {
       check(document.querySelector('table[aria-label="Startup status"]').textContent.includes('Failed'), 'Startup failures missing')
       const original = card('api')
       choose('workspace'); await wait(80)
+      check(getComputedStyle(document.querySelector('.settings-content')).padding === dashboardPadding, 'Settings views use different content spacing')
+      check(document.querySelector('.settings-toolbar').getBoundingClientRect().height === toolbar.height, 'Switching views resized Preferences')
+      check(document.querySelector('.settings-scroll').scrollHeight <= document.querySelector('.settings-scroll').clientHeight + 1, 'Compact Workspace must fit the desktop viewport')
       check(visible(card('navigation')) && !visible(card('api')), 'Category filtering failed')
       check(card('api') === original, 'Filtering remounted diagnostics')
       const shortcutDetails = document.querySelector('.settings-shortcut-details')
@@ -70,15 +78,15 @@ try {
       clock.click(); await wait(80)
       check(document.querySelector('.settings-feedback [role=alert]') && !clock.checked, 'Mutation rejection hidden or changed the stored value')
       window.refuseMutation = false
-      choose('all'); await wait(80)
+      choose('data'); await wait(80)
       await setSearch('backup')
       check(visible(card('backups')) && !visible(card('navigation')), 'Settings search failed')
       const backupGrid = card('backups').closest('.settings-grid').getBoundingClientRect()
       check(Math.abs(card('backups').getBoundingClientRect().width - backupGrid.width) < 2, 'Single search result leaves an empty column')
       await setSearch('no-such-setting')
       check(visible(document.querySelector('.settings-empty')), 'No-results recovery missing')
-      clickText(document.querySelector('.settings-empty'), 'Show all settings'); await wait(80)
-      check(visible(card('navigation')) && visible(card('api')), 'Reset search failed')
+      clickText(document.querySelector('.settings-empty'), 'Clear search'); await wait(80)
+      check(visible(card('backups')) && visible(card('cache')), 'Reset search failed')
       choose('data'); await wait(80)
       check(card('maintenance').getBoundingClientRect().top - card('backups').getBoundingClientRect().bottom <= 16, 'Maintenance leaves a large gap below backups')
       clickText(card('maintenance'), 'Clear All User Data and Cards'); await wait(80)
@@ -128,7 +136,6 @@ try {
       check(document.querySelector('table[aria-label="Provider usage"]') === retained, 'Provider polling panel remounted')
       choose('diagnostics'); await wait(80)
       check(visible(card('api')) && visible(card('load-order')) && visible(card('health')) && !visible(card('backups')), 'Diagnostics category failed')
-      choose('all'); await wait(80)
       document.querySelector('[aria-label="Dismiss settings message"]').click(); await wait(80)
       window.checkLayout()
       check(!window.renderErrors.length, 'Renderer errors: ' + window.renderErrors.join('; '))
@@ -138,13 +145,24 @@ try {
       check(document.documentElement.scrollWidth <= innerWidth, 'Window overflows horizontally')
       const scroll = document.querySelector('.settings-scroll')
       check(scroll.scrollWidth <= scroll.clientWidth + 1, 'Settings content overflows horizontally at ' + innerWidth)
-      check(scroll.clientHeight > 100 && scroll.scrollHeight > scroll.clientHeight, 'Settings lost its own scrollport')
+      check(scroll.clientHeight > 100, 'Settings lost its own scrollport')
       check([...document.querySelectorAll('.settings-card')].filter(visible).every(node => node.getBoundingClientRect().right <= innerWidth + 1), 'Card clipped horizontally')
       for (const grid of [...document.querySelectorAll('.settings-grid')].filter(visible)) {
         const columns = [...grid.children].filter(visible)
         if (columns.length === 1) check(Math.abs(columns[0].getBoundingClientRect().width - grid.getBoundingClientRect().width) < 2, 'Single visible column must fill its group')
       }
       return 'PASS: responsive Settings at ' + innerWidth + 'px'
+    }
+    window.checkNavigationSizing = async () => {
+      choose('dashboard'); await wait(80)
+      const toolbarHeight = document.querySelector('.settings-toolbar').getBoundingClientRect().height
+      const padding = getComputedStyle(document.querySelector('.app-dashboard')).padding
+      for (const category of ['workspace', 'privacy', 'data', 'integrations', 'diagnostics']) {
+        choose(category); await wait(80)
+        check(document.querySelector('.settings-toolbar').getBoundingClientRect().height === toolbarHeight, 'Preferences resized in ' + category + ' at ' + innerWidth)
+        check(getComputedStyle(document.querySelector('.settings-content')).padding === padding, 'Content spacing changed in ' + category)
+        window.checkLayout()
+      }
     }
     window.finish = () => { host.unmount(); client.clear() }
   ` }, bundle: true, jsx: 'automatic', write: false, format: 'iife', loader: { '.css': 'empty' }, alias: { '@': join(root, 'src'), '@shared': join(root, 'electron/shared') }, define: { 'process.env.NODE_ENV': '"production"' } })
@@ -191,16 +209,24 @@ try {
     const { app, BrowserWindow } = require('electron')
     app.setPath('userData', ${JSON.stringify(join(directory, 'profile'))})
     app.whenReady().then(async () => {
-      const win = new BrowserWindow({ show: false, width: 1600, height: 1100, webPreferences: { backgroundThrottling: false, offscreen: true } })
-      win.setContentSize(1600, 1100)
+      const win = new BrowserWindow({ show: false, width: 1600, height: 1000, webPreferences: { backgroundThrottling: false, offscreen: true } })
+      win.setContentSize(1600, 1000)
       try {
         await win.loadFile(${JSON.stringify(join(directory, 'index.html'))})
         console.log(await win.webContents.executeJavaScript('window.runProbe()'))
+        await win.webContents.executeJavaScript('window.checkNavigationSizing()')
         await new Promise(resolve => setTimeout(resolve, 400))
-        if (process.env.SETTINGS_SCREENSHOT) require('node:fs').writeFileSync(process.env.SETTINGS_SCREENSHOT, (await win.webContents.capturePage()).toPNG())
+        if (process.env.SETTINGS_SCREENSHOT) {
+          for (const category of ['dashboard', 'workspace', 'data', 'diagnostics']) {
+            await win.webContents.executeJavaScript('document.querySelector(' + JSON.stringify('[data-settings-category="' + category + '"]') + ').click()')
+            await new Promise(resolve => setTimeout(resolve, 120))
+            require('node:fs').writeFileSync(process.env.SETTINGS_SCREENSHOT.replace(/\\.png$/, '-' + category + '.png'), (await win.webContents.capturePage()).toPNG())
+          }
+        }
         for (const width of [1280, 1024, 768, 480]) {
           win.setSize(width, 900)
           await new Promise(resolve => setTimeout(resolve, 120))
+          await win.webContents.executeJavaScript('window.checkNavigationSizing()')
           console.log(await win.webContents.executeJavaScript('window.checkLayout()'))
         }
         await win.webContents.executeJavaScript('window.finish()')
