@@ -8,6 +8,7 @@ $ErrorActionPreference = 'Stop'
 # MCP: public Polymarket reads registered; all implemented pages support screenshot access.
 # AllTick, Finnhub and Financial Modeling Prep: encrypted API key settings added; providers remain inactive.
 # Polymarket: redesigned market cards, probability charts, depth and activity; public datasets and startup preloading retained.
+# YouTube PiP: movable, resizable always-on-top desktop window, including outside Budget Terminal; playback survives pop-out and return.
 $runtimeCheck = Join-Path $PSScriptRoot 'runtime.cjs'
 $nodeVersion = '24.22.1'
 # Official https://nodejs.org/dist/v24.22.1/SHASUMS256.txt
@@ -110,7 +111,7 @@ function Start-BudgetTerminal {
     if ($Setup -and $LASTEXITCODE -eq 0) {
       & (Join-Path $PSScriptRoot 'install-bt.ps1')
       & (Join-Path $PSScriptRoot 'install-bt.ps1') -Desktop
-      Write-Host 'Checks passed. Open a new terminal and type bt for the terminal interface or btd for the desktop app.'
+      Write-Host 'Checks passed. Open a new terminal and type btd for the desktop app or bt for the terminal interface.'
     }
     exit $LASTEXITCODE
   } catch {

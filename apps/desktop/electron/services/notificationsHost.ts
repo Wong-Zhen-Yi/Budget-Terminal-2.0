@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { NotificationCenter } from './notifications.js'
 import type { AppNotification, NotificationCommand } from '../shared/notifications.js'
 import { failed, ok } from '../shared/envelope.js'
+import { isYouTubePipWindow } from './youtubePlayer.js'
 
 export const NOTIFICATION_APP_ID = 'BudgetTerminal.Desktop'
 const desktopNotifications = new Set<Notification>()
@@ -39,7 +40,7 @@ function deliver(value: AppNotification) {
     notification.once('failed', (_event, error) => { clearTimeout(timer); desktopNotifications.delete(notification); reject(new Error(error)) })
     notification.once('close', () => desktopNotifications.delete(notification))
     notification.once('click', () => {
-      const window = BrowserWindow.getAllWindows()[0]
+      const window = BrowserWindow.getAllWindows().find(window => !window.isDestroyed() && !isYouTubePipWindow(window))
       if (window && !window.isDestroyed()) {
         if (window.isMinimized()) window.restore()
         window.show(); window.focus()

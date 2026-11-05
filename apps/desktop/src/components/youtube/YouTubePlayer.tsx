@@ -1,10 +1,9 @@
-import { useLayoutEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { youtubeEmbedUrl } from '@shared/youtubePlayer'
 import { useYouTubePlayer } from '@/stores/youtubePlayer'
 import '@/styles/youtube.css'
 
-/** Keep one iframe outside PageCache: moving or remounting it restarts YouTube. */
+/** Native playback survives PageCache eviction and transfers to the desktop PiP window. */
 export function YouTubePlayer({ pageActive, onReturn, suppressed = false }: {
   pageActive: boolean
   onReturn: () => void
@@ -12,6 +11,8 @@ export function YouTubePlayer({ pageActive, onReturn, suppressed = false }: {
 }) {
   const { video, floating, slot, slotVideoId, close, setFloating, returnToVideo } = useYouTubePlayer()
   const [bounds, setBounds] = useState<{ left: number; top: number; width: number; height: number } | null>(null)
+  const surface = useRef<HTMLDivElement>(null)
+  const [error, setError] = useState('')
   const docked = pageActive && !floating && slotVideoId === video?.videoId
   useLayoutEffect(() => {
     if (!docked || !slot) { setBounds(null); return }
@@ -30,20 +31,42 @@ export function YouTubePlayer({ pageActive, onReturn, suppressed = false }: {
       window.removeEventListener('scroll', measure, true)
     }
   }, [docked, slot])
-  if (!video) return null
+  useEffect(() => window.api.onYouTubePlayerAction(action => {
+    if (action.videoId !== useYouTubePlayer.getState().video?.videoId) return
+    if (action.action === 'close') close()
+    else { returnToVideo(); onReturn() }
+  }), [close, returnToVideo, onReturn])
   const inline = docked && bounds !== null
+  useLayoutEffect(() => {
+    let current = true
+    const rect = surface.current?.getBoundingClientRect()
+    const theme = getComputedStyle(document.documentElement)
+    const color = (role: string) => theme.getPropertyValue('--color-' + role).trim()
+    void window.api.youtubePlayer(video ? {
+      videoId: video.videoId, title: video.title,
+      floating: !docked, visible: !suppressed && (!docked || Boolean(rect?.width && rect?.height)),
+      x: rect?.left ?? 0, y: rect?.top ?? 0, width: rect?.width ?? 0, height: rect?.height ?? 0,
+      colors: { bg: color('bg'), raised: color('surface-raised'), hover: color('surface-hover'), text: color('text'), accent: color('accent') },
+    } : null).then(result => {
+      if (current) setError(result.errors[0]?.reason ?? '')
+    }).catch(() => {
+      if (current) setError('YouTube player could not open. Close the player and try again.')
+    })
+    return () => { current = false }
+  }, [video, docked, bounds, suppressed])
+  useEffect(() => () => { void window.api.youtubePlayer(null).catch(() => undefined) }, [])
+  if (!video) return null
+  if (!inline) return error ? <div className="youtube-player-error" role="alert">{error}</div> : null
   return createPortal(
-    <section className={'youtube-player ' + (inline ? 'youtube-player--inline' : 'youtube-player--pip')}
-      style={inline ? bounds : undefined} hidden={suppressed} aria-label={'Playing ' + video.title}>
+    <section className="youtube-player youtube-player--inline"
+      style={bounds} hidden={suppressed} aria-label={'Playing ' + video.title}>
       <header>
         <span title={video.title}>{video.title}</span>
-        {inline
-          ? <button type="button" onClick={() => setFloating(true)} aria-label="Picture in picture" title="Picture in picture">▣</button>
-          : <button type="button" onClick={() => { returnToVideo(); onReturn() }} aria-label="Return to video" title="Return to video">↗</button>}
+        <button type="button" onClick={() => setFloating(true)} aria-label="Picture in picture" title="Picture in picture — drag its title bar to move anywhere on your desktop">▣</button>
         <button type="button" onClick={close} aria-label="Close video player" title="Close video player">×</button>
       </header>
-      <iframe key={video.videoId} src={youtubeEmbedUrl(video.videoId) ?? undefined} title={video.title}
-        allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" />
+      <div className="youtube-player-surface" ref={surface} />
+      {error && <div className="youtube-player-error" role="alert">{error}</div>}
     </section>, document.body,
   )
 }

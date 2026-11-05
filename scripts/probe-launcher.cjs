@@ -34,9 +34,13 @@ for (const [file, command] of [
   assert.match(windowsSource, /install-bt\.ps1'\) -Desktop/, 'Setup must check or install the BTD desktop command')
   assert(!source.includes('-Dev'), `${file} must check the production build`)
   assert(!source.includes('%*'), 'Double-click setup must not forward app launch options')
-  assert.match(source, /bt\s+- open the terminal interface/, 'Explain how to open the TUI')
-  assert.match(source, /btd\s+- open the desktop app/, 'Explain how to open the desktop app')
-  assert.match(source, /new PowerShell or Command Prompt window/, 'Explain that a fresh terminal loads the updated PATH')
+  assert.match(source, /powershell\.exe[^\r\n]*launch-menu\.ps1"/, 'Show the interface menu after setup')
+  assert(source.indexOf('if errorlevel 1 goto :failed') < source.indexOf('launch-menu.ps1'), 'Setup failures must stop before the menu')
+  const menuSource = readFileSync(join(__dirname, 'launch-menu.ps1'), 'utf8')
+  assert(menuSource.indexOf('BTD - Desktop app') < menuSource.indexOf('BT  - Terminal interface'), 'Put BTD first')
+  assert.match(menuSource, /bt\s+- open the terminal interface/, 'Explain how to open the TUI')
+  assert.match(menuSource, /btd\s+- open the desktop app/, 'Explain how to open the desktop app')
+  assert.match(menuSource, /new PowerShell or Command Prompt window/, 'Explain that a fresh terminal loads the updated PATH')
   assert.match(source, /if errorlevel 1 goto :failed/, 'Setup failures must stop before success instructions')
   assert.match(source, /pause >nul/, 'Double-click setup keeps its result visible')
 }
@@ -65,6 +69,7 @@ for (const options of [{ development: true }, { logs: true }]) {
   }), 1)
 }
 function assertCurrentStartupMessages(messages) {
+  assert(messages.some(message => message.includes('Picture in picture opens an always-on-top desktop window') && message.includes('outside Budget Terminal') && message.includes('Playback continues')), 'Every launch mode announces movable desktop YouTube PiP and playback continuity')
   assert(messages.some(message => message.includes('MCP upgraded:') && message.includes('durable write recovery')), 'Every launch mode announces MCP upgrades')
   assert(messages.some(message => message.includes('Page Loading Status banner removed.') && message.includes('diagnostics remain in Settings') && message.includes('All pages still preload')), 'Every launch mode announces banner removal and diagnostics in Settings')
   assert(messages.some(message => message.includes('Dictionary Reading Room:') && message.includes('saved terms') && message.includes('offline')), 'Every launch mode announces the offline Dictionary Reading Room')

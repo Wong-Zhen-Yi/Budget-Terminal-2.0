@@ -6,6 +6,39 @@ function Assert-Check($Condition, [string]$Message) {
   if (-not $Condition) { throw $Message }
 }
 
+& {
+  . (Join-Path $PSScriptRoot 'launch-menu.ps1')
+  if ([Console]::IsInputRedirected) {
+    Assert-Check ((Read-BudgetMenuKey) -eq [ConsoleKey]::Escape) 'Redirected input must leave the menu without launching an app.'
+  }
+  function Show-BudgetInterfaceMenu([int]$Selected) {
+    $script:menuSelections.Add($Selected)
+  }
+  function Read-BudgetMenuKey {
+    Assert-Check ($script:menuKeys.Count -gt 0) 'The menu must return after the expected keys.'
+    return $script:menuKeys.Dequeue()
+  }
+  foreach ($case in @(
+    @{ Keys = @('Enter'); Expected = 'Desktop' },
+    @{ Keys = @('DownArrow', 'Enter'); Expected = 'Tui' },
+    @{ Keys = @('UpArrow', 'Enter'); Expected = 'Tui' },
+    @{ Keys = @('DownArrow', 'DownArrow', 'Enter'); Expected = 'Desktop' },
+    @{ Keys = @('D2', 'Enter'); Expected = 'Tui' },
+    @{ Keys = @('NumPad2', 'D1', 'Enter'); Expected = 'Desktop' },
+    @{ Keys = @('End', 'Home', 'Enter'); Expected = 'Desktop' },
+    @{ Keys = @('X', 'Enter'); Expected = 'Desktop' },
+    @{ Keys = @('Escape'); Expected = 'Exit' },
+    @{ Keys = @('Q'); Expected = 'Exit' }
+  )) {
+    $script:menuKeys = [Collections.Generic.Queue[ConsoleKey]]::new()
+    $script:menuSelections = [Collections.Generic.List[int]]::new()
+    foreach ($key in $case.Keys) { $script:menuKeys.Enqueue([ConsoleKey]$key) }
+    Assert-Check ((Select-BudgetInterface) -eq $case.Expected) ('Menu selection failed: ' + ($case.Keys -join ', '))
+    Assert-Check ($script:menuSelections[0] -eq 0) 'BTD must be selected when the menu opens.'
+  }
+}
+Write-Host 'PASS: launcher menu defaults to BTD on Enter, navigates both interfaces and exits safely.'
+
 Assert-Check (Test-BudgetNode $NodePath) 'The running supported Node must be detected.'
 Assert-Check (-not (Test-BudgetNode 'missing-node.exe')) 'Missing Node must be rejected.'
 $originalData = $env:LOCALAPPDATA

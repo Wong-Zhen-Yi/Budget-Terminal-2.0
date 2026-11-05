@@ -1,6 +1,7 @@
 import type { PolymarketRequest, PolymarketResult } from './polymarket.js'
 export type { PolymarketRequest, PolymarketResult } from './polymarket.js'
 import type { BrowserControl, BrowserRequest, BrowserResult, BrowserState, BrowserViewport } from './browser.js'
+import type { YouTubePlayerAction, YouTubePlayerViewport } from './youtubePlayer.js'
 import type { McpDiagnostics, McpPolicy } from './mcpAccess.js'
 export type { BrowserRequest } from './browser.js'
 import type { AgentImage, AgentsCommand, AgentsState } from './agents.js'
@@ -3602,6 +3603,8 @@ export const CHANNELS = {
   quantPair: 'quant:pair',
   youtube: 'youtube:read',
   youtubeThumbnail: 'youtube:thumbnail',
+  youtubePlayer: 'youtube:player',
+  youtubePlayerAction: 'youtube:player-action',
   fundamentals: 'dashboard:fundamentals',
   fundamentalsPage: 'fundamentals:read',
   defeatbetaTerminal: 'defeatbeta:terminal',
@@ -3845,6 +3848,8 @@ export interface DesktopApi {
   quantScan(request: QuantScanRequest): Promise<Envelope<QuantScanPayload | null>>
   quantPair(request: QuantPairRequest): Promise<Envelope<QuantPairDetail | null>>
   youtube(request: YouTubeRequest): Promise<Envelope<YouTubePayload>>
+  youtubePlayer(viewport: YouTubePlayerViewport | null): Promise<Envelope<boolean>>
+  onYouTubePlayerAction(listener: (action: YouTubePlayerAction) => void): () => void
   youtubeThumbnail(
     request: YouTubeThumbnailRequest,
   ): Promise<Envelope<YouTubeThumbnailPayload>>

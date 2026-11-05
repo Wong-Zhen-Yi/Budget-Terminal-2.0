@@ -7,7 +7,7 @@ import { loadRenderer } from './services/rendererStartup.js'
 import { isTrustedRendererUrl } from './shared/ipcSecurity.js'
 import { isSafeExternalUrl } from './services/urls.js'
 import { configureBrowserWindow } from './services/browser.js'
-import { configureYouTubePlayer } from './services/youtubePlayer.js'
+import { configureYouTubePlayer, isYouTubePlayerContents } from './services/youtubePlayer.js'
 import { isYouTubeEmbedUrl } from './shared/youtubePlayer.js'
 import { desktopWindowSize } from './shared/windowSize.js'
 import { configureRendererCacheShutdown } from './services/rendererCacheShutdown.js'
@@ -55,6 +55,7 @@ const ownsInstance = app.requestSingleInstanceLock({ openDiagnostics: process.en
 if (!ownsInstance) app.quit()
 
 let disposeIpc: (() => void) | null = null
+let mainWindow: BrowserWindow | null = null
 let releaseDataSession: (() => void) | null = null
 let closeCache: (() => Promise<void>) | null = null
 let closeQuantWorker: (() => void) | null = null
@@ -90,6 +91,8 @@ function createWindow(): BrowserWindow {
       sandbox: true,
     },
   })
+  mainWindow = window
+  window.once('closed', () => { if (mainWindow === window) mainWindow = null })
 
   configureBrowserWindow(window)
   observeDiagnosticWindow(window, rendererUrl)
@@ -107,13 +110,15 @@ function createWindow(): BrowserWindow {
   })
   window.webContents.on('will-navigate', (event) => event.preventDefault())
   window.webContents.session.setPermissionRequestHandler((contents, permission, callback, details) =>
-    callback(isTrustedRendererUrl(contents.getURL(), rendererUrl) && (
-      permission === 'clipboard-sanitized-write' || (permission === 'fullscreen' && isYouTubeEmbedUrl(details.requestingUrl))
+    callback((permission === 'clipboard-sanitized-write' && isTrustedRendererUrl(contents.getURL(), rendererUrl)) || (
+      permission === 'fullscreen' && isYouTubeEmbedUrl(details.requestingUrl) &&
+      (isTrustedRendererUrl(contents.getURL(), rendererUrl) || isYouTubePlayerContents(contents.id))
     )))
   window.webContents.session.setPermissionCheckHandler((contents, permission, _origin, details) =>
-    Boolean(contents && isTrustedRendererUrl(contents.getURL(), rendererUrl)) && (
-      permission === 'clipboard-sanitized-write' || (permission === 'fullscreen' && isYouTubeEmbedUrl(details.requestingUrl ?? ''))
-    ))
+    Boolean(contents && ((permission === 'clipboard-sanitized-write' && isTrustedRendererUrl(contents.getURL(), rendererUrl)) || (
+      permission === 'fullscreen' && isYouTubeEmbedUrl(details.requestingUrl ?? '') &&
+      (isTrustedRendererUrl(contents.getURL(), rendererUrl) || isYouTubePlayerContents(contents.id))
+    ))))
 
   // Missing files during a rebuild get a bounded retry and an actionable error.
   void loadRenderer(window, join(dirname, '../renderer/index.html'),
@@ -132,7 +137,7 @@ if (ownsInstance) {
     if (argv.includes('--tui-backend')) return
     if ((additionalData as { openDiagnostics?: boolean })?.openDiagnostics) process.env.BUDGET_TERMINAL_OPEN_DIAGNOSTICS = '1'
     terminalBackend = false
-    const window = BrowserWindow.getAllWindows()[0]
+    const window = mainWindow
     if (!window) {
       // macOS keeps the process alive after its window closes. Reuse that process;
       // on other platforms, restore hidden or minimized windows below.
@@ -222,7 +227,7 @@ if (ownsInstance) app.whenReady().then(async () => {
 
   app.on('activate', () => {
     terminalBackend = false
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (!mainWindow) createWindow()
   })
 })
 

@@ -1,6 +1,7 @@
 import { constants } from 'node:fs'
 import { assertPrivateBrowserStorage } from '../services/browserStorage.js'
 import { setBrowserPrivacy } from '../services/browser.js'
+import { isYouTubePipWindow } from '../services/youtubePlayer.js'
 import { app, BrowserWindow, dialog } from 'electron'
 import { access, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
@@ -54,7 +55,7 @@ export async function invokeMcpTool(name: string, args: unknown, signal?: AbortS
   return dispatcher.invoke(name, args, 'agent', signal)
 }
 // One capture queue across embedded agents and external MCP clients.
-export const captureTerminalScreenshot = createScreenshotService(() => BrowserWindow.getAllWindows().find((window) => !window.isDestroyed()))
+export const captureTerminalScreenshot = createScreenshotService(() => BrowserWindow.getAllWindows().find(window => !window.isDestroyed() && !isYouTubePipWindow(window)))
 
 export async function startMcpHost(): Promise<() => Promise<void>> {
   try {
@@ -80,7 +81,7 @@ export async function startMcpHost(): Promise<() => Promise<void>> {
         const detail = JSON.stringify(request, null, 2)
         // Never ask users to approve a silently truncated financial edit.
         if (detail.length > 12_000) return false
-        const window = BrowserWindow.getAllWindows().find(window => !window.isDestroyed())
+        const window = BrowserWindow.getAllWindows().find(window => !window.isDestroyed() && !isYouTubePipWindow(window))
         if (!window || signal.aborted) return false
         const result = await dialog.showMessageBox(window, {
           type: 'warning', title: 'Approve Budget Terminal MCP edit',

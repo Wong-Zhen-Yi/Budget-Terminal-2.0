@@ -29,8 +29,9 @@
 ## One workspace, from research to records
 
 On Windows, double-click **Launch Budget Terminal.cmd** to install and check the setup.
-Then open a new terminal and type `bt` for the terminal interface or `btd` for the
-desktop app. See [Quick start](#quick-start) and [terminal UI controls](docs/terminal-ui.md).
+Then press **Enter** to open the selected **BTD desktop app**, or use **Down** then
+**Enter** to open the **BT terminal interface**. Both commands also work from a new
+terminal. See [Quick start](#quick-start) and [terminal UI controls](docs/terminal-ui.md).
 
 Budget Terminal brings public market data and your saved financial records into an
 Electron app built with React and TypeScript. Move from a market overview to company
@@ -144,8 +145,10 @@ cd Budget-Terminal-2.0
 On Windows, double-click [Launch Budget Terminal.cmd](Launch%20Budget%20Terminal.cmd)
 from the checkout. It installs or repairs a supported Node.js runtime, dependencies
 and Electron, builds and checks the desktop and terminal interfaces, and installs
-or updates the per-user `bt` and `btd` commands. It finishes with launch instructions
-and waits for a keypress so you can read the result. It does not open either interface.
+or updates the per-user `bt` and `btd` commands. It then shows a keyboard menu with
+**BTD - Desktop app** first and selected by default. Press **Enter** to open it,
+or use **Up/Down** (or **1/2**) to choose an interface and **Enter** to open it.
+Press **Esc** to close the launcher without opening either interface.
 No administrator access is needed. Double-click it again whenever you need to check
 or repair setup. From the checkout, `npm.cmd run setup` runs the same Windows checks.
 
@@ -165,7 +168,7 @@ npm run dev
 After Windows setup, open a new PowerShell or Command Prompt window and type `bt`
 for the terminal interface or `btd` for the desktop app.
 
-You can close the installer window. Keep the terminal used to launch Budget Terminal
+Keep the launcher or terminal used to launch Budget Terminal
 open while using the app. Build or startup errors stay visible there.
 
 `btd` in a new PowerShell or Command Prompt window opens the desktop app from any
@@ -258,6 +261,8 @@ The current navigation includes **58 implemented pages**, including Settings.
 | **Agents** | Agents |
 | **Notifications** | Notifications |
 | **Settings** | Settings |
+
+YouTube picture in picture opens a separate, always-on-top desktop window. Drag its title bar anywhere, including outside Budget Terminal, and resize its edges. Use **Return** to bring the same video back to the page without restarting playback, or the close button to stop it. PiP stays visible when the main app is minimized and closes with the app.
 
 **Polymarket** provides searchable market cards, topic filters, outcome probability
 charts, order-book depth, and activity, plus an explorer for public datasets.

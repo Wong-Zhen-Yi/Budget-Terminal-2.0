@@ -1,6 +1,7 @@
 import type { DesktopApi, EquityMarketUpdate, SavedDataChanged } from './contract.js'
 import { CHANNELS } from './contract.js'
 import type { ScreenshotCommand } from './screenshot.js'
+import type { YouTubePlayerAction } from './youtubePlayer.js'
 
 export type Invoke = <T>(channel: string, ...args: unknown[]) => Promise<T>
 export type Subscribe = <Payload>(channel: string, listener: (payload?: Payload) => void) => () => void
@@ -125,6 +126,10 @@ export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS
     quantScan: (request) => invoke(CHANNELS.quantScan, request),
     quantPair: (request) => invoke(CHANNELS.quantPair, request),
     youtube: (request) => invoke(CHANNELS.youtube, request),
+    youtubePlayer: viewport => invoke(CHANNELS.youtubePlayer, viewport),
+    onYouTubePlayerAction: listener => subscribe<YouTubePlayerAction>(CHANNELS.youtubePlayerAction, payload => {
+      if (payload) listener(payload)
+    }),
     youtubeThumbnail: (request) => invoke(CHANNELS.youtubeThumbnail, request),
     fundamentals: (request) => invoke(CHANNELS.fundamentals, request),
     fundamentalsPage: (request) => invoke(CHANNELS.fundamentalsPage, request),

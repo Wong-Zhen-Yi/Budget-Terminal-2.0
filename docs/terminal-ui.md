@@ -2,14 +2,17 @@
 
 Double-click **Launch Budget Terminal.cmd** to install or repair dependencies,
 check the desktop and terminal builds, and install the per-user `bt` and `btd`
-commands. Setup shows launch instructions and waits for a keypress; it does not
-open the app. Open a new PowerShell or Command Prompt window and type:
+commands. Setup then shows **BTD - Desktop app** first, selected by default:
+press **Enter** to open it. Press **Down** then **Enter** to open **BT - Terminal
+interface** instead. **Up/Down** or **1/2** chooses an interface; **Esc** closes
+the launcher. You can also open a new PowerShell or Command Prompt window and type:
 
 ```powershell
 BT
 ```
 
-Type `btd` instead to open the desktop app. You can close the installer window.
+Type `btd` instead to open the desktop app. Keep the launcher or terminal used to
+open the app running while you use it.
 
 From the checkout, `npm run setup:tui` installs the command and `npm run tui`
 starts it directly. Installation requires no administrator access and does not

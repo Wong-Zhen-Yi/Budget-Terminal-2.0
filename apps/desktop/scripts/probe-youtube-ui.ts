@@ -41,6 +41,10 @@ try {
       }))
       videos.push({ ...videos[0], ticker: 'AAPL' })
       const envelope = (data, freshness = 'fresh') => ({ data, errors: [], meta: { source: 'YouTube UI fixture', fetchedAt: Date.now(), freshness } })
+      let playerViewport = null, playerAction = () => {}
+      window.api.youtubePlayer = async viewport => { playerViewport = viewport; return envelope(true) }
+      window.api.onYouTubePlayerAction = listener => { playerAction = listener; return () => { playerAction = () => {} } }
+      const returnVideo = () => playerAction({ action: 'return', videoId: playerViewport.videoId })
       let calls = 0, thumbnails = 0, mode = 'fresh', opened = '', lastRequest, lastMutation, release, failImage = false
       window.api.portfolio = async () => envelope(portfolio)
       window.api.onPortfolioChanged = () => () => {}
@@ -83,34 +87,34 @@ try {
         button('Play video').click(); await settle()
         check(document.querySelector('.youtube-player--inline'), 'Play did not replace the thumbnail')
         check(!document.querySelector('dialog'), 'Playback must not block app interaction')
-        const frame = document.querySelector('iframe')
+        const frame = playerViewport.videoId
         const slotBounds = document.querySelector('.youtube-preview-slot').getBoundingClientRect()
         const playerBounds = document.querySelector('.youtube-player').getBoundingClientRect()
         check(Math.abs(slotBounds.left - playerBounds.left) < 2 && Math.abs(slotBounds.height - playerBounds.height) < 2, 'Player is outside thumbnail area')
         document.querySelector('[aria-label="Picture in picture"]').click(); await settle()
-        check(document.querySelector('.youtube-player--pip') && document.querySelector('iframe') === frame, 'PiP restarted the iframe')
+        check(playerViewport.floating && playerViewport.videoId === frame && !document.querySelector('.youtube-player'), 'PiP must leave the main window')
         render(false); await settle()
-        check(document.querySelector('.youtube-player--pip') && document.querySelector('iframe') === frame, 'Page eviction interrupted playback')
+        check(playerViewport.floating && playerViewport.videoId === frame, 'Page eviction interrupted playback')
         check(document.querySelector('#other-page'), 'Other page cannot be used during playback')
         document.querySelector('#other-page').click()
-        document.querySelector('[aria-label="Return to video"]').click(); await settle()
-        check(document.querySelector('.youtube-player--inline') && document.querySelector('iframe') === frame, 'Returning restarted playback')
+        returnVideo(); await settle()
+        check(document.querySelector('.youtube-player--inline') && playerViewport.videoId === frame && !playerViewport.floating, 'Returning restarted playback')
         render(false); await settle()
-        check(document.querySelector('.youtube-player--pip') && document.querySelector('iframe') === frame, 'Navigation must automatically float playback')
-        document.querySelector('[aria-label="Return to video"]').click(); await settle()
-        check(document.querySelector('.youtube-player iframe').src.includes('/embed/' + videos[0].videoId), 'Player video ID wrong')
+        check(playerViewport.floating && playerViewport.videoId === frame, 'Navigation must automatically float playback')
+        returnVideo(); await settle()
+        check(playerViewport.videoId === videos[0].videoId, 'Player video ID wrong')
         check(!opened, 'Play opened the external browser')
         document.querySelector('[aria-label="Close video player"]').click(); await settle()
-        check(!document.querySelector('iframe'), 'Close must stop and remove playback')
+        check(!playerViewport && !document.querySelector('.youtube-player'), 'Close must stop and remove playback')
         document.querySelector('.youtube-preview').click(); await settle()
-        check(document.querySelector('.youtube-player iframe'), 'Preview must play in app')
+        check(document.querySelector('.youtube-player-surface') && !playerViewport.floating, 'Preview must play in app')
         rows()[2].click(); await settle()
-        check(document.querySelector('.youtube-player--pip'), 'Inspecting another video must preserve current playback')
-        document.querySelector('[aria-label="Return to video"]').click(); await settle()
+        check(playerViewport.floating, 'Inspecting another video must preserve current playback')
+        returnVideo(); await settle()
         check(document.querySelector('.youtube-player--inline'), 'Return must restore the playing selection')
         document.querySelector('[aria-label="Close video player"]').click(); await settle()
         rows()[2].dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); await settle()
-        check(document.querySelector('iframe').src.includes('/embed/' + videos[1].videoId), 'Double click played the wrong video')
+        check(playerViewport.videoId === videos[1].videoId, 'Double click played the wrong video')
         document.querySelector('[aria-label="Close video player"]').click(); await settle()
         const tickerFilter = document.querySelector('[aria-label="Filter by portfolio ticker"]')
         tickerFilter.value = 'MSFT'; tickerFilter.dispatchEvent(new Event('change', { bubbles: true })); await settle()
@@ -156,10 +160,10 @@ try {
         document.querySelector('[aria-label="Next video page"]').click(); await settle()
         const laterSelection = document.querySelector('.youtube-focus h2').textContent
         button('Play video').click(); await settle()
-        const laterFrame = document.querySelector('iframe')
+        const laterFrame = playerViewport.videoId
         render(false); await settle()
-        document.querySelector('[aria-label="Return to video"]').click(); await settle()
-        check(document.querySelector('.youtube-focus h2').textContent === laterSelection && document.querySelector('.youtube-player--inline') && document.querySelector('iframe') === laterFrame, 'Return lost a video beyond the first page')
+        returnVideo(); await settle()
+        check(document.querySelector('.youtube-focus h2').textContent === laterSelection && document.querySelector('.youtube-player--inline') && playerViewport.videoId === laterFrame, 'Return lost a video beyond the first page')
         document.querySelector('[aria-label="Close video player"]').click(); await settle()
         button('Details').click(); await settle()
         return 'PASS: startup warming/deduplication, first visit/revisit, shared-video selection, filters, saved sort, inline playback, PiP, navigation/eviction continuity, return/close/double click, loading, stale/partial/failed/empty results, refresh rejection, image failure and no holdings'
@@ -215,19 +219,17 @@ try {
   await writeFile(join(scratch, 'renderer.js'), bundle.outputFiles[0].text)
   await writeFile(join(scratch, 'index.html'), '<html><head><meta charset="UTF-8"><link rel="stylesheet" href="theme.css"></head><body><div style="height:143px;background:#0d1420;padding:24px;color:#7d8ea6">Budget Terminal · YouTube layout verification</div><div id="root" style="height:calc(100vh - 143px);display:flex"></div><script>window.api = { platform: "win32" };</script><script src="renderer.js"></script></body></html>')
   await build({ entryPoints: [join(root, 'electron/services/youtubePlayer.ts')], bundle: true, platform: 'node', format: 'cjs', external: ['electron'], outfile: join(scratch, 'player.cjs') })
-  const shellHtml = await readFile(join(root, 'src/index.html'), 'utf8')
-  const policy = shellHtml.match(/content="(default-src[^"\n]+)"/)?.[1]
-  assert(policy)
-  await writeFile(join(scratch, 'player.html'), `<meta http-equiv="Content-Security-Policy" content="${policy}"><iframe title="YouTube playback verification" style="width:800px;height:450px" allow="autoplay; encrypted-media; fullscreen" src="https://www.youtube-nocookie.com/embed/M7lc1UVf-VE?autoplay=1&playsinline=1&rel=0"></iframe>`)
   await writeFile(join(scratch, 'main.cjs'), `
     const { app, BrowserWindow } = require('electron'); const fs = require('fs');
     app.setPath('userData', ${JSON.stringify(join(scratch, 'userData'))});
+    app.on('window-all-closed', () => {});
     app.whenReady().then(async () => {
       const window = new BrowserWindow({ show: false, width: 1920, height: 1080, useContentSize: true, webPreferences: { backgroundThrottling: false, autoplayPolicy: 'no-user-gesture-required' } });
       window.webContents.session.webRequest.onBeforeRequest({ urls: ['https://www.youtube-nocookie.com/*'] }, (_, callback) => callback({ cancel: true }));
       window.webContents.on('console-message', event => console.log(event.message));
       try {
         await window.loadFile(${JSON.stringify(join(scratch, 'index.html'))});
+        if (!${process.argv.includes('--native-only')}) {
         console.log(await window.webContents.executeJavaScript('window.runProbe()'));
         for (const [width, height] of [[1920, 1080], [1600, 1000], [1366, 768], [1024, 650], [720, 850], [480, 800], [480, 600]]) {
           window.setContentSize(width, height); await new Promise(resolve => setTimeout(resolve, 250));
@@ -236,24 +238,106 @@ try {
           await new Promise(resolve => setTimeout(resolve, 100));
           fs.writeFileSync(${JSON.stringify(join(root, 'out/youtube-smoke-'))} + width + '.png', (await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG());
         }
+        }
+        const player = require('./player.cjs');
+        player.configureYouTubePlayer(window);
+        const assert = require('node:assert/strict');
+        const pause = () => new Promise(resolve => setTimeout(resolve, 200));
+        const request = { videoId: 'M7lc1UVf-VE', title: 'Desktop PiP <window> & playback', floating: false, visible: true, x: 20, y: 80, width: 400, height: 225, colors: { bg: '#080b12', raised: '#121b2b', hover: '#172233', text: '#d5dee9', accent: '#2f6fd0' } };
+        const update = patch => {
+          Object.assign(request, patch);
+          assert.equal(player.setYouTubePlayerViewport(window, request).data, true);
+        };
+        update({}); await pause();
+        const view = window.contentView.children.find(child => child.webContents && child.webContents !== window.webContents);
+        assert(view, 'Inline video must use a native view');
+        const contents = view.webContents;
+        await contents.executeJavaScript('window.continuity = "playing"');
+        const iframe = await contents.executeJavaScript('document.querySelector("iframe").src');
+        assert(iframe.includes('/embed/M7lc1UVf-VE'));
+        assert.equal(await contents.executeJavaScript('typeof window.api'), 'undefined', 'Player must have no terminal API');
+        let navigations = 0;
+        contents.on('did-start-navigation', (_event, _url, _inPlace, mainFrame) => { if (mainFrame) navigations++; });
+        const events = [];
+        const send = window.webContents.send.bind(window.webContents);
+        window.webContents.send = (channel, action) => { if (channel === 'youtube:player-action') events.push(action); else send(channel, action); };
+        update({ floating: true }); await pause();
+        let popup = BrowserWindow.getAllWindows().find(candidate => candidate !== window);
+        assert(popup && popup.contentView.children.includes(view), 'PiP must reparent the same native view');
+        assert(player.isYouTubePipWindow(popup) && !player.isYouTubePipWindow(window), 'Auxiliary PiP must be distinguishable for notifications, screenshots and main-window activation');
+        assert.equal(popup.getParentWindow(), null, 'Desktop PiP must be independent');
+        assert(popup.isAlwaysOnTop() && popup.isResizable() && popup.isMovable());
+        assert.equal(await popup.webContents.executeJavaScript('getComputedStyle(document.querySelector("header")).webkitAppRegion'), 'drag', 'Title bar must support native dragging');
+        assert.equal(await popup.webContents.executeJavaScript('getComputedStyle(document.querySelector("a")).webkitAppRegion'), 'no-drag', 'Return/close controls must stay clickable');
+        assert.equal(await popup.webContents.executeJavaScript('document.querySelector("header span").textContent'), request.title, 'Video title must be escaped');
+        assert.equal(await popup.webContents.executeJavaScript('typeof window.api'), 'undefined', 'PiP chrome must have no terminal API');
+        window.setBounds({ x: 20, y: 20, width: 800, height: 550 });
+        popup.setPosition(850, 40); popup.setSize(520, 340); await pause();
+        const position = popup.getBounds();
+        assert(position.x >= window.getBounds().x + window.getBounds().width, 'PiP cannot move outside the main application');
+        assert.equal(view.getBounds().width, popup.getContentSize()[0], 'Resizing must resize the video');
+        assert.equal(view.getBounds().height, popup.getContentSize()[1] - 32);
+        fs.writeFileSync(${JSON.stringify(join(root, 'out/youtube-pip-smoke.png'))}, (await popup.capturePage()).toPNG());
+        window.minimize(); await pause();
+        assert(popup.isVisible(), 'Minimizing the main app must leave PiP visible');
+        window.restore();
+        update({ visible: false }); assert(!popup.isVisible() && !view.getVisible(), 'Privacy/screenshot suppression must hide detached playback');
+        update({ visible: true }); await pause(); assert(popup.isVisible());
+        await popup.webContents.executeJavaScript('document.querySelectorAll("a")[0].click()'); await pause();
+        assert(events.some(event => event.action === 'return' && event.videoId === request.videoId), 'Native return control must request the video page');
+        update({ floating: false }); await pause();
+        assert(popup.isDestroyed() && window.contentView.children.includes(view), 'Return must redock the native view');
+        assert.equal(await contents.executeJavaScript('window.continuity'), 'playing', 'Pop-out/return restarted the player');
+        assert.equal(navigations, 0, 'Moving the player must not navigate or reload');
+        update({ floating: true }); await pause();
+        popup = BrowserWindow.getAllWindows().find(candidate => candidate !== window);
+        assert.deepEqual(popup.getBounds(), position, 'PiP must retain its moved/resized position');
+        await popup.webContents.executeJavaScript('document.querySelectorAll("a")[1].click()'); await pause();
+        assert(contents.isDestroyed() && events.some(event => event.action === 'close'), 'Native close must stop playback and update renderer state');
+        assert.equal(player.setYouTubePlayerViewport(window, { ...request, videoId: '../bad' }).data, false, 'Reject invalid player IDs');
+        assert.equal(player.setYouTubePlayerViewport(window, { ...request, x: Infinity }).data, false, 'Reject invalid bounds');
+        update({ floating: true }); await pause();
+        const orphan = BrowserWindow.getAllWindows().find(candidate => candidate !== window);
+        player.setYouTubePlayerViewport(window, null); await pause();
+        assert(orphan.isDestroyed(), 'Stopping playback must close detached windows');
+        console.log('PASS: native PiP drag region, desktop movement, resize, always-on-top, minimize independence, privacy suppression, escaped title, restricted API, return/close controls, saved position and uninterrupted WebContents/iframe');
         if (${process.argv.includes('--live')}) {
           window.webContents.session.webRequest.onBeforeRequest(null);
-          require('./player.cjs').configureYouTubePlayer(window);
           let identified = false;
           window.webContents.session.webRequest.onSendHeaders({ urls: ['https://www.youtube-nocookie.com/embed/*'] }, details => {
             identified = Object.entries(details.requestHeaders).some(([key, value]) => key.toLowerCase() === 'referer' && value === 'https://budget-terminal.app/');
           });
-          await window.loadFile(${JSON.stringify(join(scratch, 'player.html'))});
+          update({ floating: false }); await pause();
+          const liveView = window.contentView.children.find(child => child.webContents && child.webContents !== window.webContents);
+          const liveContents = liveView.webContents;
+          const playbackState = async () => {
+            const frame = liveContents.mainFrame.frames.find(frame => frame.url.startsWith('https://www.youtube-nocookie.com/embed/'));
+            return frame ? frame.executeJavaScript('JSON.stringify({ ready: document.querySelector("video")?.readyState, time: document.querySelector("video")?.currentTime, paused: document.querySelector("video")?.paused, text: document.body.innerText.slice(0, 500) })').then(JSON.parse).catch(() => null) : null;
+          };
           let state;
           for (let attempt = 0; attempt < 25; attempt++) {
             await new Promise(resolve => setTimeout(resolve, 1000));
-            const frame = window.webContents.mainFrame.frames.find(frame => frame.url.startsWith('https://www.youtube-nocookie.com/embed/'));
-            if (frame) state = await frame.executeJavaScript('JSON.stringify({ ready: document.querySelector("video")?.readyState, time: document.querySelector("video")?.currentTime, text: document.body.innerText.slice(0, 500) })').then(JSON.parse).catch(() => null);
+            state = await playbackState();
             if (state?.time > 0) break;
           }
           if (!identified || !(state?.time > 0)) throw Error('Live player did not start: ' + JSON.stringify({ identified, state }));
-          console.log('PASS: live YouTube playback, production CSP and public app Referer; playback time ' + state.time);
+          const beforePopout = state.time;
+          update({ floating: true }); await new Promise(resolve => setTimeout(resolve, 1500));
+          const poppedOut = await playbackState();
+          assert(poppedOut?.time > beforePopout && !poppedOut.paused, 'Live playback stopped or restarted on pop-out: ' + JSON.stringify(poppedOut));
+          update({ floating: false }); await new Promise(resolve => setTimeout(resolve, 1500));
+          const returned = await playbackState();
+          assert(returned?.time > poppedOut.time && !returned.paused, 'Live playback stopped or restarted on return: ' + JSON.stringify(returned));
+          player.setYouTubePlayerViewport(window, null);
+          console.log('PASS: live native YouTube playback, restricted CSP and public app Referer; continuous playback ' + beforePopout + ' -> ' + poppedOut.time + ' -> ' + returned.time);
         }
+        update({ floating: true }); await pause();
+        const closingPopup = BrowserWindow.getAllWindows().find(candidate => candidate !== window);
+        const closingView = closingPopup.contentView.children.find(child => child.webContents && child.webContents !== closingPopup.webContents);
+        const closingContents = closingView.webContents;
+        window.destroy(); await pause();
+        assert(closingPopup.isDestroyed() && closingContents.isDestroyed(), 'Closing the main application must stop PiP and its audio');
+        console.log('PASS: closing the main application cleans up detached playback');
         app.exit(0);
       } catch (error) { console.error(error); app.exit(1); }
     });
