@@ -47,6 +47,8 @@ try {
       assert.equal(first.child.exitCode, 0, first.output())
       assert.equal(second.child.exitCode, 0, second.output())
       assert.doesNotMatch(second.output(), /already using this data folder/)
+      assert.doesNotMatch(first.output() + second.output(), /Failed to open persistent cache|Unable to move the cache|Unable to create cache|Gpu Cache Creation failed/i,
+        'Relaunch must not contend for GPU disk caches')
       console.log(`PASS: second launch restored the ${mode} window in the existing process and rendered its content`)
     } finally {
       first.child.kill()

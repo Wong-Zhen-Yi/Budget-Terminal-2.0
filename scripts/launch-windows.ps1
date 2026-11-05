@@ -1,6 +1,8 @@
-param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Tui, [Parameter(ValueFromRemainingArguments=$true)][string[]]$TuiArguments)
+param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Tui, [switch]$Setup, [Parameter(ValueFromRemainingArguments=$true)][string[]]$TuiArguments)
 
 $ErrorActionPreference = 'Stop'
+# BT follows desktop workspace/page names, values saved portfolios with shared USD marks, and includes searchable tables and the offline Dictionary.
+# TUI charts rebuild on launch: spaced candles, smooth lines, close marker and expanded volume. Diagnostics stay in Settings.
 # Current dark navy and blue colour scheme is locked in AGENTS.md; palette changes require an explicit user request.
 # Public API routing: Coinbase/Binance spot quotes, shared CoinGecko metadata, World Bank/IMF annual context. Key-based APIs remain inactive.
 # MCP: public Polymarket reads registered; all implemented pages support screenshot access.
@@ -87,6 +89,9 @@ function Get-BudgetNode {
 function Start-BudgetTerminal {
   # Settings uses compact horizontal categories without the redundant Preferences label, overview or introductory header.
   try {
+    if ($Setup -and ($RuntimeOnly -or $Dev -or $Logs -or $Tui -or $TuiArguments.Count)) {
+      throw 'Setup cannot be combined with launch options.'
+    }
     $node = Get-BudgetNode
     # The selected complete toolchain also owns npm.cmd and all nested scripts.
     $env:PATH = (Split-Path -Parent $node) + [IO.Path]::PathSeparator + $env:PATH
@@ -98,9 +103,15 @@ function Start-BudgetTerminal {
     Write-Host 'Reload (F5) updates the current page first, then checks all other pages. Page refresh buttons have been removed; startup still loads every page.'
     Write-Host "Using Node.js $(& $node --version)."
     $launchArguments = @()
+    if ($Setup) { $launchArguments += '--setup' }
     if ($Dev) { $launchArguments += '--dev' }
     if ($Logs) { $launchArguments += '--logs' }
     & $node (Join-Path $PSScriptRoot 'launch.cjs') @launchArguments
+    if ($Setup -and $LASTEXITCODE -eq 0) {
+      & (Join-Path $PSScriptRoot 'install-bt.ps1')
+      & (Join-Path $PSScriptRoot 'install-bt.ps1') -Desktop
+      Write-Host 'Checks passed. Open a new terminal and type bt for the terminal interface or btd for the desktop app.'
+    }
     exit $LASTEXITCODE
   } catch {
     Write-Host "Budget Terminal startup failed: $($_.Exception.Message)" -ForegroundColor Red

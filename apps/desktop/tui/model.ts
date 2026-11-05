@@ -3,6 +3,10 @@ export function safeText(value: unknown): string {
   return String(value ?? '').replace(/[\x00-\x1f\x7f-\x9f]/g, ' ')
 }
 
+export function privateField(key: string): boolean {
+  return /token|password|secret|api.?key|authorization|cookie|source.?path/i.test(key)
+}
+
 export function describe(value: unknown, indent = ''): string[] {
   if (value === null || value === undefined) return [`${indent}--`]
   if (typeof value !== 'object') return [`${indent}${safeText(value)}`]
@@ -14,7 +18,7 @@ export function describe(value: unknown, indent = ''): string[] {
   }
   return Object.entries(value).flatMap(([key, entry]) => {
     // Credentials are never useful in a terminal research view.
-    if (/token|password|secret|api.?key|authorization|cookie/i.test(key)) return []
+    if (privateField(key)) return []
     return entry !== null && typeof entry === 'object'
       ? [`${indent}${safeText(key)}`, ...describe(entry, indent + '  ')]
       : [`${indent}${safeText(key).padEnd(20)} ${safeText(entry)}`]

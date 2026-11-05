@@ -28,8 +28,8 @@ if (process.env.BUDGET_PROBE_PRIMARY === '1') {
       const window = BrowserWindow.getAllWindows()[0]
       if (!window || window.webContents.isLoadingMainFrame()) return
       // An idle about:blank window or the lazy-entry fallback is not a ready app.
-      const text = await window.webContents.executeJavaScript('document.getElementById("root")?.innerText')
-      if (!text?.includes('BUDGET TERMINAL')) return
+      const ready = await window.webContents.executeJavaScript(`Boolean(document.querySelector('#root .terminal-brand img[alt="Budget Terminal"]'))`)
+      if (!ready) return
       clearInterval(poll)
       originalWindow = window
       if (process.env.BUDGET_PROBE_MODE === 'hidden') {
@@ -54,8 +54,8 @@ if (process.env.BUDGET_PROBE_PRIMARY === '1') {
         if (process.env.BUDGET_PROBE_MODE !== 'closed' && window !== originalWindow) {
           throw new Error('Relaunch replaced the existing window')
         }
-        const text = await window.webContents.executeJavaScript('document.getElementById("root")?.innerText')
-        if (!text?.includes('BUDGET TERMINAL')) return
+        const ready = await window.webContents.executeJavaScript(`Boolean(document.querySelector('#root .terminal-brand img[alt="Budget Terminal"]'))`)
+        if (!ready) return
         clearInterval(poll)
         clearTimeout(timer)
         console.log('REOPENED')

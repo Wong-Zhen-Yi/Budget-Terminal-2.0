@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -9,6 +9,14 @@ import { pathToFileURL } from 'node:url'
 const root = resolve(import.meta.dirname, '..')
 const directory = await mkdtemp(join(tmpdir(), 'budget-desktop-startup-'))
 try {
+  // Reproduce unavailable Windows shader caches without touching a real profile.
+  // Files at these directory paths prevent Chromium from opening a disk cache.
+  const profile = join(directory, 'data', 'electron-profile')
+  const shaderCaches = ['GPUCache', 'GPUPersistentCache', 'DawnGraphiteCache', 'DawnWebGPUCache', 'GrShaderCache', 'ShaderCache']
+  if (process.platform === 'win32') {
+    await mkdir(profile, { recursive: true })
+    await Promise.all(shaderCaches.map(name => writeFile(join(profile, name), 'unavailable shader cache fixture')))
+  }
   const entry = join(directory, 'startup.cjs')
   await writeFile(entry, `
     const assert = require('node:assert/strict')
@@ -74,6 +82,13 @@ try {
     })
     assert.equal(output.code, 0, output.text)
     assert.match(output.text, /PASS: built desktop opens/)
+    if (process.platform === 'win32') {
+      assert.doesNotMatch(output.text, /Failed to open persistent cache|Unable to move the cache|Unable to create cache|Gpu Cache Creation failed/i,
+        'Unavailable GPU shader caches must not cause startup errors')
+      for (const name of shaderCaches) {
+        assert.equal(await readFile(join(profile, name), 'utf8'), 'unavailable shader cache fixture', 'Startup must leave existing shader caches alone')
+      }
+    }
     if (agentFailure) {
       const logs = join(directory, 'local', 'BudgetTerminal', 'logs')
       const records = (await Promise.all((await readdir(logs)).filter(name => name.endsWith('.jsonl'))

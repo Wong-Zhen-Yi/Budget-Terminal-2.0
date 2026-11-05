@@ -28,9 +28,9 @@
 
 ## One workspace, from research to records
 
-Open the desktop app with `npm run dev`, or double-click **Launch Budget Terminal.cmd**
-for the PowerShell terminal interface and the `BT` command. Install dependencies
-first. See [Quick start](#quick-start) and [terminal UI controls](docs/terminal-ui.md).
+On Windows, double-click **Launch Budget Terminal.cmd** to install and check the setup.
+Then open a new terminal and type `bt` for the terminal interface or `btd` for the
+desktop app. See [Quick start](#quick-start) and [terminal UI controls](docs/terminal-ui.md).
 
 Budget Terminal brings public market data and your saved financial records into an
 Electron app built with React and TypeScript. Move from a market overview to company
@@ -139,7 +139,17 @@ git clone https://github.com/Wong-Zhen-Yi/Budget-Terminal-2.0.git
 cd Budget-Terminal-2.0
 ```
 
-### 2. Install and open the desktop app
+### 2. Install and check the setup
+
+On Windows, double-click [Launch Budget Terminal.cmd](Launch%20Budget%20Terminal.cmd)
+from the checkout. It installs or repairs a supported Node.js runtime, dependencies
+and Electron, builds and checks the desktop and terminal interfaces, and installs
+or updates the per-user `bt` and `btd` commands. It finishes with launch instructions
+and waits for a keypress so you can read the result. It does not open either interface.
+No administrator access is needed. Double-click it again whenever you need to check
+or repair setup. From the checkout, `npm.cmd run setup` runs the same Windows checks.
+
+For a manual installation, or on macOS and Linux:
 
 Use **Node.js 24 LTS and npm 11** for a new installation. Supported versions are
 Node.js **22.23.4+, 24.22.1+, or 26.12.1+**, with **npm 10.9.8+**, as defined in
@@ -150,22 +160,31 @@ npm install
 npm run dev
 ```
 
-### 3. Launch the desktop app
+### 3. Open Budget Terminal
 
-On Windows, open [Launch Budget Terminal.cmd](Launch%20Budget%20Terminal.cmd)
-from the checkout. It checks dependencies, builds the latest source, and opens
-the Electron desktop window. It also checks that the per-user `BT` command is
-installed and current, installing or refreshing it when needed without opening
-the TUI. Double-click launchers are provided for Windows only.
+After Windows setup, open a new PowerShell or Command Prompt window and type `bt`
+for the terminal interface or `btd` for the desktop app.
 
-Keep its terminal open while using Budget Terminal. Build or startup errors stay
-visible in the launcher window.
+You can close the installer window. Keep the terminal used to launch Budget Terminal
+open while using the app. Build or startup errors stay visible there.
+
+`btd` in a new PowerShell or Command Prompt window opens the desktop app from any
+directory and checks dependencies and builds the latest desktop source before opening it.
+To install or repair it manually on Windows, run `npm run setup:desktop` from the checkout.
+Keep the terminal open while using the app. Optional arguments include `btd -Dev`
+for live updates and `btd -Logs` to open diagnostics. To remove only this command,
+run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-bt.ps1 -Desktop -Uninstall`.
 
 `BT` in a new PowerShell window opens the TUI independently of the desktop launcher.
 To install or repair the command manually on Windows, run `npm run setup:tui`.
 On macOS and Linux, run `npm run tui` after installing dependencies.
 
 ### Launch behavior and troubleshooting
+
+On Windows, the app bypasses Chromium's GPU shader disk caches to avoid locked-file
+and access-denied errors during startup or relaunch. GPU acceleration stays enabled;
+shaders may need to compile again on each launch. Saved application data and Browser
+login profiles are preserved, and existing cache files do not need to be deleted.
 
 On Windows, the double-click launcher finds a supported Node.js installation even
 when an older version comes first on PATH. If none is available, it downloads

@@ -24,14 +24,45 @@ for (const platform of ['win32', 'darwin', 'linux']) {
   assert(!calls.some(([, args]) => args.some(arg => String(arg).includes('logViewer'))), 'No separate diagnostic application')
 }
 for (const [file, command] of [
-  ['Launch Budget Terminal.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" %\*/],
+  ['Launch Budget Terminal.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -Setup/],
 ]) {
   const source = readFileSync(resolve(__dirname, '..', file), 'utf8').replace(/\r\n/g, '\n')
-  assert.match(source, command, `${file} must open the desktop app and forward arguments on double click`)
+  assert.match(source, command, `${file} must install/check the application on double click`)
   assert(!source.includes('-Tui'), `${file} must not select the TUI`)
-  assert.match(source, /powershell\.exe[^\r\n]*install-bt\.ps1"/, `${file} must check or install the PowerShell BT command`)
-  assert(source.indexOf('install-bt.ps1') < source.indexOf('launch-windows.ps1'), 'Check BT installation before opening the desktop app')
-  assert(!source.includes('-Dev'), `${file} must build and open the production desktop app`)
+  const windowsSource = readFileSync(join(__dirname, 'launch-windows.ps1'), 'utf8')
+  assert.match(windowsSource, /install-bt\.ps1'\)/, 'Setup must check or install the PowerShell BT command')
+  assert.match(windowsSource, /install-bt\.ps1'\) -Desktop/, 'Setup must check or install the BTD desktop command')
+  assert(!source.includes('-Dev'), `${file} must check the production build`)
+  assert(!source.includes('%*'), 'Double-click setup must not forward app launch options')
+  assert.match(source, /bt\s+- open the terminal interface/, 'Explain how to open the TUI')
+  assert.match(source, /btd\s+- open the desktop app/, 'Explain how to open the desktop app')
+  assert.match(source, /new PowerShell or Command Prompt window/, 'Explain that a fresh terminal loads the updated PATH')
+  assert.match(source, /if errorlevel 1 goto :failed/, 'Setup failures must stop before success instructions')
+  assert.match(source, /pause >nul/, 'Double-click setup keeps its result visible')
+}
+for (const platform of ['win32', 'darwin', 'linux']) {
+  for (const failedCall of [0, 2, 3, 4, 5]) {
+    const calls = []
+    let verified = false
+    assert.equal(launch({ setupOnly: true, platform, nodeVersion: '24.22.1', environment: {}, locateCodex: () => null, log,
+      verifyBuild() { verified = true },
+      spawn(command, args) {
+        calls.push({ command, args })
+        return { status: calls.length === failedCall ? 7 : 0, stdout: '11.0.0' }
+      },
+    }), failedCall ? 1 : 0)
+    assert.equal(calls.length, failedCall || 5, 'Setup stops at the failed check')
+    assert(!calls.some(call => /\b(preview|dev)\b/.test(call.args.join(' '))), 'Setup never opens an application')
+    if (!failedCall || failedCall === 5) {
+      assert(verified, 'Verify desktop assets before checking the terminal build')
+      assert(calls.at(-1).args.join(' ').includes('run tui -- --build-only'), 'Build the TUI without an interactive session or backend')
+    }
+  }
+}
+for (const options of [{ development: true }, { logs: true }]) {
+  assert.equal(launch({ setupOnly: true, ...options, nodeVersion: '24.22.1', log,
+    spawn() { assert.fail('Setup must reject launch options before running commands') },
+  }), 1)
 }
 function assertCurrentStartupMessages(messages) {
   assert(messages.some(message => message.includes('MCP upgraded:') && message.includes('durable write recovery')), 'Every launch mode announces MCP upgrades')

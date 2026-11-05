@@ -14,13 +14,18 @@ function newest(directory) {
 }
 
 async function main() {
+  const buildOnly = process.argv.includes('--build-only')
   const output = path.join(desktop, 'out/tui/main.mjs')
   await build({ entryPoints: [path.join(desktop, 'tui/main.ts')], outfile: output, bundle: true, platform: 'node', format: 'esm', target: 'node22', banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" } })
   if (process.argv.includes('--help')) return import(pathToFileURL(output).href)
-  if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error('Run BT in an interactive PowerShell or Windows Terminal window.')
+  if (!buildOnly && (!process.stdin.isTTY || !process.stdout.isTTY)) throw new Error('Run BT in an interactive PowerShell or Windows Terminal window.')
   // Reuse the same authenticated local service bridge; never open a second data store.
   const runtimeOutput = path.join(desktop, 'out/tui/runtime.mjs')
   await build({ entryPoints: [path.join(desktop, 'mcp/runtime.ts')], outfile: runtimeOutput, bundle: true, platform: 'node', format: 'esm', target: 'node22' })
+  if (buildOnly) {
+    console.log('Terminal interface and service bridge built successfully.')
+    return
+  }
   const { invokeBridge } = await import(pathToFileURL(runtimeOutput).href)
   let backend
   try { await invokeBridge('budget_terminal_connection_status', {}, { timeoutMs: 2000 }) }

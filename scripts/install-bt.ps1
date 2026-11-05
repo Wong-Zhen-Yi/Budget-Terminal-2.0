@@ -1,7 +1,9 @@
-param([switch]$Uninstall)
+param([switch]$Uninstall, [switch]$Desktop)
 $ErrorActionPreference = 'Stop'
+$command = if ($Desktop) { 'BTD' } else { 'BT' }
+$interface = if ($Desktop) { 'desktop app' } else { 'TUI' }
 $bin = Join-Path $env:LOCALAPPDATA 'BudgetTerminal\bin'
-$shim = Join-Path $bin 'BT.cmd'
+$shim = Join-Path $bin "$command.cmd"
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 $entries = @($userPath -split ';' | Where-Object { $_ -and $_.TrimEnd('\') -ine $bin.TrimEnd('\') })
 function Publish-PathChange {
@@ -21,18 +23,22 @@ public static class BudgetTerminalEnvironment {
 }
 if ($Uninstall) {
   if (Test-Path -LiteralPath $shim) { Remove-Item -LiteralPath $shim }
-  [Environment]::SetEnvironmentVariable('Path', ($entries -join ';'), 'User')
+  $otherCommand = if ($Desktop) { 'BT.cmd' } else { 'BTD.cmd' }
+  if (-not (Test-Path -LiteralPath (Join-Path $bin $otherCommand) -PathType Leaf)) {
+    [Environment]::SetEnvironmentVariable('Path', ($entries -join ';'), 'User')
+  }
   Publish-PathChange
-  Write-Host 'BT command removed. Reopen PowerShell to refresh PATH.'
+  Write-Host "$command command removed. Reopen PowerShell to refresh PATH."
   return
 }
 $launcher = Join-Path $PSScriptRoot 'launch-windows.ps1'
 # Quote the checkout path; keep machine-specific paths outside the public repository.
-$content = "@echo off`r`npowershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$launcher`" -Tui %*`r`nexit /b %errorlevel%`r`n"
+$mode = if ($Desktop) { '' } else { ' -Tui' }
+$content = "@echo off`r`npowershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$launcher`"$mode %*`r`nexit /b %errorlevel%`r`n"
 if ((Test-Path -LiteralPath $shim -PathType Leaf) -and
     [IO.File]::ReadAllText($shim, [Text.Encoding]::Default) -eq $content -and
     @($userPath -split ';' | Where-Object { $_ -and $_.TrimEnd('\') -ieq $bin.TrimEnd('\') }).Count -gt 0) {
-  Write-Host 'BT is installed. Type BT in a new PowerShell window to open the TUI when needed.'
+  Write-Host "$command is installed. Type $command in a new terminal window to open the $interface when needed."
   return
 }
 New-Item -ItemType Directory -Path $bin -Force | Out-Null
@@ -40,4 +46,4 @@ New-Item -ItemType Directory -Path $bin -Force | Out-Null
 [Environment]::SetEnvironmentVariable('Path', ((@($bin) + $entries) -join ';'), 'User')
 Publish-PathChange
 $env:Path = $bin + ';' + $env:Path
-Write-Host 'BT installed. Open a new PowerShell window, then type BT. No administrator access is needed.'
+Write-Host "$command installed. Open a new terminal window, then type $command. No administrator access is needed."

@@ -16,9 +16,12 @@ function platformName(platform) {
   return null
 }
 
-function launch({ development = false, logs = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
+function launch({ development = false, logs = false, setupOnly = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
+  log.log('BT terminal interface: desktop workspaces and page names, saved portfolio selection, shared mark valuations and P&L, searchable research tables and the offline Dictionary. Press p for pages, w for workspaces, b for portfolios and f to filter. Startup diagnostics remain in Settings.')
+  log.log('TUI charts: spaced candles, smooth lines, close-price marker, readable price/date axes and expanded volume. Request diagnostics stay in Settings. BT rebuilds its terminal interface on launch.')
   log.log('Settings: consistent compact sizing and horizontal category views. The redundant Preferences label, All settings view and introductory header are removed.')
   log.log('Persistent diagnostic logging retains up to the last 15 days. Open Settings > Diagnostics or press Ctrl+Shift+L. No global diagnostics banner is added.')
+  if (platform === 'win32') log.log('Windows startup bypasses GPU shader disk caches to avoid locked-cache errors. GPU acceleration remains enabled.')
   log.log('Stock charts leave 35 percent of the plot to the right of the latest bar; disabled indicator panes release their space.')
   log.log('Pages populate completed sections while remaining data loads; all pages still preload and startup failures remain visible.')
   log.log('Page Loading Status banner removed. Startup progress, failures and diagnostics remain in Settings; page readiness indicators remain available. Opening a page promotes its queued requests with fair background turns. Shared reads avoid duplicate work. Readers retain controls longer and evicted pages restore scroll. All pages still preload.')
@@ -44,6 +47,10 @@ function launch({ development = false, logs = false, platform = process.platform
     return 1
   }
   if (logs) env.BUDGET_TERMINAL_OPEN_DIAGNOSTICS = '1'
+  if (setupOnly && (development || logs)) {
+    log.error('Setup cannot be combined with launch options.')
+    return 1
+  }
 
   log.log('Checking Codex for the Agents page...')
   const codexPath = locateCodex({ platform, environment: env })
@@ -173,6 +180,17 @@ function launch({ development = false, logs = false, platform = process.platform
     return 1
   }
 
+  if (setupOnly) {
+    log.log('Building and checking the terminal interface without starting Budget Terminal...')
+    const tui = npm(['run', 'tui', '--', '--build-only'])
+    if (tui.error || tui.status !== 0) {
+      log.error('Terminal interface build failed. Fix the error above, then run setup again.')
+      return 1
+    }
+    log.log('Node.js, npm, Electron, desktop assets and terminal interface checks passed.')
+    return 0
+  }
+
   log.log('The Notifications workspace includes U.S. market-open alerts and the shared Agent inbox. Use Send test notification to check native desktop popups.')
   log.log('Opening Budget Terminal in Electron. Keep this terminal open while using the app.')
   const app = npm(['run', 'preview', '--workspace', 'budget-terminal-desktop'])
@@ -183,6 +201,6 @@ function launch({ development = false, logs = false, platform = process.platform
   return 0
 }
 
-if (require.main === module) process.exitCode = launch({ development: process.argv.includes('--dev'), logs: process.argv.includes('--logs') })
+if (require.main === module) process.exitCode = launch({ development: process.argv.includes('--dev'), logs: process.argv.includes('--logs'), setupOnly: process.argv.includes('--setup') })
 
 module.exports = { launch, platformName }

@@ -15,6 +15,17 @@ import { assertDesktopCertificateSecurity } from './shared/certificateSecurity.j
 import { startDiagnostics, observeDiagnosticWindow } from './services/diagnosticHost.js'
 import { diagnosticLog, faultCode } from './services/diagnosticLog.js'
 
+// Windows can retain shader-cache file locks across launches. Keep GPU rendering
+// enabled, but avoid Chromium's optional disk caches before it starts the GPU.
+if (process.platform === 'win32') {
+  app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
+  // Graphite opens its persistent cache independently of the shader-cache switch.
+  const disabledFeatures = app.commandLine.getSwitchValue('disable-features').split(',').filter(Boolean)
+  app.commandLine.appendSwitch('disable-features', [...new Set([
+    ...disabledFeatures, 'GpuPersistentCache', 'SkiaGraphiteUsePersistentCache',
+  ])].join(','))
+}
+
 startDiagnostics()
 
 const dirname = fileURLToPath(new URL('.', import.meta.url))

@@ -6,30 +6,27 @@ import { safeText, wrapLines } from './model.js'
 import { CHARTS_INTERVALS, CHARTS_RANGES } from '../electron/shared/contract.js'
 import { chartCandles, renderChart } from './chart.js'
 import type { ChartState } from './chart.js'
-import { clip, compactDetail, dataTable, envelopeLines, record, renderTable } from './presentation.js'
+import { array, clip, compactDetail, dataTables, envelopeLines, portfolioSummary, record, renderTable } from './presentation.js'
+import { desktopPages, initialPageId } from './workspaces.js'
+import type { PageDefinition } from './workspaces.js'
+import { DICTIONARY_ENTRIES } from '../electron/shared/dictionary.js'
 
-interface View { name: string; operation?: string; request?: Record<string, unknown>; result?: unknown; lines: string[]; loading?: boolean; error?: string; updated?: string; revision?: number; abort?: AbortController }
+interface View extends Omit<PageDefinition, 'operation'> { operation?: string; result?: unknown; section?: number; filter?: string; loading?: boolean; error?: string; updated?: string; revision?: number; abort?: AbortController }
 interface MenuItem { label: string; activate: () => void }
 interface ActionMenu { title: string; items: MenuItem[]; selected: number; filter: string }
 const symbols = ['SPY', 'QQQ', 'AAPL', 'MSFT', 'NVDA']
 const knownSymbols = new Set(symbols)
-const views: View[] = [
-  { name: 'Portfolio', operation: 'portfolio', request: {}, lines: [] },
-  { name: 'Markets', operation: 'quotes', request: { holdings: symbols }, lines: [] },
-  { name: 'Charts', operation: 'chartsHistory', request: { symbol: 'SPY', interval: '1 Day', range: '1Y' }, lines: [] },
-  { name: 'News', operation: 'newsPage', request: { tickers: symbols }, lines: [] },
-  { name: 'Crypto', operation: 'crypto', request: {}, lines: [] },
-  { name: 'Finance', operation: 'personalFinance', request: {}, lines: [] },
-  { name: 'Research', lines: ['RESEARCH DESK', 'Space opens chart, quote, company and service actions.', 'Menus support typing to filter. Pick Type another ticker to enter any symbol.', '', 'Optional commands (press /):', 'chart AAPL          Interactive candlesticks / line and volume', 'quote AAPL MSFT     Compact price comparison with instrument labels', 'stock AAPL          Detailed company research', 'tool <name> <JSON>  Any read-only service; tools lists available names', '', 'Tables: Up/Down selects a row; Enter opens all details; Esc returns.', 'Wide terminals show selected record details beside the table.', 'Charts: s symbol · t range/interval · c style · +/- zoom', 'Enter inspects candles: Left/Right candle, Up/Down zoom, Esc leaves.', 'Source dates and instrument labels stay with the data.'] },
-  { name: 'Settings', lines: [] },
-]
-let active = 0
+const views: View[] = [...desktopPages(), { id: 'tool-console', name: 'Tool console', workspace: 'Research', lines: ['Read-only research commands', '', 'Space: browse research services', '/: chart AAPL, quote AAPL MSFT, stock AAPL, tools, tool <name> <JSON>', 'p: find a page | w: workspaces | f: filter rows | s: page ticker', '[: previous data section | ]: next data section | d: complete response'] }]
+let active = views.findIndex(view => view.id === initialPageId)
+let portfolioQuotes: unknown
+let portfolioId: string | undefined
+let portfolioFeedTickers: string | undefined
 let scroll = 0
 let selected = 0
 let detailOpen = false
 let responseOpen = false
-const charts = views[2]
-const research = views.find(view => view.name === 'Research')!
+const charts = views.find(view => view.id === 'charts')!
+const research = views.find(view => view.id === 'tool-console')!
 const chart: ChartState = { mode: 'candles', bars: 100, cursor: 0, inspect: false }
 let command: string | undefined
 const menus: ActionMenu[] = []
@@ -37,9 +34,64 @@ let closed = false
 const controller = new AbortController()
 const output = process.stdout
 
+function sourceView(view: View): View { return views.find(item => item.id === view.sourceId) ?? view }
+function tablesFor(view: View) {
+  const source = sourceView(view)
+  if (view.id === 'dictionary') return dataTables('dictionary', { data: { entries: DICTIONARY_ENTRIES } })
+  const tables = dataTables(source.operation, source.result, { quotes: portfolioQuotes, portfolioId })
+  if (view.id === 'dashboard' || view.id === 'dashboard-2') {
+    for (const id of ['news', 'global']) {
+      const page = views.find(item => item.id === id)!
+      if (page.result) tables.push(...dataTables(page.operation, page.result))
+    }
+  }
+  return tables
+}
+function tableFor(view: View) {
+  const tables = tablesFor(view)
+  const table = tables[(view.section ?? 0) % Math.max(1, tables.length)]
+  if (!table || !view.filter) return table
+  const query = view.filter.toLowerCase()
+  return { ...table, title: `Filter: ${safeText(view.filter)} | ${table.title}`, rows: table.rows.filter(row => row.cells.some(cell => cell.toLowerCase().includes(query))) }
+}
+function navigate(view: View) {
+  active = views.indexOf(view)
+  scroll = 0
+  selected = 0
+  detailOpen = false
+  chart.inspect = false
+  menus.length = 0
+}
+function pageMenu(workspace?: string) {
+  openMenu(workspace || 'Find a desktop page', views.filter(view => !workspace || view.workspace === workspace).map(view => ({
+    label: workspace ? view.name : view.workspace + ' / ' + view.name,
+    activate: () => navigate(view),
+  })))
+}
+function workspaceMenu() {
+  openMenu('Desktop workspaces', [...new Set(views.map(view => view.workspace))].map(workspace => ({ label: workspace, activate: () => pageMenu(workspace) })))
+}
+function portfolioMenu() {
+  const books = array(record(record(views.find(view => view.id === 'portfolio')?.result).data).portfolios).map(record)
+  openMenu('Choose a saved portfolio', books.map(book => ({ label: safeText(book.name), activate: () => { portfolioId = String(book.id); selected = 0; menus.length = 0 } })))
+}
+
+function loadPortfolioFeeds(result: unknown) {
+  if (closed) return
+  const tickers = [...new Set(array(record(record(result).data).portfolios).flatMap(book => array(record(book).tickers)).filter((ticker): ticker is string => typeof ticker === 'string' && /^[A-Za-z0-9.^=:_-]{1,30}$/.test(ticker)))]
+  const signature = JSON.stringify(tickers)
+  if (signature === portfolioFeedTickers) return
+  portfolioFeedTickers = signature
+  for (const id of ['news', 'calendar', 'youtube']) {
+    const view = views.find(item => item.id === id)!
+    void load(view, { ...view.request, tickers })
+  }
+}
+
 function settings() {
-  return ['Budget Terminal TUI', '', 'Read-only access to the existing local Budget Terminal services.', 'No broker orders or saved-record edits are issued.', 'Every terminal workspace starts loading at launch.', 'The background desktop renderer also preloads all implemented pages.', 'Open the desktop Settings for detailed page and provider diagnostics.', '', ...views.filter(view => view.operation).flatMap(view => [
+  return ['Budget Terminal TUI', '', 'Read-only access to the existing local Budget Terminal services.', 'No broker orders or saved-record edits are issued.', 'Every supported data page starts loading at launch.', 'p: find a page | w: workspaces | f: filter rows | [ / ]: sections', 'Pages with desktop-only interactions explain how to open them.', 'The background desktop renderer also preloads all implemented pages.', 'Open the desktop Settings for detailed page and provider diagnostics.', '', 'Portfolio mark diagnostics:', ...envelopeLines(portfolioQuotes), '', ...views.filter(view => view.operation && !view.sourceId).sort((a, b) => Number(Boolean(b.error)) - Number(Boolean(a.error))).flatMap(view => [
     `${view.name}: ${view.loading ? 'Loading' : view.error ? 'Needs attention' : 'Loaded'}${view.updated ? ` | ${view.updated}` : ''}`,
+    ...envelopeLines(view.result),
     ...(view.error ? [view.error, 'Select this workspace, press Space, then choose Refresh.'] : []),
   ])]
 }
@@ -55,7 +107,10 @@ function draw() {
   const menuLines = items.map((item, index) => `${index === menu?.selected ? '> ' : '  '}${item.label}`)
   const room = Math.max(1, height - 5)
   const contentRoom = menu ? Math.max(1, room - 2) : room
-  const table = dataTable(view.operation, view.result)
+  const source = sourceView(view)
+  const result = view.id === 'dictionary' ? { data: { entries: DICTIONARY_ENTRIES } } : source.result
+  const tables = tablesFor(view)
+  const table = tableFor(view)
   if (table) selected = Math.max(0, Math.min(selected, table.rows.length - 1))
   let body: string[]
   if (menu) {
@@ -64,40 +119,42 @@ function draw() {
     body = [menu.title, `Filter: ${menu.filter || '(type to filter)'} · ${items.length} choices`, ...wrapped.slice(offset, offset + contentRoom)]
     if (!items.length) body.push('No matches. Backspace clears the filter; Left goes back.')
   } else if (detailOpen) {
-    const lines = compactDetail(responseOpen ? view.result : table?.rows[selected] ? { data: table.rows[selected].detail } : view.result, width)
-    const details = [...lines, ...envelopeLines(view.result)]
+    const lines = compactDetail(responseOpen ? result : table?.rows[selected] ? { data: table.rows[selected].detail } : result, width)
+    const details = [...lines, ...envelopeLines(result)]
     scroll = Math.min(scroll, Math.max(0, details.length - room + 1))
     body = [`${responseOpen ? 'FULL RESPONSE DATA' : 'RECORD DETAILS'} · Esc back`, ...details.slice(scroll, scroll + Math.max(1, room - 1))]
   } else if (view === charts) {
     const data = record(record(view.result).data)
     const stats = record(data.stats)
     const candles = chartCandles(data.candles)
+    const sources = [`History: ${safeText(stats.source || record(record(view.result).meta).source || '--')}`,
+      ...(stats.priceSource ? [`Quote: ${safeText(stats.priceSource)} · ${safeText(stats.priceBasis || '--')} · ${safeText(stats.changeBasis || '--')}`] : [])]
     body = [
       `${safeText(view.request?.symbol)} ${safeText(stats.currency)}  ${safeText(view.request?.range)} / ${safeText(view.request?.interval)}  [s Symbol] [t Timeframe] [c Style]`,
-      ...(candles.length ? renderChart(candles, width, Math.max(1, room - 4), chart) : [view.loading ? 'Loading price history… Other workspaces remain available.' : 'No chart data. Press s to choose a ticker, or Space for actions.']),
-      `History: ${safeText(stats.source || record(record(view.result).meta).source || '--')} ${safeText(stats.market || '')}`,
-      `Quote: ${safeText(stats.priceSource || '--')} · ${safeText(stats.priceBasis || '--')} · change basis ${safeText(stats.changeBasis || '--')}`,
-      `${safeText(record(record(view.result).meta).freshness || '--')} · ${envelopeLines(view.result)[1]} · d full data`,
-      ...(view.error ? [`Chart warning: ${view.error} · Settings has request diagnostics.`] : []),
+      ...(candles.length ? renderChart(candles, width, Math.max(1, room - 1 - sources.length), chart) : [view.loading ? 'Loading price history… Other workspaces remain available.' : 'No chart data. Press s to choose a ticker, or Space for actions.']),
+      ...sources,
     ]
-  } else if (table && view.result) {
-    body = [...renderTable(table, selected, width, Math.max(1, room - 3)), ...envelopeLines(view.result).slice(0, 3)]
+  } else if (table && result) {
+    const summary = source.operation === 'portfolio' && !view.section ? portfolioSummary(result, { quotes: portfolioQuotes, portfolioId }) : []
+    const section = tables.length > 1 ? ['Section ' + ((view.section ?? 0) + 1) + '/' + tables.length + ' | [ / ] switch sections'] : []
+    body = [...summary, ...section, ...renderTable(table, selected, width, Math.max(1, room - summary.length - section.length))]
   } else {
-    const lines = wrapLines(view.name === 'Settings' ? settings() : view.result ? [...compactDetail(view.result, width), ...envelopeLines(view.result)] : view.lines.length ? view.lines : [view.loading ? 'Loading data… Other workspaces remain available.' : 'Space opens actions.'], width)
+    const lines = wrapLines(view.name === 'Settings' ? settings() : result ? ['No tabular records returned. Press d for full response data.'] : source.error ? ['This page could not load. Press r to retry; Settings has diagnostics.'] : view.lines.length ? view.lines : [source.loading ? 'Loading data… Other workspaces remain available.' : 'No records returned. Space opens actions.'], width)
     scroll = Math.min(scroll, Math.max(0, lines.length - room))
     body = lines.slice(scroll, scroll + room)
   }
-  const tabs = views.map((item, index) => index === active ? `[${item.name}]` : item.name).join('  ')
-  const shortTabs = views.map((item, index) => index === active ? `[${item.name}]` : item.name.slice(0, 3)).join(' ')
+  const siblings = views.filter(item => item.workspace === view.workspace)
+  const tabs = siblings.map(item => item === view ? `[${item.name}]` : item.name).join('  ')
+  const shortTabs = siblings.map(item => item === view ? `[${item.name}]` : item.name.slice(0, 3)).join(' ')
   const rows = [
-    ` BT / BUDGET TERMINAL${width >= 65 ? '                            Space: actions  /: command' : ''}`,
+    ` BT / ${view.workspace} / ${view.name}${width >= 90 ? '    p: pages  w: workspaces  Space: actions' : ''}`,
     tabs.length <= width ? tabs : shortTabs.length <= width ? shortTabs : `← ${views[(active + views.length - 1) % views.length].name}  [${view.name}]  ${views[(active + 1) % views.length].name} →`,
     '─'.repeat(width),
     ...body.slice(0, room),
   ]
   while (rows.length < height - 2) rows.push('')
   rows.push(command !== undefined ? `> ${safeText(command).slice(-Math.max(1, width - 2))}` : '─'.repeat(width), command !== undefined ? 'Enter apply · Esc cancel · Backspace edit' : menu ? '↑↓ choose · Space select · ← back · Type filter' : detailOpen ? '↑↓ scroll · Esc back · Space actions' : view === charts && chart.inspect ? 'INSPECT ←→ candle · ↑↓ zoom · Esc workspaces · Space actions' : '←→ pages · ↑↓ rows/scroll · Space actions · Enter detail/inspect · q quit')
-  output.write('\x1b[H\x1b[2J' + rows.slice(0, height).map((row, index) => index === 0 ? `\x1b[1;36m${clip(row, width)}\x1b[0m` : clip(row, width)).join('\r\n'))
+  output.write('\x1b[H\x1b[2J' + rows.slice(0, height).map((row, index) => index === 0 ? `\x1b[1;38;2;47;111;208m${clip(row, width)}\x1b[0m` : clip(row, width)).join('\r\n'))
 }
 
 function filteredItems(menu: ActionMenu): MenuItem[] { return menu.items.filter(item => item.label.toLowerCase().includes(menu.filter.toLowerCase())) }
@@ -150,19 +207,19 @@ function serviceMenu() {
 
 function showActions() {
   openMenu('Actions', [
-    { label: views[active].operation ? 'Refresh this workspace' : 'Refresh data workspaces', activate: () => {
+    { label: sourceView(views[active]).operation ? 'Refresh this workspace' : 'Refresh data workspaces', activate: () => {
       menus.length = 0
-      if (views[active].operation) void load(views[active])
-      else for (const view of views) if (view.operation) void load(view)
+      if (sourceView(views[active]).operation) void load(sourceView(views[active]))
+      else for (const view of views) if (view.operation && !view.sourceId) void load(view)
     } },
     { label: 'Quotes - choose ticker', activate: () => selectTicker('quote') },
     { label: 'Company research - choose ticker', activate: () => selectTicker('stock') },
     { label: 'Browse research services', activate: serviceMenu },
     { label: 'Chart a ticker', activate: () => selectTicker('chart') },
     { label: 'Type a ticker for chart…', activate: () => { menus.length = 0; command = 'chart ' } },
-    ...(dataTable(views[active].operation, views[active].result)?.rows[selected] ? [{ label: 'Open selected record details', activate: () => { menus.length = 0; detailOpen = true; responseOpen = false; scroll = 0 } }] : []),
-    ...(dataTable(views[active].operation, views[active].result)?.rows[selected]?.symbol ? [{ label: 'Chart selected ticker', activate: () => {
-      const symbol = dataTable(views[active].operation, views[active].result)!.rows[selected].symbol!
+    ...(tableFor(views[active])?.rows[selected] ? [{ label: 'Open selected record details', activate: () => { menus.length = 0; detailOpen = true; responseOpen = false; scroll = 0 } }] : []),
+    ...(tableFor(views[active])?.rows[selected]?.symbol ? [{ label: 'Chart selected ticker', activate: () => {
+      const symbol = tableFor(views[active])!.rows[selected].symbol!
       menus.length = 0
       void runCommand(`chart ${symbol}`)
     } }] : []),
@@ -174,6 +231,11 @@ function showActions() {
       { label: 'Zoom out', activate: () => { menus.length = 0; zoom(1.4) } },
       { label: 'Fit all candles', activate: () => { menus.length = 0; chart.bars = chartCandles(record(record(charts.result).data).candles).length } },
     ] : []),
+    { label: 'Find a desktop page', activate: () => pageMenu() },
+    { label: 'Choose a workspace', activate: workspaceMenu },
+    { label: 'Filter rows / dictionary terms', activate: () => { menus.length = 0; command = 'find ' } },
+    ...(views[active].request?.symbol && views[active] !== charts ? [{ label: 'Change this page ticker', activate: () => { menus.length = 0; command = 'symbol ' } }] : []),
+    ...(sourceView(views[active]).operation === 'portfolio' ? [{ label: 'Choose a saved portfolio', activate: portfolioMenu }] : []),
     { label: 'Return to content', activate: () => { menus.length = 0 } },
     { label: 'Quit Budget Terminal TUI', activate: close },
   ])
@@ -181,7 +243,10 @@ function showActions() {
 
 async function load(view: View, request?: Record<string, unknown>) {
   if (!view.operation || (view.loading && !request)) return
-  if (request) { view.request = request; view.result = undefined; view.lines = []; selected = 0; scroll = 0 }
+  if (request) {
+    view.request = request; view.result = undefined; view.lines = []; view.section = 0
+    if (sourceView(views[active]) === view) { selected = 0; scroll = 0 }
+  }
   view.abort?.abort()
   view.abort = new AbortController()
   const revision = (view.revision ?? 0) + 1
@@ -195,11 +260,18 @@ async function load(view: View, request?: Record<string, unknown>) {
     view.result = result
     view.lines = []
     if (view.operation === 'portfolio') {
-      const payload = result as { data?: { portfolios?: Array<{ tickers?: string[] }> } }
-      for (const portfolio of payload.data?.portfolios ?? []) {
-        for (const ticker of portfolio.tickers ?? []) if (/^[A-Za-z0-9.^=:_-]{1,30}$/.test(ticker)) knownSymbols.add(ticker.toUpperCase())
-      }
+      const tickers = [...new Set(array(record(record(result).data).portfolios).flatMap(book => array(record(book).tickers)).filter((ticker): ticker is string => typeof ticker === 'string' && /^[A-Za-z0-9.^=:_-]{1,30}$/.test(ticker)))]
+      for (const ticker of tickers) knownSymbols.add(ticker.toUpperCase())
+      if (view.id === 'portfolio') loadPortfolioFeeds(result)
+      draw()
+      const quotes = tickers.length ? await invokeBridge('budget_terminal_quotes', { request: { holdings: tickers } }, { signal: AbortSignal.any([controller.signal, view.abort.signal]), timeoutMs: 120_000 }) : undefined
+      if (closed || revision !== view.revision) return
+      portfolioQuotes = quotes
+      const quoteMeta = record(record(quotes).meta)
+      if (['failed', 'partial', 'stale'].includes(String(quoteMeta.freshness))) view.error = `Portfolio marks ${quoteMeta.freshness}; see Settings.`
     }
+
+    if (closed || revision !== view.revision) return
     const envelope = result as { meta?: { freshness?: string }; errors?: unknown }
     if (envelope.meta?.freshness === 'failed' || envelope.meta?.freshness === 'partial' || envelope.meta?.freshness === 'stale') view.error = `Data ${envelope.meta.freshness}; see response details.`
     if (view === charts) chart.cursor = Math.max(0, chartCandles(record(record(result).data).candles).length - 1)
@@ -207,12 +279,21 @@ async function load(view: View, request?: Record<string, unknown>) {
   } catch (error) {
     if (closed || revision !== view.revision) return
     view.error = safeText(error instanceof Error ? error.message : error)
+    if (view.id === 'portfolio') loadPortfolioFeeds(view.result)
     view.lines = [...view.lines, '', `Request failed: ${view.error}`, 'Press Space and choose Refresh to retry. Check Settings for connection details.']
   } finally { if (revision === view.revision) view.loading = false; draw() }
 }
 
 async function runCommand(text: string) {
   const [verb, ...args] = text.trim().split(/\s+/)
+  const current = views[active]
+  if (verb === 'find') { current.filter = args.join(' '); selected = 0; draw(); return }
+  if (verb === 'symbol' && current.request?.symbol) {
+    const symbol = (args[0] || '').toUpperCase()
+    if (/^[A-Z0-9.^=:_-]{1,30}$/.test(symbol)) { knownSymbols.add(symbol); await load(current, { ...current.request, symbol }) }
+    else { command = 'symbol '; draw() }
+    return
+  }
   detailOpen = false
   chart.inspect = false
   active = views.indexOf(research)
@@ -230,8 +311,10 @@ async function runCommand(text: string) {
     research.abort?.abort()
     research.revision = (research.revision ?? 0) + 1
     research.loading = false
+    research.error = undefined
     if (verb === 'tools') {
       research.result = undefined
+      research.operation = undefined
       research.lines = catalog.filter(entry => entry.tool.annotations?.readOnlyHint && !['settings', 'screenshot'].includes(entry.operation)).map(entry => `${entry.operation}: ${entry.tool.description?.split('. ')[0]}`)
       draw()
       return
@@ -267,7 +350,7 @@ function close() {
 }
 
 if (process.argv.includes('--help')) {
-  console.log('BT: compact tables, record details and charts. Arrows navigate; Space actions; Enter details. Charts: s ticker, t timeframe, c style, Enter inspect, +/- zoom. / commands: chart AAPL, quote AAPL MSFT, stock AAPL. q quits.')
+  console.log('BT: desktop workspaces, portfolio valuations, data tables and charts. p finds pages; w chooses a workspace; b chooses a portfolio; [ / ] changes data sections. Arrows navigate; Space actions; Enter details. Charts: s ticker, t timeframe, c style, Enter inspect, +/- zoom. / commands: chart AAPL, quote AAPL MSFT, stock AAPL. q quits.')
 } else if (!process.stdin.isTTY || !output.isTTY) {
   console.error('Budget Terminal TUI needs an interactive terminal. Run BT in PowerShell or Windows Terminal.')
   process.exitCode = 1
@@ -301,7 +384,17 @@ if (process.argv.includes('--help')) {
     } else if (key.name === 'space' || text === ' ') showActions()
     else if (text === 'q') return close()
     else if (text === '/') command = ''
-    else if (text === 'r') void load(views[active])
+    else if (text === 'r' || key.name === 'f5') void load(sourceView(view))
+    else if (text === 'p') pageMenu()
+    else if (text === 'w') workspaceMenu()
+    else if (text === 'f') command = 'find '
+    else if (text === 's' && view !== charts && view.request?.symbol) command = 'symbol '
+    else if (text === 'b' && sourceView(view).operation === 'portfolio') portfolioMenu()
+    else if (text === '[' || text === ']') {
+      const count = tablesFor(view).length
+      if (count) view.section = ((view.section ?? 0) + (text === ']' ? 1 : count - 1)) % count
+      selected = 0; scroll = 0; detailOpen = false
+    }
     else if (key.name === 'escape') { detailOpen = false; chart.inspect = false; scroll = 0 }
     else if (text === 'd' || (key.name === 'return' && view !== charts)) { detailOpen = !detailOpen; responseOpen = text === 'd'; scroll = 0 }
     else if (view === charts && !detailOpen && text === 's') command = 'chart '
@@ -320,8 +413,8 @@ if (process.argv.includes('--help')) {
       else if (key.name === 'end') chart.cursor = Math.max(0, count - 1)
     }
     else if (key.name === 'tab' || key.name === 'right' || key.name === 'left') { active = (active + (key.shift || key.name === 'left' ? views.length - 1 : 1)) % views.length; scroll = 0; selected = 0; detailOpen = false; chart.inspect = false }
-    else if (!detailOpen && dataTable(view.operation, view.result)) {
-      const maximum = Math.max(0, dataTable(view.operation, view.result)!.rows.length - 1)
+    else if (!detailOpen && tableFor(view)) {
+      const maximum = Math.max(0, tableFor(view)!.rows.length - 1)
       const step = key.name === 'pagedown' || key.name === 'pageup' ? Math.max(1, (output.rows || 30) - 10) : 1
       if (key.name === 'down' || key.name === 'pagedown') selected = Math.min(maximum, selected + step)
       else if (key.name === 'up' || key.name === 'pageup') selected = Math.max(0, selected - step)
@@ -337,5 +430,8 @@ if (process.argv.includes('--help')) {
     draw()
   })
   draw()
-  for (const view of views) if (view.operation) void load(view)
+  const portfolio = views.find(view => view.id === 'portfolio')!
+  const dependentPages = ['news', 'calendar', 'youtube']
+  void load(portfolio)
+  for (const view of views) if (view.operation && !view.sourceId && view !== portfolio && !dependentPages.includes(view.id)) void load(view)
 }
