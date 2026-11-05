@@ -95,7 +95,7 @@ function launch({ development = false, logs = false, setupOnly = false, platform
   log.log('Refresh schedule: Heatmap every 30 minutes; company snapshots and Personal Finance FX hourly; Dashboard headlines every 5 minutes. Backtest preloads once with no automatic refresh.')
   log.log('Startup loading: completed pages refresh while slower pages load, recovered warnings clear, and changed selections preload without restarting unrelated pages.')
   log.log('Polymarket: redesigned market cards, probability charts, depth and activity; public datasets and startup preloading retained.')
-  log.log('AllTick, Finnhub and Financial Modeling Prep: encrypted API key settings added; providers remain inactive and make no data requests.')
+  log.log('AllTick API removed from Settings and supported credential providers. Finnhub and Financial Modeling Prep remain inactive and make no data requests.')
   log.log('Public API routing: Coinbase/Binance spot quotes, shared CoinGecko metadata and World Bank/IMF annual context use independent budgets and cooldowns. Key-based APIs remain inactive.')
   log.log('Page headers: removed the equity price source subtitle from every page.')
   log.log('Agents connects quietly at startup; connection status and errors stay visible in the Agents toolbar.')

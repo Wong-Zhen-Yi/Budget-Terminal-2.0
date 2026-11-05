@@ -396,8 +396,8 @@ The current comparison loads at startup, including when Scorecard is unvisited.
   access, pairing, and the built-in web server are no longer included.
 - **Local MCP tools.** Connect research and saved-record tools to supported local
   clients. Write tools edit local records, not broker orders. See the [MCP setup guide](docs/local-mcp.md).
-- **Optional encrypted credentials.** Settings → Integrations can store AllTick,
-  Finnhub, and Financial Modeling Prep API keys encrypted locally. These integrations
+- **Optional encrypted credentials.** Settings → Integrations can store Finnhub
+  and Financial Modeling Prep API keys encrypted locally. These integrations
   remain inactive, even with saved keys; current data services use public endpoints.
   Browser login profiles, Agent history, and credentials belong outside the checkout.
 

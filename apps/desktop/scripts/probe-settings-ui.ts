@@ -102,7 +102,8 @@ try {
       choose('integrations'); await wait(80)
       check(visible(card('mcp')) && !visible(card('privacy')), 'Integrations category failed')
       const keys = card('market-api-keys')
-      check(visible(keys) && keys.querySelectorAll('input[type=password]').length === 3, 'Masked API key controls missing')
+      check(visible(keys) && keys.querySelectorAll('input[type=password]').length === 2, 'Masked API key controls missing')
+      check(!keys.textContent.includes('AllTick') && !keys.querySelector('#market-key-alltick'), 'Retired AllTick controls remain visible')
       for (const provider of ['binance', 'coinbase', 'world-bank', 'imf']) {
         const entry = keys.querySelector('[data-api-provider="' + provider + '"]')
         check(visible(entry) && entry.textContent.includes('Public endpoints enabled'), 'Public provider missing: ' + provider)
@@ -118,10 +119,10 @@ try {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(keyInput, 'fixture-only-key')
       keyInput.dispatchEvent(new Event('input', { bubbles: true })); await wait(80)
       keys.querySelector('button[type=submit]').click(); await wait(80)
-      check(window.fixtureKeys.alltick && keyInput.value === '' && keys.textContent.includes('Provider remains inactive'), 'Key save failed or draft retained')
+      check(window.fixtureKeys.finnhub && keyInput.value === '' && keys.textContent.includes('Provider remains inactive'), 'Key save failed or draft retained')
       check(!document.body.innerText.includes('fixture-only-key'), 'Key exposed as visible text')
       clickText(keys, 'Remove'); await wait(80)
-      check(!window.fixtureKeys.alltick && keys.textContent.includes('Key removed'), 'Key removal failed')
+      check(!window.fixtureKeys.finnhub && keys.textContent.includes('Key removed'), 'Key removal failed')
       const categories = card('mcp').querySelector('fieldset[aria-label="MCP access categories"]')
       check(categories.querySelectorAll('input').length === 7, 'MCP category controls missing')
       const portfolioAccess = [...categories.querySelectorAll('label')].find(label => label.textContent.includes('Saved portfolios')).querySelector('input')
@@ -177,7 +178,7 @@ try {
     addEventListener('unhandledrejection', event => window.renderErrors.push(String(event.reason)))
     window.fixtureMcpPolicy = { readOnly: true, requireApproval: true, browserRequireApproval: false }
     window.maintenanceCalls = []
-    window.fixtureKeys = { alltick: false, finnhub: false, fmp: false }
+    window.fixtureKeys = { finnhub: false, fmp: false }
     const envelope = data => ({ data, meta: { source: 'UI fixture', fetchedAt: Date.now(), freshness: 'fresh' }, errors: [] })
     window.api = {
       platform: 'win32', settings: async () => envelope(window.fixtureSettings),

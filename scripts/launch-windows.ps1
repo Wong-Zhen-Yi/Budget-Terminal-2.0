@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'
 # Current dark navy and blue colour scheme is locked in AGENTS.md; palette changes require an explicit user request.
 # Public API routing: Coinbase/Binance spot quotes, shared CoinGecko metadata, World Bank/IMF annual context. Key-based APIs remain inactive.
 # MCP: public Polymarket reads registered; all implemented pages support screenshot access.
-# AllTick, Finnhub and Financial Modeling Prep: encrypted API key settings added; providers remain inactive.
+# AllTick API removed from Settings and supported credential providers; Finnhub and Financial Modeling Prep remain inactive.
 # Polymarket: redesigned market cards, probability charts, depth and activity; public datasets and startup preloading retained.
 # YouTube PiP: movable, resizable always-on-top desktop window, including outside Budget Terminal; playback survives pop-out and return.
 $runtimeCheck = Join-Path $PSScriptRoot 'runtime.cjs'

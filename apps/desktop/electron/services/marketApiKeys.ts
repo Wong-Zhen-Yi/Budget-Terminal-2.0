@@ -34,7 +34,7 @@ export class MarketApiKeyStore {
   }
 
   private status(keys: Keys): MarketApiKeyStatus {
-    return { configured: { alltick: Boolean(keys.alltick), finnhub: Boolean(keys.finnhub), fmp: Boolean(keys.fmp) }, encryptionAvailable: this.storage.available() }
+    return { configured: { finnhub: Boolean(keys.finnhub), fmp: Boolean(keys.fmp) }, encryptionAvailable: this.storage.available() }
   }
 
   read() {

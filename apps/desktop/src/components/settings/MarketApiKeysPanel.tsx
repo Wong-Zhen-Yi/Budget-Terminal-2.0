@@ -6,7 +6,7 @@ import { Panel } from '@/components/ui/Panel'
 
 export function MarketApiKeysPanel() {
   const [status, setStatus] = useState<MarketApiKeyStatus | null>(null)
-  const [drafts, setDrafts] = useState({ alltick: '', finnhub: '', fmp: '' })
+  const [drafts, setDrafts] = useState({ finnhub: '', fmp: '' })
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState(false)
@@ -39,7 +39,7 @@ export function MarketApiKeysPanel() {
 
   return <Panel title="Market data APIs">
     <div className="flex flex-col gap-3 p-2">
-      <p className="text-2xs text-text-muted">Public APIs diversify spot quotes and annual economic data with separate budgets, caching and cooldowns. AllTick, Finnhub and Financial Modeling Prep remain inactive, including when a key is saved. Keys stay encrypted on this device.</p>
+      <p className="text-2xs text-text-muted">Public APIs diversify spot quotes and annual economic data with separate budgets, caching and cooldowns. Finnhub and Financial Modeling Prep remain inactive, including when a key is saved. Keys stay encrypted on this device.</p>
       {status && !status.encryptionAvailable ? <p role="alert">OS credential encryption is unavailable. Enable your system keyring to save keys.</p> : null}
       {MARKET_API_PROVIDERS.map(provider => <form key={provider.id} className="market-api-key" onSubmit={event => {
         event.preventDefault()

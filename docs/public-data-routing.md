@@ -1,6 +1,6 @@
 # Public data routing
 
-Only public, unauthenticated endpoints are enabled. AllTick, Finnhub and Financial Modeling Prep stay inactive, even when encrypted keys have been saved. Data services never read those keys.
+Only public, unauthenticated endpoints are enabled. Finnhub and Financial Modeling Prep stay inactive, even when encrypted keys have been saved. Data services never read those keys.
 
 - Supported crypto USD spot quotes use Coinbase and Binance. ETH and BNB prefer Binance; BTC, SOL and XRP prefer Coinbase. Binance USDT prices and rolling 24-hour changes are converted using a shared Coinbase USDT/USD rate. A conversion failure rejects that route; USDT is never assumed to equal USD.
 - Venue failures, invalid data, timeouts and local budget pressure fall back to another eligible venue, then existing CoinGecko/Yahoo paths. Explicit perpetual symbols and Hyperliquid equity marks retain their existing instrument basis.

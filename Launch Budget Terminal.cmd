@@ -1,4 +1,5 @@
 @echo off
+rem AllTick API removed from Settings and supported credential providers.
 rem Crypto opens directly with market data; the Workspace header, USD badge and Copy snapshot action are removed.
 rem Portfolio stocks highlight the full row on hover and while editing or focusing row controls.
 rem BT TUI includes Portfolio, candlestick charts and Agents chat with saved history and model controls.
