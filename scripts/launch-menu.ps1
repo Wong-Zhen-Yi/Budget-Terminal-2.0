@@ -1,4 +1,6 @@
 $ErrorActionPreference = 'Stop'
+# Crypto opens directly with market data; the Workspace header, USD badge and Copy snapshot action are removed.
+# Portfolio stocks highlight the full row on hover and while editing or focusing row controls.
 
 function Read-BudgetMenuKey {
   # A redirected/noninteractive installer must not launch the default app silently.
@@ -21,6 +23,7 @@ function Show-BudgetInterfaceMenu([int]$Selected) {
   Write-Host 'You can also open a new PowerShell or Command Prompt window and type:'
   Write-Host '  btd  - open the desktop app'
   Write-Host '  bt   - open the terminal interface'
+  Write-Host 'BT TUI includes Portfolio, candlestick charts and Agents chat. F1/F2 switches views.'
   Write-Host 'Keep this terminal open while using Budget Terminal.'
 }
 

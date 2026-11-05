@@ -1,8 +1,9 @@
 param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Tui, [switch]$Setup, [Parameter(ValueFromRemainingArguments=$true)][string[]]$TuiArguments)
 
 $ErrorActionPreference = 'Stop'
-# BT follows desktop workspace/page names, values saved portfolios with shared USD marks, and includes searchable tables and the offline Dictionary.
-# TUI charts rebuild on launch: spaced candles, smooth lines, close marker and expanded volume. Diagnostics stay in Settings.
+# Crypto opens directly with market data; the Workspace header, USD badge and Copy snapshot action are removed.
+# Portfolio stocks highlight the full row on hover and while editing or focusing row controls.
+# BT TUI opens Portfolio, candlestick charts and Agents chat; F1/F2 switches views without a desktop window.
 # Current dark navy and blue colour scheme is locked in AGENTS.md; palette changes require an explicit user request.
 # Public API routing: Coinbase/Binance spot quotes, shared CoinGecko metadata, World Bank/IMF annual context. Key-based APIs remain inactive.
 # MCP: public Polymarket reads registered; all implemented pages support screenshot access.

@@ -1,10 +1,4 @@
 .crypto-workspace { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; gap: 12px; padding: 16px; overflow: auto; container: crypto / inline-size; }
-.crypto-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
-.crypto-eyebrow { color: #7d8ea6; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
-.crypto-heading h1 { margin: 2px 0; font-size: 26px; font-weight: 650; letter-spacing: -.025em; }
-.crypto-heading p { margin: 0; color: #7d8ea6; font-size: 14px; }
-.crypto-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.crypto-currency { border: 1px solid #1e2b3f; border-radius: 4px; padding: 6px 10px; font-size: 14px; color: #7d8ea6; }
 .crypto-notice { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; border: 1px solid #66532d; border-radius: 5px; padding: 8px 12px; background: #272215; color: #d6b25e; font-size: 14px; }
 .crypto-ribbon { display: flex; flex-wrap: wrap; border: 1px solid #1e2b3f; border-radius: 5px; background: #0d1420; }
 .crypto-ribbon-item { display: flex; flex: 1 1 180px; align-items: center; gap: 10px; padding: 10px 14px; border-right: 1px solid #1e2b3f; font-size: 14px; }

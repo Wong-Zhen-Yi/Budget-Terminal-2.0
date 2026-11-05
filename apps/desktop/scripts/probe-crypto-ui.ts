@@ -34,7 +34,7 @@ try {
         let mode = 'success'
         let ready = false
         let forced = false
-        let chartCalls = 0, chartRequest, copied = '', opened = ''
+        let chartCalls = 0, chartRequest, opened = ''
         const good = {
           fetchedAt: new Date().toISOString(),
           heatmap: { tiles: Array.from({ length: 30 }, (_, i) => ({ rank: i+1, symbol: 'C'+i, name: 'Coin '+i, price: 100, changePct: 1, marketCap: 1e9, volume: 1e6, source: 'Yahoo Finance' })), coverage: { loaded: 30, total: 30 }, updatedAt: '2026-09-29T10:00:00' },
@@ -50,7 +50,6 @@ try {
           volumeSource: 'Yahoo Finance stock volume (shares)', marketCapSource: 'Yahoo Finance', metadataAsOf: Date.now() }
         Object.assign(window.api, {
           apiUsage: async () => ({ providers: [], sampledAt: Date.now() }),
-          writeClipboard: async value => { copied = value },
           openExternal: async url => { opened = url },
           chartsHistory: async request => {
             chartCalls++; chartRequest = request
@@ -164,13 +163,13 @@ try {
           document.querySelector('[aria-label="Chart BTC perpetual"]').click()
           ;[...document.querySelectorAll('button')].find(button => button.textContent === '1h').click()
           await settle()
-          ;[...document.querySelectorAll('button')].find(button => button.textContent === 'Copy snapshot').click(); await settle()
-          check(copied.includes('BTC') && copied.includes('ETH'), 'Copy snapshot lost watchlist data')
+          check(!document.querySelector('.crypto-heading') && !text().includes('Crypto Workspace'), 'Removed workspace header returned')
+          check(![...document.querySelectorAll('button')].some(button => button.textContent === 'Copy snapshot'), 'Removed header action returned')
           document.querySelector('.crypto-news-item').click(); await settle()
           check(opened === 'https://example.com/crypto', 'News link failed')
           const lastCell = document.querySelector('.crypto-heatmap-cell:last-child')
           check(lastCell.getBoundingClientRect().bottom <= document.querySelector('.crypto-breadth').getBoundingClientRect().bottom, 'The last heatmap row is clipped')
-          return 'PASS: prepared startup chart, watchlist/timeframes, real candlestick rendering, market search/sort, source separation, copy/news actions, cooldown, partial readiness and recovery'
+          return 'PASS: prepared startup chart, watchlist/timeframes, real candlestick rendering, market search/sort, source separation, removed workspace header, news actions, cooldown, partial readiness and recovery'
         }
       `,
     },

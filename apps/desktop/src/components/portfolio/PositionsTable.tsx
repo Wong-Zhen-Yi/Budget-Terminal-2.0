@@ -237,6 +237,7 @@ export function PositionsTable({
       columns={columns}
       rows={rows}
       rowKey={(row) => row.ticker}
+      rowClassName={() => 'hover:bg-surface-hover focus-within:bg-surface-hover'}
       showIndex
       defaultSort={{ key: 'marketValue', direction: 'desc' }}
       empty={loading ? 'Loading positions...' : 'No positions. Use + Add Position to start.'}

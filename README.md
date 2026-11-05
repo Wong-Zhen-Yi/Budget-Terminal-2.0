@@ -178,7 +178,15 @@ Keep the terminal open while using the app. Optional arguments include `btd -Dev
 for live updates and `btd -Logs` to open diagnostics. To remove only this command,
 run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-bt.ps1 -Desktop -Uninstall`.
 
-`BT` in a new PowerShell window opens the TUI independently of the desktop launcher.
+`BT` in a new PowerShell window opens the Portfolio TUI with saved holdings, live
+prices, totals and saved option contracts. Left/Right switches portfolios, R refreshes,
+H hides values, C opens candlestick charts, Tab switches holdings/options, and Q or Ctrl+C exits.
+In charts, Up/Down selects holdings, 1/2/3 chooses hourly/daily/weekly bars, and + / - zooms.
+F2 (or A from Portfolio) opens Agents research chat; F1 returns to Portfolio. Enter
+sends a message, /help lists chat commands, and Ctrl+C exits from either view. Agents
+uses your Codex CLI sign-in, with separate local TUI chat history and model/thinking
+controls. Research uses the existing read permissions; saved-data edits remain in
+the desktop app.
 To install or repair the command manually on Windows, run `npm run setup:tui`.
 On macOS and Linux, run `npm run tui` after installing dependencies.
 
@@ -401,7 +409,7 @@ The current comparison loads at startup, including when Scorecard is unvisited.
 | Guide | What's inside |
 | :--- | :--- |
 | [Data, startup & backups](docs/user-guide.md) | All-page readiness, feed health, saved-data locations, migration, and backup behavior. |
-| [Terminal interface](docs/terminal-ui.md) | Windows launcher, PowerShell `BT`, keyboard controls, and terminal charts. |
+| [Terminal interface](docs/terminal-ui.md) | Windows launcher, PowerShell `BT`, and the Portfolio/Agents TUI. |
 | [Public data routing](docs/public-data-routing.md) | Coinbase/Binance spot quotes, CoinGecko metadata, World Bank/IMF annual context, and provider budgets. |
 | [Browser](docs/browser.md) | Embedded Chromium tabs, source reading, research controls, and local login profiles. |
 | [Diagnostic logging](docs/diagnostic-logging.md) | Settings log viewer, retention, export, and privacy. |

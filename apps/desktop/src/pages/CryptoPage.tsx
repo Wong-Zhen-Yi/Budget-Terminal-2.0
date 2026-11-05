@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import type { Candle, CryptoPayload, CryptoQuote, HyperliquidMarket } from '@shared/contract'
 import {
   CRYPTO_HEATMAP_LIMIT, CRYPTO_TICKERS, PROXY_TICKERS,
-  buildCryptoSnapshot, clockTail, cryptoMoney, cryptoPercent, cryptoPrice, cryptoTone, heatmapIntensity,
+  clockTail, cryptoMoney, cryptoPercent, cryptoPrice, cryptoTone, heatmapIntensity,
 } from '@shared/crypto'
 import { CRYPTO_CHART_INTERVALS, cryptoChartRequest } from '@shared/cryptoWorkspace'
 import { FRESHNESS } from '@shared/freshness'
@@ -14,7 +14,6 @@ import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
 import { useCryptoWorkspace } from '@/stores/crypto'
 import { CryptoPriceChart } from '@/components/crypto/CryptoPriceChart'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
-import { Button } from '@/components/ui/Button'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 
 const EMPTY_CANDLES: Candle[] = []
@@ -43,7 +42,6 @@ export function CryptoPage({ onStatusChange }: { onStatusChange: (panels: PanelS
   const { symbol, interval, selectSymbol, setInterval } = useCryptoWorkspace()
   const history = useChartsHistory(cryptoChartRequest(symbol, interval), 60)
   const refreshing = false
-  const [notice, setNotice] = useState('')
   const [search, setSearch] = useState('')
   const payload = query.data?.data
   const quotes = payload?.quotes ?? {}
@@ -64,11 +62,11 @@ export function CryptoPage({ onStatusChange }: { onStatusChange: (panels: PanelS
   const chartFailure = history.error?.message || (history.data?.meta.freshness === 'failed' ? history.data.meta.failureReason : '')
   const chartFreshness = history.data ? effectiveFreshness(history.data, now, FRESHNESS.chartIntraday) : 'loading'
   const chartSource = history.data?.data.stats?.source ?? 'Hyperliquid crypto perpetual'
-  const status = notice || (query.error ? `Crypto data refresh failed: ${query.error.message}`
+  const status = query.error ? `Crypto data refresh failed: ${query.error.message}`
     : query.data?.meta.freshness === 'failed' ? `Crypto data refresh failed: ${query.data.meta.failureReason || errors || 'Provider unavailable'}`
     : loading && !payload ? 'Fetching crypto market data...'
     : !payload ? 'Loading crypto market data...'
-    : errors)
+    : errors
 
   useEffect(() => {
     onStatusChange([
@@ -83,23 +81,9 @@ export function CryptoPage({ onStatusChange }: { onStatusChange: (panels: PanelS
   }, [cooldown, query.refetch])
 
 
-  const onCopy = async () => {
-    if (!payload) { setNotice('Load crypto market data before copying.'); return }
-    try { await api.writeClipboard(buildCryptoSnapshot({ fetchedAt: payload.fetchedAt, quotes })); setNotice('Snapshot copied to clipboard') }
-    catch (error) { setNotice(`Copy failed: ${error instanceof Error ? error.message : String(error)}`) }
-  }
-
   const markets = useMemo(() => (payload?.hyperliquid?.markets ?? []).filter(row => row.symbol.toLowerCase().includes(search.trim().toLowerCase())), [payload?.hyperliquid, search])
 
   return <div className="crypto-workspace">
-    <header className="crypto-heading">
-      <div><div className="crypto-eyebrow">Market intelligence</div><h1>Crypto Workspace</h1><p>Price action, spot quotes and perpetual markets</p></div>
-      <div className="crypto-actions"><span className="crypto-currency" title="Quotes and chart prices are shown in USD">USD</span>
-        <Button onClick={() => void onCopy()} disabled={!payload}>Copy snapshot</Button>
-
-      </div>
-    </header>
-
     {(cooldown || status) && <div className="crypto-notice" role="status">
       <span>{cooldown ? `CoinGecko rate limited · ${payload ? 'Showing available snapshots and labelled fallback prices' : 'Spot data unavailable'}` : status}</span>
       {cooldown && <span className="num">Auto-retry in {cooldownSeconds}s</span>}

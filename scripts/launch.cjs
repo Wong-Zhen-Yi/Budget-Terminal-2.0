@@ -17,8 +17,7 @@ function platformName(platform) {
 }
 
 function launch({ development = false, logs = false, setupOnly = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
-  log.log('BT terminal interface: desktop workspaces and page names, saved portfolio selection, shared mark valuations and P&L, searchable research tables and the offline Dictionary. Press p for pages, w for workspaces, b for portfolios and f to filter. Startup diagnostics remain in Settings.')
-  log.log('TUI charts: spaced candles, smooth lines, close-price marker, readable price/date axes and expanded volume. Request diagnostics stay in Settings. BT rebuilds its terminal interface on launch.')
+  log.log('Portfolio stocks highlight the full row on hover and while editing or focusing row controls.')
   log.log('Settings: consistent compact sizing and horizontal category views. The redundant Preferences label, All settings view and introductory header are removed.')
   log.log('Persistent diagnostic logging retains up to the last 15 days. Open Settings > Diagnostics or press Ctrl+Shift+L. No global diagnostics banner is added.')
   if (platform === 'win32') log.log('Windows startup bypasses GPU shader disk caches to avoid locked-cache errors. GPU acceleration remains enabled.')
@@ -88,6 +87,7 @@ function launch({ development = false, logs = false, setupOnly = false, platform
   log.log(`Starting Budget Terminal for ${os}...`)
   log.log('Dictionary Reading Room: category browsing, readable articles, section navigation, saved terms, recent history and formula copying. All 405 terms remain available offline. Dictionary candlestick charts render at full size across all pattern examples.')
   log.log('Crypto: removed the snapshot summary banner. Refresh errors, rate limits and startup loading remain visible.')
+  log.log('Crypto opens directly with market data; the Workspace header, USD badge and Copy snapshot action are removed.')
   log.log('Saved-data warning banners removed throughout the app, including ETF, IPO, Valuation, company pages and charts. Startup progress and failure details are available in Settings.')
   log.log('MCP startup fix: desktop-only cache controls, heatmap progress and TV are classified correctly. Agent startup errors no longer block the app from opening.')
   log.log('Heatmap fills holdings and quote colours progressively while data loads; loading progress stays visible until completion.')
@@ -122,6 +122,7 @@ function launch({ development = false, logs = false, setupOnly = false, platform
   log.log('Startup dependency fixes: Up/Down price targets preload before page readiness; Cards warms every interval after a partial result; News splits multi-ticker article labels into valid quote requests.')
   log.log('Settings API usage now shows startup health and a compact live provider table, with an expandable API and page directory. Failed and incomplete pages appear first in its startup status list.')
   log.log('Telegram: two commands - /new starts a fresh chat; /model opens model buttons, followed by supported reasoning buttons. Desktop Agents History keeps Telegram transcripts visible with separate context. Replies use natural plain text without asterisks, heading symbols or em dashes. Desktop and Telegram agents can search and read the live public web for investor relations, filings and other research, with source links and saved run details.')
+  log.log('BT TUI: Portfolio, candlestick charts and Agents research chat with saved TUI history, streaming, model/thinking controls, Stop and Continue research. F1/F2 switches views.')
   log.log('Installing dependencies...')
   const install = npm(['install', '--no-audit', '--no-fund', '--strict-ssl=true'])
   if (install.error || install.status !== 0) {

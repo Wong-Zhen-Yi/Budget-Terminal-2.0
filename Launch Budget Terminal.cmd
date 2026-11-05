@@ -1,6 +1,7 @@
 @echo off
-rem BT uses desktop workspaces, saved portfolio marks, searchable data tables and the offline Dictionary; p finds pages and w selects workspaces.
-rem TUI charts: spaced candles, smooth lines, close marker, readable price/date axes and expanded volume; diagnostics stay in Settings.
+rem Crypto opens directly with market data; the Workspace header, USD badge and Copy snapshot action are removed.
+rem Portfolio stocks highlight the full row on hover and while editing or focusing row controls.
+rem BT TUI includes Portfolio, candlestick charts and Agents chat with saved history and model controls.
 rem Settings: compact sizing, horizontal categories, no redundant Preferences label, All settings page or introductory header.
 rem GitHub showcase refreshed: README.md includes eight demo screenshots across markets, research, charts, portfolios, and learning.
 rem Current dark navy and blue colour scheme is locked in AGENTS.md; palette changes require an explicit user request.
