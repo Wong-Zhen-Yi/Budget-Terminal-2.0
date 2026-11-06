@@ -101,6 +101,10 @@ try {
         input.dispatchEvent(new Event('input', { bubbles: true })); await wait(30)
       }
       await setInput('Convex deployment URL', 'https://fixture.convex.cloud')
+      window.githubNotConfigured = true
+      clickText(sync, 'Sign in with GitHub'); await wait(80)
+      check(sync.textContent.includes('AUTH_GITHUB_ID') && !sync.textContent.includes('Cancel sign-in'), 'Missing GitHub credentials must show setup guidance before opening a browser')
+      window.githubNotConfigured = false
       clickText(sync, 'Sign in with GitHub'); await wait(80)
       check(sync.textContent.includes('Complete GitHub sign-in') && !sync.querySelector('input'), 'Browser approval status missing')
       clickText(sync, 'Cancel sign-in'); await wait(80)
@@ -222,6 +226,11 @@ try {
       cloudSyncStatus: async () => envelope(window.fixtureSync),
       cloudSyncCommand: async command => {
         window.syncCommands.push(command)
+        if (command.type === 'signInGitHub' && window.githubNotConfigured) {
+          const message = 'GitHub sign-in is not configured. Add AUTH_GITHUB_ID and AUTH_GITHUB_SECRET in Convex.'
+          window.fixtureSync = { ...window.fixtureSync, state: 'error', message, signInPending: false }
+          return { ...envelope(window.fixtureSync), meta: { freshness: 'failed', failureReason: message } }
+        }
         const signedOut = ['disconnect', 'cancelSignIn', 'sendCode', 'signInGitHub'].includes(command.type)
         window.fixtureSync = { ...window.fixtureSync, state: signedOut ? 'disconnected' : command.type === 'sync' ? 'conflict' : 'synced', signedIn: !signedOut,
           signInPending: command.type === 'signInGitHub', message: command.type === 'signInGitHub' ? 'Complete GitHub sign-in in your browser.' : undefined }

@@ -1,4 +1,5 @@
 const { spawnSync } = require('node:child_process')
+// GitHub sync sign-in reports missing OAuth configuration in Settings before opening the browser.
 // Timestamped Convex snapshots restore the newest server revision automatically on fresh devices.
 // Optional Convex sync supports GitHub browser sign-in and regional cloud deployments.
 // Optional Convex sync preserves local operation; Settings owns sign-in and conflict controls.

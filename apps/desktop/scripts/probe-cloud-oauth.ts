@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { request } from 'node:http'
-import { beginGitHubSignIn, createOAuthCallback, type OAuthArgs } from '../electron/services/cloudSyncOAuth.js'
+import { beginGitHubSignIn, createOAuthCallback, GitHubSetupError, type OAuthArgs } from '../electron/services/cloudSyncOAuth.js'
 import { convexDeploymentUrl, desktopOAuthRedirect, githubSignInUrl } from '../electron/shared/cloudOAuth.js'
 
 const path = `/convex-sync-callback/${'a'.repeat(64)}`
@@ -58,6 +58,7 @@ const calls: OAuthArgs[] = []
 let callbackUrl = ''
 let opened = ''
 const flow = await beginGitHubSignIn(deployment, {
+  isConfigured: async () => true,
   signIn: async args => {
     calls.push(args)
     if (args.provider === 'github') {
@@ -81,13 +82,22 @@ assert(callbackUrl.startsWith('http://127.0.0.1:'))
 
 let unsafeOpened = false
 await assert.rejects(beginGitHubSignIn(deployment, {
+  isConfigured: async () => true,
   signIn: async () => ({ redirect: 'https://example.invalid', verifier: 'fixture' }),
   openExternal: async () => { unsafeOpened = true },
 }))
 assert.equal(unsafeOpened, false, 'Untrusted redirects must never be opened by the OS')
 const pending = await beginGitHubSignIn(deployment, {
+  isConfigured: async () => true,
   signIn: async () => ({ redirect: entry, verifier: 'fixture' }), openExternal: async () => {},
 })
 pending.cancel()
 assert.deepEqual(await pending.result, { reason: 'cancelled' })
+let startedWithoutCredentials = false
+await assert.rejects(beginGitHubSignIn(deployment, {
+  isConfigured: async () => false,
+  signIn: async () => { startedWithoutCredentials = true; return {} },
+  openExternal: async () => { startedWithoutCredentials = true },
+}), GitHubSetupError)
+assert.equal(startedWithoutCredentials, false, 'Missing OAuth credentials must show setup guidance without starting sign-in or opening a broken GitHub URL')
 console.log('PASS: GitHub browser handshake, bound verifier, loopback-only redirects, hostile callbacks, one-use listener, expiry, cancellation and no browser token exposure')

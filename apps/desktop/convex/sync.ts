@@ -2,6 +2,15 @@ import { mutationGeneric, queryGeneric } from 'convex/server'
 import { getAuthUserId } from '@convex-dev/auth/server'
 import { v } from 'convex/values'
 
+// Public setup metadata contains only a boolean, never credentials or user records.
+export const authConfiguration = queryGeneric({
+  args: {},
+  handler: async () => {
+    const configured = (value: string | undefined) => Boolean(value?.trim() && !['undefined', 'null'].includes(value.trim()))
+    return { githubConfigured: configured(process.env.AUTH_GITHUB_ID) && configured(process.env.AUTH_GITHUB_SECRET) }
+  },
+})
+
 export const identity = queryGeneric({
   args: {},
   handler: async ctx => {

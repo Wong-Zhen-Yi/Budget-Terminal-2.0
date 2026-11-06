@@ -5,6 +5,11 @@ import { desktopOAuthRedirect, githubSignInUrl } from '../shared/cloudOAuth.js'
 export interface OAuthTokens { token: string; refreshToken: string }
 export interface OAuthArgs { provider?: string; params?: Record<string, string>; verifier?: string }
 export interface OAuthResponse { redirect?: string; verifier?: string; tokens?: OAuthTokens | null }
+export class GitHubSetupError extends Error {
+  constructor() {
+    super('GitHub sign-in is not configured on this Convex deployment. Add AUTH_GITHUB_ID and AUTH_GITHUB_SECRET in the Convex dashboard, then retry. Local data is still available.')
+  }
+}
 type CallbackResult = { code: string } | { reason: 'cancelled' | 'expired' }
 
 /** Listen on loopback only. The random path and Convex verifier bind the response to this device. */
@@ -63,9 +68,11 @@ export interface GitHubSignIn {
 }
 
 export async function beginGitHubSignIn(deploymentUrl: string, dependencies: {
+  isConfigured: () => Promise<boolean>
   signIn: (args: OAuthArgs) => Promise<OAuthResponse>
   openExternal: (url: string) => Promise<void>
 }): Promise<GitHubSignIn> {
+  if (!await dependencies.isConfigured()) throw new GitHubSetupError()
   const callback = await createOAuthCallback()
   try {
     const started = await dependencies.signIn({ provider: 'github', params: { redirectTo: callback.url } })

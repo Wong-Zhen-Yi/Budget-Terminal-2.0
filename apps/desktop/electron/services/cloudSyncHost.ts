@@ -10,11 +10,12 @@ import { CloudSyncEngine, type SyncCheckpoint } from './cloudSyncEngine.js'
 import { applySyncData, atomicSyncFile, cloudDataPath, readLocalSyncData, readSyncData, recoverSyncData } from './cloudSyncData.js'
 import { withSavedDataLock } from './automaticBackup.js'
 import { subscribeSavedDataChanged } from './savedDataEvents.js'
-import { beginGitHubSignIn, type GitHubSignIn, type OAuthTokens } from './cloudSyncOAuth.js'
+import { beginGitHubSignIn, GitHubSetupError, type GitHubSignIn, type OAuthTokens } from './cloudSyncOAuth.js'
 import { convexDeploymentUrl } from '../shared/cloudOAuth.js'
 
 const readRef = makeFunctionReference<'query', Record<string, never>, CloudSnapshot | null>('sync:read')
 const userRef = makeFunctionReference<'query', Record<string, never>, string>('sync:identity')
+const authConfigRef = makeFunctionReference<'query', Record<string, never>, { githubConfigured: boolean }>('sync:authConfiguration')
 const writeRef = makeFunctionReference<'mutation', { expectedRevision: number; payload: string }, { accepted: boolean; revision: number; updatedAt: number }>('sync:write')
 const signInRef = makeFunctionReference<'action', { provider?: string; params?: Record<string, string>; refreshToken?: string; verifier?: string },
   { tokens?: { token: string; refreshToken: string } | null; started?: boolean; redirect?: string; verifier?: string }>('auth:signIn')
@@ -190,6 +191,7 @@ export function cloudSyncCommand(input: CloudSyncCommand) {
         if (session || pendingGitHub || !encryptionAvailable()) throw new Error('Sign-in unavailable')
         const login = http(command.url)
         const flow = await beginGitHubSignIn(command.url, {
+          isConfigured: async () => (await login.query(authConfigRef, {})).githubConfigured,
           signIn: args => login.action(signInRef, args), openExternal: url => shell.openExternal(url),
         })
         pendingGitHub = flow
@@ -238,7 +240,12 @@ export function cloudSyncCommand(input: CloudSyncCommand) {
       }
       const status = cloudSyncStatus()
       return status.state === 'error' ? failed(status, status.message ?? 'Sync failed.', 'cloud sync') : ok(status, 'cloud sync')
-    } catch {
+    } catch (error) {
+      if (error instanceof GitHubSetupError) {
+        authError = true
+        message = error.message
+        return failed(cloudSyncStatus(), message, 'cloud sync')
+      }
       return failed(cloudSyncStatus(), 'Could not complete the sync command. Check the deployment URL, sign-in configuration, connection and OS credential encryption. Your local data is unchanged.', 'cloud sync')
     }
   })

@@ -1,4 +1,5 @@
 @echo off
+rem GitHub sync sign-in checks backend credentials first and shows setup guidance instead of a GitHub 404.
 rem Timestamped Convex snapshots automatically restore the latest cloud copy on fresh devices; local edits stay protected.
 rem Convex sync supports GitHub browser sign-in and regional cloud deployments; local data works without signing in.
 rem Desktop launches run independently so this console can close after selection.
