@@ -86,6 +86,10 @@ function emptySettings(): StoredSettings {
   }
 }
 
+export function defaultSyncSettings(): unknown {
+  return normalize(emptySettings())
+}
+
 /**
  * Repair anything the schema let through: tabs this build no longer ships, tabs it
  * gained since the file was written, and any attempt to hide or obscure Settings.

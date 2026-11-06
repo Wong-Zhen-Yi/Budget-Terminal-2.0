@@ -1,4 +1,7 @@
 const { spawnSync } = require('node:child_process')
+// Timestamped Convex snapshots restore the newest server revision automatically on fresh devices.
+// Optional Convex sync supports GitHub browser sign-in and regional cloud deployments.
+// Optional Convex sync preserves local operation; Settings owns sign-in and conflict controls.
 // Current dark navy and blue colour scheme is locked in AGENTS.md; palette changes require an explicit user request.
 // MCP: public Polymarket reads registered; all implemented pages support screenshot access.
 const path = require('node:path')

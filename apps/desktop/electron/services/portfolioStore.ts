@@ -230,6 +230,10 @@ function withDefaultPortfolio(document: StoredDocument): StoredDocument {
   return document
 }
 
+export function defaultSyncUserData(): unknown {
+  return withDefaultPortfolio(emptyDocument())
+}
+
 /* ------------------------------------------------------------------- access */
 
 let cached: StoredDocument | null = null
@@ -905,6 +909,10 @@ export async function importUserData(source: unknown): Promise<string> {
   await run
   if (failure) throw failure
   return rollback
+}
+
+export function validateUserDataImport(source: unknown): void {
+  importDocumentSchema.parse(source)
 }
 
 /**

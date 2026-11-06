@@ -9,6 +9,10 @@
     "npm": ">=10.9.8"
   },
   "scripts": {
+    "probe:cloud-oauth": "tsx scripts/probe-cloud-oauth.ts",
+    "probe:cloud-sync": "tsx scripts/probe-cloud-sync.ts",
+    "convex:dev": "convex dev",
+    "convex:deploy": "convex deploy",
     "probe:public-providers": "tsx scripts/probe-public-providers.ts",
     "probe:settings-dashboard-ui": "tsx scripts/probe-settings-dashboard-ui.ts",
     "probe:tui": "tsx scripts/probe-tui.ts",
@@ -167,11 +171,14 @@
     "vite": "^8.3.5"
   },
   "dependencies": {
+    "@auth/core": "^0.41.3",
+    "@convex-dev/auth": "^0.0.96",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@tanstack/react-query": "^5.105.0",
     "@tanstack/react-query-persist-client": "^5.105.0",
     "@tanstack/react-virtual": "3.13.12",
     "ajv": "^8.20.0",
+    "convex": "^1.49.0",
     "hyparquet": "^1.32.0",
     "hyparquet-compressors": "^1.1.2",
     "lightweight-charts": "^5.2.1",

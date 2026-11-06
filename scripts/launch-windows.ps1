@@ -1,6 +1,9 @@
-param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Tui, [switch]$Setup, [Parameter(ValueFromRemainingArguments=$true)][string[]]$TuiArguments)
+param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Tui, [switch]$Setup, [switch]$Attached, [Parameter(ValueFromRemainingArguments=$true)][string[]]$TuiArguments)
 
 $ErrorActionPreference = 'Stop'
+# Timestamped Convex snapshots restore fresh devices automatically; offline edits keep their local timestamps.
+# Settings supports GitHub browser sign-in and regional Convex deployments; local saves remain independent.
+# Optional Convex sync runs behind local stores; no account or cloud connection is required to launch.
 # Crypto opens directly with market data; the Workspace header, USD badge and Copy snapshot action are removed.
 # Portfolio stocks highlight the full row on hover and while editing or focusing row controls.
 # BT TUI opens Portfolio, candlestick charts and Agents chat; F1/F2 switches views without a desktop window.
@@ -91,6 +94,16 @@ function Get-BudgetNode {
 function Start-BudgetTerminal {
   # Settings uses compact horizontal categories without the redundant Preferences label, overview or introductory header.
   try {
+    if (-not ($Attached -or $RuntimeOnly -or $Dev -or $Tui -or $Setup)) {
+      $logDirectory = Join-Path $env:LOCALAPPDATA 'BudgetTerminal\launcher-logs'
+      New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
+      $session = [Guid]::NewGuid().ToString('N')
+      $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + (Join-Path $PSScriptRoot 'launch-windows.ps1') + '"'), '-Attached')
+      if ($Logs) { $arguments += '-Logs' }
+      Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList $arguments -WindowStyle Hidden -WorkingDirectory (Split-Path -Parent $PSScriptRoot) -RedirectStandardOutput (Join-Path $logDirectory "$session.log") -RedirectStandardError (Join-Path $logDirectory "$session.error.log") | Out-Null
+      Write-Host "Budget Terminal is starting independently. You can close this terminal. Startup logs: $logDirectory"
+      return
+    }
     if ($Setup -and ($RuntimeOnly -or $Dev -or $Logs -or $Tui -or $TuiArguments.Count)) {
       throw 'Setup cannot be combined with launch options.'
     }

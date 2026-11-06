@@ -7,6 +7,7 @@ import { exportUserData } from './portfolioStore.js'
 import { exportSettings } from './settingsStore.js'
 import { readArticles } from './articlesStore.js'
 import { exportCards } from './cardsStore.js'
+import { readLocalSyncData } from './cloudSyncData.js'
 
 export const AUTOMATIC_BACKUP_FILENAME = 'budget-terminal-backup.json'
 
@@ -31,6 +32,9 @@ function enqueue<T>(run: () => Promise<T>): Promise<T> {
   queue = task.then(() => {}, () => {}).finally(() => { pending -= 1 })
   return task
 }
+
+/** Cloud snapshots share the edit queue; callers must not re-enter backup helpers. */
+export const withSavedDataLock = enqueue
 
 async function writeSnapshot(target: string): Promise<void> {
   const directory = dirname(target)
@@ -96,13 +100,15 @@ export function initializeAutomaticBackup(): Promise<void> {
 
 /** Serialize edits and their complete snapshots, including multi-store import and clear. */
 export function withAutomaticBackup<T>(run: () => Promise<Envelope<T>>): Promise<Envelope<T>> {
-  if (!downloads) return run()
   return enqueue(async () => {
     const result = await run()
     if (result.errors.length) return result
+    let timestampFailure = false
+    try { await readLocalSyncData() } catch { timestampFailure = true }
     try {
-      await save()
-      return result
+      if (downloads) await save()
+      return timestampFailure ? partial(result.data, [err('cloud sync', 'Saved locally, but the local edit timestamp could not be recorded.', 'timestamp')], result.meta.source,
+        'Saved locally, but the local edit timestamp could not be recorded.') : result
     } catch (error) {
       const reason = `Saved locally, but the automatic backup could not be updated: ${describeError(error)}`
       return partial(result.data, [err('automatic backup', reason, 'backup')], result.meta.source, reason)

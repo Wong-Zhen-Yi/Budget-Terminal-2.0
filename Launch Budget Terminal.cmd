@@ -1,4 +1,8 @@
 @echo off
+rem Timestamped Convex snapshots automatically restore the latest cloud copy on fresh devices; local edits stay protected.
+rem Convex sync supports GitHub browser sign-in and regional cloud deployments; local data works without signing in.
+rem Desktop launches run independently so this console can close after selection.
+rem Optional Convex sync: local saves work without a connection; sign-in and conflict controls are in Settings.
 rem AllTick API removed from Settings and supported credential providers.
 rem Crypto opens directly with market data; the Workspace header, USD badge and Copy snapshot action are removed.
 rem Portfolio stocks highlight the full row on hover and while editing or focusing row controls.

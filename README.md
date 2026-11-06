@@ -168,13 +168,14 @@ npm run dev
 After Windows setup, open a new PowerShell or Command Prompt window and type `bt`
 for the terminal interface or `btd` for the desktop app.
 
-Keep the launcher or terminal used to launch Budget Terminal
-open while using the app. Build or startup errors stay visible there.
+The desktop app runs independently, so its launcher or terminal can close.
+The terminal interface and development mode require their terminal to stay open.
 
 `btd` in a new PowerShell or Command Prompt window opens the desktop app from any
 directory and checks dependencies and builds the latest desktop source before opening it.
 To install or repair it manually on Windows, run `npm run setup:desktop` from the checkout.
-Keep the terminal open while using the app. Optional arguments include `btd -Dev`
+Normal desktop startup logs are saved under `%LOCALAPPDATA%\BudgetTerminal\launcher-logs`.
+Optional arguments include `btd -Dev`
 for live updates and `btd -Logs` to open diagnostics. To remove only this command,
 run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-bt.ps1 -Desktop -Uninstall`.
 
@@ -408,6 +409,7 @@ The current comparison loads at startup, including when Scorecard is unvisited.
 
 | Guide | What's inside |
 | :--- | :--- |
+| [Optional Convex sync](docs/convex-sync.md) | Cross-device sync, GitHub browser sign-in, offline local saves, conflict recovery and deployment. |
 | [Data, startup & backups](docs/user-guide.md) | All-page readiness, feed health, saved-data locations, migration, and backup behavior. |
 | [Terminal interface](docs/terminal-ui.md) | Windows launcher, PowerShell `BT`, and the Portfolio/Agents TUI. |
 | [Public data routing](docs/public-data-routing.md) | Coinbase/Binance spot quotes, CoinGecko metadata, World Bank/IMF annual context, and provider budgets. |

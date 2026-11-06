@@ -19,6 +19,7 @@ import { rendererCacheFlushed } from '../services/rendererCacheShutdown.js'
 import { notificationsStatus, notificationsCommand, onNotificationClick } from '../services/notificationsHost.js'
 import type { NotificationCommand } from '../shared/notifications.js'
 import { hyperliquidEquities } from '../services/hyperliquidEquities.js'
+import { cloudSyncCommand, cloudSyncStatus } from '../services/cloudSyncHost.js'
 
 export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent) => boolean): () => void {
   const handle: typeof ipcMain.handle = (channel, listener) => {
@@ -28,6 +29,8 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
     })
   }
   const provider = yahooProvider
+  handle(CHANNELS.cloudSyncStatus, () => ok(cloudSyncStatus(), 'cloud sync'))
+  handle(CHANNELS.cloudSyncCommand, (_event, command) => cloudSyncCommand(command))
   const stopEquityUpdates = hyperliquidEquities.subscribe(update => {
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.webContents.isDestroyed()) window.webContents.send(CHANNELS.equityMarketChanged, update)

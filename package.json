@@ -11,6 +11,8 @@
     "apps/desktop"
   ],
   "scripts": {
+    "probe:cloud-oauth": "npm run --workspace budget-terminal-desktop probe:cloud-oauth",
+    "probe:cloud-sync": "npm run --workspace budget-terminal-desktop probe:cloud-sync",
     "probe:public-providers": "npm run --workspace budget-terminal-desktop probe:public-providers --",
     "tui": "node scripts/tui.cjs",
     "setup": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/launch-windows.ps1 -Setup",

@@ -81,6 +81,11 @@ conf/
 **/web-access.json
 **/sync-session.bin
 **/sync-checkpoint.json
+**/sync-checkpoint.json.*
+**/sync-local-metadata.json*
+**/sync-session.bin*
+**/sync-apply-journal.json*
+**/sync-backups/
 **/*.sqlite
 **/*.sqlite-*
 **/*.db

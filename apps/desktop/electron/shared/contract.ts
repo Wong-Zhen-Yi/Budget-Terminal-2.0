@@ -1,4 +1,5 @@
 import type { PolymarketRequest, PolymarketResult } from './polymarket.js'
+import type { CloudSyncCommand, CloudSyncStatus } from './cloudSync.js'
 export type { PolymarketRequest, PolymarketResult } from './polymarket.js'
 import type { BrowserControl, BrowserRequest, BrowserResult, BrowserState, BrowserViewport } from './browser.js'
 import type { YouTubePlayerAction, YouTubePlayerViewport } from './youtubePlayer.js'
@@ -3501,6 +3502,8 @@ export interface PoliticsExportRequest {
 }
 
 export const CHANNELS = {
+  cloudSyncStatus: 'cloud-sync:status',
+  cloudSyncCommand: 'cloud-sync:command',
   appMetrics: 'system:app-metrics',
   browserStatus: 'browser:status',
   browserResearch: 'browser:research',
@@ -3723,6 +3726,8 @@ export interface DiagnosticEntry {
 export interface DiagnosticSnapshot { entries: DiagnosticEntry[]; files: number; bytes: number }
 
 export interface DesktopApi {
+  cloudSyncStatus(): Promise<Envelope<CloudSyncStatus>>
+  cloudSyncCommand(command: CloudSyncCommand): Promise<Envelope<CloudSyncStatus>>
   diagnosticLogs: () => Promise<Envelope<DiagnosticSnapshot>>
   diagnosticLogAction: (action: 'folder' | 'export') => Promise<Envelope<{ message: string }>>
   diagnosticsInitial: () => Promise<boolean>

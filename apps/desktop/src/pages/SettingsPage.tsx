@@ -20,6 +20,7 @@ import { ApiUsagePanel } from '@/components/settings/ApiUsagePanel'
 import { CachePanel } from '@/components/settings/CachePanel'
 import { McpPanel } from '@/components/settings/McpPanel'
 import { MarketApiKeysPanel } from '@/components/settings/MarketApiKeysPanel'
+import { CloudSyncPanel } from '@/components/settings/CloudSyncPanel'
 import { DiagnosticLogsPanel } from '@/components/settings/DiagnosticLogsPanel'
 import { useSettingsNavigation } from '@/stores/settingsNavigation'
 import { AppDashboard } from '@/components/settings/AppDashboard'
@@ -191,6 +192,7 @@ export function SettingsPage({
     {
       id: 'data', title: 'Data & storage', hint: 'Keep useful data close and your saved work protected.',
       cards: [
+        { id: 'cloud-sync', category: 'data', terms: 'cloud convex sync devices account offline github browser sign in email backup conflicts', content: <CloudSyncPanel /> },
         { id: 'cache', category: 'data', terms: 'cache retention disk memory snapshots market images previews limits startup', content: <CachePanel /> },
         { id: 'backups', category: 'data', column: 'secondary', terms: 'automatic backups saved data export import restore storage location portfolios cards finance', content:
           <UserDataPanel mode="backups" onRun={onRunMaintenance} busy={busy} sourcePath={holdingsPath}

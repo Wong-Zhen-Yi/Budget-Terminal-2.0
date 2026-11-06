@@ -66,6 +66,7 @@ let flushBackup: (() => Promise<void>) | null = null
 let stopMcp: (() => Promise<void>) | null = null
 let flushAgents: (() => Promise<void>) | null = null
 let flushNotifications: (() => Promise<void>) | null = null
+let closeCloudSync: (() => Promise<void>) | null = null
 const rendererUrl = isDev && process.env.ELECTRON_RENDERER_URL
   ? process.env.ELECTRON_RENDERER_URL
   : pathToFileURL(join(dirname, '../renderer/index.html')).href
@@ -190,6 +191,10 @@ if (ownsInstance) app.whenReady().then(async () => {
       diagnosticLog.write('warn', 'app', 'startup-stage-failed', { stage: 'automatic-backup', code: faultCode(error) })
       console.warn('Automatic backup failed:', error)
     })
+    stage = 'cloud-sync'
+    const sync = await import('./services/cloudSyncHost.js')
+    closeCloudSync = sync.closeCloudSync
+    await sync.startCloudSync()
     // Resolve paths and take ownership before a service opens its persistent cache.
     stage = 'services'
     const { registerIpcHandlers } = await import('./ipc/handlers.js')
@@ -247,6 +252,7 @@ app.on('before-quit', (event) => {
     try {
       await Promise.all([stopMcp?.(), flushAgents?.()])
       await flushNotifications?.()
+      await closeCloudSync?.()
       await flushBackup?.()
     } finally {
       await closeCache?.()

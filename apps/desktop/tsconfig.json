@@ -33,6 +33,7 @@
     }
   },
   "include": [
+    "convex/**/*.ts",
     "electron/**/*.ts",
     "src/**/*.ts",
     "src/**/*.tsx",

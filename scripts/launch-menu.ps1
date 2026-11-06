@@ -24,7 +24,7 @@ function Show-BudgetInterfaceMenu([int]$Selected) {
   Write-Host '  btd  - open the desktop app'
   Write-Host '  bt   - open the terminal interface'
   Write-Host 'BT TUI includes Portfolio, candlestick charts and Agents chat. F1/F2 switches views.'
-  Write-Host 'Keep this terminal open while using Budget Terminal.'
+  Write-Host 'BTD runs independently; you can close this terminal. BT requires its terminal to stay open.'
 }
 
 function Select-BudgetInterface {

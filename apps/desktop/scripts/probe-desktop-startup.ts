@@ -42,9 +42,11 @@ try {
       window.webContents.once('did-finish-load', async () => {
         try {
           const result = await window.webContents.executeJavaScript(
-            '(async () => { const cache = await window.api.cacheStatus(); return { mcp: await window.api.testMcpConnection(), cache, configured: await window.api.configureCache(cache.data.settings), progress: await window.api.heatmapProgress("SPY") } })()',
+            '(async () => { const cache = await window.api.cacheStatus(); return { sync: await window.api.cloudSyncStatus(), mcp: await window.api.testMcpConnection(), cache, configured: await window.api.configureCache(cache.data.settings), progress: await window.api.heatmapProgress("SPY") } })()',
           )
           assert.equal(result.mcp.available, true, result.mcp.error)
+          assert.equal(result.sync.data.signedIn, false)
+          assert.equal(result.sync.data.state, 'disconnected', 'Local startup must work without Convex configuration')
           assert.equal(result.mcp.setup.valid, true)
           assert.equal(result.cache.meta.freshness, 'fresh')
           assert.equal(result.configured.meta.freshness, 'fresh')

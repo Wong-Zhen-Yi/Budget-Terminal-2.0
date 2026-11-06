@@ -39,6 +39,21 @@ function Assert-Check($Condition, [string]$Message) {
 }
 Write-Host 'PASS: launcher menu defaults to BTD on Enter, navigates both interfaces and exits safely.'
 
+& {
+  $script:detachedLaunch = $null
+  function Start-Process {
+    param($FilePath, $ArgumentList, $WindowStyle, $WorkingDirectory, $RedirectStandardOutput, $RedirectStandardError)
+    $script:detachedLaunch = $PSBoundParameters
+  }
+  Start-BudgetTerminal
+  Assert-Check ($script:detachedLaunch.WindowStyle -eq 'Hidden') 'Desktop startup must create an independent hidden process.'
+  Assert-Check ($script:detachedLaunch.ArgumentList -contains '-Attached') 'The worker must not recursively detach.'
+  Assert-Check ($script:detachedLaunch.ArgumentList -contains ('"' + (Join-Path $PSScriptRoot 'launch-windows.ps1') + '"')) 'Quote the worker path for checkouts containing spaces.'
+  Assert-Check ($script:detachedLaunch.RedirectStandardOutput -ne $script:detachedLaunch.RedirectStandardError) 'Retain separate startup output and errors.'
+  Assert-Check (-not $script:detachedLaunch.ContainsKey('Wait')) 'The calling terminal must return immediately.'
+}
+Write-Host 'PASS: desktop launch detaches with a hidden worker and startup logs.'
+
 Assert-Check (Test-BudgetNode $NodePath) 'The running supported Node must be detected.'
 Assert-Check (-not (Test-BudgetNode 'missing-node.exe')) 'Missing Node must be rejected.'
 $originalData = $env:LOCALAPPDATA

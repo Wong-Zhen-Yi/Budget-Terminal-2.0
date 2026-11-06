@@ -76,6 +76,10 @@ export function replaceArticles(value: unknown): Promise<void> {
   return enqueue(() => persist(value, articlesPath()))
 }
 
+export function validateArticlesImport(value: unknown): void {
+  document.parse(value)
+}
+
 export async function getArticles() {
   try { return ok(await readArticles(), 'articles store') }
   catch (error) { return failed({ articles: [], sourcePath: articlesPath() }, describeError(error), 'articles store') }
