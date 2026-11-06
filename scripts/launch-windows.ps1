@@ -1,6 +1,7 @@
 param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Tui, [switch]$Setup, [switch]$Attached, [Parameter(ValueFromRemainingArguments=$true)][string[]]$TuiArguments)
 
 $ErrorActionPreference = 'Stop'
+# Charts watchlists now follow user data backup, restore, cloud sync and clear, with automatic profile migration.
 # GitHub sync sign-in validates backend configuration before opening the browser.
 # Timestamped Convex snapshots restore fresh devices automatically; offline edits keep their local timestamps.
 # Settings supports GitHub browser sign-in and regional Convex deployments; local saves remain independent.

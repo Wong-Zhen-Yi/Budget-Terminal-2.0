@@ -18,6 +18,7 @@ import { currentPageForced } from './pageProgress'
 import { api, queryKeys } from './client'
 import { NEWS_REFRESH_MS, QUOTE_REFRESH_MS } from './refreshRates'
 import { queryFreshness } from './queryPersistence'
+import { readPortfolioWithCharts } from '@/stores/charts'
 
 /** True only within the focused page query being explicitly reloaded. */
 export function forcing(): boolean {
@@ -38,7 +39,7 @@ export function usePortfolio(): UseQueryResult<Envelope<PortfolioPayload>> {
 
   return useQuery({
     queryKey: queryKeys.portfolio,
-    queryFn: () => api.portfolio(),
+    queryFn: readPortfolioWithCharts,
     staleTime: Infinity,
   })
 }

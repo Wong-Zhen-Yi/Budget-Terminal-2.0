@@ -21,6 +21,7 @@ function platformName(platform) {
 }
 
 function launch({ development = false, logs = false, setupOnly = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
+  log.log('Charts watchlists: saved with user data, backups and cloud sync. Existing profile lists migrate automatically; import and clear update the charts immediately.')
   log.log('Portfolio stocks highlight the full row on hover and while editing or focusing row controls.')
   log.log('Settings: consistent compact sizing and horizontal category views. The redundant Preferences label, All settings view and introductory header are removed.')
   log.log('Persistent diagnostic logging retains up to the last 15 days. Open Settings > Diagnostics or press Ctrl+Shift+L. No global diagnostics banner is added.')

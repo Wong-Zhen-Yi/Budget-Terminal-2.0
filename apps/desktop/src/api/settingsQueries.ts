@@ -11,6 +11,7 @@ import type {
 } from '@shared/contract'
 import { api, queryKeys } from './client'
 import { isRemoteQueryKey, removeRendererCache } from './queryPersistence'
+import { flushChartsWatchlists } from '@/stores/charts'
 
 export function useSettings(): UseQueryResult<Envelope<AppSettings>> {
   return useQuery({
@@ -50,6 +51,7 @@ export function useMaintenance(): (
   const queryClient = useQueryClient()
   return useCallback(
     async (action: MaintenanceAction) => {
+      await flushChartsWatchlists()
       const result = await api.maintenance(action)
       if (result.data.performed && action === 'exportUserData') {
         await queryClient.invalidateQueries({ queryKey: queryKeys.settings })

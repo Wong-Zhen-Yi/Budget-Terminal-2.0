@@ -2020,8 +2020,8 @@ const providerImplementation: MarketDataProvider = {
             action: 'clearUserData' as const,
             performed: true,
             message: rollback
-              ? `Cleared all holdings, personal finance and cards. Rollback copy: ${rollback}`
-              : 'Cleared all holdings, personal finance and cards.',
+              ? `Cleared all holdings, personal finance, Charts watchlists and cards. Rollback copy: ${rollback}`
+              : 'Cleared all holdings, personal finance, Charts watchlists and cards.',
             path: rollback,
           },
           SETTINGS_SOURCE,

@@ -1,5 +1,6 @@
 param([switch]$Uninstall, [switch]$Desktop)
 $ErrorActionPreference = 'Stop'
+# Charts watchlists now follow user data backup, restore, cloud sync and clear, with automatic profile migration.
 $command = if ($Desktop) { 'BTD' } else { 'BT' }
 $interface = if ($Desktop) { 'desktop app' } else { 'TUI' }
 $bin = Join-Path $env:LOCALAPPDATA 'BudgetTerminal\bin'

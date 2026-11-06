@@ -40,6 +40,15 @@ try {
   await initializeAutomaticBackup()
   await checkComplete()
   const portfolioId = (await provider.portfolio()).data.mainId!
+  const chartsWatchlists = { watchlist: ['SPY', 'QQQ'], multiCustomSymbols: ['AAPL', 'MSFT'], multiOrder: ['MSFT', 'AAPL'] }
+  succeeded(await provider.mutatePortfolio({ type: 'setChartsWatchlists', value: {
+    watchlist: ['spy', 'SPY', ' qqq '], multiCustomSymbols: ['aapl', 'MSFT'], multiOrder: ['MSFT', 'AAPL'],
+  } }))
+  assert.deepEqual((await snapshot()).userData.chartsWatchlists, chartsWatchlists)
+  succeeded(await provider.mutatePortfolio({ type: 'setChartsWatchlists', value: { watchlist: ['OLD'], multiCustomSymbols: [], multiOrder: [] }, migrateOnly: true }))
+  assert.deepEqual((await provider.portfolio()).data.chartsWatchlists, chartsWatchlists, 'Migration must not overwrite saved lists')
+  const { readSyncData } = await import('../electron/services/cloudSyncData.js')
+  assert.deepEqual(JSON.parse(await readSyncData()).userData.chartsWatchlists, chartsWatchlists)
   succeeded(await provider.mutatePortfolio({ type: 'addPosition', portfolioId, ticker: 'TEST' }))
   succeeded(await provider.mutatePortfolio({ type: 'setPosition', portfolioId, ticker: 'TEST', shares: 9 }))
   assert.equal((await snapshot()).userData.portfolios[portfolioId].holdings.TEST.shares, 9)
@@ -99,14 +108,22 @@ try {
   await writeFile(portable, await readFile(backup))
   const saved = await snapshot()
   succeeded(await provider.clearUserData())
+  assert.deepEqual((await provider.portfolio()).data.chartsWatchlists, { watchlist: [], multiCustomSymbols: [], multiOrder: [] })
   assert.equal((await snapshot()).userData.portfolios.portfolio_1.tickers.length, 0)
   assert.equal((await snapshot()).cards.customCards.length, 0)
   await checkComplete()
   succeeded(await provider.importUserData(portable))
+  assert.deepEqual((await provider.portfolio()).data.chartsWatchlists, chartsWatchlists)
   assert.deepEqual((await snapshot()).userData, saved.userData)
   assert.deepEqual((await snapshot()).cards, saved.cards)
   await checkComplete()
   await flushAutomaticBackup()
+  // Old backups remain importable and explicitly clear lists, rather than resurrecting the profile copy.
+  const legacy = structuredClone(saved)
+  delete legacy.userData.chartsWatchlists
+  await writeFile(portable, JSON.stringify(legacy))
+  succeeded(await provider.importUserData(portable))
+  assert.deepEqual((await provider.portfolio()).data.chartsWatchlists, { watchlist: [], multiCustomSymbols: [], multiOrder: [] })
   const olderSnapshot = JSON.stringify({ ...(await snapshot()), exportedAt: '2000-01-01T00:00:00.000Z' })
   await writeFile(backup, olderSnapshot)
   await initializeAutomaticBackup()

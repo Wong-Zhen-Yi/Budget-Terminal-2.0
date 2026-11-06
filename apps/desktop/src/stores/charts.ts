@@ -2,6 +2,9 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 import type {
+  ChartsWatchlists,
+  Envelope,
+  PortfolioPayload,
   ChartsCompareInterval,
   ChartsCompareRange,
   ChartsInterval,
@@ -185,7 +188,7 @@ export const useChartsStore = create<ChartsState>()(
       setFibMode: (fibMode) => set({ fibMode }),
       setFibLookback: (fibLookback) => set({ fibLookback: Math.max(20, Math.min(500, Math.trunc(fibLookback))) }),
       setDrawings: (context, drawings) => set((state) => ({ drawingsByContext: { ...state.drawingsByContext, [context]: drawings } })),
-      setWatchlist: (watchlist) => set({ watchlist: normalizeSymbols(watchlist) }),
+      setWatchlist: (watchlist) => saveChartsWatchlists({ watchlist: normalizeSymbols(watchlist) }),
       setCompareSymbols: (compareSymbols) => set({ compareSymbols: normalizeSymbols(compareSymbols) }),
       setCompareInterval: (compareInterval) => set({ compareInterval }),
       setCompareRange: (compareRange) => set({ compareRange }),
@@ -200,8 +203,8 @@ export const useChartsStore = create<ChartsState>()(
       setMultiMode: (multiMode) => set({ multiMode }),
       setMultiInterval: (multiInterval) => set({ multiInterval }),
       setMultiStyle: (multiStyle) => set({ multiStyle }),
-      setMultiCustomSymbols: (multiCustomSymbols) => set({ multiCustomSymbols: normalizeSymbols(multiCustomSymbols) }),
-      setMultiOrder: (multiOrder) => set({ multiOrder: normalizeSymbols(multiOrder) }),
+      setMultiCustomSymbols: (multiCustomSymbols) => saveChartsWatchlists({ multiCustomSymbols: normalizeSymbols(multiCustomSymbols) }),
+      setMultiOrder: (multiOrder) => saveChartsWatchlists({ multiOrder: normalizeSymbols(multiOrder) }),
     }),
     {
       name: 'budget-terminal:charts',
@@ -242,3 +245,63 @@ export const useChartsStore = create<ChartsState>()(
     },
   ),
 )
+
+function chartWatchlists(): ChartsWatchlists {
+  const { watchlist, multiCustomSymbols, multiOrder } = useChartsStore.getState()
+  return { watchlist, multiCustomSymbols, multiOrder }
+}
+
+// Serialize migration, reads and edits so an older read cannot undo a new edit.
+let watchlistQueue: Promise<unknown> = Promise.resolve()
+let watchlistRevision = 0
+
+function queueWatchlists<T>(run: () => Promise<T>): Promise<T> {
+  const result = watchlistQueue.then(run)
+  watchlistQueue = result.catch(() => {})
+  return result
+}
+
+export async function flushChartsWatchlists(): Promise<void> {
+  await watchlistQueue
+}
+
+/** Runs with the startup portfolio read, before planning chart preload targets. */
+export function readPortfolioWithCharts(): Promise<Envelope<PortfolioPayload>> {
+  const revision = watchlistRevision
+  return queueWatchlists(async () => {
+    let result = await window.api.portfolio()
+    if (result.meta.freshness === 'failed') return result
+    if (result.data.chartsWatchlists === undefined) {
+      const legacy = chartWatchlists()
+      if (Object.values(legacy).some(symbols => symbols.length > 0)) {
+        result = await window.api.mutatePortfolio({ type: 'setChartsWatchlists', value: legacy, migrateOnly: true })
+        if (!result.data.chartsWatchlists) throw new Error(result.meta.failureReason ?? 'Chart watchlist migration failed')
+      }
+    }
+    if (revision === watchlistRevision && result.data.chartsWatchlists) {
+      useChartsStore.setState(result.data.chartsWatchlists)
+    }
+    return result
+  })
+}
+
+function saveChartsWatchlists(patch: Partial<ChartsWatchlists>): void {
+  const previous = chartWatchlists()
+  const value = { ...previous, ...patch }
+  const revision = ++watchlistRevision
+  useChartsStore.setState(value)
+  void queueWatchlists(async () => {
+    let confirmed = previous
+    try {
+      const current = await window.api.portfolio()
+      if (current.meta.freshness === 'failed') throw new Error(current.meta.failureReason ?? 'Chart watchlists could not load')
+      confirmed = current.data.chartsWatchlists ?? previous
+      const result = await window.api.mutatePortfolio({ type: 'setChartsWatchlists', value: { ...confirmed, ...patch } })
+      if (revision === watchlistRevision) useChartsStore.setState(result.data.chartsWatchlists ?? confirmed)
+      if (result.errors.length) console.error('Chart watchlist save:', result.errors)
+    } catch (error) {
+      if (revision === watchlistRevision) useChartsStore.setState(confirmed)
+      console.error('Chart watchlist save:', error)
+    }
+  })
+}

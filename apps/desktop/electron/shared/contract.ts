@@ -139,7 +139,15 @@ export interface Portfolio {
   readOnly: boolean
 }
 
+export interface ChartsWatchlists {
+  watchlist: string[]
+  multiCustomSymbols: string[]
+  multiOrder: string[]
+}
+
 export interface PortfolioPayload {
+  /** Missing only before migrating a legacy browser-profile watchlist. */
+  chartsWatchlists?: ChartsWatchlists
   portfolios: Portfolio[]
   activeId: string | null
   /** The portfolio treated as "main" — what the Dashboard opens on. */
@@ -161,6 +169,7 @@ export const MAX_PORTFOLIOS = 5
  * the whole re-read document, so the renderer never guesses at post-write state.
  */
 export type PortfolioMutation =
+  | { type: 'setChartsWatchlists'; value: ChartsWatchlists; migrateOnly?: boolean }
   | { type: 'setActive'; id: string }
   | { type: 'setMain'; id: string }
   | { type: 'create'; name?: string }

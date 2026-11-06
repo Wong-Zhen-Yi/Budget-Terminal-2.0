@@ -1142,6 +1142,26 @@
             "properties": {
               "type": {
                 "type": "string",
+                "const": "setChartsWatchlists"
+              },
+              "value": {
+                "$ref": "#/definitions/ChartsWatchlists"
+              },
+              "migrateOnly": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "type",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
                 "const": "setActive"
               },
               "id": {
@@ -1413,6 +1433,35 @@
           }
         ],
         "description": "Every write the Portfolio page can make. One channel takes the union and answers with the whole re-read document, so the renderer never guesses at post-write state."
+      },
+      "ChartsWatchlists": {
+        "type": "object",
+        "properties": {
+          "watchlist": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "multiCustomSymbols": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "multiOrder": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "watchlist",
+          "multiCustomSymbols",
+          "multiOrder"
+        ],
+        "additionalProperties": false
       },
       "OptionMutation": {
         "anyOf": [

@@ -4,6 +4,7 @@ import { watch, type FSWatcher } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 import { z } from 'zod'
+import { normalizeSymbols } from '../shared/charts.js'
 
 import { randomUUID } from 'node:crypto'
 
@@ -109,7 +110,16 @@ const personalFinanceSchema = z.object({
   goal: goalSchema.catch({ title: 'Net Worth Goal', targetAmount: 0, currency: 'SGD' }),
 })
 
+const chartsWatchlistsSchema = z.object({
+  watchlist: z.array(z.string()).transform(normalizeSymbols),
+  multiCustomSymbols: z.array(z.string()).transform(normalizeSymbols),
+  multiOrder: z.array(z.string()).transform(normalizeSymbols),
+})
+
+const emptyChartsWatchlists = () => ({ watchlist: [], multiCustomSymbols: [], multiOrder: [] })
+
 const documentSchema = z.object({
+  chartsWatchlists: chartsWatchlistsSchema.optional(),
   version: z.number().catch(1),
   activeId: z.string().nullable().catch(null),
   mainId: z.string().nullable().catch(null),
@@ -130,6 +140,7 @@ const STORE_VERSION = 2
 // defaults used when reading an older local store.
 const importEntrySchema = z.object({ id: z.string(), desc: z.string(), amount: z.number().finite() })
 const importDocumentSchema = z.object({
+  chartsWatchlists: chartsWatchlistsSchema.optional(),
   version: z.number().int().min(1).max(STORE_VERSION),
   activeId: z.string().nullable(),
   mainId: z.string().nullable(),
@@ -231,7 +242,7 @@ function withDefaultPortfolio(document: StoredDocument): StoredDocument {
 }
 
 export function defaultSyncUserData(): unknown {
-  return withDefaultPortfolio(emptyDocument())
+  return { ...withDefaultPortfolio(emptyDocument()), chartsWatchlists: emptyChartsWatchlists() }
 }
 
 /* ------------------------------------------------------------------- access */
@@ -482,6 +493,7 @@ function portfolioPayload(document: StoredDocument): PortfolioPayload {
 
   return {
     portfolios,
+    chartsWatchlists: document.chartsWatchlists,
     activeId: document.activeId,
     mainId: document.mainId,
     sourcePath: storePath(),
@@ -532,6 +544,11 @@ function cleanNumber(value: number | undefined, { min = 0 } = {}): number | unde
 
 function apply(document: StoredDocument, mutation: PortfolioMutation): void {
   switch (mutation.type) {
+    case 'setChartsWatchlists': {
+      if (mutation.migrateOnly && document.chartsWatchlists !== undefined) return
+      document.chartsWatchlists = chartsWatchlistsSchema.parse(mutation.value)
+      return
+    }
     case 'setActive': {
       if (mutation.id === COMBINED_PORTFOLIO_ID || document.portfolios[mutation.id]) {
         document.activeId = mutation.id
@@ -864,7 +881,10 @@ export async function mutatePersonalFinance(
  * app's own store, so an export taken here restores here.
  */
 export async function exportUserData(): Promise<unknown> {
-  return queued(async () => structuredClone(await loadDocument()))
+  return queued(async () => {
+    const document = structuredClone(await loadDocument())
+    return { ...document, chartsWatchlists: document.chartsWatchlists ?? emptyChartsWatchlists() }
+  })
 }
 
 /**
@@ -898,6 +918,7 @@ export async function importUserData(source: unknown): Promise<string> {
       await loading
       rollback = await writeRollback('before-import')
       parsed.data.personalFinance = parsed.data.personalFinance ?? emptyFinance()
+      parsed.data.chartsWatchlists ??= emptyChartsWatchlists()
       const document = normalize(parsed.data)
       await persist(document)
       cached = document
@@ -929,6 +950,7 @@ export async function clearUserData(): Promise<string> {
       await loading
       rollback = await writeRollback('before-clear')
       const document = withDefaultPortfolio(emptyDocument())
+      document.chartsWatchlists = emptyChartsWatchlists()
       await persist(document)
       cached = document
     } catch (error) {

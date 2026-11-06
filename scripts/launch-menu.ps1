@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+# Charts watchlists now follow user data backup, restore, cloud sync and clear, with automatic profile migration.
 # Crypto opens directly with market data; the Workspace header, USD badge and Copy snapshot action are removed.
 # Portfolio stocks highlight the full row on hover and while editing or focusing row controls.
 

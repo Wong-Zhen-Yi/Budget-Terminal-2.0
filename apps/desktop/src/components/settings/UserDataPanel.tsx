@@ -13,13 +13,13 @@ const CONFIRMATIONS: Partial<Record<MaintenanceAction, { title: string; body: st
     importUserData: {
       title: 'Import User Data',
       body:
-        'Importing replaces the saved holdings, options tracker, personal finance book and Cards data with the contents of the backup file. A rollback copy of the current holdings store is written beside it first.',
+        'Importing replaces the saved holdings, options tracker, personal finance book, Charts watchlists and Cards data with the contents of the backup file. A rollback copy of the current holdings store is written beside it first.',
       verb: 'Choose Backup File',
     },
     clearUserData: {
       title: 'Clear All User Data',
       body:
-        'This removes every saved portfolio, holding, options position, personal finance row and custom Card. Settings — navigation order, privacy and the clock — are kept, and a rollback copy of the holdings store is written first.',
+        'This removes every saved portfolio, holding, options position, personal finance row, Charts watchlist and custom Card. Settings — navigation order, privacy and the clock — are kept, and a rollback copy of the holdings store is written first.',
       verb: 'Clear Everything',
     },
     resetCache: {
@@ -62,7 +62,7 @@ export function UserDataPanel({
       <div className="flex flex-col gap-2 p-2">
         <SectionHeader
           title={mode === 'maintenance' ? 'Recover safely' : 'Protect your saved work'}
-          hint={mode === 'maintenance' ? 'Review the scope before resetting or removing data. Both actions require confirmation.' : 'Export or restore one JSON file holding portfolios, personal finance, Cards and these settings.'}
+          hint={mode === 'maintenance' ? 'Review the scope before resetting or removing data. Both actions require confirmation.' : 'Export or restore one JSON file holding portfolios, personal finance, Charts watchlists, Cards and these settings.'}
         />
         {mode !== 'maintenance' && <>
         {automaticBackup ? (
