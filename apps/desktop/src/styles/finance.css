@@ -1,0 +1,59 @@
+.finance-page {
+  container-type: inline-size;
+}
+
+.finance-grid {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 62fr) minmax(0, 62fr) minmax(31rem, 100fr) minmax(0, 65fr) minmax(0, 55fr);
+  grid-template-rows: minmax(0, 2fr) minmax(0, 1fr);
+  grid-template-areas: 'cash debt bills totals goal' 'silos silos silos silos silos';
+}
+
+.finance-grid > section { min-width: 0; }
+.finance-cash { grid-area: cash; }
+.finance-debt { grid-area: debt; }
+.finance-bills { grid-area: bills; }
+.finance-totals { grid-area: totals; }
+.finance-goal { grid-area: goal; }
+.finance-silos { grid-area: silos; }
+
+/* Use the actual page width, including sidebar and zoom, to choose the layout. */
+@container (max-width: 1700px) {
+  .finance-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(31rem, 1.7fr);
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    grid-template-areas: 'cash debt bills' 'totals goal silos';
+  }
+
+  .finance-totals > div > div:first-child {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .finance-totals > div > div:first-child button { grid-column: 1 / -1; }
+
+  .finance-totals > div > div:has(> svg) {
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+    padding: 0.5rem;
+  }
+
+  .finance-totals svg {
+    min-height: 0;
+    max-height: 160px;
+    width: 48%;
+    flex-shrink: 1;
+  }
+
+  .finance-totals ul { min-width: 0; }
+  .finance-totals li > span:nth-child(2) { width: auto; overflow-wrap: anywhere; }
+
+  .finance-goal svg {
+    min-height: 0;
+    max-width: 100%;
+  }
+}

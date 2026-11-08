@@ -22,6 +22,7 @@ import { TabBar } from '@/components/chrome/TabBar'
 import { TabPicker } from '@/components/chrome/TabPicker'
 import { WorkspaceHeader, WorkspaceSidebar } from '@/components/chrome/WorkspaceNavigation'
 import { isTextEntry } from '@/lib/shortcuts'
+import { useControllerNavigation } from '@/input/useControllerNavigation'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { BacktestPage } from '@/pages/BacktestPage'
 import { CardsPage } from '@/pages/CardsPage'
@@ -289,6 +290,12 @@ export function App() {
     },
     [visibleTabs],
   )
+
+  useControllerNavigation({
+    enabled: !screenshotPage,
+    stepPage: direction => stepTab(direction, workspaceTabs),
+    togglePicker: () => setPickerOpen(open => !open),
+  })
 
   const toggleObscure = useCallback(() => {
     const targets = settings?.obscuredTabs ?? []

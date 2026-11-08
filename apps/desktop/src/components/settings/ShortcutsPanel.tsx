@@ -1,5 +1,6 @@
 import { Panel } from '@/components/ui/Panel'
 import { shortcutsForPlatform } from '@/lib/shortcuts'
+import { CONTROLLER_SHORTCUTS } from '@/input/controller'
 
 /** `_build_settings_shortcuts_box`, reading off the same table the app binds. */
 export function ShortcutsPanel() {
@@ -32,6 +33,14 @@ export function ShortcutsPanel() {
             ))}
           </tbody>
         </table>
+        </details>
+        <details className="settings-shortcut-details">
+          <summary>Controller controls</summary>
+          <p className="text-2xs text-text-muted">Connect a standard gamepad and press a button to make it available. Controls work while Budget Terminal has focus.</p>
+          <dl className="settings-shortcuts">{CONTROLLER_SHORTCUTS.map(row => <div key={row.keys}>
+            <dt>{row.label}</dt><dd><kbd>{row.keys}</kbd></dd>
+          </div>)}</dl>
+          <p className="text-2xs text-text-muted">Use up/down to change a select field and left/right to leave it. Text entry and embedded web content use a keyboard, touch or mouse. On Steam Deck, choose a Gamepad layout; desktop mouse layouts continue to work through Steam Input.</p>
         </details>
       </div>
     </Panel>

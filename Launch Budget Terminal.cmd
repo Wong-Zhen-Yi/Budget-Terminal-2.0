@@ -1,4 +1,7 @@
 @echo off
+rem Personal Finance: Steam Deck layout keeps recurring bill names readable and the Goal panel visible.
+rem Controller support: D-pad/left stick focus, A activate, B dismiss, shoulders switch pages, Menu page picker, right stick scroll.
+rem Display compatibility: centered work-area bounds, compact minimum size and safe monitor changes; Steam Deck Gaming Mode uses native fullscreen.
 rem Charts watchlists are saved with user data, backups and cloud sync; existing lists migrate automatically.
 rem GitHub sync sign-in checks backend credentials first and shows setup guidance instead of a GitHub 404.
 rem Timestamped Convex snapshots automatically restore the latest cloud copy on fresh devices; local edits stay protected.

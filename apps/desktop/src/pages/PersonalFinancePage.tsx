@@ -34,6 +34,7 @@ import { Button } from '@/components/ui/Button'
 import { PrivateNumber } from '@/components/ui/NumberPrivacy'
 import { money, moneyExplicit } from '@/lib/format'
 import { easeOutCubic, useAnimatedProgress } from '@/lib/useAnimatedProgress'
+import '@/styles/finance.css'
 
 const DONUT_ANIMATION_MS = 1000
 const GOAL_ANIMATION_MS = 900
@@ -250,7 +251,7 @@ export function PersonalFinancePage({
   }, [queryClient, saving])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
+    <div className="finance-page flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-2">
       <div className="flex shrink-0 items-center gap-2">
         <h1 className="text-sm font-semibold text-text">Personal Finance</h1>
         <Button className="ml-auto" onClick={() => void save()} disabled={saving}>
@@ -264,12 +265,10 @@ export function PersonalFinancePage({
         </p>
       ) : null}
 
-      {/* Weights rather than even columns: Cash and Debt need room for the header's
-          two buttons, Bills for four columns, Totals for the donut and its legend. */}
-      <div className="flex min-h-0 flex-[2] gap-2">
+      <div className="finance-grid">
         <EntriesPanel
           title="Cash (SGD)"
-          className="min-h-0 flex-[62] min-w-[16rem]"
+          className="finance-cash"
           rows={finance.cash}
           addVariant="positive"
           footer={<>Cash total: <PrivateNumber>{money(cashTotal, 'SGD')}</PrivateNumber></>}
@@ -280,7 +279,7 @@ export function PersonalFinancePage({
         />
         <EntriesPanel
           title="Debt (SGD)"
-          className="min-h-0 flex-[62] min-w-[16rem]"
+          className="finance-debt"
           rows={finance.debt}
           addVariant="danger"
           footer={debtFooter(debtTotal, margin, rate)}
@@ -290,7 +289,7 @@ export function PersonalFinancePage({
           onSetAmount={(id, amount) => void send({ type: 'setEntry', category: 'debt', id, amount })}
         />
         <BillsPanel
-          className="min-h-0 flex-[88] min-w-[22rem]"
+          className="finance-bills"
           rows={finance.recurringBills}
           totals={bills}
           display={display}
@@ -302,7 +301,7 @@ export function PersonalFinancePage({
           onSetCurrency={(id, currency) => void send({ type: 'setBill', id, currency })}
         />
         <TotalsPanel
-          className="min-h-0 flex-[55] min-w-[18rem]"
+          className="finance-totals"
           slices={slices}
           total={netWorth}
           complete={valuation.available}
@@ -316,7 +315,7 @@ export function PersonalFinancePage({
           onSetCurrency={(currency) => void send({ type: 'setTotalsCurrency', currency })}
         />
         <GoalPanel
-          className="min-h-0 flex-[51] min-w-[16rem]"
+          className="finance-goal"
           goal={finance.goal}
           current={goal.value}
           available={goal.available}
@@ -326,9 +325,8 @@ export function PersonalFinancePage({
           onSetTarget={(targetAmount) => void send({ type: 'setGoal', targetAmount })}
           onSetCurrency={(currency) => void send({ type: 'setGoal', currency })}
         />
+        <SilosPanel className="finance-silos" bars={bars} display={display} complete={valuation.available} />
       </div>
-
-      <SilosPanel className="min-h-0 flex-1" bars={bars} display={display} complete={valuation.available} />
     </div>
   )
 }

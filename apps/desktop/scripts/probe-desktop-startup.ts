@@ -20,7 +20,7 @@ try {
   const entry = join(directory, 'startup.cjs')
   await writeFile(entry, `
     const assert = require('node:assert/strict')
-    const { app, dialog, session } = require('electron')
+    const { app, dialog, screen, session } = require('electron')
     app.setAppPath(${JSON.stringify(root)})
     app.setPath('userData', ${JSON.stringify(join(directory, 'profile'))})
     if (process.env.BUDGET_PROBE_AGENT_FAILURE === '1') {
@@ -41,6 +41,12 @@ try {
     app.on('browser-window-created', (_event, window) => {
       window.webContents.once('did-finish-load', async () => {
         try {
+          const bounds = window.getBounds()
+          const area = screen.getDisplayMatching(bounds).workArea
+          assert(bounds.x >= area.x && bounds.y >= area.y, 'Window starts inside the display origin')
+          assert(bounds.x + bounds.width <= area.x + area.width, 'Window right edge fits the display')
+          assert(bounds.y + bounds.height <= area.y + area.height, 'Window bottom edge fits the work area')
+          assert(window.getMinimumSize()[0] < area.width || area.width <= 960, 'Compact displays retain room to resize')
           const result = await window.webContents.executeJavaScript(
             '(async () => { const cache = await window.api.cacheStatus(); return { sync: await window.api.cloudSyncStatus(), mcp: await window.api.testMcpConnection(), cache, configured: await window.api.configureCache(cache.data.settings), progress: await window.api.heatmapProgress("SPY") } })()',
           )
@@ -56,6 +62,32 @@ try {
           while (!await window.webContents.executeJavaScript('Boolean(document.querySelector("#root")?.children.length)')) {
             assert(Date.now() < deadline, 'Desktop UI must mount')
             await new Promise(resolve => setTimeout(resolve, 25))
+          }
+          if (process.platform === 'linux' && area.width > 960 && area.height > 600) {
+            const waitFor = async (check, message) => {
+              const until = Date.now() + 5000
+              while (!check()) {
+                assert(Date.now() < until, message)
+                await new Promise(resolve => setTimeout(resolve, 25))
+              }
+            }
+            await waitFor(() => window.isVisible(), 'Window must become visible')
+            // KWin can remember maximized state between the two fixture launches.
+            // Start control checks from a visibly smaller, restored window.
+            window.unmaximize()
+            window.setBounds({ x: area.x, y: area.y, width: Math.max(960, area.width - 80), height: Math.max(600, area.height - 80) })
+            await waitFor(() => !window.isMaximized() && window.getBounds().width < area.width, 'Prepare a restored window for control checks')
+            await window.webContents.executeJavaScript('window.api.windowControl("maximize")')
+            await waitFor(() => window.isMaximized(), 'Title-bar maximize must work on Steam Deck')
+            const maximized = window.getBounds()
+            assert(maximized.x >= area.x && maximized.x + maximized.width <= area.x + area.width, 'Maximized window must not shift past the right edge')
+            await window.webContents.executeJavaScript('window.api.windowControl("maximize")')
+            await waitFor(() => !window.isMaximized(), 'Title-bar restore must work on Steam Deck')
+            window.setFullScreen(true)
+            await waitFor(() => window.isFullScreen(), 'Native fullscreen must work')
+            await window.webContents.executeJavaScript('window.api.windowControl("maximize")')
+            await waitFor(() => !window.isFullScreen(), 'Title-bar restore must exit native fullscreen')
+            console.log('PASS: Steam Deck window placement, maximize, restore and fullscreen controls')
           }
           console.log('PASS: built desktop opens with a mounted UI, working MCP connection and all three desktop-only IPC services')
           app.quit()

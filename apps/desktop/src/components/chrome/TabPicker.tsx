@@ -75,6 +75,12 @@ export function TabPicker({
         aria-label="Page search"
         aria-modal="true"
         onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            event.stopPropagation()
+            onClose()
+            return
+          }
           if (event.key !== 'Tab') return
           const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('input, button:not(:disabled)'))
           const next = event.shiftKey ? controls.at(-1) : controls[0]

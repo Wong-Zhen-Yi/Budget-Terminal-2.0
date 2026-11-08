@@ -11,6 +11,8 @@
     "apps/desktop"
   ],
   "scripts": {
+    "probe:controller": "npm run --workspace budget-terminal-desktop probe:controller",
+    "setup:linux": "node scripts/install-linux-launcher.cjs",
     "probe:cloud-oauth": "npm run --workspace budget-terminal-desktop probe:cloud-oauth",
     "probe:cloud-sync": "npm run --workspace budget-terminal-desktop probe:cloud-sync",
     "probe:public-providers": "npm run --workspace budget-terminal-desktop probe:public-providers --",

@@ -9,7 +9,7 @@ import { isSafeExternalUrl } from './services/urls.js'
 import { configureBrowserWindow } from './services/browser.js'
 import { configureYouTubePlayer, isYouTubePlayerContents } from './services/youtubePlayer.js'
 import { isYouTubeEmbedUrl } from './shared/youtubePlayer.js'
-import { desktopWindowSize } from './shared/windowSize.js'
+import { desktopWindowBounds, useGamingFullscreen } from './shared/windowSize.js'
 import { configureRendererCacheShutdown } from './services/rendererCacheShutdown.js'
 import { assertDesktopCertificateSecurity } from './shared/certificateSecurity.js'
 import { startDiagnostics, observeDiagnosticWindow } from './services/diagnosticHost.js'
@@ -73,7 +73,7 @@ const rendererUrl = isDev && process.env.ELECTRON_RENDERER_URL
 
 function createWindow(): BrowserWindow {
   const isMac = process.platform === 'darwin'
-  const size = desktopWindowSize(screen.getPrimaryDisplay().workAreaSize)
+  const size = desktopWindowBounds(screen.getPrimaryDisplay().workArea)
   const window = new BrowserWindow({
     ...size,
     show: false,
@@ -83,7 +83,8 @@ function createWindow(): BrowserWindow {
     // macOS owns the traffic lights and native fullscreen; other platforms keep the
     // existing custom title bar and window controls.
     frame: isMac,
-    ...(isMac ? { titleBarStyle: 'hiddenInset' as const, fullscreenable: true } : {}),
+    fullscreenable: true,
+    ...(isMac ? { titleBarStyle: 'hiddenInset' as const } : {}),
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(dirname, '../preload/preload.cjs'),
@@ -101,7 +102,31 @@ function createWindow(): BrowserWindow {
   configureRendererCacheShutdown(window)
 
   // Paint once, rather than showing an empty frame and then the UI.
-  window.once('ready-to-show', () => { if (!terminalBackend) window.show() })
+  window.once('ready-to-show', () => {
+    if (terminalBackend) return
+    if (useGamingFullscreen(process.platform, process.env)) window.setFullScreen(true)
+    window.show()
+  })
+
+  // Docking, rotating or changing desktop scaling must not strand the window.
+  // Let the compositor own maximized/fullscreen bounds, especially in Gamescope.
+  const fitDisplay = () => {
+    if (window.isDestroyed()) return
+    const display = screen.getDisplayMatching(window.getBounds())
+    const fitted = desktopWindowBounds(display.workArea, window.getNormalBounds())
+    window.setMinimumSize(fitted.minWidth, fitted.minHeight)
+    if (!window.isMaximized() && !window.isFullScreen()) {
+      window.setBounds({ x: fitted.x, y: fitted.y, width: fitted.width, height: fitted.height })
+    }
+  }
+  screen.on('display-metrics-changed', fitDisplay)
+  screen.on('display-removed', fitDisplay)
+  window.on('unmaximize', fitDisplay)
+  window.on('leave-full-screen', fitDisplay)
+  window.once('closed', () => {
+    screen.removeListener('display-metrics-changed', fitDisplay)
+    screen.removeListener('display-removed', fitDisplay)
+  })
 
   // Nothing in this app should ever navigate the shell or spawn a window; news links
   // go to the system browser through the explicit IPC channel instead.

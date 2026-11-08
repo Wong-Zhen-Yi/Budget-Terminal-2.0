@@ -53,7 +53,8 @@ export function TextInput({
     const element = areaRef.current
     if (!element) return
     element.style.height = 'auto'
-    element.style.height = `${element.scrollHeight}px`
+    // scrollHeight excludes borders; the textarea uses border-box sizing.
+    element.style.height = `${element.scrollHeight + element.offsetHeight - element.clientHeight}px`
   }, [])
 
   // Measure after layout so the row settles in the same frame the text changes in.

@@ -163,6 +163,38 @@ npm install
 npm run dev
 ```
 
+On Steam Deck, switch to **Desktop Mode** and install the desktop and application
+menu shortcuts once from the checkout:
+
+```bash
+npm run setup:linux
+```
+
+Double-click **Budget Terminal 2.0** on the desktop, or run
+[Launch Budget Terminal.sh](Launch%20Budget%20Terminal.sh) from the checkout.
+The launcher checks the runtime, installs dependencies, builds the latest source,
+and opens the desktop app. Keep its terminal open while using the app. It finds
+Node in `~/.local/bin`, fnm's default alias, Volta, or a per-user Budget Terminal
+runtime. Install a supported Node.js version first; no SteamOS system changes
+or administrator access are required. Re-run `npm run setup:linux` after moving
+the checkout. For Gaming Mode, add the application menu entry as a non-Steam game
+and leave Proton compatibility disabled.
+
+Steam Deck Desktop Mode opens the window within the display's usable area,
+including panel offsets and desktop scaling. The window refits when docking,
+undocking or changing resolution. Gaming Mode (Gamescope) opens in native
+fullscreen. The title-bar restore button exits fullscreen.
+
+Basic controller support works with standard gamepads while the desktop app has
+focus. Use the D-pad or left stick to move focus, A/Cross to activate, B/Circle to
+dismiss or leave a text field, LB/RB (L1/R1) to switch pages, Menu/Options to open
+the page picker, and the right stick to scroll. Hold a direction to repeat.
+Select fields use up/down to change and left/right to leave. Text entry and
+embedded browser content still require a keyboard, touch or mouse. On Steam
+Deck, select a **Gamepad** Steam Input layout to expose controller buttons;
+desktop mouse layouts can still be used as usual. The control reference is in
+Settings → Workspace → Keyboard Shortcuts → Controller controls.
+
 ### 3. Open Budget Terminal
 
 After Windows setup, open a new PowerShell or Command Prompt window and type `bt`

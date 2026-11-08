@@ -170,7 +170,7 @@ export function SettingsPage({
             onSetHidden={(id, hidden) => void write({ type: 'setTabHidden', id, hidden }, 'Page navigation updated.')}
             onMove={(id, direction) => void write({ type: 'moveTab', id, direction }, 'Page navigation order updated.')}
             onReset={() => void write({ type: 'resetNavigation' }, 'Page navigation reset.')} /> },
-        { id: 'clock', category: 'workspace', column: 'secondary', terms: 'general clock keyboard shortcuts country market timezone time format 12 hour', content:
+        { id: 'clock', category: 'workspace', column: 'secondary', terms: 'general clock keyboard shortcuts controller gamepad steam deck country market timezone time format 12 hour', content:
           <div className="settings-stack">
             <ClockPanel country={settings.clockCountry} time12h={settings.time12h}
               onSetCountry={(code) => void write({ type: 'setClockCountry', code }, 'Clock market updated.')}

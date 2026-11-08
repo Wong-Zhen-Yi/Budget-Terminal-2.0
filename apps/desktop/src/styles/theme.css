@@ -105,3 +105,9 @@ body {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
+
+/* Gamepad navigation must remain visible even on controls that suppress outlines. */
+[data-controller-focus]:focus {
+  outline: 2px solid var(--color-accent-hover) !important;
+  outline-offset: -2px !important;
+}

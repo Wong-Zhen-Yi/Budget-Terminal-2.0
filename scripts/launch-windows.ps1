@@ -1,6 +1,8 @@
 param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Tui, [switch]$Setup, [switch]$Attached, [Parameter(ValueFromRemainingArguments=$true)][string[]]$TuiArguments)
+# Personal Finance: Steam Deck layout keeps recurring bill names readable and the Goal panel visible.
 
 $ErrorActionPreference = 'Stop'
+# Controller support: standard gamepads navigate desktop controls and pages; Settings includes the control reference.
 # Charts watchlists now follow user data backup, restore, cloud sync and clear, with automatic profile migration.
 # GitHub sync sign-in validates backend configuration before opening the browser.
 # Timestamped Convex snapshots restore fresh devices automatically; offline edits keep their local timestamps.

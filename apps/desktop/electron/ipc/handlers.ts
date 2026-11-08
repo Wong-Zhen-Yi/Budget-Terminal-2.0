@@ -163,6 +163,7 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
     if (!window) return
     if (action === 'minimize') window.minimize()
     else if (action === 'close') window.close()
+    else if (window.isFullScreen()) window.setFullScreen(false)
     else if (window.isMaximized()) window.unmaximize()
     else window.maximize()
   })

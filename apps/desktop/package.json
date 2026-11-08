@@ -9,6 +9,7 @@
     "npm": ">=10.9.8"
   },
   "scripts": {
+    "probe:controller": "tsx scripts/probe-controller.ts",
     "probe:cloud-oauth": "tsx scripts/probe-cloud-oauth.ts",
     "probe:cloud-sync": "tsx scripts/probe-cloud-sync.ts",
     "convex:dev": "convex dev",
@@ -66,6 +67,7 @@
     "probe:cache-ui": "tsx scripts/probe-cache-ui.ts",
     "probe:analytics": "tsx scripts/probe-analytics.ts",
     "probe:finance": "tsx scripts/probe-finance.ts",
+    "probe:finance-ui": "tsx scripts/probe-finance-ui.ts",
     "probe:settings": "tsx scripts/probe-settings.ts",
     "probe:backup": "tsx scripts/probe-backup.ts",
     "probe:global": "tsx scripts/probe-global.ts",

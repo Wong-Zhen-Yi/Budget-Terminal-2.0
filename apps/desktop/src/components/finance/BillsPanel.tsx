@@ -74,7 +74,7 @@ export function BillsPanel({
       header: 'Amount',
       align: 'right',
       numeric: true,
-      width: '5.5rem',
+      width: '8rem',
       sortValue: (row) => row.amount,
       cell: (row) => (
         <NumberInput
@@ -103,7 +103,7 @@ export function BillsPanel({
     {
       key: 'currency',
       header: 'Currency',
-      width: '5rem',
+      width: '6rem',
       cell: (row) => (
         <Select
           aria-label={`${row.desc} currency`}
@@ -145,13 +145,13 @@ export function BillsPanel({
         columns={columns}
         rows={rows}
         rowKey={(row) => row.id}
-        showIndex
         layout="fixed"
+        minWidth="30rem"
         empty="No recurring bills"
         onRowClick={(row) => setSelectedId(row.id === selectedId ? null : row.id)}
         rowClassName={(row) => (row.id === selectedId ? 'bg-accent-dim' : '')}
       />
-      <div className="flex h-8 shrink-0 items-center justify-end gap-4 border-t border-border px-2 text-2xs font-semibold text-text">
+      <div className="flex min-h-8 shrink-0 flex-wrap items-center justify-end gap-x-4 gap-y-1 py-1 border-t border-border px-2 text-2xs font-semibold text-text">
         <span>
           Monthly total ({display}): <span className="num"><PrivateNumber>{monthly}</PrivateNumber></span>
         </span>
