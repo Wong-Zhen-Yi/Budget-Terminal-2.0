@@ -9,7 +9,7 @@ import { Sp500Page } from '@/pages/Sp500Page'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { SETTINGS_TAB_ID, TABS } from '@shared/contract'
-import { DEFAULT_TAB_ID, WORKSPACES } from '@shared/navigation'
+import { adjacentPage, DEFAULT_TAB_ID, pagesInVisualOrder } from '@shared/navigation'
 import { useWarmPages } from '@/api/prefetch'
 import { useEquityMarketStream } from '@/api/equityStream'
 import { useMcpScreenshot, useScreenshotReady } from '@/api/mcpScreenshot'
@@ -273,27 +273,20 @@ export function App() {
     }
   }, [warm.reload])
 
-  const workspaceTabs = useMemo(() => [
-    ...WORKSPACES.flatMap((workspace) =>
-      visibleTabs.filter((tab) => tab.implemented && workspace.pages.includes(tab.id)),
-    ),
-    ...visibleTabs.filter((tab) => tab.implemented && tab.id === SETTINGS_TAB_ID),
-  ], [visibleTabs])
+  const workspaceTabs = useMemo(() => pagesInVisualOrder(visibleTabs), [visibleTabs])
 
   /** Step through visible pages, wrapping at both ends. */
   const stepTab = useCallback(
-    (direction: -1 | 1, tabs = visibleTabs) => {
-      if (!tabs.length) return
-      const current = tabs.findIndex((tab) => tab.id === activeTabRef.current)
-      const next = current < 0 ? 0 : (current + direction + tabs.length) % tabs.length
-      setActiveTab(tabs[next].id)
+    (direction: -1 | 1) => {
+      const next = adjacentPage(workspaceTabs, activeTabRef.current, direction)
+      if (next) setActiveTab(next)
     },
-    [visibleTabs],
+    [workspaceTabs],
   )
 
   useControllerNavigation({
     enabled: !screenshotPage,
-    stepPage: direction => stepTab(direction, workspaceTabs),
+    stepPage: stepTab,
     togglePicker: () => setPickerOpen(open => !open),
   })
 
@@ -310,6 +303,7 @@ export function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault()
         setPickerOpen((open) => !open)
@@ -320,7 +314,7 @@ export function App() {
       if (event.key === 'Tab' && event.ctrlKey && !event.altKey) {
         if (pickerOpen) return
         event.preventDefault()
-        stepTab(event.shiftKey ? -1 : 1, workspaceTabs)
+        stepTab(event.shiftKey ? -1 : 1)
         return
       }
 

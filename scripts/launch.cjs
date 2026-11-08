@@ -129,6 +129,7 @@ function launch({ development = false, logs = false, setupOnly = false, platform
   log.log('Settings API usage now shows startup health and a compact live provider table, with an expandable API and page directory. Failed and incomplete pages appear first in its startup status list.')
   log.log('Telegram: two commands - /new starts a fresh chat; /model opens model buttons, followed by supported reasoning buttons. Desktop Agents History keeps Telegram transcripts visible with separate context. Replies use natural plain text without asterisks, heading symbols or em dashes. Desktop and Telegram agents can search and read the live public web for investor relations, filings and other research, with source links and saved run details.')
   log.log('BT TUI: Portfolio, candlestick charts and Agents research chat with saved TUI history, streaming, model/thinking controls, Stop and Continue research. F1/F2 switches views.')
+  log.log('Controller page switching follows visible workspace/page order, including custom ordering and hidden pages.')
   log.log('Controller support: D-pad/left stick moves focus, A activates, B dismisses, shoulders switch pages, Menu opens the page picker and right stick scrolls. Standard gamepads work while the app has focus; see Settings for controls.')
   log.log('Personal Finance: compact screens use two rows so recurring bill names remain readable and the Goal panel stays visible.')
   log.log('Obscure now hides recurring bill names as well as amounts, including accessibility labels. Reveal restores editable bill names.')

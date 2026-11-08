@@ -1,4 +1,5 @@
 @echo off
+rem Controller page switching follows visible workspace/page order, including custom ordering and hidden pages.
 rem Compact layouts keep Treasury curves, market controls, probability statistics and heatmap details accessible.
 rem Personal Finance charts keep readable values while Totals and Goal resize to the screen.
 rem Obscure hides recurring bill names and amounts; Reveal restores editable names.

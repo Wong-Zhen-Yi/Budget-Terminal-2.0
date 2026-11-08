@@ -19,13 +19,13 @@ export function shortcutsForPlatform(isMac: boolean): ReadonlyArray<ShortcutRow>
       keys: 'Ctrl+Tab',
       label: 'Next page',
       behavior:
-        'Switch to the next visible main tab and wrap through the current navigation order.',
+        'Switch to the next visible page in workspace order, following the page buttons shown on screen. Wrap at the ends.',
     },
     {
       keys: '← / →',
       label: 'Previous / next page',
       behavior:
-        'Step to the previous or next visible main tab. Ignored while a text field, table or dropdown has focus.',
+        'Step through visible pages in workspace order, matching the page buttons shown on screen. Ignored while a text field or dropdown has focus, or a control handles the key.',
     },
     { keys: isMac ? '⌘R' : 'F5', label: 'Reload pages', behavior: 'Reload the current page first, then check all other pages.' },
     {

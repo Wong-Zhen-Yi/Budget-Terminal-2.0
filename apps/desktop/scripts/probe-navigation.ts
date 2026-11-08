@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createRequire } from 'node:module'
 import { build } from 'esbuild'
-import { DEFAULT_TAB_ID, startupPages, workspaceFor } from '../electron/shared/navigation.js'
+import { adjacentPage, DEFAULT_TAB_ID, pagesInVisualOrder, startupPages, workspaceFor } from '../electron/shared/navigation.js'
 import { TABS } from '../electron/shared/contract.js'
 
 assert.equal(workspaceFor('dashboard-2')?.id, 'overview')
@@ -31,6 +31,20 @@ assert(!TABS.some(tab => tab.id === 'signals'), 'Day Trading must be absent from
 assert.equal(workspaceFor('signals'), undefined)
 assert(!startupPages('signals', ['signals'], ['signals']).includes('signals'), 'Saved history must not restore Day Trading')
 
+// Saved global order interleaves workspaces; controller/arrow traversal must follow the UI instead.
+const interleaved = ['charts', 'news', 'stocks', 'dashboard-2', 'heatmap', 'portfolio', 'pre-market', 'settings']
+  .map(id => TABS.find(tab => tab.id === id)!)
+const visualOrder = pagesInVisualOrder(interleaved)
+assert.deepEqual(visualOrder.map(tab => tab.id), ['news', 'dashboard-2', 'heatmap', 'pre-market', 'stocks', 'charts', 'portfolio', 'settings'])
+assert.equal(adjacentPage(visualOrder, 'news', 1), 'dashboard-2', 'Right must follow the next visible header button')
+assert.equal(adjacentPage(visualOrder, 'dashboard-2', 1), 'heatmap', 'Workspace boundaries must follow sidebar order')
+assert.equal(adjacentPage(visualOrder, 'news', -1), 'settings', 'Left must wrap to the last visible page')
+assert.equal(adjacentPage(visualOrder, 'settings', 1), 'news', 'Right must wrap to the first visible page')
+assert.equal(adjacentPage([], 'news', 1), undefined)
+assert.equal(adjacentPage(visualOrder, 'hidden', 1), 'news')
+assert(!pagesInVisualOrder(interleaved.map(tab => ({ ...tab, implemented: tab.id !== 'charts' }))).some(tab => tab.id === 'charts'))
+assert(!pagesInVisualOrder(interleaved.filter(tab => tab.id !== 'heatmap')).some(tab => tab.id === 'heatmap'))
+
 // Exercise the actual page host in Chromium with synthetic data and isolated storage.
 const require = createRequire(import.meta.url)
 const directory = await mkdtemp(join(tmpdir(), 'budget-navigation-'))
@@ -44,10 +58,10 @@ try {
         import { createRoot } from 'react-dom/client'
         import { flushSync } from 'react-dom'
         import { PageCache } from './src/components/chrome/PageCache'
-        import { WorkspaceSidebar } from './src/components/chrome/WorkspaceNavigation'
+        import { WorkspaceHeader, WorkspaceSidebar } from './src/components/chrome/WorkspaceNavigation'
         import { pageIconPaths } from './src/components/chrome/NavigationIcon'
         import { TABS } from './electron/shared/contract'
-        import { WORKSPACES } from './electron/shared/navigation'
+        import { adjacentPage, pagesInVisualOrder, WORKSPACES } from './electron/shared/navigation'
         const renders = {}, effects = {}, ticks = {}
         const ids = ['a', 'b', 'c', 'd', 'e', 'dictionary', 'settings', 'articles', 'notifications']
         let select, updateShell, hide
@@ -83,6 +97,32 @@ try {
             tabs: TABS, activeTab: 'articles', favorites: TABS.map(tab => tab.id), recent: [],
             onSelectTab: id => selected = id, onToggleCollapsed: () => toggled = true,
             saving: false, isMac: false,
+          }
+          flushSync(() => railRoot.render(<WorkspaceSidebar {...railProps} collapsed />))
+          // Compare traversal with real header buttons, including reordered and hidden pages.
+          const reordered = [...TABS].reverse().filter(tab => tab.id !== 'heatmap')
+          const ordered = pagesInVisualOrder(reordered)
+          const renderedOrder = []
+          for (const workspace of WORKSPACES) {
+            const first = ordered.find(tab => workspace.pages.includes(tab.id))
+            if (!first) continue
+            flushSync(() => railRoot.render(<WorkspaceHeader tabs={reordered} activeTab={first.id}
+              onSelectTab={id => selected = id} favorite={false} onToggleFavorite={() => {}} saving={false} isMac={false} />))
+            for (const button of railHost.querySelectorAll('nav[aria-label="Workspace pages"] button:not(:disabled)')) {
+              button.click()
+              renderedOrder.push(selected)
+            }
+          }
+          if (ordered.some(tab => tab.id === 'settings')) renderedOrder.push('settings')
+          check(JSON.stringify(renderedOrder) === JSON.stringify(ordered.map(tab => tab.id)), 'Page stepping differs from visual navigation order')
+          for (let i = 0; i < renderedOrder.length; i++) {
+            check(adjacentPage(ordered, renderedOrder[i], 1) === renderedOrder[(i + 1) % renderedOrder.length], 'Right skipped a visible page')
+            check(adjacentPage(ordered, renderedOrder[i], -1) === renderedOrder[(i + renderedOrder.length - 1) % renderedOrder.length], 'Left skipped a visible page')
+          }
+          if (${JSON.stringify(process.argv.includes('--page-order-only'))}) {
+            railRoot.unmount()
+            railHost.remove()
+            return 'PASS: visual page traversal matches real workspace headers in both directions, custom ordering, hidden pages and wrapping'
           }
           flushSync(() => railRoot.render(<WorkspaceSidebar {...railProps} collapsed />))
           const favoriteButtons = [...railHost.querySelectorAll('nav[aria-label="Favorite pages"] button')]
@@ -156,7 +196,7 @@ try {
           check(dictionary.querySelector('button').textContent === '1', 'Retained reader lost selection/control state')
           check([...document.querySelectorAll('[data-page-id]')].filter(node => ['a','b','c','d','e'].includes(node.dataset.pageId)).length <= 3, 'Light reader retention exceeded the chart budget')
           check(Object.values(effects).reduce((a, b) => a + b, 0) === 1, 'More than one page has active effects')
-          return 'PASS: all page and workspace icons, tooltips, selection, sidebar expansion, recent-page retention, resident limit, eviction, shell render isolation, suspended polling, effect resume, hidden-page removal'
+          return 'PASS: visual page traversal in both directions, reordered/hidden pages, wrapping, all page and workspace icons, tooltips, selection, sidebar expansion, recent-page retention, resident limit, eviction, shell render isolation, suspended polling, effect resume, hidden-page removal'
         }
       `,
     },
@@ -183,7 +223,9 @@ try {
   const env: NodeJS.ProcessEnv = { ...process.env, APPDATA: directory, LOCALAPPDATA: directory }
   delete env.ELECTRON_RUN_AS_NODE
   const output = await new Promise<{ code: number | null, text: string }>((resolveRun, reject) => {
-    const child = spawn(require('electron') as string, [join(directory, 'main.cjs')], {
+    const headless = process.platform === 'linux' && !process.env.DISPLAY
+      ? ['--ozone-platform=headless', '--disable-gpu'] : []
+    const child = spawn(require('electron') as string, [...headless, join(directory, 'main.cjs')], {
       env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
     })
     let text = ''

@@ -22,6 +22,20 @@ export function workspaceFor(tabId: string) {
   return WORKSPACES.find((workspace) => workspace.pages.includes(tabId))
 }
 
+/** Match sidebar workspace order and the user's visible page order within each header. */
+export function pagesInVisualOrder<T extends { id: string; implemented: boolean }>(tabs: readonly T[]): T[] {
+  return [
+    ...WORKSPACES.flatMap(workspace => tabs.filter(tab => tab.implemented && workspace.pages.includes(tab.id))),
+    ...tabs.filter(tab => tab.implemented && tab.id === 'settings'),
+  ]
+}
+
+export function adjacentPage(tabs: readonly { id: string }[], active: string, direction: -1 | 1): string | undefined {
+  if (!tabs.length) return undefined
+  const current = tabs.findIndex(tab => tab.id === active)
+  return tabs[current < 0 ? 0 : (current + direction + tabs.length) % tabs.length].id
+}
+
 export function recentPages(previous: readonly string[], id: string): string[] {
   return [id, ...previous.filter((page) => page !== id)].slice(0, 6)
 }

@@ -1,4 +1,5 @@
 #!/bin/sh
+# Controller page switching follows visible workspace/page order, including custom ordering and hidden pages.
 # Compact layouts keep Treasury curves, market controls, probability statistics and heatmap details accessible.
 # Personal Finance charts keep readable values while Totals and Goal resize to the screen.
 # Obscure hides recurring bill names and amounts; Reveal restores editable names.

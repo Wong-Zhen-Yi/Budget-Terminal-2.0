@@ -189,6 +189,9 @@ Basic controller support works with standard gamepads while the desktop app has
 focus. Use the D-pad or left stick to move focus, A/Cross to activate, B/Circle to
 dismiss or leave a text field, LB/RB (L1/R1) to switch pages, Menu/Options to open
 the page picker, and the right stick to scroll. Hold a direction to repeat.
+Page switching follows the workspace order in the sidebar and the page buttons
+within each workspace, including custom ordering and hidden pages. Steam Input
+layouts that map the D-pad to keyboard arrows follow the same order.
 Select fields use up/down to change and left/right to leave. Text entry and
 embedded browser content still require a keyboard, touch or mouse. On Steam
 Deck, select a **Gamepad** Steam Input layout to expose controller buttons;
