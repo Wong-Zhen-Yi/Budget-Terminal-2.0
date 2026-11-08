@@ -1,4 +1,5 @@
 #!/bin/sh
+# Settings > Controller controls: game-style diagram, live input display and navigation-safe test mode.
 # Controller page switching follows visible workspace/page order, including custom ordering and hidden pages.
 # Compact layouts keep Treasury curves, market controls, probability statistics and heatmap details accessible.
 # Personal Finance charts keep readable values while Totals and Goal resize to the screen.

@@ -9,6 +9,7 @@ import { DEFAULT_YOUTUBE_PAGE_SETTINGS } from '@shared/youtube'
 import { usePortfolio } from '@/api/queries'
 import { useMaintenance, useSettings, useSettingsMutation } from '@/api/settingsQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
+import { ControllerControls } from '@/components/settings/ControllerControls'
 import { ClockPanel } from '@/components/settings/ClockPanel'
 import { DataHealthPanel } from '@/components/settings/DataHealthPanel'
 import { NavigationPanel, type NavigationTab } from '@/components/settings/NavigationPanel'
@@ -29,6 +30,7 @@ import '@/styles/settings.css'
 const categories = [
   { id: 'dashboard', label: 'App dashboard' },
   { id: 'workspace', label: 'Workspace' },
+  { id: 'controller', label: 'Controller controls' },
   { id: 'privacy', label: 'Privacy' },
   { id: 'data', label: 'Data & storage' },
   { id: 'integrations', label: 'Integrations' },
@@ -236,15 +238,18 @@ export function SettingsPage({
     <div className="settings-page">
       <header className="settings-toolbar">
         <nav className="settings-tabs" aria-label="Settings categories">{navigation}</nav>
-        <label className={`settings-search${category === 'dashboard' ? ' settings-search--inactive' : ''}`} aria-hidden={category === 'dashboard'}><span aria-hidden="true">⌕</span>
-          <input type="search" aria-label="Search settings" placeholder="Search settings…" value={search} disabled={category === 'dashboard'}
+        <label className={`settings-search${category === 'dashboard' || category === 'controller' ? ' settings-search--inactive' : ''}`} aria-hidden={category === 'dashboard' || category === 'controller'}><span aria-hidden="true">⌕</span>
+          <input type="search" aria-label="Search settings" placeholder="Search settings…" value={search} disabled={category === 'dashboard' || category === 'controller'}
             onChange={event => { setSearch(event.target.value); scrollRef.current?.scrollTo({ top: 0 }) }} />
         </label>
       </header>
       <div className="settings-dashboard-host" hidden={category !== 'dashboard'}>
         <AppDashboard settings={settings} />
       </div>
-      <div className="settings-scroll" ref={scrollRef} hidden={category === 'dashboard'}>
+      <div className="controller-host" hidden={category !== 'controller'}>
+        <ControllerControls active={active && category === 'controller'} />
+      </div>
+      <div className="settings-scroll" ref={scrollRef} hidden={category === 'dashboard' || category === 'controller'}>
         <div className="settings-content">
           {settingsQuery.error && <p role="alert" className="settings-error">Settings could not load. {settingsQuery.error.message}</p>}
           {status.text && <div className={`settings-feedback settings-feedback--${status.tone}`}>

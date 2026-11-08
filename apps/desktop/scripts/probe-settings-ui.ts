@@ -20,6 +20,7 @@ try {
     import { DEFAULT_YOUTUBE_PAGE_SETTINGS } from './electron/shared/youtube'
     import { useSettingsNavigation } from './src/stores/settingsNavigation'
     import { useDataHealth } from './src/stores/dataHealth'
+    import { startControllerNavigation } from './src/input/controllerNavigation'
     const check = (value, message) => { if (!value) throw Error(message) }
     const wait = ms => new Promise(resolve => setTimeout(resolve, ms))
     const visible = node => !!node && node.getClientRects().length > 0
@@ -50,7 +51,7 @@ try {
       const dashboardPadding = getComputedStyle(document.querySelector('.app-dashboard')).padding
       const toolbar = document.querySelector('.settings-toolbar').getBoundingClientRect()
       const tabs = [...document.querySelectorAll('[data-settings-category]')]
-      check(tabs.length === 6 && tabs.every(tab => visible(tab) && tab.getBoundingClientRect().top === tabs[0].getBoundingClientRect().top), 'Preferences must form one horizontal row')
+      check(tabs.length === 7 && tabs.every(tab => visible(tab) && tab.getBoundingClientRect().top === tabs[0].getBoundingClientRect().top), 'Preferences must form one horizontal row')
       check(document.querySelectorAll('[data-settings-card]').length === 13, 'Expected all thirteen settings panels mounted')
       useSettingsNavigation.getState().openDiagnostics(); await wait(80)
       check(visible(card('logs')), 'Diagnostics navigation must reveal the log panel')
@@ -205,6 +206,60 @@ try {
         window.checkLayout()
       }
     }
+    window.checkController = async () => {
+      choose('controller'); await wait(100)
+      const panel = document.querySelector('.controller-controls')
+      const status = panel.querySelector('[role=status]')
+      check(visible(panel) && !visible(document.querySelector('.settings-scroll')), 'Controller category not displayed')
+      check(status.textContent.includes('Connect a controller'), 'Disconnected guidance missing')
+      window.controllerPad = { index: 0, connected: true, mapping: 'standard', buttons: Array.from({ length: 17 }, () => ({ pressed: false })), axes: [0,0,0,0] }
+      await wait(100)
+      check(status.textContent.includes('Controller connected'), 'Connection status missing')
+      let pageChanges = 0, pickerChanges = 0
+      const stop = startControllerNavigation(() => ({ enabled: true, stepPage: () => pageChanges++, togglePicker: () => pickerChanges++ }))
+      clickText(panel, 'Test inputs'); await wait(100)
+      window.controllerPad.buttons[4].pressed = true
+      window.controllerPad.buttons[9].pressed = true
+      window.controllerPad.axes = [0.8, 0, 0, -0.8]
+      await wait(100)
+      check(panel.hasAttribute('data-controller-test'), 'Test mode did not start')
+      check(panel.querySelectorAll('.is-pressed').length >= 7, 'Buttons and sticks must highlight')
+      check(pageChanges === 0 && pickerChanges === 0, 'Test input escaped into page navigation')
+      window.controllerPad.buttons[1].pressed = true; await wait(100)
+      check(!panel.hasAttribute('data-controller-test'), 'B must finish test mode')
+      await wait(100)
+      check(pageChanges === 0 && pickerChanges === 0, 'Held inputs triggered when leaving test mode')
+      window.controllerPad.buttons.forEach(button => button.pressed = false)
+      window.controllerPad.axes = [0,0,0,0]; await wait(100)
+      window.controllerPad.buttons[5].pressed = true; await wait(100)
+      check(pageChanges === 1, 'Normal shoulder navigation did not resume')
+      stop()
+      clickText(panel, 'Test inputs'); await wait(50)
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await wait(50)
+      check(!panel.hasAttribute('data-controller-test'), 'Esc must finish test mode')
+      window.controllerPad = null; await wait(100)
+      check(status.textContent.includes('Connect a controller') && !panel.querySelector('.is-pressed'), 'Disconnect retained stale input')
+      window.controllerPad = { connected: true, mapping: '', buttons: [], axes: [] }; await wait(100)
+      check(status.textContent.includes('Standard layout required'), 'Unsupported mapping not explained')
+      window.controllerPad = null
+      clickText(panel, 'Test inputs'); await wait(50)
+      choose('workspace'); await wait(50)
+      check(!panel.hasAttribute('data-controller-test'), 'Hidden tab retained test capture')
+      choose('controller'); await wait(80)
+      check(!panel.hasAttribute('data-controller-test'), 'Reopened tab kept test capture')
+      return 'PASS: controller status, live buttons/sticks, test isolation, B/Escape exit, navigation recovery, disconnect, unsupported devices and hidden-tab cleanup'
+    }
+    window.checkControllerLayout = async () => {
+      document.getElementById('root').style.cssText = 'display:flex;height:100%;box-sizing:border-box;padding-top:94px;padding-left:64px'
+      choose('controller'); await wait(100)
+      for (const selector of ['.controller-host', '.controller-controls', '.controller-layout', '.controller-stage', '.controller-map']) {
+        const node = document.querySelector(selector)
+        check(node.scrollWidth <= node.clientWidth + 1, 'Controller horizontal overflow: ' + selector + ' at ' + innerWidth)
+        if (innerWidth >= 1000) check(node.scrollHeight <= node.clientHeight + 1, 'Controller vertical overflow: ' + selector + ' at ' + innerWidth)
+      }
+      check(document.querySelector('.controller-diagram').getBoundingClientRect().height > 200, 'Diagram collapsed')
+      return 'PASS: controller layout at ' + innerWidth + 'x' + innerHeight
+    }
     window.finish = () => { host.unmount(); client.clear() }
   ` }, bundle: true, jsx: 'automatic', write: false, format: 'iife', loader: { '.css': 'empty' }, alias: { '@': join(root, 'src'), '@shared': join(root, 'electron/shared') }, define: { 'process.env.NODE_ENV': '"production"' } })
   const assets = join(root, 'out/renderer/assets')
@@ -213,6 +268,9 @@ try {
   await writeFile(join(directory, 'theme.css'), await readFile(join(assets, css)))
   await writeFile(join(directory, 'renderer.js'), bundle.outputFiles[0].text)
   await writeFile(join(directory, 'fixture.js'), `
+    window.controllerPad = null
+    Object.defineProperty(navigator, 'getGamepads', { value: () => window.controllerPad ? [window.controllerPad] : [] })
+    Object.defineProperty(document, 'hasFocus', { value: () => true })
     window.renderErrors = []
     addEventListener('error', event => window.renderErrors.push(event.message))
     addEventListener('unhandledrejection', event => window.renderErrors.push(String(event.reason)))
@@ -270,10 +328,11 @@ try {
       try {
         await win.loadFile(${JSON.stringify(join(directory, 'index.html'))})
         console.log(await win.webContents.executeJavaScript('window.runProbe()'))
+        console.log(await win.webContents.executeJavaScript('window.checkController()'))
         await win.webContents.executeJavaScript('window.checkNavigationSizing()')
         await new Promise(resolve => setTimeout(resolve, 400))
         if (process.env.SETTINGS_SCREENSHOT) {
-          for (const category of ['dashboard', 'workspace', 'data', 'diagnostics']) {
+          for (const category of ['controller']) {
             await win.webContents.executeJavaScript('document.querySelector(' + JSON.stringify('[data-settings-category="' + category + '"]') + ').click()')
             await new Promise(resolve => setTimeout(resolve, 120))
             require('node:fs').writeFileSync(process.env.SETTINGS_SCREENSHOT.replace(/\\.png$/, '-' + category + '.png'), (await win.webContents.capturePage()).toPNG())
@@ -285,6 +344,10 @@ try {
           await win.webContents.executeJavaScript('window.checkNavigationSizing()')
           console.log(await win.webContents.executeJavaScript('window.checkLayout()'))
         }
+        for (const [width, height] of [[1600,1000], [1366,768], [1280,800], [1024,768], [480,900]]) {
+          win.setContentSize(width, height)
+          console.log(await win.webContents.executeJavaScript('window.checkControllerLayout()'))
+        }
         await win.webContents.executeJavaScript('window.finish()')
         app.exit(0)
       } catch (error) { console.error(error); app.exit(1) }
@@ -293,7 +356,7 @@ try {
   const env: NodeJS.ProcessEnv = { ...process.env, APPDATA: directory, LOCALAPPDATA: directory }
   delete env.ELECTRON_RUN_AS_NODE
   const result = await new Promise<{ code: number | null; output: string }>((done, reject) => {
-    const child = spawn(createRequire(import.meta.url)('electron'), [join(directory, 'main.cjs')], { env, windowsHide: true })
+    const child = spawn(createRequire(import.meta.url)('electron'), [...(process.platform === 'linux' && !process.env.DISPLAY ? ['--ozone-platform=headless', '--ozone-override-screen-size=1920,1080', '--disable-gpu'] : []), join(directory, 'main.cjs')], { env, windowsHide: true })
     let output = ''
     child.stdout.on('data', data => { output += data })
     child.stderr.on('data', data => { output += data })

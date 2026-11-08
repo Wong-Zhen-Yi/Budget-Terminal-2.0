@@ -1,4 +1,5 @@
 param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Tui, [switch]$Setup, [switch]$Attached, [Parameter(ValueFromRemainingArguments=$true)][string[]]$TuiArguments)
+# Settings > Controller controls includes a live controller diagram and navigation-safe input test.
 # Controller page switching follows visible workspace/page order, including custom ordering and hidden pages.
 # Compact layouts keep Treasury curves, market controls, probability statistics and heatmap details accessible.
 # Personal Finance charts keep readable values while Totals and Goal resize to the screen.

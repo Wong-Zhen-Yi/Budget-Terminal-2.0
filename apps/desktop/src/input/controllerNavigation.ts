@@ -103,18 +103,22 @@ export function performControllerAction(action: ControllerAction, options: Contr
 export function startControllerNavigation(getOptions: () => ControllerNavigationOptions) {
   if (!navigator.getGamepads) return () => {}
   const reader = new ControllerReader()
-  let frame = 0, previousTime = 0
+  let frame = 0, previousTime = 0, wasTesting = false
   const clearFocus = () => document.querySelector('[data-controller-focus]')?.removeAttribute('data-controller-focus')
   const tick = (now: number) => {
     const options = getOptions()
+    const testing = Boolean(document.querySelector('[data-controller-test]'))
+    if (testing !== wasTesting) { reader.reset(); wasTesting = testing }
     if (document.hidden || !document.hasFocus() || !options.enabled) reader.reset()
     else {
       const pads = Array.from(navigator.getGamepads()).filter((pad): pad is Gamepad => Boolean(pad?.connected && pad.mapping === 'standard'))
       const { actions, scroll } = reader.read(pads[0], now)
       // One action per frame prevents confirm and navigation firing together.
       const action = actions.find(value => ['back', 'picker', 'previousPage', 'nextPage'].includes(value)) ?? actions[0]
-      if (action) performControllerAction(action, options)
-      if (scroll.some(value => value !== 0)) {
+      if (testing) {
+        if (actions.includes('back')) performControllerAction('back', options)
+      } else if (action) performControllerAction(action, options)
+      if (!testing && scroll.some(value => value !== 0)) {
         const distance = Math.min(32, now - previousTime) * 0.7
         scrollControllerPanel(scroll[0] * distance, scroll[1] * distance)
       }

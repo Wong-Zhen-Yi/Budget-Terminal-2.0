@@ -21,6 +21,7 @@ function platformName(platform) {
 }
 
 function launch({ development = false, logs = false, setupOnly = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
+  log.log('Settings > Controller controls: game-style diagram, live inputs and a test mode that pauses page navigation. B or Esc finishes the test.')
   log.log('Compact layouts keep Treasury curves, market controls, probability statistics and heatmap details accessible.')
   log.log('Charts watchlists: saved with user data, backups and cloud sync. Existing profile lists migrate automatically; import and clear update the charts immediately.')
   log.log('Portfolio stocks highlight the full row on hover and while editing or focusing row controls.')
