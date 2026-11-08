@@ -24,7 +24,7 @@ export function PrivacyPanel({
       <div className="flex flex-col gap-2 p-2">
         <SectionHeader
           title="Obscured Pages"
-          hint="Choose which main pages Obscure protects. Portfolio and Personal Finance replace numbers with ****; other pages blur and lock. An empty selection is allowed."
+          hint="Choose which main pages Obscure protects. Portfolio and Personal Finance replace numbers with ****. Recurring bill names are also hidden. Other pages blur and lock. An empty selection is allowed."
         />
         <p className="text-2xs text-text-muted">Use {window.api.platform === 'darwin' ? '⌘⇧H' : 'Ctrl+Shift+H'} to hide or reveal the selected pages.</p>
         <ul className="grid max-h-72 grid-cols-2 gap-x-4 gap-y-0.5 overflow-y-auto border border-border bg-bg p-2">

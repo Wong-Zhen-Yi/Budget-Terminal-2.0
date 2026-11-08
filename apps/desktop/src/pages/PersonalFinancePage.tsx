@@ -34,7 +34,6 @@ import { Button } from '@/components/ui/Button'
 import { PrivateNumber } from '@/components/ui/NumberPrivacy'
 import { money, moneyExplicit } from '@/lib/format'
 import { easeOutCubic, useAnimatedProgress } from '@/lib/useAnimatedProgress'
-import '@/styles/finance.css'
 
 const DONUT_ANIMATION_MS = 1000
 const GOAL_ANIMATION_MS = 900

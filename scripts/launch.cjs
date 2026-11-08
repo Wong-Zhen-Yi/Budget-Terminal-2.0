@@ -130,6 +130,7 @@ function launch({ development = false, logs = false, setupOnly = false, platform
   log.log('BT TUI: Portfolio, candlestick charts and Agents research chat with saved TUI history, streaming, model/thinking controls, Stop and Continue research. F1/F2 switches views.')
   log.log('Controller support: D-pad/left stick moves focus, A activates, B dismisses, shoulders switch pages, Menu opens the page picker and right stick scrolls. Standard gamepads work while the app has focus; see Settings for controls.')
   log.log('Personal Finance: compact screens use two rows so recurring bill names remain readable and the Goal panel stays visible.')
+  log.log('Obscure now hides recurring bill names as well as amounts, including accessibility labels. Reveal restores editable bill names.')
   log.log('Installing dependencies...')
   const install = npm(['install', '--no-audit', '--no-fund', '--strict-ssl=true'])
   if (install.error || install.status !== 0) {

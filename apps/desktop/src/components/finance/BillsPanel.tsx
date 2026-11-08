@@ -6,7 +6,7 @@ import type { BillTotals } from '@shared/financeMath'
 import { Button } from '@/components/ui/Button'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { NumberInput } from '@/components/ui/NumberInput'
-import { PrivateNumber } from '@/components/ui/NumberPrivacy'
+import { PrivateNumber, useNumberPrivacy } from '@/components/ui/NumberPrivacy'
 import { Panel } from '@/components/ui/Panel'
 import { Select } from '@/components/ui/Select'
 import { TextInput } from '@/components/ui/TextInput'
@@ -50,6 +50,7 @@ export function BillsPanel({
   className = '',
 }: BillsPanelProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const maskNumbers = useNumberPrivacy()
 
   const columns: Array<Column<RecurringBill>> = [
     {
@@ -59,7 +60,9 @@ export function BillsPanel({
       // Dashboard's news headlines do.
       wrap: true,
       sortValue: (row) => row.desc.toLowerCase(),
-      cell: (row) => (
+      cell: (row) => maskNumbers ? (
+        <span aria-label="Bill description">****</span>
+      ) : (
         <TextInput
           aria-label={`${row.desc} description`}
           value={row.desc}
@@ -78,7 +81,7 @@ export function BillsPanel({
       sortValue: (row) => row.amount,
       cell: (row) => (
         <NumberInput
-          aria-label={`${row.desc} amount`}
+          aria-label={`${maskNumbers ? 'Bill' : row.desc} amount`}
           value={row.amount}
           decimals={2}
           // The row states its own currency, unlike the reference's bare `$`.
@@ -93,7 +96,7 @@ export function BillsPanel({
       width: '6.25rem',
       cell: (row) => (
         <Select
-          aria-label={`${row.desc} cycle`}
+          aria-label={`${maskNumbers ? 'Bill' : row.desc} cycle`}
           value={row.frequency}
           options={CYCLES}
           onChange={(value) => onSetFrequency(row.id, value)}
@@ -106,7 +109,7 @@ export function BillsPanel({
       width: '6rem',
       cell: (row) => (
         <Select
-          aria-label={`${row.desc} currency`}
+          aria-label={`${maskNumbers ? 'Bill' : row.desc} currency`}
           value={row.currency}
           options={CURRENCIES}
           onChange={(value) => onSetCurrency(row.id, value)}

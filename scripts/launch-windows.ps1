@@ -1,4 +1,5 @@
 param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Tui, [switch]$Setup, [switch]$Attached, [Parameter(ValueFromRemainingArguments=$true)][string[]]$TuiArguments)
+# Obscure hides recurring bill names and amounts; Reveal restores editable names.
 # Personal Finance: Steam Deck layout keeps recurring bill names readable and the Goal panel visible.
 
 $ErrorActionPreference = 'Stop'

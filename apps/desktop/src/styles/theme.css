@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import './crypto.css';
+@import './finance.css';
 
 /*
  * Terminal palette. Dark only, deliberately: this is a trading workstation that runs

@@ -1,4 +1,5 @@
 @echo off
+rem Obscure hides recurring bill names and amounts; Reveal restores editable names.
 rem Personal Finance: Steam Deck layout keeps recurring bill names readable and the Goal panel visible.
 rem Controller support: D-pad/left stick focus, A activate, B dismiss, shoulders switch pages, Menu page picker, right stick scroll.
 rem Display compatibility: centered work-area bounds, compact minimum size and safe monitor changes; Steam Deck Gaming Mode uses native fullscreen.
