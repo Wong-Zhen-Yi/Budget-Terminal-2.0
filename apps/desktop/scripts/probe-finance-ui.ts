@@ -26,7 +26,9 @@ try {
       ],
       totalsCurrency: 'SGD', goal: { title: 'Emergency savings goal', targetAmount: 100000, currency: 'SGD' }, sourcePath: '',
     }))
-    client.setQueryData(queryKeys.portfolio, envelope({ portfolios: [], sourcePath: '' }))
+    client.setQueryData(queryKeys.portfolio, envelope({ portfolios: ['Brokerage', 'Retirement', 'Investments'].map((name, index) => ({
+      id: name, name, readOnly: false, tickers: [], holdings: {}, options: [], cashBalance: (index + 1) * 10000, marginDebt: 0,
+    })), sourcePath: '' }))
     client.setQueryData(queryKeys.fx, envelope({ usdSgd: 1.3, collectedAt: Date.now() }))
     createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><PersonalFinancePage onStatusChange={() => {}} /></QueryClientProvider>)
     window.checkLayout = () => {
@@ -53,6 +55,20 @@ try {
         const body = document.querySelector('.finance-goal > div').getBoundingClientRect()
         check(rect.height > 0 && rect.top >= body.top && rect.bottom <= body.bottom + 1, 'Goal control or ring is clipped')
       }
+      for (const selector of ['.finance-donut-value', '.finance-goal-value']) {
+        const label = document.querySelector(selector)
+        const rect = label.getBoundingClientRect()
+        check(rect.width > 0 && rect.height > 0, 'Chart value missing: ' + selector)
+        for (const line of label.children) {
+          check(parseFloat(getComputedStyle(line).fontSize) >= 15, 'Chart value scales below readable text: ' + selector)
+          check(line.scrollWidth <= line.clientWidth + 1, 'Chart value overflows: ' + selector)
+        }
+      }
+      for (const selector of ['.finance-donut-ring', '.finance-goal-ring']) {
+        const rect = document.querySelector(selector).getBoundingClientRect()
+        check(Math.min(rect.height, rect.width) >= 140, 'Finance ring too small: ' + selector + ' ' + rect.width + 'x' + rect.height)
+      }
+      check(document.querySelectorAll('.finance-donut-legend li').length >= 5, 'Exercise the full totals legend')
       return 'PASS: finance layout at ' + innerWidth + 'x' + innerHeight + ' (sidebar reserved)'
     }
   ` }, bundle: true, jsx: 'automatic', write: false, format: 'iife', loader: { '.css': 'empty' }, alias: { '@': join(root, 'src'), '@shared': join(root, 'electron/shared') }, define: { 'process.env.NODE_ENV': '"production"' } })

@@ -67,6 +67,7 @@ try {
           check(dots.some(dot => dot.getAttribute('cx') === element.getAttribute('cx') && dot.getAttribute('cy') === element.getAttribute('cy')), 'Ring centered on a plotted dot')
           check([...document.querySelectorAll('svg text')].some(label => label.textContent === name), 'Hovered ticker label revealed')
         }
+        window.setCompactPane = () => useTradingVolumesPage.setState({ tableWidth: 900 })
         window.runProbe = async () => {
           useTradingVolumesPage.setState({ interval: '1d', tableWidth: 650 })
           createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><TradingVolumesPage onStatusChange={() => {}} /></QueryClientProvider>)
@@ -96,7 +97,7 @@ try {
           await leave('N20'); await click('Stop')
           await hover('LOW'); checkRing('LOW')
           // A new row set must clear transient hover state, including after a refresh.
-          await click('Refresh')
+          await client.refetchQueries(); await settle()
           check(!ring(), 'Refreshing clears obsolete table hover')
           check(calls === 2, 'Hover, intervals and replay reuse loaded data without extra requests')
           return 'PASS: table hover, hidden labels, ring position, leave/switch cleanup, missing values, outlier preview, intervals, replay and refresh'
@@ -121,6 +122,13 @@ try {
       try {
         await window.loadFile(${JSON.stringify(join(directory, 'index.html'))})
         console.log(await window.webContents.executeJavaScript('window.runProbe()'))
+        window.setContentSize(1280, 750)
+        await window.webContents.executeJavaScript('document.getElementById("root").style.cssText = "margin-left:64px;margin-top:143px;height:calc(100% - 143px)"; window.setCompactPane()')
+        await new Promise(resolve => setTimeout(resolve, 250))
+        const fits = await window.webContents.executeJavaScript(
+          '(() => { const title = [...document.querySelectorAll("span")].find(e => e.textContent === "Trading Volumes Dot Plot"); const toolbar = title.parentElement; return toolbar.scrollWidth <= toolbar.clientWidth && [...toolbar.querySelectorAll("button")].every(e => { const r = e.getBoundingClientRect(); const p = toolbar.getBoundingClientRect(); return r.right <= p.right && r.bottom <= p.bottom }) })()'
+        )
+        if (!fits) throw Error('Dot plot controls must fit the compact viewport')
         app.exit(0)
       } catch (error) { console.error(error); app.exit(1) }
     })

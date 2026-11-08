@@ -32,57 +32,45 @@ export function GoalRing({
   const color = available ? 'var(--color-accent)' : 'var(--color-text-dim)'
 
   return (
-    <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="h-full max-h-[220px] min-h-[150px] w-auto">
-      <g
-        // Rotate so zero sits at 12 o'clock and the arc grows clockwise.
-        transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
-        fill="none"
-        strokeLinecap="round"
-      >
-        <circle
-          cx={SIZE / 2}
-          cy={SIZE / 2}
-          r={RADIUS}
-          stroke="var(--color-border-strong)"
-          strokeWidth={STROKE}
-        />
-        {/* A soft outer glow, the widest of the reference's three concentric strokes. */}
-        <circle
-          cx={SIZE / 2}
-          cy={SIZE / 2}
-          r={RADIUS}
-          stroke={color}
-          strokeWidth={STROKE + 8}
-          strokeOpacity={0.18}
-          strokeDasharray={`${circumference * filled} ${circumference}`}
-        />
-        <circle
-          cx={SIZE / 2}
-          cy={SIZE / 2}
-          r={RADIUS}
-          stroke={color}
-          strokeWidth={STROKE}
-          strokeDasharray={`${circumference * filled} ${circumference}`}
-        />
-      </g>
-      <text
-        x={SIZE / 2}
-        y={SIZE / 2 - 2}
-        textAnchor="middle"
-        className="num fill-text"
-        style={{ fontSize: 24, fontWeight: 600 }}
-      >
-        <PrivateNumber>{centerText}</PrivateNumber>
-      </text>
-      <text
-        x={SIZE / 2}
-        y={SIZE / 2 + 20}
-        textAnchor="middle"
-        className="fill-text-muted"
-        style={{ fontSize: 14 }}
-      >
-        {subtext}
-      </text>
-    </svg>
+    <div className="finance-goal-ring">
+      <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="h-full w-full" aria-hidden="true">
+        <g
+          // Rotate so zero sits at 12 o'clock and the arc grows clockwise.
+          transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
+          fill="none"
+          strokeLinecap="round"
+        >
+          <circle
+            cx={SIZE / 2}
+            cy={SIZE / 2}
+            r={RADIUS}
+            stroke="var(--color-border-strong)"
+            strokeWidth={STROKE}
+          />
+          {/* A soft outer glow, the widest of the reference's three concentric strokes. */}
+          <circle
+            cx={SIZE / 2}
+            cy={SIZE / 2}
+            r={RADIUS}
+            stroke={color}
+            strokeWidth={STROKE + 8}
+            strokeOpacity={0.18}
+            strokeDasharray={`${circumference * filled} ${circumference}`}
+          />
+          <circle
+            cx={SIZE / 2}
+            cy={SIZE / 2}
+            r={RADIUS}
+            stroke={color}
+            strokeWidth={STROKE}
+            strokeDasharray={`${circumference * filled} ${circumference}`}
+          />
+        </g>
+      </svg>
+      <div className="finance-goal-value">
+        <div className="num text-2xs font-semibold text-text"><PrivateNumber>{centerText}</PrivateNumber></div>
+        <div className="text-2xs text-text-muted">{subtext}</div>
+      </div>
+    </div>
   )
 }

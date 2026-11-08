@@ -13,7 +13,7 @@ function HistoryRow({ row }: { row: FearGreedRow }) {
   const color = fgColor(row.score)
   return (
     <div className="flex items-center gap-2">
-      <div className="w-24 shrink-0">
+      <div className="min-w-0 flex-1">
         <p className="text-2xs leading-tight text-text-muted">{row.period}</p>
         <p className="text-2xs leading-tight font-semibold text-text">{row.rating}</p>
       </div>
@@ -49,18 +49,22 @@ export function FearGreedPanel({
   return (
     <Panel title="Fear & Greed Index" warning={warning} className={className}>
       {data ? (
-        <div className="flex min-h-0 flex-1 gap-4 p-3">
-          <div className="flex min-h-0 flex-[3] flex-col justify-center">
-            <FearGreedGauge score={data.score} progress={progress} />
+        <div className="flex min-h-0 flex-1 flex-col gap-1 p-2">
+          <div className="flex min-h-0 flex-1 gap-3">
+            <div className="flex min-h-0 min-w-0 flex-[3] flex-col justify-center">
+              <FearGreedGauge score={data.score} progress={progress} />
+            </div>
+            <div className="flex min-h-0 min-w-0 flex-[2] flex-col justify-evenly gap-1 overflow-y-auto">
+              {data.history.map((row) => (
+                <HistoryRow key={row.period} row={row} />
+              ))}
+            </div>
           </div>
-          <div className="flex min-h-0 flex-[2] flex-col gap-1.5 overflow-hidden">
-            {data.history.map((row) => (
-              <HistoryRow key={row.period} row={row} />
-            ))}
-            <p className="mt-auto text-2xs text-text-dim">
-              {data.timestamp ? `Last updated ${data.timestamp}` : ''}
+          {data.timestamp ? (
+            <p className="shrink-0 text-2xs text-text-dim">
+              Last updated {data.timestamp}
             </p>
-          </div>
+          ) : null}
         </div>
       ) : (
         <PanelMessage>

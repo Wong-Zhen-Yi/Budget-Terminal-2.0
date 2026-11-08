@@ -202,24 +202,20 @@ export function TradingVolumesPage({
         <Splitter onDrag={onDrag} />
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border border-border bg-surface">
-          <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border px-2">
-            <span className="shrink-0 text-2xs font-semibold whitespace-nowrap text-text">
+          <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-2 py-1">
+            <span className="min-w-0 text-2xs font-semibold text-text">
               Trading Volumes Dot Plot
             </span>
-{/* The header is a fixed h-9 on a pane that can get narrow, so the prose and
-                the playback date take turns rather than competing for it. While Replay
-                runs the date is the information — `_p20_apply_market_cap_animation_frame`
-                writes it here — and the standing caption would only truncate to noise. */}
             {replay.frame ? (
               <span
-                className="num shrink-0 pl-1 text-2xs whitespace-nowrap text-text-muted"
+                className="num text-2xs text-text-muted"
                 title="Estimated market cap on this date, assuming shares outstanding are unchanged."
               >
                 • {replay.frame.date}
               </span>
             ) : (
               <span
-                className="min-w-0 truncate pl-1 text-2xs whitespace-nowrap text-text-dim"
+                className="text-2xs text-text-dim"
                 title="Price-based estimate that assumes shares outstanding remain unchanged."
               >
                 Estimated market cap{replay.canReplay ? ' • price-based' : ''}

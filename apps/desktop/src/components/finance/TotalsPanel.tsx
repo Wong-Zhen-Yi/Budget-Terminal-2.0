@@ -85,6 +85,7 @@ export function TotalsPanel({
         Cash and debt are SGD. Investments and brokerage accounts are USD.
       </p>
       <Donut
+        responsive
         slices={slices}
         empty="Nothing to total yet"
         // The centre counts up with the sweep, as the reference's does.

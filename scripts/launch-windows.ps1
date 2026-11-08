@@ -1,4 +1,6 @@
 param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Tui, [switch]$Setup, [switch]$Attached, [Parameter(ValueFromRemainingArguments=$true)][string[]]$TuiArguments)
+# Compact layouts keep Treasury curves, market controls, probability statistics and heatmap details accessible.
+# Personal Finance charts keep readable values while Totals and Goal resize to the screen.
 # Obscure hides recurring bill names and amounts; Reveal restores editable names.
 # Personal Finance: Steam Deck layout keeps recurring bill names readable and the Goal panel visible.
 

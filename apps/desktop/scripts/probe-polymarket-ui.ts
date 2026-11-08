@@ -165,10 +165,14 @@ try {
         console.log(await window.webContents.executeJavaScript('window.runProbe().catch(error => { throw Error(error.stack) })'));
         await new Promise(resolve => setTimeout(resolve, 500));
         if (!${JSON.stringify(liveMode)}) {
-          window.setSize(1280, 850);
+          window.setContentSize(1280, 750);
+          await window.webContents.executeJavaScript('document.querySelector(".poly-page").style.cssText = "margin-left:64px;margin-top:143px"');
           await new Promise(resolve => setTimeout(resolve, 300));
-          const assertViewport = await window.webContents.executeJavaScript('document.documentElement.scrollWidth <= innerWidth && document.querySelector(".poly-page").scrollHeight <= document.querySelector(".poly-page").clientHeight + 1');
+          const assertViewport = await window.webContents.executeJavaScript(
+            '(() => { const page = document.querySelector(".poly-page"); const activity = document.querySelector(".poly-activity-panel").getBoundingClientRect(); const feature = document.querySelector(".poly-feature"); const metrics = document.querySelector(".poly-market-metrics").getBoundingClientRect(); return document.documentElement.scrollWidth <= innerWidth && page.scrollHeight <= page.clientHeight + 1 && activity.bottom <= innerHeight && feature.scrollHeight <= feature.clientHeight + 1 && metrics.bottom <= feature.getBoundingClientRect().bottom + 1 })()'
+          );
           if (!assertViewport) throw Error('Compact viewport overflows');
+          await window.webContents.executeJavaScript('document.querySelector(".poly-page").style.cssText = ""');
           window.setSize(1600, 1200);
           await new Promise(resolve => setTimeout(resolve, 300));
         }

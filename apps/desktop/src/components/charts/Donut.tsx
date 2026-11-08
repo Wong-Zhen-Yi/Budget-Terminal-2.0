@@ -36,6 +36,8 @@ interface DonutProps {
   animationProgress?: number
   /** Dense dashboard treatment: smaller chart and a two-column legend. */
   compact?: boolean
+  /** Keep labels at normal text size while the finance chart resizes. */
+  responsive?: boolean
   /**
    * Degrees clockwise from twelve o'clock to begin the first wedge at. Defaults to 0, so
    * every existing caller is unchanged; the ETF page passes a negative angle to rotate
@@ -78,6 +80,7 @@ export function Donut({
   animationProgress = 1,
   startAngle = 0,
   compact = false,
+  responsive = false,
 }: DonutProps) {
   const maskNumbers = useNumberPrivacy()
   const positive = slices.filter((slice) => slice.value > 0)
@@ -108,15 +111,21 @@ export function Donut({
   return (
     <div
       className={
-        compact
+        responsive ? 'finance-donut' : compact
           ? 'flex min-h-0 flex-1 items-center justify-center gap-4 p-2'
           : 'flex min-h-0 flex-1 flex-wrap items-center justify-center gap-8 p-4'
       }
     >
+      {responsive && centerText ? (
+        <div className="finance-donut-value">
+          <div className="num text-sm font-semibold text-text"><PrivateNumber>{centerText}</PrivateNumber></div>
+          {centerSubtext ? <div className="text-2xs text-text-muted">{centerSubtext}</div> : null}
+        </div>
+      ) : null}
       <svg
         viewBox={`0 0 ${SIZE} ${SIZE}`}
         className={
-          compact
+          responsive ? 'finance-donut-ring' : compact
             ? 'h-full max-h-[150px] min-h-[110px] w-auto shrink-0'
             : 'h-full max-h-[340px] min-h-[220px] w-auto'
         }
@@ -128,7 +137,7 @@ export function Donut({
             </path>
           ) : null,
         )}
-        {centerText ? (
+        {!responsive && centerText ? (
           <text
             x={SIZE / 2}
             y={centerSubtext ? SIZE / 2 - 2 : SIZE / 2 + 6}
@@ -139,7 +148,7 @@ export function Donut({
             <PrivateNumber>{centerText}</PrivateNumber>
           </text>
         ) : null}
-        {centerSubtext ? (
+        {!responsive && centerSubtext ? (
           <text
             x={SIZE / 2}
             y={SIZE / 2 + 22}
@@ -154,7 +163,7 @@ export function Donut({
 
       <ul
         className={
-          compact ? 'grid min-w-0 flex-1 grid-cols-2 gap-x-3 gap-y-1' : 'flex flex-col gap-1'
+          responsive ? 'finance-donut-legend' : compact ? 'grid min-w-0 flex-1 grid-cols-2 gap-x-3 gap-y-1' : 'flex flex-col gap-1'
         }
       >
         {wedges.map((wedge, index) => (
@@ -167,7 +176,7 @@ export function Donut({
               className={
                 compact
                   ? 'min-w-0 flex-1 truncate text-[10px] text-text'
-                  : 'w-20 text-2xs text-text'
+                  : `${responsive ? 'min-w-0 flex-1 break-words' : 'w-20'} text-2xs text-text`
               }
               title={wedge.label}
             >

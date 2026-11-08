@@ -332,6 +332,7 @@ export function IndexHeatmap({
             {group.headerHeight ? (
               <div
                 className="absolute flex items-center overflow-hidden px-1.5 text-2xs font-semibold whitespace-nowrap text-text"
+                title={`${group.sector} ${(group.weight * 100).toFixed(1)}%`}
                 style={{
                   left: headerBox.left,
                   top: headerBox.top,
@@ -339,7 +340,8 @@ export function IndexHeatmap({
                   height: headerBox.height,
                 }}
               >
-                {group.sector} {(group.weight * 100).toFixed(1)}%
+                <span className="min-w-0 flex-1 truncate">{group.sector}</span>
+                <span className="num ml-1 shrink-0">{(group.weight * 100).toFixed(1)}%</span>
               </div>
             ) : null}
 
@@ -355,6 +357,10 @@ export function IndexHeatmap({
               if (!visible(tile) || tile.width < 1 || tile.height < 1) return null
               const unquoted = isUnquoted(row)
               const selected = row.symbol === selectedSymbol
+              const change = formatHeatmapPct(row.changePct, true)
+              const fullChange = `${row.intervalLabel} ${change}`
+              const showSymbol = tile.width >= row.symbol.length * 11 + 14 && tile.height >= 26
+              const showChange = tile.height >= 46 && tile.width >= change.length * 9.5 + 14
               return (
                 <div
                   key={row.symbol}
@@ -379,12 +385,12 @@ export function IndexHeatmap({
                         : '1px solid var(--color-bg)',
                   }}
                 >
-                  {tile.width >= 34 && tile.height >= 22 ? (
+                  {showSymbol ? (
                     <div className="px-1 pt-0.5 leading-tight">
-                      <div className="truncate text-2xs font-semibold text-white">{row.symbol}</div>
-                      {tile.height >= 40 && tile.width >= 46 ? (
-                        <div className="num truncate text-2xs text-white/80">
-                          {row.intervalLabel} {formatHeatmapPct(row.changePct, true)}
+                      <div className="text-2xs font-semibold whitespace-nowrap text-white">{row.symbol}</div>
+                      {showChange ? (
+                        <div className="num text-2xs whitespace-nowrap text-white/80">
+                          {tile.width >= fullChange.length * 9.5 + 14 ? fullChange : change}
                         </div>
                       ) : null}
                       {row.name && zoom >= 1.35 && tile.height >= 58 && tile.width >= 90 ? (

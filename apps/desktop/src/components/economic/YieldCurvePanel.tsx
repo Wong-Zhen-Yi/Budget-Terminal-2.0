@@ -71,8 +71,8 @@ export function YieldCurvePanel({
 
   return (
     <Panel title="Treasury curve" className={className}>
-      <div className="flex min-h-0 flex-1 gap-2 p-2">
-        <div className="flex min-h-0 w-[320px] shrink-0 border border-border bg-surface">
+      <div className="flex min-h-0 min-w-0 flex-1 gap-2 p-2">
+        <div className="flex min-h-0 min-w-0 w-[320px] max-w-[45%] shrink-0 border border-border bg-surface">
           <DataTable
             columns={columns}
             rows={tenors}
@@ -81,12 +81,12 @@ export function YieldCurvePanel({
             empty="Treasury curve unavailable"
           />
         </div>
-        <div className="flex min-h-0 flex-1 flex-col gap-1">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1">
           <p className={`shrink-0 text-2xs ${curve?.inverted2s10s ? 'text-down' : 'text-text-muted'}`}>
             {summary}
           </p>
           {tenors.length ? (
-            <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               <LineChart
                 labels={tenors.map((item) => item.label)}
                 series={[

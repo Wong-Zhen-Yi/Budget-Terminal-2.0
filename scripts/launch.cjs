@@ -21,6 +21,7 @@ function platformName(platform) {
 }
 
 function launch({ development = false, logs = false, setupOnly = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
+  log.log('Compact layouts keep Treasury curves, market controls, probability statistics and heatmap details accessible.')
   log.log('Charts watchlists: saved with user data, backups and cloud sync. Existing profile lists migrate automatically; import and clear update the charts immediately.')
   log.log('Portfolio stocks highlight the full row on hover and while editing or focusing row controls.')
   log.log('Settings: consistent compact sizing and horizontal category views. The redundant Preferences label, All settings view and introductory header are removed.')
@@ -131,6 +132,7 @@ function launch({ development = false, logs = false, setupOnly = false, platform
   log.log('Controller support: D-pad/left stick moves focus, A activates, B dismisses, shoulders switch pages, Menu opens the page picker and right stick scrolls. Standard gamepads work while the app has focus; see Settings for controls.')
   log.log('Personal Finance: compact screens use two rows so recurring bill names remain readable and the Goal panel stays visible.')
   log.log('Obscure now hides recurring bill names as well as amounts, including accessibility labels. Reveal restores editable bill names.')
+  log.log('Personal Finance: Totals and Goal have balanced panel sizes and readable chart values at Steam Deck resolutions.')
   log.log('Installing dependencies...')
   const install = npm(['install', '--no-audit', '--no-fund', '--strict-ssl=true'])
   if (install.error || install.status !== 0) {

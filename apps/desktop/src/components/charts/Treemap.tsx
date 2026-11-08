@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { PrivateNumber, useNumberPrivacy } from '@/components/ui/NumberPrivacy'
 
 export interface TreemapTile {
@@ -105,6 +105,17 @@ interface TreemapProps {
 /** Sector groups laid out first, then the holdings inside each group. */
 export function Treemap({ tiles, onHover, format, empty = 'No holdings to map' }: TreemapProps) {
   const maskNumbers = useNumberPrivacy()
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [size, setSize] = useState({ width: 0, height: 0 })
+  useLayoutEffect(() => {
+    const node = containerRef.current
+    if (!node) return
+    const observer = new ResizeObserver(([entry]) => {
+      setSize({ width: entry.contentRect.width, height: entry.contentRect.height })
+    })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
   const groups = useMemo(() => {
     const byGroup = new Map<string, TreemapTile[]>()
     for (const tile of tiles) {
@@ -130,17 +141,19 @@ export function Treemap({ tiles, onHover, format, empty = 'No holdings to map' }
 
   if (!groups.length) {
     return (
-      <div className="flex flex-1 items-center justify-center text-2xs text-text-dim">{empty}</div>
+      <div ref={containerRef} className="flex flex-1 items-center justify-center text-2xs text-text-dim">{empty}</div>
     )
   }
 
   return (
-    <div className="relative min-h-0 flex-1" onMouseLeave={() => onHover?.(null)}>
+    <div ref={containerRef} className="relative min-h-0 flex-1" onMouseLeave={() => onHover?.(null)}>
       {groups.map((group) => {
-        const header = 20
+        const width = Math.max(0, size.width * group.rect.width / 100 - 2)
+        const height = Math.max(0, size.height * group.rect.height / 100 - 2)
+        const header = height >= 55 ? 20 : 0
         const inner = squarify(
           group.members.map((member) => member.weight),
-          { x: 0, y: 0, width: 100, height: 100 },
+          { x: 0, y: 0, width, height: Math.max(0, height - header) },
         )
         return (
           <div
@@ -153,30 +166,49 @@ export function Treemap({ tiles, onHover, format, empty = 'No holdings to map' }
               height: `${group.rect.height}%`,
             }}
           >
-            <div className="flex h-5 items-center bg-surface-raised px-1 text-2xs whitespace-nowrap text-text-muted">
-              {group.group} <PrivateNumber>{group.weight.toFixed(1)}%</PrivateNumber>
-            </div>
+            {header ? (
+              <div
+                className="h-5 truncate bg-surface-raised px-1 text-2xs text-text-muted"
+                title={`${group.group} ${maskNumbers ? '****' : `${group.weight.toFixed(1)}%`}`}
+              >
+                {group.group} <PrivateNumber>{group.weight.toFixed(1)}%</PrivateNumber>
+              </div>
+            ) : null}
             <div className="relative" style={{ height: `calc(100% - ${header}px)` }}>
-              {group.members.map((member, index) => (
-                <div
-                  key={member.key}
-                  onMouseEnter={() => onHover?.(member)}
-                  title={`${member.label}  ${maskNumbers ? '****' : format(member.changePct)}`}
-                  className="absolute overflow-hidden border border-bg/60 p-1"
-                  style={{
-                    left: `${inner[index].x}%`,
-                    top: `${inner[index].y}%`,
-                    width: `${inner[index].width}%`,
-                    height: `${inner[index].height}%`,
-                    background: heatColor(member.changePct),
-                  }}
-                >
-                  {/* Tiles carry their own saturated background, so they need their
-                      own text colours rather than the panel palette. */}
-                  <div className="text-2xs font-semibold text-white">{member.label}</div>
-                  <div className="num text-2xs text-white/75"><PrivateNumber>{member.subtitle}</PrivateNumber></div>
-                </div>
-              ))}
+              {group.members.map((member, index) => {
+                const fullSubtitle = maskNumbers ? '****' : member.subtitle
+                const compactSubtitle = maskNumbers ? '****' : format(member.changePct)
+                const subtitle = inner[index].width >= fullSubtitle.length * 9.5 + 10
+                  ? fullSubtitle : compactSubtitle
+                return (
+                  <div
+                    key={member.key}
+                    onMouseEnter={() => onHover?.(member)}
+                    onFocus={() => onHover?.(member)}
+                    onBlur={() => onHover?.(null)}
+                    tabIndex={0}
+                    aria-label={`${member.label}, ${group.group}, ${maskNumbers ? '****' : member.subtitle}`}
+                    title={`${member.label}  ${maskNumbers ? '****' : format(member.changePct)}`}
+                    className="absolute overflow-hidden border border-bg/60 p-1 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-hover"
+                    style={{
+                      left: inner[index].x,
+                      top: inner[index].y,
+                      width: inner[index].width,
+                      height: inner[index].height,
+                      background: heatColor(member.changePct),
+                    }}
+                  >
+                    {/* Tiles carry their own saturated background, so they need their
+                        own text colours rather than the panel palette. */}
+                    {inner[index].width >= member.label.length * 11 + 10 && inner[index].height >= 30 ? (
+                      <div className="text-2xs font-semibold whitespace-nowrap text-white">{member.label}</div>
+                    ) : null}
+                    {inner[index].width >= subtitle.length * 9.5 + 10 && inner[index].height >= 50 ? (
+                      <div className="num text-2xs whitespace-nowrap text-white/75"><PrivateNumber>{subtitle}</PrivateNumber></div>
+                    ) : null}
+                  </div>
+                )
+              })}
             </div>
           </div>
         )

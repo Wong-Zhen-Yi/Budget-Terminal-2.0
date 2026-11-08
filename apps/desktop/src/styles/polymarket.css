@@ -120,14 +120,14 @@
 @container polymarket (max-width: 720px) { .poly-detail-layout { grid-template-columns: minmax(0, 1fr); } .poly-header-actions { flex-wrap: wrap; } .poly-discovery-bar { gap: 12px; } .poly-search { max-width: none; } .poly-tab-heading { flex-wrap: wrap; gap: 0; } .poly-tab-heading > span { display: none; } .poly-market-metrics { padding: 15px; } .poly-market-grid { grid-template-columns: minmax(0, 1fr); } .poly-rules dl > div { flex-direction: column; gap: 0; } }
 
 /* Keep discovery, the selected market and activity visible in the same viewport. */
-.poly-page { overflow: hidden; padding: 18px 22px 22px; }
+.poly-page { overflow: hidden; padding: 12px 16px; container-type: size; }
 .poly-header, .poly-navigation, .poly-discovery-bar { flex-shrink: 0; }
-.poly-header { padding-bottom: 16px; }
-.poly-discovery-bar { margin: 14px 0 18px; }
+.poly-header { padding-bottom: 8px; }
+.poly-discovery-bar { margin: 8px 0 10px; }
 .poly-workspace { flex: 1; min-height: 0; display: grid; grid-template-columns: 285px minmax(0, 1fr); gap: 20px; }
-.poly-analysis { display: grid; grid-template-rows: minmax(300px, 1fr) minmax(165px, .42fr); gap: 18px; min-height: 0; min-width: 0; }
+.poly-analysis { display: grid; grid-template-rows: minmax(0, 1fr) minmax(110px, .42fr); gap: 10px; min-height: 0; min-width: 0; }
 .poly-detail-layout { grid-template-columns: minmax(0, 1fr) 255px; gap: 16px; min-height: 0; align-items: stretch; }
-.poly-feature { display: flex; flex-direction: column; min-height: 0; }
+.poly-feature { display: flex; flex-direction: column; min-height: 0; overflow: auto; }
 .poly-feature > :not(.poly-chart) { flex-shrink: 0; }
 .poly-question { padding: 20px 20px 0; gap: 12px; }
 .poly-question h2 { font-size: clamp(19px, 1.7cqw, 25px); }
@@ -136,8 +136,8 @@
 .poly-probability > strong { font-size: 37px; }
 .poly-probability .poly-outcomes { margin-left: 0; }
 .poly-chart-toolbar { padding-inline: 18px; }
-.poly-chart { min-height: 100px; flex: 1; }
-.poly-chart svg { min-height: 100px; height: 100%; max-height: none; }
+.poly-chart { min-height: 70px; flex: 1; }
+.poly-chart svg { min-height: 0; height: 100%; max-height: none; }
 .poly-market-metrics { padding: 14px 18px; }
 .poly-market-metrics strong { font-size: 14px; }
 .poly-book-panel { display: flex; flex-direction: column; min-height: 0; overflow: auto; }
@@ -173,3 +173,22 @@
 .poly-market-image img { position: absolute; inset: 0; }
 
 .poly-activity-table td:first-child { max-width: 250px; overflow: hidden; text-overflow: ellipsis; }
+
+/* Short desktop windows still need room for a chart, statistics and activity. */
+@container polymarket (max-height: 700px) {
+  .poly-question { padding: 10px 12px 0; gap: 8px; }
+  .poly-question h2 { margin-top: 3px; font-size: 18px; }
+  .poly-question .poly-market-image { width: 32px; height: 32px; flex-basis: 32px; }
+  .poly-probability { padding: 8px 12px; gap: 8px; }
+  .poly-probability > strong { font-size: 30px; }
+  .poly-outcomes { gap: 5px; }
+  .poly-yes, .poly-no { padding: 5px 8px; gap: 8px; }
+  .poly-chart-toolbar { padding-inline: 12px; gap: 4px; }
+  .poly-chart-toolbar button { padding: 3px 6px; }
+  .poly-market-metrics { padding: 6px 12px; gap: 6px; }
+  .poly-market-metrics > div { gap: 2px; }
+  .poly-market-metrics strong { font-size: 12px; }
+  .poly-tab-heading { padding: 9px 12px 0; }
+  .poly-tab-heading nav { flex-wrap: wrap; gap: 12px; }
+  .poly-tab-heading nav button { padding-bottom: 8px; }
+}
