@@ -1,4 +1,6 @@
 const { spawnSync } = require('node:child_process')
+// Deferred bug fixes and completion cleanup instructions are recorded in bugs.md.
+// Deferred performance improvements and completion cleanup instructions are recorded in efficiency.md.
 // GitHub sync sign-in reports missing OAuth configuration in Settings before opening the browser.
 // Timestamped Convex snapshots restore the newest server revision automatically on fresh devices.
 // Optional Convex sync supports GitHub browser sign-in and regional cloud deployments.

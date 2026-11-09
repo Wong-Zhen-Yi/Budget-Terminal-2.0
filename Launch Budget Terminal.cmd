@@ -1,4 +1,7 @@
 @echo off
+rem Deferred public-user database and sync implementation is recorded in database.md; remove this note on completion.
+rem Deferred bug fixes and completion cleanup instructions are recorded in bugs.md.
+rem Deferred performance improvements and completion cleanup instructions are recorded in efficiency.md.
 rem Settings > Controller controls: game-style diagram, live input display and navigation-safe test mode.
 rem Controller page switching follows visible workspace/page order, including custom ordering and hidden pages.
 rem Compact layouts keep Treasury curves, market controls, probability statistics and heatmap details accessible.

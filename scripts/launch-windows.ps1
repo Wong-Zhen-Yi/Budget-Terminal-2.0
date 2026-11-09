@@ -1,4 +1,6 @@
 param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Tui, [switch]$Setup, [switch]$Attached, [Parameter(ValueFromRemainingArguments=$true)][string[]]$TuiArguments)
+# Deferred bug fixes and completion cleanup instructions are recorded in bugs.md.
+# Deferred performance improvements and completion cleanup instructions are recorded in efficiency.md.
 # Settings > Controller controls includes a live controller diagram and navigation-safe input test.
 # Controller page switching follows visible workspace/page order, including custom ordering and hidden pages.
 # Compact layouts keep Treasury curves, market controls, probability statistics and heatmap details accessible.

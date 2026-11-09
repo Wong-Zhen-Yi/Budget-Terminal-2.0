@@ -1,4 +1,7 @@
 #!/bin/sh
+# Deferred public-user database and sync implementation is recorded in database.md; remove this note on completion.
+# Deferred bug fixes and completion cleanup instructions are recorded in bugs.md.
+# Deferred performance improvements and completion cleanup instructions are recorded in efficiency.md.
 # Settings > Controller controls: game-style diagram, live input display and navigation-safe test mode.
 # Controller page switching follows visible workspace/page order, including custom ordering and hidden pages.
 # Compact layouts keep Treasury curves, market controls, probability statistics and heatmap details accessible.
