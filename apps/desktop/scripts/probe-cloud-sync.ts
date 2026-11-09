@@ -1,113 +1,14 @@
+import { syncBuiltinESMExports } from 'node:module'
 import assert from 'node:assert/strict'
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { CloudSyncEngine, type SyncCheckpoint } from '../electron/services/cloudSyncEngine.js'
-import type { CloudSnapshot } from '../electron/shared/cloudSync.js'
 
 const directory = await mkdtemp(join(tmpdir(), 'budget-cloud-sync-'))
 const previous = { APPDATA: process.env.APPDATA, LOCALAPPDATA: process.env.LOCALAPPDATA }
 process.env.APPDATA = directory
 process.env.LOCALAPPDATA = directory
 try {
-  let remote: CloudSnapshot | null = null
-  let online = true
-  let duringRead: (() => void) | undefined
-  let duringWrite: (() => void) | undefined
-  let serverTime = 1000
-  const device = (initial: string, stored?: SyncCheckpoint, pristine = false, updatedAt = Date.now()) => {
-    let local = initial
-    let saved: SyncCheckpoint | undefined = stored
-    const engine = new CloudSyncEngine(stored ?? { account: 'fixture', revision: 0 }, {
-      readLocal: async () => ({ payload: local, pristine, updatedAt }),
-      applyIfUnchanged: async (expected, payload, serverUpdatedAt) => {
-        if (local !== expected) return false
-        local = payload; pristine = false; updatedAt = serverUpdatedAt
-        return true
-      },
-      readRemote: async () => {
-        if (!online) throw Error('offline')
-        const snapshot = remote ? { ...remote } : null
-        duringRead?.(); duringRead = undefined
-        return snapshot
-      },
-      writeRemote: async (expected, payload) => {
-        duringWrite?.(); duringWrite = undefined
-        if (!online) throw Error('offline')
-        if ((remote?.revision ?? 0) !== expected) return { accepted: false, revision: remote?.revision ?? 0, updatedAt: remote?.updatedAt ?? 0 }
-        remote = { revision: expected + 1, payload, updatedAt: ++serverTime }
-        return { accepted: true, revision: remote.revision, updatedAt: remote.updatedAt }
-      },
-      saveCheckpoint: async value => { saved = structuredClone(value) },
-    })
-    return { engine, edit: (value: string) => { local = value; pristine = false; updatedAt++ }, local: () => local, saved: () => saved }
-  }
-  const first = device('original')
-  await first.engine.sync()
-  assert.equal(first.engine.state, 'synced')
-  const fresh = device('factory defaults', undefined, true)
-  await fresh.engine.sync()
-  assert.equal(fresh.local(), 'original', 'A fresh device must automatically download the newest server snapshot')
-  assert.equal(fresh.engine.state, 'synced')
-  assert.equal(fresh.saved()?.cloudUpdatedAt, remote!.updatedAt, 'Checkpoints must preserve the server data timestamp')
-  const second = device('new device')
-  await second.engine.sync()
-  assert.equal(second.engine.state, 'conflict', 'First connection must not overwrite local or cloud data')
-  assert.equal(second.local(), 'new device')
-  await second.engine.sync('cloud')
-  assert.equal(second.local(), 'original')
-  first.edit('first edit')
-  await first.engine.sync()
-  await second.engine.sync()
-  assert.equal(second.local(), 'first edit', 'A device with no local edits must receive cloud updates')
-
-  online = false
-  first.edit('offline edit')
-  await first.engine.sync()
-  assert.equal(first.engine.state, 'error')
-  assert.equal(first.local(), 'offline edit')
-  const restarted = device(first.local(), first.saved())
-  online = true
-  await restarted.engine.sync()
-  assert.equal(restarted.engine.state, 'synced', 'Pending edits must survive process restarts')
-  assert.equal(remote!.payload, 'offline edit')
-  const latestNewMachine = device('new factory defaults', undefined, true, Date.now() + 86_400_000)
-  await latestNewMachine.engine.sync()
-  assert.equal(latestNewMachine.local(), 'offline edit', 'A new machine must fetch the newest uploaded edit even when its clock is ahead')
-  assert.equal(latestNewMachine.saved()?.cloudUpdatedAt, remote!.updatedAt)
-  second.edit('competing edit')
-  await second.engine.sync()
-  assert.equal(second.engine.state, 'conflict')
-  assert.equal(second.local(), 'competing edit')
-  restarted.edit('even newer edit')
-  await restarted.engine.sync()
-  await second.engine.sync('local')
-  assert.equal(second.engine.state, 'conflict', 'A choice made against a stale cloud revision must be reconfirmed')
-  assert.equal(remote!.payload, 'even newer edit')
-  await second.engine.sync('local')
-  assert.equal(remote!.payload, 'competing edit')
-  duringRead = () => restarted.edit('typed during download')
-  await restarted.engine.sync()
-  assert.equal(restarted.local(), 'typed during download', 'Network reads must not overwrite new local edits')
-  assert.equal(restarted.engine.pending, true)
-
-  const racer = device(remote!.payload)
-  await racer.engine.sync()
-  racer.edit('race edit')
-  duringWrite = () => { remote = { payload: 'another device won', revision: remote!.revision + 1, updatedAt: ++serverTime } }
-  await racer.engine.sync()
-  assert.equal(remote!.payload, 'another device won', 'Compare-and-set must preserve a concurrent remote write')
-  assert.equal(racer.engine.pending, true)
-  await racer.engine.sync()
-  assert.equal(racer.engine.state, 'conflict')
-  const newest = remote!
-  const staleReader = device(newest.payload, { account: 'fixture', baseline: newest.payload, revision: newest.revision, cloudUpdatedAt: newest.updatedAt })
-  remote = { payload: 'outdated snapshot', revision: newest.revision - 1, updatedAt: newest.updatedAt - 1 }
-  await staleReader.engine.sync()
-  assert.equal(staleReader.local(), newest.payload, 'An older server revision must never replace the last acknowledged data')
-  assert.equal(staleReader.engine.state, 'error')
-  remote = newest
-
   const data = await import('../electron/services/cloudSyncData.js')
   const { withSavedDataLock, withAutomaticBackup } = await import('../electron/services/automaticBackup.js')
   const { mutateSettings } = await import('../electron/services/settingsStore.js')
@@ -126,6 +27,12 @@ try {
   const modified = await withSavedDataLock(data.readSyncData)
   assert.deepEqual(JSON.parse(modified).userData.chartsWatchlists, chartsWatchlists)
   const editedLocal = await withSavedDataLock(data.readLocalSyncData)
+  await withSavedDataLock(() => data.applySyncData(modified, editedLocal.updatedAt, true))
+  assert.equal(await data.readSyncData(), modified, 'Cloud records must round trip through the real local store normalizers without losing fields')
+  const tooManyRows = JSON.parse(modified)
+  tooManyRows.userData.personalFinance.cash = Array.from({ length: 41 }, (_, index) => ({ id: `row-${index}`, desc: 'Fixture', amount: 1 }))
+  await assert.rejects(withSavedDataLock(() => data.applySyncData(JSON.stringify(tooManyRows), editedLocal.updatedAt, true)))
+  assert.equal(await data.readSyncData(), modified, 'A cloud download cannot silently lose rows through local normalization')
   assert.equal(editedLocal.pristine, false)
   assert(editedLocal.updatedAt > 0, 'Offline saves must record their edit time without a cloud connection')
   assert.equal((await data.readLocalSyncData()).updatedAt, editedLocal.updatedAt, 'Reading or retrying must not bump the edit time')
@@ -142,50 +49,34 @@ try {
   assert.equal(app, 'budget-terminal-electron')
   assert(Number.isFinite(Date.parse(exportedAt)))
   assert.equal(data.canonical(recoveryCopy), modified)
+  await withSavedDataLock(() => data.importBackupData({ userData: JSON.parse(modified).userData }))
+  assert.deepEqual(JSON.parse(await data.readSyncData()).userData, JSON.parse(modified).userData)
+  await withSavedDataLock(() => data.applySyncData(baseline))
   const invalid = JSON.parse(baseline)
   invalid.articles = { articles: [{ id: 'broken' }] }
   await assert.rejects(withSavedDataLock(() => data.applySyncData(JSON.stringify(invalid))))
   assert.equal(await data.readSyncData(), baseline, 'Invalid remote stores must be rejected before changing any local file')
+  await assert.rejects(withSavedDataLock(() => data.importBackupData({ userData: JSON.parse(modified).userData, articles: invalid.articles })))
+  assert.equal(await data.readSyncData(), baseline)
+  // Fail a later store write once, allowing the journal rollback to succeed.
+  const fs = await import('node:fs/promises')
+  const originalRename = fs.default.rename
+  let injected = false
+  fs.default.rename = async (from, to) => {
+    if (!injected && String(to).endsWith('articles.json')) { injected = true; throw Error('Injected article write failure') }
+    return originalRename(from, to)
+  }
+  syncBuiltinESMExports()
+  try {
+    await assert.rejects(withSavedDataLock(() => data.importBackupData(JSON.parse(modified))))
+    assert(injected)
+    assert.equal(await data.readSyncData(), baseline, 'Failed imports restore every store')
+  } finally { fs.default.rename = originalRename; syncBuiltinESMExports() }
   await data.atomicSyncFile(data.cloudDataPath('sync-apply-journal.json'), { before: modified })
   await withSavedDataLock(data.recoverSyncData)
   assert.equal(await data.readSyncData(), modified, 'An interrupted multi-store download must recover on startup')
 
-  // Exercise the actual Convex handlers with an isolated in-memory database.
-  const backend = await import('../convex/sync.js')
-  type Row = { _id: string; userId: string; revision: number; payload: string; updatedAt: number }
-  const rows = new Map<string, Row>()
-  let owner: string | null = 'owner-a'
-  const ctx = { auth: { getUserIdentity: async () => owner ? { subject: `${owner}|session` } : null }, db: {
-    query: () => ({ withIndex: (_index: string, select: (q: { eq: (key: string, value: string) => void }) => void) => {
-      let selected = ''
-      select({ eq: (_key, value) => { selected = value } })
-      return { unique: async () => [...rows.values()].find(row => row.userId === selected) ?? null }
-    } }),
-    insert: async (_table: string, value: Omit<Row, '_id'>) => { rows.set(value.userId, { ...value, _id: value.userId }); return value.userId },
-    replace: async (id: string, value: Omit<Row, '_id'>) => { rows.set(id, { ...value, _id: id }) },
-  } }
-  const read = (backend.read as unknown as { _handler: (ctx: unknown, args: unknown) => Promise<CloudSnapshot | null> })._handler
-  const write = (backend.write as unknown as { _handler: (ctx: unknown, args: unknown) => Promise<{ accepted: boolean; revision: number; updatedAt: number }> })._handler
-  const initialWrite = await write(ctx, { expectedRevision: 0, payload: baseline })
-  assert.equal(initialWrite.accepted, true)
-  assert.equal(initialWrite.revision, 1)
-  assert(initialWrite.updatedAt > 0)
-  assert.deepEqual(await write(ctx, { expectedRevision: 0, payload: baseline }), initialWrite, 'Lost responses must not change the data timestamp')
-  assert.deepEqual(await write(ctx, { expectedRevision: 0, payload: modified }), { accepted: false, revision: 1, updatedAt: initialWrite.updatedAt })
-  assert.equal((await read(ctx, {}))?.updatedAt, initialWrite.updatedAt)
-  owner = 'owner-b'
-  assert.equal(await read(ctx, {}), null, 'Accounts must never see each other’s snapshots')
-  await write(ctx, { expectedRevision: 0, payload: modified })
-  owner = 'owner-a'
-  assert.equal((await read(ctx, {}))?.payload, baseline)
-  const laterWrite = await write(ctx, { expectedRevision: 1, payload: modified })
-  assert.equal(laterWrite.revision, 2)
-  assert(laterWrite.updatedAt > initialWrite.updatedAt, 'Accepted updates must have a strictly increasing server timestamp')
-  await assert.rejects(write(ctx, { expectedRevision: 1, payload: 'x'.repeat(750_001) }))
-  owner = null
-  await assert.rejects(read(ctx, {}))
-  await assert.rejects(write(ctx, { expectedRevision: 0, payload: baseline }))
-  console.log('PASS: automatic fresh-device restore, persisted offline timestamps, monotonic server timestamps, stale-revision protection, two-device sync, conflicts, retries, account isolation, backups and interrupted-download recovery')
+  console.log('PASS: offline saved-data timestamps, complete backup imports, validation, failed-write rollback and interrupted-apply recovery')
 } finally {
   for (const key of ['APPDATA', 'LOCALAPPDATA'] as const) {
     if (previous[key] === undefined) delete process.env[key]

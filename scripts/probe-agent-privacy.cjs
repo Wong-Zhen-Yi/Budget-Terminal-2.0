@@ -6,6 +6,7 @@ const path = require('node:path')
 const { check, checkPush, privateAgentData, privateBrowserData, browserExamples } = require('./check-private-agent-data.cjs')
 
 console.log(check())
+for (const name of ['budget-terminal-cloud-export.json', 'exports/budget-terminal-cloud-export-copy.json', 'sync-session.bin', 'copy/sync-checkpoint.json.tmp', 'copy/sync-backups/review.json']) assert(privateAgentData(name), name)
 for (const name of ['telegram-settings.bin', 'copies/telegram-settings.bin.tmp', 'telegram-agents.json', 'copies/telegram-agents.json.123.tmp', 'agents.json', 'copies/AGENTS.JSON.123.tmp', 'exports/chat-history-private.json', 'any/BudgetTerminalElectron/other.json', 'copies/agent-images/private.json', 'copies/AGENT-IMAGES/photo.png']) assert(privateAgentData(name), name)
 for (const name of [...browserExamples, 'copies\\\\NETWORK\\\\COOKIES', 'copies/USERDATA/token.bin']) {
   assert(privateBrowserData(name), name)

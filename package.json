@@ -28,6 +28,7 @@
     "ensure:electron": "node scripts/ensure-electron.cjs",
     "dev": "node scripts/dev.cjs",
     "build": "npm run build --workspace budget-terminal-desktop",
+    "build:release": "node scripts/build-release.cjs",
     "typecheck": "npm run typecheck --workspace budget-terminal-desktop",
     "probe": "npm run probe --workspace budget-terminal-desktop",
     "probe:launcher": "node scripts/probe-launcher.cjs",

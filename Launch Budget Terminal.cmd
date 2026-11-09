@@ -1,6 +1,7 @@
 @echo off
-rem Deferred public-user database and sync implementation is recorded in database.md; remove this note on completion.
-rem Deferred bug fixes and completion cleanup instructions are recorded in bugs.md.
+rem Record sync is implemented; production release checks remain in database.md. Operator setup: docs/convex-sync.md.
+rem Local saves remain available; account review, record conflicts, cloud export and deletion are in Settings.
+rem Backup imports recover on failure; Escape cancels edits; public WebSocket resources are supported.
 rem Deferred performance improvements and completion cleanup instructions are recorded in efficiency.md.
 rem Settings > Controller controls: game-style diagram, live input display and navigation-safe test mode.
 rem Controller page switching follows visible workspace/page order, including custom ordering and hidden pages.
@@ -12,7 +13,7 @@ rem Controller support: D-pad/left stick focus, A activate, B dismiss, shoulders
 rem Display compatibility: centered work-area bounds, compact minimum size and safe monitor changes; Steam Deck Gaming Mode uses native fullscreen.
 rem Charts watchlists are saved with user data, backups and cloud sync; existing lists migrate automatically.
 rem GitHub sync sign-in checks backend credentials first and shows setup guidance instead of a GitHub 404.
-rem Timestamped Convex snapshots automatically restore the latest cloud copy on fresh devices; local edits stay protected.
+rem Bounded record sync restores fresh devices, retains offline edits and deletion markers, and preserves legacy snapshots.
 rem Convex sync supports GitHub browser sign-in and regional cloud deployments; local data works without signing in.
 rem Desktop launches run independently so this console can close after selection.
 rem Optional Convex sync: local saves work without a connection; sign-in and conflict controls are in Settings.

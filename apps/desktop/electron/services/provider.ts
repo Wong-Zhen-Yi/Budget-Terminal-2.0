@@ -5,7 +5,7 @@ import { markEquityScreenRows } from './equityScreenMarks.js'
 import { getMoney, clearMoneyCache } from './money.js'
 import { withSourceEnvelope } from './sourceHealth.js'
 import { getHims } from './hims.js'
-import { replaceArticles } from './articlesStore.js'
+import { importBackupData } from './cloudSyncData.js'
 import type { HimsPayload, HimsRequest } from '../shared/hims.js'
 import { getHood } from './hood.js'
 import { getSofi } from './sofi.js'
@@ -185,7 +185,6 @@ import {
   clearCards,
   mutateCards,
   readCards,
-  replaceCards,
 } from './cardsStore.js'
 import { BMNR_SOURCE, getBmnr } from './bmnr.js'
 import { GOLD_SOURCE, getGold } from './gold.js'
@@ -237,7 +236,6 @@ import {
 import { FX_SOURCE, getFxRate } from './fx.js'
 import {
   clearUserData,
-  importUserData,
   mutatePersonalFinance,
   mutatePortfolios,
   readPersonalFinance,
@@ -247,7 +245,6 @@ import {
   recordBackupExport,
   mutateSettings,
   readSettings,
-  replaceSettings,
   settingsPath,
 } from './settingsStore.js'
 import { getChart } from './yahoo/chart.js'
@@ -1973,19 +1970,12 @@ const providerImplementation: MarketDataProvider = {
         if (!parsed.success || parsed.data.app !== BACKUP_APP_ID) {
           throw new Error('That file is not a Budget Terminal backup.')
         }
-        const rollback = await importUserData(parsed.data.userData)
-        // Settings are optional: a backup taken before this section existed still restores
-        // its holdings rather than being refused outright.
-        if (parsed.data.settings) await replaceSettings(parsed.data.settings)
-        if (parsed.data.cards) await replaceCards(parsed.data.cards)
-        if (parsed.data.articles) await replaceArticles(parsed.data.articles)
+        await importBackupData(parsed.data)
         return ok(
           {
             action: 'importUserData' as const,
             performed: true,
-            message: rollback
-              ? `Imported from ${sourcePath}. Rollback copy: ${rollback}`
-              : `Imported from ${sourcePath}.`,
+            message: `Imported from ${sourcePath}.`,
             path: sourcePath,
           },
           SETTINGS_SOURCE,

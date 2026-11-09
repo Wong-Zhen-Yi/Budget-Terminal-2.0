@@ -1,8 +1,10 @@
 export interface CloudSyncStatus {
   url: string
+  configured?: boolean
   signedIn: boolean
+  accountLabel?: string
   encryptionAvailable: boolean
-  state: 'disconnected' | 'idle' | 'syncing' | 'synced' | 'conflict' | 'error'
+  state: 'disconnected' | 'idle' | 'syncing' | 'synced' | 'conflict' | 'review' | 'error'
   lastSyncedAt?: number
   localUpdatedAt?: number
   cloudUpdatedAt?: number
@@ -10,6 +12,11 @@ export interface CloudSyncStatus {
   pending: boolean
   message?: string
   signInPending?: boolean
+  conflicts?: { key: string; kind: string; local: string | null; cloud: string | null; token: string }[]
+  reviewToken?: string
+  conflictCount?: number
+  pendingRecords?: number
+  metrics?: { attempts: number; failures: number; lastDurationMs: number; sentRecords: number; receivedRecords: number; sentBytes: number; receivedBytes: number }
 }
 
 export type CloudSyncCommand =
@@ -18,18 +25,9 @@ export type CloudSyncCommand =
   | { type: 'sendCode'; url: string; email: string }
   | { type: 'verifyCode'; url: string; email: string; code: string }
   | { type: 'sync' }
-  | { type: 'resolve'; use: 'local' | 'cloud' }
+  | { type: 'resolve'; use: 'local' | 'cloud'; key?: string; token?: string }
+  | { type: 'exportAccount' }
+  | { type: 'deleteAccount'; confirmation: 'DELETE MY ACCOUNT' }
   | { type: 'disconnect' }
 
-export interface CloudSnapshot { revision: number; payload: string; updatedAt: number }
 export interface LocalSyncSnapshot { payload: string; updatedAt: number; pristine: boolean }
-
-/** Fresh installs restore the server copy; existing unsynced work needs a choice. */
-export function syncDecision(local: string, remote: CloudSnapshot | null, baseline?: string, pristine = false) {
-  if (!remote) return 'upload' as const
-  if (local === remote.payload) return 'equal' as const
-  if (baseline === undefined) return pristine ? 'download' as const : 'conflict' as const
-  if (local === baseline) return 'download' as const
-  if (remote.payload === baseline) return 'upload' as const
-  return 'conflict' as const
-}

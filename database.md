@@ -1,6 +1,6 @@
 # Public-user database and cloud sync implementation brief
 
-Status: pending implementation. This is a temporary task brief, not a description of completed functionality.
+Status: protocol 2 is implemented in the working tree and offline verification passes. Production release acceptance remains pending. See docs/convex-sync.md for the implemented architecture, operator setup, verification and external blockers. Do not delete this brief until the live production, delivery, isolation and operating-cost checks are complete.
 
 ## Instruction for the future implementation run
 

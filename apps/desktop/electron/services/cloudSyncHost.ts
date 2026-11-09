@@ -1,37 +1,59 @@
-import { safeStorage, shell } from 'electron'
+import { safeStorage, shell, dialog } from 'electron'
+import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { ConvexClient, ConvexHttpClient } from 'convex/browser'
 import { makeFunctionReference } from 'convex/server'
 import { z } from 'zod'
-import type { CloudSnapshot, CloudSyncCommand, CloudSyncStatus } from '../shared/cloudSync.js'
+import type { CloudSyncCommand, CloudSyncStatus } from '../shared/cloudSync.js'
+import type { RecordPage, RecordWrite, RemoteRecord, SyncSignal, WriteResult } from '../shared/syncRecords.js'
+import { joinSnapshot, splitSnapshot } from '../shared/syncRecords.js'
+import { diagnosticLog } from './diagnosticLog.js'
 import { failed, ok } from '../shared/envelope.js'
-import { CloudSyncEngine, type SyncCheckpoint } from './cloudSyncEngine.js'
-import { applySyncData, atomicSyncFile, cloudDataPath, readLocalSyncData, readSyncData, recoverSyncData } from './cloudSyncData.js'
+import { CloudRecordEngine, newRecordCheckpoint, type RecordCheckpoint } from './cloudRecordEngine.js'
+import { applySyncData, atomicSyncFile, cloudDataPath, defaultSyncData, readLocalSyncData, readSyncData, recoverSyncData } from './cloudSyncData.js'
 import { withSavedDataLock } from './automaticBackup.js'
 import { subscribeSavedDataChanged } from './savedDataEvents.js'
 import { beginGitHubSignIn, GitHubSetupError, type GitHubSignIn, type OAuthTokens } from './cloudSyncOAuth.js'
 import { convexDeploymentUrl } from '../shared/cloudOAuth.js'
 
-const readRef = makeFunctionReference<'query', Record<string, never>, CloudSnapshot | null>('sync:read')
+declare const __BUDGET_SYNC_URL__: string
+const defaultUrl = typeof __BUDGET_SYNC_URL__ === 'string' ? __BUDGET_SYNC_URL__ : ''
+const prepareRef = makeFunctionReference<'mutation', Record<string, never>, SyncSignal>('sync:prepare')
+const migrateRef = makeFunctionReference<'mutation', { epoch: string }, SyncSignal>('sync:migrate')
+const changesRef = makeFunctionReference<'query', { epoch: string; cursor: number }, RecordPage>('sync:changes')
+const watchRef = makeFunctionReference<'query', Record<string, never>, SyncSignal | null>('sync:watch')
+const pushRef = makeFunctionReference<'mutation', { epoch: string; records: RecordWrite[] }, WriteResult>('sync:push')
+const deleteRef = makeFunctionReference<'mutation', { confirmation: 'DELETE MY ACCOUNT' }, null>('sync:deleteAccount')
+const exportInfoRef = makeFunctionReference<'query', Record<string, never>, { profile: unknown; legacySnapshot: unknown; storageBytes: number; historyBytes: number }>('sync:exportInfo')
 const userRef = makeFunctionReference<'query', Record<string, never>, string>('sync:identity')
+const labelRef = makeFunctionReference<'query', Record<string, never>, string>('sync:accountLabel')
 const authConfigRef = makeFunctionReference<'query', Record<string, never>, { githubConfigured: boolean }>('sync:authConfiguration')
-const writeRef = makeFunctionReference<'mutation', { expectedRevision: number; payload: string }, { accepted: boolean; revision: number; updatedAt: number }>('sync:write')
 const signInRef = makeFunctionReference<'action', { provider?: string; params?: Record<string, string>; refreshToken?: string; verifier?: string },
   { tokens?: { token: string; refreshToken: string } | null; started?: boolean; redirect?: string; verifier?: string }>('auth:signIn')
 const signOutRef = makeFunctionReference<'action', Record<string, never>, null>('auth:signOut')
 const tokensSchema = z.object({ token: z.string().min(1), refreshToken: z.string().min(1) })
-const sessionSchema = z.object({ url: z.string(), userId: z.string(), tokens: tokensSchema })
+const sessionSchema = z.object({ url: z.string(), userId: z.string(), accountLabel: z.string().optional(), tokens: tokensSchema })
 type Session = z.infer<typeof sessionSchema>
-const checkpointSchema = z.object({ account: z.string(), baseline: z.string().optional(), revision: z.number().int().nonnegative(), lastSyncedAt: z.number().optional(), cloudUpdatedAt: z.number().optional() })
-const urlSchema = z.string().trim().url().transform(convexDeploymentUrl)
+const recordKindSchema = z.enum(['format', 'portfolio', 'ticker', 'holding', 'option', 'cash', 'debt', 'bill', 'card', 'chunk', 'article', 'preference'])
+const recordValueSchema = z.object({ key: z.string().max(1000), kind: recordKindSchema, data: z.string().max(64_000).nullable() })
+const checkpointSchema = z.object({ version: z.literal(2), account: z.string(), epoch: z.string().optional(), cursor: z.number().int().nonnegative(),
+  initialized: z.boolean(), reviewRequired: z.boolean().optional(), reviewToken: z.string().optional(), baseline: z.record(z.string(), z.string().nullable()),
+  remote: z.record(z.string(), recordValueSchema.extend({ revision: z.number().int().positive(), seq: z.number().int().positive(), updatedAt: z.number() })),
+  pending: z.array(recordValueSchema.extend({ expectedRevision: z.number().int().nonnegative() })),
+  conflicts: z.array(z.object({ key: z.string(), kind: recordKindSchema, local: z.string().nullable(), cloud: z.string().nullable(),
+    revision: z.number().int().nonnegative(), token: z.string().regex(/^[a-f0-9]{64}$/), groupHash: z.string().optional() })),
+  lastSyncedAt: z.number().optional(), cloudUpdatedAt: z.number().optional() })
+const urlSchema = z.string().trim().transform(value => convexDeploymentUrl(value || defaultUrl))
 const commandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('signInGitHub'), url: urlSchema }),
   z.object({ type: z.literal('cancelSignIn') }),
   z.object({ type: z.literal('sendCode'), url: urlSchema, email: z.string().trim().email().max(254) }),
   z.object({ type: z.literal('verifyCode'), url: urlSchema, email: z.string().trim().email().max(254), code: z.string().trim().min(1).max(64) }),
   z.object({ type: z.literal('sync') }), z.object({ type: z.literal('disconnect') }),
-  z.object({ type: z.literal('resolve'), use: z.enum(['local', 'cloud']) }),
+  z.object({ type: z.literal('resolve'), use: z.enum(['local', 'cloud']), key: z.string().max(1000).optional(), token: z.string().max(64).optional() }),
+  z.object({ type: z.literal('exportAccount') }),
+  z.object({ type: z.literal('deleteAccount'), confirmation: z.literal('DELETE MY ACCOUNT') }),
 ])
 
 const encryptionAvailable = () => safeStorage.isEncryptionAvailable() &&
@@ -42,7 +64,7 @@ const http = (url: string) => new ConvexHttpClient(url, { logger: false,
   fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(12_000) }) })
 
 let session: Session | undefined
-let engine: CloudSyncEngine | undefined
+let engine: CloudRecordEngine | undefined
 let client: ConvexHttpClient | undefined
 let subscription: ConvexClient | undefined
 let timer: ReturnType<typeof setInterval> | undefined
@@ -76,7 +98,8 @@ async function connectTokens(url: string, value: OAuthTokens) {
   const login = http(url)
   login.setAuth(tokens.token)
   const userId = await login.query(userRef, {})
-  const next = { url, userId, tokens }
+  const accountLabel = await login.query(labelRef, {})
+  const next = { url, userId, accountLabel, tokens }
   await saveSession(next)
   await attach(next)
   authError = false
@@ -91,6 +114,9 @@ async function authenticatedClient(forceRefresh = false) {
     const result = await http(session.url).action(signInRef, { refreshToken: session.tokens.refreshToken })
     if (!result.tokens) throw new Error('Session expired.')
     const next = { ...session, tokens: tokensSchema.parse(result.tokens) }
+    const identityCheck = http(session.url)
+    identityCheck.setAuth(next.tokens.token)
+    if (await identityCheck.query(userRef, {}) !== session.userId) throw Error('Account changed during refresh. Sign in again to review local data.')
     await saveSession(next)
     session = next
   }
@@ -113,23 +139,37 @@ async function attach(value: Session) {
   session = value
   client = http(value.url)
   const account = `${value.url}|${value.userId}`
-  let checkpoint: SyncCheckpoint = { account, revision: 0 }
+  let checkpoint = newRecordCheckpoint(account)
   try {
-    const parsed = checkpointSchema.parse(JSON.parse(await readFile(checkpointPath(), 'utf8')))
-    if (parsed.account === account) checkpoint = parsed
+    const raw = JSON.parse(await readFile(checkpointPath(), 'utf8'))
+    if (raw.account !== account) checkpoint.reviewRequired = true
+    else if (raw.version === 2) checkpoint = checkpointSchema.parse(raw) as RecordCheckpoint
+    else if (typeof raw.baseline === 'string') {
+      // Migrate the old acknowledged baseline locally, preserving unsynced offline edits.
+      await atomicSyncFile(cloudDataPath(`sync-backups/legacy-checkpoint-${Date.now()}-${randomUUID()}.json`), raw)
+      await atomicSyncFile(cloudDataPath(`sync-backups/before-record-migration-${Date.now()}-${randomUUID()}.json`), JSON.parse(await withSavedDataLock(readSyncData)))
+      checkpoint.baseline = Object.fromEntries(splitSnapshot(raw.baseline).map(row => [row.key, row.data]))
+      checkpoint.initialized = true
+    }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') message = 'The sync checkpoint could not be read. Copies will be compared before replacing data.'
   }
-  engine = new CloudSyncEngine(checkpoint, {
+  engine = new CloudRecordEngine(checkpoint, {
+    defaults: defaultSyncData,
     readLocal: () => withSavedDataLock(readLocalSyncData),
     applyIfUnchanged: (expected, payload, updatedAt) => withSavedDataLock(async () => {
       if (await readSyncData() !== expected) return false
-      await applySyncData(payload, updatedAt)
+      await applySyncData(payload, updatedAt, true)
       return true
     }),
-    readRemote: async () => (await authenticatedClient()).query(readRef, {}),
-    writeRemote: async (expectedRevision, payload) => (await authenticatedClient()).mutation(writeRef, { expectedRevision, payload }),
+    prepare: async () => (await authenticatedClient()).mutation(prepareRef, {}),
+    migrate: async epoch => (await authenticatedClient()).mutation(migrateRef, { epoch }),
+    changes: async (epoch, cursor) => (await authenticatedClient()).query(changesRef, { epoch, cursor }),
+    push: async (epoch, records) => (await authenticatedClient()).mutation(pushRef, { epoch, records }),
     saveCheckpoint: checkpoint => atomicSyncFile(checkpointPath(), checkpoint),
+    archive: value => atomicSyncFile(cloudDataPath(`sync-backups/sync-review-${Date.now()}-${randomUUID()}.json`), value),
+    onFailure: () => diagnosticLog.write('warn', 'sync', 'record-sync-failed'),
+    onFinished: (state, metrics) => diagnosticLog.write('debug', 'sync', 'record-sync-finished', { state, ...metrics }),
   })
   // The subscription is only a wake-up signal. Network work never blocks local startup or writes.
   subscription = new ConvexClient(value.url, { logger: false })
@@ -139,17 +179,23 @@ async function attach(value: Session) {
       try { await authenticatedClient(forceRefreshToken); return session?.tokens.token ?? null } catch { return null }
     })
   })
-  subscription.onUpdate(readRef, {}, () => schedule(), () => { /* HTTP retry reports failures in Settings. */ })
+  subscription.onUpdate(watchRef, {}, () => schedule(), () => { /* HTTP retry reports failures in Settings. */ })
   schedule()
 }
 
 export function cloudSyncStatus(): CloudSyncStatus {
-  return { url: session?.url ?? '', signedIn: Boolean(session), encryptionAvailable: encryptionAvailable(),
+  return { url: session?.url ?? defaultUrl, configured: Boolean(defaultUrl), signedIn: Boolean(session), encryptionAvailable: encryptionAvailable(),
+    accountLabel: session?.accountLabel,
     state: engine?.state ?? (authError ? 'error' : 'disconnected'), pending: engine?.pending ?? false,
     signInPending: Boolean(pendingGitHub),
     localUpdatedAt: engine?.localUpdatedAt,
     cloudUpdatedAt: engine?.cloudUpdatedAt ?? engine?.checkpoint.cloudUpdatedAt,
-    revision: engine?.cloudRevision ?? engine?.checkpoint.revision,
+    revision: engine?.cloudRevision ?? engine?.checkpoint.cursor,
+    conflicts: engine?.checkpoint.conflicts.slice(0, 20),
+    conflictCount: engine?.checkpoint.conflicts.length,
+    reviewToken: engine?.checkpoint.reviewToken,
+    pendingRecords: engine?.checkpoint.pending.length,
+    metrics: engine ? { ...engine.metrics } : undefined,
     lastSyncedAt: engine?.checkpoint.lastSyncedAt, message: engine?.message ?? message }
 }
 
@@ -221,7 +267,32 @@ export function cloudSyncCommand(input: CloudSyncCommand) {
         if (command.type === 'verifyCode') {
           await connectTokens(command.url, tokensSchema.parse(result.tokens))
         } else message = 'Code sent. Check your email, then enter the code within 15 minutes.'
-      } else if (command.type === 'disconnect') {
+      } else if (command.type === 'exportAccount') {
+        if (!session) throw Error('Sign in first.')
+        const api = await authenticatedClient()
+        const start = await api.mutation(prepareRef, {})
+        if (!start.migrated) throw Error('Finish migration before export.')
+        const records = new Map<string, RemoteRecord>()
+        let cursor = 0
+        for (let count = 0; count < 3000; count++) {
+          const page = await api.query(changesRef, { epoch: start.epoch, cursor })
+          page.records.forEach(row => records.set(row.key, row))
+          cursor = page.cursor
+          if (page.done) break
+          if (count === 2999) throw Error('Cloud library exceeds the export limit.')
+        }
+        const end = await api.query(watchRef, {})
+        if (!end || end.epoch !== start.epoch || end.seq !== start.seq) throw Error('Cloud library changed during export. Try again.')
+        const target = await dialog.showSaveDialog({ title: 'Export cloud account data', defaultPath: 'budget-terminal-cloud-export.json', filters: [{ name: 'JSON', extensions: ['json'] }] })
+        if (!target.canceled && target.filePath) {
+          const info = await api.query(exportInfoRef, {})
+          await atomicSyncFile(target.filePath, { ...JSON.parse(joinSnapshot(records.values(), defaultSyncData())),
+            app: 'budget-terminal-electron', exportedAt: new Date().toISOString(),
+            cloud: { protocol: 2, records: [...records.values()], ...info } })
+          message = 'Cloud account data exported. Keep this file private.'
+        }
+      } else if (command.type === 'disconnect' || command.type === 'deleteAccount') {
+        if (command.type === 'deleteAccount') await (await authenticatedClient()).mutation(deleteRef, { confirmation: command.confirmation })
         pendingGitHub?.cancel()
         pendingGitHub = undefined
         // Remove local credentials first. Failed server revocation must never prevent disconnect.
@@ -234,9 +305,11 @@ export function cloudSyncCommand(input: CloudSyncCommand) {
         await subscription?.close()
         subscription = undefined
         try { await previous?.action(signOutRef, {}) } catch { /* Local session is already removed. */ }
+        message = command.type === 'deleteAccount' ? 'Cloud account deletion started. Local files and recovery backups are retained. Other devices cannot upload to the deleted account.' : 'Disconnected. Local data and cloud data are retained. Connecting a different account requires a review.'
       } else {
         if (!engine) throw new Error('Sign in first.')
-        await engine.sync(command.type === 'resolve' ? command.use : undefined)
+        await engine.sync(command.type === 'resolve' ? command.use : undefined, command.type === 'resolve' ? command.key : undefined,
+          command.type === 'resolve' ? command.token : undefined)
       }
       const status = cloudSyncStatus()
       return status.state === 'error' ? failed(status, status.message ?? 'Sync failed.', 'cloud sync') : ok(status, 'cloud sync')
@@ -246,7 +319,7 @@ export function cloudSyncCommand(input: CloudSyncCommand) {
         message = error.message
         return failed(cloudSyncStatus(), message, 'cloud sync')
       }
-      return failed(cloudSyncStatus(), 'Could not complete the sync command. Check the deployment URL, sign-in configuration, connection and OS credential encryption. Your local data is unchanged.', 'cloud sync')
+      return failed(cloudSyncStatus(), 'Could not complete this request. Check your connection and try again, or contact the service operator if sign-in remains unavailable. Your local data is safe.', 'cloud sync')
     }
   })
 }

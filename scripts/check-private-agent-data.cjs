@@ -39,6 +39,9 @@ function privateAgentData(file) {
     || normalized.split('/').includes('agent-images')
     || /^agents\.json(?:\..*)?$/.test(basename)
     || /^(?:agent-history|chat-history).*\.json$/.test(basename)
+    || /^budget-terminal-cloud-export.*\.json$/.test(basename)
+    || /^sync-(?:session\.bin|checkpoint\.json|local-metadata\.json|apply-journal\.json)(?:\..*)?$/.test(basename)
+    || normalized.split('/').includes('sync-backups')
 }
 function git(args, options = {}) {
   const result = spawnSync('git', args, { cwd: root, encoding: 'utf8', ...options })

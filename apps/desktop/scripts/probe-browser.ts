@@ -110,7 +110,8 @@ try {
       const blocked = await window.api.browserResearch({ action: 'select' })
       check(blocked.meta.freshness === 'failed', 'Disabled access blocks agent tools')
       await click('New browser tab')
-      check(document.querySelectorAll('[role=tab]').length === 2, 'New tab control')
+      for (let attempt = 0; attempt < 25 && document.querySelectorAll('[role=tab]').length !== 2; attempt++) await settle()
+      check(document.querySelectorAll('[role=tab]').length === 2, 'New tab control: ' + JSON.stringify(await window.api.browserStatus()))
       check((await window.api.browserStatus()).data.agentEnabled === false, 'Opening tabs and polling never re-enable disabled access')
       await click('Agent browser access')
       check(document.querySelector('[role=switch]').getAttribute('aria-checked') === 'true', 'Enable agent access')
@@ -151,13 +152,13 @@ try {
     import assert from 'node:assert/strict'
     import { mkdirSync, writeFileSync } from 'node:fs'
     import { assertPrivateBrowserStorage } from './electron/services/browserStorage'
-    import { browserStatus, browserResearch, browserControl, browserUrl, configureBrowserWindow, setBrowserPrivacy, setBrowserViewport, authorizeBrowserScreenshot, compositeBrowserScreenshot } from './electron/services/browser'
+    import { browserStatus, browserResearch, browserControl, browserUrl, publicRequest, configureBrowserWindow, setBrowserPrivacy, setBrowserViewport, authorizeBrowserScreenshot, compositeBrowserScreenshot } from './electron/services/browser'
     app.setPath('userData', ${JSON.stringify(join(directory, 'userData'))})
     app.whenReady().then(async () => {
       const window = new BrowserWindow({ show: false, width: 1400, height: 950, webPreferences: { preload: ${JSON.stringify(join(directory, 'preload.cjs'))}, contextIsolation: true, sandbox: true, backgroundThrottling: false } })
       const profile = session.fromPartition('persist:budget-terminal-research')
       const resolveHost = profile.resolveHost.bind(profile)
-      profile.resolveHost = async (host, ...args) => host === 'duckduckgo.com' ? { endpoints: [{ address: '8.8.8.8', family: 'ipv4' }] } : resolveHost(host, ...args)
+      profile.resolveHost = async (host, ...args) => host === 'private.example.com' ? { endpoints: [{ address: '10.0.0.1', family: 'ipv4' }] } : host === 'duckduckgo.com' ? { endpoints: [{ address: '8.8.8.8', family: 'ipv4' }] } : resolveHost(host, ...args)
       const searchQueries = []
       let privateRequests = 0
       await profile.protocol.handle('http', () => { privateRequests++; return new Response('Private network must not be reached') })
@@ -179,6 +180,12 @@ try {
         await window.loadFile(${JSON.stringify(join(directory, 'index.html'))})
         window.showInactive()
         console.log(await window.webContents.executeJavaScript('window.runUi()'))
+        await publicRequest('wss://duckduckgo.com/stream', true)
+        await publicRequest('ws://8.8.8.8/stream', true)
+        await publicRequest('https://duckduckgo.com/api')
+        for (const url of ['wss://private.example.com/stream', 'ws://127.0.0.1/stream', 'wss://192.168.1.1/stream', 'wss://user:pass@duckduckgo.com/stream', 'ftp://duckduckgo.com']) await assert.rejects(publicRequest(url, true))
+        await assert.rejects(publicRequest('wss://duckduckgo.com/stream'))
+        assert.throws(() => browserUrl('wss://duckduckgo.com/stream'))
         assert(searchQueries.includes('Apple investor relations') && searchQueries.includes('semiconductors'), 'Searches reached the synthetic engine')
         let result = await browserResearch({ action: 'search', query: 'Blocked agent search' })
         assert.equal(result.meta.freshness, 'failed', 'Stop keeps agent search disabled until the user re-enables it')

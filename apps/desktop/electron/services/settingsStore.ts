@@ -38,7 +38,7 @@ import {
  * Writes are atomic (temp file plus rename), same as the holdings store.
  */
 
-const settingsSchema = z.object({
+export const settingsSchema = z.object({
   lastBackupAt: z.number().finite().nonnegative().optional(),
   version: z.number().catch(1),
   clockCountry: z.string().catch(DEFAULT_CLOCK_COUNTRY),

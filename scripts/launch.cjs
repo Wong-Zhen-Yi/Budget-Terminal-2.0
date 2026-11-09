@@ -1,8 +1,8 @@
 const { spawnSync } = require('node:child_process')
-// Deferred bug fixes and completion cleanup instructions are recorded in bugs.md.
+// Backup imports recover on failure; Escape cancels edits; public WebSocket resources are supported.
 // Deferred performance improvements and completion cleanup instructions are recorded in efficiency.md.
 // GitHub sync sign-in reports missing OAuth configuration in Settings before opening the browser.
-// Timestamped Convex snapshots restore the newest server revision automatically on fresh devices.
+// Bounded record sync restores fresh devices; offline edits, conflicts and deletion markers persist.
 // Optional Convex sync supports GitHub browser sign-in and regional cloud deployments.
 // Optional Convex sync preserves local operation; Settings owns sign-in and conflict controls.
 // Current dark navy and blue colour scheme is locked in AGENTS.md; palette changes require an explicit user request.
@@ -23,6 +23,7 @@ function platformName(platform) {
 }
 
 function launch({ development = false, logs = false, setupOnly = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
+  log.log('Cloud sync uses account-owned records, migration, offline recovery and Settings review/export/deletion controls. Production release configuration and live checks: docs/convex-sync.md. Local use requires no account.')
   log.log('Settings > Controller controls: game-style diagram, live inputs and a test mode that pauses page navigation. B or Esc finishes the test.')
   log.log('Compact layouts keep Treasury curves, market controls, probability statistics and heatmap details accessible.')
   log.log('Charts watchlists: saved with user data, backups and cloud sync. Existing profile lists migrate automatically; import and clear update the charts immediately.')

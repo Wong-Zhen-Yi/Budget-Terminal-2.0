@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNumberPrivacy } from './NumberPrivacy'
 
 interface NumberInputProps {
@@ -42,6 +42,7 @@ export function NumberInput({
   const display = decimals === undefined ? String(value) : value.toFixed(decimals)
   const [draft, setDraft] = useState(display)
   const [editing, setEditing] = useState(false)
+  const cancelBlur = useRef(false)
 
   useEffect(() => {
     if (!editing) setDraft(display)
@@ -49,6 +50,7 @@ export function NumberInput({
 
   const commit = () => {
     setEditing(false)
+    if (cancelBlur.current) { cancelBlur.current = false; return }
     if (maskNumbers) return
     const parsed = Number(draft.replace(/[$,\s]/g, ''))
     if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
@@ -80,6 +82,7 @@ export function NumberInput({
         }}
         onDragStart={(event) => event.preventDefault()}
         onFocus={(event) => {
+          cancelBlur.current = false
           setEditing(true)
           setDraft(display)
           event.currentTarget.select()
@@ -89,6 +92,7 @@ export function NumberInput({
         onKeyDown={(event) => {
           if (event.key === 'Enter') event.currentTarget.blur()
           if (event.key === 'Escape') {
+            cancelBlur.current = true
             setDraft(display)
             setEditing(false)
             event.currentTarget.blur()

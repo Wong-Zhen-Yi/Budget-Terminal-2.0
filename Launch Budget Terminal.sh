@@ -1,6 +1,7 @@
 #!/bin/sh
-# Deferred public-user database and sync implementation is recorded in database.md; remove this note on completion.
-# Deferred bug fixes and completion cleanup instructions are recorded in bugs.md.
+# Record sync is implemented; production release checks remain in database.md. Operator setup: docs/convex-sync.md.
+# Local saves remain available; account review, record conflicts, cloud export and deletion are in Settings.
+# Backup imports recover on failure; Escape cancels edits; public WebSocket resources are supported.
 # Deferred performance improvements and completion cleanup instructions are recorded in efficiency.md.
 # Settings > Controller controls: game-style diagram, live input display and navigation-safe test mode.
 # Controller page switching follows visible workspace/page order, including custom ordering and hidden pages.

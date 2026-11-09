@@ -444,7 +444,7 @@ The current comparison loads at startup, including when Scorecard is unvisited.
 
 | Guide | What's inside |
 | :--- | :--- |
-| [Optional Convex sync](docs/convex-sync.md) | Cross-device sync, GitHub browser sign-in, offline local saves, conflict recovery and deployment. |
+| [Optional account sync](docs/convex-sync.md) | Record sync, email/GitHub sign-in, account safety, offline recovery, migration and operator release setup. Production acceptance remains pending. |
 | [Data, startup & backups](docs/user-guide.md) | All-page readiness, feed health, saved-data locations, migration, and backup behavior. |
 | [Terminal interface](docs/terminal-ui.md) | Windows launcher, PowerShell `BT`, and the Portfolio/Agents TUI. |
 | [Public data routing](docs/public-data-routing.md) | Coinbase/Binance spot quotes, CoinGecko metadata, World Bank/IMF annual context, and provider budgets. |

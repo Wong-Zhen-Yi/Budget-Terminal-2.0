@@ -1,5 +1,5 @@
 param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Tui, [switch]$Setup, [switch]$Attached, [Parameter(ValueFromRemainingArguments=$true)][string[]]$TuiArguments)
-# Deferred bug fixes and completion cleanup instructions are recorded in bugs.md.
+# Backup imports recover on failure; Escape cancels edits; public WebSocket resources are supported.
 # Deferred performance improvements and completion cleanup instructions are recorded in efficiency.md.
 # Settings > Controller controls includes a live controller diagram and navigation-safe input test.
 # Controller page switching follows visible workspace/page order, including custom ordering and hidden pages.
@@ -12,7 +12,8 @@ $ErrorActionPreference = 'Stop'
 # Controller support: standard gamepads navigate desktop controls and pages; Settings includes the control reference.
 # Charts watchlists now follow user data backup, restore, cloud sync and clear, with automatic profile migration.
 # GitHub sync sign-in validates backend configuration before opening the browser.
-# Timestamped Convex snapshots restore fresh devices automatically; offline edits keep their local timestamps.
+# Bounded record sync restores fresh devices, preserves offline edits and retains deletion markers.
+# Account review, conflicts, export and deletion stay in Settings; production setup/checks: docs/convex-sync.md.
 # Settings supports GitHub browser sign-in and regional Convex deployments; local saves remain independent.
 # Optional Convex sync runs behind local stores; no account or cloud connection is required to launch.
 # Crypto opens directly with market data; the Workspace header, USD badge and Copy snapshot action are removed.

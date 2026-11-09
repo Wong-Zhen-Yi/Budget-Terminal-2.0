@@ -70,8 +70,12 @@ export function browserUrl(value: string): string {
   return url.href
 }
 
-async function publicRequest(url: string) {
-  const target = new URL(browserUrl(url))
+export async function publicRequest(url: string, websocket = false) {
+  const resource = new URL(url)
+  if (websocket && ['ws:', 'wss:'].includes(resource.protocol)) {
+    resource.protocol = resource.protocol === 'wss:' ? 'https:' : 'http:'
+  }
+  const target = new URL(browserUrl(resource.href))
   const hostname = target.hostname.replace(/^\[|\]$/g, '')
   if (isIP(hostname)) return
   const addresses = await profile!.resolveHost(hostname)
@@ -111,7 +115,7 @@ function configureProfile() {
       callback({ cancel })
     }
     const timer = setTimeout(() => finish(true), 8000)
-    void publicRequest(details.url).then(() => finish(false), () => finish(true))
+    void publicRequest(details.url, details.resourceType === 'webSocket').then(() => finish(false), () => finish(true))
   })
   return profile
 }

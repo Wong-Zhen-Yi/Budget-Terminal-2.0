@@ -40,6 +40,7 @@ export function TextInput({
 }: TextInputProps) {
   const [draft, setDraft] = useState(value)
   const [editing, setEditing] = useState(false)
+  const cancelBlur = useRef(false)
   const areaRef = useRef<HTMLTextAreaElement>(null)
   const lastWidth = useRef(0)
 
@@ -79,6 +80,7 @@ export function TextInput({
 
   const commit = () => {
     setEditing(false)
+    if (cancelBlur.current) { cancelBlur.current = false; return }
     // A textarea can carry newlines; the stored description is always one line.
     const trimmed = draft.replace(/\s+/g, ' ').trim()
     if (!trimmed) {
@@ -104,6 +106,7 @@ export function TextInput({
       <input
         {...shared}
         onFocus={(event) => {
+          cancelBlur.current = false
           setEditing(true)
           setDraft(value)
           event.currentTarget.select()
@@ -111,6 +114,7 @@ export function TextInput({
         onKeyDown={(event) => {
           if (event.key === 'Enter') event.currentTarget.blur()
           if (event.key === 'Escape') {
+            cancelBlur.current = true
             setDraft(value)
             setEditing(false)
             event.currentTarget.blur()
@@ -127,6 +131,7 @@ export function TextInput({
       ref={areaRef}
       rows={1}
       onFocus={(event) => {
+        cancelBlur.current = false
         setEditing(true)
         setDraft(value)
         event.currentTarget.select()
@@ -138,6 +143,7 @@ export function TextInput({
           event.currentTarget.blur()
         }
         if (event.key === 'Escape') {
+          cancelBlur.current = true
           setDraft(value)
           setEditing(false)
           event.currentTarget.blur()

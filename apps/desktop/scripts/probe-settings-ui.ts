@@ -26,7 +26,7 @@ try {
     const visible = node => !!node && node.getClientRects().length > 0
     const card = id => document.querySelector('[data-settings-card="' + id + '"]')
     const choose = id => [...document.querySelectorAll('[data-settings-category="' + id + '"]')].find(visible).click()
-    const clickText = (scope, text) => [...scope.querySelectorAll('button')].find(button => button.textContent === text).click()
+    const clickText = (scope, text) => { const button = [...scope.querySelectorAll('button')].find(button => button.textContent === text); check(button, 'Missing button: ' + text); button.click() }
     const setSearch = async value => {
       const input = document.querySelector('input[aria-label="Search settings"]')
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value)
@@ -101,39 +101,56 @@ try {
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value)
         input.dispatchEvent(new Event('input', { bubbles: true })); await wait(30)
       }
-      await setInput('Convex deployment URL', 'https://fixture.convex.cloud')
+      check(!sync.querySelector('[aria-label="Convex deployment URL"]').closest('details').open, 'A public user must not need a deployment URL')
+      check(visible(sync.querySelector('input[type=email]')), 'Email sign-in must be immediately accessible')
       window.githubNotConfigured = true
       clickText(sync, 'Sign in with GitHub'); await wait(80)
-      check(sync.textContent.includes('AUTH_GITHUB_ID') && !sync.textContent.includes('Cancel sign-in'), 'Missing GitHub credentials must show setup guidance before opening a browser')
+      check(sync.textContent.includes('not configured') && !sync.textContent.includes('Cancel sign-in'), 'Missing GitHub setup must be explained before browser sign-in')
       window.githubNotConfigured = false
       clickText(sync, 'Sign in with GitHub'); await wait(80)
       check(sync.textContent.includes('Complete GitHub sign-in') && !sync.querySelector('input'), 'Browser approval status missing')
       clickText(sync, 'Cancel sign-in'); await wait(80)
-      check(sync.querySelector('[aria-label="Convex deployment URL"]'), 'Cancelled sign-in must restore the form')
       clickText(sync, 'Sign in with GitHub'); await wait(80)
-      window.fixtureSync = { ...window.fixtureSync, state: 'synced', signedIn: true, signInPending: false, cloudUpdatedAt: Date.now(), localUpdatedAt: Date.now(), revision: 3 }
+      window.fixtureSync = { ...window.fixtureSync, state: 'review', reviewToken: 'review-choice', signedIn: true, signInPending: false, message: 'Review local data before importing into this account.', cloudUpdatedAt: Date.now(), localUpdatedAt: Date.now(), revision: 3 }
       await wait(2100)
-      check(!sync.querySelector('input'), 'Browser sign-in must update Settings without reloading')
-      check(sync.textContent.includes('Cloud data updated') && sync.textContent.includes('Revision 3') && sync.textContent.includes('Local data updated'), 'Data timestamps and server revision must be visible in Settings')
-      clickText(sync, 'Sync now'); await wait(80)
-      check(sync.textContent.includes('Choose a copy'), 'Sync conflict hidden')
-      clickText(sync, 'Use cloud copy'); await wait(40)
-      check(!window.syncCommands.some(command => command.type === 'resolve'), 'Conflict replacement bypassed confirmation')
+      check(!sync.querySelector('input[type=email]') && sync.textContent.includes('Review local data'), 'First sign-in review missing')
+      check(sync.textContent.includes('Cloud data updated') && sync.textContent.includes('Revision 3') && sync.textContent.includes('Local data updated'), 'Settings data timestamps missing')
+      clickText(sync, 'Use cloud data from this account'); await wait(40)
+      check(!window.syncCommands.some(command => command.type === 'resolve'), 'Account import bypassed review')
       clickText(sync, 'Cancel'); await wait(40)
-      clickText(sync, 'Use cloud copy'); await wait(40)
-      clickText(sync, 'Confirm replacement'); await wait(80)
-      check(window.syncCommands.some(command => command.type === 'resolve' && command.use === 'cloud'), 'Cloud choice did not reach the host')
+      clickText(sync, 'Use cloud data from this account'); await wait(40)
+      clickText(sync, 'Confirm choice'); await wait(80)
+      check(window.syncCommands.some(command => command.type === 'resolve' && command.token === 'review-choice'), 'First-sign-in confirmation must retain its reviewed version')
+      clickText(sync, 'Sync now'); await wait(80)
+      check(sync.textContent.includes('Review competing edits'), 'Record conflict hidden')
+      sync.querySelector('[data-sync-conflict]').open = true
+      clickText(sync, 'Keep cloud version'); await wait(40)
+      const resolutions = window.syncCommands.filter(command => command.type === 'resolve').length
+      check(resolutions === 1, 'Record conflict bypassed confirmation')
+      clickText(sync, 'Confirm choice'); await wait(80)
+      check(window.syncCommands.some(command => command.type === 'resolve' && command.key === 'fixture-record' && command.token === 'record-choice'), 'Record identity/version missing from resolution')
+      clickText(sync, 'Export cloud data'); await wait(80)
+      check(window.syncCommands.some(command => command.type === 'exportAccount'), 'Cloud export unavailable')
+      const deletion = [...sync.querySelectorAll('details')].find(node => node.textContent.includes('Delete cloud account'))
+      deletion.open = true
+      clickText(sync, 'Delete account'); await wait(40)
+      check([...sync.querySelectorAll('button')].find(node => node.textContent === 'Permanently delete account').disabled, 'Account deletion must require the typed phrase')
+      clickText(sync, 'Cancel deletion'); await wait(40)
+      check(!window.syncCommands.some(command => command.type === 'deleteAccount'), 'Cancelled deletion reached the backend')
       clickText(sync, 'Disconnect sync'); await wait(80)
-      check(sync.querySelector('input[type=email]') && sync.textContent.includes('Not connected'), 'Disconnect must retain normal local operation and restore sign-in')
-      await setInput('Convex deployment URL', 'https://fixture.convex.cloud')
-      sync.querySelector('details').open = true
       await setInput('Sync account email', 'fixture@example.invalid')
       sync.querySelector('button[type=submit]').click(); await wait(80)
-      check(sync.querySelector('[aria-label="Sync email code"]'), 'Optional email code entry missing')
+      check(sync.querySelector('[aria-label="Sync email code"]'), 'Email code entry missing')
       await setInput('Sync email code', 'TESTCODE')
       sync.querySelector('button[type=submit]').click(); await wait(80)
       check(!sync.querySelector('input[type=email]') && !sync.textContent.includes('fixture@example.invalid'), 'Sign-in drafts retained after connecting')
       clickText(sync, 'Disconnect sync'); await wait(80)
+      window.fixtureSync = { ...window.fixtureSync, url: '', configured: false }
+      await wait(2100)
+      check(sync.textContent.includes('not configured in this build'), 'Unconfigured release must show an honest local-use message')
+      sync.querySelector('details').open = true; await wait(40)
+      await setInput('Convex deployment URL', 'https://fixture.convex.cloud')
+      check(![...sync.querySelectorAll('button')].find(node => node.textContent === 'Sign in with GitHub').disabled, 'Advanced custom server unavailable')
       clickText(card('maintenance'), 'Reset Cache'); await wait(80)
       clickText(document.querySelector('[role=dialog]'), 'Reset Cache'); await wait(80)
       check(window.maintenanceCalls.join() === 'resetCache', 'Confirmed maintenance did not run exactly once')
@@ -278,7 +295,7 @@ try {
     window.maintenanceCalls = []
     window.fixtureKeys = { finnhub: false, fmp: false }
     window.syncCommands = []
-    window.fixtureSync = { url: '', signedIn: false, encryptionAvailable: true, state: 'disconnected', pending: false }
+    window.fixtureSync = { url: 'https://fixture.convex.cloud', configured: true, signedIn: false, encryptionAvailable: true, state: 'disconnected', pending: false }
     const envelope = data => ({ data, meta: { source: 'UI fixture', fetchedAt: Date.now(), freshness: 'fresh' }, errors: [] })
     window.api = {
       cloudSyncStatus: async () => envelope(window.fixtureSync),
@@ -289,9 +306,10 @@ try {
           window.fixtureSync = { ...window.fixtureSync, state: 'error', message, signInPending: false }
           return { ...envelope(window.fixtureSync), meta: { freshness: 'failed', failureReason: message } }
         }
-        const signedOut = ['disconnect', 'cancelSignIn', 'sendCode', 'signInGitHub'].includes(command.type)
+        const signedOut = ['disconnect', 'deleteAccount', 'cancelSignIn', 'sendCode', 'signInGitHub'].includes(command.type)
         window.fixtureSync = { ...window.fixtureSync, state: signedOut ? 'disconnected' : command.type === 'sync' ? 'conflict' : 'synced', signedIn: !signedOut,
           signInPending: command.type === 'signInGitHub', message: command.type === 'signInGitHub' ? 'Complete GitHub sign-in in your browser.' : undefined }
+        if (command.type === 'sync') window.fixtureSync.conflicts = [{ key: 'fixture-record', kind: 'cash', local: '{"amount":20}', cloud: '{"amount":30}', token: 'record-choice' }]
         return envelope(window.fixtureSync)
       },
       platform: 'win32', settings: async () => envelope(window.fixtureSettings),

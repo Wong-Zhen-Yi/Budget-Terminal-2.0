@@ -3,11 +3,11 @@ import { dirname, join } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { defaultSyncUserData, exportUserData, importUserData, validateUserDataImport } from './portfolioStore.js'
-import { defaultSyncSettings, exportSettings, replaceSettings } from './settingsStore.js'
+import { defaultSyncSettings, exportSettings, replaceSettings, settingsSchema } from './settingsStore.js'
 import { exportCards, replaceCards } from './cardsStore.js'
 import { readArticles, replaceArticles, validateArticlesImport } from './articlesStore.js'
 import { publishSavedDataChanged } from './savedDataEvents.js'
-import { defaultCardsPayload } from '../shared/cards.js'
+import { defaultCardsPayload, normalizeCardsPayload } from '../shared/cards.js'
 import type { LocalSyncSnapshot } from '../shared/cloudSync.js'
 
 export const cloudDataPath = (name: string) => join(process.env.APPDATA!, 'BudgetTerminalElectron', name)
@@ -40,8 +40,12 @@ const metadataSchema = z.object({ hash: z.string(), updatedAt: z.number().finite
 const hash = (payload: string) => createHash('sha256').update(payload).digest('hex')
 
 function pristineData(payload: string): boolean {
+  return payload === defaultSyncData()
+}
+
+export function defaultSyncData(): string {
   const { sourcePath: _sourcePath, ...cards } = defaultCardsPayload()
-  return payload === canonical({ version: 1, userData: defaultSyncUserData(), settings: defaultSyncSettings(),
+  return canonical({ version: 1, userData: defaultSyncUserData(), settings: defaultSyncSettings(),
     cards, articles: { articles: [] } })
 }
 
@@ -76,6 +80,8 @@ function snapshot(payload: string) {
   }).parse(JSON.parse(payload))
   validateUserDataImport(value.userData)
   validateArticlesImport(value.articles)
+  settingsSchema.parse(value.settings)
+  normalizeCardsPayload(value.cards)
   return value
 }
 
@@ -101,7 +107,7 @@ export async function recoverSyncData(): Promise<void> {
 }
 
 /** Caller holds the saved-data lock and has checked that local data has not changed. */
-export async function applySyncData(payload: string, updatedAt = Date.now()): Promise<void> {
+export async function applySyncData(payload: string, updatedAt = Date.now(), requireExact = false): Promise<void> {
   snapshot(payload)
   const local = await readLocalSyncData()
   const before = local.payload
@@ -112,7 +118,9 @@ export async function applySyncData(payload: string, updatedAt = Date.now()): Pr
   await atomicSyncFile(journalPath(), { before, local: { updatedAt: local.updatedAt, pristine: local.pristine } })
   try {
     await replace(payload)
-    await saveLocalMetadata({ payload: await readSyncData(), updatedAt, pristine: false })
+    const saved = await readSyncData()
+    if (requireExact && saved !== canonical(JSON.parse(payload))) throw new Error('Cloud data cannot be represented by this version of the local stores. Local data was preserved.')
+    await saveLocalMetadata({ payload: saved, updatedAt, pristine: false })
   }
   catch (error) {
     await replace(before)
@@ -122,4 +130,11 @@ export async function applySyncData(payload: string, updatedAt = Date.now()): Pr
   }
   await rm(journalPath())
   publishSavedDataChanged(['portfolio', 'personalFinance', 'settings', 'cards', 'articles'])
+}
+
+/** Caller already holds the save queue through withAutomaticBackup. */
+export async function importBackupData(backup: { userData: unknown; settings?: unknown; cards?: unknown; articles?: unknown }): Promise<void> {
+  const current = JSON.parse(await readSyncData())
+  const supplied = Object.fromEntries(Object.entries(backup).filter(([key, value]) => ['userData', 'settings', 'cards', 'articles'].includes(key) && value !== undefined))
+  await applySyncData(canonical({ ...current, ...supplied, version: 1 }))
 }
