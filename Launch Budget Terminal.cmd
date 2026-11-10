@@ -1,10 +1,8 @@
 @echo off
+rem Convex snapshot writes are restored; record-era cloud tables are retained as an archive.
+rem Database sync restored to 3208321: optional Convex snapshots, GitHub sign-in and complete-copy conflict choices.
 rem macOS: double-click Launch Budget Terminal.command. Linux: Launch Budget Terminal.sh.
-rem Production bundles use the separate configured endpoint and release preflight. Local launches retain the existing account. See docs/production-release.md.
 rem Backup and sync snapshots resolve asynchronous defaults inside function bodies for build compatibility.
-rem Local builds keep the existing Convex account; sign-in uses GitHub only, without a mail API.
-rem Record sync is implemented; production release checks remain in database.md. Operator setup: docs/convex-sync.md.
-rem Local saves remain available; account review, record conflicts, cloud export and deletion are in Settings.
 rem Backup imports recover on failure; Escape cancels edits; public WebSocket resources are supported.
 rem Shared option chains, single-capture backups, targeted refresh and live status updates. Measurements: docs/efficiency-results.md.
 rem Settings > Controller controls: game-style diagram, live input display and navigation-safe test mode.
@@ -17,37 +15,26 @@ rem Controller support: D-pad/left stick focus, A activate, B dismiss, shoulders
 rem Display compatibility: centered work-area bounds, compact minimum size and safe monitor changes; Steam Deck Gaming Mode uses native fullscreen.
 rem Charts watchlists are saved with user data, backups and cloud sync; existing lists migrate automatically.
 rem GitHub sync sign-in checks backend credentials first and shows setup guidance instead of a GitHub 404.
-rem Bounded record sync restores fresh devices, retains offline edits and deletion markers, and preserves legacy snapshots.
 rem Convex sync supports GitHub browser sign-in and regional cloud deployments; local data works without signing in.
-rem Desktop launches run independently so this console can close after selection.
+rem Desktop launches run independently so this console can close after startup.
 rem Optional Convex sync: local saves work without a connection; sign-in and conflict controls are in Settings.
 rem AllTick API removed from Settings and supported credential providers.
 rem Crypto opens directly with market data; the Workspace header, USD badge and Copy snapshot action are removed.
 rem Portfolio stocks highlight the full row on hover and while editing or focusing row controls.
-rem BT TUI includes Portfolio, candlestick charts and Agents chat with saved history and model controls.
+rem Double-click opens the desktop app directly; btd remains available in the terminal.
 rem Settings: compact sizing, horizontal categories, no redundant Preferences label, All settings page or introductory header.
 rem GitHub showcase refreshed: README.md includes eight demo screenshots across markets, research, charts, portfolios, and learning.
 rem Current dark navy and blue colour scheme is locked in AGENTS.md; palette changes require an explicit user request.
-title Budget Terminal - Install, Check and Open
+title Budget Terminal
 rem YouTube PiP opens a movable, resizable always-on-top window outside Budget Terminal; pop-out and return preserve playback.
 cd /d "%~dp0" || exit /b 1
-echo Budget Terminal installer and checker
-echo Checking Node.js, dependencies, Electron, application builds and terminal commands...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\launch-windows.ps1" -Setup
-if errorlevel 1 goto :failed
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\launch-menu.ps1"
+echo Opening Budget Terminal...
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\launch-windows.ps1"
 if errorlevel 1 goto :launchFailed
 exit /b 0
 
 :launchFailed
 echo.
 echo Budget Terminal could not open. Check the error above. Press any key to close.
-pause >nul
-exit /b 1
-
-:failed
-echo.
-echo Budget Terminal setup failed. Fix the error above, then double-click this file to retry.
-echo Press any key to close.
 pause >nul
 exit /b 1

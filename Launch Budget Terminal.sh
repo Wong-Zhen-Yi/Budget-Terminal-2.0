@@ -1,10 +1,9 @@
 #!/bin/sh
+# Convex snapshot writes are restored; record-era cloud tables are retained as an archive.
+# Double-click opens the desktop app directly without an interface chooser.
+# Database sync restored to 3208321: optional Convex snapshots, GitHub sign-in and complete-copy conflict choices.
 # macOS users can double-click Launch Budget Terminal.command; both use this startup path.
-# Production bundles use the separate configured endpoint and release preflight. Local launches retain the existing account. See docs/production-release.md.
 # Backup and sync snapshots resolve asynchronous defaults inside function bodies for build compatibility.
-# Local builds keep the existing Convex account; sign-in uses GitHub only, without a mail API.
-# Record sync is implemented; production release checks remain in database.md. Operator setup: docs/convex-sync.md.
-# Local saves remain available; account review, record conflicts, cloud export and deletion are in Settings.
 # Backup imports recover on failure; Escape cancels edits; public WebSocket resources are supported.
 # Shared option chains, single-capture backups, targeted refresh and live status updates. Measurements: docs/efficiency-results.md.
 # Settings > Controller controls: game-style diagram, live input display and navigation-safe test mode.

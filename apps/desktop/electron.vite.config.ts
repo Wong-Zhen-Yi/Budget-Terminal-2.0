@@ -3,9 +3,6 @@ import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { createRequire } from 'node:module'
-import { loadEnv } from 'vite'
-import cloudSyncConfig from './config/cloud-sync.json'
-import { cloudBuildUrl } from './electron/shared/cloudSyncConfiguration'
 
 const { supportedNodeVersion, assertCertificateEnvironment } = createRequire(import.meta.url)('../../scripts/runtime.cjs')
 if (!supportedNodeVersion(process.versions.node)) throw new Error('Install Node.js 22.23.4+, 24.22.1+, or 26.12.1+ (eMudhra certificate security update).')
@@ -18,12 +15,8 @@ for (const key of Object.keys(process.env)) {
 
 const root = __dirname
 
-export default defineConfig(({ command, mode }) => {
-  const env = { ...loadEnv(mode, root, ''), ...process.env }
-  const syncUrl = cloudBuildUrl(command, env, cloudSyncConfig)
-  return {
+export default defineConfig({
   main: {
-    define: { __BUDGET_SYNC_URL__: JSON.stringify(syncUrl) },
     build: {
       outDir: 'out/main',
       lib: { entry: {
@@ -78,5 +71,4 @@ export default defineConfig(({ command, mode }) => {
       rollupOptions: { input: resolve(root, 'src/index.html') },
     },
   },
-  }
 })

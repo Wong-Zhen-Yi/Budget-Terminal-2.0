@@ -7,39 +7,6 @@ function Assert-Check($Condition, [string]$Message) {
 }
 
 & {
-  . (Join-Path $PSScriptRoot 'launch-menu.ps1')
-  if ([Console]::IsInputRedirected) {
-    Assert-Check ((Read-BudgetMenuKey) -eq [ConsoleKey]::Escape) 'Redirected input must leave the menu without launching an app.'
-  }
-  function Show-BudgetInterfaceMenu([int]$Selected) {
-    $script:menuSelections.Add($Selected)
-  }
-  function Read-BudgetMenuKey {
-    Assert-Check ($script:menuKeys.Count -gt 0) 'The menu must return after the expected keys.'
-    return $script:menuKeys.Dequeue()
-  }
-  foreach ($case in @(
-    @{ Keys = @('Enter'); Expected = 'Desktop' },
-    @{ Keys = @('DownArrow', 'Enter'); Expected = 'Tui' },
-    @{ Keys = @('UpArrow', 'Enter'); Expected = 'Tui' },
-    @{ Keys = @('DownArrow', 'DownArrow', 'Enter'); Expected = 'Desktop' },
-    @{ Keys = @('D2', 'Enter'); Expected = 'Tui' },
-    @{ Keys = @('NumPad2', 'D1', 'Enter'); Expected = 'Desktop' },
-    @{ Keys = @('End', 'Home', 'Enter'); Expected = 'Desktop' },
-    @{ Keys = @('X', 'Enter'); Expected = 'Desktop' },
-    @{ Keys = @('Escape'); Expected = 'Exit' },
-    @{ Keys = @('Q'); Expected = 'Exit' }
-  )) {
-    $script:menuKeys = [Collections.Generic.Queue[ConsoleKey]]::new()
-    $script:menuSelections = [Collections.Generic.List[int]]::new()
-    foreach ($key in $case.Keys) { $script:menuKeys.Enqueue([ConsoleKey]$key) }
-    Assert-Check ((Select-BudgetInterface) -eq $case.Expected) ('Menu selection failed: ' + ($case.Keys -join ', '))
-    Assert-Check ($script:menuSelections[0] -eq 0) 'BTD must be selected when the menu opens.'
-  }
-}
-Write-Host 'PASS: launcher menu defaults to BTD on Enter, navigates both interfaces and exits safely.'
-
-& {
   $script:detachedLaunch = $null
   function Start-Process {
     param($FilePath, $ArgumentList, $WindowStyle, $WorkingDirectory, $RedirectStandardOutput, $RedirectStandardError)
@@ -57,6 +24,7 @@ Write-Host 'PASS: desktop launch detaches with a hidden worker and startup logs.
 Assert-Check (Test-BudgetNode $NodePath) 'The running supported Node must be detected.'
 Assert-Check (-not (Test-BudgetNode 'missing-node.exe')) 'Missing Node must be rejected.'
 $originalData = $env:LOCALAPPDATA
+$originalPath = $env:Path
 $originalTls = $env:NODE_TLS_REJECT_UNAUTHORIZED
 $originalArchitecture = $env:PROCESSOR_ARCHITECTURE
 $originalWow = $env:PROCESSOR_ARCHITEW6432
@@ -64,6 +32,39 @@ $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('budget-windows-launcher-' + [
 New-Item -ItemType Directory -Path $testRoot | Out-Null
 try {
   $env:LOCALAPPDATA = $testRoot
+  & {
+    . (Join-Path $PSScriptRoot 'install-bt.ps1')
+    $script:fixtureUserPath = 'C:\fixture-bin'
+    $script:pathWrites = 0
+    function Get-BudgetUserPath { $script:fixtureUserPath }
+    function Set-BudgetUserPath([string]$Value) { $script:fixtureUserPath = $Value; $script:pathWrites++ }
+    function Publish-PathChange {}
+    $bin = Join-Path $testRoot 'BudgetTerminal\bin'
+    New-Item -ItemType Directory -Path $bin -Force | Out-Null
+    $legacyShim = Join-Path $bin 'BT.cmd'
+    $desktopShim = Join-Path $bin 'BTD.cmd'
+    $launcher = Join-Path $PSScriptRoot 'launch-windows.ps1'
+    Set-Content -LiteralPath $legacyShim -Value "@echo off`r`npowershell.exe -File `"$launcher`" -Tui %*"
+    Install-BudgetDesktopCommand
+    Assert-Check (-not (Test-Path -LiteralPath $legacyShim)) 'Remove the retired command for this checkout.'
+    $content = [IO.File]::ReadAllText($desktopShim)
+    Assert-Check ($content.Contains('"' + $launcher + '" %*')) 'The desktop command quotes the checkout and forwards options.'
+    Assert-Check (-not $content.Contains('-Tui')) 'The installed command must open the desktop app.'
+    Assert-Check ($script:fixtureUserPath -eq ($bin + ';C:\fixture-bin')) 'Install the command directory on the fixture PATH.'
+    Install-BudgetDesktopCommand
+    Assert-Check ($script:pathWrites -eq 1) 'Repeated installation must not rewrite PATH.'
+    Set-Content -LiteralPath $legacyShim -Value 'unrelated command fixture'
+    Install-BudgetDesktopCommand
+    Assert-Check ((Get-Content -LiteralPath $legacyShim) -eq 'unrelated command fixture') 'Preserve unrelated commands.'
+    $Uninstall = $true
+    Install-BudgetDesktopCommand
+    Assert-Check (-not (Test-Path -LiteralPath $desktopShim)) 'Uninstall removes the desktop command.'
+    Assert-Check ($script:fixtureUserPath.Contains($bin)) 'Preserve PATH while another command remains.'
+    Remove-Item -LiteralPath $legacyShim
+    Install-BudgetDesktopCommand
+    Assert-Check ($script:fixtureUserPath -eq 'C:\fixture-bin') 'Uninstall removes the unused command directory from PATH.'
+  }
+  Write-Host 'PASS: desktop command installs idempotently, removes its retired command, preserves unrelated commands and uninstalls safely.'
   $env:PROCESSOR_ARCHITECTURE = 'AMD64'
   $env:PROCESSOR_ARCHITEW6432 = ''
   $env:NODE_TLS_REJECT_UNAUTHORIZED = '0'
@@ -120,6 +121,7 @@ try {
   Write-Host 'PASS: Windows launcher finds later PATH runtimes, blocks TLS bypasses, verifies downloads, cleans failures and reuses its private runtime.'
 } finally {
   $env:LOCALAPPDATA = $originalData
+  $env:Path = $originalPath
   $env:NODE_TLS_REJECT_UNAUTHORIZED = $originalTls
   $env:PROCESSOR_ARCHITECTURE = $originalArchitecture
   $env:PROCESSOR_ARCHITEW6432 = $originalWow

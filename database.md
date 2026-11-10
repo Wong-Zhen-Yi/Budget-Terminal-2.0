@@ -1,8 +1,10 @@
 # Public-user database and cloud sync implementation brief
 
-Status: protocol 2 is implemented, deployed to the separate production service, and offline verification passes. Production signing/discovery and the public release endpoint are configured. Production GitHub credentials and final release acceptance remain pending. See docs/production-release.md and docs/convex-sync.md. Do not delete this brief until the live production, isolation and operating-cost checks are complete.
+> Historical record-sync work: the repository database feature has been restored to commit `3208321debc5e46712d95fb36db563c59e9ba80c`. The implementation and setup now follow [optional Convex snapshot sync](docs/convex-sync.md). The protocol 2 release workflow below is no longer active in this checkout. A later repair deployed the matching snapshot backend to the existing saved-data development service after a private backup and record/snapshot comparison; existing records and accounts were retained. Live desktop sync subsequently reached revision 22. See the follow-up repair in the sync guide. The separate production service remains unchanged.
 
-User override, 2026-11-10: use GitHub only through Convex Auth, keep the existing account, and do not use a mail API. This supersedes the email-code/delivery requirements below. The existing saved-data deployment was backed up and updated; local launchers retain its configured address. The separate production backend and signing settings are now deployed; its independent GitHub OAuth credentials are pending.
+Status: protocol 2 is implemented, deployed to the separate production service, and offline verification passes. Production signing/discovery, the public release endpoint and production GitHub credentials are configured. Production preflight and the live authorization redirect pass; completed browser sign-in and final release acceptance remain pending. See docs/production-release.md and docs/convex-sync.md. Do not delete this brief until the live production, isolation and operating-cost checks are complete.
+
+User override, 2026-11-10: use GitHub only through Convex Auth, keep the existing account, and do not use a mail API. This supersedes the email-code/delivery requirements below. The existing saved-data deployment was backed up and updated; local launchers retain its configured address. The separate production backend, signing settings and independent GitHub OAuth credentials are configured.
 
 ## Instruction for the future implementation run
 

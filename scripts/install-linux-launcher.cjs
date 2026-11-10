@@ -1,5 +1,7 @@
 const { chmodSync, mkdirSync, writeFileSync } = require('node:fs')
-// Installed source launchers retain the existing local backend; production release builds use docs/production-release.md.
+// Convex snapshot writes are restored; record-era cloud tables are retained as an archive.
+// Launchers open the desktop workspace directly, including Portfolio, charts and Agents.
+// Database sync restored to 3208321: optional Convex snapshots, GitHub sign-in and complete-copy conflict choices.
 // Efficiency updates preserve all-page startup readiness; verification is recorded in docs/efficiency-results.md.
 const { homedir } = require('node:os')
 const path = require('node:path')

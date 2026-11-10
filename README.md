@@ -28,10 +28,9 @@
 
 ## One workspace, from research to records
 
-On Windows, double-click **Launch Budget Terminal.cmd** to install and check the setup.
-Then press **Enter** to open the selected **BTD desktop app**, or use **Down** then
-**Enter** to open the **BT terminal interface**. Both commands also work from a new
-terminal. See [Quick start](#quick-start) and [terminal UI controls](docs/terminal-ui.md).
+On Windows, double-click **Launch Budget Terminal.cmd** to open the desktop app
+directly. It checks and updates the app automatically. You can also type `btd` in a new terminal.
+See [Quick start](#quick-start).
 
 Budget Terminal brings public market data and your saved financial records into an
 Electron app built with React and TypeScript. Move from a market overview to company
@@ -144,13 +143,11 @@ cd Budget-Terminal-2.0
 
 On Windows, double-click [Launch Budget Terminal.cmd](Launch%20Budget%20Terminal.cmd)
 from the checkout. It installs or repairs a supported Node.js runtime, dependencies
-and Electron, builds and checks the desktop and terminal interfaces, and installs
-or updates the per-user `bt` and `btd` commands. It then shows a keyboard menu with
-**BTD - Desktop app** first and selected by default. Press **Enter** to open it,
-or use **Up/Down** (or **1/2**) to choose an interface and **Enter** to open it.
-Press **Esc** to close the launcher without opening either interface.
-No administrator access is needed. Double-click it again whenever you need to check
-or repair setup. From the checkout, `npm.cmd run setup` runs the same Windows checks.
+and Electron, builds and checks the desktop app, and installs or updates the per-user
+`btd` command. It then opens the desktop app directly. Setup also removes the retired
+`bt` command when it belongs to this checkout.
+No administrator access is needed. Double-click it again whenever you need to open
+the app. From the checkout, `npm.cmd run setup` runs the Windows checks without opening the app.
 
 On macOS, install a supported Node.js version with npm, then double-click
 [Launch Budget Terminal.command](Launch%20Budget%20Terminal.command) in Finder.
@@ -208,11 +205,11 @@ Settings → Workspace → Keyboard Shortcuts → Controller controls.
 
 ### 3. Open Budget Terminal
 
-After Windows setup, open a new PowerShell or Command Prompt window and type `bt`
-for the terminal interface or `btd` for the desktop app.
+After Windows setup, open a new PowerShell or Command Prompt window and type `btd`
+for the desktop app.
 
 The desktop app runs independently, so its launcher or terminal can close.
-The terminal interface and development mode require their terminal to stay open.
+Development mode requires its terminal to stay open.
 
 `btd` in a new PowerShell or Command Prompt window opens the desktop app from any
 directory and checks dependencies and builds the latest desktop source before opening it.
@@ -220,19 +217,7 @@ To install or repair it manually on Windows, run `npm run setup:desktop` from th
 Normal desktop startup logs are saved under `%LOCALAPPDATA%\BudgetTerminal\launcher-logs`.
 Optional arguments include `btd -Dev`
 for live updates and `btd -Logs` to open diagnostics. To remove only this command,
-run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-bt.ps1 -Desktop -Uninstall`.
-
-`BT` in a new PowerShell window opens the Portfolio TUI with saved holdings, live
-prices, totals and saved option contracts. Left/Right switches portfolios, R refreshes,
-H hides values, C opens candlestick charts, Tab switches holdings/options, and Q or Ctrl+C exits.
-In charts, Up/Down selects holdings, 1/2/3 chooses hourly/daily/weekly bars, and + / - zooms.
-F2 (or A from Portfolio) opens Agents research chat; F1 returns to Portfolio. Enter
-sends a message, /help lists chat commands, and Ctrl+C exits from either view. Agents
-uses your Codex CLI sign-in, with separate local TUI chat history and model/thinking
-controls. Research uses the existing read permissions; saved-data edits remain in
-the desktop app.
-To install or repair the command manually on Windows, run `npm run setup:tui`.
-On macOS and Linux, run `npm run tui` after installing dependencies.
+run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-bt.ps1 -Uninstall`.
 
 ### Launch behavior and troubleshooting
 
@@ -293,12 +278,6 @@ npm run preview --workspace budget-terminal-desktop
 
 The build produces application bundles. Installer packaging and automatic
 application updates are not configured.
-
-For the production release workflow, use `npm run build:release`. It verifies the
-configured production backend, GitHub-only authentication and public signing keys
-before building. `npm run check:production` checks that configuration independently;
-`npm run probe:release` runs its offline regressions. Production OAuth setup and
-remaining acceptance checks are recorded in [the release guide](docs/production-release.md).
 
 </details>
 
@@ -458,9 +437,8 @@ The current comparison loads at startup, including when Scorecard is unvisited.
 
 | Guide | What's inside |
 | :--- | :--- |
-| [Optional account sync](docs/convex-sync.md) | Record sync, GitHub sign-in through Convex Auth, account safety, offline recovery, migration and operator release setup. Production acceptance remains pending. |
+| [Optional Convex sync](docs/convex-sync.md) | Cross-device snapshot sync, GitHub browser sign-in, offline local saves, conflict recovery and deployment. |
 | [Data, startup & backups](docs/user-guide.md) | All-page readiness, feed health, saved-data locations, migration, and backup behavior. |
-| [Terminal interface](docs/terminal-ui.md) | Windows launcher, PowerShell `BT`, and the Portfolio/Agents TUI. |
 | [Public data routing](docs/public-data-routing.md) | Coinbase/Binance spot quotes, CoinGecko metadata, World Bank/IMF annual context, and provider budgets. |
 | [Browser](docs/browser.md) | Embedded Chromium tabs, source reading, research controls, and local login profiles. |
 | [Diagnostic logging](docs/diagnostic-logging.md) | Settings log viewer, retention, export, and privacy. |

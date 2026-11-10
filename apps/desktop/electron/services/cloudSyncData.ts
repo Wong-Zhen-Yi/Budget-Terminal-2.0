@@ -50,12 +50,8 @@ const metadataSchema = z.object({ hash: z.string(), updatedAt: z.number().finite
 const hash = (payload: string) => createHash('sha256').update(payload).digest('hex')
 
 function pristineData(payload: string): boolean {
-  return payload === defaultSyncData()
-}
-
-export function defaultSyncData(): string {
   const { sourcePath: _sourcePath, ...cards } = defaultCardsPayload()
-  return canonical({ version: 1, userData: defaultSyncUserData(), settings: defaultSyncSettings(),
+  return payload === canonical({ version: 1, userData: defaultSyncUserData(), settings: defaultSyncSettings(),
     cards, articles: { articles: [] } })
 }
 
@@ -117,7 +113,7 @@ export async function recoverSyncData(): Promise<void> {
 }
 
 /** Caller holds the saved-data lock and has checked that local data has not changed. */
-export async function applySyncData(payload: string, updatedAt = Date.now(), requireExact = false): Promise<void> {
+export async function applySyncData(payload: string, updatedAt = Date.now()): Promise<void> {
   snapshot(payload)
   const local = await readLocalSyncData()
   const before = local.payload
@@ -128,9 +124,7 @@ export async function applySyncData(payload: string, updatedAt = Date.now(), req
   await atomicSyncFile(journalPath(), { before, local: { updatedAt: local.updatedAt, pristine: local.pristine } })
   try {
     await replace(payload)
-    const saved = await readSyncData()
-    if (requireExact && saved !== canonical(JSON.parse(payload))) throw new Error('Cloud data cannot be represented by this version of the local stores. Local data was preserved.')
-    await saveLocalMetadata({ payload: saved, updatedAt, pristine: false })
+    await saveLocalMetadata({ payload: await readSyncData(), updatedAt, pristine: false })
   }
   catch (error) {
     await replace(before)

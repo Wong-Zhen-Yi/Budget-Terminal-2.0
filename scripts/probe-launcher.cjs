@@ -61,28 +61,23 @@ for (const platform of ['win32', 'darwin', 'linux']) {
   assert(!calls.some(([, args]) => args.some(arg => String(arg).includes('logViewer'))), 'No separate diagnostic application')
 }
 for (const [file, command] of [
-  ['Launch Budget Terminal.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -Setup/],
+  ['Launch Budget Terminal.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1"\n/],
 ]) {
   const source = readFileSync(resolve(__dirname, '..', file), 'utf8').replace(/\r\n/g, '\n')
-  assert.match(source, command, `${file} must install/check the application on double click`)
-  assert(!source.includes('-Tui'), `${file} must not select the TUI`)
+  assert.match(source, command, `${file} must launch the application on double click`)
   const windowsSource = readFileSync(join(__dirname, 'launch-windows.ps1'), 'utf8')
-  assert.match(windowsSource, /install-bt\.ps1'\)/, 'Setup must check or install the PowerShell BT command')
-  assert.match(windowsSource, /install-bt\.ps1'\) -Desktop/, 'Setup must check or install the BTD desktop command')
+  assert.match(windowsSource, /install-bt\.ps1'\)/, 'Setup must check or install the BTD desktop command')
+  assert(!windowsSource.includes('$Tui'), 'Windows launcher must not expose the retired interface')
   assert(!source.includes('-Dev'), `${file} must check the production build`)
   assert(!source.includes('%*'), 'Double-click setup must not forward app launch options')
-  assert.match(source, /powershell\.exe[^\r\n]*launch-menu\.ps1"/, 'Show the interface menu after setup')
-  assert(source.indexOf('if errorlevel 1 goto :failed') < source.indexOf('launch-menu.ps1'), 'Setup failures must stop before the menu')
-  const menuSource = readFileSync(join(__dirname, 'launch-menu.ps1'), 'utf8')
-  assert(menuSource.indexOf('BTD - Desktop app') < menuSource.indexOf('BT  - Terminal interface'), 'Put BTD first')
-  assert.match(menuSource, /bt\s+- open the terminal interface/, 'Explain how to open the TUI')
-  assert.match(menuSource, /btd\s+- open the desktop app/, 'Explain how to open the desktop app')
-  assert.match(menuSource, /new PowerShell or Command Prompt window/, 'Explain that a fresh terminal loads the updated PATH')
-  assert.match(source, /if errorlevel 1 goto :failed/, 'Setup failures must stop before success instructions')
-  assert.match(source, /pause >nul/, 'Double-click setup keeps its result visible')
+  assert(!source.includes('-Setup'), 'Double-click startup must open the app without a separate setup-only pass')
+  assert.equal(source.match(/^powershell\.exe/gm)?.length, 1, 'Double-click startup must launch once')
+  assert.match(source, /powershell\.exe[^\r\n]*launch-windows\.ps1"\nif errorlevel 1 goto :launchFailed/, 'Open the desktop app directly after setup')
+  assert(!source.includes('launch-menu.ps1'), 'Double-click startup must not show an interface chooser')
+  assert.match(source, /pause >nul/, 'Double-click startup keeps failures visible')
 }
 for (const platform of ['win32', 'darwin', 'linux']) {
-  for (const failedCall of [0, 2, 3, 4, 5]) {
+  for (const failedCall of [0, 2, 3, 4]) {
     const calls = []
     let verified = false
     assert.equal(launch({ setupOnly: true, platform, nodeVersion: '24.22.1', environment: {}, locateCodex: () => null, log,
@@ -92,12 +87,10 @@ for (const platform of ['win32', 'darwin', 'linux']) {
         return { status: calls.length === failedCall ? 7 : 0, stdout: '11.0.0' }
       },
     }), failedCall ? 1 : 0)
-    assert.equal(calls.length, failedCall || 5, 'Setup stops at the failed check')
+    assert.equal(calls.length, failedCall || 4, 'Setup stops at the failed check')
     assert(!calls.some(call => /\b(preview|dev)\b/.test(call.args.join(' '))), 'Setup never opens an application')
-    if (!failedCall || failedCall === 5) {
-      assert(verified, 'Verify desktop assets before checking the terminal build')
-      assert(calls.at(-1).args.join(' ').includes('run tui -- --build-only'), 'Build the TUI without an interactive session or backend')
-    }
+    assert.equal(verified, !failedCall, 'Verify desktop assets only after a successful build')
+    assert(!calls.some(call => call.args.join(' ').includes('tui')), 'Setup must not build the retired interface')
   }
 }
 for (const options of [{ development: true }, { logs: true }]) {
@@ -155,7 +148,7 @@ for (const platform of ['win32', 'darwin', 'linux']) {
   assert(calls[1].args.join(' ').includes('install --no-audit --no-fund'))
   assert(calls[1].args.includes('--strict-ssl=true') || calls[1].args.join(' ').includes('--strict-ssl=true'), 'Dependency installs must override insecure npm SSL configuration')
   assert(calls[2].args.join(' ').includes('run ensure:electron'))
-  assert(calls[3].args.join(' ').includes('run build:local'), 'Local launchers must build with the configured existing backend')
+  assert(calls[3].args.join(' ').includes('run build'), 'Local launchers must build the restored snapshot-sync application')
   assert(calls[4].args.join(' ').includes('run preview --workspace budget-terminal-desktop'))
   for (const call of calls) assert.deepEqual(call.options.env, { PATH: 'unchanged' })
 }

@@ -1,11 +1,10 @@
 const { spawnSync } = require('node:child_process')
-// Production release preflight is documented in docs/production-release.md; source launches keep their existing local backend.
+// Convex snapshot writes are restored; record-era cloud tables are retained as an archive.
+// Database sync restored to 3208321: optional Convex snapshots, GitHub sign-in and complete-copy conflict choices.
 // Backup and sync snapshots resolve asynchronous defaults inside function bodies for build compatibility.
-// Local builds keep the existing Convex account; sign-in uses GitHub only, without a mail API.
 // Backup imports recover on failure; Escape cancels edits; public WebSocket resources are supported.
 // Shared option chains, single-capture backups, targeted refresh and live status updates: docs/efficiency-results.md.
 // GitHub sync sign-in reports missing OAuth configuration in Settings before opening the browser.
-// Bounded record sync restores fresh devices; offline edits, conflicts and deletion markers persist.
 // Optional Convex sync supports GitHub browser sign-in and regional cloud deployments.
 // Optional Convex sync preserves local operation; Settings owns sign-in and conflict controls.
 // Current dark navy and blue colour scheme is locked in AGENTS.md; palette changes require an explicit user request.
@@ -26,7 +25,7 @@ function platformName(platform) {
 }
 
 function launch({ development = false, logs = false, setupOnly = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
-  log.log('Cloud sync uses account-owned records, migration, offline recovery and Settings review/export/deletion controls. Production release configuration and preflight: docs/production-release.md. Local source launches keep the existing account. Local use requires no account.')
+  log.log('Cloud sync restored to optional Convex snapshots. Enter your existing deployment URL in Settings; GitHub sign-in, offline saves and complete-copy conflict recovery are available.')
   log.log('Settings > Controller controls: game-style diagram, live inputs and a test mode that pauses page navigation. B or Esc finishes the test.')
   log.log('Compact layouts keep Treasury curves, market controls, probability statistics and heatmap details accessible.')
   log.log('Charts watchlists: saved with user data, backups and cloud sync. Existing profile lists migrate automatically; import and clear update the charts immediately.')
@@ -135,7 +134,7 @@ function launch({ development = false, logs = false, setupOnly = false, platform
   log.log('Startup dependency fixes: Up/Down price targets preload before page readiness; Cards warms every interval after a partial result; News splits multi-ticker article labels into valid quote requests.')
   log.log('Settings API usage now shows startup health and a compact live provider table, with an expandable API and page directory. Failed and incomplete pages appear first in its startup status list.')
   log.log('Telegram: two commands - /new starts a fresh chat; /model opens model buttons, followed by supported reasoning buttons. Desktop Agents History keeps Telegram transcripts visible with separate context. Replies use natural plain text without asterisks, heading symbols or em dashes. Desktop and Telegram agents can search and read the live public web for investor relations, filings and other research, with source links and saved run details.')
-  log.log('BT TUI: Portfolio, candlestick charts and Agents research chat with saved TUI history, streaming, model/thinking controls, Stop and Continue research. F1/F2 switches views.')
+  log.log('Launchers open the desktop app directly. Portfolio, charts and Agents are available in the desktop workspace.')
   log.log('Controller page switching follows visible workspace/page order, including custom ordering and hidden pages.')
   log.log('Controller support: D-pad/left stick moves focus, A activates, B dismisses, shoulders switch pages, Menu opens the page picker and right stick scrolls. Standard gamepads work while the app has focus; see Settings for controls.')
   log.log('Personal Finance: compact screens use two rows so recurring bill names remain readable and the Goal panel stays visible.')
@@ -185,7 +184,7 @@ function launch({ development = false, logs = false, setupOnly = false, platform
   log.log('MCP research now supports summaries, field selection and pagination; scans and captures report progress and accept cancellation. Settings includes token-free client setup, data-folder validation and optional website-content approval. Portfolio, Cards, finance and settings writes require current revisions to protect concurrent edits.')
   log.log('MCP defaults to read-only, with optional native approval for saved-record edits, privacy-safe activity and a connection test in Settings > Data > Local MCP. Mutation request IDs are journaled privately across restarts; check operation status and saved records after interruption.')
   log.log('Updating MCP bundles safely: unchanged files are left alone, changed files are replaced atomically, and temporary Windows file locks are retried. No MCP clients are forcibly stopped.')
-  const build = npm(['run', 'build:local'])
+  const build = npm(['run', 'build'])
   if (build.error || build.status !== 0) {
     log.error('Budget Terminal could not build. See the error above. If an MCP bundle remains locked, close Budget Terminal and disconnect its MCP connection in Codex or other MCP clients, then run this launcher again.')
     return 1
@@ -200,13 +199,7 @@ function launch({ development = false, logs = false, setupOnly = false, platform
   }
 
   if (setupOnly) {
-    log.log('Building and checking the terminal interface without starting Budget Terminal...')
-    const tui = npm(['run', 'tui', '--', '--build-only'])
-    if (tui.error || tui.status !== 0) {
-      log.error('Terminal interface build failed. Fix the error above, then run setup again.')
-      return 1
-    }
-    log.log('Node.js, npm, Electron, desktop assets and terminal interface checks passed.')
+    log.log('Node.js, npm, Electron and desktop asset checks passed.')
     return 0
   }
 

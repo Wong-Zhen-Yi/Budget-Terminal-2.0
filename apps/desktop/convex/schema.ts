@@ -4,6 +4,8 @@ import { authTables } from '@convex-dev/auth/server'
 
 export default defineSchema({
   ...authTables,
+  // Retain record-era tables and indexes as an archive when restoring snapshot sync.
+  // The active sync API only reads/writes syncSnapshots; do not discard archived data.
   authVerifiers: defineTable({ sessionId: v.optional(v.id('authSessions')), signature: v.optional(v.string()) })
     .index('signature', ['signature']).index('by_session', ['sessionId']),
   authRateLimits: defineTable({ identifier: v.string(), lastAttemptTime: v.number(), attemptsLeft: v.number() })

@@ -1,8 +1,8 @@
-param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Tui, [switch]$Setup, [switch]$Attached, [Parameter(ValueFromRemainingArguments=$true)][string[]]$TuiArguments)
+param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Setup, [switch]$Attached)
+# Convex snapshot writes are restored; record-era cloud tables are retained as an archive.
+# Database sync restored to 3208321: optional Convex snapshots, GitHub sign-in and complete-copy conflict choices.
 # Efficiency updates preserve all-page startup readiness; verification is recorded in docs/efficiency-results.md.
-# Production bundles have a separate endpoint and release preflight; local launches retain the existing account. See docs/production-release.md.
 # Backup and sync snapshots resolve asynchronous defaults inside function bodies for build compatibility.
-# Local builds keep the existing Convex account; sign-in uses GitHub only, without a mail API.
 # Backup imports recover on failure; Escape cancels edits; public WebSocket resources are supported.
 # Shared option chains, single-capture backups, targeted refresh and live status updates: docs/efficiency-results.md.
 # Settings > Controller controls includes a live controller diagram and navigation-safe input test.
@@ -16,13 +16,11 @@ $ErrorActionPreference = 'Stop'
 # Controller support: standard gamepads navigate desktop controls and pages; Settings includes the control reference.
 # Charts watchlists now follow user data backup, restore, cloud sync and clear, with automatic profile migration.
 # GitHub sync sign-in validates backend configuration before opening the browser.
-# Bounded record sync restores fresh devices, preserves offline edits and retains deletion markers.
-# Account review, conflicts, export and deletion stay in Settings; production setup/checks: docs/convex-sync.md.
 # Settings supports GitHub browser sign-in and regional Convex deployments; local saves remain independent.
 # Optional Convex sync runs behind local stores; no account or cloud connection is required to launch.
 # Crypto opens directly with market data; the Workspace header, USD badge and Copy snapshot action are removed.
 # Portfolio stocks highlight the full row on hover and while editing or focusing row controls.
-# BT TUI opens Portfolio, candlestick charts and Agents chat; F1/F2 switches views without a desktop window.
+# Launchers open the desktop workspace directly, including Portfolio, charts and Agents.
 # Current dark navy and blue colour scheme is locked in AGENTS.md; palette changes require an explicit user request.
 # Public API routing: Coinbase/Binance spot quotes, shared CoinGecko metadata, World Bank/IMF annual context. Key-based APIs remain inactive.
 # MCP: public Polymarket reads registered; all implemented pages support screenshot access.
@@ -110,7 +108,7 @@ function Get-BudgetNode {
 function Start-BudgetTerminal {
   # Settings uses compact horizontal categories without the redundant Preferences label, overview or introductory header.
   try {
-    if (-not ($Attached -or $RuntimeOnly -or $Dev -or $Tui -or $Setup)) {
+    if (-not ($Attached -or $RuntimeOnly -or $Dev -or $Setup)) {
       $logDirectory = Join-Path $env:LOCALAPPDATA 'BudgetTerminal\launcher-logs'
       New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
       $session = [Guid]::NewGuid().ToString('N')
@@ -120,17 +118,14 @@ function Start-BudgetTerminal {
       Write-Host "Budget Terminal is starting independently. You can close this terminal. Startup logs: $logDirectory"
       return
     }
-    if ($Setup -and ($RuntimeOnly -or $Dev -or $Logs -or $Tui -or $TuiArguments.Count)) {
+    if ($Setup -and ($RuntimeOnly -or $Dev -or $Logs)) {
       throw 'Setup cannot be combined with launch options.'
     }
     $node = Get-BudgetNode
     # The selected complete toolchain also owns npm.cmd and all nested scripts.
     $env:PATH = (Split-Path -Parent $node) + [IO.Path]::PathSeparator + $env:PATH
     if ($RuntimeOnly) { Write-Output $node; return }
-    if ($Tui) {
-      & $node (Join-Path $PSScriptRoot 'tui.cjs') @TuiArguments
-      exit $LASTEXITCODE
-    }
+    if (-not $Setup) { & (Join-Path $PSScriptRoot 'install-bt.ps1') }
     Write-Host 'Reload (F5) updates the current page first, then checks all other pages. Page refresh buttons have been removed; startup still loads every page.'
     Write-Host "Using Node.js $(& $node --version)."
     $launchArguments = @()
@@ -140,8 +135,7 @@ function Start-BudgetTerminal {
     & $node (Join-Path $PSScriptRoot 'launch.cjs') @launchArguments
     if ($Setup -and $LASTEXITCODE -eq 0) {
       & (Join-Path $PSScriptRoot 'install-bt.ps1')
-      & (Join-Path $PSScriptRoot 'install-bt.ps1') -Desktop
-      Write-Host 'Checks passed. Open a new terminal and type btd for the desktop app or bt for the terminal interface.'
+      Write-Host 'Checks passed. Open a new terminal and type btd for the desktop app.'
     }
     exit $LASTEXITCODE
   } catch {

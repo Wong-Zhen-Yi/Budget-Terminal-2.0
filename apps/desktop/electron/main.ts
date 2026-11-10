@@ -30,20 +30,6 @@ startDiagnostics()
 
 const dirname = fileURLToPath(new URL('.', import.meta.url))
 const isDev = !app.isPackaged
-let terminalBackend = process.argv.includes('--tui-backend')
-// Windows GUI executables cannot reliably inherit stdin. Watch the owning Node
-// process instead, including when its terminal is closed or crashes.
-if (terminalBackend) {
-  const parent = Number(process.argv.find(value => value.startsWith('--tui-parent='))?.split('=')[1])
-  if (Number.isInteger(parent) && parent > 0) {
-    const monitor = setInterval(() => {
-      if (!terminalBackend) { clearInterval(monitor); return }
-      try { process.kill(parent, 0) } catch { clearInterval(monitor); app.quit() }
-    }, 1000)
-    monitor.unref()
-  }
-}
-
 if (process.platform === 'darwin') app.setName('Budget Terminal')
 // Isolate Electron's instance lock and browser profile with explicit data overrides.
 if (process.env.BUDGET_TERMINAL_DATA_DIR) {
@@ -103,7 +89,6 @@ function createWindow(): BrowserWindow {
 
   // Paint once, rather than showing an empty frame and then the UI.
   window.once('ready-to-show', () => {
-    if (terminalBackend) return
     if (useGamingFullscreen(process.platform, process.env)) window.setFullScreen(true)
     window.show()
   })
@@ -159,10 +144,8 @@ function createWindow(): BrowserWindow {
 }
 
 if (ownsInstance) {
-  app.on('second-instance', (_event, argv, _directory, additionalData) => {
-    if (argv.includes('--tui-backend')) return
+  app.on('second-instance', (_event, _argv, _directory, additionalData) => {
     if ((additionalData as { openDiagnostics?: boolean })?.openDiagnostics) process.env.BUDGET_TERMINAL_OPEN_DIAGNOSTICS = '1'
-    terminalBackend = false
     const window = mainWindow
     if (!window) {
       // macOS keeps the process alive after its window closes. Reuse that process;
@@ -250,13 +233,12 @@ if (ownsInstance) app.whenReady().then(async () => {
     createWindow()
   } catch (error) {
     diagnosticLog.write('error', 'app', 'startup-failed', { stage, code: faultCode(error) })
-    if (!terminalBackend) dialog.showErrorBox('Budget Terminal could not start', error instanceof Error ? error.message : String(error))
+    dialog.showErrorBox('Budget Terminal could not start', error instanceof Error ? error.message : String(error))
     app.quit()
     return
   }
 
   app.on('activate', () => {
-    terminalBackend = false
     if (!mainWindow) createWindow()
   })
 })

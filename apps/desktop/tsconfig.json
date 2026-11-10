@@ -39,7 +39,6 @@
     "src/**/*.tsx",
     "scripts/**/*.ts",
     "mcp/**/*.ts",
-    "tui/**/*.ts",
     "electron.vite.config.ts"
   ]
 }
