@@ -12,6 +12,9 @@ import { createScreenshotService } from './screenshot.js'
 import { McpDispatcher, mcpPolicySchema } from './dispatcher.js'
 import { invokeBridge, runtimePath } from '../../mcp/runtime.js'
 import { connectionTool } from '../../mcp/catalog.js'
+import { liveStatusEvents } from '../services/liveStatusEvents.js'
+
+const statusChanged = () => liveStatusEvents.changed('mcpStatus')
 
 let status: McpStatus = { available: false, error: 'MCP is starting.' }
 let dispatcher: McpDispatcher | undefined
@@ -20,11 +23,13 @@ export async function configureMcp(value: unknown): Promise<McpStatus> {
   if (!dispatcher || !status.available) throw new Error('Local MCP is unavailable.')
   await dispatcher.configure(value)
   setBrowserPrivacy(dispatcher.diagnostics().policy.browserRequireApproval ?? false)
+  statusChanged()
   return getMcpStatus()
 }
 export async function cancelMcpCall(id: number): Promise<McpStatus> {
   if (!dispatcher) throw new Error('Local MCP is unavailable.')
   dispatcher.cancel(id)
+  statusChanged()
   return getMcpStatus()
 }
 async function inspectSetup(): Promise<NonNullable<McpStatus['setup']>> {
@@ -46,6 +51,7 @@ async function inspectSetup(): Promise<NonNullable<McpStatus['setup']>> {
 }
 export async function testMcpConnection(): Promise<McpStatus> {
   status.setup = await inspectSetup()
+  statusChanged()
   if (!status.setup.valid) throw new Error(status.setup.message)
   await invokeBridge(connectionTool.name, {})
   return getMcpStatus()
@@ -94,14 +100,16 @@ export async function startMcpHost(): Promise<() => Promise<void>> {
     })
     setBrowserPrivacy(dispatcher.diagnostics().policy.browserRequireApproval ?? false)
     // Shared service handlers publish mutations once to the desktop renderer.
-    const bridge = await startBridge({ dispatcher, descriptorPath, onChanged: () => {} })
+    const bridge = await startBridge({ dispatcher, descriptorPath, onChanged: () => {}, onStatusChanged: statusChanged })
     status = bridge.status
     status.setup = await inspectSetup()
-    return async () => { status = { available: false, error: 'MCP is shutting down.' }; await bridge.stop() }
+    statusChanged()
+    return async () => { status = { available: false, error: 'MCP is shutting down.' }; statusChanged(); await bridge.stop() }
   } catch {
     dispatcher?.close()
     dispatcher = undefined
     status = { available: false, error: 'Local MCP could not start. Check local data-folder permissions and restart Budget Terminal.' }
+    statusChanged()
     console.warn(status.error)
     return async () => {}
   }

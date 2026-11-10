@@ -22,6 +22,16 @@ try {
             import { createChart as create } from ${JSON.stringify(resolve(root, '../../node_modules/lightweight-charts/dist/lightweight-charts.production.mjs'))}
             export function createChart(...args) {
               const chart = create(...args)
+              chart.performance = { replacements: 0, updates: 0, candleReplacements: 0 }
+              const add = chart.addSeries.bind(chart)
+              chart.addSeries = (...args) => {
+                const series = add(...args)
+                const set = series.setData.bind(series), update = series.update.bind(series)
+                const candle = args[0].type === 'Candlestick'
+                series.setData = (...args) => { chart.performance.replacements++; if (candle) chart.performance.candleReplacements++; return set(...args) }
+                series.update = (...args) => { chart.performance.updates++; return update(...args) }
+                return series
+              }
               window.lastChart = chart
               return chart
             }
@@ -115,12 +125,15 @@ try {
           const state = useChartsStore.getState()
           const key = queryKeys.chartsHistory(state.symbol, state.interval, state.range)
           const last = client.getQueryData(key).data.candles.at(-1)
+          const performanceBefore = { ...window.lastChart.performance }
           applyEquityMarketUpdate(client, { quotes: [{ symbol: 'AAPL', price: 250, change: 25, absChange: 50, currency: 'USD', priceBasis: 'equity-perp-mark', changeBasis: '24h', source: 'Hyperliquid equity perp (xyz:AAPL)' }],
             candles: [{ symbol: 'AAPL', market: 'xyz:AAPL', interval: '1d', candle: { ...last, close: 181, high: 182 } }] })
           await settle()
           check(document.body.innerText.includes('Hyperliquid equity perp (xyz:AAPL)'), 'Chart and mark sources must be visible')
           check(document.body.innerText.includes('250.00'), 'Streamed mark must update the rendered header')
           check(client.getQueryData(key).data.candles.at(-1).close === 181, 'Actual streamed candle must update separately from the mark')
+          check(window.lastChart.performance.candleReplacements === performanceBefore.candleReplacements, 'A live candle must not replace the full chart history')
+          check(window.lastChart.performance.updates > performanceBefore.updates, 'A live candle must use incremental chart updates')
           useChartsStore.getState().setAutoFollow(false)
           useChartsStore.getState().setSymbol('NVDA'); await settle()
           assertPosition()

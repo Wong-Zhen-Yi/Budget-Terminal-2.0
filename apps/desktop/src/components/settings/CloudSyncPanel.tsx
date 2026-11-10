@@ -1,16 +1,20 @@
 import { useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import type { Envelope } from '@shared/contract'
 import type { CloudSyncCommand, CloudSyncStatus } from '@shared/cloudSync'
 import { Button } from '@/components/ui/Button'
 import { Panel } from '@/components/ui/Panel'
 
 export function CloudSyncPanel() {
-  const [status, setStatus] = useState<CloudSyncStatus | null>(null)
+  const client = useQueryClient()
+  const prepared = client.getQueryData<Envelope<CloudSyncStatus>>(['cloudSyncStatus'])
+  const [status, setStatus] = useState<CloudSyncStatus | null>(() => prepared?.data ?? null)
   const [url, setUrl] = useState('')
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [codeSent, setCodeSent] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(() => prepared?.meta.failureReason ?? '')
   const [notice, setNotice] = useState('')
   const [choice, setChoice] = useState<'local' | 'cloud' | null>(null)
 
@@ -23,13 +27,17 @@ export function CloudSyncPanel() {
     const load = async () => {
       try {
         const result = await window.api.cloudSyncStatus()
-        if (mounted) { setStatus(result.data); if (result.meta.failureReason) setError(result.meta.failureReason) }
+        if (mounted) {
+          client.setQueryData(['cloudSyncStatus'], result)
+          setStatus(result.data)
+          if (result.meta.failureReason) setError(result.meta.failureReason)
+        }
       } catch { if (mounted) setError('Sync settings are unavailable. Local saves continue as usual.') }
     }
-    void load()
+    if (!client.getQueryData(['cloudSyncStatus'])) void load()
     const timer = setInterval(() => void load(), 2000)
     return () => { mounted = false; clearInterval(timer) }
-  }, [])
+  }, [client])
 
   const run = async (command: CloudSyncCommand) => {
     setBusy(true)
@@ -37,6 +45,7 @@ export function CloudSyncPanel() {
     setNotice('')
     try {
       const result = await window.api.cloudSyncCommand(command)
+      client.setQueryData(['cloudSyncStatus'], result)
       setStatus(result.data)
       if (result.meta.failureReason) setError(result.meta.failureReason)
       else {

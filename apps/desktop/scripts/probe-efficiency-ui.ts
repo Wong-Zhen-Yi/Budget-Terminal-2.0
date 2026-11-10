@@ -34,6 +34,7 @@ try {
     import { useNotifications } from './src/api/notificationsQueries'
     import { useBrowser } from './src/api/browserQueries'
     import { subscribeLiveStatus } from './src/api/liveStatus'
+    import { McpActivity } from './src/components/chrome/McpActivity'
     const wait = () => new Promise(resolve => setTimeout(resolve, 10))
     const check = (value, message) => { if (!value) throw Error(message) }
     let time = 0, id = 0
@@ -62,7 +63,7 @@ try {
       const agents = useAgents(true)
       useNotifications()
       useBrowser(true)
-      return <p>{agents.data?.data.messages.at(-1)?.text}</p>
+      return <><p>{agents.data?.data.messages.at(-1)?.text}</p><McpActivity /></>
     }
     window.runChecks = async () => {
       const measurements = {}
@@ -73,7 +74,7 @@ try {
         const host = document.createElement('div'); document.body.append(host)
         const root = createRoot(host)
         root.render(<QueryClientProvider client={client}><StatusHooks /></QueryClientProvider>)
-        for (let index = 0; index < 100 && !client.getQueryData(['browser']); index++) await wait()
+        for (let index = 0; index < 100 && (!client.getQueryData(['browser']) || !client.getQueryData(['mcpStatus'])); index++) await wait()
         check(client.getQueryData(['agents']) && client.getQueryData(['notifications']) && client.getQueryData(['browser']), 'Initial status snapshots did not load')
         await window.fixture.control({ type: 'reset' })
         await advance(60000)
@@ -85,6 +86,8 @@ try {
           check(client.getQueryData(['agents']).data.messages.at(-1).text === 'Final streamed answer', 'Native push lost the final answer')
           for (let index = 0; index < 100 && !client.getQueryData(['notifications']).data.notifications[0].read; index++) await wait()
           check(client.getQueryData(['notifications']).data.notifications[0].read, 'Unread state did not cross IPC')
+          for (let index = 0; index < 100 && document.querySelector('[data-mcp-light="active"]')?.dataset.state !== 'on'; index++) await wait()
+          check(document.querySelector('[data-mcp-light="active"]')?.dataset.state === 'on', 'MCP push must update the activity indicator')
           stop()
           check(window.fixture.listeners() === 0, 'Native IPC listeners leaked')
           await window.fixture.control({ type: 'update', emit: false, text: 'Recovered after disconnect', read: false })
@@ -93,7 +96,7 @@ try {
         } else stop()
         root.unmount(); client.clear(); host.remove(); timers.clear()
       }
-      check(measurements.legacy.calls.agents === 20 && measurements.legacy.calls.notifications === 20 && measurements.legacy.calls.browser === 100, 'Legacy transport polling changed')
+      check(measurements.legacy.calls.agents === 20 && measurements.legacy.calls.notifications === 20 && measurements.legacy.calls.browser === 100 && measurements.legacy.calls.mcpStatus === 120, 'Legacy transport polling changed')
       return measurements
     }
   ` }, bundle: true, platform: 'browser', format: 'iife', tsconfig: join(root, 'tsconfig.json'), outfile: join(scratch, 'renderer.js') })
@@ -107,9 +110,10 @@ try {
       agents: { connected: true, busy: false, trackers: [], messages: Array.from({ length: 300 }, (_, id) => ({ id: String(id), text: 'x'.repeat(1000) })) },
       notifications: { notifications: Array.from({ length: 500 }, (_, id) => ({ id: String(id), read: false, body: 'Synthetic inbox message' })) },
       browser: { tabs: [], activeTabId: '', agentEnabled: false, activity: '' },
+      mcpStatus: { available: true, connected: true, active: false },
     }
-    for (const kind of Object.keys(payloads)) ipcMain.handle(kind + ':status', () => {
-      const result = { data: structuredClone(payloads[kind]), errors: [], meta: { source: 'synthetic fixture', freshness: 'fresh', fetchedAt: Date.now() } }
+    for (const kind of Object.keys(payloads)) ipcMain.handle(kind === 'mcpStatus' ? 'system:mcp-status' : kind + ':status', () => {
+      const result = kind === 'mcpStatus' ? structuredClone(payloads[kind]) : { data: structuredClone(payloads[kind]), errors: [], meta: { source: 'synthetic fixture', freshness: 'fresh', fetchedAt: Date.now() } }
       calls[kind] = (calls[kind] || 0) + 1
       bytes += Buffer.byteLength(JSON.stringify(result))
       return result
@@ -120,7 +124,8 @@ try {
       if (request.type === 'update') {
         payloads.agents.messages.at(-1).text = request.text
         payloads.notifications.notifications[0].read = request.read
-        if (request.emit) for (const kind of ['agents', 'notifications']) event.sender.send('live-status:changed', { kind, revision: ++revision })
+        payloads.mcpStatus.active = request.emit
+        if (request.emit) for (const kind of ['agents', 'notifications', 'mcpStatus']) event.sender.send('live-status:changed', { kind, revision: ++revision })
       }
     })
     app.whenReady().then(async () => {

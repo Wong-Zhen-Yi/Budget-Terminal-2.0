@@ -165,6 +165,21 @@ function jsonBytes(value: unknown): number {
 // React Query retains immutable state objects between updates. Reuse their sizes so
 // each startup result does not serialize all previously loaded histories again.
 const querySizes = new WeakMap<object, number>()
+const liveSnapshots = new WeakSet<object>()
+
+/** Internal provenance only: source refreshes/failures must retain normal persistence timing. */
+export function markLiveQuerySnapshot(snapshot: object): void {
+  liveSnapshots.add(snapshot)
+}
+
+function querySize(query: PersistedClient['clientState']['queries'][number]): number {
+  let size = querySizes.get(query.state)
+  if (size === undefined) {
+    size = jsonBytes(query)
+    querySizes.set(query.state, size)
+  }
+  return size
+}
 
 function* trimClient(client: PersistedClient, maxBytes = cacheSettings.rendererMiB * MIB): Generator<void, PersistedClient> {
   const candidates = [...client.clientState.queries]
@@ -173,11 +188,7 @@ function* trimClient(client: PersistedClient, maxBytes = cacheSettings.rendererM
   const queries: PersistedClient['clientState']['queries'] = []
   let used = jsonBytes(empty)
   for (const query of candidates) {
-    let size = querySizes.get(query.state)
-    if (size === undefined) {
-      size = jsonBytes(query)
-      querySizes.set(query.state, size)
-    }
+    const size = querySize(query)
     yield
     if (used + size > maxBytes) continue
     queries.push(query)
@@ -237,12 +248,12 @@ function markRestored(client: PersistedClient): PersistedClient {
 }
 
 type SavedQuery = PersistedClient['clientState']['queries'][number]
-interface SavedMetadata { reference?: WeakRef<object>; updatedAt: number; size: number }
+interface SavedMetadata { reference?: WeakRef<object>; updatedAt: number; savedAt: number; size: number }
 
 function savedMetadata(query: SavedQuery): SavedMetadata {
   const data = query.state.data
   return { reference: data && typeof data === 'object' ? new WeakRef(data) : undefined,
-    updatedAt: query.state.dataUpdatedAt, size: jsonBytes(query) }
+    updatedAt: query.state.dataUpdatedAt, savedAt: Date.now(), size: querySize(query) }
 }
 
 type ClientHeader = PersistedClient & { incremental?: boolean }
@@ -266,8 +277,8 @@ export function recordCacheDecision(root: string, reason: 'reused' | 'missing' |
 }
 
 /** Independent instances let restart probes use real IndexedDB, never a user's profile. */
-export function createRendererQueryPersister({ database = DATABASE, throttleMs = 1_000, loadSettings }: {
-  database?: string; throttleMs?: number; loadSettings?: () => Promise<void>
+export function createRendererQueryPersister({ database = DATABASE, throttleMs = 1_000, liveCheckpointMs = 15_000, loadSettings }: {
+  database?: string; throttleMs?: number; liveCheckpointMs?: number; loadSettings?: () => Promise<void>
 } = {}): Persister & { flush: () => Promise<void>; stats: () => RendererCacheStats } {
   let pendingWrite: ReturnType<typeof setTimeout> | undefined
   let latestClient: PersistedClient | undefined
@@ -293,7 +304,7 @@ export function createRendererQueryPersister({ database = DATABASE, throttleMs =
     }
   }
 
-  function writeLatestClient(): Promise<void> {
+  function writeLatestClient(force = false): Promise<void> {
     if (writing) return writing
     const client = latestClient
     latestClient = undefined
@@ -301,7 +312,20 @@ export function createRendererQueryPersister({ database = DATABASE, throttleMs =
     const currentGeneration = generation
     writing = (async () => {
       try {
-        const trimmed = await trimPersistedClientInBackground(client, () => currentGeneration !== generation)
+        // Stream marks preserve source age. Checkpoint them less often than real
+        // provider refreshes, and always drain the latest values on orderly shutdown.
+        const deferred = new Set<string>()
+        const candidates = client.clientState.queries.filter(query => {
+          const previous = savedQueries.get(query.queryHash)
+          if (!force && liveSnapshots.has(query.state.data as object) && previous && previous.updatedAt === query.state.dataUpdatedAt
+            && previous.reference?.deref() !== query.state.data && Date.now() - previous.savedAt < liveCheckpointMs) {
+            deferred.add(query.queryHash)
+            return false
+          }
+          return true
+        })
+        if (deferred.size) latestClient ??= client
+        const trimmed = await trimPersistedClientInBackground({ ...client, clientState: { ...client.clientState, queries: candidates } }, () => currentGeneration !== generation)
         if (!trimmed || currentGeneration !== generation) return
         // Memory GC is independent of disk retention. Only hold weak identities and
         // scalar bookkeeping here, never full snapshots that defeat memory eviction.
@@ -371,7 +395,7 @@ export function createRendererQueryPersister({ database = DATABASE, throttleMs =
       do {
         clearTimeout(pendingWrite)
         pendingWrite = undefined
-        await (writing ?? writeLatestClient())
+        await (writing ?? writeLatestClient(true))
       } while (latestClient || writing)
     },
     restoreClient: async () => {

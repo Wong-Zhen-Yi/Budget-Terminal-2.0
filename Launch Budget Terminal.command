@@ -1,5 +1,6 @@
 #!/bin/sh
 # macOS Finder entry point. Share runtime checks and startup updates with Linux.
+# Incremental charts, indexed live updates and cache checkpoints: docs/performance.md.
 # Curated design references live in docs/; output/ is for ignored local captures.
 cd "$(dirname "$0")" || exit 1
 

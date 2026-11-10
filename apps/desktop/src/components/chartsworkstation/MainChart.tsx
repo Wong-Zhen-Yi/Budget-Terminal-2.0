@@ -1,4 +1,5 @@
 import { fitStockChart, layoutIndicatorPanes } from '@/charts/stockChartLayout'
+import { syncTimeSeries } from '@/charts/seriesUpdates'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AreaSeries,
@@ -90,6 +91,7 @@ export function MainChart({
   const priceLines = useRef<IPriceLine[]>([])
   const candlesRef = useRef(new Map<number, Candle>())
   const fittedContext = useRef('')
+  const previousData = useRef<{ context: string; candles: Candle[]; indicators: ChartsHistoryPayload['indicators'] } | null>(null)
   const propsRef = useRef({ drawings, drawingTool, onDrawingsChange, onDrawingToolComplete })
   propsRef.current = { drawings, drawingTool, onDrawingsChange, onDrawingToolComplete }
   const [pending, setPending] = useState<DrawingAnchor | null>(null)
@@ -162,6 +164,7 @@ export function MainChart({
       chartRef.current = null
       seriesRef.current = null
       fittedContext.current = ''
+      previousData.current = null
     }
   }, [onHover])
 
@@ -169,17 +172,28 @@ export function MainChart({
     const series = seriesRef.current
     const chart = chartRef.current
     if (!series || !chart) return
-    candlesRef.current = new Map(shownCandles.map((candle) => [candle.time, candle]))
-    series.candles.setData(shownCandles.map((row) => ({ time: row.time as UTCTimestamp, open: row.open, high: row.high, low: row.low, close: row.close })))
-    const closeData = shownCandles.map((row) => ({ time: row.time as UTCTimestamp, value: row.close }))
-    series.line.setData(closeData)
-    series.area.setData(closeData)
-    series.volume.setData(shownCandles.map((row) => ({ time: row.time as UTCTimestamp, value: row.volume, color: row.close >= row.open ? `${COLORS.up}80` : `${COLORS.down}80` })))
-    series.ma50.setData((payload?.indicators.ma50 ?? []).filter((point) => point.time <= lastShownTime).map(pointData))
-    series.ma200.setData((payload?.indicators.ma200 ?? []).filter((point) => point.time <= lastShownTime).map(pointData))
-    series.rsi.setData((payload?.indicators.rsi ?? []).filter((point) => point.time <= lastShownTime).map(pointData))
-    series.rsiMa.setData((payload?.indicators.rsiMa ?? []).filter((point) => point.time <= lastShownTime).map(pointData))
     const context = `${payload?.symbol}:${payload?.intervalLabel}:${payload?.rangeLabel}`
+    const previous = previousData.current
+    const reset = previous?.context !== context
+    const replaced = syncTimeSeries(series.candles, previous?.candles, shownCandles,
+      row => ({ time: row.time as UTCTimestamp, open: row.open, high: row.high, low: row.low, close: row.close }), reset)
+    const closePoint = (row: Candle) => ({ time: row.time as UTCTimestamp, value: row.close })
+    syncTimeSeries(series.line, previous?.candles, shownCandles, closePoint, reset)
+    syncTimeSeries(series.area, previous?.candles, shownCandles, closePoint, reset)
+    syncTimeSeries(series.volume, previous?.candles, shownCandles,
+      row => ({ time: row.time as UTCTimestamp, value: row.volume, color: row.close >= row.open ? `${COLORS.up}80` : `${COLORS.down}80` }), reset)
+    const currentIndicators = {} as ChartsHistoryPayload['indicators']
+    for (const key of ['ma50', 'ma200', 'rsi', 'rsiMa'] as const) {
+      const points = payload?.indicators[key] ?? []
+      currentIndicators[key] = replayLimit === null ? points : points.filter(point => point.time <= lastShownTime)
+      syncTimeSeries(series[key], previous?.indicators[key], currentIndicators[key], pointData, reset)
+    }
+    if (replaced) candlesRef.current = new Map(shownCandles.map(candle => [candle.time, candle]))
+    else for (let index = Math.max(0, (previous?.candles.length ?? 1) - 1); index < shownCandles.length; index++) {
+      const candle = shownCandles[index]
+      candlesRef.current.set(candle.time, candle)
+    }
+    previousData.current = { context, candles: shownCandles, indicators: currentIndicators }
     if (shownCandles.length && (fittedContext.current !== context || autoFollow || replayLimit !== null)) {
       fittedContext.current = context
       requestAnimationFrame(() => fitStockChart(chart, shownCandles.length))

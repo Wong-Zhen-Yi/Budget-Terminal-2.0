@@ -87,6 +87,23 @@ function branches(schema: Schema, root: unknown): Schema[] {
 }
 
 try {
+  const statusPushes: Array<{ active?: boolean; connected?: boolean }> = []
+  bridge = await startBridge({ dispatcher: new McpDispatcher({ routes: new Map(catalog.map(entry =>
+    [entry.operation, () => ({ providers: [], sampledAt: Date.now() })])),
+  }), onChanged: () => {}, onStatusChanged: () => {
+    statusPushes.push({ active: bridge?.status.active, connected: bridge?.status.connected })
+  } })
+  await invokeBridge('budget_terminal_api_usage', { request: {} })
+  assert(statusPushes.some(status => status.active && status.connected), 'Real bridge activity must publish status changes')
+  const realNow = Date.now
+  const expiryClock = mock.method(Date, 'now', () => realNow() + 16_000)
+  try {
+    // The existing 1.5 s expiry timer must publish both expired lights without a
+    // renderer poll, even after suspend/resume advances the wall clock.
+    await new Promise(resolve => setTimeout(resolve, 1_650))
+    assert.deepEqual(statusPushes.at(-1), { active: false, connected: false })
+  } finally { expiryClock.mock.restore(); await bridge.stop() }
+
   const client = await connect()
   const tools = (await client.listTools()).tools
   assert.equal(tools.length, Object.keys(operations).length + 1)

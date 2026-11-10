@@ -25,6 +25,7 @@ function platformName(platform) {
 }
 
 function launch({ development = false, logs = false, setupOnly = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
+  log.log('Performance: incremental live charts, batched symbol updates, reduced cache writes and pushed MCP status. Settings > Cache and startup shows prepared-page memory estimates. All pages still preload.')
   log.log('Cloud sync restored to optional Convex snapshots. Enter your existing deployment URL in Settings; GitHub sign-in, offline saves and complete-copy conflict recovery are available.')
   log.log('Settings > Controller controls: game-style diagram, live inputs and a test mode that pauses page navigation. B or Esc finishes the test.')
   log.log('Compact layouts keep Treasury curves, market controls, probability statistics and heatmap details accessible.')

@@ -14,11 +14,12 @@ import type { McpStatus, SavedDataDomain } from '../shared/contract.js'
 export interface BridgeOptions {
   dispatcher: McpDispatcher
   onChanged: (domains: SavedDataDomain[]) => void
+  onStatusChanged?: () => void
   descriptorPath?: string
 }
 
 /** This bridge owns no stores; every operation executes in the existing Electron owner. */
-export async function startBridge({ dispatcher, onChanged, descriptorPath = runtimePath() }: BridgeOptions) {
+export async function startBridge({ dispatcher, onChanged, onStatusChanged, descriptorPath = runtimePath() }: BridgeOptions) {
   const token = randomBytes(32).toString('hex')
   const expected = Buffer.from(`Bearer ${token}`)
   let closing = false
@@ -30,6 +31,19 @@ export async function startBridge({ dispatcher, onChanged, descriptorPath = runt
     tools: catalog.length + 1,
     get connected() { return !closing && (activeCalls > 0 || Date.now() - lastSeen < 15_000) },
     get active() { return !closing && (activeCalls > 0 || Date.now() - lastActivity < 1_500) },
+  }
+  let statusTimer: ReturnType<typeof setTimeout> | undefined
+  const publishStatus = () => {
+    clearTimeout(statusTimer)
+    statusTimer = undefined
+    onStatusChanged?.()
+    if (closing || activeCalls) return
+    const now = Date.now()
+    const deadlines = [lastActivity + 1_500, lastSeen + 15_000].filter(deadline => deadline > now)
+    if (deadlines.length) {
+      statusTimer = setTimeout(publishStatus, Math.min(...deadlines) - now + 1)
+      statusTimer.unref()
+    }
   }
   const pending = new Set<Promise<void>>()
   const server = createServer((request, response) => {
@@ -89,6 +103,7 @@ export async function startBridge({ dispatcher, onChanged, descriptorPath = runt
       if (call.name === connectionTool.name) {
         if (!call.arguments || typeof call.arguments !== 'object' || Array.isArray(call.arguments) || Object.keys(call.arguments).length) return send(400, { error: 'Connection status takes no arguments.' })
         lastSeen = Date.now()
+        publishStatus()
         return send(200, { available: true, version: BRIDGE_VERSION, tools: catalog.length + 1, policy: dispatcher.diagnostics().policy })
       }
       let validated: ReturnType<typeof validateCall>
@@ -98,6 +113,7 @@ export async function startBridge({ dispatcher, onChanged, descriptorPath = runt
       }
       lastSeen = Date.now()
       activeCalls += 1
+      publishStatus()
       try {
         const result = await dispatcher.invoke(call.name, call.arguments, 'external', controller.signal, progress)
         if (validated.operation in mutationDomains && !failed(result)) {
@@ -110,6 +126,7 @@ export async function startBridge({ dispatcher, onChanged, descriptorPath = runt
         activeCalls -= 1
         lastSeen = Date.now()
         lastActivity = lastSeen
+        publishStatus()
       }
     }
     const task = run().catch(() => send(400, { error: 'Could not read bridge request.' }))
@@ -125,7 +142,7 @@ export async function startBridge({ dispatcher, onChanged, descriptorPath = runt
       resolve((server.address() as { port: number }).port)
     })
   })
-  server.on('error', () => { closing = true; status.available = false; status.error = 'The local MCP bridge stopped accepting requests.' })
+  server.on('error', () => { closing = true; status.available = false; status.error = 'The local MCP bridge stopped accepting requests.'; publishStatus() })
   try {
     const directory = dirname(descriptorPath)
     await mkdir(directory, { recursive: true, mode: 0o700 })
@@ -141,6 +158,8 @@ export async function startBridge({ dispatcher, onChanged, descriptorPath = runt
     await writeFile(temporary, JSON.stringify({ version: BRIDGE_VERSION, port, token, pid: process.pid }), { mode: 0o600 })
     await rename(temporary, descriptorPath)
   } catch (error) {
+    closing = true
+    clearTimeout(statusTimer)
     server.close()
     await rm(`${descriptorPath}.${process.pid}.tmp`, { force: true })
     throw error
@@ -153,6 +172,7 @@ export async function startBridge({ dispatcher, onChanged, descriptorPath = runt
         closing = true
         dispatcher.close()
         status.available = false
+        publishStatus()
         const closed = new Promise<void>((resolve) => server.close(() => resolve()))
         server.closeIdleConnections()
         await Promise.allSettled([...pending])

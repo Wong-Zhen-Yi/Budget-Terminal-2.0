@@ -29,7 +29,7 @@ try {
   await build({ stdin: { resolveDir: root, loader: 'tsx', contents: `
     import { QueryClient, QueryClientProvider, dehydrate, hydrate } from '@tanstack/react-query'
     import { createRoot } from 'react-dom/client'
-    import { createRendererQueryPersister, shouldPersistRemoteQuery, configureRendererCache } from './src/api/queryPersistence'
+    import { createRendererQueryPersister, shouldPersistRemoteQuery, configureRendererCache, markLiveQuerySnapshot } from './src/api/queryPersistence'
     import { DEFAULT_CACHE_SETTINGS } from './electron/shared/cachePolicy'
     import { CachePanel } from './src/components/settings/CachePanel'
     import { warmStartupQuery } from './src/api/warmQueue'
@@ -116,6 +116,52 @@ try {
         check(!await polling.restoreClient(), 'Cleared data was resurrected by a pending save')
         client.clear()
 
+        const live = createRendererQueryPersister({ database: 'synthetic-live-cache', throttleMs: 10, liveCheckpointMs: 200 })
+        let liveWrites = 0, serializations = 0
+        IDBObjectStore.prototype.put = function(value, ...args) {
+          if (this.name === 'queries') liveWrites++
+          return put.call(this, value, ...args)
+        }
+        const sourceAt = Date.now() - 1000
+        try {
+          const measured = { toJSON() { serializations++; return { price: 10 } } }
+          client.setQueryData(['quotes', 'LIVE'], { ...envelope(10, sourceAt), data: measured }, { updatedAt: sourceAt })
+          // toJSON methods cannot enter IndexedDB; measure the serializer in the
+          // trimming path separately, then persist ordinary structured-clone data.
+          const { trimPersistedClient } = await import('./src/api/queryPersistence')
+          const measuredSnapshot = snapshot()
+          trimPersistedClient(measuredSnapshot); trimPersistedClient(measuredSnapshot)
+          check(serializations === 1, 'Repeated trimming must reuse snapshot sizes')
+          client.setQueryData(['quotes', 'LIVE'], envelope(10, sourceAt), { updatedAt: sourceAt })
+          live.persistClient(snapshot()); await live.flush()
+          for (let price = 11; price <= 15; price++) {
+            client.setQueryData(['quotes', 'LIVE'], envelope(price, sourceAt), { updatedAt: sourceAt })
+            markLiveQuerySnapshot(client.getQueryData(['quotes', 'LIVE']))
+            live.persistClient(snapshot())
+            await wait(15)
+          }
+          check(liveWrites === 1, 'Live ticks must not serialize/write the full snapshot at polling cadence: ' + liveWrites)
+          await live.flush()
+          check(liveWrites === 2, 'Shutdown flush must checkpoint the latest buffered tick')
+          const restoredLive = await live.restoreClient()
+          check(restoredLive.clientState.queries[0].state.data.data.price === 15, 'The final live value did not survive a restore')
+          check(restoredLive.clientState.queries[0].state.data.meta.fetchedAt === sourceAt, 'Checkpointing changed source age')
+          client.setQueryData(['quotes', 'LIVE'], envelope(16, sourceAt), { updatedAt: sourceAt })
+          markLiveQuerySnapshot(client.getQueryData(['quotes', 'LIVE']))
+          live.persistClient(snapshot())
+          await wait(260)
+          check(liveWrites === 3, 'Continuous live updates must eventually checkpoint without shutdown')
+          client.setQueryData(['quotes', 'LIVE'], envelope(17), { updatedAt: sourceAt })
+          live.persistClient(snapshot())
+          await wait(40)
+          check(liveWrites === 4, 'A provider result with an unchanged source timestamp must bypass the live-only checkpoint delay')
+        } finally {
+          await live.flush()
+          IDBObjectStore.prototype.put = put
+          await live.removeClient()
+          client.clear()
+        }
+
         client.setQueryData(['quotes', 'FIXTURE'], envelope(100))
         client.setQueryData(['fundamentals', 'FIXTURE'], envelope(200))
         await client.fetchQuery({ queryKey: ['fundamentals', 'FIXTURE'],
@@ -175,6 +221,7 @@ try {
       await wait(100)
       check(document.querySelector('main').textContent.includes('101 (cached)'), 'Restored UI did not paint its ready content')
       check(document.querySelectorAll('meter').length === 3, 'Cache Settings must show three independent budgets')
+      check(document.querySelector('[data-query-memory]')?.textContent.includes('prepared pages'), 'Settings must expose protected startup memory separately from disk limits')
       check(document.body.textContent.includes('due for a check'), 'Cache Settings must describe revalidation without declaring market history invalid')
       check(document.body.textContent.includes('next regular session'), 'Cache Settings must explain session-aware reuse')
       const button = [...document.querySelectorAll('button')].find(button => button.textContent === 'Use defaults')

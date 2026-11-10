@@ -1,4 +1,5 @@
 import { fitStockChart } from '@/charts/stockChartLayout'
+import { syncTimeSeries } from '@/charts/seriesUpdates'
 import { useEffect, useRef } from 'react'
 import {
   CandlestickSeries,
@@ -17,6 +18,7 @@ import type { ChartsHistoryPayload } from '@shared/contract'
 export function MiniChart({ payload, style, active }: { payload: ChartsHistoryPayload | null; style: 'candles' | 'line'; active: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
+  const previousPayload = useRef<ChartsHistoryPayload | null>(null)
   const seriesRef = useRef<{ candles: ISeriesApi<'Candlestick'>; line: ISeriesApi<'Line'>; priceLine: IPriceLine } | null>(null)
 
   useEffect(() => {
@@ -40,6 +42,7 @@ export function MiniChart({ payload, style, active }: { payload: ChartsHistoryPa
       chart.remove()
       chartRef.current = null
       seriesRef.current = null
+      previousPayload.current = null
     }
   }, [])
 
@@ -55,12 +58,16 @@ export function MiniChart({ payload, style, active }: { payload: ChartsHistoryPa
     const chart = chartRef.current
     if (!series || !chart) return
     const rows = payload?.candles ?? []
-    series.candles.setData(rows.map((row) => ({ time: row.time as UTCTimestamp, open: row.open, high: row.high, low: row.low, close: row.close })))
-    series.line.setData(rows.map((row) => ({ time: row.time as UTCTimestamp, value: row.close })))
+    const previous = previousPayload.current
+    const reset = previous?.symbol !== payload?.symbol || previous?.intervalLabel !== payload?.intervalLabel || previous?.rangeLabel !== payload?.rangeLabel
+    const replaced = syncTimeSeries(series.candles, previous?.candles, rows,
+      row => ({ time: row.time as UTCTimestamp, open: row.open, high: row.high, low: row.low, close: row.close }), reset)
+    syncTimeSeries(series.line, previous?.candles, rows, row => ({ time: row.time as UTCTimestamp, value: row.close }), reset)
+    previousPayload.current = payload
     series.candles.applyOptions({ visible: style === 'candles' })
     series.line.applyOptions({ visible: style === 'line' })
     if (rows.length) series.priceLine.applyOptions({ price: rows.at(-1)!.close })
-    requestAnimationFrame(() => fitStockChart(chart, rows.length))
+    if (replaced) requestAnimationFrame(() => fitStockChart(chart, rows.length))
   }, [payload, style])
 
   return <div ref={containerRef} className="min-h-44 flex-1" />

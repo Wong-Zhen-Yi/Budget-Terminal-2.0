@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
-import { useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { notifyManager, useQueryClient, type Query, type QueryClient } from '@tanstack/react-query'
 import type { BmnrPayload, Candle, ChartPayload, ChartsComparePayload, ChartsHistoryPayload, CryptoPayload, EquityMarketUpdate, Envelope, FundamentalsPagePayload, HeatmapPayload, MarketCapPayload, PriceScreenPayload, Quote, QuotesPayload, StocksPayload, ValuationPayload } from '@shared/contract'
-import { rsi, sma, toPoints } from '../../electron/services/indicators'
+import { liveIndicators, retainLiveIndicatorState } from './liveIndicators'
+import { createEquityQueryIndex } from './equityQueryIndex'
+import { markLiveQuerySnapshot } from './queryPersistence'
 import { targetUpside } from '@shared/stocks'
 import { sofiBookRatios, type SofiPayload } from '@shared/sofi'
 import { markBmnrPayload } from '@shared/bmnr'
@@ -23,12 +25,13 @@ function stockMark(stock: StocksPayload, quote: Quote): StocksPayload {
 export function mergeStreamCandle(candles: Candle[], candle: Candle): Candle[] {
   const last = candles.at(-1)
   if (!last || candle.time < last.time) return candles
+  if (last.time === candle.time && last.open === candle.open && last.high === candle.high && last.low === candle.low && last.close === candle.close && last.volume === candle.volume) return candles
   return (candle.time === last.time ? [...candles.slice(0, -1), candle] : [...candles, candle]).slice(-5_000)
 }
 
-export function applyEquityMarketUpdate(client: QueryClient, update: EquityMarketUpdate): void {
+export function applyEquityMarketUpdate(client: QueryClient, update: EquityMarketUpdate, queries: Iterable<Query> = client.getQueryCache().getAll()): void {
   const quotes = new Map(update.quotes.map(quote => [quote.symbol, quote]))
-  for (const query of client.getQueryCache().getAll()) {
+  for (const query of queries) {
     const envelope = query.state.data as Envelope<unknown> | undefined
     if (!envelope?.data || typeof envelope.data !== 'object') continue
     const root = String(query.queryKey[0])
@@ -141,13 +144,7 @@ export function applyEquityMarketUpdate(client: QueryClient, update: EquityMarke
         if (event.symbol !== payload.symbol || event.market !== payload.stats.market || event.interval !== (payload.interval === '1w' ? '1wk' : payload.interval === '1M' ? '1mo' : payload.interval)) continue
         const candles = mergeStreamCandle(next.candles, event.candle)
         if (candles === next.candles) continue
-        const closes = candles.map(row => row.close)
-        const rsiValues = rsi(closes, 14)
-        // Intraday MA lines remain daily-derived. Daily MAs can be recomputed from the
-        // same venue's complete visible daily series once enough bars are present.
-        const indicators = { ...next.indicators, rsi: toPoints(candles, rsiValues), rsiMa: toPoints(candles, sma(rsiValues, 14)) }
-        if (payload.interval === '1d' && candles.length >= 200) indicators.ma200 = toPoints(candles, sma(closes, 200))
-        if (payload.interval === '1d' && candles.length >= 50 && 'ma50' in indicators) indicators.ma50 = toPoints(candles, sma(closes, 50))
+        const indicators = liveIndicators(next, candles)
         const last = candles.at(-1)!
         const previous = candles.at(-2) ?? last
         const cryptoStats = cryptoPerpSymbol(payload.symbol) ? { price: last.close, absChange: last.close - previous.close, change: (last.close / previous.close - 1) * 100 } : {}
@@ -157,11 +154,48 @@ export function applyEquityMarketUpdate(client: QueryClient, update: EquityMarke
     }
     // Keep the envelope's oldest source time/failures: a new mark must not make
     // old Yahoo fundamentals, macro quotes or historical dependencies look fresh.
-    if (data !== envelope.data) client.setQueryData(query.queryKey, { ...envelope, data }, { updatedAt: query.state.dataUpdatedAt })
+    if (data !== envelope.data) {
+      const stored = client.setQueryData<Envelope<unknown>>(query.queryKey, { ...envelope, data }, { updatedAt: query.state.dataUpdatedAt })
+      if (stored) markLiveQuerySnapshot(stored)
+      if (root === 'chart' || root === 'chartsHistory') {
+        retainLiveIndicatorState((data as ChartPayload).candles, (stored!.data as ChartPayload).candles)
+      }
+    }
   }
 }
 
 export function useEquityMarketStream(): void {
   const client = useQueryClient()
-  useEffect(() => window.api.onEquityMarketChanged?.(update => applyEquityMarketUpdate(client, update)), [client])
+  useEffect(() => {
+    const stream = createBatchedEquityUpdates(client)
+    const stop = window.api.onEquityMarketChanged?.(stream.enqueue)
+    return () => { stop?.(); stream.stop() }
+  }, [client])
+}
+
+/** Retain every distinct candle timestamp while coalescing repeated marks/live bars. */
+export function createBatchedEquityUpdates(client: QueryClient, delayMs = 50) {
+  const index = createEquityQueryIndex(client)
+  const quotes = new Map<string, Quote>()
+  const candles = new Map<string, EquityMarketUpdate['candles'][number]>()
+  let hyperliquid: EquityMarketUpdate['hyperliquid']
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const flush = () => {
+    clearTimeout(timer)
+    timer = undefined
+    if (!quotes.size && !candles.size && !hyperliquid) return
+    const update = { quotes: [...quotes.values()], candles: [...candles.values()].sort((a, b) => a.candle.time - b.candle.time), hyperliquid }
+    quotes.clear(); candles.clear(); hyperliquid = undefined
+    notifyManager.batch(() => applyEquityMarketUpdate(client, update, index.matching(update)))
+  }
+  return {
+    enqueue(update: EquityMarketUpdate) {
+      for (const quote of update.quotes) quotes.set(quote.symbol, quote)
+      for (const event of update.candles) candles.set(JSON.stringify([event.symbol, event.market, event.interval, event.candle.time]), event)
+      if (update.hyperliquid) hyperliquid = update.hyperliquid
+      timer ??= setTimeout(flush, delayMs)
+    },
+    flush,
+    stop() { flush(); index.stop() },
+  }
 }

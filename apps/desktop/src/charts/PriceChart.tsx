@@ -1,4 +1,5 @@
 import { fitStockChart, layoutIndicatorPanes } from '@/charts/stockChartLayout'
+import { syncTimeSeries } from '@/charts/seriesUpdates'
 import { useEffect, useRef } from 'react'
 import {
   CandlestickSeries,
@@ -10,7 +11,6 @@ import {
   LineStyle,
   type IChartApi,
   type ISeriesApi,
-  type Time,
   type UTCTimestamp,
 } from 'lightweight-charts'
 
@@ -47,6 +47,7 @@ interface PriceChartProps {
 export function PriceChart({ payload, indicators }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
+  const previousPayload = useRef<ChartPayload | null>(null)
   const seriesRef = useRef<{
     candles: ISeriesApi<'Candlestick'>
     volume: ISeriesApi<'Histogram'>
@@ -126,6 +127,7 @@ export function PriceChart({ payload, indicators }: PriceChartProps) {
       chart.remove()
       chartRef.current = null
       seriesRef.current = null
+      previousPayload.current = null
     }
   }, [])
 
@@ -141,32 +143,33 @@ export function PriceChart({ payload, indicators }: PriceChartProps) {
       series.ma200.setData([])
       series.rsi.setData([])
       series.rsiMa.setData([])
+      previousPayload.current = null
       return
     }
 
-    series.candles.setData(
-      payload.candles.map((candle) => ({
-        time: candle.time as UTCTimestamp,
-        open: candle.open,
-        high: candle.high,
-        low: candle.low,
-        close: candle.close,
-      })),
-    )
-    series.volume.setData(
-      payload.candles.map((candle) => ({
-        time: candle.time as UTCTimestamp,
-        value: candle.volume,
-        // Volume bars take the colour of their own candle, as in the reference chart.
-        color: candle.close >= candle.open ? `${COLORS.up}80` : `${COLORS.down}80`,
-      })),
-    )
-    series.ma200.setData(toLine(payload.indicators.ma200))
-    series.rsi.setData(toLine(payload.indicators.rsi))
-    series.rsiMa.setData(toLine(payload.indicators.rsiMa))
+    const previous = previousPayload.current
+    const reset = previous?.symbol !== payload.symbol || previous?.interval !== payload.interval || previous?.timeframe !== payload.timeframe
+    const replaced = syncTimeSeries(series.candles, previous?.candles, payload.candles, candle => ({
+      time: candle.time as UTCTimestamp,
+      open: candle.open,
+      high: candle.high,
+      low: candle.low,
+      close: candle.close,
+    }), reset)
+    syncTimeSeries(series.volume, previous?.candles, payload.candles, candle => ({
+      time: candle.time as UTCTimestamp,
+      value: candle.volume,
+      // Volume bars take the colour of their own candle, as in the reference chart.
+      color: candle.close >= candle.open ? `${COLORS.up}80` : `${COLORS.down}80`,
+    }), reset)
+    const line = (point: { time: number; value: number }) => ({ time: point.time as UTCTimestamp, value: point.value })
+    syncTimeSeries(series.ma200, previous?.indicators.ma200, payload.indicators.ma200, line, reset)
+    syncTimeSeries(series.rsi, previous?.indicators.rsi, payload.indicators.rsi, line, reset)
+    syncTimeSeries(series.rsiMa, previous?.indicators.rsiMa, payload.indicators.rsiMa, line, reset)
+    previousPayload.current = payload
 
-    fitStockChart(chart, payload.candles.length)
-  }, [payload?.candles, payload?.indicators])
+    if (replaced) fitStockChart(chart, payload.candles.length)
+  }, [payload?.symbol, payload?.interval, payload?.timeframe, payload?.candles, payload?.indicators])
 
   // lightweight-charts keeps its bar spacing when the canvas resizes, so a narrower pane
   // shows fewer bars rather than the same range compressed. Refit so dragging a splitter
@@ -204,8 +207,4 @@ export function PriceChart({ payload, indicators }: PriceChartProps) {
   }, [indicators])
 
   return <div ref={containerRef} className="min-h-0 flex-1" />
-}
-
-function toLine(points: Array<{ time: number; value: number }>): Array<{ time: Time; value: number }> {
-  return points.map((point) => ({ time: point.time as UTCTimestamp, value: point.value }))
 }

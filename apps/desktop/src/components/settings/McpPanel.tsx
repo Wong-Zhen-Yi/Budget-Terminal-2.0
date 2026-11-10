@@ -44,7 +44,7 @@ export function McpPanel() {
   const client = useQueryClient()
   const [testMessage, setTestMessage] = useState('')
   const [copyMessage, setCopyMessage] = useState('')
-  const { data, error } = useQuery({ queryKey: ['mcpStatus'], queryFn: () => api.mcpStatus(), refetchInterval: 5_000 })
+  const { data, error } = useQuery({ queryKey: ['mcpStatus'], queryFn: () => api.mcpStatus(), refetchInterval: api.onLiveStatusChanged ? 30_000 : 5_000 })
   const permissions = useMutation({
     mutationFn: (policy: McpPolicy) => api.configureMcp(policy),
     onSuccess: status => { client.setQueryData(['mcpStatus'], status) },

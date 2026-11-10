@@ -1,7 +1,8 @@
 import type { LiveStatusChanged, LiveStatusKind } from '../shared/liveStatus.js'
 
 /** Compact dirty notifications; full snapshots stay on the existing read APIs. */
-export function createLiveStatusEvents(cadence: Record<LiveStatusKind, number> = { agents: 700, notifications: 100, browser: 600 }) {
+export function createLiveStatusEvents(overrides: Partial<Record<LiveStatusKind, number>> = {}) {
+  const cadence: Record<LiveStatusKind, number> = { agents: 700, notifications: 100, browser: 600, mcpStatus: 50, ...overrides }
   const listeners = new Set<(event: LiveStatusChanged) => void>()
   const timers = new Map<LiveStatusKind, ReturnType<typeof setTimeout>>()
   let revision = 0

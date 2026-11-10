@@ -1,5 +1,6 @@
 @echo off
 rem Windows double-click entry point; shared setup and startup live in scripts/.
+rem Incremental charts, indexed live updates and cache checkpoints: docs/performance.md.
 rem macOS: double-click Launch Budget Terminal.command. Linux: Launch Budget Terminal.sh.
 rem Curated design references live in docs/; output/ is for ignored local captures.
 title Budget Terminal

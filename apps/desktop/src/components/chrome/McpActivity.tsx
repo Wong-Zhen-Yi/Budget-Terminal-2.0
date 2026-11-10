@@ -5,7 +5,7 @@ export function McpActivity() {
   const { data, error } = useQuery({
     queryKey: ['mcpStatus'],
     queryFn: () => api.mcpStatus(),
-    refetchInterval: 500,
+    refetchInterval: api.onLiveStatusChanged ? 30_000 : 500,
     staleTime: 0,
     retry: false,
   })

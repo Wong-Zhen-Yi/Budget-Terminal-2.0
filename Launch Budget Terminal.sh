@@ -1,5 +1,6 @@
 #!/bin/sh
 # Linux/macOS entry point; shared runtime checks and startup live in scripts/.
+# Incremental charts, indexed live updates and cache checkpoints: docs/performance.md.
 # macOS users can double-click Launch Budget Terminal.command; both use this startup path.
 # Curated design references live in docs/; output/ is for ignored local captures.
 

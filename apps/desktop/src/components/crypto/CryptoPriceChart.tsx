@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { CandlestickSeries, HistogramSeries, ColorType, CrosshairMode, createChart } from 'lightweight-charts'
 import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts'
 import type { Candle } from '@shared/contract'
+import { syncTimeSeries } from '@/charts/seriesUpdates'
 
 /** Marks are displayed separately: only provider OHLCV observations enter this plot. */
 export function CryptoPriceChart({ candles, context }: { candles: Candle[]; context: string }) {
@@ -9,6 +10,7 @@ export function CryptoPriceChart({ candles, context }: { candles: Candle[]; cont
   const chart = useRef<IChartApi | null>(null)
   const series = useRef<{ price: ISeriesApi<'Candlestick'>; volume: ISeriesApi<'Histogram'> } | null>(null)
   const fitted = useRef('')
+  const previous = useRef<{ candles: Candle[]; context: string } | null>(null)
 
   useEffect(() => {
     if (!host.current) return
@@ -29,13 +31,17 @@ export function CryptoPriceChart({ candles, context }: { candles: Candle[]; cont
     volume.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } })
     chart.current = view
     series.current = { price, volume }
-    return () => { view.remove(); chart.current = null; series.current = null; fitted.current = '' }
+    return () => { view.remove(); chart.current = null; series.current = null; fitted.current = ''; previous.current = null }
   }, [])
 
   useEffect(() => {
-    series.current?.price.setData(candles.map(row => ({ ...row, time: row.time as UTCTimestamp })))
-    series.current?.volume.setData(candles.map(row => ({ time: row.time as UTCTimestamp, value: row.volume,
-      color: row.close >= row.open ? '#26c28160' : '#f0554e60' })))
+    const current = series.current
+    if (!current) return
+    const reset = previous.current?.context !== context
+    syncTimeSeries(current.price, previous.current?.candles, candles, row => ({ ...row, time: row.time as UTCTimestamp }), reset)
+    syncTimeSeries(current.volume, previous.current?.candles, candles, row => ({ time: row.time as UTCTimestamp, value: row.volume,
+      color: row.close >= row.open ? '#26c28160' : '#f0554e60' }), reset)
+    previous.current = { candles, context }
     // Provider polling and shared mark updates must preserve the user's zoom/pan.
     if (candles.length && fitted.current !== context) {
       chart.current?.timeScale().fitContent()

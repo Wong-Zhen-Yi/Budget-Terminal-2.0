@@ -1,4 +1,5 @@
 import { fitStockChart } from '@/charts/stockChartLayout'
+import { syncTimeSeries } from '@/charts/seriesUpdates'
 import { useEffect, useRef } from 'react'
 import { CandlestickSeries, ColorType, createChart } from 'lightweight-charts'
 import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts'
@@ -7,6 +8,7 @@ import type { Candle } from '@shared/contract'
 export function CandlestickChart({ candles }: { candles: Candle[] }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
+  const previous = useRef<Candle[] | undefined>(undefined)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
 
   useEffect(() => {
@@ -38,14 +40,18 @@ export function CandlestickChart({ candles }: { candles: Candle[] }) {
       chart.remove()
       chartRef.current = null
       seriesRef.current = null
+      previous.current = undefined
     }
   }, [])
 
   useEffect(() => {
-    seriesRef.current?.setData(candles.map(candle => ({
+    const series = seriesRef.current
+    if (!series) return
+    const replaced = syncTimeSeries(series, previous.current, candles, candle => ({
       time: candle.time as UTCTimestamp, open: candle.open, high: candle.high, low: candle.low, close: candle.close,
-    })))
-    fitStockChart(chartRef.current, candles.length)
+    }))
+    previous.current = candles
+    if (replaced) fitStockChart(chartRef.current, candles.length)
   }, [candles])
 
   return <div ref={containerRef} className="min-h-0 flex-1" />

@@ -5,7 +5,42 @@ const retiredOwners = new WeakSet<object>()
 const completed = new WeakSet<QueryClient>()
 const maintenance = new WeakMap<QueryClient, Set<() => void>>()
 export const QUERY_IDLE_MS = 15 * 60_000
-const localRoots = new Set(['browser', 'agents', 'agentImages', 'notifications', 'articles', 'portfolio', 'cards', 'settings', 'personalFinance', 'cloudSyncStatus', 'marketApiKeys'])
+const localRoots = new Set(['browser', 'agents', 'agentImages', 'notifications', 'articles', 'portfolio', 'cards', 'settings', 'personalFinance', 'cloudSyncStatus', 'marketApiKeys', 'mcpStatus', 'appMetrics', 'apiUsage', 'cacheStatus'])
+const payloadSizes = new WeakMap<object, number>()
+
+function payloadBytes(data: unknown): number {
+  if (data && typeof data === 'object') {
+    const previous = payloadSizes.get(data)
+    if (previous !== undefined) return previous
+  }
+  const bytes = new TextEncoder().encode(JSON.stringify(data) ?? '').byteLength
+  if (data && typeof data === 'object') payloadSizes.set(data, bytes)
+  return bytes
+}
+
+export interface QueryMemoryStats {
+  pinnedBytes: number; pinnedQueries: number
+  additionalBytes: number; additionalQueries: number
+  localBytes: number; localQueries: number
+  unmeasuredQueries: number
+}
+
+/** Settings-only estimates include protected snapshots without making them eviction candidates. */
+export async function readQueryMemoryStats(client: QueryClient): Promise<QueryMemoryStats> {
+  const result: QueryMemoryStats = { pinnedBytes: 0, pinnedQueries: 0, additionalBytes: 0, additionalQueries: 0,
+    localBytes: 0, localQueries: 0, unmeasuredQueries: 0 }
+  let slice = performance.now()
+  for (const query of client.getQueryCache().getAll()) {
+    const category = localRoots.has(String(query.queryKey[0])) ? 'local' : pins.get(client)?.has(query.queryHash) ? 'pinned' : 'additional'
+    result[`${category}Queries`]++
+    try { result[`${category}Bytes`] += payloadBytes(query.state.data) } catch { result.unmeasuredQueries++ }
+    if (performance.now() - slice >= 4) {
+      await new Promise<void>(resolve => setTimeout(resolve, 0))
+      slice = performance.now()
+    }
+  }
+  return result
+}
 
 export function pinStartupQuery(client: QueryClient, queryKey: QueryKey, owner?: object): boolean {
   if (owner && retiredOwners.has(owner)) return false
@@ -42,20 +77,12 @@ export function manageQueryMemory(client: QueryClient, options: {
   const maxBytes = options.maxBytes ?? 64 * 1024 * 1024
   const maxQueries = options.maxQueries ?? 1_000
   const accessed = new Map<string, number>()
-  const sizes = new WeakMap<object, number>()
   let scheduled: ReturnType<typeof setTimeout> | undefined
   let stopped = false
   let sweeping = false
   let again = false
   const estimate = (data: unknown) => {
-    if (data && typeof data === 'object') {
-      const previous = sizes.get(data)
-      if (previous !== undefined) return previous
-    }
-    let bytes = 0
-    try { bytes = new TextEncoder().encode(JSON.stringify(data) ?? '').byteLength } catch { bytes = maxBytes }
-    if (data && typeof data === 'object') sizes.set(data, bytes)
-    return bytes
+    try { return payloadBytes(data) } catch { return maxBytes }
   }
   async function sweep(): Promise<void> {
     if (stopped || (options.deferUntilStartup && !completed.has(client))) return

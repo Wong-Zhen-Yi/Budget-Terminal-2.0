@@ -106,6 +106,7 @@ function Get-BudgetNode {
 }
 
 function Start-BudgetTerminal {
+  # Incremental charts, indexed live updates and cache checkpoints: docs/performance.md.
   # Settings uses compact horizontal categories without the redundant Preferences label, overview or introductory header.
   try {
     if (-not ($Attached -or $RuntimeOnly -or $Dev -or $Setup)) {

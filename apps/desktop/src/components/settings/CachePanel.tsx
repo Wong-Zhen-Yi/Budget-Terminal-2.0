@@ -5,6 +5,7 @@ import { CACHE_SETTING_BOUNDS, DEFAULT_CACHE_SETTINGS, MIB, validCacheSettings, 
 import { api } from '@/api/client'
 import { configureRendererCache, rendererCacheSettings, rendererQueryPersister, RENDERER_CACHE_BUSTER, shouldPersistRemoteQuery } from '@/api/queryPersistence'
 import { Button } from '@/components/ui/Button'
+import { readQueryMemoryStats, type QueryMemoryStats } from '@/api/queryMemory'
 
 const labels: Record<keyof CacheSettings, string> = {
   rendererMiB: 'Page snapshots (MiB)', marketMiB: 'Market data (MiB)',
@@ -28,6 +29,7 @@ export function CachePanel() {
   const service = status.data?.data.service
   const [draft, setDraft] = useState<CacheSettings>(rendererCacheSettings)
   const [renderer, setRenderer] = useState(() => rendererQueryPersister.stats())
+  const [memory, setMemory] = useState<QueryMemoryStats>()
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [failure, setFailure] = useState(false)
@@ -36,6 +38,21 @@ export function CachePanel() {
     const timer = setInterval(() => setRenderer(rendererQueryPersister.stats()), 2_000)
     return () => clearInterval(timer)
   }, [])
+  useEffect(() => {
+    let active = true
+    let busy = false
+    const sample = async () => {
+      if (busy) return
+      busy = true
+      try {
+        const next = await readQueryMemoryStats(client)
+        if (active) setMemory(next)
+      } finally { busy = false }
+    }
+    void sample()
+    const timer = setInterval(() => void sample(), 5_000)
+    return () => { active = false; clearInterval(timer) }
+  }, [client])
 
   const apply = async (event: FormEvent) => {
     event.preventDefault()
@@ -67,6 +84,13 @@ export function CachePanel() {
       <Usage label="Market data" bytes={service?.market.bytes ?? 0} limit={active.marketMiB} detail={`${service?.market.entries ?? 0} entries · ${service?.market.expiredEntries ?? 0} due for a check · ${service?.market.evictions ?? 0} evictions this session`} />
       <Usage label="Images and previews" bytes={service?.assets.bytes ?? 0} limit={active.assetsMiB} detail={`${service?.assets.entries ?? 0} entries · ${service?.assets.evictions ?? 0} evictions this session`} />
     </div>
+    {memory && <p className="mt-2 text-2xs text-text-muted" data-query-memory>
+      In-memory payload estimates: prepared pages {size(memory.pinnedBytes)} ({memory.pinnedQueries} queries),
+      additional data {size(memory.additionalBytes)} ({memory.additionalQueries} queries),
+      local records and sessions {size(memory.localBytes)} ({memory.localQueries} queries).
+      {' '}Prepared pages remain available for instant switching. The 64 MiB cleanup budget covers additional data; these estimates are separate from disk limits and process RAM.
+      {memory.unmeasuredQueries > 0 && ` ${memory.unmeasuredQueries} queries could not be measured.`}
+    </p>}
     <form className="mt-3 flex flex-wrap items-end gap-3" onSubmit={event => void apply(event)}>
       {(Object.keys(labels) as Array<keyof CacheSettings>).map(key => <label key={key} className="flex flex-col gap-1 text-2xs text-text-muted">
         {labels[key]}
