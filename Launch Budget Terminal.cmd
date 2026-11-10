@@ -1,4 +1,5 @@
 @echo off
+rem macOS: double-click Launch Budget Terminal.command. Linux: Launch Budget Terminal.sh.
 rem Production bundles use the separate configured endpoint and release preflight. Local launches retain the existing account. See docs/production-release.md.
 rem Backup and sync snapshots resolve asynchronous defaults inside function bodies for build compatibility.
 rem Local builds keep the existing Convex account; sign-in uses GitHub only, without a mail API.

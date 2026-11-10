@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const { spawnSync } = require('node:child_process')
 const { join, resolve } = require('node:path')
-const { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } = require('node:fs')
+const { chmodSync, copyFileSync, mkdtempSync, mkdirSync, readFileSync, statSync, writeFileSync, rmSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { launch: runLaunch } = require('./launch.cjs')
 const { dev } = require('./dev.cjs')
@@ -13,6 +13,43 @@ const { supportedNodeVersion, supportedNpmVersion, runtimeEnvironment, assertCer
 const { version: electronVersion } = require('electron/package.json')
 
 const log = { log() {}, error() {} }
+if (process.platform !== 'win32') {
+  const directory = mkdtempSync(join(tmpdir(), 'budget-mac-launcher-'))
+  try {
+    const checkout = join(directory, 'checkout with spaces')
+    const home = join(directory, 'home with spaces')
+    const output = join(directory, 'launch-output')
+    mkdirSync(checkout)
+    mkdirSync(join(home, '.local/bin'), { recursive: true })
+    for (const file of ['Launch Budget Terminal.command', 'Launch Budget Terminal.sh']) {
+      const source = resolve(__dirname, '..', file)
+      assert(statSync(source).mode & 0o111, `${file} must be executable after checkout`)
+      copyFileSync(source, join(checkout, file))
+    }
+    const node = join(home, '.local/bin/node')
+    writeFileSync(node, `#!/bin/sh
+case "$1" in
+  scripts/runtime.cjs) exit 0 ;;
+  scripts/launch.cjs)
+    printf '%s\\n' "$PWD" "$@" > "$BUDGET_LAUNCHER_PROBE_OUTPUT"
+    exit "$BUDGET_LAUNCHER_PROBE_STATUS"
+    ;;
+esac
+exit 99
+`)
+    chmodSync(node, 0o755)
+    for (const status of [0, 7]) {
+      const result = spawnSync('/bin/sh', [join(checkout, 'Launch Budget Terminal.command'), '--logs', 'argument with spaces'], {
+        cwd: tmpdir(), encoding: 'utf8', input: '', timeout: 10_000,
+        env: { ...process.env, HOME: home, BUDGET_LAUNCHER_PROBE_OUTPUT: output, BUDGET_LAUNCHER_PROBE_STATUS: String(status) },
+      })
+      assert.equal(result.status, status, result.stderr || result.error?.message)
+      assert.deepEqual(readFileSync(output, 'utf8').trim().split('\n'), [checkout, 'scripts/launch.cjs', '--logs', 'argument with spaces'], 'Finder launch must resolve its checkout, find Node outside PATH, forward arguments and preserve errors')
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
 for (const platform of ['win32', 'darwin', 'linux']) {
   const calls = []
   assert.equal(launch({ logs: true, platform, nodeVersion: '24.22.1', log,

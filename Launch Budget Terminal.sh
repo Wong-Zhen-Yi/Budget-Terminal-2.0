@@ -1,4 +1,5 @@
 #!/bin/sh
+# macOS users can double-click Launch Budget Terminal.command; both use this startup path.
 # Production bundles use the separate configured endpoint and release preflight. Local launches retain the existing account. See docs/production-release.md.
 # Backup and sync snapshots resolve asynchronous defaults inside function bodies for build compatibility.
 # Local builds keep the existing Convex account; sign-in uses GitHub only, without a mail API.
@@ -17,15 +18,19 @@
 
 cd "$(dirname "$0")" || exit 1
 
-# Dolphin and Steam do not inherit an interactive terminal's PATH.
-export PATH="$HOME/.local/bin:$HOME/.local/share/fnm/aliases/default/bin:$HOME/.volta/bin:$PATH"
+# Finder, Dolphin and Steam may not inherit an interactive terminal's PATH.
+export PATH="$HOME/.local/bin:$HOME/.local/share/fnm/aliases/default/bin:$HOME/Library/Application Support/fnm/aliases/default/bin:$HOME/.volta/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 if command -v node >/dev/null 2>&1 && node scripts/runtime.cjs >/dev/null 2>&1; then
   exec node scripts/launch.cjs "$@"
 fi
 
-# Also support a per-user runtime installed for Budget Terminal on Steam Deck.
-for runtime in "$HOME"/.local/share/budget-terminal/node-*-linux-*/bin/node; do
+# Also check Homebrew LTS, nvm and per-user Steam Deck runtimes without sourcing shell profiles.
+for runtime in /opt/homebrew/opt/node@24/bin/node /usr/local/opt/node@24/bin/node \
+  /opt/homebrew/opt/node@22/bin/node /usr/local/opt/node@22/bin/node \
+  /opt/homebrew/opt/node@26/bin/node /usr/local/opt/node@26/bin/node \
+  "${NVM_DIR:-$HOME/.nvm}"/versions/node/*/bin/node \
+  "$HOME"/.local/share/budget-terminal/node-*-linux-*/bin/node; do
   if [ -x "$runtime" ] && "$runtime" scripts/runtime.cjs >/dev/null 2>&1; then
     export PATH="$(dirname "$runtime"):$PATH"
     exec "$runtime" scripts/launch.cjs "$@"

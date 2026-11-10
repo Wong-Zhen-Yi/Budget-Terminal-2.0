@@ -152,7 +152,15 @@ Press **Esc** to close the launcher without opening either interface.
 No administrator access is needed. Double-click it again whenever you need to check
 or repair setup. From the checkout, `npm.cmd run setup` runs the same Windows checks.
 
-For a manual installation, or on macOS and Linux:
+On macOS, install a supported Node.js version with npm, then double-click
+[Launch Budget Terminal.command](Launch%20Budget%20Terminal.command) in Finder.
+It checks the runtime, installs dependencies, builds the latest source and opens
+the desktop app. Keep its Terminal window open while using the app. Homebrew,
+Volta, fnm and nvm installation locations are checked automatically. Launch errors
+stay visible so you can fix them and retry. Keep the launcher in the checkout;
+you can create a Finder alias for convenient access elsewhere.
+
+For a manual installation on any platform:
 
 Use **Node.js 24 LTS and npm 11** for a new installation. Supported versions are
 Node.js **22.23.4+, 24.22.1+, or 26.12.1+**, with **npm 10.9.8+**, as defined in
