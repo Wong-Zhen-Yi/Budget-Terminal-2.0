@@ -140,7 +140,7 @@ function launch({ development = false, logs = false, setupOnly = false, platform
   log.log('Personal Finance: compact screens use two rows so recurring bill names remain readable and the Goal panel stays visible.')
   log.log('Obscure now hides recurring bill names as well as amounts, including accessibility labels. Reveal restores editable bill names.')
   log.log('Personal Finance: Totals and Goal have balanced panel sizes and readable chart values at Steam Deck resolutions.')
-  log.log('Installing dependencies...')
+  log.log('Checking and installing application dependencies...')
   const install = npm(['install', '--no-audit', '--no-fund', '--strict-ssl=true'])
   if (install.error || install.status !== 0) {
     log.error('Dependency installation failed. See the npm error above.')

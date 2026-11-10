@@ -1,6 +1,6 @@
 #!/bin/sh
 # Convex snapshot writes are restored; record-era cloud tables are retained as an archive.
-# Double-click opens the desktop app directly without an interface chooser.
+# Check and install dependencies before opening the desktop app without an interface chooser.
 # Database sync restored to 3208321: optional Convex snapshots, GitHub sign-in and complete-copy conflict choices.
 # macOS users can double-click Launch Budget Terminal.command; both use this startup path.
 # Backup and sync snapshots resolve asynchronous defaults inside function bodies for build compatibility.
@@ -16,6 +16,7 @@
 # Steam Deck: centered display bounds in Desktop Mode; native fullscreen in Gaming Mode.
 
 cd "$(dirname "$0")" || exit 1
+printf 'Checking Node.js and application dependencies, then opening Budget Terminal...\n'
 
 # Finder, Dolphin and Steam may not inherit an interactive terminal's PATH.
 export PATH="$HOME/.local/bin:$HOME/.local/share/fnm/aliases/default/bin:$HOME/Library/Application Support/fnm/aliases/default/bin:$HOME/.volta/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"

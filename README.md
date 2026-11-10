@@ -146,6 +146,10 @@ from the checkout. It installs or repairs a supported Node.js runtime, dependenc
 and Electron, builds and checks the desktop app, and installs or updates the per-user
 `btd` command. It then opens the desktop app directly. Setup also removes the retired
 `bt` command when it belongs to this checkout.
+Every launch, including the first launch from a fresh checkout, runs `npm install`,
+checks or repairs Electron, builds the app and verifies its files before opening it.
+Failed dependency checks stop startup. There is no interface selection menu, and
+`btd` uses the same dependency checks when launched from a terminal.
 No administrator access is needed. Double-click it again whenever you need to open
 the app. From the checkout, `npm.cmd run setup` runs the Windows checks without opening the app.
 

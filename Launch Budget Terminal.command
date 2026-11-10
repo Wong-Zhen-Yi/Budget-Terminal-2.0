@@ -1,6 +1,6 @@
 #!/bin/sh
 # Convex snapshot writes are restored; record-era cloud tables are retained as an archive.
-# Double-click opens the desktop app directly without an interface chooser.
+# Check and install dependencies before opening the desktop app without an interface chooser.
 # Database sync restored to 3208321: optional Convex snapshots, GitHub sign-in and complete-copy conflict choices.
 # macOS Finder entry point. Share runtime checks and startup updates with Linux.
 cd "$(dirname "$0")" || exit 1

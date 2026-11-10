@@ -13,6 +13,46 @@ const { supportedNodeVersion, supportedNpmVersion, runtimeEnvironment, assertCer
 const { version: electronVersion } = require('electron/package.json')
 
 const log = { log() {}, error() {} }
+// A fresh checkout must reach installation without importing installed packages.
+const firstRunDirectory = mkdtempSync(join(tmpdir(), 'budget-first-launch-'))
+try {
+  const scripts = join(firstRunDirectory, 'scripts')
+  mkdirSync(scripts)
+  copyFileSync(resolve(__dirname, '../package.json'), join(firstRunDirectory, 'package.json'))
+  for (const file of ['launch.cjs', 'runtime.cjs', 'codex-runtime.cjs', 'verify-desktop-build.cjs']) {
+    copyFileSync(join(__dirname, file), join(scripts, file))
+  }
+  const result = spawnSync(process.execPath, ['-e', `
+    const assert = require('node:assert/strict')
+    const { existsSync } = require('node:fs')
+    const { launch } = require('./scripts/launch.cjs')
+    assert(!existsSync('node_modules'))
+    for (const platform of ['win32', 'darwin', 'linux']) {
+      for (const failedStep of [null, 'install', 'ensure:electron', 'build']) {
+        const steps = []
+        const status = launch({ platform, nodeVersion: '24.22.1', environment: {},
+          locateCodex: () => null, log: { log() {}, error() {} },
+          verifyBuild() { steps.push('verify') },
+          spawn(_command, args, options) {
+            assert.equal(options.cwd, process.cwd())
+            const command = args.join(' ')
+            const step = command.includes('--version') ? 'npm' : command.includes('install --') ? 'install'
+              : command.includes('ensure:electron') ? 'ensure:electron' : command.includes('run build') ? 'build' : 'open'
+            steps.push(step)
+            return { status: step === failedStep ? 1 : 0, stdout: '11.0.0' }
+          },
+        })
+        const expected = ['npm', 'install', 'ensure:electron', 'build', 'verify', 'open']
+        assert.equal(status, failedStep ? 1 : 0)
+        assert.deepEqual(steps, failedStep ? expected.slice(0, expected.indexOf(failedStep) + 1) : expected)
+      }
+    }
+  `], { cwd: firstRunDirectory, env: runtimeEnvironment(), encoding: 'utf8', timeout: 10_000 })
+  assert.equal(result.status, 0, result.stderr || result.error?.message)
+  console.log('PASS: fresh checkout starts without node_modules; dependencies, Electron, build and asset checks precede opening; failures stop startup on every platform.')
+} finally {
+  rmSync(firstRunDirectory, { recursive: true, force: true })
+}
 if (process.platform !== 'win32') {
   const directory = mkdtempSync(join(tmpdir(), 'budget-mac-launcher-'))
   try {

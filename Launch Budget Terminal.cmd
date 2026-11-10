@@ -21,14 +21,14 @@ rem Optional Convex sync: local saves work without a connection; sign-in and con
 rem AllTick API removed from Settings and supported credential providers.
 rem Crypto opens directly with market data; the Workspace header, USD badge and Copy snapshot action are removed.
 rem Portfolio stocks highlight the full row on hover and while editing or focusing row controls.
-rem Double-click opens the desktop app directly; btd remains available in the terminal.
+rem Check and install dependencies before opening the desktop app; btd remains available in the terminal.
 rem Settings: compact sizing, horizontal categories, no redundant Preferences label, All settings page or introductory header.
 rem GitHub showcase refreshed: README.md includes eight demo screenshots across markets, research, charts, portfolios, and learning.
 rem Current dark navy and blue colour scheme is locked in AGENTS.md; palette changes require an explicit user request.
 title Budget Terminal
 rem YouTube PiP opens a movable, resizable always-on-top window outside Budget Terminal; pop-out and return preserve playback.
 cd /d "%~dp0" || exit /b 1
-echo Opening Budget Terminal...
+echo Checking Node.js and application dependencies, then opening Budget Terminal...
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\launch-windows.ps1"
 if errorlevel 1 goto :launchFailed
 exit /b 0
