@@ -1,19 +1,7 @@
 #!/bin/sh
-# Convex snapshot writes are restored; record-era cloud tables are retained as an archive.
-# Check and install dependencies before opening the desktop app without an interface chooser.
-# Database sync restored to 3208321: optional Convex snapshots, GitHub sign-in and complete-copy conflict choices.
+# Linux/macOS entry point; shared runtime checks and startup live in scripts/.
 # macOS users can double-click Launch Budget Terminal.command; both use this startup path.
-# Backup and sync snapshots resolve asynchronous defaults inside function bodies for build compatibility.
-# Backup imports recover on failure; Escape cancels edits; public WebSocket resources are supported.
-# Shared option chains, single-capture backups, targeted refresh and live status updates. Measurements: docs/efficiency-results.md.
-# Settings > Controller controls: game-style diagram, live input display and navigation-safe test mode.
-# Controller page switching follows visible workspace/page order, including custom ordering and hidden pages.
-# Compact layouts keep Treasury curves, market controls, probability statistics and heatmap details accessible.
-# Personal Finance charts keep readable values while Totals and Goal resize to the screen.
-# Obscure hides recurring bill names and amounts; Reveal restores editable names.
-# Personal Finance: Steam Deck layout keeps recurring bill names readable and the Goal panel visible.
-# Controller support: D-pad/left stick focus, A activate, B dismiss, shoulders switch pages, Menu page picker, right stick scroll.
-# Steam Deck: centered display bounds in Desktop Mode; native fullscreen in Gaming Mode.
+# Curated design references live in docs/; output/ is for ignored local captures.
 
 cd "$(dirname "$0")" || exit 1
 printf 'Checking Node.js and application dependencies, then opening Budget Terminal...\n'

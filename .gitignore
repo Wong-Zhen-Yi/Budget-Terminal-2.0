@@ -15,8 +15,8 @@ apps/desktop/AppData/
 **/budget-terminal-backup-*.json
 **/budget-terminal-backup.json
 **/budget-terminal-cloud-export*.json
-output/playwright/
-output/mockups/
+# Generated captures and local experiments; curated designs belong in docs/.
+/output/
 plugins/budget-terminal/server/
 
 # Local credentials, browser captures, and machine-specific configuration.

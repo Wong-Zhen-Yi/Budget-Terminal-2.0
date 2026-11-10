@@ -17,7 +17,7 @@ const { app, nativeImage } = require('electron')
 app.disableHardwareAcceleration()
 app.whenReady().then(() => {
   const root = join(__dirname, '../apps/desktop')
-  const source = nativeImage.createFromPath(join(root, 'src/assets/branding/budget-terminal-fold-icon-source.png'))
+  const source = nativeImage.createFromPath(join(__dirname, '../docs/design-concepts/branding/budget-terminal-fold-icon-source.png'))
   if (source.isEmpty()) throw new Error('Fold icon source is missing or invalid.')
   writeFileSync(join(root, 'resources/budget-terminal-icon.png'), source.resize({ width: 512, height: 512, quality: 'best' }).toPNG())
   const sizes = [16, 24, 32, 48, 64, 128, 256]

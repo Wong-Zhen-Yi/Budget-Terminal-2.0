@@ -1,8 +1,6 @@
 #!/bin/sh
-# Convex snapshot writes are restored; record-era cloud tables are retained as an archive.
-# Check and install dependencies before opening the desktop app without an interface chooser.
-# Database sync restored to 3208321: optional Convex snapshots, GitHub sign-in and complete-copy conflict choices.
 # macOS Finder entry point. Share runtime checks and startup updates with Linux.
+# Curated design references live in docs/; output/ is for ignored local captures.
 cd "$(dirname "$0")" || exit 1
 
 /bin/sh './Launch Budget Terminal.sh' "$@"

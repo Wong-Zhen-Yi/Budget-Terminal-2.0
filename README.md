@@ -448,6 +448,7 @@ The current comparison loads at startup, including when Scorecard is unvisited.
 | [Diagnostic logging](docs/diagnostic-logging.md) | Settings log viewer, retention, export, and privacy. |
 | [Local MCP](docs/local-mcp.md) | Client registration, research tools, record edits, screenshots, and bridge security. |
 | [Development](docs/development.md) | Architecture, verification commands, security checks, and data-layer conventions. |
+| [Design archive](docs/design-prototypes/README.md) | Curated page prototypes, branding concepts, source prompts, and renderers. |
 | [Semiconductors](docs/semiconductors.md) | Semiconductor supply-chain research and data sources. |
 | [Chart pattern reference](apps/desktop/docs/chart-patterns/README.md) | Pattern examples and chart reference images. |
 

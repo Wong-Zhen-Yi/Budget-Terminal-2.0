@@ -78,4 +78,19 @@ flag. Validate visible changes in the app as well as with TypeScript.
 - Portfolio and Dashboard weight denominators differ: Dashboard uses stock value;
   Portfolio includes counted cash. Label the basis when comparing results.
 
+## Repository housekeeping
+
+- Keep application code and runtime assets in `apps/desktop`. Approved logos and
+  platform icons remain in `apps/desktop/resources`.
+- Keep curated design references, prompts and prototype renderers in
+  [`design-concepts`](design-prototypes/README.md#concepts-and-branding) and
+  [`design-prototypes`](design-prototypes/README.md). Branding source images live
+  in `docs/design-concepts/branding`; `node scripts/export-branding.cjs` exports
+  the approved icon to the application resources.
+- Use the ignored root `output/` directory for local screenshots and experiments.
+  Keep generated bundles in the ignored `apps/desktop/out/` directory.
+- Leave local profiles, saved records, credentials and dependency directories in
+  place when tidying the checkout. They are excluded from Git and may be needed
+  by an installed or running application.
+
 Installer packaging and automatic application updates are not configured.
