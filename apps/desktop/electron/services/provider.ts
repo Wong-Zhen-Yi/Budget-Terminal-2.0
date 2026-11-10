@@ -694,7 +694,7 @@ const providerImplementation: MarketDataProvider = {
       }),
       includeSectors ? getHoldingSectors(holdings) : Promise.resolve({ sectors: {} as Record<string, string>, missing: [] as string[] }),
     ])
-    const quoteSource = [...new Set(Object.values(batch.quotes).map(quote => quote.priceBasis === 'equity-perp-mark' ? 'Hyperliquid equity perps' : 'Yahoo Finance'))].join(' + ') || 'market prices'
+    const quoteSource = [...new Set(Object.values(batch.quotes).map(quote => quote.source ?? 'market prices'))].join(' + ') || 'market prices'
 
     const macro: QuotesPayload['macro'] = {}
     for (const entry of includeMacro ? MACRO_SYMBOLS : []) {
@@ -2065,7 +2065,7 @@ export const yahooProvider: MarketDataProvider = new Proxy(providerImplementatio
         const rows = property === 'priceScreen' ? marked.rows.filter(row => row.price !== null
           && row.price >= result.data.minimumPrice && row.price <= result.data.maximumPrice) : marked.rows
         result.data = { ...result.data, rows,
-          source: marked.marked ? `${result.data.source} screen candidates; Hyperliquid marks on mapped rows` : result.data.source }
+          source: marked.marked ? `${result.data.source} screen candidates; ${marked.sources.join(' + ')} current quotes` : result.data.source }
         if (marked.errors.length) {
           result.errors = [...result.errors, ...marked.errors]
           result.meta = { ...result.meta, freshness: 'partial', failureReason: marked.errors.map(error => error.reason).join(' · ') }
@@ -2076,7 +2076,7 @@ export const yahooProvider: MarketDataProvider = new Proxy(providerImplementatio
         result.data = { ...result.data,
           holdings: result.data.holdings.map((row: object, index: number) => ({ ...row, price: marked.rows[index].price,
             priceSource: marked.rows[index].priceSource, priceBasis: marked.rows[index].priceBasis })),
-          priceSource: marked.marked ? 'Hyperliquid mapped marks + Yahoo other prices; returns use Yahoo stock history' : result.data.priceSource }
+          priceSource: marked.marked ? `${marked.sources.join(' + ')} + Yahoo other prices; returns use Yahoo stock history` : result.data.priceSource }
         if (marked.errors.length) {
           result.errors = [...result.errors, ...marked.errors]
           result.meta = { ...result.meta, freshness: 'partial', failureReason: marked.errors.map(error => error.reason).join(' · ') }

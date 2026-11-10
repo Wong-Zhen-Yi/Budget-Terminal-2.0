@@ -160,7 +160,7 @@ try {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(keyInput, 'fixture-only-key')
       keyInput.dispatchEvent(new Event('input', { bubbles: true })); await wait(80)
       keys.querySelector('button[type=submit]').click(); await wait(80)
-      check(window.fixtureKeys.finnhub && keyInput.value === '' && keys.textContent.includes('Provider remains inactive'), 'Key save failed or draft retained')
+      check(window.fixtureKeys.finnhub && keyInput.value === '' && keys.textContent.includes('Finnhub is now preferred') && keys.textContent.includes('Preferred for stock quotes'), 'Key save failed, Finnhub inactive or draft retained')
       check(!document.body.innerText.includes('fixture-only-key'), 'Key exposed as visible text')
       clickText(keys, 'Remove'); await wait(80)
       check(!window.fixtureKeys.finnhub && keys.textContent.includes('Key removed'), 'Key removal failed')

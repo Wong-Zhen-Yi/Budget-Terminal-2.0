@@ -9,6 +9,7 @@
     "npm": ">=10.9.8"
   },
   "scripts": {
+    "probe:finnhub": "tsx scripts/probe-finnhub.ts",
     "probe:controller": "tsx scripts/probe-controller.ts",
     "probe:cloud-oauth": "tsx scripts/probe-cloud-oauth.ts",
     "probe:cloud-sync": "tsx scripts/probe-cloud-sync.ts",

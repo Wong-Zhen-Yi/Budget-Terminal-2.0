@@ -38,13 +38,13 @@ try {
     client.setQueryData(['stocks', 'SYNTHETIC'], envelope({}))
     useDataHealth.setState({ startup: { planned: 5, durationMs: 1000,
       pages: { stocks: { state: 'ready' }, charts: { state: 'loading' }, news: { state: 'degraded' }, crypto: { state: 'failed' }, agents: { state: 'idle' } },
-      timings: [{ tab: 'stocks', label: 'Stocks', durationMs: 8400, failed: false }] },
+      timings: Array.from({ length: 10 }, (_, index) => ({ tab: 'stocks', label: 'Stocks', durationMs: 8400 + index * 100, failed: false })) },
       records: { fixture: { page: 'stocks', label: 'Feed', source: 'Fixture', fetchedAt: Date.now(), freshness: 'fresh', failureReason: '', errors: [] } } })
     const partition = { bytes: 10485760, entries: 20, expiredEntries: 2, evictions: 1 }
     let fail = false
     window.api.apiUsage = async () => {
       if (fail) throw Error('synthetic private error must not appear')
-      return { sampledAt: Date.now(), providers: ['Yahoo', 'CoinGecko', 'Hyperliquid', 'Alt.me', 'DefeatBeta'].map((label, index) => ({ id: label, label, inFlight: index, ...(index === 0 ? { queued: 2 } : {}), latencyMs: { p50: 200, p95: 600, samples: 20 }, requestCount: index * 10, windowSeconds: 60 })) }
+      return { sampledAt: Date.now(), providers: ['Yahoo', 'CoinGecko', 'Hyperliquid', 'Alt.me', 'DefeatBeta', 'Finnhub', 'Coinbase', 'Binance', 'World Bank', 'IMF'].map((label, index) => ({ id: label, label, inFlight: index < 5 ? index : 0, ...(index === 0 ? { queued: 2 } : {}), latencyMs: { p50: 200 * (index + 1), p95: 600 * (index + 1), samples: 20 }, requestCount: index * 10, windowSeconds: 60 })) }
     }
     window.api.cacheStatus = async () => envelope({ settings: DEFAULT_CACHE_SETTINGS, service: { market: partition, assets: partition, hits: 90, misses: 10, errors: 4 } })
     window.api.mcpStatus = async () => ({ available: true, diagnostics: { activity: [{ state: 'success' }, { state: 'failed' }] } })
@@ -68,6 +68,14 @@ try {
         const rect = card.getBoundingClientRect()
         check(rect.bottom <= innerHeight && rect.right <= innerWidth, 'Chart clipped outside viewport')
         check(card.scrollHeight <= card.clientHeight + 1, 'Chart content overflows: ' + card.textContent)
+        const plot = card.querySelector('.app-dash-plot').getBoundingClientRect()
+        for (const element of card.querySelectorAll('.app-dash-bar, .app-dash-bars > small')) {
+          const bounds = element.getBoundingClientRect()
+          check(bounds.top >= plot.top - 1 && bounds.bottom <= plot.bottom + 1, 'Chart rows overlap its title or note: ' + card.querySelector('h3').textContent)
+          check(bounds.left >= plot.left - 1 && bounds.right <= plot.right + 1, 'Chart row extends outside its plot')
+          const cells = [...element.children].map(cell => cell.getBoundingClientRect())
+          for (let index = 1; index < cells.length; index += 1) check(cells[index].left >= cells[index - 1].right - 1, 'Provider label, bar and value overlap')
+        }
       }
       check(!document.body.textContent.includes('987,654'), 'Private balance exposed')
       check(!document.body.textContent.includes('PRIVATE'), 'Private ticker exposed')
@@ -111,6 +119,7 @@ try {
         for (const [width, height] of [[1600,1000],[1920,1080],[1366,768]]) {
           window.setContentSize(width, height)
           console.log(width + 'x' + height + ': ' + await window.webContents.executeJavaScript('window.checkLayout()'))
+          await fs.writeFile(${JSON.stringify(join(screenshots, 'settings-dashboard-'))} + width + 'x' + height + '.png', (await window.webContents.capturePage()).toPNG())
           if (width === 1600) await fs.writeFile(${JSON.stringify(join(screenshots, 'settings-dashboard.png'))}, (await window.webContents.capturePage()).toPNG())
         }
         console.log(await window.webContents.executeJavaScript('window.checkBehavior()'))

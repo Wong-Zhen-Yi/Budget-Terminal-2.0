@@ -55,7 +55,7 @@ function Bars({ rows, unit, capacities }: { rows: Datum[]; unit: string; capacit
   if (!data.length) return <Empty />
   const max = Math.max(1, ...data.map(row => Math.abs(row.value)))
   const signed = !capacities && data.some(row => row.value < 0)
-  return <div className="app-dash-bars" role="img" aria-label={`${unit}: ${data.map(row => `${row.label} ${number(row.value)}`).join(', ')}`}>
+  return <div className={`app-dash-bars${data.length > 6 ? ' app-dash-bars--dense' : ''}`} role="img" aria-label={`${unit}: ${data.map(row => `${row.label} ${number(row.value)}`).join(', ')}`}>
     {data.map((row, index) => <div className="app-dash-bar" key={row.label} title={`${row.label}: ${number(row.value)}${capacities ? ` / ${number(capacities[index])}` : ''} ${unit}`}>
       <span>{row.label}</span><div className={signed ? 'app-dash-bar-signed' : undefined}><i style={{ width: `${Math.min(signed ? 50 : 100, Math.abs(row.value) / Math.max(1, capacities?.[index] ?? max) * (signed ? 50 : 100))}%`, background: row.color ?? colors[1], ...(signed ? { position: 'absolute', [row.value < 0 ? 'right' : 'left']: '50%' } : {}) }} /></div>
       <b>{number(row.value)}{capacities ? ` / ${number(capacities[index])}` : ''}</b>
@@ -85,7 +85,7 @@ function Latency({ providers }: { providers: ApiUsageSnapshot['providers'] }) {
   const observed = providers.filter(provider => provider.latencyMs)
   const max = Math.max(1, ...observed.map(provider => provider.latencyMs!.p95))
   if (!observed.length) return <Empty>Waiting for a completed provider request</Empty>
-  return <div className="app-dash-bars"><small>p50 / p95 · milliseconds</small>{observed.map(provider => <div className="app-dash-bar" key={provider.id} title={`${provider.latencyMs!.samples} completed requests`}><span>{provider.label}</span><div className="app-dash-latency"><i style={{ width: `${provider.latencyMs!.p50 / max * 100}%`, background: colors[1] }} /><i style={{ width: `${provider.latencyMs!.p95 / max * 100}%`, background: colors[3] }} /></div><b>{number(provider.latencyMs!.p50)} / {number(provider.latencyMs!.p95)}</b></div>)}</div>
+  return <div className={`app-dash-bars${observed.length > 6 ? ' app-dash-bars--dense' : ''}`}><small>p50 / p95 · milliseconds</small>{observed.map(provider => <div className="app-dash-bar" key={provider.id} title={`${provider.label}: ${number(provider.latencyMs!.p50)} / ${number(provider.latencyMs!.p95)} ms · ${provider.latencyMs!.samples} completed requests`}><span>{provider.label}</span><div className="app-dash-latency"><i style={{ width: `${provider.latencyMs!.p50 / max * 100}%`, background: colors[1] }} /><i style={{ width: `${provider.latencyMs!.p95 / max * 100}%`, background: colors[3] }} /></div><b>{number(provider.latencyMs!.p50)} / {number(provider.latencyMs!.p95)}</b></div>)}</div>
 }
 
 function Card({ title, children, note }: { title: string; children: ReactNode; note?: string }) {

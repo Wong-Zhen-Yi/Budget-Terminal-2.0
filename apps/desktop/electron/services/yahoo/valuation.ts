@@ -32,6 +32,7 @@ import { withYahooSummary } from './requests.js'
 import { getFundamentalsPage } from './fundamentalsPage.js'
 import { getYahooSeries } from './series.js'
 import { getQuote } from './quotes.js'
+import { finnhubQuotes } from '../finnhubQuotes.js'
 import { equityMarket } from '../../shared/equityMarkets.js'
 
 /**
@@ -258,7 +259,7 @@ async function fetchInfo(symbol: string, force: boolean): Promise<SummaryInfo> {
     { force },
   )
   analystCache.set(symbol, resolved.value.trend)
-  if (equityMarket(symbol)) {
+  if (equityMarket(symbol) || await finnhubQuotes.configured(symbol)) {
     try {
       const quote = await getQuote(symbol, force)
       return { ...resolved.value.info, currentPrice: quote.price, regularMarketPrice: quote.price }
@@ -842,7 +843,7 @@ export async function getValuation(
     { force },
   )
   const priceErrors: EnvelopeError[] = []
-  const quote = equityMarket(symbol) ? await valuationStage('quote', () => dependencies.quote(symbol, force)).catch(error => {
+  const quote = equityMarket(symbol) || await finnhubQuotes.configured(symbol) ? await valuationStage('quote', () => dependencies.quote(symbol, force)).catch(error => {
     priceErrors.push({ source: 'market prices', operation: 'quote', symbol, reason: `Current price refresh failed: ${describeError(error)}` })
     return undefined
   }) : undefined

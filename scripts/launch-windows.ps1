@@ -1,4 +1,6 @@
 param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Setup, [switch]$Attached)
+# Settings dashboard fits the full provider inventory without overlapping chart titles or notes.
+# Finnhub queues portfolio quotes and retains stock prices during cooldowns; perp updates cannot overwrite them.
 # Convex snapshot writes are restored; record-era cloud tables are retained as an archive.
 # Database sync restored to 3208321: optional Convex snapshots, GitHub sign-in and complete-copy conflict choices.
 # Efficiency updates preserve all-page startup readiness; verification is recorded in docs/efficiency-results.md.

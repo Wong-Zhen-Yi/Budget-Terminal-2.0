@@ -45,14 +45,18 @@ try {
   }
   const reloaded = new MarketApiKeyStore(storage)
   assert.deepEqual((await reloaded.read()).data.configured, { finnhub: true, fmp: true })
+  assert.equal(await reloaded.getForService('finnhub'), secrets[0])
+  assert.equal(await reloaded.getForService('fmp'), secrets[1])
   assert.equal((await store.mutate({ type: 'save', provider: 'unknown', key: 'bad' })).meta.freshness, 'failed')
   assert.equal((await store.mutate({ type: 'save', provider: 'finnhub', key: ' ' })).meta.freshness, 'failed')
   assert.deepEqual(await readFile(path), bytes, 'Invalid requests changed storage')
   available = false
+  await assert.rejects(reloaded.getForService('finnhub'))
   assert.equal((await store.mutate({ type: 'save', provider: 'finnhub', key: 'replacement' })).meta.freshness, 'failed')
   assert.deepEqual(await readFile(path), bytes, 'Encryption failure changed storage')
   available = true
   await store.mutate({ type: 'remove', provider: 'finnhub' })
+  assert.equal(await reloaded.getForService('finnhub'), undefined)
   assert.deepEqual((await reloaded.read()).data.configured, { finnhub: false, fmp: true })
   const goodBytes = await readFile(path)
   await writeFile(path, 'corrupt')

@@ -14,7 +14,8 @@ const use = (pages: string, purpose: string): ApiUse => ({ pages: pages.split('|
 
 /** Public service inventory. Dependencies include fallback and shared data consumers, not request attribution. */
 export const API_CATALOG: ApiDefinition[] = [
-  ...MARKET_API_PROVIDERS.map(provider => ({ id: provider.id, label: provider.label, inactive: true, uses: [] })),
+  ...MARKET_API_PROVIDERS.filter(provider => provider.id !== 'finnhub').map(provider => ({ id: provider.id, label: provider.label, inactive: true, uses: [] })),
+  { id: 'finnhub', label: 'Finnhub', uses: [use('dashboard|dashboard-2|portfolio|stocks|charts|price|market-cap|heatmap|cards|up-down|fundamentals|valuation|semiconductors|amzn|avgo|mu|sofi|vst|hood|hims|pltr|bmnr', 'Preferred supported US stock quotes when a key is saved. Large batches queue within a 60 requests/minute budget. Failed refreshes retain a stale Finnhub quote or use Yahoo stock quotes; perpetual marks cannot replace them. Other providers retain history and other data.')] },
   { id: 'coinbase', label: 'Coinbase', uses: [use('crypto', 'Supported USD spot quotes and a shared USDT/USD conversion rate. Separate from perpetuals and global market cap.')] },
   { id: 'binance', label: 'Binance', uses: [use('crypto', 'Supported spot quotes converted from USDT to USD, with Coinbase and CoinGecko fallbacks.')] },
   { id: 'world-bank', label: 'World Bank', uses: [use('economic', 'Annual US CPI inflation, distinct from monthly releases.')] },

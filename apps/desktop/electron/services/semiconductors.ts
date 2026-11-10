@@ -12,6 +12,7 @@ import { withYahooSummary } from './yahoo/requests.js'
 import { fetchPortfolioNews } from './yahoo/newsPage.js'
 import { equityMarket } from '../shared/equityMarkets.js'
 import { getQuote } from './yahoo/quotes.js'
+import { finnhubQuotes } from './finnhubQuotes.js'
 
 const SOURCE = 'Yahoo Finance · reviewed SEC company catalog'
 const DAY = 86_400_000
@@ -47,7 +48,7 @@ const defaults: SemiconductorFetchers = {
     else if (series.value.stale) warnings.push('History refresh failed; showing cached data.')
     if (!history.length) warnings.push('Adjusted price history unavailable.')
     if (finite(raw.regularMarketPrice) === null) warnings.push('Share price unavailable.')
-    const perp = equityMarket(symbol) ? await getQuote(symbol, force).catch(error => {
+    const perp = equityMarket(symbol) || await finnhubQuotes.configured(symbol) ? await getQuote(symbol, force).catch(error => {
       warnings.push(`Selected price refresh failed; showing Yahoo stock quote: ${describeError(error)}`)
       return undefined
     }) : undefined

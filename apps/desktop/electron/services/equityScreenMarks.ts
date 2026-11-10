@@ -1,6 +1,7 @@
 import type { EnvelopeError, Quote } from '../shared/contract.js'
 import { equityMarket } from '../shared/equityMarkets.js'
 import { getQuotes } from './yahoo/quotes.js'
+import { finnhubQuotes, finnhubSymbol } from './finnhubQuotes.js'
 
 /** Overlay only current prices. Screener ranks, reported multiples, volumes and
  * historical stock returns keep their own source and measurement basis.
@@ -9,9 +10,11 @@ export async function markEquityScreenRows<Row extends { ticker: string; price: 
   rows: Array<Row & { priceSource?: string; priceBasis?: Quote['priceBasis'] }>
   errors: EnvelopeError[]
   marked: boolean
+  sources: string[]
 }> {
-  const symbols = rows.map(row => row.ticker).filter(symbol => equityMarket(symbol))
-  if (!symbols.length) return { rows, errors: [], marked: false }
+  const useFinnhub = await finnhubQuotes.configured('AAPL')
+  const symbols = rows.map(row => row.ticker).filter(symbol => equityMarket(symbol) || useFinnhub && finnhubSymbol(symbol))
+  if (!symbols.length) return { rows, errors: [], marked: false, sources: [] }
   const batch = await getQuotes(symbols, force)
   return {
     rows: rows.map(row => {
@@ -20,6 +23,7 @@ export async function markEquityScreenRows<Row extends { ticker: string; price: 
         : equityMarket(row.ticker) ? { ...row, priceSource: 'Yahoo stock snapshot (selected live quote unavailable)' } : row
     }),
     errors: batch.errors.map(error => ({ source: 'market prices', operation: 'quote', symbol: error.symbol, reason: error.reason })),
-    marked: Object.values(batch.quotes).some(quote => quote.priceBasis === 'equity-perp-mark'),
+    marked: Object.values(batch.quotes).some(quote => quote.priceBasis === 'equity-perp-mark' || quote.source === 'Finnhub'),
+    sources: [...new Set(Object.values(batch.quotes).flatMap(quote => quote.source ? [quote.source] : []))],
   }
 }

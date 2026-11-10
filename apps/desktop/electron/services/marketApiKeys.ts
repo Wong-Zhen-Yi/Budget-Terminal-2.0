@@ -6,7 +6,7 @@ import { failed, ok } from '../shared/envelope.js'
 
 type Keys = Partial<Record<MarketApiProvider, string>>
 
-/** No network access or key getter: these credentials are reserved for future integrations. */
+/** Encrypted credentials. Only main-process services may retrieve a key. */
 export class MarketApiKeyStore {
   private pending: Promise<unknown> = Promise.resolve()
 
@@ -42,6 +42,10 @@ export class MarketApiKeyStore {
       try { return ok(this.status(await this.load()), 'local-credentials') }
       catch { return failed(this.status({}), 'Unable to read encrypted API keys. Check the system keyring and try again.', 'local-credentials') }
     })
+  }
+
+  getForService(provider: MarketApiProvider): Promise<string | undefined> {
+    return this.enqueue(async () => (await this.load())[provider])
   }
 
   mutate(request: unknown) {

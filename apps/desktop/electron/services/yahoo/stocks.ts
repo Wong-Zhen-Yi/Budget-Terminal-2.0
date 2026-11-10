@@ -30,6 +30,7 @@ import { withYahooStatements, withYahooSummary } from './requests.js'
 import { equityMarket } from '../../shared/equityMarkets.js'
 import { getQuote } from './quotes.js'
 import { captureSources } from '../sourceHealth.js'
+import { finnhubQuotes } from '../finnhubQuotes.js'
 
 export const STOCKS_SOURCE = 'yahoo stocks'
 
@@ -290,7 +291,8 @@ export async function getStocks(symbolInput: string, force = false): Promise<Sto
     fetchChart(symbol, force),
     fetchSummary(symbol, force),
     fetchNews(symbol, force),
-    equityMarket(symbol) ? captureSources(() => getQuote(symbol, force)).then(result => result.value) : Promise.resolve(undefined),
+    (async () => equityMarket(symbol) || await finnhubQuotes.configured(symbol)
+      ? (await captureSources(() => getQuote(symbol, force))).value : undefined)(),
   ] as const
   const settle = () => Promise.allSettled(tasks)
   const assemble = ([chartResult, summaryResult, newsResult, quoteResult]: Awaited<ReturnType<typeof settle>>): StocksServiceResult => {
@@ -361,7 +363,7 @@ export async function getStocks(symbolInput: string, force = false): Promise<Sto
 
 /** Refresh the mark even when a focus page reuses its cached company-data block. */
 export async function refreshStocksQuote(payload: StocksPayload, force = false): Promise<StocksPayload> {
-  if (!equityMarket(payload.symbol)) return payload
+  if (!equityMarket(payload.symbol) && !await finnhubQuotes.configured(payload.symbol)) return payload
   const { value: quote } = await captureSources(() => getQuote(payload.symbol, force))
   const upside = targetUpside(quote.price, payload.targets.meanPrice)
   return { ...payload, currentQuote: quote,

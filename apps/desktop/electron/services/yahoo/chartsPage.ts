@@ -24,6 +24,7 @@ import { getYahooSeries } from './series.js'
 import { getMarketSeries } from '../marketSeries.js'
 import { equityMarket } from '../../shared/equityMarkets.js'
 import { getQuote } from './quotes.js'
+import { finnhubQuotes } from '../finnhubQuotes.js'
 import { hyperliquidEquities } from '../hyperliquidEquities.js'
 import { captureSources, observeSource } from '../sourceHealth.js'
 import { cryptoPerpSymbol } from '../../shared/cryptoWorkspace.js'
@@ -218,7 +219,7 @@ export async function getChartsHistory(request: ChartsHistoryRequest): Promise<C
   if (cryptoPerpSymbol(symbol)) return cryptoCharts.getHistory({ ...request, symbol })
   let currentQuote: Quote | undefined
   // The independently streamed header mark must not expire historical candles in 15s.
-  if (equityMarket(symbol)) void captureSources(() => getQuote(symbol, Boolean(request.force)))
+  if (equityMarket(symbol) || await finnhubQuotes.configured(symbol)) void captureSources(() => getQuote(symbol, Boolean(request.force)))
     .then(({ value }) => { currentQuote = value }).catch(() => undefined)
   const fetchInterval = INTERVALS[request.interval]
   const start = requestStart(request.range, fetchInterval)

@@ -26,14 +26,17 @@
 .app-dash-donut li b { font-weight: 400; font-variant-numeric: tabular-nums; }
 .app-dash-bars { display: flex; flex-direction: column; justify-content: center; gap: 7px; min-height: 0; }
 .app-dash-bar { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1fr) auto; gap: 5px; align-items: center; font-size: clamp(8px, .67vw, 11px); }
-.app-dash-bar > span { overflow-wrap: anywhere; }
+.app-dash-bar > span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .app-dash-bar > div { height: 10px; background: var(--color-border); }
 .app-dash-bar i { display: block; height: 100%; }
 .app-dash-bar > .app-dash-latency { background: transparent; display: flex; flex-direction: column; gap: 2px; }
 .app-dash-latency i { height: 4px; flex-shrink: 0; }
 .app-dash-bar-signed { position: relative; }
 .app-dash-bar-signed::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; border-left: 1px solid var(--color-text-muted); }
-.app-dash-bar b { font-variant-numeric: tabular-nums; font-weight: 400; }
+.app-dash-bar b { font-variant-numeric: tabular-nums; font-weight: 400; white-space: nowrap; }
+/* Provider inventories and load timings must fit between the title and note. */
+.app-dash-bars--dense { gap: 3px; }
+.app-dash-bars--dense .app-dash-bar { font-size: 10px; line-height: 1.1; }
 .app-dash-bars small, .app-dash-line small, .app-dash-config small { display: block; text-align: center; font-size: 9px; line-height: 1.25; color: var(--color-text-muted); }
 .app-dash-line { display: flex; flex-direction: column; min-height: 0; gap: 3px; }
 .app-dash-line > div { display: flex; justify-content: center; gap: 12px; font-size: 10px; }
@@ -50,6 +53,12 @@
   .app-dash-card { padding: 7px; gap: 4px; }
   .app-dash-kpis strong { font-size: 20px; }
   .app-dash-bars { gap: 4px; }
+  .app-dash-bars--dense { gap: 1px; }
+  .app-dash-bars--dense .app-dash-bar { font-size: 8px; }
+  .app-dash-bars--dense .app-dash-bar > div { height: 7px; }
+  .app-dash-bars--dense .app-dash-latency { gap: 1px; }
+  .app-dash-bars--dense .app-dash-latency i { height: 3px; }
+  .app-dash-bars--dense small { font-size: 8px; }
   .app-dash-donut li { gap: 3px; }
   .app-dash-donut ul { gap: 3px; }
 }

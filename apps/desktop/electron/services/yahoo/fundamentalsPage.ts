@@ -20,6 +20,7 @@ import { fetchSecCompanyBundle, type SecCompanyBundle } from '../secEdgar.js'
 import { paced, yahoo } from './client.js'
 import { withYahooStatements, withYahooSummary } from './requests.js'
 import { getQuote } from './quotes.js'
+import { finnhubQuotes } from '../finnhubQuotes.js'
 
 export const FUNDAMENTALS_PAGE_SOURCE = 'SEC EDGAR + Yahoo Finance'
 
@@ -403,7 +404,7 @@ export async function getFundamentalsPage(symbolInput: string, force = false): P
     () => fetchUncached(symbol, force),
     { force },
   )
-  if (equityMarket(symbol)) {
+  if (equityMarket(symbol) || await finnhubQuotes.configured(symbol)) {
     try {
       const quote = await getQuote(symbol, force)
       return { ...resolved.value, payload: { ...resolved.value.payload,

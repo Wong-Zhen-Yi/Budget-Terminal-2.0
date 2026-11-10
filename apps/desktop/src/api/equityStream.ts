@@ -67,7 +67,7 @@ export function applyEquityMarketUpdate(client: QueryClient, update: EquityMarke
       if (changed) {
         if ('minimumPrice' in payload) rows = rows.filter(row => row.price !== null && row.price >= payload.minimumPrice && row.price <= payload.maximumPrice)
         data = { ...payload, rows,
-          source: payload.source.includes('Hyperliquid') ? payload.source : `${payload.source}; Hyperliquid mapped marks` }
+          source: [...new Set([...payload.source.split('; '), ...update.quotes.map(quote => quote.source).filter(Boolean)])].join('; ') }
       }
     } else if (root === 'heatmap') {
       const payload = data as HeatmapPayload
@@ -78,7 +78,7 @@ export function applyEquityMarketUpdate(client: QueryClient, update: EquityMarke
         changed = true
         return { ...row, price: quote.price, priceSource: quote.source, priceBasis: quote.priceBasis }
       })
-      if (changed) data = { ...payload, holdings, priceSource: 'Hyperliquid mapped marks + Yahoo other prices; returns use Yahoo stock history' }
+      if (changed) data = { ...payload, holdings, priceSource: `${[...new Set(holdings.map(row => row.priceSource).filter(Boolean))].join(' + ')}; returns use Yahoo stock history` }
     } else if (root === 'bmnr') {
       const quote = quotes.get('BMNR')
       if (quote) data = markBmnrPayload(data as BmnrPayload, quote)

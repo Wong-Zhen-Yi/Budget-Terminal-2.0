@@ -21,6 +21,8 @@ import type { NotificationCommand } from '../shared/notifications.js'
 import { hyperliquidEquities } from '../services/hyperliquidEquities.js'
 import { cloudSyncCommand, cloudSyncStatus } from '../services/cloudSyncHost.js'
 import { liveStatusEvents } from '../services/liveStatusEvents.js'
+import { finnhubQuotes } from '../services/finnhubQuotes.js'
+import { marketApiKeys } from '../services/marketApiKeysHost.js'
 
 export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent) => boolean): () => void {
   const handle: typeof ipcMain.handle = (channel, listener) => {
@@ -30,6 +32,14 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
     })
   }
   const provider = yahooProvider
+  finnhubQuotes.setCredentialLoader(() => marketApiKeys.getForService('finnhub'))
+  const stopFinnhubUpdates = finnhubQuotes.subscribe(quote => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.webContents.isDestroyed()) window.webContents.send(CHANNELS.equityMarketChanged, { quotes: [quote], candles: [] })
+    }
+  })
+  const finnhubPoll = setInterval(() => { void finnhubQuotes.poll() }, 1_200)
+  finnhubPoll.unref()
   const stopLiveStatus = liveStatusEvents.subscribe(event => {
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.webContents.isDestroyed()) window.webContents.send(CHANNELS.liveStatusChanged, event)
@@ -37,9 +47,11 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
   })
   handle(CHANNELS.cloudSyncStatus, () => ok(cloudSyncStatus(), 'cloud sync'))
   handle(CHANNELS.cloudSyncCommand, (_event, command) => cloudSyncCommand(command))
-  const stopEquityUpdates = hyperliquidEquities.subscribe(update => {
+  const stopEquityUpdates = hyperliquidEquities.subscribe(async update => {
+    await finnhubQuotes.configured('AAPL')
+    const filtered = { ...update, quotes: update.quotes.filter(quote => !finnhubQuotes.prefers(quote.symbol)) }
     for (const window of BrowserWindow.getAllWindows()) {
-      if (!window.webContents.isDestroyed()) window.webContents.send(CHANNELS.equityMarketChanged, update)
+      if (!window.webContents.isDestroyed()) window.webContents.send(CHANNELS.equityMarketChanged, filtered)
     }
   })
   hyperliquidEquities.start()
@@ -192,6 +204,8 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
     stopLiveStatus()
     stopSavedData()
     stopEquityUpdates()
+    stopFinnhubUpdates()
+    clearInterval(finnhubPoll)
     hyperliquidEquities.close()
     for (const channel of Object.values(CHANNELS)) ipcMain.removeHandler(channel)
   }

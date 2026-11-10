@@ -13,6 +13,7 @@ import { periodStart } from './client.js'
 import { getMarketSeries } from '../marketSeries.js'
 import { equityMarket } from '../../shared/equityMarkets.js'
 import { getQuote } from './quotes.js'
+import { finnhubQuotes } from '../finnhubQuotes.js'
 import { captureSources } from '../sourceHealth.js'
 
 export function timeframeSpec(label: TimeframeLabel): TimeframeSpec {
@@ -183,7 +184,7 @@ export async function getChart(
   // A current mark is a separate feed. Start it alongside history; a delayed or
   // unavailable quote must not hold otherwise usable candles behind a spinner.
   let currentQuote: Quote | undefined
-  if (equityMarket(symbol)) void captureSources(() => getQuote(symbol, force))
+  if (equityMarket(symbol) || await finnhubQuotes.configured(symbol)) void captureSources(() => getQuote(symbol, force))
     .then(({ value }) => { currentQuote = value }).catch(() => undefined)
   const spec = timeframeSpec(timeframe)
   const raw = await fetchCandles(symbol, spec, force)

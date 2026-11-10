@@ -3,7 +3,7 @@ export const MARKET_API_PROVIDERS = [
   { id: 'fmp', label: 'Financial Modeling Prep' },
 ] as const
 
-/** Authenticated providers remain inactive. Only public endpoints are enabled. */
+/** Finnhub is preferred for supported stock quotes when its key is configured. */
 export const MARKET_DATA_PROVIDERS = [
   ...MARKET_API_PROVIDERS.map(provider => ({ ...provider, access: 'key' as const })),
   { id: 'binance', label: 'Binance', access: 'public', description: 'Enabled for supported spot quotes. USDT prices are converted to USD using a shared Coinbase rate. Independent rate budget and fallback.' },

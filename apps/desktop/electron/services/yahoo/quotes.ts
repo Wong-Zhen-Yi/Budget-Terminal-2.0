@@ -6,6 +6,7 @@ import { equityMarket } from '../../shared/equityMarkets.js'
 import { hyperliquidEquities } from '../hyperliquidEquities.js'
 import { regularMarketRefreshAt } from '../../shared/marketRefresh.js'
 import { diversifiedData } from '../diversifiedData.js'
+import { finnhubQuotes } from '../finnhubQuotes.js'
 
 interface QuoteChartResult {
   quotes: Array<{ date: Date; close: number | null }>
@@ -112,6 +113,20 @@ export async function getQuote(symbol: string, force = false): Promise<Quote> {
 
 async function resolveQuote(symbol: string, force = false): Promise<CachedResult<Quote> & { stale: boolean }> {
   symbol = symbol.trim().toUpperCase()
+  let finnhubFailure: string | undefined
+  try {
+    const quote = await finnhubQuotes.resolve(symbol, force)
+    if (quote) return quote
+  } catch (error) { finnhubFailure = error instanceof Error ? error.message : 'Finnhub quote unavailable.' }
+  const result = await resolveExistingQuote(symbol, force, await finnhubQuotes.configured(symbol))
+  if (!finnhubFailure) return result
+  const reason = `${finnhubFailure} Using ${result.value.source ?? 'existing market data provider'}.`
+  observeSource({ fetchedAt: Date.now(), stale: result.stale, fromCache: result.fromCache, failures: [reason] })
+  return { ...result, value: { ...result.value, fallbackReason: [reason, result.value.fallbackReason].filter(Boolean).join(' ') } }
+}
+
+async function resolveExistingQuote(symbol: string, force: boolean, stockOnly = false): Promise<CachedResult<Quote> & { stale: boolean }> {
+  if (stockOnly) return resolveYahooQuote(symbol, force)
   if (equityMarket(symbol)) {
     try {
       const quote = await hyperliquidEquities.getQuote(symbol, force)
@@ -159,7 +174,7 @@ export async function getQuotes(symbols: string[], force = false, onProgress?: (
     if (outcome.status === 'fulfilled') {
       quotes[symbol] = outcome.value.value
       if (outcome.value.value.fallbackReason) errors.push({ symbol,
-        reason: `Hyperliquid unavailable; using Yahoo stock quote. ${outcome.value.value.fallbackReason}` })
+        reason: outcome.value.value.fallbackReason })
       if (outcome.value.fromCache) fromCacheCount += 1
       if (outcome.value.stale) staleCount += 1
       cacheAgeSeconds = Math.max(cacheAgeSeconds, outcome.value.ageSeconds)

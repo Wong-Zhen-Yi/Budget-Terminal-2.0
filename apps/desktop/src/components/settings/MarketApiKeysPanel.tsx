@@ -32,10 +32,16 @@ export function MarketApiKeysPanel() {
       const result = await window.api.mutateMarketApiKeys(request)
       client.setQueryData(['marketApiKeys'], result)
       setError(Boolean(result.meta.failureReason))
-      setMessage(result.meta.failureReason ?? (request.type === 'save' ? 'Key saved. Provider remains inactive.' : 'Key removed.'))
+      setMessage(result.meta.failureReason ?? (request.type === 'save'
+        ? request.provider === 'finnhub' ? 'Key saved. Finnhub is now preferred for supported stock quotes.' : 'Key saved. Financial Modeling Prep remains inactive.'
+        : 'Key removed.'))
       if (!result.meta.failureReason) {
         setStatus(result.data)
         setDrafts(previous => ({ ...previous, [request.provider]: '' }))
+        if (request.provider === 'finnhub') {
+          const roots = new Set(['quotes', 'backtestQuotes', 'stocks', 'chart', 'chartsHistory', 'amzn', 'avgo', 'mu', 'sofi', 'vst', 'hood', 'hims', 'pltr', 'bmnr', 'fundamentalsPage', 'valuation', 'heatmap', 'marketCap', 'priceScreen', 'semiconductors'])
+          void client.invalidateQueries({ predicate: query => roots.has(String(query.queryKey[0])), refetchType: 'all' })
+        }
       }
     } catch { setError(true); setMessage('Unable to update API key. Try again.') }
     finally { setBusy(false) }
@@ -43,13 +49,13 @@ export function MarketApiKeysPanel() {
 
   return <Panel title="Market data APIs">
     <div className="flex flex-col gap-3 p-2">
-      <p className="text-2xs text-text-muted">Public APIs diversify spot quotes and annual economic data with separate budgets, caching and cooldowns. Finnhub and Financial Modeling Prep remain inactive, including when a key is saved. Keys stay encrypted on this device.</p>
+      <p className="text-2xs text-text-muted">Saving a Finnhub key makes it the preferred source for supported US stock quotes. Quotes refresh automatically within a shared 60 requests/minute budget; coverage and timing depend on your Finnhub plan. If a refresh fails, the last Finnhub quote stays visible as stale, or Yahoo supplies a stock quote. Perpetual marks do not replace these stock prices. Existing APIs supply history and other data. Financial Modeling Prep remains inactive. Keys stay encrypted on this device.</p>
       {status && !status.encryptionAvailable ? <p role="alert">OS credential encryption is unavailable. Enable your system keyring to save keys.</p> : null}
       {MARKET_API_PROVIDERS.map(provider => <form key={provider.id} className="market-api-key" onSubmit={event => {
         event.preventDefault()
         void update({ type: 'save', provider: provider.id, key: drafts[provider.id] })
       }}>
-        <label htmlFor={`market-key-${provider.id}`} className="text-xs">{provider.label} <span className="text-text-muted">· Inactive · {status ? status.configured[provider.id] ? 'Key saved' : 'No key saved' : 'Status unavailable'}</span></label>
+        <label htmlFor={`market-key-${provider.id}`} className="text-xs">{provider.label} <span className="text-text-muted">· {provider.id === 'finnhub' ? status?.configured.finnhub ? 'Preferred for stock quotes' : 'Enter key to enable stock quotes' : 'Inactive'} · {status ? status.configured[provider.id] ? 'Key saved' : 'No key saved' : 'Status unavailable'}</span></label>
         <div className="flex flex-wrap gap-2">
           <input id={`market-key-${provider.id}`} type="password" autoComplete="off" spellCheck={false} maxLength={4096}
             className="min-w-0 flex-1 border border-border bg-bg px-2 text-xs" placeholder="Enter API key" aria-label={`${provider.label} API key`}

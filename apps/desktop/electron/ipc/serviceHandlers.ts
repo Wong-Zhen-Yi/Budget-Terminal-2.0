@@ -97,6 +97,7 @@ import { getHeatmapProgress } from '../services/heatmap.js'
 import { normalizeEtfKey } from '../shared/heatmap.js'
 import { publishSavedDataChanged } from '../services/savedDataEvents.js'
 import type { SavedDataDomain } from '../shared/contract.js'
+import { finnhubQuotes } from '../services/finnhubQuotes.js'
 
 const changedDomains = new Map<string, SavedDataDomain>([
   [CHANNELS.articlesMutate, 'articles'],
@@ -120,7 +121,11 @@ export function registerServiceHandlers(registerRoute: RegisterService): void {
 
   register(CHANNELS.apiUsage, () => getApiUsageSnapshot())
   register(CHANNELS.marketApiKeys, async () => (await import('../services/marketApiKeysHost.js')).marketApiKeys.read())
-  register(CHANNELS.marketApiKeysMutate, async (request: unknown) => (await import('../services/marketApiKeysHost.js')).marketApiKeys.mutate(request))
+  register(CHANNELS.marketApiKeysMutate, async (request: unknown) => {
+    const result = await (await import('../services/marketApiKeysHost.js')).marketApiKeys.mutate(request)
+    if (result.meta.freshness !== 'failed' && (request as { provider?: string })?.provider === 'finnhub') finnhubQuotes.credentialsChanged()
+    return result
+  })
   register(CHANNELS.appMetrics, readAppMetrics)
   register(CHANNELS.startupPriority, (order: number | null) => rateGate.preferBackgroundOrder(order))
   register(CHANNELS.cacheStatus, () => getCacheStatus())

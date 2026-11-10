@@ -1,4 +1,6 @@
 @echo off
+rem Settings dashboard fits the full provider inventory without overlapping chart titles or notes.
+rem Finnhub queues portfolio quotes and retains stock prices during cooldowns; perp updates cannot overwrite them.
 rem Windows double-click entry point; shared setup and startup live in scripts/.
 rem Incremental charts, indexed live updates and cache checkpoints: docs/performance.md.
 rem macOS: double-click Launch Budget Terminal.command. Linux: Launch Budget Terminal.sh.
