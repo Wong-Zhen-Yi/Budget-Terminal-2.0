@@ -7,7 +7,7 @@ export const notificationsKey = ['notifications'] as const
 export const loadNotifications = () => api.notificationsStatus()
 export function useNotifications() {
   return useQuery({ queryKey: notificationsKey, queryFn: loadNotifications, staleTime: Infinity,
-    refetchInterval: 3000, refetchIntervalInBackground: true, retry: false })
+    refetchInterval: api.onLiveStatusChanged ? 30_000 : 3000, refetchIntervalInBackground: true, retry: false })
 }
 export function useNotificationCommand() {
   const client = useQueryClient()

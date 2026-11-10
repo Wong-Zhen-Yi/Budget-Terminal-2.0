@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { randomBytes } from 'node:crypto'
 import type { TelegramState } from '../shared/telegram.js'
 import { formatTelegramText, TelegramError } from '../shared/telegram.js'
+import { agentsChanged, observableStatus } from './liveStatusEvents.js'
 
 export const telegramCommands = [
   { command: 'new', description: 'Start a fresh chat: /new [question]' },
@@ -39,7 +40,9 @@ interface Options {
 /** Single private home chat, explicit allowlist, outbound-only HTTP and no token in diagnostics. */
 export class TelegramService {
   private config: TelegramConfig | null = null
-  private state: TelegramState = { configured: false, enabled: false, receive: false, connected: false, bot: '', chatId: '', error: '' }
+  private currentState: TelegramState = observableStatus({ configured: false, enabled: false, receive: false, connected: false, bot: '', chatId: '', error: '' }, agentsChanged)
+  private get state() { return this.currentState }
+  private set state(value: TelegramState) { this.currentState = observableStatus(value, agentsChanged); agentsChanged() }
   private controller = new AbortController()
   private loop: Promise<void> | null = null
   private sending = false

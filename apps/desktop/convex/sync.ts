@@ -33,8 +33,8 @@ const findRecord = (ctx: QueryCtx, userId: Id<'users'>, key: string) => ctx.db.q
 
 export const authConfiguration = query({ args: {}, handler: async () => {
   const configured = (value: string | undefined) => Boolean(value?.trim() && !['undefined', 'null'].includes(value.trim()))
-  return { githubConfigured: configured(process.env.AUTH_GITHUB_ID) && configured(process.env.AUTH_GITHUB_SECRET),
-    emailConfigured: configured(process.env.AUTH_RESEND_KEY) && configured(process.env.AUTH_EMAIL_FROM) }
+  return { protocol: 2, githubConfigured: configured(process.env.AUTH_GITHUB_ID) && configured(process.env.AUTH_GITHUB_SECRET),
+    emailConfigured: false }
 } })
 export const identity = query({ args: {}, handler: async ctx => (await account(ctx)).userId })
 export const accountLabel = query({ args: {}, handler: async ctx => {

@@ -29,10 +29,20 @@ export function canonical(value: unknown): string {
   return JSON.stringify(value)
 }
 
+/** Operation-local capture only; never retain snapshots across external file writes. */
+export async function captureSavedData() {
+  const settings = await exportSettings()
+  const data = { version: 1, userData: await exportUserData(), settings,
+    cards: await exportCards(), articles: { articles: (await readArticles()).articles } }
+  const { lastBackupAt: _lastBackupAt, ...syncSettings } = settings
+  let payload: string | undefined
+  let payloadHash: string | undefined
+  const serialize = () => payload ??= canonical({ ...data, settings: syncSettings })
+  return { data, get payload() { return serialize() }, get hash() { return payloadHash ??= hash(serialize()) } }
+}
+
 export async function readSyncData(): Promise<string> {
-  const { lastBackupAt: _lastBackupAt, ...settings } = await exportSettings()
-  return canonical({ version: 1, userData: await exportUserData(), settings,
-    cards: await exportCards(), articles: { articles: (await readArticles()).articles } })
+  return (await captureSavedData()).payload
 }
 
 const metadataPath = () => cloudDataPath('sync-local-metadata.json')
@@ -49,13 +59,13 @@ export function defaultSyncData(): string {
     cards, articles: { articles: [] } })
 }
 
-async function saveLocalMetadata(value: LocalSyncSnapshot): Promise<void> {
-  await atomicSyncFile(metadataPath(), { hash: hash(value.payload), updatedAt: value.updatedAt, pristine: value.pristine })
+async function saveLocalMetadata(value: LocalSyncSnapshot, payloadHash = hash(value.payload)): Promise<void> {
+  await atomicSyncFile(metadataPath(), { hash: payloadHash, updatedAt: value.updatedAt, pristine: value.pristine })
 }
 
 /** Called under the save queue, including while disconnected. Defaults have no edit time. */
-export async function readLocalSyncData(): Promise<LocalSyncSnapshot> {
-  const payload = await readSyncData()
+export async function readLocalSyncData(captured?: Awaited<ReturnType<typeof captureSavedData>>): Promise<LocalSyncSnapshot> {
+  const { payload, hash: payloadHash } = captured ?? await captureSavedData()
   let previous: z.infer<typeof metadataSchema> | undefined
   let uncertain = false
   try { previous = metadataSchema.parse(JSON.parse(await readFile(metadataPath(), 'utf8'))) }
@@ -63,11 +73,11 @@ export async function readLocalSyncData(): Promise<LocalSyncSnapshot> {
     if (error instanceof SyntaxError || error instanceof z.ZodError) uncertain = true
     else if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
   }
-  if (previous?.hash === hash(payload)) return { payload, updatedAt: previous.updatedAt, pristine: previous.pristine }
+  if (previous?.hash === payloadHash) return { payload, updatedAt: previous.updatedAt, pristine: previous.pristine }
   const pristine = !uncertain && previous === undefined && pristineData(payload)
   const updatedAt = pristine ? 0 : Math.max(Date.now(), (previous?.updatedAt ?? 0) + 1)
   const value = { payload, updatedAt, pristine }
-  await saveLocalMetadata(value)
+  await saveLocalMetadata(value, payloadHash)
   return value
 }
 

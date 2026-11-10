@@ -5,6 +5,7 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { App } from './App'
 import { api } from './api/client'
 import { refreshSavedData } from './api/mcpChanges'
+import { subscribeLiveStatus } from './api/liveStatus'
 import { CACHE_SETTING_BOUNDS } from '@shared/cachePolicy'
 import {
   RENDERER_CACHE_BUSTER,
@@ -46,6 +47,8 @@ const stopMcpChanges = api.onSavedDataChanged((event) => {
   void refreshSavedData(queryClient, event)
 })
 if (import.meta.hot) import.meta.hot.dispose(stopMcpChanges)
+const stopLiveStatus = api.onLiveStatusChanged ? subscribeLiveStatus(queryClient, api.onLiveStatusChanged) : undefined
+if (import.meta.hot) import.meta.hot.dispose(() => stopLiveStatus?.())
 
 export default function TerminalRoot() {
   return (

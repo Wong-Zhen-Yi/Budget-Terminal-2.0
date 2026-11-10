@@ -1,32 +1,36 @@
 import { useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import type { Envelope } from '@shared/contract'
 import { MARKET_API_PROVIDERS, MARKET_DATA_PROVIDERS } from '@shared/marketApiKeys'
 import type { MarketApiKeyMutation, MarketApiKeyStatus, MarketApiProvider } from '@shared/marketApiKeys'
 import { Button } from '@/components/ui/Button'
 import { Panel } from '@/components/ui/Panel'
 
 export function MarketApiKeysPanel() {
-  const [status, setStatus] = useState<MarketApiKeyStatus | null>(null)
+  const client = useQueryClient()
+  const [status, setStatus] = useState<MarketApiKeyStatus | null>(() => client.getQueryData<Envelope<MarketApiKeyStatus>>(['marketApiKeys'])?.data ?? null)
   const [drafts, setDrafts] = useState({ finnhub: '', fmp: '' })
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState(false)
 
-  const load = async () => {
+  const load = async (refresh = true) => {
     setBusy(true)
     try {
-      const result = await window.api.marketApiKeys()
+      const result = await client.fetchQuery({ queryKey: ['marketApiKeys'], queryFn: () => window.api.marketApiKeys(), staleTime: refresh ? 0 : Infinity })
       setStatus(result.meta.failureReason ? null : result.data)
       setMessage(result.meta.failureReason ?? '')
       setError(Boolean(result.meta.failureReason))
     } catch { setError(true); setMessage('Unable to read API key settings. Try again.') }
     finally { setBusy(false) }
   }
-  useEffect(() => { void load() }, [])
+  useEffect(() => { void load(false) }, [client])
 
   const update = async (request: MarketApiKeyMutation) => {
     setBusy(true)
     try {
       const result = await window.api.mutateMarketApiKeys(request)
+      client.setQueryData(['marketApiKeys'], result)
       setError(Boolean(result.meta.failureReason))
       setMessage(result.meta.failureReason ?? (request.type === 'save' ? 'Key saved. Provider remains inactive.' : 'Key removed.'))
       if (!result.meta.failureReason) {

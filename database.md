@@ -1,6 +1,8 @@
 # Public-user database and cloud sync implementation brief
 
-Status: protocol 2 is implemented in the working tree and offline verification passes. Production release acceptance remains pending. See docs/convex-sync.md for the implemented architecture, operator setup, verification and external blockers. Do not delete this brief until the live production, delivery, isolation and operating-cost checks are complete.
+Status: protocol 2 is implemented, deployed to the separate production service, and offline verification passes. Production signing/discovery and the public release endpoint are configured. Production GitHub credentials and final release acceptance remain pending. See docs/production-release.md and docs/convex-sync.md. Do not delete this brief until the live production, isolation and operating-cost checks are complete.
+
+User override, 2026-11-10: use GitHub only through Convex Auth, keep the existing account, and do not use a mail API. This supersedes the email-code/delivery requirements below. The existing saved-data deployment was backed up and updated; local launchers retain its configured address. The separate production backend and signing settings are now deployed; its independent GitHub OAuth credentials are pending.
 
 ## Instruction for the future implementation run
 

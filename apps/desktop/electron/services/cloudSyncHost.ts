@@ -16,6 +16,7 @@ import { withSavedDataLock } from './automaticBackup.js'
 import { subscribeSavedDataChanged } from './savedDataEvents.js'
 import { beginGitHubSignIn, GitHubSetupError, type GitHubSignIn, type OAuthTokens } from './cloudSyncOAuth.js'
 import { convexDeploymentUrl } from '../shared/cloudOAuth.js'
+import { CloudBackendUpgradeError, requireCloudBackend, type CloudAuthConfiguration } from '../shared/cloudSyncConfiguration.js'
 
 declare const __BUDGET_SYNC_URL__: string
 const defaultUrl = typeof __BUDGET_SYNC_URL__ === 'string' ? __BUDGET_SYNC_URL__ : ''
@@ -28,7 +29,7 @@ const deleteRef = makeFunctionReference<'mutation', { confirmation: 'DELETE MY A
 const exportInfoRef = makeFunctionReference<'query', Record<string, never>, { profile: unknown; legacySnapshot: unknown; storageBytes: number; historyBytes: number }>('sync:exportInfo')
 const userRef = makeFunctionReference<'query', Record<string, never>, string>('sync:identity')
 const labelRef = makeFunctionReference<'query', Record<string, never>, string>('sync:accountLabel')
-const authConfigRef = makeFunctionReference<'query', Record<string, never>, { githubConfigured: boolean }>('sync:authConfiguration')
+const authConfigRef = makeFunctionReference<'query', Record<string, never>, CloudAuthConfiguration>('sync:authConfiguration')
 const signInRef = makeFunctionReference<'action', { provider?: string; params?: Record<string, string>; refreshToken?: string; verifier?: string },
   { tokens?: { token: string; refreshToken: string } | null; started?: boolean; redirect?: string; verifier?: string }>('auth:signIn')
 const signOutRef = makeFunctionReference<'action', Record<string, never>, null>('auth:signOut')
@@ -48,8 +49,9 @@ const urlSchema = z.string().trim().transform(value => convexDeploymentUrl(value
 const commandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('signInGitHub'), url: urlSchema }),
   z.object({ type: z.literal('cancelSignIn') }),
-  z.object({ type: z.literal('sendCode'), url: urlSchema, email: z.string().trim().email().max(254) }),
-  z.object({ type: z.literal('verifyCode'), url: urlSchema, email: z.string().trim().email().max(254), code: z.string().trim().min(1).max(64) }),
+  // Recognize retired renderer commands only to return a clear upgrade message. Never send mail.
+  z.object({ type: z.literal('sendCode') }),
+  z.object({ type: z.literal('verifyCode') }),
   z.object({ type: z.literal('sync') }), z.object({ type: z.literal('disconnect') }),
   z.object({ type: z.literal('resolve'), use: z.enum(['local', 'cloud']), key: z.string().max(1000).optional(), token: z.string().max(64).optional() }),
   z.object({ type: z.literal('exportAccount') }),
@@ -75,6 +77,12 @@ let closed = false
 let message: string | undefined
 let authError = false
 let pendingGitHub: GitHubSignIn | undefined
+let authProviders: { url: string; configuration: CloudAuthConfiguration } | undefined
+async function readAuthConfiguration(url: string): Promise<CloudAuthConfiguration> {
+  const configuration = requireCloudBackend(await http(url).query(authConfigRef, {}))
+  authProviders = { url, configuration }
+  return configuration
+}
 
 function enqueue<T>(run: () => Promise<T>): Promise<T> {
   const result = busy.then(run)
@@ -185,6 +193,7 @@ async function attach(value: Session) {
 
 export function cloudSyncStatus(): CloudSyncStatus {
   return { url: session?.url ?? defaultUrl, configured: Boolean(defaultUrl), signedIn: Boolean(session), encryptionAvailable: encryptionAvailable(),
+    authProviders: authProviders?.url === (session?.url ?? defaultUrl) ? authProviders.configuration : undefined,
     accountLabel: session?.accountLabel,
     state: engine?.state ?? (authError ? 'error' : 'disconnected'), pending: engine?.pending ?? false,
     signInPending: Boolean(pendingGitHub),
@@ -201,6 +210,7 @@ export function cloudSyncStatus(): CloudSyncStatus {
 
 export async function startCloudSync(): Promise<void> {
   closed = false
+  if (defaultUrl) void readAuthConfiguration(defaultUrl).catch(() => { /* Sign-in reports connection/setup failures when attempted. */ })
   // Local journal recovery is the only startup dependency; it never accesses Convex.
   await withSavedDataLock(recoverSyncData)
   // Establish the factory baseline before the window can make edits. Never require cloud access.
@@ -237,7 +247,7 @@ export function cloudSyncCommand(input: CloudSyncCommand) {
         if (session || pendingGitHub || !encryptionAvailable()) throw new Error('Sign-in unavailable')
         const login = http(command.url)
         const flow = await beginGitHubSignIn(command.url, {
-          isConfigured: async () => (await login.query(authConfigRef, {})).githubConfigured,
+          isConfigured: async () => (await readAuthConfiguration(command.url)).githubConfigured,
           signIn: args => login.action(signInRef, args), openExternal: url => shell.openExternal(url),
         })
         pendingGitHub = flow
@@ -258,15 +268,8 @@ export function cloudSyncCommand(input: CloudSyncCommand) {
         pendingGitHub?.cancel()
         pendingGitHub = undefined
       } else if (command.type === 'sendCode' || command.type === 'verifyCode') {
-        if (session || pendingGitHub) throw new Error('Disconnect before changing accounts.')
-        if (!encryptionAvailable()) throw new Error('OS encryption unavailable')
-        const login = http(command.url)
-        const params: Record<string, string> = { email: command.email.toLowerCase() }
-        if (command.type === 'verifyCode') params.code = command.code.toUpperCase()
-        const result = await login.action(signInRef, { provider: 'email', params })
-        if (command.type === 'verifyCode') {
-          await connectTokens(command.url, tokensSchema.parse(result.tokens))
-        } else message = 'Code sent. Check your email, then enter the code within 15 minutes.'
+        message = 'Email-code sign-in has been removed. Restart Budget Terminal and use GitHub to connect to your existing account.'
+        return failed(cloudSyncStatus(), message, 'cloud sync')
       } else if (command.type === 'exportAccount') {
         if (!session) throw Error('Sign in first.')
         const api = await authenticatedClient()
@@ -314,7 +317,7 @@ export function cloudSyncCommand(input: CloudSyncCommand) {
       const status = cloudSyncStatus()
       return status.state === 'error' ? failed(status, status.message ?? 'Sync failed.', 'cloud sync') : ok(status, 'cloud sync')
     } catch (error) {
-      if (error instanceof GitHubSetupError) {
+      if (error instanceof GitHubSetupError || error instanceof CloudBackendUpgradeError) {
         authError = true
         message = error.message
         return failed(cloudSyncStatus(), message, 'cloud sync')

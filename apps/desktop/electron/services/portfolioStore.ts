@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 import { z } from 'zod'
 import { normalizeSymbols } from '../shared/charts.js'
+import { portfolioMarketInputs } from '../shared/portfolioDependencies.js'
 
 import { randomUUID } from 'node:crypto'
 
@@ -403,14 +404,17 @@ function normalize(document: StoredDocument): StoredDocument {
   return document
 }
 
+let lastWrittenDocument: string | undefined
 async function persist(document: StoredDocument): Promise<void> {
   const target = storePath()
   await mkdir(dirname(target), { recursive: true })
   // Write beside the target then rename: rename is atomic on the same volume, so a
   // reader never sees a half-written document.
   const temporary = `${target}.${process.pid}.tmp`
-  await writeFile(temporary, JSON.stringify(document, null, 2), 'utf8')
+  const contents = JSON.stringify(document, null, 2)
+  await writeFile(temporary, contents, 'utf8')
   await rename(temporary, target)
+  lastWrittenDocument = contents
 }
 
 /* ------------------------------------------------------------------ reading */
@@ -970,7 +974,7 @@ export async function clearUserData(): Promise<string> {
  * user editing the file by hand. Portfolios and the finance section share the file, so
  * one watcher covers both.
  */
-export function watchPortfolios(onChange: () => void): () => void {
+export function watchPortfolios(onChange: (metadataOnly?: boolean) => void): () => void {
   const path = storePath()
   let watcher: FSWatcher | null = null
   let timer: NodeJS.Timeout | null = null
@@ -979,10 +983,20 @@ export function watchPortfolios(onChange: () => void): () => void {
   const schedule = () => {
     if (stopped) return
     if (timer) clearTimeout(timer)
-    timer = setTimeout(() => {
+    timer = setTimeout(async () => {
       if (stopped) return
-      cached = null
-      onChange()
+      try {
+        const contents = await readFile(path, 'utf8')
+        if (stopped || contents === lastWrittenDocument) return
+        lastWrittenDocument = undefined
+        const before = cached ? portfolioMarketInputs(portfolioPayload(cached)) : undefined
+        cached = null
+        const after = portfolioMarketInputs(await readPortfolios())
+        if (!stopped) onChange(before !== undefined && before === after)
+      } catch {
+        cached = null
+        if (!stopped) onChange()
+      }
     }, 300)
   }
 

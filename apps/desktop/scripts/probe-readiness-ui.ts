@@ -118,6 +118,7 @@ try {
     const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg=='
     let populated = false, calls = [], fixtureSettings = settings, restoredCurrency = false
     const fixture = (method, request = {}) => {
+      request ??= {} // Native player teardown accepts null instead of a request object.
       if (method === 'cacheStatus') {
         const part = { bytes: 0, entries: 0, expiredEntries: 0, evictions: 0 }
         return ok({ settings: DEFAULT_CACHE_SETTINGS, service: { market: part, assets: part,
@@ -359,12 +360,12 @@ try {
             const settingsPage = visiblePage(tab.id)
             check(settingsPage.querySelectorAll('.app-dash-card').length === 18, 'Settings dashboard must prepare all 18 charts')
             check(settingsPage.querySelector('.app-dashboard').getBoundingClientRect().height > 0, 'App dashboard must be the default Settings view')
-            settingsPage.querySelector('[data-settings-category="all"]').click()
+            settingsPage.querySelector('[data-settings-category="data"]').click()
             await wait()
             check(visiblePage(tab.id).querySelectorAll('meter').length === 3, 'Cache diagnostics must be ready on first visit')
             check(visiblePage(tab.id).querySelector('input[type="number"]')?.value === '256', 'Saved cache limits must be available without a first-visit load')
             check(!visiblePage(tab.id).innerText.includes('Remote'), 'Settings must not offer remote access')
-            check(visiblePage(tab.id).innerText.includes('User Data'), 'Desktop data controls must remain available')
+            check(visiblePage(tab.id).innerText.includes('Backups & saved data'), 'Desktop data controls must remain available')
           }
           if (scenario === 'populated' && ['dashboard', 'news', 'youtube', 'settings'].includes(tab.id)) {
             await paint()
@@ -480,8 +481,9 @@ try {
     alias: { '@': join(root, 'src'), '@shared': join(root, 'electron/shared') }, define: { 'process.env.NODE_ENV': '"production"' } })
   await writeFile(join(directory, 'renderer.js'), renderer.outputFiles[0].text)
   await writeFile(join(directory, 'index.html'), `<html><head><link rel="stylesheet" href="theme.css"></head><body><div id="root" style="height:100vh"></div><script>
+    window.addEventListener('error', event => console.error(event.error?.stack || event.message));
     window.fixtureTemplates = ${JSON.stringify(templates)};
-    window.api = new Proxy({platform:'win32'}, {get: (target, key) => key in target ? target[key] : String(key).startsWith('on') ? () => () => {} : request => window.fixtureHandler(key, request)});
+    window.api = new Proxy({platform:'win32', onLiveStatusChanged:undefined}, {get: (target, key) => key in target ? target[key] : String(key).startsWith('on') ? () => () => {} : request => window.fixtureHandler(key, request)});
     </script><script src="renderer.js"></script></body></html>`)
   await writeFile(join(directory, 'preload.cjs'), `const {contextBridge,ipcRenderer}=require('electron');contextBridge.exposeInMainWorld('captureFixture',name=>ipcRenderer.invoke('capture-fixture',name));contextBridge.exposeInMainWorld('reportFixture',data=>ipcRenderer.invoke('report-fixture',data));`)
   await writeFile(join(directory, 'main.cjs'), `const {app,BrowserWindow,ipcMain}=require('electron');const fs=require('fs');const path=require('path');

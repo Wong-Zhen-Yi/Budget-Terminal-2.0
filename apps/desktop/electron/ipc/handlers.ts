@@ -20,6 +20,7 @@ import { notificationsStatus, notificationsCommand, onNotificationClick } from '
 import type { NotificationCommand } from '../shared/notifications.js'
 import { hyperliquidEquities } from '../services/hyperliquidEquities.js'
 import { cloudSyncCommand, cloudSyncStatus } from '../services/cloudSyncHost.js'
+import { liveStatusEvents } from '../services/liveStatusEvents.js'
 
 export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent) => boolean): () => void {
   const handle: typeof ipcMain.handle = (channel, listener) => {
@@ -29,6 +30,11 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
     })
   }
   const provider = yahooProvider
+  const stopLiveStatus = liveStatusEvents.subscribe(event => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.webContents.isDestroyed()) window.webContents.send(CHANNELS.liveStatusChanged, event)
+    }
+  })
   handle(CHANNELS.cloudSyncStatus, () => ok(cloudSyncStatus(), 'cloud sync'))
   handle(CHANNELS.cloudSyncCommand, (_event, command) => cloudSyncCommand(command))
   const stopEquityUpdates = hyperliquidEquities.subscribe(update => {
@@ -168,8 +174,8 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
     else window.maximize()
   })
 
-  const stopWatching = watchPortfolios(() => {
-    publishSavedDataChanged(['portfolio', 'personalFinance'])
+  const stopWatching = watchPortfolios((metadataOnly) => {
+    publishSavedDataChanged(['portfolio', 'personalFinance'], metadataOnly)
     for (const window of BrowserWindow.getAllWindows()) {
       window.webContents.send(CHANNELS.portfolioChanged)
     }
@@ -183,6 +189,7 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
     onNotificationClick(null)
     closeAgents()
     stopWatching()
+    stopLiveStatus()
     stopSavedData()
     stopEquityUpdates()
     hyperliquidEquities.close()

@@ -1,8 +1,11 @@
 @echo off
+rem Production bundles use the separate configured endpoint and release preflight. Local launches retain the existing account. See docs/production-release.md.
+rem Backup and sync snapshots resolve asynchronous defaults inside function bodies for build compatibility.
+rem Local builds keep the existing Convex account; sign-in uses GitHub only, without a mail API.
 rem Record sync is implemented; production release checks remain in database.md. Operator setup: docs/convex-sync.md.
 rem Local saves remain available; account review, record conflicts, cloud export and deletion are in Settings.
 rem Backup imports recover on failure; Escape cancels edits; public WebSocket resources are supported.
-rem Deferred performance improvements and completion cleanup instructions are recorded in efficiency.md.
+rem Shared option chains, single-capture backups, targeted refresh and live status updates. Measurements: docs/efficiency-results.md.
 rem Settings > Controller controls: game-style diagram, live input display and navigation-safe test mode.
 rem Controller page switching follows visible workspace/page order, including custom ordering and hidden pages.
 rem Compact layouts keep Treasury curves, market controls, probability statistics and heatmap details accessible.

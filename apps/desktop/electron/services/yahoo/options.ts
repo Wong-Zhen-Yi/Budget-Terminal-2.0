@@ -1,7 +1,7 @@
 import type { OptionBucket, OptionRow, OptionsPayload } from '../../shared/contract.js'
 import { OPTION_BUCKETS } from '../../shared/contract.js'
 import { cache, TTL } from '../cache.js'
-import { paced, yahoo } from './client.js'
+import { optionExpiries, rawOptionChain } from './optionChain.js'
 
 /** `YYYY-MM-DD` in UTC, the form Yahoo publishes expirations in. */
 function isoDate(date: Date): string {
@@ -56,13 +56,8 @@ function toRows(symbol: string, expiration: string, chain: {
   return rows.sort((a, b) => b.volume - a.volume).slice(0, 10)
 }
 
-async function fetchExpirations(symbol: string): Promise<Date[]> {
-  const result = await paced(() => yahoo.options(symbol))
-  return result.expirationDates ?? []
-}
-
-async function fetchBucket(symbol: string, expiration: string): Promise<OptionRow[]> {
-  const result = await paced(() => yahoo.options(symbol, { date: expiration }))
+async function fetchBucket(symbol: string, expiration: string, force: boolean): Promise<OptionRow[]> {
+  const result = await rawOptionChain(symbol, expiration, force)
   const chain = result.options?.[0]
   if (!chain) return []
   return toRows(symbol, expiration, {
@@ -72,9 +67,8 @@ async function fetchBucket(symbol: string, expiration: string): Promise<OptionRo
 }
 
 export async function getOptions(symbol: string, force = false): Promise<OptionsPayload> {
-  const expirations = (
-    await cache.resolve(`optexp:${symbol}`, TTL.options, () => fetchExpirations(symbol), { force })
-  ).value
+  symbol = symbol.trim().toUpperCase()
+  const expirations = await optionExpiries(symbol, force)
 
   const selected = selectBucketExpirations(expirations)
 
@@ -91,7 +85,7 @@ export async function getOptions(symbol: string, force = false): Promise<Options
           await cache.resolve(
             `optchain:${symbol}:${expiration}`,
             TTL.options,
-            () => fetchBucket(symbol, expiration),
+            () => fetchBucket(symbol, expiration, force),
             { force },
           )
         ).value

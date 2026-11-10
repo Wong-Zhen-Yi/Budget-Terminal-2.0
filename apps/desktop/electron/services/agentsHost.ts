@@ -17,6 +17,7 @@ import { applyAgentPortfolioUpdate, readPortfolios } from './portfolioStore.js'
 import { publishSavedDataChanged } from './savedDataEvents.js'
 import { withAutomaticBackup } from './automaticBackup.js'
 import { browserControl } from './browser.js'
+import { agentsChanged } from './liveStatusEvents.js'
 
 let service: AgentsService | null = null
 let startup: Promise<unknown> | null = null
@@ -151,6 +152,9 @@ export async function agentsStatus() {
   return error ? failed(state, error, 'Codex agent') : ok(state, 'Codex agent')
 }
 export async function agentsCommand(command: AgentsCommand) {
+  try { return await executeAgentsCommand(command) } finally { agentsChanged() }
+}
+async function executeAgentsCommand(command: AgentsCommand) {
   await startTelegram()
   if (command?.type === 'telegramViewChat' || command?.type === 'telegramDeleteChat') {
     try {

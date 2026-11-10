@@ -1,6 +1,10 @@
 param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Tui, [switch]$Setup, [switch]$Attached, [Parameter(ValueFromRemainingArguments=$true)][string[]]$TuiArguments)
+# Efficiency updates preserve all-page startup readiness; verification is recorded in docs/efficiency-results.md.
+# Production bundles have a separate endpoint and release preflight; local launches retain the existing account. See docs/production-release.md.
+# Backup and sync snapshots resolve asynchronous defaults inside function bodies for build compatibility.
+# Local builds keep the existing Convex account; sign-in uses GitHub only, without a mail API.
 # Backup imports recover on failure; Escape cancels edits; public WebSocket resources are supported.
-# Deferred performance improvements and completion cleanup instructions are recorded in efficiency.md.
+# Shared option chains, single-capture backups, targeted refresh and live status updates: docs/efficiency-results.md.
 # Settings > Controller controls includes a live controller diagram and navigation-safe input test.
 # Controller page switching follows visible workspace/page order, including custom ordering and hidden pages.
 # Compact layouts keep Treasury curves, market controls, probability statistics and heatmap details accessible.

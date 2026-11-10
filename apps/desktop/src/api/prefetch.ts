@@ -53,6 +53,8 @@ import { createProgressReporter } from './progressReporter'
 import { pageQueryKeys } from './pageQueryScope'
 import { markReloadQuery } from './pageProgress'
 import { createStartupScheduler } from './startupScheduler'
+import { subscribeRequestInputs } from './requestInputs'
+import { portfolioMarketInputs } from '@shared/portfolioDependencies'
 
 /**
  * Load every implemented page's automatic initial data when the app opens.
@@ -129,6 +131,16 @@ export function buildTasks(
 ): PlannedWarmTask[] {
   const { active, every, editable, main, upDown } = holdingsOf(payload)
   const tasks: WarmTask[] = [{
+    tab: 'settings', label: 'Cloud connection status', refresh: false,
+    run: (client, _backgroundOrder, onSnapshot) => warmStartupQuery(client, {
+      queryKey: ['cloudSyncStatus'], queryFn: () => api.cloudSyncStatus(), staleTime: Infinity,
+    }, onSnapshot),
+  }, {
+    tab: 'settings', label: 'Market provider configuration', refresh: false,
+    run: (client, _backgroundOrder, onSnapshot) => warmStartupQuery(client, {
+      queryKey: ['marketApiKeys'], queryFn: () => api.marketApiKeys(), staleTime: Infinity,
+    }, onSnapshot),
+  }, {
     tab: 'settings', label: 'Cache diagnostics', refresh: false,
     run: (client, _backgroundOrder, onSnapshot) => warmStartupQuery(client, {
       queryKey: ['cacheStatus'], queryFn: () => api.cacheStatus(), staleTime: Infinity,
@@ -482,7 +494,7 @@ export function buildTasks(
   })
 
   tasks.push({ tab: 'polymarket', label: 'Polymarket public data',
-    run: (client, _backgroundOrder, onSnapshot) => warmPolymarket(client, onSnapshot),
+    run: (client, backgroundOrder, onSnapshot) => warmPolymarket(client, onSnapshot, backgroundOrder),
   })
   tasks.push({
     tab: 'politics',
@@ -1116,7 +1128,7 @@ export function buildTasks(
     'dashboard-2': [active, dashboardTickers],
     portfolio: [active, upDown, optionPositions],
     'personal-finance': [editable, financeOptionPositions],
-    cards: payload?.portfolios,
+    cards: payload ? portfolioMarketInputs(payload) : undefined,
     calendar: [main, calendar.year, calendar.month, calendar.earningsYear],
     ipo: calendar.ipoYear,
     backtest: [main, backtest],
@@ -1144,6 +1156,26 @@ export function buildTasks(
       id: JSON.stringify([task.tab, index, revisions[task.tab]]),
     }
   })
+}
+
+export function subscribeStartupRequestInputs(schedule: () => void): Array<() => void> {
+  return [
+    subscribeRequestInputs(useStocksPage, s => s.symbol, schedule),
+    subscribeRequestInputs(useFundamentalsStore, s => s.symbol, schedule),
+    subscribeRequestInputs(useCalendarPage, s => [s.year, s.month, s.earningsYear], schedule),
+    subscribeRequestInputs(useIpoPage, s => s.completedYear, schedule),
+    subscribeRequestInputs(useScorecard, s => s.symbols, schedule),
+    subscribeRequestInputs(useDefeatBetaTerminal, s => s.symbol, schedule),
+    subscribeRequestInputs(useDashboard, s => [s.symbol, s.timeframe], schedule),
+    subscribeRequestInputs(useEtfPage, s => s.ticker, schedule),
+    subscribeRequestInputs(useUpDownPage, s => [s.activeSource, s.interval, s.activeSource === 'custom' ? s.customSymbols : []], schedule),
+    subscribeRequestInputs(useNewsPageStore, s => [s.showImages, s.filter, s.sort], schedule),
+    subscribeRequestInputs(useChartsStore, s => [s.symbol, s.interval, s.range, s.multiInterval], schedule),
+    subscribeRequestInputs(useCryptoWorkspace, s => [s.symbol, s.interval], schedule),
+    subscribeRequestInputs(useValuationPage, s => [s.ticker, s.customPeersByTicker[s.ticker]], schedule),
+    subscribeRequestInputs(useProjectionsPage, s => [s.symbol, s.timeframe], schedule),
+    subscribeRequestInputs(useOptionsPage, s => [s.loaded, s.symbol, s.expiry], schedule),
+  ]
 }
 
 export function useWarmPages(settings: AppSettings | undefined, settingsSettled: boolean, activeTab: string, recent: string[], settingsError?: unknown): WarmProgress & { reload: (page: string) => Promise<void> } {
@@ -1282,11 +1314,7 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
         }, 100)
       }
       reconcile.current = schedule
-      for (const store of [useStocksPage, useFundamentalsStore, useCalendarPage, useIpoPage,
-        useScorecard, useDefeatBetaTerminal, useDashboard, useEtfPage, useUpDownPage,
-        useNewsPageStore, useChartsStore, useCryptoWorkspace, useValuationPage, useProjectionsPage, useOptionsPage]) {
-        unsubscribers.push(store.subscribe(schedule))
-      }
+      unsubscribers.push(...subscribeStartupRequestInputs(schedule))
       update()
       reporter.flush()
     }, 250)
@@ -1305,7 +1333,9 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
     }
   }, [ready, queryClient])
 
-  useEffect(() => { reconcile.current?.() }, [settings, payload, settingsError, portfolioError])
+  const requestSettings = JSON.stringify([settings?.youtubePage])
+  const requestPortfolio = payload ? portfolioMarketInputs(payload) : undefined
+  useEffect(() => { reconcile.current?.() }, [requestSettings, requestPortfolio, settingsError, portfolioError])
   useEffect(() => { prioritize.current?.(activeTab) }, [activeTab])
 
   return { ...progress, reload: (page: string) => reload.current ? reload.current(page) : Promise.reject(new Error('Page loading is still initializing. Try Reload again shortly.')), retry: page => retry.current?.(page) }

@@ -1,3 +1,4 @@
+import { liveStatusEvents } from './liveStatusEvents.js'
 import { checkMcpCancellation, mcpExecution } from './mcpContext.js'
 import { app, BrowserWindow, dialog, WebContentsView, nativeImage, session, type NativeImage, type Session, type WebContents } from 'electron'
 import { randomUUID } from 'node:crypto'
@@ -140,6 +141,7 @@ export function configureBrowserWindow(window: BrowserWindow) {
 }
 
 function layout() {
+  liveStatusEvents.changed('browser')
   if (!owner || owner.isDestroyed()) return
   const bounds = owner.getContentBounds()
   const zoom = owner.webContents.getZoomFactor()
@@ -182,6 +184,14 @@ function newTab(): Tab {
   tabs.push(tab)
   activeTabId = tab.id
   const contents = view.webContents
+  const changed = () => liveStatusEvents.changed('browser')
+  contents.on('did-start-loading', changed)
+  contents.on('did-stop-loading', changed)
+  contents.on('did-navigate', changed)
+  contents.on('did-navigate-in-page', changed)
+  contents.on('page-title-updated', changed)
+  contents.on('did-fail-load', changed)
+  contents.on('render-process-gone', changed)
   // WebRTC UDP bypasses HTTP request guards and can reveal local interface addresses.
   contents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp')
   contents.setWindowOpenHandler(({ url }) => {
@@ -393,6 +403,9 @@ async function execute(request: BrowserRequest, agent: boolean, token: number): 
 }
 
 export async function browserResearch(value: unknown): Promise<Envelope<BrowserResult>> {
+  try { return await runBrowserResearch(value) } finally { liveStatusEvents.changed('browser') }
+}
+async function runBrowserResearch(value: unknown): Promise<Envelope<BrowserResult>> {
   const parsed = browserRequestSchema.safeParse(value)
   if (!parsed.success) return failed({ state: snapshot() }, 'Invalid Browser request.', SOURCE)
   const token = generation
@@ -402,6 +415,9 @@ export async function browserResearch(value: unknown): Promise<Envelope<BrowserR
 }
 
 export async function browserControl(value: BrowserControl): Promise<Envelope<BrowserResult>> {
+  try { return await runBrowserControl(value) } finally { liveStatusEvents.changed('browser') }
+}
+async function runBrowserControl(value: BrowserControl): Promise<Envelope<BrowserResult>> {
   if (value?.action === 'agentAccess') {
     const parsed = accessSchema.parse(value)
     agentEnabled = parsed.enabled

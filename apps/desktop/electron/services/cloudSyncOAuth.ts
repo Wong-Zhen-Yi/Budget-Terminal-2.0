@@ -7,7 +7,7 @@ export interface OAuthArgs { provider?: string; params?: Record<string, string>;
 export interface OAuthResponse { redirect?: string; verifier?: string; tokens?: OAuthTokens | null }
 export class GitHubSetupError extends Error {
   constructor() {
-    super('GitHub sign-in is not available on this server yet. The service operator must finish account setup. Try email sign-in or continue using your local data.')
+    super('GitHub sign-in is not available on this server yet. The service operator must finish account setup. Your local data remains available.')
   }
 }
 type CallbackResult = { code: string } | { reason: 'cancelled' | 'expired' }

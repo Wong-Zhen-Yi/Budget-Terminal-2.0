@@ -5,7 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { createRequire } from 'node:module'
 import { loadEnv } from 'vite'
 import cloudSyncConfig from './config/cloud-sync.json'
-import { convexDeploymentUrl } from './electron/shared/cloudOAuth'
+import { cloudBuildUrl } from './electron/shared/cloudSyncConfiguration'
 
 const { supportedNodeVersion, assertCertificateEnvironment } = createRequire(import.meta.url)('../../scripts/runtime.cjs')
 if (!supportedNodeVersion(process.versions.node)) throw new Error('Install Node.js 22.23.4+, 24.22.1+, or 26.12.1+ (eMudhra certificate security update).')
@@ -20,12 +20,7 @@ const root = __dirname
 
 export default defineConfig(({ command, mode }) => {
   const env = { ...loadEnv(mode, root, ''), ...process.env }
-  // Never ship VITE_CONVEX_URL from the developer's .env.local in a production bundle.
-  const configured = command === 'serve'
-    ? env.BUDGET_TERMINAL_SYNC_DEVELOPMENT_URL || cloudSyncConfig.developmentUrl || env.VITE_CONVEX_URL || ''
-    : env.BUDGET_TERMINAL_SYNC_PRODUCTION_URL || cloudSyncConfig.productionUrl
-  const syncUrl = configured ? convexDeploymentUrl(configured) : ''
-  if (env.BUDGET_TERMINAL_RELEASE === '1' && !syncUrl) throw Error('Release requires a public production sync URL. See docs/convex-sync.md.')
+  const syncUrl = cloudBuildUrl(command, env, cloudSyncConfig)
   return {
   main: {
     define: { __BUDGET_SYNC_URL__: JSON.stringify(syncUrl) },

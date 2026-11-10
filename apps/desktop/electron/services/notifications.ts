@@ -1,3 +1,4 @@
+import { liveStatusEvents } from './liveStatusEvents.js'
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
@@ -69,7 +70,11 @@ export class NotificationCenter {
     } catch (error) {
       this.storageError = `Notification changes could not be saved: ${String(error)}`
       throw new Error(this.storageError)
-    } finally { await rm(temporary, { force: true }).catch(() => {}) }
+    } finally {
+      liveStatusEvents.changed('notifications')
+      liveStatusEvents.changed('agents')
+      await rm(temporary, { force: true }).catch(() => {})
+    }
   }
   /** Import by stable ID before clearing the old inbox. Safe to retry after a crash. */
   importLegacy(items: AppNotification[]) {

@@ -286,6 +286,12 @@ npm run preview --workspace budget-terminal-desktop
 The build produces application bundles. Installer packaging and automatic
 application updates are not configured.
 
+For the production release workflow, use `npm run build:release`. It verifies the
+configured production backend, GitHub-only authentication and public signing keys
+before building. `npm run check:production` checks that configuration independently;
+`npm run probe:release` runs its offline regressions. Production OAuth setup and
+remaining acceptance checks are recorded in [the release guide](docs/production-release.md).
+
 </details>
 
 ## Explore the workspaces
@@ -444,7 +450,7 @@ The current comparison loads at startup, including when Scorecard is unvisited.
 
 | Guide | What's inside |
 | :--- | :--- |
-| [Optional account sync](docs/convex-sync.md) | Record sync, email/GitHub sign-in, account safety, offline recovery, migration and operator release setup. Production acceptance remains pending. |
+| [Optional account sync](docs/convex-sync.md) | Record sync, GitHub sign-in through Convex Auth, account safety, offline recovery, migration and operator release setup. Production acceptance remains pending. |
 | [Data, startup & backups](docs/user-guide.md) | All-page readiness, feed health, saved-data locations, migration, and backup behavior. |
 | [Terminal interface](docs/terminal-ui.md) | Windows launcher, PowerShell `BT`, and the Portfolio/Agents TUI. |
 | [Public data routing](docs/public-data-routing.md) | Coinbase/Binance spot quotes, CoinGecko metadata, World Bank/IMF annual context, and provider budgets. |

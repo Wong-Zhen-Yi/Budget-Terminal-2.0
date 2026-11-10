@@ -9,7 +9,7 @@ import * as backend from '../convex/sync.js'
 import * as authLimits from '../convex/authLimits.js'
 import * as authentication from '../convex/auth.js'
 import { CloudRecordEngine, newRecordCheckpoint, type RecordCheckpoint } from '../electron/services/cloudRecordEngine.js'
-import { BATCH_BYTES, PAGE_RECORDS, RECORD_BYTES, digest, joinSnapshot, recordKey, splitSnapshot, stableJson, utf8Bytes } from '../electron/shared/syncRecords.js'
+import { BATCH_BYTES, PAGE_RECORDS, RECORD_BYTES, joinSnapshot, recordKey, splitSnapshot, stableJson, utf8Bytes } from '../electron/shared/syncRecords.js'
 import type { RecordWrite } from '../electron/shared/syncRecords.js'
 
 const directory = await mkdtemp(join(tmpdir(), 'budget-records-'))
@@ -169,12 +169,7 @@ try {
   await t.run(ctx => ctx.db.patch(rateRow!._id, { writes: 600, windowStart: Date.now() }))
   await assert.rejects(a.mutation(app.api.sync.push, { epoch: stateA.epoch, records: [{ ...record, expectedRevision: 0 }] }), /busy/)
   await t.run(ctx => ctx.db.patch(rateRow!._id, { writes: 0 }))
-  for (let index = 0; index < 5; index++) assert(await t.mutation(app.internal.authLimits.email, { identifierHash: digest('fixture@example.invalid') }))
-  assert.equal(await t.mutation(app.internal.authLimits.email, { identifierHash: digest('fixture@example.invalid') }), false)
-  const globalLimit = await t.run(ctx => ctx.db.query('syncAuthLimits').withIndex('by_key', q => q.eq('key', 'email:global')).unique())
-  await t.run(ctx => ctx.db.patch(globalLimit!._id, { count: 100 }))
-  assert.equal(await t.mutation(app.internal.authLimits.email, { identifierHash: digest('another@example.invalid') }), false)
-  for (let attempt = 0; attempt < 11; attempt++) await assert.rejects(t.action(app.api.auth.signIn, { provider: 'email', params: { email: 'rate-test@example.invalid', code: 'INVALID' } }))
+  for (let attempt = 0; attempt < 11; attempt++) assert.equal((await t.action(app.api.auth.signIn, { params: { email: 'rate-test@example.invalid', code: 'INVALID' }, verifier: 'fixture' })).tokens, null)
   const failedSignIns = await t.run(ctx => ctx.db.query('authRateLimits').collect())
   assert(failedSignIns.some(row => row.attemptsLeft < 1), 'Failed sign-in attempts must exercise the configured Auth limit')
 
@@ -259,7 +254,7 @@ try {
   await t.finishAllScheduledFunctions(() => {}, 1000)
   const remaining = await t.run(ctx => ctx.db.query('syncRecords').withIndex('by_user_seq', q => q.eq('userId', idB)).collect())
   assert.equal(remaining.length, 0)
-  console.log(`PASS: record isolation, ownership/reference attacks, two-device/offline/restart/lost-reply convergence, conflicts, deletions, account switching/deletion, resumable migration, quotas and email budgets. Synthetic library ${utf8Bytes(large)} bytes; ${batches} bounded writes, ${pages} pages, ${transfers} response bytes; large-library round trip ${Math.round(performance.now() - started)} ms. In-memory measurements are not production capacity or cost.`)
+  console.log(`PASS: record isolation, ownership/reference attacks, two-device/offline/restart/lost-reply convergence, conflicts, deletions, account switching/deletion, resumable migration, quotas and failed sign-in budgets. Synthetic library ${utf8Bytes(large)} bytes; ${batches} bounded writes, ${pages} pages, ${transfers} response bytes; large-library round trip ${Math.round(performance.now() - started)} ms. In-memory measurements are not production capacity or cost.`)
 } finally {
   for (const key of ['APPDATA', 'LOCALAPPDATA'] as const) {
     if (previous[key] === undefined) delete process.env[key]

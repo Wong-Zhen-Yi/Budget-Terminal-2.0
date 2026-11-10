@@ -1,6 +1,9 @@
 const { spawnSync } = require('node:child_process')
+// Production release preflight is documented in docs/production-release.md; source launches keep their existing local backend.
+// Backup and sync snapshots resolve asynchronous defaults inside function bodies for build compatibility.
+// Local builds keep the existing Convex account; sign-in uses GitHub only, without a mail API.
 // Backup imports recover on failure; Escape cancels edits; public WebSocket resources are supported.
-// Deferred performance improvements and completion cleanup instructions are recorded in efficiency.md.
+// Shared option chains, single-capture backups, targeted refresh and live status updates: docs/efficiency-results.md.
 // GitHub sync sign-in reports missing OAuth configuration in Settings before opening the browser.
 // Bounded record sync restores fresh devices; offline edits, conflicts and deletion markers persist.
 // Optional Convex sync supports GitHub browser sign-in and regional cloud deployments.
@@ -23,7 +26,7 @@ function platformName(platform) {
 }
 
 function launch({ development = false, logs = false, setupOnly = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
-  log.log('Cloud sync uses account-owned records, migration, offline recovery and Settings review/export/deletion controls. Production release configuration and live checks: docs/convex-sync.md. Local use requires no account.')
+  log.log('Cloud sync uses account-owned records, migration, offline recovery and Settings review/export/deletion controls. Production release configuration and preflight: docs/production-release.md. Local source launches keep the existing account. Local use requires no account.')
   log.log('Settings > Controller controls: game-style diagram, live inputs and a test mode that pauses page navigation. B or Esc finishes the test.')
   log.log('Compact layouts keep Treasury curves, market controls, probability statistics and heatmap details accessible.')
   log.log('Charts watchlists: saved with user data, backups and cloud sync. Existing profile lists migrate automatically; import and clear update the charts immediately.')
@@ -182,7 +185,7 @@ function launch({ development = false, logs = false, setupOnly = false, platform
   log.log('MCP research now supports summaries, field selection and pagination; scans and captures report progress and accept cancellation. Settings includes token-free client setup, data-folder validation and optional website-content approval. Portfolio, Cards, finance and settings writes require current revisions to protect concurrent edits.')
   log.log('MCP defaults to read-only, with optional native approval for saved-record edits, privacy-safe activity and a connection test in Settings > Data > Local MCP. Mutation request IDs are journaled privately across restarts; check operation status and saved records after interruption.')
   log.log('Updating MCP bundles safely: unchanged files are left alone, changed files are replaced atomically, and temporary Windows file locks are retried. No MCP clients are forcibly stopped.')
-  const build = npm(['run', 'build'])
+  const build = npm(['run', 'build:local'])
   if (build.error || build.status !== 0) {
     log.error('Budget Terminal could not build. See the error above. If an MCP bundle remains locked, close Budget Terminal and disconnect its MCP connection in Codex or other MCP clients, then run this launcher again.')
     return 1

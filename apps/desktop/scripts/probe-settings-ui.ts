@@ -102,7 +102,7 @@ try {
         input.dispatchEvent(new Event('input', { bubbles: true })); await wait(30)
       }
       check(!sync.querySelector('[aria-label="Convex deployment URL"]').closest('details').open, 'A public user must not need a deployment URL')
-      check(visible(sync.querySelector('input[type=email]')), 'Email sign-in must be immediately accessible')
+      check(!sync.querySelector('input[type=email]') && !sync.textContent.includes('Send sign-in code'), 'Sync must use the existing GitHub account without email setup')
       window.githubNotConfigured = true
       clickText(sync, 'Sign in with GitHub'); await wait(80)
       check(sync.textContent.includes('not configured') && !sync.textContent.includes('Cancel sign-in'), 'Missing GitHub setup must be explained before browser sign-in')
@@ -138,13 +138,7 @@ try {
       clickText(sync, 'Cancel deletion'); await wait(40)
       check(!window.syncCommands.some(command => command.type === 'deleteAccount'), 'Cancelled deletion reached the backend')
       clickText(sync, 'Disconnect sync'); await wait(80)
-      await setInput('Sync account email', 'fixture@example.invalid')
-      sync.querySelector('button[type=submit]').click(); await wait(80)
-      check(sync.querySelector('[aria-label="Sync email code"]'), 'Email code entry missing')
-      await setInput('Sync email code', 'TESTCODE')
-      sync.querySelector('button[type=submit]').click(); await wait(80)
-      check(!sync.querySelector('input[type=email]') && !sync.textContent.includes('fixture@example.invalid'), 'Sign-in drafts retained after connecting')
-      clickText(sync, 'Disconnect sync'); await wait(80)
+      check(!sync.querySelector('input[type=email]'), 'Disconnect must restore GitHub-only sign-in')
       window.fixtureSync = { ...window.fixtureSync, url: '', configured: false }
       await wait(2100)
       check(sync.textContent.includes('not configured in this build'), 'Unconfigured release must show an honest local-use message')

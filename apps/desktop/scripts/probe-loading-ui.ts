@@ -149,6 +149,11 @@ try {
             check(!document.querySelector('[role=dialog]'), 'Picker did not close')
           }
           check(client.isFetching() > 0, 'Fixture unexpectedly finished loading')
+          const chooseSettingsCategory = async category => {
+            document.querySelector('[data-settings-category="' + category + '"]').click()
+            await settle()
+          }
+          await chooseSettingsCategory('diagnostics')
           const orderTable = document.querySelector('table[aria-label="Startup page load order"]')
           check(orderTable && orderTable.getBoundingClientRect().height > 0, 'Page load order is not visible in Settings')
           check(document.body.innerText.includes('Yahoo background requests are paced at 3 per second, with up to 3 in flight'), 'Settings does not explain startup pacing')
@@ -163,7 +168,10 @@ try {
           check(window.fixtureRequests.filter(entry => entry.method === 'forexNews' && entry.request?.background).length === 2, 'Transient startup data did not retry exactly once')
           check(!useDataHealth.getState().startup.pages.forex.reason?.includes('Retry'), 'Completed recovery left an obsolete retry warning')
           console.log('PASS: transient partial startup data retries automatically, displays recovery progress, reuses its background lane and settles ready once')
+          await chooseSettingsCategory('data')
+          document.querySelector('[data-settings-card="backups"] details.settings-path').open = true
           check(document.body.innerText.includes('/fixture/Downloads/budget-terminal-backup.json'), 'Automatic backup file is not shown in Settings')
+          await chooseSettingsCategory('integrations')
           check(document.body.innerText.includes('Ready · ' + toolCount + ' tools for ChatGPT / Codex'), 'MCP status is not visible in Settings')
           const capabilities = document.querySelector('[aria-label="MCP capabilities"]')
           check(capabilities?.querySelectorAll('[data-mcp-capability]').length === toolCount, 'Settings does not list every MCP capability')
@@ -213,6 +221,7 @@ try {
           await settle()
           check(document.body.innerText.includes('Fixture MCP startup failure'), 'MCP startup failure is not visible')
           client.setQueryData(['mcpStatus'], { available: true, tools: toolCount })
+          await chooseSettingsCategory('data')
           client.setQueryData(['settings'], result => ({ ...result, data: { ...result.data,
             automaticBackup: { ...result.data.automaticBackup, error: 'Fixture backup failure' } } }))
           await settle()
@@ -279,6 +288,10 @@ try {
         screenshotReady: result => window.captureApi.screenshotReady(result),
         onPortfolioChanged: () => () => {},
         onNotificationClicked: () => () => {},
+        onOpenDiagnostics: () => () => {},
+        onEquityMarketChanged: () => () => {},
+        onYouTubePlayerAction: () => () => {},
+        onLiveStatusChanged: undefined, // Exercise legacy polling transport compatibility.
         mcpStatus: async () => ({ available: true, tools: ${toolCount}, diagnostics: structuredClone(window.fixtureMcp), setup: { valid: true, message: 'Fixture data folder validated', configuration: '{"mcpServers":{"fixture":{"command":"node"}}}' } }),
         configureMcp: async policy => { window.fixtureMcp.policy = policy; return window.api.mcpStatus(); },
         testMcpConnection: async () => window.api.mcpStatus(),

@@ -1,15 +1,14 @@
 import { useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import type { Envelope } from '@shared/contract'
 import type { CloudSyncCommand, CloudSyncStatus } from '@shared/cloudSync'
 import { Button } from '@/components/ui/Button'
 import { Panel } from '@/components/ui/Panel'
 
 export function CloudSyncPanel() {
-  const [status, setStatus] = useState<CloudSyncStatus | null>(null)
+  const client = useQueryClient()
+  const [status, setStatus] = useState<CloudSyncStatus | null>(() => client.getQueryData<Envelope<CloudSyncStatus>>(['cloudSyncStatus'])?.data ?? null)
   const [url, setUrl] = useState('')
-  const [email, setEmail] = useState('')
-  const [code, setCode] = useState('')
-  const [codeSent, setCodeSent] = useState(false)
-  const [codeUrl, setCodeUrl] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -18,35 +17,35 @@ export function CloudSyncPanel() {
   const [confirmation, setConfirmation] = useState('')
   const [advanced, setAdvanced] = useState(false)
   const deployment = advanced ? url : ''
-  const available = Boolean((codeSent ? codeUrl : deployment).trim() || status?.url)
+  const available = Boolean(deployment.trim() || status?.url)
 
   useEffect(() => {
-    if (status?.signedIn) { setCode(''); setEmail(''); setUrl(''); setCodeSent(false); setNotice(''); setError('') }
+    if (status?.signedIn) { setUrl(''); setNotice(''); setError('') }
   }, [status?.signedIn])
   useEffect(() => {
     let mounted = true
-    const load = async () => {
+    const load = async (refresh = false) => {
       try {
-        const result = await window.api.cloudSyncStatus()
+        const result = await client.fetchQuery({ queryKey: ['cloudSyncStatus'], queryFn: () => window.api.cloudSyncStatus(), staleTime: refresh ? 0 : Infinity })
         if (mounted) { setStatus(result.data); if (result.meta.failureReason) setError(result.meta.failureReason) }
       } catch { if (mounted) setError('Sync settings are unavailable. Local saves continue as usual.') }
     }
     void load()
-    const timer = setInterval(() => void load(), 2000)
+    const timer = setInterval(() => void load(true), 2000)
     return () => { mounted = false; clearInterval(timer) }
-  }, [])
+  }, [client])
   const run = async (command: CloudSyncCommand) => {
     setBusy(true); setError(''); setNotice('')
     try {
       const result = await window.api.cloudSyncCommand(command)
+      client.setQueryData(['cloudSyncStatus'], result)
       setStatus(result.data)
       if (result.meta.failureReason) setError(result.meta.failureReason)
       else {
         setChoice(null)
-        if (command.type === 'sendCode') { setCodeSent(true); setCodeUrl(command.url); setNotice(result.data.message ?? 'Code sent.') }
         if (command.type === 'exportAccount') setNotice(result.data.message ?? '')
-        if (['verifyCode', 'disconnect', 'deleteAccount'].includes(command.type)) {
-          setCode(''); setEmail(''); setUrl(''); setCodeSent(false); setCodeUrl(''); setAdvanced(false); setDeleting(false); setConfirmation('')
+        if (['disconnect', 'deleteAccount'].includes(command.type)) {
+          setUrl(''); setAdvanced(false); setDeleting(false); setConfirmation('')
         }
       }
     } catch { setError('Unable to complete sync. Local saves continue as usual.') }
@@ -112,19 +111,17 @@ export function CloudSyncPanel() {
       </> : status?.signInPending ? <div className="flex flex-col gap-2">
         <p className="text-2xs" role="status">{status.message ?? 'Waiting for GitHub approval in your browser…'}</p>
         <Button disabled={busy} onClick={() => void run({ type: 'cancelSignIn' })}>Cancel sign-in</Button>
-      </div> : <form className="flex flex-col gap-2" onSubmit={event => { event.preventDefault(); void run(codeSent ? { type: 'verifyCode', url: codeUrl, email, code } : { type: 'sendCode', url: deployment, email }) }}>
+      </div> : <div className="flex flex-col gap-2">
         <p className="text-xs">Sign in to sync your data</p>
         {!available && status ? <p className="text-2xs text-warn">Cloud sign-in is not configured in this build. You can keep using all local features. The service operator must configure a production release.</p> : null}
-        <label className="text-2xs">Account email<input className={inputClass} type="email" required autoComplete="email" aria-label="Sync account email" value={email} disabled={busy || codeSent} onChange={event => setEmail(event.target.value)} /></label>
-        {codeSent ? <label className="text-2xs">Email code<input className={inputClass} autoComplete="one-time-code" required maxLength={32} aria-label="Sync email code" value={code} disabled={busy} onChange={event => setCode(event.target.value.replace(/\s/g, ''))} /></label> : null}
-        <div className="flex flex-wrap gap-2"><Button type="submit" variant="accent" disabled={busy || !status?.encryptionAvailable || !available}>{codeSent ? 'Verify and connect' : 'Send sign-in code'}</Button>
-          {codeSent ? <Button disabled={busy} onClick={() => { setCodeSent(false); setCode(''); setNotice('') }}>Change details / resend</Button> : <Button disabled={busy || !status?.encryptionAvailable || !available} onClick={() => void run({ type: 'signInGitHub', url: deployment })}>Sign in with GitHub</Button>}</div>
+        <p className="text-2xs text-text-muted">Sign in with the same GitHub account to restore your saved data.</p>
+        <Button variant="accent" disabled={busy || !status?.encryptionAvailable || !available} onClick={() => void run({ type: 'signInGitHub', url: deployment })}>Sign in with GitHub</Button>
         <details onToggle={event => setAdvanced(event.currentTarget.open)}><summary className="cursor-pointer text-2xs text-text-muted">Advanced: custom sync server</summary>
-          <label className="text-2xs">Convex deployment URL<input className={inputClass} type="url" aria-label="Convex deployment URL" placeholder="https://your-deployment.convex.cloud" value={url} disabled={busy || codeSent} onChange={event => setUrl(event.target.value)} /></label>
+          <label className="text-2xs">Convex deployment URL<input className={inputClass} type="url" aria-label="Convex deployment URL" placeholder="https://your-deployment.convex.cloud" value={url} disabled={busy} onChange={event => setUrl(event.target.value)} /></label>
           <p className="text-2xs text-text-muted">Use a trusted server only. It receives your saved financial records. Developer setup: docs/convex-sync.md.</p>
         </details>
         {status && !status.encryptionAvailable ? <p className="text-2xs text-warn">Enable your OS credential keyring to connect sync. Local saves remain available.</p> : null}
-      </form>}
+      </div>}
       <p className="text-2xs text-text-dim">Browser sessions, provider API keys, agents and market caches stay on this device. Disconnect keeps local data and the cloud copy. Cloud data is not end-to-end encrypted.</p>
       {status?.message && !['error', 'conflict', 'review'].includes(status.state) && !status.signInPending ? <p className="text-2xs">{status.message}</p> : null}
       {notice ? <p role="status" className="text-2xs">{notice}</p> : null}

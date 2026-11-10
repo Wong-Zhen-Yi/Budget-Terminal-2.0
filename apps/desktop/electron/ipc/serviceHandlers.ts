@@ -154,7 +154,8 @@ export function registerServiceHandlers(registerRoute: RegisterService): void {
       )
       if (domain) return result.then((value) => {
         const envelope = value as { meta?: { freshness?: string } }
-        if (envelope?.meta?.freshness !== 'failed') publishSavedDataChanged(domain === 'settings' ? ['settings'] : [domain, 'settings'])
+        if (envelope?.meta?.freshness !== 'failed') publishSavedDataChanged(domain === 'settings' ? ['settings'] : [domain, 'settings'],
+          domain === 'portfolio' && ['rename', 'reorder', 'setChartsWatchlists'].includes(String((request as { type?: string })?.type)))
         return value
       })
       if (ownScan) return result

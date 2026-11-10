@@ -11,7 +11,8 @@
   "scripts": {
     "probe:controller": "tsx scripts/probe-controller.ts",
     "probe:cloud-oauth": "tsx scripts/probe-cloud-oauth.ts",
-    "probe:cloud-sync": "tsx scripts/probe-cloud-sync.ts && tsx scripts/probe-cloud-records.ts",
+    "probe:cloud-signin-live": "tsx scripts/probe-cloud-signin-live.ts",
+    "probe:cloud-sync": "tsx scripts/probe-cloud-configuration.ts && tsx scripts/probe-cloud-sync.ts && tsx scripts/probe-cloud-records.ts",
     "convex:dev": "convex dev",
     "convex:deploy": "convex deploy",
     "probe:public-providers": "tsx scripts/probe-public-providers.ts",
@@ -156,7 +157,8 @@
     "probe:diagnostics": "tsx scripts/probe-diagnostics.ts",
     "probe:diagnostics-ui": "tsx scripts/probe-diagnostics-ui.ts",
     "probe:polymarket": "tsx scripts/probe-polymarket.ts",
-    "probe:polymarket-ui": "tsx scripts/probe-polymarket-ui.ts"
+    "probe:polymarket-ui": "tsx scripts/probe-polymarket-ui.ts",
+    "probe:efficiency": "tsx scripts/probe-efficiency.ts && tsx scripts/probe-efficiency-renderer.ts && tsx scripts/probe-live-status.ts && tsx scripts/probe-efficiency-ui.ts"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

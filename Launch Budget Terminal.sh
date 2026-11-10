@@ -1,8 +1,11 @@
 #!/bin/sh
+# Production bundles use the separate configured endpoint and release preflight. Local launches retain the existing account. See docs/production-release.md.
+# Backup and sync snapshots resolve asynchronous defaults inside function bodies for build compatibility.
+# Local builds keep the existing Convex account; sign-in uses GitHub only, without a mail API.
 # Record sync is implemented; production release checks remain in database.md. Operator setup: docs/convex-sync.md.
 # Local saves remain available; account review, record conflicts, cloud export and deletion are in Settings.
 # Backup imports recover on failure; Escape cancels edits; public WebSocket resources are supported.
-# Deferred performance improvements and completion cleanup instructions are recorded in efficiency.md.
+# Shared option chains, single-capture backups, targeted refresh and live status updates. Measurements: docs/efficiency-results.md.
 # Settings > Controller controls: game-style diagram, live input display and navigation-safe test mode.
 # Controller page switching follows visible workspace/page order, including custom ordering and hidden pages.
 # Compact layouts keep Treasury curves, market controls, probability statistics and heatmap details accessible.

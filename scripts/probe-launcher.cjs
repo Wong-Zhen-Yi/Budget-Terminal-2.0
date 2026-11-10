@@ -118,7 +118,7 @@ for (const platform of ['win32', 'darwin', 'linux']) {
   assert(calls[1].args.join(' ').includes('install --no-audit --no-fund'))
   assert(calls[1].args.includes('--strict-ssl=true') || calls[1].args.join(' ').includes('--strict-ssl=true'), 'Dependency installs must override insecure npm SSL configuration')
   assert(calls[2].args.join(' ').includes('run ensure:electron'))
-  assert(calls[3].args.join(' ').includes('run build'))
+  assert(calls[3].args.join(' ').includes('run build:local'), 'Local launchers must build with the configured existing backend')
   assert(calls[4].args.join(' ').includes('run preview --workspace budget-terminal-desktop'))
   for (const call of calls) assert.deepEqual(call.options.env, { PATH: 'unchanged' })
 }

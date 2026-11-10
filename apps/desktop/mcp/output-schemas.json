@@ -1727,7 +1727,7 @@
             "$ref": "#/definitions/McpOutputChartsCompareRange"
           },
           "series": {
-            "$ref": "#/definitions/Record%3Cstring%2Cdef-interface-523195628-29709-29794-523195628-0-145995%5B%5D%3E"
+            "$ref": "#/definitions/Record%3Cstring%2Cdef-interface-523195628-29783-29868-523195628-0-146337%5B%5D%3E"
           },
           "sources": {
             "$ref": "#/definitions/Record%3Cstring%2Cstring%3E"
@@ -1766,7 +1766,7 @@
           "1M"
         ]
       },
-      "Record<string,def-interface-523195628-29709-29794-523195628-0-145995[]>": {
+      "Record<string,def-interface-523195628-29783-29868-523195628-0-146337[]>": {
         "type": "object",
         "additionalProperties": {
           "type": "array",
@@ -3896,9 +3896,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "McpOutputFundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CMcpOutputFundamentalSeriesKey%2Cdef-interface-523195628-24764-25018-523195628-0-145995%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CMcpOutputFundamentalSeriesKey%2Cdef-interface-523195628-24838-25092-523195628-0-146337%5B%5D%3E"
       },
-      "Record<McpOutputFundamentalSeriesKey,def-interface-523195628-24764-25018-523195628-0-145995[]>": {
+      "Record<McpOutputFundamentalSeriesKey,def-interface-523195628-24838-25092-523195628-0-146337[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -13919,9 +13919,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22419-22655-150963582-0-128036%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22419-22655-150963582-0-128316%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-22419-22655-150963582-0-128036[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-22419-22655-150963582-0-128316[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -15299,9 +15299,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22419-22655-150963582-0-128036%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22419-22655-150963582-0-128316%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-22419-22655-150963582-0-128036[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-22419-22655-150963582-0-128316[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -16729,9 +16729,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22419-22655-150963582-0-128036%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22419-22655-150963582-0-128316%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-22419-22655-150963582-0-128036[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-22419-22655-150963582-0-128316[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -18169,9 +18169,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22419-22655-150963582-0-128036%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22419-22655-150963582-0-128316%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-22419-22655-150963582-0-128036[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-22419-22655-150963582-0-128316[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -19973,9 +19973,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22419-22655-150963582-0-128036%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22419-22655-150963582-0-128316%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-22419-22655-150963582-0-128036[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-22419-22655-150963582-0-128316[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -21328,9 +21328,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22419-22655-150963582-0-128036%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22419-22655-150963582-0-128316%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-22419-22655-150963582-0-128036[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-22419-22655-150963582-0-128316[]>": {
         "type": "object",
         "properties": {
           "revenue": {

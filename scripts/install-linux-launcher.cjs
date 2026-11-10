@@ -1,4 +1,6 @@
 const { chmodSync, mkdirSync, writeFileSync } = require('node:fs')
+// Installed source launchers retain the existing local backend; production release builds use docs/production-release.md.
+// Efficiency updates preserve all-page startup readiness; verification is recorded in docs/efficiency-results.md.
 const { homedir } = require('node:os')
 const path = require('node:path')
 const { spawnSync } = require('node:child_process')

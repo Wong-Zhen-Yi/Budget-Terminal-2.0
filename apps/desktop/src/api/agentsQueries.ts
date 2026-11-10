@@ -38,6 +38,7 @@ export async function warmAgentWorkspace(client: QueryClient, backgroundOrder?: 
 export function useAgents(poll = false) {
   return useQuery({ queryKey: queryKeys.agents, queryFn: loadAgents, staleTime: Infinity, retry: false,
     refetchInterval: !poll ? false : query => {
+      if (api.onLiveStatusChanged) return 30_000 // Bounded reconnect recovery; pushes own streaming cadence.
       const agent = query.state.data?.data
       return agent?.busy || agent?.trackers?.some(tracker => tracker.running) ? 700 : agent?.connected || agent?.autonomy || agent?.telegram?.enabled || agent?.trackers?.some(tracker => tracker.enabled) ? 3000 : false
     }, refetchIntervalInBackground: true })

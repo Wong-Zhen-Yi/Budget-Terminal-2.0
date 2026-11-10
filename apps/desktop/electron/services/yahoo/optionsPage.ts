@@ -20,6 +20,7 @@ import {
 import { describeError } from '../../shared/envelope.js'
 import { cache, TTL } from '../cache.js'
 import { paced, yahoo } from './client.js'
+import { rawOptionChain, rawOptionListing } from './optionChain.js'
 
 /**
  * The Options page's data, ported from `OptionsChainMixin` and
@@ -99,8 +100,8 @@ function toRows(symbol: string, expiration: string, chain: {
  * One `options` call answers with the expiration list, the chain for one date *and* the
  * underlying quote, so the Chain tab's spot price costs no extra request.
  */
-async function fetchChain(symbol: string, expiration: string): Promise<ChainFetch> {
-  const result = await paced(() => yahoo.options(symbol, { date: expiration }))
+async function fetchChain(symbol: string, expiration: string, force: boolean): Promise<ChainFetch> {
+  const result = await rawOptionChain(symbol, expiration, force)
   const chain = result.options?.[0]
   const spot = Number(result.quote?.regularMarketPrice) || 0
   if (!chain) throw new Error(`No options chain returned for ${symbol} ${expiration}.`)
@@ -115,8 +116,9 @@ async function fetchChain(symbol: string, expiration: string): Promise<ChainFetc
 
 async function fetchExpirations(
   symbol: string,
+  force: boolean,
 ): Promise<{ expiries: string[]; spot: number; marketDate: string }> {
-  const result = await paced(() => yahoo.options(symbol))
+  const result = await rawOptionListing(symbol, force)
   return {
     expiries: (result.expirationDates ?? []).map(isoDate),
     spot: Number(result.quote?.regularMarketPrice) || 0,
@@ -182,7 +184,7 @@ export async function getOptionsChain(
   const failures: OptionsPageFailure[] = []
 
   const listing = (
-    await cache.resolve(`optpage:exp:${symbol}`, TTL.options, () => fetchExpirations(symbol), {
+    await cache.resolve(`optpage:exp:${symbol}`, TTL.options, () => fetchExpirations(symbol, force), {
       force,
     })
   ).value
@@ -218,7 +220,7 @@ export async function getOptionsChain(
     fetchRiskFreeRate(force),
     fetchDividendYield(symbol, force),
     cache
-      .resolve(`optpage:chain:${symbol}:${expiry}`, TTL.options, () => fetchChain(symbol, expiry), {
+      .resolve(`optpage:chain:${symbol}:${expiry}`, TTL.options, () => fetchChain(symbol, expiry, force), {
         force,
       })
       .then((result) => result.value)
@@ -262,7 +264,7 @@ export async function getOptionsExpirations(
   const failures: OptionsPageFailure[] = []
 
   const listing = (
-    await cache.resolve(`optpage:exp:${symbol}`, TTL.options, () => fetchExpirations(symbol), {
+    await cache.resolve(`optpage:exp:${symbol}`, TTL.options, () => fetchExpirations(symbol, force), {
       force,
     })
   ).value
@@ -294,7 +296,7 @@ export async function getOptionsExpirations(
           await cache.resolve(
             `optpage:chain:${symbol}:${expiry}`,
             TTL.options,
-            () => fetchChain(symbol, expiry),
+            () => fetchChain(symbol, expiry, force),
             { force },
           )
         ).value

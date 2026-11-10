@@ -1,3 +1,4 @@
+import { agentsChanged } from './liveStatusEvents.js'
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { catalog, connectionTool, failed, validateCall } from '../../mcp/catalog.js'
@@ -140,6 +141,7 @@ export class AgentsService {
     return this.initializing
   }
   private saveChat() {
+    agentsChanged()
     if (this.options.workspace && this.initialized && !this.options.trackerId) this.options.workspace.recordConversation(this.state.messages, this.state.model, this.state.thinking, this.state.runLimitMinutes ?? 10)
   }
   private get readOnly() { return this.researchOnly || this.state.autonomy || !!this.options.trackerId || !!this.options.remoteResearch }
@@ -195,6 +197,7 @@ export class AgentsService {
     this.saveChat()
   }
   private disableAutonomy() {
+    agentsChanged()
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
     this.state.autonomy = false
@@ -202,6 +205,7 @@ export class AgentsService {
     this.state.runsRemaining = 0
   }
   private refreshActivity() {
+    agentsChanged()
     if (!this.state.busy || !this.state.connected) return
     this.state.activity = this.state.messages.some(message => message.imageStatus === 'generating') ? 'generating'
       : [...this.activeTools.values()].includes('researching') ? 'researching'
@@ -220,6 +224,7 @@ export class AgentsService {
     this.deadline = null
   }
   private resetConnection() {
+    agentsChanged()
     this.toolAbort.abort()
     this.generation++
     this.client?.close()
@@ -255,6 +260,9 @@ export class AgentsService {
   }
 
   async command(input: AgentsCommand): Promise<AgentsState> {
+    try { return await this.executeCommand(input) } finally { agentsChanged() }
+  }
+  private async executeCommand(input: AgentsCommand): Promise<AgentsState> {
     const command = commandSchema.parse(input)
     if (this.options.workspace && !this.initialized) await this.initialize()
     if (command.type === 'readNotifications' || command.type === 'deleteNotification' || command.type === 'trackerEnabled' || command.type === 'deleteTracker') {
@@ -528,6 +536,7 @@ export class AgentsService {
     await this.run(`Autonomous monitoring run. Objective: ${this.state.objective}`)
   }
   private schedule() {
+    agentsChanged()
     if (!this.state.autonomy) return
     if (this.state.runsRemaining <= 0) { this.disableAutonomy(); this.add('activity', 'Autonomous monitoring completed all requested runs.'); return }
     this.state.nextRunAt = Date.now() + this.state.intervalMinutes * 60_000

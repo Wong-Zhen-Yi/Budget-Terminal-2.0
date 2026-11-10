@@ -3519,6 +3519,7 @@ export const CHANNELS = {
   browserControl: 'browser:control',
   browserViewport: 'browser:viewport',
   agentsStatus: 'agents:status',
+  liveStatusChanged: 'live-status:changed',
   notificationsStatus: 'notifications:status',
   notificationsCommand: 'notifications:command',
   notificationClicked: 'notifications:clicked',
@@ -3748,6 +3749,7 @@ export interface DesktopApi {
   browserControl(request: BrowserControl): Promise<Envelope<BrowserResult>>
   browserViewport(viewport: BrowserViewport): Promise<void>
   agentsStatus(): Promise<Envelope<AgentsState>>
+  onLiveStatusChanged?(listener: (event: import('./liveStatus.js').LiveStatusChanged) => void): () => void
   notificationsStatus(): Promise<Envelope<NotificationsState>>
   notificationsCommand(command: NotificationCommand): Promise<Envelope<NotificationsState>>
   onNotificationClicked(listener: () => void): () => void
@@ -3887,6 +3889,10 @@ export interface DesktopApi {
 }
 
 export type SavedDataDomain = 'articles' | 'portfolio' | 'cards' | 'personalFinance' | 'settings'
-export interface SavedDataChanged { domains: SavedDataDomain[] }
+export interface SavedDataChanged {
+  domains: SavedDataDomain[]
+  /** Only present when the writer verified that market-query inputs are unchanged. */
+  portfolioMetadataOnly?: boolean
+}
 
 export interface McpStatus { available: boolean; connected?: boolean; active?: boolean; tools?: number; error?: string; diagnostics?: McpDiagnostics; setup?: { valid: boolean; message: string; configuration?: string; descriptorPath?: string } }

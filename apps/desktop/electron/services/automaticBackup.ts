@@ -3,11 +3,7 @@ import { basename, dirname, join } from 'node:path'
 
 import type { AutomaticBackupStatus, Envelope } from '../shared/contract.js'
 import { describeError, err, partial } from '../shared/envelope.js'
-import { exportUserData } from './portfolioStore.js'
-import { exportSettings } from './settingsStore.js'
-import { readArticles } from './articlesStore.js'
-import { exportCards } from './cardsStore.js'
-import { readLocalSyncData } from './cloudSyncData.js'
+import { captureSavedData, readLocalSyncData } from './cloudSyncData.js'
 
 export const AUTOMATIC_BACKUP_FILENAME = 'budget-terminal-backup.json'
 
@@ -36,18 +32,14 @@ function enqueue<T>(run: () => Promise<T>): Promise<T> {
 /** Cloud snapshots share the edit queue; callers must not re-enter backup helpers. */
 export const withSavedDataLock = enqueue
 
-async function writeSnapshot(target: string): Promise<void> {
+async function writeSnapshot(target: string, captured?: Awaited<ReturnType<typeof captureSavedData>>): Promise<void> {
   const directory = dirname(target)
   const temporary = join(directory, `.${basename(target)}.${process.pid}.tmp`)
   try {
     const bundle = {
       app: 'budget-terminal-electron',
-      version: 1,
+      ...(captured ?? await captureSavedData()).data,
       exportedAt: new Date().toISOString(),
-      userData: await exportUserData(),
-      settings: await exportSettings(),
-      cards: await exportCards(),
-      articles: { articles: (await readArticles()).articles },
     }
     await mkdir(directory, { recursive: true })
     await writeFile(temporary, JSON.stringify(bundle, null, 2), 'utf8')
@@ -57,10 +49,10 @@ async function writeSnapshot(target: string): Promise<void> {
   }
 }
 
-async function save(): Promise<void> {
+async function save(captured?: Awaited<ReturnType<typeof captureSavedData>>): Promise<void> {
   if (!status) return
   try {
-    await writeSnapshot(status.path)
+    await writeSnapshot(status.path, captured)
     status = { path: status.path, savedAt: Date.now() }
   } catch (error) {
     status = { ...status, error: describeError(error) }
@@ -104,9 +96,10 @@ export function withAutomaticBackup<T>(run: () => Promise<Envelope<T>>): Promise
     const result = await run()
     if (result.errors.length) return result
     let timestampFailure = false
-    try { await readLocalSyncData() } catch { timestampFailure = true }
+    let captured: Awaited<ReturnType<typeof captureSavedData>> | undefined
+    try { captured = await captureSavedData(); await readLocalSyncData(captured) } catch { timestampFailure = true }
     try {
-      if (downloads) await save()
+      if (downloads) await save(captured)
       return timestampFailure ? partial(result.data, [err('cloud sync', 'Saved locally, but the local edit timestamp could not be recorded.', 'timestamp')], result.meta.source,
         'Saved locally, but the local edit timestamp could not be recorded.') : result
     } catch (error) {

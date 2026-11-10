@@ -44,10 +44,10 @@ export function marketDetails(market: Record<string, Json>): PolymarketRequest[]
 }
 
 /** Warm the actual opening workspace, including its first market's detail panels. */
-export async function warmPolymarket(client: QueryClient, onSnapshot?: StartupSnapshotObserver) {
+export async function warmPolymarket(client: QueryClient, onSnapshot?: StartupSnapshotObserver, backgroundOrder?: number) {
   const load = async (request: PolymarketRequest) => {
     const key = polyKey(request)
-    const result = await warmStartupQuery(client, { queryKey: key, queryFn: () => api.polymarket({ ...request, background: true }), staleTime: POLYMARKET_TTL }, onSnapshot)
+    const result = await warmStartupQuery(client, { queryKey: key, queryFn: () => api.polymarket({ ...request, background: true, backgroundOrder }), staleTime: POLYMARKET_TTL }, onSnapshot)
     return result
   }
   const [markets] = await Promise.all([load(marketRequest), load(boardRequest)])

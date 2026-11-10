@@ -23,6 +23,9 @@ export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS
     browserControl: (request) => invoke(CHANNELS.browserControl, request),
     browserViewport: (viewport) => invoke(CHANNELS.browserViewport, viewport),
     agentsStatus: () => invoke(CHANNELS.agentsStatus),
+    onLiveStatusChanged: listener => subscribe<import('./liveStatus.js').LiveStatusChanged>(CHANNELS.liveStatusChanged, payload => {
+      if (payload) listener(payload)
+    }),
     notificationsStatus: () => invoke(CHANNELS.notificationsStatus),
     notificationsCommand: (command) => invoke(CHANNELS.notificationsCommand, command),
     onNotificationClicked: (listener) => subscribe(CHANNELS.notificationClicked, listener),

@@ -1,4 +1,6 @@
 $ErrorActionPreference = 'Stop'
+# Production release setup and verification are documented in docs/production-release.md; this menu preserves local source-launch account selection.
+# Efficiency updates preserve all-page startup readiness; verification is recorded in docs/efficiency-results.md.
 # Controller page switching follows visible workspace/page order, including custom ordering and hidden pages.
 # Charts watchlists now follow user data backup, restore, cloud sync and clear, with automatic profile migration.
 # Crypto opens directly with market data; the Workspace header, USD badge and Copy snapshot action are removed.

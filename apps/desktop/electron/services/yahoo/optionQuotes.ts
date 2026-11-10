@@ -1,7 +1,7 @@
 import type { OptionQuote, OptionQuotesPayload, OptionQuotesRequest } from '../../shared/contract.js'
 import { isSellerStrategy } from '../../shared/analytics.js'
 import { cache, TTL } from '../cache.js'
-import { paced, yahoo } from './client.js'
+import { optionExpiries, rawOptionChain } from './optionChain.js'
 import { observeSource } from '../sourceHealth.js'
 
 /**
@@ -18,18 +18,14 @@ import { observeSource } from '../sourceHealth.js'
  * and the ISO mapping the Expiry dropdown wants happens on the way out. Caching the
  * mapped strings here instead left the Options page sorting strings with `getTime`.
  */
-async function fetchExpiries(ticker: string): Promise<Date[]> {
-  const result = await paced(() => yahoo.options(ticker))
-  return result.expirationDates ?? []
-}
-
 async function fetchContract(
   ticker: string,
   expiry: string,
   strike: number,
   strategy: string,
+  force: boolean,
 ): Promise<OptionQuote> {
-  const result = await paced(() => yahoo.options(ticker, { date: expiry }))
+  const result = await rawOptionChain(ticker, expiry, force)
   const chain = result.options?.[0]
   if (!chain) throw new Error(`No chain for ${ticker} ${expiry}.`)
 
@@ -79,9 +75,7 @@ export async function getOptionQuotes({
 
   const expiryResults = await Promise.allSettled(
     tickers.map((ticker) =>
-      cache
-        .resolve(`optexp:${ticker}`, TTL.options, () => fetchExpiries(ticker), { force })
-        .then((result) => result.value.map((date) => date.toISOString().slice(0, 10))),
+      optionExpiries(ticker, force).then(dates => dates.map(date => date.toISOString().slice(0, 10))),
     ),
   )
   const expiries: OptionQuotesPayload['expiries'] = {}
@@ -105,6 +99,7 @@ export async function getOptionQuotes({
               position.expiry,
               position.strike,
               position.strategy,
+              force,
             ),
           { force },
         )

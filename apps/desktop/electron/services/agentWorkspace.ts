@@ -1,3 +1,4 @@
+import { agentsChanged } from './liveStatusEvents.js'
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
@@ -92,6 +93,7 @@ export class AgentWorkspace {
   }
   conversation(id = this.data.currentChatId) { return structuredClone(this.data.conversations.find(chat => chat.id === id) ?? null) }
   private changed() {
+    agentsChanged()
     if (!this.writable) throw new Error(this.storageError || 'Agents storage is not initialized.')
     this.dirty = true
     if (!this.saveTimer) this.saveTimer = setTimeout(() => { this.saveTimer = null; void this.flush().catch(() => {}) }, 250)
