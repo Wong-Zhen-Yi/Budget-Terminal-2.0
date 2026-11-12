@@ -8,12 +8,10 @@ import {
   type TradingVolumeFilter,
 } from '@shared/tradingVolumes'
 
-/**
- * Enough for all ten columns: 44 + 76 + 184 + 96 for the identity columns, plus six ADV
- * columns at 84. Narrower and the ADV columns the page exists for start scrolling out.
- */
-const DEFAULT_TABLE_WIDTH = 904
-const STORE_VERSION = 2
+/** Keep the selected volume visible while giving most of the viewport to the plot. */
+const DEFAULT_TABLE_WIDTH = 430
+const DEFAULT_INTERVAL: TradingVolumeInterval = 'ytd'
+const STORE_VERSION = 3
 
 /**
  * The Trading Volumes page's own view state.
@@ -43,7 +41,7 @@ export const useTradingVolumesPage = create<TradingVolumesState>()(
   persist(
     (set) => ({
       ...DEFAULT_TRADING_VOLUME_FILTER,
-      interval: '1d',
+      interval: DEFAULT_INTERVAL,
       tableWidth: DEFAULT_TABLE_WIDTH,
 
       setInterval: (interval) => set({ interval }),
@@ -67,10 +65,11 @@ export const useTradingVolumesPage = create<TradingVolumesState>()(
     {
       name: 'budget-terminal:trading-volumes',
       version: STORE_VERSION,
-      // The column widths changed, so a persisted pane width sized for the old ones
-      // would clip the last ADV column on an existing install.
+      // Apply the chart-focused YTD layout once to existing installs. Subsequent
+      // interval selections and divider adjustments still persist normally.
       migrate: (persisted) => ({
         ...(persisted as TradingVolumesState),
+        interval: DEFAULT_INTERVAL,
         tableWidth: DEFAULT_TABLE_WIDTH,
       }),
     },

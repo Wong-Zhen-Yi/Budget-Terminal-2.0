@@ -1,5 +1,5 @@
 @echo off
-rem Settings dashboard fits the full provider inventory without overlapping chart titles or notes.
+rem Trading Volumes defaults to a compact YTD table beside the expanded dot plot.
 rem Crypto prices use Hyperliquid and CoinGecko only; Finnhub remains a stock provider.
 rem Windows double-click entry point; shared setup and startup live in scripts/.
 rem Keep dependency checks and build output visible in this terminal before opening the app.

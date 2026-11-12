@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import { TRADING_VOLUME_INTERVALS } from '@shared/contract'
 import {
@@ -37,7 +37,14 @@ const toneClass: Record<Tone, string> = {
 }
 
 /** Keeps either pane usable however far the divider is dragged. */
-const MIN_PANE = 320
+const MIN_TABLE_WIDTH = 400
+const MIN_PLOT_WIDTH = 320
+const SPLITTER_WIDTH = 8
+
+function fitTableWidth(width: number, available: number): number {
+  const minimum = Math.min(MIN_TABLE_WIDTH, Math.max(0, (available - SPLITTER_WIDTH) / 2))
+  return Math.min(Math.max(width, minimum), Math.max(minimum, available - MIN_PLOT_WIDTH - SPLITTER_WIDTH))
+}
 
 export function TradingVolumesPage({
   onStatusChange,
@@ -50,6 +57,21 @@ export function TradingVolumesPage({
   const tableWidth = useTradingVolumesPage((state) => state.tableWidth)
   const setInterval = useTradingVolumesPage((state) => state.setInterval)
   const setTableWidth = useTradingVolumesPage((state) => state.setTableWidth)
+  const panesRef = useRef<HTMLDivElement>(null)
+  const [availableWidth, setAvailableWidth] = useState(window.innerWidth)
+
+  useLayoutEffect(() => {
+    const panes = panesRef.current
+    if (!panes) return
+    const measure = () => {
+      // Hidden preloaded pages must retain their last usable measurement.
+      if (panes.clientWidth > 0) setAvailableWidth(panes.clientWidth)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(panes)
+    return () => observer.disconnect()
+  }, [])
 
   const [hoveredTicker, setHoveredTicker] = useState<string | null>(null)
   const [outliersToRemove, setOutliersToRemove] = useState(0)
@@ -134,8 +156,10 @@ export function TradingVolumesPage({
 
   const onDrag = useCallback(
     (clientX: number) => {
-      const available = window.innerWidth
-      setTableWidth(Math.min(Math.max(clientX, MIN_PANE), available - MIN_PANE))
+      const panes = panesRef.current
+      if (!panes) return
+      const bounds = panes.getBoundingClientRect()
+      setTableWidth(fitTableWidth(clientX - bounds.left - SPLITTER_WIDTH / 2, bounds.width))
     },
     [setTableWidth],
   )
@@ -186,10 +210,10 @@ export function TradingVolumesPage({
         <span className={`ml-auto pl-2 text-2xs ${toneClass[status.tone]}`}>{status.text}</span>
       </div>
 
-      <div className="flex min-h-0 flex-1">
+      <div ref={panesRef} className="flex min-h-0 min-w-0 flex-1">
         <div
-          className="flex min-h-0 flex-col overflow-hidden border border-border bg-surface"
-          style={{ width: tableWidth }}
+          className="flex min-h-0 shrink-0 flex-col overflow-hidden border border-border bg-surface [&_td]:px-1 [&_th]:px-1"
+          style={{ width: fitTableWidth(tableWidth, availableWidth) }}
         >
           <VolumeTable
             rows={rows}

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { build } from 'esbuild'
@@ -9,6 +9,7 @@ import { build } from 'esbuild'
 const require = createRequire(import.meta.url)
 const root = resolve(import.meta.dirname, '..')
 const directory = await mkdtemp(join(tmpdir(), 'budget-trading-volumes-ui-'))
+const capture = process.argv.includes('--capture') ? resolve(root, '../../output/trading-volumes-default.png') : null
 try {
   const bundle = await build({
     stdin: {
@@ -35,6 +36,8 @@ try {
           ] : [],
         })
         const rows = Array.from({ length: 21 }, (_, i) => makeRow('N' + i, 10 ** (6 + i / 10), 10 ** (8 + i / 10)))
+        rows[0].fiveDayAvgDollarVolume = 2e9
+        rows[0].name = 'A long company name that should stay within the compact table'
         rows.push(makeRow('DUP', 1e7, 1e9), makeRow('LOW', 1e7, 1e6), makeRow('MISSING', null, null))
         let calls = 0
         window.api.tradingVolumes = async () => {
@@ -67,9 +70,41 @@ try {
           check(dots.some(dot => dot.getAttribute('cx') === element.getAttribute('cx') && dot.getAttribute('cy') === element.getAttribute('cy')), 'Ring centered on a plotted dot')
           check([...document.querySelectorAll('svg text')].some(label => label.textContent === name), 'Hovered ticker label revealed')
         }
-        window.setCompactPane = () => useTradingVolumesPage.setState({ tableWidth: 900 })
+        window.checkLayout = async (width) => {
+          const state = useTradingVolumesPage.getState()
+          const pane = document.querySelector('table').parentElement.parentElement
+          const chart = document.querySelector('svg').parentElement
+          const scroller = document.querySelector('table').parentElement
+          const headers = [...document.querySelectorAll('th')]
+          check(headers.length === 5 && headers[4].textContent.includes('YTD ADV ($m)'), 'Only selected volume is shown')
+          check(scroller.scrollWidth <= scroller.clientWidth, 'All table columns visible without horizontal scrolling at ' + width)
+          check(headers[4].getBoundingClientRect().right <= scroller.getBoundingClientRect().right, 'Selected volume fits inside left pane')
+          check([headers[0], headers[1], headers[3], headers[4]].every(cell => cell.scrollWidth <= cell.clientWidth), 'Identity and volume headings are readable at ' + width + ': ' + headers.map(cell => cell.textContent + ' ' + cell.scrollWidth + '/' + cell.clientWidth).join(', '))
+          check([...document.querySelectorAll('tbody tr')].every(row => [row.cells[0], row.cells[3], row.cells[4]].every(cell => cell.scrollWidth <= cell.clientWidth)), 'Rank, market cap and volume values are readable at ' + width)
+          check(chart.getBoundingClientRect().width > pane.getBoundingClientRect().width, 'Plot wider than table at ' + width)
+          check(document.documentElement.scrollWidth <= innerWidth && document.documentElement.scrollHeight <= innerHeight, 'Page fits viewport at ' + width)
+          check(document.querySelector('span[title="' + rows[0].name + '"]'), 'Full company name available on hover')
+          const separator = document.querySelector('[role="separator"]')
+          const bounds = separator.parentElement.getBoundingClientRect()
+          separator.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+          window.dispatchEvent(new PointerEvent('pointermove', { clientX: bounds.left + 474 }))
+          window.dispatchEvent(new PointerEvent('pointerup'))
+          await settle()
+          check(Math.abs(pane.getBoundingClientRect().width - 470) <= 1, 'Divider uses pane-relative position at ' + width)
+          // A narrow window clamps the rendered width without overwriting the user's saved width.
+          useTradingVolumesPage.setState({ tableWidth: 2000 })
+          await settle()
+          check(chart.getBoundingClientRect().width >= 320, 'Resizing preserves usable chart width')
+          check(useTradingVolumesPage.getState().tableWidth === 2000, 'Viewport clamping does not overwrite saved divider preference')
+          useTradingVolumesPage.setState({ tableWidth: state.tableWidth })
+          await settle()
+        }
         window.runProbe = async () => {
-          useTradingVolumesPage.setState({ interval: '1d', tableWidth: 650 })
+          check(useTradingVolumesPage.getState().interval === 'ytd', 'Existing installs migrate to YTD')
+          check(useTradingVolumesPage.getState().tableWidth === 430, 'Existing installs migrate to narrow table')
+          localStorage.removeItem('budget-terminal:trading-volumes')
+          useTradingVolumesPage.setState(useTradingVolumesPage.getInitialState())
+          check(useTradingVolumesPage.getState().interval === 'ytd' && useTradingVolumesPage.getState().tableWidth === 430, 'Fresh installs use the same default')
           createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><TradingVolumesPage onStatusChange={() => {}} /></QueryClientProvider>)
           await settle(); await settle()
           check(calls === 1 && document.querySelector('svg circle'), 'Page loads and plots fixture once')
@@ -88,6 +123,9 @@ try {
           check(document.querySelector('circle[aria-label="Remove outlier LOW"]'), 'Outlier preview still works')
           slider.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body })); await settle()
           await click('5D')
+          check(document.querySelectorAll('th').length === 5 && document.querySelectorAll('th')[4].textContent.includes('5D ADV ($m)'), 'Interval switches the visible volume header')
+          check(document.querySelector('tbody tr').dataset.rowKey === 'N0', 'Selected interval determines table rank')
+          check(document.querySelector('tbody tr').lastElementChild.textContent === '2,000', 'Selected interval determines displayed volume in millions')
           await hover('N20'); checkRing('N20'); await leave('N20')
           await click('Replay'); await hover('N20'); checkRing('N20')
           const before = ring().getAttribute('cy')
@@ -100,7 +138,16 @@ try {
           await client.refetchQueries(); await settle()
           check(!ring(), 'Refreshing clears obsolete table hover')
           check(calls === 2, 'Hover, intervals and replay reuse loaded data without extra requests')
-          return 'PASS: table hover, hidden labels, ring position, leave/switch cleanup, missing values, outlier preview, intervals, replay and refresh'
+          for (const label of ['1D', '30D', '1Y', '3Y', 'YTD']) {
+            await click(label)
+            check(document.querySelectorAll('th')[4].textContent.includes(label + ' ADV ($m)'), 'Volume header follows ' + label)
+          }
+          useTradingVolumesPage.setState({ interval: '30d', tableWidth: 500 })
+          await useTradingVolumesPage.persist.rehydrate()
+          check(useTradingVolumesPage.getState().interval === '30d' && useTradingVolumesPage.getState().tableWidth === 500, 'New selections survive rehydration')
+          useTradingVolumesPage.setState({ interval: 'ytd', tableWidth: 430 })
+          await settle()
+          return 'PASS: default layout, migration, persistence, selected volume and sorting, table hover, hidden labels, missing values, outlier preview, replay and refresh'
         }
       `,
     },
@@ -113,7 +160,8 @@ try {
   assert.ok(css, 'Run npm run build before this UI probe')
   await writeFile(join(directory, 'theme.css'), await readFile(join(assets, css)))
   await writeFile(join(directory, 'renderer.js'), bundle.outputFiles[0].text)
-  await writeFile(join(directory, 'index.html'), '<link rel="stylesheet" href="theme.css"><style>html,body,#root{height:100%;margin:0}#root{display:flex}</style><div id="root"></div><script>window.api={}</script><script src="renderer.js"></script>')
+  await writeFile(join(directory, 'index.html'), '<link rel="stylesheet" href="theme.css"><style>html,body,#root{height:100%;margin:0}#root{display:flex}</style><div id="root"></div><script>window.api={};localStorage.setItem("budget-terminal:trading-volumes",JSON.stringify({version:2,state:{interval:"1d",tableWidth:904}}))</script><script src="renderer.js"></script>')
+  if (capture) await mkdir(resolve(capture, '..'), { recursive: true })
   await writeFile(join(directory, 'main.cjs'), `
     const { app, BrowserWindow } = require('electron')
     app.setPath('userData', ${JSON.stringify(join(directory, 'userData'))})
@@ -122,13 +170,20 @@ try {
       try {
         await window.loadFile(${JSON.stringify(join(directory, 'index.html'))})
         console.log(await window.webContents.executeJavaScript('window.runProbe()'))
-        window.setContentSize(1280, 750)
-        await window.webContents.executeJavaScript('document.getElementById("root").style.cssText = "margin-left:64px;margin-top:143px;height:calc(100% - 143px)"; window.setCompactPane()')
-        await new Promise(resolve => setTimeout(resolve, 250))
+        await window.webContents.executeJavaScript('document.getElementById("root").style.cssText = "position:absolute;inset:143px 0 0 64px;height:auto"')
+        for (const [width, height] of [[1920, 1032], [1280, 750], [1024, 768]]) {
+          window.setContentSize(width, height)
+          await new Promise(resolve => setTimeout(resolve, 250))
+          await window.webContents.executeJavaScript('window.checkLayout(' + width + ')')
+        }
+        console.log('PASS: viewport fit, selected volume visibility, divider position and resize clamping at 1920, 1280 and 1024 pixels')
         const fits = await window.webContents.executeJavaScript(
           '(() => { const title = [...document.querySelectorAll("span")].find(e => e.textContent === "Trading Volumes Dot Plot"); const toolbar = title.parentElement; return toolbar.scrollWidth <= toolbar.clientWidth && [...toolbar.querySelectorAll("button")].every(e => { const r = e.getBoundingClientRect(); const p = toolbar.getBoundingClientRect(); return r.right <= p.right && r.bottom <= p.bottom }) })()'
         )
         if (!fits) throw Error('Dot plot controls must fit the compact viewport')
+        ${capture ? `window.setContentSize(1920, 1032)
+        await new Promise(resolve => setTimeout(resolve, 250))
+        require('node:fs').writeFileSync(${JSON.stringify(capture)}, (await window.webContents.capturePage()).toPNG())` : ''}
         app.exit(0)
       } catch (error) { console.error(error); app.exit(1) }
     })

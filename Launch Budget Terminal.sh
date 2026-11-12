@@ -1,5 +1,5 @@
 #!/bin/sh
-# Settings dashboard fits the full provider inventory without overlapping chart titles or notes.
+# Trading Volumes defaults to a compact YTD table beside the expanded dot plot.
 # Crypto prices use Hyperliquid and CoinGecko only; Finnhub remains a stock provider.
 # Linux/macOS entry point; shared runtime checks and startup live in scripts/.
 # Keep dependency checks and build output visible in this terminal before opening the app.

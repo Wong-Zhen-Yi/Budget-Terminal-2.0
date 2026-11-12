@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 
-import { TRADING_VOLUME_INTERVALS, type TradingVolumeInterval } from '@shared/contract'
+import type { TradingVolumeInterval } from '@shared/contract'
 import {
   TRADING_VOLUME_METRICS,
   metricValue,
@@ -10,11 +10,8 @@ import { DataTable, type Column } from '@/components/ui/DataTable'
 import { compactCurrency, integer } from '@/lib/format'
 
 /**
- * The left half of the Trading Volumes page: `_P20_HEADERS` as a `DataTable`.
- *
- * The columns are the reference's, in its order. Two things are worth knowing:
- * the `#` column prints the rank the row held *before* the filter sliced the list, and
- * the ADV columns print millions with no unit, which is what `($m)` in the header means.
+ * The compact table keeps the active interval's ADV beside each stock's identity.
+ * Rank is retained before filtering; ADV prints millions, as the ($m) header indicates.
  */
 
 interface VolumeTableProps {
@@ -31,18 +28,7 @@ function millions(value: number | null): string {
 
 export function VolumeTable({ rows, interval, loading, onTickerHover }: VolumeTableProps) {
   const columns = useMemo<Array<Column<RankedTradingVolumeRow>>>(() => {
-    const advColumns = TRADING_VOLUME_INTERVALS.map((key) => {
-      const metric = TRADING_VOLUME_METRICS[key]
-      return {
-        key,
-        header: metric.columnHeader,
-        align: 'right' as const,
-        numeric: true,
-        width: '84px',
-        cell: (row: RankedTradingVolumeRow) => millions(metricValue(row, metric.volumeField)),
-        sortValue: (row: RankedTradingVolumeRow) => metricValue(row, metric.volumeField),
-      }
-    })
+    const metric = TRADING_VOLUME_METRICS[interval]
 
     return [
       {
@@ -50,7 +36,7 @@ export function VolumeTable({ rows, interval, loading, onTickerHover }: VolumeTa
         header: '#',
         align: 'right',
         numeric: true,
-        width: '44px',
+        width: '40px',
         // The rank before filtering, not the display position — which is exactly why
         // this is a real column instead of the table's own `showIndex` gutter.
         cell: (row) => row.rank,
@@ -59,7 +45,7 @@ export function VolumeTable({ rows, interval, loading, onTickerHover }: VolumeTa
       {
         key: 'ticker',
         header: 'Ticker',
-        width: '76px',
+        width: '68px',
         cell: (row) => (
           <span
             className="block text-text"
@@ -74,13 +60,8 @@ export function VolumeTable({ rows, interval, loading, onTickerHover }: VolumeTa
       {
         key: 'name',
         header: 'Name',
-        // Wide enough for most company names outright, where the reference clips at
-        // roughly half this. It cannot be a `100%` stretch column: under `table-fixed`
-        // that collapses to nothing, and under `auto` it swallows the pane and pushes
-        // the ADV columns out of sight. Ten dense columns do not fit either way, so the
-        // pane scrolls horizontally exactly as the reference's does.
-        width: '184px',
-        cell: (row) => <span className="text-text-muted">{row.name}</span>,
+        // Fill the space left by the numeric columns and reveal clipped names on hover.
+        cell: (row) => <span className="text-text-muted" title={row.name}>{row.name}</span>,
         sortValue: (row) => row.name,
       },
       {
@@ -88,13 +69,21 @@ export function VolumeTable({ rows, interval, loading, onTickerHover }: VolumeTa
         header: 'Market Cap',
         align: 'right',
         numeric: true,
-        width: '96px',
+        width: '104px',
         cell: (row) => compactCurrency(row.marketCap),
         sortValue: (row) => row.marketCap,
       },
-      ...advColumns,
+      {
+        key: interval,
+        header: metric.columnHeader,
+        align: 'right',
+        numeric: true,
+        width: '128px',
+        cell: (row) => millions(metricValue(row, metric.volumeField)),
+        sortValue: (row) => metricValue(row, metric.volumeField),
+      },
     ]
-  }, [onTickerHover])
+  }, [interval, onTickerHover])
 
   return (
     <DataTable

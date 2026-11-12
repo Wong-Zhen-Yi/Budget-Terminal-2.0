@@ -1,5 +1,5 @@
 param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Setup, [switch]$Attached)
-# Settings dashboard fits the full provider inventory without overlapping chart titles or notes.
+# Trading Volumes defaults to a compact YTD table beside the expanded dot plot.
 # Crypto prices use Hyperliquid and CoinGecko only; Finnhub remains a stock provider.
 # Convex snapshot writes are restored; record-era cloud tables are retained as an archive.
 # Database sync restored to 3208321: optional Convex snapshots, GitHub sign-in and complete-copy conflict choices.
