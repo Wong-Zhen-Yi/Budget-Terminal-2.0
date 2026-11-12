@@ -144,7 +144,9 @@ cd Budget-Terminal-2.0
 On Windows, double-click [Launch Budget Terminal.cmd](Launch%20Budget%20Terminal.cmd)
 from the checkout. It installs or repairs a supported Node.js runtime, dependencies
 and Electron, builds and checks the desktop app, and installs or updates the per-user
-`btd` command. It then opens the desktop app directly. Setup also removes the retired
+`btd` command. Dependency checks and build output appear in the launcher terminal,
+then the desktop app opens directly. Keep that terminal open while using the app.
+Setup also removes the retired
 `bt` command when it belongs to this checkout.
 Every launch, including the first launch from a fresh checkout, runs `npm install`,
 checks or repairs Electron, builds the app and verifies its files before opening it.
@@ -212,13 +214,15 @@ Settings → Workspace → Keyboard Shortcuts → Controller controls.
 After Windows setup, open a new PowerShell or Command Prompt window and type `btd`
 for the desktop app.
 
-The desktop app runs independently, so its launcher or terminal can close.
-Development mode requires its terminal to stay open.
+Double-click launchers show dependency checks and build output in their terminal;
+keep that terminal open while using the app. The Windows `btd` command runs
+independently, so its calling terminal can close. Development mode requires its
+terminal to stay open.
 
 `btd` in a new PowerShell or Command Prompt window opens the desktop app from any
 directory and checks dependencies and builds the latest desktop source before opening it.
 To install or repair it manually on Windows, run `npm run setup:desktop` from the checkout.
-Normal desktop startup logs are saved under `%LOCALAPPDATA%\BudgetTerminal\launcher-logs`.
+Background `btd` startup logs are saved under `%LOCALAPPDATA%\BudgetTerminal\launcher-logs`.
 Optional arguments include `btd -Dev`
 for live updates and `btd -Logs` to open diagnostics. To remove only this command,
 run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-bt.ps1 -Uninstall`.

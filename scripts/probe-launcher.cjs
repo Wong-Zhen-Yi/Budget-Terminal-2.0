@@ -101,7 +101,7 @@ for (const platform of ['win32', 'darwin', 'linux']) {
   assert(!calls.some(([, args]) => args.some(arg => String(arg).includes('logViewer'))), 'No separate diagnostic application')
 }
 for (const [file, command] of [
-  ['Launch Budget Terminal.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1"\n/],
+  ['Launch Budget Terminal.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -Attached\n/],
 ]) {
   const source = readFileSync(resolve(__dirname, '..', file), 'utf8').replace(/\r\n/g, '\n')
   assert.match(source, command, `${file} must launch the application on double click`)
@@ -112,7 +112,7 @@ for (const [file, command] of [
   assert(!source.includes('%*'), 'Double-click setup must not forward app launch options')
   assert(!source.includes('-Setup'), 'Double-click startup must open the app without a separate setup-only pass')
   assert.equal(source.match(/^powershell\.exe/gm)?.length, 1, 'Double-click startup must launch once')
-  assert.match(source, /powershell\.exe[^\r\n]*launch-windows\.ps1"\nif errorlevel 1 goto :launchFailed/, 'Open the desktop app directly after setup')
+  assert.match(source, /powershell\.exe[^\r\n]*launch-windows\.ps1" -Attached\nif errorlevel 1 goto :launchFailed/, 'Double-click startup must retain the terminal for dependency checks, build output and errors')
   assert(!source.includes('launch-menu.ps1'), 'Double-click startup must not show an interface chooser')
   assert.match(source, /pause >nul/, 'Double-click startup keeps failures visible')
 }
@@ -190,6 +190,7 @@ for (const platform of ['win32', 'darwin', 'linux']) {
   assert(calls[2].args.join(' ').includes('run ensure:electron'))
   assert(calls[3].args.join(' ').includes('run build'), 'Local launchers must build the restored snapshot-sync application')
   assert(calls[4].args.join(' ').includes('run preview --workspace budget-terminal-desktop'))
+  for (const call of calls.slice(1)) assert.equal(call.options.stdio, 'inherit', 'Dependency checks, Electron checks, build and app output must stay visible in the launcher terminal')
   for (const call of calls) assert.deepEqual(call.options.env, { PATH: 'unchanged' })
 }
 

@@ -2,6 +2,7 @@
 # Settings dashboard fits the full provider inventory without overlapping chart titles or notes.
 # Finnhub queues portfolio quotes and retains stock prices during cooldowns; perp updates cannot overwrite them.
 # macOS Finder entry point. Share runtime checks and startup updates with Linux.
+# Keep dependency checks and build output visible in Terminal before opening the app.
 # Incremental charts, indexed live updates and cache checkpoints: docs/performance.md.
 # Curated design references live in docs/; output/ is for ignored local captures.
 cd "$(dirname "$0")" || exit 1

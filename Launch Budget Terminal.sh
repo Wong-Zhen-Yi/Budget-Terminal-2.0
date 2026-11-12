@@ -2,6 +2,7 @@
 # Settings dashboard fits the full provider inventory without overlapping chart titles or notes.
 # Finnhub queues portfolio quotes and retains stock prices during cooldowns; perp updates cannot overwrite them.
 # Linux/macOS entry point; shared runtime checks and startup live in scripts/.
+# Keep dependency checks and build output visible in this terminal before opening the app.
 # Incremental charts, indexed live updates and cache checkpoints: docs/performance.md.
 # macOS users can double-click Launch Budget Terminal.command; both use this startup path.
 # Curated design references live in docs/; output/ is for ignored local captures.
