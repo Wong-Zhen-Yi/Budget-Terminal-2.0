@@ -34,6 +34,8 @@ import { CoinGeckoClient, coinGeckoClient } from '../electron/services/coingecko
 import { CryptoChartsClient } from '../electron/services/cryptoCharts.js'
 import { cache, TtlCache } from '../electron/services/cache.js'
 import { cryptoChartRequest } from '../electron/shared/cryptoWorkspace.js'
+import { finnhubQuotes } from '../electron/services/finnhubQuotes.js'
+import { getQuote, getQuotes } from '../electron/services/yahoo/quotes.js'
 import { diversifiedData } from '../electron/services/diversifiedData.js'
 
 const directCoinGecko = async (url: string): Promise<unknown> => {
@@ -196,30 +198,67 @@ async function checkHyperliquid(): Promise<void> {
 async function checkHeatmapFallback(): Promise<void> {
   const primary = mock.method(coinGeckoClient, 'getJson', directCoinGecko)
   const request = mock.method(globalThis, 'fetch', async () => new Response('', { status: 403 }))
-  const fallback = mock.method(yahoo, '_fetch', async () => ({ finance: { result: [{ quotes:
-    Array.from({ length: 30 }, (_, index) => ({
-      symbol: `COIN${index}-USD`, shortName: `Coin ${index} USD`,
-      regularMarketPrice: 100 + index, regularMarketChangePercent: -1,
-      marketCap: 1_000 + index, volume24Hr: 500,
-    })),
-  }] } }))
+  const yahooScreen = mock.method(yahoo, '_fetch', async () => { throw new Error('Forbidden crypto provider') })
   try {
-    const tiles = await fetchTopTiles()
-    assert.equal(tiles.length, 30, 'HTTP 403 must recover the full heatmap')
-    assert.equal(tiles[0].symbol, 'COIN29')
-    assert.equal(tiles[0].source, 'Yahoo Finance')
-    assert.equal(tiles[0].volume, 500)
-    assert.equal(tiles[0].changePct, -1)
-    assert.deepEqual(tiles.map(tile => tile.rank), Array.from({ length: 30 }, (_, i) => i + 1))
-    request.mock.mockImplementation(async () => new Response('[]'))
-    assert.equal((await fetchTopTiles()).length, 30, 'Empty successful responses also need fallback')
-    fallback.mock.mockImplementation(async () => { throw new Error('offline') })
-    await assert.rejects(fetchTopTiles(), /Yahoo fallback: offline/)
-    console.log('Crypto fallback checks passed: HTTP 403, empty response, full ranking, and dual-provider failure.')
+    await assert.rejects(fetchTopTiles(), /HTTP 403/)
+    request.mock.mockImplementation(async () => Response.json([]))
+    assert.deepEqual(await fetchTopTiles(), [], 'Empty coverage must remain visible')
+    request.mock.mockImplementation(async () => Response.json([{ id: 'bitcoin', symbol: 'btc', current_price: 100, market_cap_rank: 1 }]))
+    const partial = await fetchTopTiles()
+    assert.equal(partial.length, 1, 'Partial CoinGecko coverage must not switch providers')
+    assert.equal(partial[0].source, 'CoinGecko')
+    assert.equal(yahooScreen.mock.callCount(), 0)
+    console.log('Crypto heatmap checks passed: CoinGecko-only coverage and visible failures.')
   } finally {
     primary.mock.restore()
     request.mock.restore()
-    fallback.mock.restore()
+    yahooScreen.mock.restore()
+  }
+}
+
+async function checkSharedCryptoRouting(): Promise<void> {
+  let coins: unknown = [{ id: 'bitcoin', current_price: 100, price_change_percentage_24h: 25 }]
+  const primary = mock.method(coinGeckoClient, 'getJson', async () => coins)
+  const markets = mock.method(hyperliquidClient, 'getMarkets', async () => ({ markets: parseHyperliquidMarkets(hyperliquidFixture), fetchedAt: localIsoSeconds() }))
+  finnhubQuotes.setCredentialLoader(async () => 'fixture-stock-only-key')
+  assert.equal(await finnhubQuotes.configured('AAPL'), true)
+  const finnhub = mock.method(finnhubQuotes, 'resolve', async () => { throw new Error('Forbidden crypto provider') })
+  const chart = mock.method(yahoo, 'chart', async () => { throw new Error('Forbidden crypto provider') })
+  const spot = mock.method(diversifiedData, 'spot', async () => { throw new Error('Forbidden crypto provider') })
+  try {
+    const quote = await getQuote(' btc-usd ', true)
+    assert.equal(quote.source, 'CoinGecko')
+    assert.equal(quote.price, 100)
+    assert.equal(quote.change, 25)
+    assert.equal(quote.absChange, 20)
+    assert.equal(quote.changeBasis, '24h')
+    assert.equal(markets.mock.callCount(), 0, 'Healthy spot quotes need no extra venue request')
+    coins = [{ id: 'dogecoin', symbol: 'doge', current_price: .25, price_change_percentage_24h: 0 }]
+    assert.equal((await getQuote('DOGE-USD', true)).source, 'CoinGecko', 'Additional ranked coins must follow the same policy')
+    coins = [{ id: 'bitcoin', current_price: null, price_change_percentage_24h: 999 }]
+    const fallback = await getQuote('BTC-USD', true)
+    assert.equal(fallback.source, 'Hyperliquid crypto perp')
+    assert.equal(fallback.price, 110)
+    assert.ok(Math.abs(fallback.change - 10) < 1e-10)
+    assert.ok(Math.abs(fallback.absChange - 10) < 1e-10)
+    assert.match(fallback.fallbackReason!, /perpetual/)
+    primary.mock.mockImplementation(async () => { throw new Error('CoinGecko offline') })
+    assert.equal((await getQuote('BTC-USD', true)).source, 'Hyperliquid crypto perp')
+    markets.mock.mockImplementation(async () => { throw new Error('Hyperliquid offline') })
+    const symbols = [...CRYPTO_TICKERS.map(row => row.symbol), 'DOGE-USD', 'UNKNOWN-USD']
+    const unavailable = await getQuotes(symbols, true)
+    assert.deepEqual(unavailable.missing, symbols, 'Unsupported crypto pairs must not leak into stock or other venue providers')
+    assert.equal(finnhub.mock.callCount(), 0, 'Crypto must bypass Finnhub even with a saved key')
+    assert.equal(chart.mock.callCount(), 0)
+    assert.equal(spot.mock.callCount(), 0)
+    console.log('Shared crypto routing passed: configured Finnhub bypass, CoinGecko spot, labelled perps and dual-provider failure.')
+  } finally {
+    primary.mock.restore()
+    markets.mock.restore()
+    finnhub.mock.restore()
+    chart.mock.restore()
+    spot.mock.restore()
+    finnhubQuotes.setCredentialLoader(async () => undefined)
   }
 }
 
@@ -242,7 +281,7 @@ async function checkCryptoHyperliquidStage(): Promise<void> {
     assert.equal(first.payload.quotes.BTC.marketCap, null, 'Perpetual open interest is never a crypto market cap')
     assert.equal(first.payload.quotes.COIN.volume, 42, 'Stock volume comes from cached Yahoo metadata, never perp volume')
     assert.match(first.payload.quotes.COIN.volumeSource!, /Yahoo/)
-    const avoided = new Set(['COIN', 'MSTR', 'BMNR', 'BTC-USD', 'ETH-USD'])
+    const avoided = new Set(['COIN', 'MSTR', 'BMNR', ...CRYPTO_TICKERS.map(row => row.symbol)])
     assert.ok(chart.mock.calls.every(call => !avoided.has(String(call.arguments[0]))), 'Mapped stock and available perp fallback prices must skip Yahoo charts')
     const metadataCalls = summary.mock.callCount()
     await fetchMappedProxyQuote('COIN')
@@ -266,10 +305,10 @@ async function checkCryptoHyperliquidStage(): Promise<void> {
     const partial = await getCrypto(true)
     assert.equal(partial.payload.hyperliquid, null)
     assert.equal(partial.payload.progress.hyperliquid, 'unavailable')
-    assert.equal(partial.payload.progress.quotes, 'loaded', 'Other stages must survive a Hyperliquid outage')
-    assert.equal(partial.payload.quotes.BTC.price, 110)
+    assert.equal(partial.payload.progress.quotes, 'unavailable', 'Dual-provider failure must remain visible')
+    assert.equal(partial.payload.quotes.BTC.price, null)
     assert.ok(partial.errors.some(error => error.symbol === 'Hyperliquid Perpetuals' && /429/.test(error.reason)))
-    // Exercise the full page with venue prices and a shared cached CoinGecko metadata request.
+    // Exercise the full page with one shared CoinGecko request and forbidden venue fallbacks.
     let marketRequests = 0
     let fakeNow = Date.now()
     const shared = new CoinGeckoClient(async input => {
@@ -280,15 +319,13 @@ async function checkCryptoHyperliquidStage(): Promise<void> {
       return Response.json({ data: {} })
     }, () => fakeNow, async delay => { fakeNow += delay }, new TtlCache())
     primary.mock.mockImplementation(url => shared.getJson(url))
-    const spot = mock.method(diversifiedData, 'spot', async (symbol: string) => symbol === 'BTC-USD' ? {
-      value: { symbol, price: 120, change: 20, absChange: 20, currency: 'USD', source: 'Coinbase spot (USD, rolling 24h)' },
-      fromCache: false, stale: false as const, ageSeconds: 0,
-    } : null)
+    const spot = mock.method(diversifiedData, 'spot', async () => { throw new Error('Forbidden crypto provider') })
     try {
       const publicSpot = await getCrypto(true)
-      assert.equal(publicSpot.payload.quotes.BTC.price, 120)
-      assert.equal(publicSpot.payload.quotes.BTC.changePct, 20)
-      assert.match(publicSpot.payload.quotes.BTC.source, /Coinbase spot/)
+      assert.equal(publicSpot.payload.quotes.BTC.price, 100)
+      assert.equal(publicSpot.payload.quotes.BTC.changePct, 1)
+      assert.equal(publicSpot.payload.quotes.BTC.source, 'CoinGecko')
+      assert.equal(spot.mock.callCount(), 0)
       assert.equal(publicSpot.payload.quotes.BTC.marketCap, 900)
       assert.equal(publicSpot.payload.quotes.BTC.volumeSource, 'CoinGecko')
       assert.equal(marketRequests, 1, 'Heatmap and quote metadata must share one CoinGecko upstream request')
@@ -481,6 +518,7 @@ runOffline()
 await checkHeatmapFallback()
 await checkHyperliquid()
 await checkCryptoHyperliquidStage()
+await checkSharedCryptoRouting()
 await checkCoinGeckoBudget()
 await checkCryptoCharts()
 if (args.includes('--workspace-live')) {

@@ -16,8 +16,8 @@ const use = (pages: string, purpose: string): ApiUse => ({ pages: pages.split('|
 export const API_CATALOG: ApiDefinition[] = [
   ...MARKET_API_PROVIDERS.filter(provider => provider.id !== 'finnhub').map(provider => ({ id: provider.id, label: provider.label, inactive: true, uses: [] })),
   { id: 'finnhub', label: 'Finnhub', uses: [use('dashboard|dashboard-2|portfolio|stocks|charts|price|market-cap|heatmap|cards|up-down|fundamentals|valuation|semiconductors|amzn|avgo|mu|sofi|vst|hood|hims|pltr|bmnr', 'Preferred supported US stock quotes when a key is saved. Large batches queue within a 60 requests/minute budget. Failed refreshes retain a stale Finnhub quote or use Yahoo stock quotes; perpetual marks cannot replace them. Other providers retain history and other data.')] },
-  { id: 'coinbase', label: 'Coinbase', uses: [use('crypto', 'Supported USD spot quotes and a shared USDT/USD conversion rate. Separate from perpetuals and global market cap.')] },
-  { id: 'binance', label: 'Binance', uses: [use('crypto', 'Supported spot quotes converted from USDT to USD, with Coinbase and CoinGecko fallbacks.')] },
+  { id: 'coinbase', label: 'Coinbase', inactive: true, uses: [] },
+  { id: 'binance', label: 'Binance', inactive: true, uses: [] },
   { id: 'world-bank', label: 'World Bank', uses: [use('economic', 'Annual US CPI inflation, distinct from monthly releases.')] },
   { id: 'imf', label: 'IMF', uses: [use('economic', 'Annual US GDP growth through the IMF WEO actual-data cutoff; forecasts excluded.')] },
   { id: 'yahoo', label: 'Yahoo Finance', uses: [
@@ -28,7 +28,7 @@ export const API_CATALOG: ApiDefinition[] = [
     use('news|calendar|ipo', 'Headlines, earnings events and IPO calendar fallback.'),
   ] },
   { id: 'hyperliquid', label: 'Hyperliquid', uses: [
-    use('crypto', 'Shared live perpetual mark prices, funding, open interest and venue volume; labelled price fallback when CoinGecko is unavailable. Yahoo stock metadata is cached separately.'),
+    use('crypto', 'Shared live perpetual mark prices, candles, funding, open interest and venue volume; labelled price fallback when CoinGecko is unavailable. Crypto prices use only Hyperliquid and CoinGecko; stock/ETF proxies retain stock providers.'),
     use('portfolio|stocks|stock-discovery|price|market-cap|heatmap|cards|up-down|charts', 'Mapped equity perpetual marks and supported live chart bars; coverage depends on the symbol.'),
   ] },
   { id: 'coingecko', label: 'CoinGecko', uses: [use('crypto', 'Coin rankings, prices, market capitalizations and global market totals.'), use('bmnr', 'Public Ethereum treasury holdings.')] },

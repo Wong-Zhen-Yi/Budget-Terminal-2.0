@@ -1,6 +1,6 @@
 param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Setup, [switch]$Attached)
 # Settings dashboard fits the full provider inventory without overlapping chart titles or notes.
-# Finnhub queues portfolio quotes and retains stock prices during cooldowns; perp updates cannot overwrite them.
+# Crypto prices use Hyperliquid and CoinGecko only; Finnhub remains a stock provider.
 # Convex snapshot writes are restored; record-era cloud tables are retained as an archive.
 # Database sync restored to 3208321: optional Convex snapshots, GitHub sign-in and complete-copy conflict choices.
 # Efficiency updates preserve all-page startup readiness; verification is recorded in docs/efficiency-results.md.
@@ -24,9 +24,9 @@ $ErrorActionPreference = 'Stop'
 # Portfolio stocks highlight the full row on hover and while editing or focusing row controls.
 # Launchers open the desktop workspace directly, including Portfolio, charts and Agents.
 # Current dark navy and blue colour scheme is locked in AGENTS.md; palette changes require an explicit user request.
-# Public API routing: Coinbase/Binance spot quotes, shared CoinGecko metadata, World Bank/IMF annual context. Key-based APIs remain inactive.
+# Public API routing: Hyperliquid/CoinGecko crypto prices and World Bank/IMF annual context. Finnhub is stock-only when configured.
 # MCP: public Polymarket reads registered; all implemented pages support screenshot access.
-# AllTick API removed from Settings and supported credential providers; Finnhub and Financial Modeling Prep remain inactive.
+# AllTick API removed from Settings; Financial Modeling Prep remains inactive and Finnhub is stock-only.
 # Polymarket: redesigned market cards, probability charts, depth and activity; public datasets and startup preloading retained.
 # YouTube PiP: movable, resizable always-on-top desktop window, including outside Budget Terminal; playback survives pop-out and return.
 $runtimeCheck = Join-Path $PSScriptRoot 'runtime.cjs'
@@ -128,9 +128,7 @@ function Start-BudgetTerminal {
     # The selected complete toolchain also owns npm.cmd and all nested scripts.
     $env:PATH = (Split-Path -Parent $node) + [IO.Path]::PathSeparator + $env:PATH
     if ($RuntimeOnly) { Write-Output $node; return }
-    if (-not $Setup) { & (Join-Path $PSScriptRoot 'install-bt.ps1') }
-    Write-Host 'Reload (F5) updates the current page first, then checks all other pages. Page refresh buttons have been removed; startup still loads every page.'
-    Write-Host "Using Node.js $(& $node --version)."
+    if (-not $Setup) { & (Join-Path $PSScriptRoot 'install-bt.ps1') -Quiet }
     $launchArguments = @()
     if ($Setup) { $launchArguments += '--setup' }
     if ($Dev) { $launchArguments += '--dev' }

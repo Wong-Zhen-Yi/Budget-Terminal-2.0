@@ -2143,9 +2143,9 @@ export interface EarningsExportInput {
 /**
  * One row of the Crypto page's quote map, keyed by the short label (`BTC`, `COIN`).
  *
- * `source` is per row rather than per payload because the coins prefer CoinGecko and
- * fall back to Yahoo field by field (`_fetch_quotes`), so two rows in the same table can
- * genuinely have come from different places.
+ * Coins use CoinGecko spot prices with labelled Hyperliquid perpetual fallbacks.
+ * Price and change always describe the same instrument; stock/ETF proxies retain
+ * their stock providers. Volume and market cap have independent source labels.
  */
 export interface CryptoQuote {
   volumeSource?: string

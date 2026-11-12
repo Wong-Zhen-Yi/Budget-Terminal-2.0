@@ -1,14 +1,15 @@
 #!/bin/sh
 # Settings dashboard fits the full provider inventory without overlapping chart titles or notes.
-# Finnhub queues portfolio quotes and retains stock prices during cooldowns; perp updates cannot overwrite them.
+# Crypto prices use Hyperliquid and CoinGecko only; Finnhub remains a stock provider.
 # Linux/macOS entry point; shared runtime checks and startup live in scripts/.
 # Keep dependency checks and build output visible in this terminal before opening the app.
+# Shared launcher presents five numbered stages with measured completion times.
 # Incremental charts, indexed live updates and cache checkpoints: docs/performance.md.
 # macOS users can double-click Launch Budget Terminal.command; both use this startup path.
 # Curated design references live in docs/; output/ is for ignored local captures.
 
 cd "$(dirname "$0")" || exit 1
-printf 'Checking Node.js and application dependencies, then opening Budget Terminal...\n'
+printf '\n  Preparing Budget Terminal launcher...\n'
 
 # Finder, Dolphin and Steam may not inherit an interactive terminal's PATH.
 export PATH="$HOME/.local/bin:$HOME/.local/share/fnm/aliases/default/bin:$HOME/Library/Application Support/fnm/aliases/default/bin:$HOME/.volta/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"

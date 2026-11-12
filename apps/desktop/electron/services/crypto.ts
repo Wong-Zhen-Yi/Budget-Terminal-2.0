@@ -14,7 +14,6 @@ import type {
   HyperliquidPayload,
 } from '../shared/contract.js'
 import {
-  COINGECKO_IDS,
   CRYPTO_HEATMAP_LIMIT,
   CRYPTO_NEWS_CANDIDATE_LIMIT,
   CRYPTO_NEWS_FEEDS,
@@ -40,7 +39,7 @@ import { getQuote } from './yahoo/quotes.js'
 import { observeSource } from './sourceHealth.js'
 import { hyperliquidEquities } from './hyperliquidEquities.js'
 import { markCryptoPerpetuals } from '../shared/hyperliquid.js'
-import { diversifiedData } from './diversifiedData.js'
+import { CRYPTO_MARKETS_URL, fetchCoinGeckoQuotes } from './cryptoQuotes.js'
 
 /**
  * The Crypto page's data, ported from `CryptoMarketWorker` (`workers/crypto.py`).
@@ -50,8 +49,8 @@ import { diversifiedData } from './diversifiedData.js'
  * while the healthy panels remain usable, including during startup preloading.
  *
  * CoinGecko has its own endpoint cache, pacing and enforced cooldown, shared with
- * BMNR. Its failures cannot throttle Yahoo; metadata and fallback quotes still use
- * Yahoo's shared gate. Alternative.me stays independent of both provider budgets.
+ * BMNR. Coin prices use only CoinGecko and labelled Hyperliquid perpetuals. Stock
+ * proxies retain stock providers. Alternative.me has an independent budget.
  */
 
 export const CRYPTO_SOURCE = 'crypto market'
@@ -59,7 +58,6 @@ export const COINGECKO_SOURCE = 'CoinGecko'
 export const CRYPTO_FEAR_GREED_SOURCE = 'Alternative.me'
 const YAHOO_SOURCE = 'Yahoo Finance'
 
-const MARKETS_URL = 'https://api.coingecko.com/api/v3/coins/markets'
 const GLOBAL_URL = 'https://api.coingecko.com/api/v3/global'
 const FEAR_GREED_URL = 'https://api.alternative.me/fng/?limit=1'
 
@@ -84,17 +82,6 @@ interface CoinGeckoRow {
   total_volume?: unknown
 }
 
-interface YahooCryptoRow {
-  symbol?: string
-  shortName?: string
-  longName?: string
-  regularMarketPrice?: number
-  regularMarketChangePercent?: number
-  marketCap?: number
-  regularMarketVolume?: number
-  volume24Hr?: number
-}
-
 async function getJson(url: string): Promise<unknown> {
   if (url.startsWith('https://api.coingecko.com/')) return coinGeckoClient.getJson(url)
   const providerId = url.startsWith('https://api.coingecko.com/')
@@ -109,21 +96,9 @@ async function getJson(url: string): Promise<unknown> {
 
 /* ------------------------------------------------------------------ stage 1 */
 
-function marketsUrl(params: Record<string, string>): string {
-  const query = new URLSearchParams({
-    vs_currency: 'usd',
-    order: 'market_cap_desc',
-    page: '1',
-    sparkline: 'false',
-    price_change_percentage: '24h',
-    ...params,
-  })
-  return `${MARKETS_URL}?${query.toString()}`
-}
-
 /** `_fetch_top_crypto_heatmap`: the 30 largest coins by market cap. */
 async function fetchCoinGeckoTiles(): Promise<CryptoHeatmapTile[]> {
-  const body = await getJson(marketsUrl({ per_page: String(CRYPTO_HEATMAP_LIMIT) }))
+  const body = await getJson(CRYPTO_MARKETS_URL)
   const rows = Array.isArray(body) ? (body as CoinGeckoRow[]) : []
 
   const tiles: CryptoHeatmapTile[] = []
@@ -150,43 +125,9 @@ async function fetchCoinGeckoTiles(): Promise<CryptoHeatmapTile[]> {
   return tiles
 }
 
-/** Yahoo's market-cap-ranked USD screen keeps the full heatmap available if CoinGecko fails. */
+/** CoinGecko supplies rankings; unavailable coverage stays visible in Settings. */
 export async function fetchTopTiles(): Promise<CryptoHeatmapTile[]> {
-  let primary: CryptoHeatmapTile[] = []
-  let primaryError = 'Incomplete CoinGecko heatmap'
-  try {
-    primary = await fetchCoinGeckoTiles()
-    if (primary.length === CRYPTO_HEATMAP_LIMIT) return primary
-  } catch (error) {
-    primaryError = describeError(error)
-  }
-  try {
-    // This saved crypto screen is not in yahoo-finance2's predefined screen enum.
-    const body = await paced(() => yahoo._fetch(
-      'https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved',
-      { scrIds: 'all_cryptocurrencies_us', count: String(CRYPTO_HEATMAP_LIMIT), formatted: 'false' },
-      {}, 'json', false,
-    )) as { finance?: { result?: Array<{ quotes?: YahooCryptoRow[] }> } }
-    const rows = body.finance?.result?.[0]?.quotes ?? []
-    const tiles = rows.filter(row => row.symbol?.endsWith('-USD') && firstNumber(row.regularMarketPrice) !== null)
-      .sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0))
-      .slice(0, CRYPTO_HEATMAP_LIMIT)
-      .map((row, index): CryptoHeatmapTile => ({
-        rank: index + 1,
-        symbol: row.symbol!.replace(/-USD$/, ''),
-        name: (row.longName || row.shortName || row.symbol!).replace(/ USD$/, ''),
-        price: firstNumber(row.regularMarketPrice),
-        changePct: firstNumber(row.regularMarketChangePercent),
-        marketCap: firstNumber(row.marketCap),
-        volume: firstNumber(row.volume24Hr, row.regularMarketVolume),
-        source: YAHOO_SOURCE,
-      }))
-    if (tiles.length > primary.length) return tiles
-    if (!primary.length) throw new Error('Yahoo returned no usable crypto rows')
-  } catch (error) {
-    if (!primary.length) throw new Error(`${primaryError}; Yahoo fallback: ${describeError(error)}`)
-  }
-  return primary
+  return fetchCoinGeckoTiles()
 }
 
 /** `_build_heatmap_payload`: normalise, cap at 30 and attach coverage. */
@@ -252,26 +193,6 @@ const EMPTY_QUOTE: RawQuote = {
   source: YAHOO_SOURCE,
 }
 
-/** `_fetch_coingecko_quotes`: the five named coins in one call, keyed back to the label. */
-async function fetchCoinGeckoQuotes(): Promise<Record<string, RawQuote>> {
-  // Share the heatmap's single top-30 request instead of a second paced CoinGecko call.
-  const body = await getJson(marketsUrl({ per_page: String(CRYPTO_HEATMAP_LIMIT) }))
-  const tiles = Array.isArray(body) ? body as CoinGeckoRow[] : []
-  const quotes: Record<string, RawQuote> = {}
-  for (const [label, id] of Object.entries(COINGECKO_IDS)) {
-    const row = tiles.find(tile => tile.id === id)
-    if (!row) continue
-    quotes[label] = {
-      price: firstNumber(row.current_price),
-      changePct: firstNumber(row.price_change_percentage_24h_in_currency, row.price_change_percentage_24h),
-      volume: firstNumber(row.total_volume),
-      marketCap: firstNumber(row.market_cap),
-      source: COINGECKO_SOURCE,
-    }
-  }
-  return quotes
-}
-
 /** Stock metadata has its own cache; a fresh perpetual mark never refreshes it. */
 export async function fetchMappedProxyQuote(symbol: string, force = false): Promise<RawQuote> {
   const [quote, metadata] = await Promise.allSettled([
@@ -296,7 +217,7 @@ export async function fetchMappedProxyQuote(symbol: string, force = false): Prom
     volumeSource: 'Yahoo Finance stock volume (shares)', marketCapSource: YAHOO_SOURCE, metadataAsOf: snapshot?.asOf }
 }
 
-/** Unmapped ETFs and last-resort crypto fallbacks retain Yahoo price/metadata. */
+/** Stock and ETF proxies retain their existing price and metadata providers. */
 async function fetchYahooQuote(symbol: string, force = false): Promise<RawQuote> {
   if (equityMarket(symbol)) return fetchMappedProxyQuote(symbol, force)
   const result: RawQuote = { ...EMPTY_QUOTE }
@@ -336,54 +257,30 @@ async function fetchYahooQuote(symbol: string, force = false): Promise<RawQuote>
   return result
 }
 
-/**
- * Public venue spot quotes share CoinGecko metadata; missing spot prices prefer labelled perps.
- * Stock metadata and volume remain separate from mapped perpetual prices.
- */
+/** Coin prices use CoinGecko spot data or explicitly labelled Hyperliquid perps. */
 async function fetchQuotes(force: boolean, perpetuals: Promise<HyperliquidPayload | null>): Promise<Record<string, CryptoQuote>> {
-  const [live, spots] = await Promise.all([
-    fetchCoinGeckoQuotes().catch(() => ({}) as Record<string, RawQuote>),
-    Promise.all(CRYPTO_TICKERS.map(async entry => [entry.label, await diversifiedData.spot(entry.symbol)] as const)).then(rows => new Map(rows)),
+  const [coins, markets, proxies] = await Promise.all([
+    fetchCoinGeckoQuotes().catch(() => ({} as Record<string, RawQuote>)),
+    perpetuals,
+    Promise.all(PROXY_TICKERS.map(entry => fetchYahooQuote(entry.symbol, force))),
   ])
-
-  const symbols = [...CRYPTO_TICKERS, ...PROXY_TICKERS]
-  const fallbacks = await Promise.all(symbols.map(async (entry): Promise<RawQuote> => {
-    const preferred = live[entry.label]
-    const spot = spots.get(entry.label)?.value
-    if (spot) return { price: spot.price, changePct: spot.change, volume: preferred?.volume ?? null,
-      marketCap: preferred?.marketCap ?? null, source: spot.source!, marketCapSource: preferred?.source, volumeSource: preferred?.source }
-    // A CoinGecko outage must not fan out into two Yahoo requests per coin.
-    // Venue volume is labelled; perpetuals never supply a global market cap.
-    if (entry.symbol.endsWith('-USD') && preferred?.price == null) {
-      const market = (await perpetuals)?.markets.find(row => row.symbol === entry.label)
-      if (market) return { price: market.markPrice, changePct: market.changePct, volume: market.volume24hUsd,
-        marketCap: preferred?.marketCap ?? null, source: 'Hyperliquid crypto perp',
-        volumeSource: 'Hyperliquid perpetual 24h volume (USD)', marketCapSource: preferred?.source }
-    }
-    return preferred && [preferred.price, preferred.changePct, preferred.volume, preferred.marketCap].every(value => value !== null)
-      ? Promise.resolve(preferred)
-      : fetchYahooQuote(entry.symbol, force)
-  }))
-
   const rows: Record<string, CryptoQuote> = {}
-  symbols.forEach((entry, index) => {
-    const fallback = fallbacks[index]
-    const preferred = live[entry.label]
-    const spot = spots.get(entry.label)?.value
+  for (const entry of CRYPTO_TICKERS) {
+    const spot = coins[entry.label]
+    const perp = spot?.price == null ? markets?.markets.find(row => row.symbol === entry.label) : undefined
     rows[entry.label] = {
-      label: entry.label,
-      symbol: entry.symbol,
-      name: entry.name,
-      price: firstNumber(spot?.price, preferred?.price, fallback.price),
-      changePct: spot ? spot.change : fallback.source === 'Hyperliquid crypto perp' ? fallback.changePct : firstNumber(preferred?.changePct, fallback.changePct),
-      volume: firstNumber(preferred?.volume, fallback.volume),
-      marketCap: firstNumber(preferred?.marketCap, fallback.marketCap),
-      source: spot?.source ?? (preferred?.price != null ? preferred.source : fallback.source || YAHOO_SOURCE),
-      volumeSource: preferred?.volume != null ? preferred.source : fallback.volumeSource,
-      marketCapSource: preferred?.marketCap != null ? preferred.source : fallback.marketCapSource,
-      metadataAsOf: fallback.metadataAsOf,
+      ...entry,
+      price: spot?.price ?? perp?.markPrice ?? null,
+      // Keep price and change on the same instrument even when metadata is incomplete.
+      changePct: spot?.price != null ? spot.changePct : perp?.changePct ?? null,
+      volume: spot?.volume ?? perp?.volume24hUsd ?? null,
+      marketCap: spot?.marketCap ?? null,
+      source: spot?.price != null ? COINGECKO_SOURCE : perp ? 'Hyperliquid crypto perp' : 'Hyperliquid / CoinGecko (unavailable)',
+      volumeSource: spot?.volume != null ? COINGECKO_SOURCE : perp ? 'Hyperliquid perpetual 24h volume (USD)' : undefined,
+      marketCapSource: spot?.marketCap != null ? COINGECKO_SOURCE : undefined,
     }
-  })
+  }
+  PROXY_TICKERS.forEach((entry, index) => { rows[entry.label] = { ...entry, ...proxies[index] } })
   return rows
 }
 
@@ -565,7 +462,7 @@ async function fetchCrypto(force: boolean): Promise<CryptoFetchResult> {
  */
 export function getCrypto(force = false): Promise<CryptoFetchResult> {
   return cache
-    .resolve('crypto:page:public-spot-v3', TTL.crypto, () => fetchCrypto(force), { force })
+    .resolve('crypto:page:hyperliquid-coingecko-v4', TTL.crypto, () => fetchCrypto(force), { force })
     .then((result) => {
       const live = hyperliquidEquities.getCryptoMarkets()
       return live ? { ...result.value, payload: markCryptoPerpetuals(result.value.payload, live) } : result.value

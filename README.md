@@ -146,6 +146,9 @@ from the checkout. It installs or repairs a supported Node.js runtime, dependenc
 and Electron, builds and checks the desktop app, and installs or updates the per-user
 `btd` command. Dependency checks and build output appear in the launcher terminal,
 then the desktop app opens directly. Keep that terminal open while using the app.
+The launcher shows five numbered stages with completion times, live installation
+and build output, and a final check result. Colours follow the app's accents;
+redirected output and `NO_COLOR` use plain text.
 Setup also removes the retired
 `bt` command when it belongs to this checkout.
 Every launch, including the first launch from a fresh checkout, runs `npm install`,
@@ -336,14 +339,12 @@ active markets. Hyperliquid failures appear in page readiness and panel warnings
 the other crypto feeds remain available. These are venue-specific perpetual
 contracts, displayed separately from spot quotes. No trading actions are exposed.
 
-Mapped crypto-equity proxies use the shared perpetual mark directly. Yahoo stock
-volume and market cap have an independent 15-minute cache; manual Refresh reloads
-that metadata. Supported USD spot quotes prefer Coinbase or Binance, with Binance
-USDT quotes converted using a shared Coinbase USDT/USD rate. Other eligible venues
-and the existing CoinGecko/Yahoo routes provide fallbacks. CoinGecko supplies shared
-top-30 market metadata. A labelled Hyperliquid perpetual can supply fallback price
-and venue volume without inventing a global market cap. See
-[public data routing](docs/public-data-routing.md) for source order and app budgets.
+Crypto prices use CoinGecko spot quotes with explicitly labelled Hyperliquid
+perpetual fallbacks. The shared quote API follows the same routing, including when
+a Finnhub key is configured. CoinGecko supplies top-30 rankings, market caps and
+global totals; missing coverage stays visible instead of switching coin providers.
+Stock/ETF proxies retain stock quote providers and separately cached Yahoo stock
+metadata. See [public data routing](docs/public-data-routing.md) for details.
 
 **Stock quotes and charts** prefer explicitly mapped Hyperliquid equity perpetuals.
 These USD **mark prices** also value portfolio positions, gains and allocations.
@@ -447,7 +448,7 @@ The current comparison loads at startup, including when Scorecard is unvisited.
 | :--- | :--- |
 | [Optional Convex sync](docs/convex-sync.md) | Cross-device snapshot sync, GitHub browser sign-in, offline local saves, conflict recovery and deployment. |
 | [Data, startup & backups](docs/user-guide.md) | All-page readiness, feed health, saved-data locations, migration, and backup behavior. |
-| [Public data routing](docs/public-data-routing.md) | Coinbase/Binance spot quotes, CoinGecko metadata, World Bank/IMF annual context, and provider budgets. |
+| [Public data routing](docs/public-data-routing.md) | Hyperliquid/CoinGecko crypto quotes, World Bank/IMF annual context, and provider budgets. |
 | [Browser](docs/browser.md) | Embedded Chromium tabs, source reading, research controls, and local login profiles. |
 | [Diagnostic logging](docs/diagnostic-logging.md) | Settings log viewer, retention, export, and privacy. |
 | [Local MCP](docs/local-mcp.md) | Client registration, research tools, record edits, screenshots, and bridge security. |

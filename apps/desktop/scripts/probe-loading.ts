@@ -1062,14 +1062,14 @@ try {
     heatmap: { tiles: [], coverage: { loaded: 0, total: 30 }, updatedAt: '2026-10-08T07:50:45' },
     progress: { heatmap: 'loaded', quotes: 'loaded', market: 'loaded', news: 'loaded', hyperliquid: 'loaded' } }
   const cryptoEnvelope = ok(cryptoSnapshot)
-  cryptoClient.setQueryData(['crypto', 'hyperliquid-v1'], { ...cryptoEnvelope, meta: { ...cryptoEnvelope.meta, fetchedAt: Date.now() - 180_000 } })
+  cryptoClient.setQueryData(['crypto', 'hyperliquid-coingecko-v2'], { ...cryptoEnvelope, meta: { ...cryptoEnvelope.meta, fetchedAt: Date.now() - 180_000 } })
   const cryptoMarkup = renderToStaticMarkup(createElement(QueryClientProvider, { client: cryptoClient },
     createElement(CryptoPage, { onStatusChange: () => {} })))
   assert.doesNotMatch(cryptoMarkup, /crypto-notice|Snapshot updated at|stages ready/)
   assert.doesNotMatch(cryptoMarkup, /Snapshot expired/)
   assert.match(cryptoMarkup, /Snapshot coverage 0\/30 \| stale \| Updated 07:50:45/)
   assert.doesNotMatch(cryptoMarkup, /Live data|Live coverage/)
-  cryptoClient.setQueryData(['crypto', 'hyperliquid-v1'], cryptoEnvelope)
+  cryptoClient.setQueryData(['crypto', 'hyperliquid-coingecko-v2'], cryptoEnvelope)
   const freshCryptoMarkup = renderToStaticMarkup(createElement(QueryClientProvider, { client: cryptoClient },
     createElement(CryptoPage, { onStatusChange: () => {} })))
   assert.doesNotMatch(freshCryptoMarkup, /crypto-notice|Snapshot updated at|stages ready/)

@@ -3,6 +3,7 @@ const { chmodSync, mkdirSync, writeFileSync } = require('node:fs')
 // Launchers open the desktop workspace directly, including Portfolio, charts and Agents.
 // Database sync restored to 3208321: optional Convex snapshots, GitHub sign-in and complete-copy conflict choices.
 // Efficiency updates preserve all-page startup readiness; verification is recorded in docs/efficiency-results.md.
+// Crypto prices use Hyperliquid and CoinGecko only; Finnhub remains a stock provider.
 const { homedir } = require('node:os')
 const path = require('node:path')
 const { spawnSync } = require('node:child_process')

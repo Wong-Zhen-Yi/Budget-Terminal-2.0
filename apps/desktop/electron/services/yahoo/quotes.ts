@@ -5,7 +5,7 @@ import { observeSource } from '../sourceHealth.js'
 import { equityMarket } from '../../shared/equityMarkets.js'
 import { hyperliquidEquities } from '../hyperliquidEquities.js'
 import { regularMarketRefreshAt } from '../../shared/marketRefresh.js'
-import { diversifiedData } from '../diversifiedData.js'
+import { isCryptoQuoteSymbol, resolveCryptoQuote } from '../cryptoQuotes.js'
 import { finnhubQuotes } from '../finnhubQuotes.js'
 
 interface QuoteChartResult {
@@ -113,6 +113,7 @@ export async function getQuote(symbol: string, force = false): Promise<Quote> {
 
 async function resolveQuote(symbol: string, force = false): Promise<CachedResult<Quote> & { stale: boolean }> {
   symbol = symbol.trim().toUpperCase()
+  if (isCryptoQuoteSymbol(symbol)) return resolveCryptoQuote(symbol)
   let finnhubFailure: string | undefined
   try {
     const quote = await finnhubQuotes.resolve(symbol, force)
@@ -139,8 +140,7 @@ async function resolveExistingQuote(symbol: string, force: boolean, stockOnly = 
       return { ...fallback, value: { ...fallback.value, source: 'Yahoo Finance (Hyperliquid fallback)', fallbackReason: reason } }
     }
   }
-  const alternative = await diversifiedData.spot(symbol)
-  return alternative ?? resolveYahooQuote(symbol, force)
+  return resolveYahooQuote(symbol, force)
 }
 
 export interface QuoteBatch {

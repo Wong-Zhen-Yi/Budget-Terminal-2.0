@@ -1,17 +1,7 @@
 const { spawnSync } = require('node:child_process')
-// Convex snapshot writes are restored; record-era cloud tables are retained as an archive.
-// Database sync restored to 3208321: optional Convex snapshots, GitHub sign-in and complete-copy conflict choices.
-// Backup and sync snapshots resolve asynchronous defaults inside function bodies for build compatibility.
-// Backup imports recover on failure; Escape cancels edits; public WebSocket resources are supported.
-// Shared option chains, single-capture backups, targeted refresh and live status updates: docs/efficiency-results.md.
-// GitHub sync sign-in reports missing OAuth configuration in Settings before opening the browser.
-// Optional Convex sync supports GitHub browser sign-in and regional cloud deployments.
-// Optional Convex sync preserves local operation; Settings owns sign-in and conflict controls.
-// Current dark navy and blue colour scheme is locked in AGENTS.md; palette changes require an explicit user request.
-// MCP: public Polymarket reads registered; all implemented pages support screenshot access.
 const path = require('node:path')
 const { supportedNodeVersion, supportedNpmVersion, runtimeEnvironment, assertCertificateEnvironment } = require('./runtime.cjs')
-const { engines } = require('../package.json')
+const { engines, version } = require('../package.json')
 const { findCodex } = require('./codex-runtime.cjs')
 const { verifyDesktopBuild } = require('./verify-desktop-build.cjs')
 
@@ -24,60 +14,81 @@ function platformName(platform) {
   return null
 }
 
+// Use the app's semantic accents, with plain text for redirected logs and NO_COLOR.
+function createLauncherOutput({ log = console, environment = process.env, terminal = Boolean(process.stdout.isTTY), now = Date.now } = {}) {
+  const colour = terminal && !('NO_COLOR' in environment) && environment.TERM !== 'dumb'
+  const palette = { accent: '47;111;208', muted: '125;142;166', up: '38;194;129', down: '240;85;78', warn: '214;178;94' }
+  const paint = (role, text) => colour ? `\x1b[38;2;${palette[role]}m${text}\x1b[0m` : text
+  const started = now()
+  let stageStarted = started
+  const elapsed = start => `${Math.max(0, (now() - start) / 1000).toFixed(1)}s`
+  const rule = paint('muted', '  ' + '-'.repeat(58))
+  return {
+    header(mode, os) {
+      log.log('')
+      log.log(paint('accent', '  BUDGET TERMINAL') + paint('muted', `  /  ${version}`))
+      log.log(paint('muted', `  ${mode}  |  ${os}`))
+      log.log(rule)
+    },
+    stage(number, title) {
+      stageStarted = now()
+      log.log('')
+      log.log(paint('accent', `  [${number}/5]`) + ` ${title}`)
+    },
+    note(message) { log.log(paint('muted', `        ${message}`)) },
+    warn(message) { log.log(paint('warn', `  [NOTE] ${message}`)) },
+    done(message) { log.log(paint('up', '  [ OK ]') + ` ${message}` + paint('muted', `  (${elapsed(stageStarted)})`)) },
+    ready(message) {
+      log.log('')
+      log.log(rule)
+      log.log(paint('up', `  ${message}`) + paint('muted', `  |  ${elapsed(started)}`))
+    },
+    error(message) {
+      log.error('')
+      log.error(paint('down', '  [FAIL]') + ` ${message}`)
+      log.error(paint('muted', '         Fix the error above, then run the launcher again.'))
+    },
+  }
+}
+
+// Crypto routing is shared by all double-click launchers.
 function launch({ development = false, logs = false, setupOnly = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
-  log.log('Settings dashboard: provider charts fit the full inventory without overlapping titles, values or footnotes, including shorter desktop windows.')
-  log.log('Finnhub: portfolio requests queue within the shared budget. Stock prices retain the last Finnhub quote as stale or fall back to Yahoo stock quotes; perp updates cannot overwrite them while a key is configured. Other APIs remain available.')
-  log.log('Performance: incremental live charts, batched symbol updates, reduced cache writes and pushed MCP status. Settings > Cache and startup shows prepared-page memory estimates. All pages still preload.')
-  log.log('Cloud sync restored to optional Convex snapshots. Enter your existing deployment URL in Settings; GitHub sign-in, offline saves and complete-copy conflict recovery are available.')
-  log.log('Settings > Controller controls: game-style diagram, live inputs and a test mode that pauses page navigation. B or Esc finishes the test.')
-  log.log('Compact layouts keep Treasury curves, market controls, probability statistics and heatmap details accessible.')
-  log.log('Charts watchlists: saved with user data, backups and cloud sync. Existing profile lists migrate automatically; import and clear update the charts immediately.')
-  log.log('Portfolio stocks highlight the full row on hover and while editing or focusing row controls.')
-  log.log('Settings: consistent compact sizing and horizontal category views. The redundant Preferences label, All settings view and introductory header are removed.')
-  log.log('Persistent diagnostic logging retains up to the last 15 days. Open Settings > Diagnostics or press Ctrl+Shift+L. No global diagnostics banner is added.')
-  if (platform === 'win32') log.log('Windows startup bypasses GPU shader disk caches to avoid locked-cache errors. GPU acceleration remains enabled.')
-  log.log('Stock charts leave 35 percent of the plot to the right of the latest bar; disabled indicator panes release their space.')
-  log.log('Pages populate completed sections while remaining data loads; all pages still preload and startup failures remain visible.')
-  log.log('Page Loading Status banner removed. Startup progress, failures and diagnostics remain in Settings; page readiness indicators remain available. Opening a page promotes its queued requests with fair background turns. Shared reads avoid duplicate work. Readers retain controls longer and evicted pages restore scroll. All pages still preload.')
-  log.log('Reload (F5) updates the current page first, then checks all other pages. Page refresh buttons have been removed; startup still loads every page.')
-  log.log('Hyperliquid: live crypto candles share the equity connection, including overnight updates and reconnect recovery; market tables retain 24h change and volume.')
+  const output = createLauncherOutput({ log, environment })
   const os = platformName(platform)
-  log.log('YouTube: videos play in the thumbnail area. Picture in picture opens an always-on-top desktop window; drag its title bar outside Budget Terminal and resize its edges. Playback continues when you pop out or return; return and close controls stay available.')
-  log.log('YouTube Research Terminal: compact table, right-side inspector and pagination without scrollbars. Warning-count status and warning controls are removed. All videos and images still preload at startup.')
-  log.log('TV page removed. YouTube videos play inside the app with player controls and fullscreen. All remaining pages still preload at startup.')
+  output.header(setupOnly ? 'Setup check' : development ? 'Live development' : 'Desktop launcher', os || platform)
+  output.stage(1, 'Check toolchain')
   if (!os) {
-    log.error(`Budget Terminal supports Windows, macOS, and Linux; found ${platform}.`)
+    output.error(`Budget Terminal supports Windows, macOS, and Linux; found ${platform}.`)
     return 1
   }
-
   if (!supportedNodeVersion(nodeVersion)) {
-    log.error(`Unsupported Node.js ${nodeVersion}. Required: ${engines.node}. Latest Node.js 24 LTS is recommended.`)
+    output.error(`Unsupported Node.js ${nodeVersion}. Required: ${engines.node}. Latest Node.js 24 LTS is recommended.`)
     return 1
   }
 
   const env = runtimeEnvironment(environment)
   try { assertCertificateEnvironment(env) } catch (error) {
-    log.error(error.message)
+    output.error(error.message)
     return 1
   }
   if (logs) env.BUDGET_TERMINAL_OPEN_DIAGNOSTICS = '1'
   if (setupOnly && (development || logs)) {
-    log.error('Setup cannot be combined with launch options.')
+    output.error('Setup cannot be combined with launch options.')
     return 1
   }
 
-  log.log('Checking Codex for the Agents page...')
+  // Codex is optional: preserve discovery and handoff without starting inference.
   const codexPath = locateCodex({ platform, environment: env })
   if (codexPath) {
     const codex = spawn(codexPath, ['--version'], { cwd: root, env, windowsHide: true, stdio: 'pipe', encoding: 'utf8', timeout: 10_000 })
     if (!codex.error && codex.status === 0 && /^codex(?:-cli)?\s+\d+\.\d+/i.test(codex.stdout?.trim() || '')) {
       env.BUDGET_TERMINAL_CODEX_PATH = codexPath
-      log.log(`Agents runtime ready: ${codex.stdout.trim()}. Codex connects automatically at app startup; New chat keeps the connection. Autonomous mode starts off.`)
+      output.note(`Agents: ${codex.stdout.trim()}. Autonomous mode starts off.`)
     } else {
-      log.log('Codex could not run. The app will open; check your Codex installation before connecting from Agents.')
+      output.warn('Codex could not run; the app will open. Check Agents for setup help.')
     }
   } else {
-    log.log('Codex was not found. The app will open; Agents includes installation and sign-in instructions.')
+    output.note('Agents: optional Codex runtime not found; setup help is in the app.')
   }
 
   const npm = (args, capture = false) => {
@@ -85,137 +96,71 @@ function launch({ development = false, logs = false, setupOnly = false, platform
     const commandArgs = platform === 'win32' ? ['/d', '/s', '/c', `npm ${args.join(' ')}`] : args
     return spawn(command, commandArgs, { cwd: root, env, stdio: capture ? 'pipe' : 'inherit', encoding: 'utf8' })
   }
-
   const installed = npm(['--version'], true)
   if (installed.error || installed.status !== 0) {
-    log.error('npm is required. Install the latest Node.js 24 LTS with npm, then relaunch Budget Terminal.')
+    output.error('npm is required. Install the latest Node.js 24 LTS with npm, then relaunch Budget Terminal.')
     return 1
   }
   const npmVersion = installed.stdout?.trim()
   if (!supportedNpmVersion(npmVersion)) {
-    log.error(`Unsupported npm ${npmVersion || '(unknown)'}. Required: ${engines.npm}. npm 11 is recommended.`)
+    output.error(`Unsupported npm ${npmVersion || '(unknown)'}. Required: ${engines.npm}. npm 11 is recommended.`)
     return 1
   }
+  output.done(`Node.js ${nodeVersion}  /  npm ${npmVersion}`)
 
-  log.log('MCP upgraded: typed results, research workflows, stable paging, structured errors, durable write recovery and category permissions in Settings. All pages still preload.')
-  log.log('News: removed partial-feed status indicators from the page. Feed coverage and startup diagnostics remain in Settings; all pages still preload.')
-  log.log(`Starting Budget Terminal for ${os}...`)
-  log.log('Dictionary Reading Room: category browsing, readable articles, section navigation, saved terms, recent history and formula copying. All 405 terms remain available offline. Dictionary candlestick charts render at full size across all pattern examples.')
-  log.log('Crypto: removed the snapshot summary banner. Refresh errors, rate limits and startup loading remain visible.')
-  log.log('Crypto opens directly with market data; the Workspace header, USD badge and Copy snapshot action are removed.')
-  log.log('Saved-data warning banners removed throughout the app, including ETF, IPO, Valuation, company pages and charts. Startup progress and failure details are available in Settings.')
-  log.log('MCP startup fix: desktop-only cache controls, heatmap progress and TV are classified correctly. Agent startup errors no longer block the app from opening.')
-  log.log('Heatmap fills holdings and quote colours progressively while data loads; loading progress stays visible until completion.')
-  log.log('Cache startup: saved pages stay usable during background refresh. Settings controls 256 MiB page snapshots, 2 GiB market data, a separate 512 MiB image budget and 30-day retention. All pages still preload.')
-  log.log('Refresh schedule: Heatmap every 30 minutes; company snapshots and Personal Finance FX hourly; Dashboard headlines every 5 minutes. Backtest preloads once with no automatic refresh.')
-  log.log('Startup loading: completed pages refresh while slower pages load, recovered warnings clear, and changed selections preload without restarting unrelated pages.')
-  log.log('Polymarket: redesigned market cards, probability charts, depth and activity; public datasets and startup preloading retained.')
-  log.log('AllTick API removed from Settings and supported credential providers. Finnhub and Financial Modeling Prep remain inactive and make no data requests.')
-  log.log('Public API routing: Coinbase/Binance spot quotes, shared CoinGecko metadata and World Bank/IMF annual context use independent budgets and cooldowns. Key-based APIs remain inactive.')
-  log.log('Page headers: removed the equity price source subtitle from every page.')
-  log.log('Agents connects quietly at startup; connection status and errors stay visible in the Agents toolbar.')
-  log.log('Yahoo load reduction: mapped crypto-equity prices skip Yahoo charts, stock metadata is cached for 15 minutes, and crypto perpetuals share the live equity socket with REST fallback. All pages still preload.')
-  log.log('Stock data reuse: checked Yahoo U.S. closing quotes and history stay cached until the next regular session, after closing updates settle. Manual refresh and live perpetual feeds continue. All pages still preload.')
-  log.log('Agents chat: the message composer fills resizable dashboard and dropdown panes at every zoom level.')
-  log.log('Data health: all startup pages report current results and refresh after expiry. Chart history keeps its own freshness; SPY security IDs and Robinhood monthly reports are handled correctly.')
-  log.log('MCP prices use the shared live Hyperliquid feed for mapped stocks. Fast quote reads skip macro and sector lookups by default; projected responses preserve perp market labels and Yahoo fallback details.')
-  log.log('Portfolio charts stay prepared across all books: Dashboard, Stocks and selected Main/Multi views load at startup, refresh in the background and prepare new holdings automatically. The bottom status strip is hidden; background loading, chart refresh and monitoring continue. Readiness and failures are available in Settings.')
-  log.log('Chart ticker switches reuse cached history and refresh its recent tail. Interactive requests have priority and reserved Hyperliquid rate budget; live marks keep chart zoom steady.')
-  log.log('Stock prices use labelled Hyperliquid equity-perpetual marks where mapped, including portfolio values and screener prices. Prices and covered charts stream live with native UTC 4-hour perp bars; Yahoo supplies stock-history and quote fallbacks plus fundamentals.')
-  log.log('Crypto Workspace: interactive perpetual charts, watchlist selection, searchable markets, source labels and enforced CoinGecko cooldowns. The chart preloads with every page. Hourly funding, USD open interest and volume remain separate from spot prices.')
-  log.log('Dependencies updated: Electron 45.1.0, query caching, MCP and Parquet readers. Virtual tables retain their tested version.')
-  log.log('Agent recovery: saved run details, temporary read retries, partial answers and Continue research. Manual run limits are configurable in Controls.')
-  log.log('Portfolio and Personal Finance privacy: Obscure replaces numbers with **** while labels, controls and charts stay visible. Reveal restores values and numeric editing.')
-  log.log('Agent options: MCP refreshes expirations, chains and contract marks. Top-volume research ranks all loaded live expirations and reports missing coverage.')
-  log.log('Portfolio Move Position: select stocks and a destination, then confirm. Shares, average prices and weight settings are preserved; existing destination tickers are protected.')
-  log.log('Portfolio stock removal: use Remove Position to select named tickers and review them before confirming. Distant row X buttons have been removed.')
-  log.log('Portfolio Dip Finder: Entry shows percentage gain or loss versus your average purchase price.')
-  log.log('Agent news: MCP news tools refresh sources before returning. Summaries check publication dates and report stale data or refresh failures.')
-  log.log('Agent reading: highlighting keeps streamed replies steady. Clear the selection to catch up; scroll to the bottom to follow new text.')
-  log.log('Display compatibility: centered work-area bounds, compact minimum size and safe monitor changes. Steam Deck Gaming Mode uses native fullscreen; Desktop Mode remains windowed. Use the Linux application launcher, or add it to Steam with Proton compatibility disabled.')
-  log.log('Performance updates: Quant pair calculations and SQLite persistence run in workers. Extra query memory is bounded, prepared startup pages stay available, and large tables render visible rows.')
-  log.log('Startup dependency fixes: Up/Down price targets preload before page readiness; Cards warms every interval after a partial result; News splits multi-ticker article labels into valid quote requests.')
-  log.log('Settings API usage now shows startup health and a compact live provider table, with an expandable API and page directory. Failed and incomplete pages appear first in its startup status list.')
-  log.log('Telegram: two commands - /new starts a fresh chat; /model opens model buttons, followed by supported reasoning buttons. Desktop Agents History keeps Telegram transcripts visible with separate context. Replies use natural plain text without asterisks, heading symbols or em dashes. Desktop and Telegram agents can search and read the live public web for investor relations, filings and other research, with source links and saved run details.')
-  log.log('Launchers open the desktop app directly. Portfolio, charts and Agents are available in the desktop workspace.')
-  log.log('Controller page switching follows visible workspace/page order, including custom ordering and hidden pages.')
-  log.log('Controller support: D-pad/left stick moves focus, A activates, B dismisses, shoulders switch pages, Menu opens the page picker and right stick scrolls. Standard gamepads work while the app has focus; see Settings for controls.')
-  log.log('Personal Finance: compact screens use two rows so recurring bill names remain readable and the Goal panel stays visible.')
-  log.log('Obscure now hides recurring bill names as well as amounts, including accessibility labels. Reveal restores editable bill names.')
-  log.log('Personal Finance: Totals and Goal have balanced panel sizes and readable chart values at Steam Deck resolutions.')
-  log.log('Checking and installing application dependencies...')
+  output.stage(2, 'Check and install dependencies')
+  output.note('First launch may take a few minutes. Installation output follows.')
   const install = npm(['install', '--no-audit', '--no-fund', '--strict-ssl=true'])
   if (install.error || install.status !== 0) {
-    log.error('Dependency installation failed. See the npm error above.')
+    output.error('Dependency installation failed. See the npm error above.')
     return 1
   }
+  output.done('Dependencies ready')
 
-  log.log('Checking Electron runtime...')
+  output.stage(3, 'Verify Electron runtime')
   const electron = npm(['run', 'ensure:electron'])
   if (electron.error || electron.status !== 0) {
-    log.error('Electron runtime could not start. See the error above.')
+    output.error('Electron runtime could not start. See the error above.')
     return 1
   }
+  output.done('Electron ready')
 
-  log.log('Certificate protection: patched Node.js required; Electron 44.9.3+ blocks compromised eMudhra keys in Node and Chromium. Certificate verification bypasses are rejected.')
-
-  log.log('Startup Yahoo pacing is now 3 requests per second (up from 1), without bursts, with up to 3 background requests in flight and a reserved foreground slot. All pages still preload; foreground requests take priority and rate limits trigger automatic backoff. Settings API Usage shows Yahoo rolling request counts, active requests and queued work, not a provider-reported quota or loading progress.')
-  log.log('Pre-Market futures now try daily history when hourly refresh fails or returns stale data. Healthy daily fallbacks clear old degradation; retained stale prices keep their warnings. All pages still preload at startup.')
-  log.log('Trading Volumes circles the matching dot and shows its ticker label when you hover over a ticker in the volume table. Beta centers the ticker cluster horizontally using median dollar volume, keeping all outliers visible and the log scale fixed during replay.')
-  if (development) {
-    log.log('Building local MCP tools before starting live development...')
-    const mcp = npm(['run', 'build:mcp'])
-    if (mcp.error || mcp.status !== 0) {
-      log.error('MCP tools could not build. See the error above.')
+  output.stage(4, development ? 'Build local MCP tools' : 'Build desktop app')
+  const build = npm(['run', development ? 'build:mcp' : 'build'])
+  if (build.error || build.status !== 0) {
+    output.error(development ? 'MCP tools could not build. See the error above.' : 'Budget Terminal could not build. See the error above. If an MCP bundle remains locked, close Budget Terminal and disconnect its MCP connection in Codex or other MCP clients, then run this launcher again.')
+    return 1
+  }
+  if (!development) {
+    output.note('Verifying desktop files and assets...')
+    try { verifyBuild() } catch (error) {
+      output.error(error.message)
       return 1
     }
-    log.log('Opening live development mode. UI edits update automatically; Electron main/preload edits rebuild and restart or reload the app. Keep this terminal open. Close any existing Budget Terminal window first.')
-    const app = npm(['run', 'dev', '--workspace', 'budget-terminal-desktop'])
-    if (app.error || app.status !== 0) {
-      log.error('Budget Terminal development stopped with an error. See the output above.')
-      return app.status || 1
-    }
-    return 0
   }
-
-  log.log('Building the latest desktop-only Budget Terminal source. Remote browser access and pairing have been removed; all implemented pages still load at startup. Local Agents, MCP tools and backups remain available. The top-bar Ask Agent box opens a full dropdown chat on any page, sharing the existing conversation and connection, with live Thinking, Researching and Done activity badges. Agents chat supports native image generation, image editing and inline private image cards, plus pie charts and full-history interactive price charts with in-chat ranges, candle intervals, crosshair OHLC, zoom and pan. Restored chat charts preload at startup. Charts includes a toggleable 50-day simple moving average. Quant now includes a redesigned research workspace with larger, more readable fonts across tables, controls and diagnostics, plus scan overview cards, an interactive factor inspector and a pairs lab with spread charts. IPOs now includes pending filings with dates marked TBD and backup calendar sources.')
-  log.log('Browser login privacy: Chromium profiles must stay outside application source and Git repositories. Cookies and login/session files are excluded by Git ignore rules and checked by local commit/push hooks. Browser profiles are not included in app backups.')
-  log.log('Browser search is ready: type search terms or a website URL in the address bar. Searches open DuckDuckGo, and agent tools can search the web too.')
-  log.log('Browser is now included: a shared, isolated Chromium research session with tabs, navigation, page reading and agent access ON by default for each new window. All pages, including Browser, initialize at startup. Disable and Stop revoke agent browser access until you re-enable it. No separate browser installation is needed.')
-  log.log('Temporary data failures retry with backoff. Stuck Yahoo workers restart automatically, and incomplete cached results can recover without waiting for their normal expiry. Startup retry progress and unresolved failures stay visible in Settings.')
-  log.log('Data caching now saves remote snapshots incrementally across launches, even while pages poll. Startup restores saved data before warming all pages; fresh data is reused, and only expired or missing data refreshes. Pending cache saves finish before the window closes.')
-  log.log('MCP research now supports summaries, field selection and pagination; scans and captures report progress and accept cancellation. Settings includes token-free client setup, data-folder validation and optional website-content approval. Portfolio, Cards, finance and settings writes require current revisions to protect concurrent edits.')
-  log.log('MCP defaults to read-only, with optional native approval for saved-record edits, privacy-safe activity and a connection test in Settings > Data > Local MCP. Mutation request IDs are journaled privately across restarts; check operation status and saved records after interruption.')
-  log.log('Updating MCP bundles safely: unchanged files are left alone, changed files are replaced atomically, and temporary Windows file locks are retried. No MCP clients are forcibly stopped.')
-  const build = npm(['run', 'build'])
-  if (build.error || build.status !== 0) {
-    log.error('Budget Terminal could not build. See the error above. If an MCP bundle remains locked, close Budget Terminal and disconnect its MCP connection in Codex or other MCP clients, then run this launcher again.')
-    return 1
-  }
-
-  log.log('Verifying the built desktop interface and its assets...')
-  try {
-    verifyBuild()
-  } catch (error) {
-    log.error(error.message)
-    return 1
-  }
+  output.done(development ? 'MCP tools built' : 'Desktop build verified')
 
   if (setupOnly) {
-    log.log('Node.js, npm, Electron and desktop asset checks passed.')
+    output.stage(5, 'Finish setup check')
+    output.ready('SETUP COMPLETE')
+    output.note('All checks passed. Run the launcher to open the desktop app.')
+    log.log('')
     return 0
   }
-
-  log.log('The Notifications workspace includes U.S. market-open alerts and the shared Agent inbox. Use Send test notification to check native desktop popups.')
-  log.log('Opening Budget Terminal in Electron. Keep this terminal open while using the app.')
-  const app = npm(['run', 'preview', '--workspace', 'budget-terminal-desktop'])
+  output.stage(5, development ? 'Open live development' : 'Open desktop app')
+  output.ready('LAUNCH CHECKS PASSED')
+  output.note('Keep this terminal open while using Budget Terminal.')
+  output.note(development ? 'Live edits rebuild automatically. Close any existing app window first.' : 'F5 reloads the current page. Startup details are in Settings.')
+  log.log('')
+  const app = npm(['run', development ? 'dev' : 'preview', '--workspace', 'budget-terminal-desktop'])
   if (app.error || app.status !== 0) {
-    log.error('Budget Terminal stopped with an error. See the output above.')
+    output.error('Budget Terminal stopped with an error. See the output above.')
     return app.status || 1
   }
+  output.done('Session ended')
   return 0
 }
 
 if (require.main === module) process.exitCode = launch({ development: process.argv.includes('--dev'), logs: process.argv.includes('--logs'), setupOnly: process.argv.includes('--setup') })
 
-module.exports = { launch, platformName }
+module.exports = { launch, platformName, createLauncherOutput }
