@@ -167,8 +167,116 @@ async function probeStream(): Promise<void> {
   console.log('PASS: pre-market streaming, close reference/DST, early trades, REST races, validation, batching, reconnect, key removal, aliases and bounded subscription rotation')
 }
 
+async function probePortfolioPriority(): Promise<void> {
+  let now = Date.parse('2026-11-13T10:00:00Z')
+  const reference = { c: 110, pc: 100, t: now / 1_000 - 1 }
+  const calls: string[] = []
+  let holdings = [' aapl ', 'BRK-B', 'BRK.B', 'BTC-USD', '^GSPC']
+  let release: (() => void) | undefined
+  let gate: Promise<void> | undefined
+  const sockets: TestSocket[] = []
+  const client = new FinnhubQuotes(async () => 'fixture', async input => {
+    calls.push(new URL(String(input)).searchParams.get('symbol')!)
+    if (gate) await gate
+    return Response.json(reference)
+  }, () => now, () => {
+    const socket = new TestSocket()
+    sockets.push(socket)
+    return socket as unknown as WebSocket
+  })
+  client.setPortfolioLoader(async () => holdings)
+  client.start()
+  try {
+    await client.poll()
+    assert.deepEqual(calls, ['AAPL', 'BRK.B'], 'Startup must seed all portfolios, normalize aliases and exclude other instruments')
+    sockets[0].open()
+    const active = new Set<string>()
+    const apply = () => {
+      for (const row of sockets[0].sent.splice(0)) {
+        if (row.type === 'subscribe') active.add(row.symbol)
+        else active.delete(row.symbol)
+        assert(active.size <= 50)
+      }
+    }
+    await Promise.allSettled(Array.from({ length: 55 }, (_, i) => client.resolve(`OTHER${i}`)))
+    apply()
+    assert(active.has('AAPL') && active.has('BRK.B'))
+    for (let i = 0; i < 3; i += 1) {
+      now += 31_000
+      sockets[0].message({ type: 'ping' })
+      await client.poll()
+      const removed = sockets[0].sent.filter(row => row.type === 'unsubscribe').map(row => row.symbol)
+      assert(!removed.includes('AAPL') && !removed.includes('BRK.B'), 'Background rotation evicted a portfolio live/pre-market feed')
+      apply()
+    }
+    // A newly added stock takes the next free REST slot ahead of queued screeners.
+    now += 61_000
+    gate = new Promise<void>(done => { release = done })
+    const background = Array.from({ length: 10 }, (_, i) => client.resolve(`QUEUE${i}`, true))
+    await new Promise(done => setImmediate(done))
+    const before = calls.length
+    holdings = ['MSFT']
+    client.portfolioChanged()
+    const added = client.resolve('MSFT', true)
+    await new Promise(done => setImmediate(done))
+    release!()
+    gate = undefined
+    await Promise.all([...background, added])
+    assert.equal(calls[before], 'MSFT', 'Portfolio request stayed behind queued background requests')
+    apply()
+    assert(active.has('MSFT'), 'Portfolio edits did not update the live feed')
+    // Frequent cached reads must not postpone the portfolio reference refresh.
+    for (let i = 0; i < 2; i += 1) { now += 10_000; await client.resolve('MSFT') }
+    now += 11_000
+    const refreshed = calls.length
+    await client.poll()
+    assert.equal(calls[refreshed], 'MSFT')
+  } finally { release?.(); client.close() }
+
+  const budgetCalls: string[] = []
+  const budget = new FinnhubQuotes(async () => 'fixture', async input => {
+    budgetCalls.push(new URL(String(input)).searchParams.get('symbol')!)
+    return Response.json(reference)
+  }, () => now)
+  budget.setPortfolioLoader(async () => ['AAPL', 'MSFT'])
+  await Promise.allSettled(Array.from({ length: 65 }, (_, i) => budget.resolve(`SCREEN${i}`)))
+  assert.equal(budgetCalls.length, 56, 'Background pages consumed reserved portfolio refresh capacity')
+  await Promise.all(['AAPL', 'MSFT'].map(symbol => budget.resolve(symbol)))
+  now += 31_000
+  await Promise.all(['AAPL', 'MSFT'].map(symbol => budget.resolve(symbol, true)))
+  assert.equal(budgetCalls.length, 60)
+  assert.deepEqual(budgetCalls.slice(-4), ['AAPL', 'MSFT', 'AAPL', 'MSFT'])
+  await budget.resolve('AAPL', true)
+  assert.equal(budgetCalls.length, 60, 'Priority bypassed the shared provider budget')
+  budget.setPortfolioLoader(async () => [])
+  now += 61_000
+  await budget.resolve('SCREEN99')
+  assert.equal(budgetCalls.at(-1), 'SCREEN99', 'Clearing portfolios did not release reserved capacity')
+
+  const largeSocket = new TestSocket()
+  const large = new FinnhubQuotes(async () => 'fixture', async () => Response.json(reference), () => now,
+    () => largeSocket as unknown as WebSocket)
+  large.setPortfolioLoader(async () => Array.from({ length: 55 }, (_, i) => `HELD${i}`))
+  large.start()
+  try {
+    await large.poll()
+    await large.resolve('BACKGROUND').catch(() => undefined)
+    largeSocket.open()
+    const first = largeSocket.sent.filter(row => row.type === 'subscribe').map(row => row.symbol)
+    assert.equal(first.length, 50)
+    assert(first.every(symbol => symbol.startsWith('HELD')))
+    largeSocket.sent = []
+    now += 31_000
+    await large.poll()
+    assert(largeSocket.sent.some(row => row.type === 'subscribe' && row.symbol === 'HELD54'), 'Oversized portfolios failed to rotate')
+    assert(largeSocket.sent.every(row => row.symbol.startsWith('HELD')), 'Background symbols displaced an oversized portfolio')
+  } finally { large.close() }
+  console.log('PASS: portfolio startup seeding, REST queue priority/reservation, cached-read refreshes, live subscription pinning/rotation and portfolio edits')
+}
+
 try {
   await probeStream()
+  await probePortfolioPriority()
   let now = Date.now()
   let calls = 0
   let currentKey: string | undefined = 'fixture-finnhub-secret'

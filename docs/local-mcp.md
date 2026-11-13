@@ -4,10 +4,20 @@
 
 Budget Terminal exposes MCP tools for service operations, page screenshots,
 and connection status. Research tools use the same caches and provider rate gate as the app.
+When Finnhub is configured, saved portfolio stock tickers take priority for REST
+refreshes and live subscriptions, including pre-market trades when supplied.
+Background page and MCP requests share the remaining capacity; a requested ticker
+does not gain portfolio priority unless it is saved in a portfolio. Portfolios that
+fit within the 50-symbol stream limit stay subscribed while spare slots rotate;
+larger portfolios rotate before background stocks. The shared 60-request/minute
+REST budget and provider cooldowns remain enforced. See [Finnhub streaming](finnhub-streaming.md).
 Write tools edit saved portfolios, options records, Cards, personal finance and
 settings through the existing stores and automatic backup. These are local record
 edits, not broker orders. Bulk import/export, clear-all, cache reset and shell
 operations remain in the desktop UI.
+Portfolio **Export for LLM** and **Export Tickers** copy text directly to the
+native clipboard on Windows, macOS and Linux. Clipboard access remains a UI-only
+operation; these actions do not add MCP tools or file-save dialogs.
 
 News reads (`news`, `newsPage`, `newsTickerSearch`, `newsArticle`, `forexNews`)
 always request a source refresh before returning, including when `request.force`

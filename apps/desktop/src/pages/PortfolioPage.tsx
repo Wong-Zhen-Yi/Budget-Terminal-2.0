@@ -70,6 +70,7 @@ export function PortfolioPage({
   const [saveStatus, setSaveStatus] = useState('')
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [exportStatus, setExportStatus] = useState('')
 
   const rows = useMemo(
     () =>
@@ -241,7 +242,14 @@ export function PortfolioPage({
 
   const exportTickers = useCallback(async () => {
     if (!selected) return
-    await api.saveText(`${selected.name}_tickers.txt`, selected.tickers.join('\n'))
+    setExportStatus('')
+    setError('')
+    try {
+      await api.writeClipboard(selected.tickers.join('\n'))
+      setExportStatus('Tickers copied to clipboard.')
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Could not copy tickers to clipboard.')
+    }
   }, [selected])
 
   /** A plain-text snapshot of the book, for pasting into a chat with a model. */
@@ -249,6 +257,7 @@ export function PortfolioPage({
     if (!selected || exporting) return
     const portfolioId = selected.id
     setExporting(true)
+    setExportStatus('')
     setError('')
     try {
       const snapshot = await api.portfolio()
@@ -295,7 +304,8 @@ export function PortfolioPage({
             ].join(' | ')} |`,
         ),
       ]
-      await api.saveText(`${selected.name}_portfolio.md`, lines.join('\n'))
+      await api.writeClipboard(lines.join('\n'))
+      setExportStatus('Portfolio export copied to clipboard.')
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Portfolio export failed.')
     } finally {
@@ -352,6 +362,7 @@ export function PortfolioPage({
           Main: {portfolios.find((entry) => entry.id === payload?.mainId)?.name ?? '--'}
         </span>
         {error ? <span className="text-2xs text-down">{error}</span> : null}
+        {exportStatus ? <span role="status" className="text-2xs text-up">{exportStatus}</span> : null}
       </div>
 
       <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-border">
@@ -398,10 +409,10 @@ export function PortfolioPage({
                   </Button>
                 </>
               )}
-              <Button onClick={() => void exportForLlm()} disabled={exporting}>
+              <Button onClick={() => void exportForLlm()} disabled={exporting} title="Copy portfolio snapshot to clipboard">
                 {exporting ? 'Exporting...' : 'Export for LLM'}
               </Button>
-              <Button onClick={() => void exportTickers()} disabled={!selected.tickers.length}>
+              <Button onClick={() => void exportTickers()} disabled={!selected.tickers.length} title="Copy tickers to clipboard, one per line">
                 Export Tickers
               </Button>
             </div>

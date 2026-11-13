@@ -36,6 +36,12 @@ try {
           totalsCurrency: 'SGD', goal: { title: 'Demo goal', targetAmount: 200000, currency: 'SGD' }, sourcePath: '' }
         let fx = { usdSgd: 1.3142, collectedAt: Date.now() }
         const mutations = []
+        let clipboardText = '', clipboardFailure = false
+        window.api.saveText = async () => { throw Error('Portfolio exports must not open a save dialog') }
+        window.api.writeClipboard = async text => {
+          if (clipboardFailure) throw Error('Clipboard unavailable')
+          clipboardText = text
+        }
         window.api.onPortfolioChanged = () => () => {}
         window.api.portfolio = async () => envelope(payload)
         window.api.personalFinance = async () => envelope(finance)
@@ -127,6 +133,21 @@ try {
           check(document.querySelector('input[aria-label="Brokerage cash"]').value === '23456.78', 'Reveal shows current cash')
           check(document.querySelector('input[aria-label="DEMO shares"]').value === '17', 'Reveal restores shares editor')
           check(body().includes('$145.50'), 'Reveal restores table values')
+          await click('Export Tickers')
+          check(clipboardText === 'DEMO' && body().includes('Tickers copied to clipboard.'), 'Ticker export copies plain ticker text and confirms success')
+          await click('Export for LLM')
+          check(clipboardText.startsWith('Portfolio: Demo Portfolio') && clipboardText.includes('| Ticker | Shares |') && clipboardText.includes('| DEMO | 17 |'), 'LLM export copies the portfolio snapshot and holdings table')
+          check(body().includes('Portfolio export copied to clipboard.'), 'LLM export confirms clipboard success')
+          const previousClipboard = clipboardText
+          clipboardFailure = true
+          for (const label of ['Export Tickers', 'Export for LLM']) {
+            await click(label)
+            check(body().includes('Clipboard unavailable') && !body().includes('copied to clipboard.'), label + ' reports clipboard failure without false success')
+            check(clipboardText === previousClipboard, 'Failed export preserves clipboard contents')
+          }
+          clipboardFailure = false
+          await click('Export Tickers')
+          check(!body().includes('Clipboard unavailable') && body().includes('Tickers copied to clipboard.'), 'Export can recover after clipboard failure')
           await click('Momentum Tracker')
           check(body().includes('Value $11,000.00') && body().includes('Daily candles'), 'Momentum shows portfolio value in currency')
           check(document.querySelector('[data-candle] title').textContent.includes('Open $10,000'), 'Revealed candles expose OHLC')
@@ -184,7 +205,7 @@ try {
           financePage = false; hidden = false; render(); await settle()
           await click('Momentum Tracker')
           check(document.querySelector('[data-candle="portfolio"]').getBoundingClientRect().height > 5, 'Value candles remain visible in the page layout')
-          return 'PASS: Portfolio all eight tabs; daily value candles, EMA and OHLC privacy; Personal Finance cash, debt, margin, bills, totals, goals, chart labels, FX failures, live updates and reveal/edit/hide; scoped privacy'
+          return 'PASS: Portfolio all eight tabs; clipboard exports, failures and recovery; daily value candles, EMA and OHLC privacy; Personal Finance cash, debt, margin, bills, totals, goals, chart labels, FX failures, live updates and reveal/edit/hide; scoped privacy'
         }
       `,
     },

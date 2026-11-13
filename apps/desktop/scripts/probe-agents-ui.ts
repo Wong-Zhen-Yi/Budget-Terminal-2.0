@@ -330,6 +330,52 @@ try {
           client.setQueryData(['agents'], envelope()); render(); await settle()
           const transcript = document.querySelector('.agents-transcript')
           check(transcript.scrollTop > 0, 'New replies follow the bottom before the reader scrolls away: ' + JSON.stringify({ embeddedMode, top: transcript.scrollTop, height: transcript.scrollHeight, client: transcript.clientHeight, paragraphs: transcript.querySelectorAll('p').length, parent: transcript.parentElement.getBoundingClientRect().height }))
+          const middle = (target = transcript) => target.dispatchEvent(new PointerEvent('pointerdown', { button: 1, clientY: 400, bubbles: true, cancelable: true }))
+          const releaseMiddle = () => {
+            document.dispatchEvent(new PointerEvent('pointerup', { button: 1, bubbles: true }))
+            transcript.dispatchEvent(new MouseEvent('auxclick', { button: 1, bubbles: true, cancelable: true }))
+          }
+          const active = () => transcript.hasAttribute('data-middle-scrolling')
+          const moveMiddle = y => document.dispatchEvent(new PointerEvent('pointermove', { clientY: y, bubbles: true }))
+          transcript.scrollTop = 300; await settle()
+          check(!middle() && active(), 'Middle click starts custom scrolling and prevents native autoscroll')
+          releaseMiddle(); await settle()
+          check(active() && transcript.scrollTop === 300, 'A middle click latches without moving inside the dead zone')
+          moveMiddle(465); await settle()
+          check(transcript.scrollTop > 310, 'Pointer below the origin scrolls down smoothly in page and embedded chat')
+          const samples = []
+          for (let frame = 0; frame < 8; frame++) {
+            await new Promise(resolve => requestAnimationFrame(resolve))
+            samples.push(transcript.scrollTop)
+          }
+          check(samples.at(-1) > samples[0] && samples.every((value, index) => !index || value - samples[index - 1] < 50), 'Autoscroll advances over animation frames without large jumps')
+          state.messages[0].text += '\\n\\nStreaming during middle-click scrolling'
+          client.setQueryData(['agents'], envelope()); await settle()
+          check(transcript.scrollHeight - transcript.clientHeight - transcript.scrollTop > 200, 'Streamed replies cannot pull active middle-click scrolling to the bottom')
+          moveMiddle(300); await settle()
+          const reversing = transcript.scrollTop; await settle()
+          check(transcript.scrollTop < reversing, 'Pointer above the origin reverses direction')
+          const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+          document.dispatchEvent(escape)
+          check(!active() && escape.defaultPrevented, 'Escape stops scrolling before an embedded chat can close')
+          const stopped = transcript.scrollTop; await settle()
+          check(transcript.scrollTop === stopped, 'Cancellation removes the animation loop')
+          middle(); moveMiddle(465); await settle(); releaseMiddle()
+          check(!active(), 'Holding middle and moving scrolls only until release')
+          middle(); releaseMiddle(); middle(); releaseMiddle()
+          check(!active(), 'Another middle click stops latched scrolling')
+          middle(); releaseMiddle(); document.dispatchEvent(new WheelEvent('wheel', { deltaY: 20, bubbles: true }))
+          check(!active(), 'Mouse wheel stops middle-click scrolling')
+          middle(); releaseMiddle(); window.dispatchEvent(new Event('blur'))
+          check(!active(), 'Losing window focus stops middle-click scrolling')
+          middle(); releaseMiddle(); document.dispatchEvent(new PointerEvent('pointerdown', { button: 0, bubbles: true }))
+          check(!active(), 'A normal click stops middle-click scrolling')
+          const sourceLink = document.createElement('a'); sourceLink.href = 'https://example.com/'; transcript.append(sourceLink)
+          check(middle(sourceLink) && !active(), 'Middle clicks on source links keep their default behavior')
+          sourceLink.remove()
+          middle(); releaseMiddle()
+          state.currentChatId += '-scroll-reset'; client.setQueryData(['agents'], envelope()); await settle()
+          check(!active(), 'Switching chats cancels middle-click scrolling')
           const paragraph = transcript.querySelector('.agents-prose p')
           paragraph.scrollIntoView({ block: 'start' }); await settle()
           const position = transcript.scrollTop
@@ -434,7 +480,7 @@ try {
           state.currentChatId = 'restored-chat'; state.messages = savedMessages; state.busy = false
           client.setQueryData(['agents'], envelope()); await settle()
         }
-        return 'PASS: selection stability during streaming in page and embedded chats, pointer-drag and keyboard highlights, unchanged selected DOM, reading scroll position, follow resumption, chat-switch selection reset, private history reopening, independent notification page, tracker review/start/pause/delete, automatic startup readiness, connected New chat, preserved model settings, cleared drafts, private inline image display, image edit attachment, missing-image fallback, inline candlestick charts, OHLC inspection, doji/flat/negative/intraday charts, native pie charts, exact values, percentages, accessible tables, safe malformed chart fallback, formatted Markdown, nested lists, tables, code, safe links, literal user text, chat controls, image paste/picker/send, portfolio review, model settings, autonomy, startup readiness and private cache exclusion'
+        return 'PASS: smooth middle-click scrolling in page and embedded chats, dead zone, frame pacing, streaming, direction reversal, hold/release, cancellation and link behavior; selection stability during streaming in page and embedded chats, pointer-drag and keyboard highlights, unchanged selected DOM, reading scroll position, follow resumption, chat-switch selection reset, private history reopening, independent notification page, tracker review/start/pause/delete, automatic startup readiness, connected New chat, preserved model settings, cleared drafts, private inline image display, image edit attachment, missing-image fallback, inline candlestick charts, OHLC inspection, doji/flat/negative/intraday charts, native pie charts, exact values, percentages, accessible tables, safe malformed chart fallback, formatted Markdown, nested lists, tables, code, safe links, literal user text, chat controls, image paste/picker/send, portfolio review, model settings, autonomy, startup readiness and private cache exclusion'
       }
     ` }, bundle: true, jsx: 'automatic', write: false, format: 'iife', loader: { '.css': 'empty' },
     define: { 'process.env.NODE_ENV': '"production"' }, alias: { '@': join(root, 'src'), '@shared': join(root, 'electron/shared') },
@@ -459,6 +505,18 @@ try {
         writeFileSync(${JSON.stringify(resolve(root, '../../output/playwright/agent-portfolio-fixture.png'))}, Buffer.from(fixture.split(',')[1], 'base64'))
         console.log(await window.webContents.executeJavaScript('window.runProbe()'))
         console.log('PASS: configurable run limits, saved diagnostic details and disconnected research continuation UI')
+        const middle = await window.webContents.executeJavaScript('window.prepareNativeSelection()')
+        window.webContents.sendInputEvent({ type: 'mouseMove', x: middle.x, y: middle.y })
+        window.webContents.sendInputEvent({ type: 'mouseDown', x: middle.x, y: middle.y, button: 'middle', clickCount: 1 })
+        window.webContents.sendInputEvent({ type: 'mouseUp', x: middle.x, y: middle.y, button: 'middle', clickCount: 1 })
+        window.webContents.sendInputEvent({ type: 'mouseMove', x: middle.x, y: middle.y + 80 })
+        await new Promise(resolve => setTimeout(resolve, 250))
+        if (!await window.webContents.executeJavaScript('document.querySelector(".agents-transcript[data-middle-scrolling]")?.scrollTop > 10')) throw Error('Real middle click must latch and scroll the chat')
+        window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' })
+        window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
+        await new Promise(resolve => setTimeout(resolve, 50))
+        if (await window.webContents.executeJavaScript('!!document.querySelector(".agents-transcript[data-middle-scrolling]")')) throw Error('Real Escape must stop middle-click scrolling')
+        console.log('PASS: real middle mouse click, pointer movement and Escape scroll and stop the conversation')
         const drag = await window.webContents.executeJavaScript('window.prepareNativeSelection()')
         window.webContents.sendInputEvent({ type: 'mouseMove', x: drag.x, y: drag.y })
         window.webContents.sendInputEvent({ type: 'mouseDown', x: drag.x, y: drag.y, button: 'left', clickCount: 1 })

@@ -1,11 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { AgentMessage } from '@shared/agents'
+import { useMiddleClickScroll } from './useMiddleClickScroll'
 
 const emptyMessages: AgentMessage[] = []
 
 /** Let native text selection run without streamed Markdown replacing its text nodes. */
 export function useAgentTranscript(messages = emptyMessages, chatId?: string | null, proposalId?: string) {
   const transcript = useRef<HTMLDivElement>(null)
+  const middleScrolling = useMiddleClickScroll(transcript, chatId)
   const following = useRef(true)
   const dragging = useRef(false)
   const latest = useRef({ messages, chatId })
@@ -47,7 +49,7 @@ export function useAgentTranscript(messages = emptyMessages, chatId?: string | n
     const up = () => { dragging.current = false; syncSelection() }
     const scroll = () => {
       // Selection autoscroll is a reading gesture too, so keep its final position.
-      following.current = element.scrollHeight - element.clientHeight - element.scrollTop < 48
+      following.current = !middleScrolling.current && element.scrollHeight - element.clientHeight - element.scrollTop < 48
     }
     element.addEventListener('pointerdown', down)
     element.addEventListener('scroll', scroll, { passive: true })
@@ -63,7 +65,7 @@ export function useAgentTranscript(messages = emptyMessages, chatId?: string | n
       element.ownerDocument.removeEventListener('pointercancel', up)
       window.removeEventListener('blur', up)
     }
-  }, [])
+  }, [middleScrolling])
 
   useLayoutEffect(() => {
     following.current = true
@@ -76,7 +78,7 @@ export function useAgentTranscript(messages = emptyMessages, chatId?: string | n
 
   useLayoutEffect(() => {
     const element = transcript.current
-    if (element && !reading && following.current) element.scrollTo({ top: element.scrollHeight, behavior: 'instant' })
+    if (element && !reading && !middleScrolling.current && following.current) element.scrollTo({ top: element.scrollHeight, behavior: 'instant' })
   }, [chatId, lastMessage?.id, lastMessage?.text, proposalId, reading])
 
   return { transcript, visibleMessages, readingSelection: !!reading }

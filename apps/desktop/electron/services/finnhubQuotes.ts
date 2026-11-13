@@ -21,9 +21,14 @@ export class FinnhubQuotes {
   private quotes = new Map<string, { value: Quote; fetchedAt: number }>()
   private pending = new Map<string, Promise<QuoteResult>>()
   private active = 0
-  private waiters: Array<() => void> = []
+  private waiters: Array<{ symbol: string; resume: () => void }> = []
   private watched = new Map<string, number>()
+  private portfolio = new Set<string>()
+  private portfolioLoader?: () => Promise<string[]>
+  private portfolioLoading?: Promise<void>
+  private portfolioVersion = 0
   private times: number[] = []
+  private backgroundTimes: number[] = []
   private until = 0
   private listeners = new Set<(quote: Quote) => void>()
   private references = new Map<string, ReferenceQuote>()
@@ -48,7 +53,7 @@ export class FinnhubQuotes {
 
   start(): void {
     this.streaming = true
-    void this.connect()
+    void this.poll()
   }
 
   close(): void {
@@ -107,14 +112,55 @@ export class FinnhubQuotes {
     return () => { this.listeners.delete(listener) }
   }
 
-  /** Rotate all requested stock symbols within the shared minute budget. */
+  setPortfolioLoader(loader: () => Promise<string[]>): void {
+    this.portfolioLoader = loader
+    this.portfolioChanged()
+  }
+
+  portfolioChanged(): void {
+    this.portfolioVersion += 1
+    this.portfolioLoading = undefined
+  }
+
+  private async preparePortfolio(): Promise<void> {
+    if (!this.portfolioLoader) return
+    const version = this.portfolioVersion
+    const loading: Promise<void> = this.portfolioLoading ??= this.portfolioLoader().then(symbols => {
+      if (this.portfolioLoading !== loading) return
+      this.portfolio = new Set(symbols.map(symbol => finnhubSymbol(symbol.trim().toUpperCase()))
+        .filter((symbol): symbol is string => Boolean(symbol)))
+      for (const symbol of this.portfolio) if (!this.watched.has(symbol)) this.watched.set(symbol, -Infinity)
+      this.rotation = 0
+      this.rotationAt = 0
+      this.syncSubscriptions()
+    }).catch(() => {
+      // Retain the last known priorities and retry a temporarily unreadable store.
+      if (this.portfolioLoading === loading) this.portfolioLoading = undefined
+    })
+    await loading
+    if (version !== this.portfolioVersion) await this.preparePortfolio()
+  }
+
+  private isPortfolio(symbol: string): boolean {
+    return this.portfolio.has(finnhubSymbol(symbol) ?? '')
+  }
+
+  /** Refresh portfolio stocks first, then rotate the remaining requested symbols. */
   async poll(): Promise<void> {
+    await this.preparePortfolio()
     if (this.streaming) {
       if (this.socket && this.now() - this.lastMessageAt > 90_000) this.disconnect()
       await this.connect()
       this.syncSubscriptions()
     }
-    const next = [...this.watched].sort((a, b) => a[1] - b[1])
+    // Seed every saved portfolio before broad startup pages consume the REST budget.
+    const initial = [...this.portfolio].filter(symbol => !this.references.has(symbol)
+      && !this.pending.has(symbol) && this.now() - (this.watched.get(symbol) ?? -Infinity) >= QUOTE_TTL)
+    if (initial.length) {
+      await Promise.all(initial.map(symbol => this.resolve(symbol).catch(() => undefined)))
+      return
+    }
+    const next = [...this.watched].sort((a, b) => Number(this.isPortfolio(b[0])) - Number(this.isPortfolio(a[0])) || a[1] - b[1])
       .find(([symbol, checkedAt]) => !this.pending.has(symbol) && this.now() - checkedAt >= QUOTE_TTL)
     if (next) await this.resolve(next[0], true).catch(() => undefined)
   }
@@ -122,7 +168,8 @@ export class FinnhubQuotes {
   async resolve(symbol: string, force = false): Promise<QuoteResult | null> {
     const upstreamSymbol = finnhubSymbol(symbol)
     if (!upstreamSymbol) return null
-    this.watched.set(symbol, this.now())
+    await this.preparePortfolio()
+    if (!this.watched.has(symbol)) this.watched.set(symbol, -Infinity)
     const generation = this.generation
     let key: string | undefined
     try { key = await (this.credential ??= this.getKey()) }
@@ -163,22 +210,30 @@ export class FinnhubQuotes {
     // A large portfolio queues behind the concurrency limit instead of failing
     // every holding after the first few requests.
     if (this.active < 4) this.active += 1
-    else await new Promise<void>(resolve => { this.waiters.push(resolve) })
+    else await new Promise<void>(resume => { this.waiters.push({ symbol, resume }) })
     try { return await this.requestQuote(symbol, upstreamSymbol, key, generation) }
     finally {
-      const next = this.waiters.shift()
-      if (next) next()
+      const priority = this.waiters.findIndex(waiter => this.isPortfolio(waiter.symbol))
+      const next = this.waiters.splice(priority < 0 ? 0 : priority, 1)[0]
+      if (next) next.resume()
       else this.active -= 1
     }
   }
 
   private async requestQuote(symbol: string, upstreamSymbol: string, key: string, generation: number): Promise<QuoteResult> {
     if (generation !== this.generation) throw new Error('Finnhub: credentials changed.')
+    this.watched.set(symbol, this.now())
     this.times = this.times.filter(time => time > this.now() - 60_000)
-    if (this.until > this.now() || this.times.length >= 60) {
+    this.backgroundTimes = this.backgroundTimes.filter(time => time > this.now() - 60_000)
+    // Reserve two reference refreshes per portfolio symbol per minute, up to the
+    // shared limit. Screeners and MCP reads use only the remaining capacity.
+    const backgroundLimit = Math.max(0, 60 - this.portfolio.size * 2)
+    if (this.until > this.now() || this.times.length >= 60
+      || !this.isPortfolio(symbol) && this.backgroundTimes.length >= backgroundLimit) {
       throw new Error('Finnhub: request budget or cooldown active.')
     }
     this.times.push(this.now())
+    if (!this.isPortfolio(symbol)) this.backgroundTimes.push(this.now())
     return trackApiRequest('finnhub', async () => {
       try {
         const url = new URL('https://finnhub.io/api/v1/quote')
@@ -304,13 +359,19 @@ export class FinnhubQuotes {
   private syncSubscriptions(): void {
     const socket = this.socket
     if (!socket || socket.readyState !== 1) return
-    const symbols = [...new Set([...this.watched.keys()].map(finnhubSymbol).filter((value): value is string => Boolean(value)))]
-    // Stay within the free feed's symbol budget; rotate larger startup universes.
+    const background = [...new Set([...this.watched.keys()].map(finnhubSymbol)
+      .filter((value): value is string => value !== undefined && !this.portfolio.has(value)))]
+    // Pin portfolios that fit; only spare slots rotate through the startup universe.
+    // Oversized portfolios rotate among themselves before any background symbols.
+    const pinned = this.portfolio.size <= 50 ? [...this.portfolio] : []
+    const rotating = this.portfolio.size > 50 ? [...this.portfolio] : background
+    const capacity = 50 - pinned.length
     if (this.now() >= this.rotationAt) {
-      this.rotation = symbols.length > 50 ? (this.rotation + 50) % symbols.length : 0
+      this.rotation = rotating.length > capacity && capacity > 0
+        ? (this.rotation + (this.rotationAt ? capacity : 0)) % rotating.length : 0
       this.rotationAt = this.now() + 30_000
     }
-    const desired = new Set([...symbols.slice(this.rotation), ...symbols.slice(0, this.rotation)].slice(0, 50))
+    const desired = new Set([...pinned, ...[...rotating.slice(this.rotation), ...rotating.slice(0, this.rotation)].slice(0, capacity)])
     try {
       for (const symbol of this.subscriptions) if (!desired.has(symbol)) {
         socket.send(JSON.stringify({ type: 'unsubscribe', symbol }))

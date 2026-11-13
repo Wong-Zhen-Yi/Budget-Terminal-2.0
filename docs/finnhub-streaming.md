@@ -12,9 +12,23 @@ reference for pre-market changes, rather than the older `pc` field. New York dat
 handle daylight saving time and gaps between sessions. Periodic REST refreshes
 update the reference but cannot overwrite a newer trade with an older close.
 
-Subscriptions are capped at 50 unique upstream symbols on one socket. Larger
-startup universes rotate through batches every 30 seconds; symbols outside the
-current batch retain their last known stock quote and regular REST refreshes.
+Saved stock tickers across every portfolio are loaded before scheduling startup
+quotes. Portfolio edits, imports, cloud restores and external store changes refresh
+these priorities automatically. Ticker aliases share one priority and subscription;
+crypto and unsupported symbols keep their existing providers.
+
+Subscriptions are capped at 50 unique upstream symbols on one socket. Portfolio
+symbols stay subscribed continuously when they fit; spare slots rotate through
+other requested stocks every 30 seconds. Portfolios larger than 50 unique supported
+stocks rotate among themselves before background symbols receive any slots.
+Symbols outside the current batch retain their last known stock quote.
+
+Portfolio REST requests jump ahead of queued background requests, and automatic
+polling checks due portfolio references first. Two requests per portfolio symbol
+per minute are reserved from the shared 60-request budget, up to the full budget;
+other pages and MCP reads use the remaining capacity. The overall budget and
+provider cooldowns still apply. Cached reads do not postpone reference refreshes.
+Other implemented pages continue startup loading through existing fallback sources.
 Renderer notifications are coalesced per symbol over 250 milliseconds. Malformed,
 future, unsolicited and out-of-order trades are ignored. Reconnects use bounded
 backoff and restore subscriptions. Removing or replacing the key closes the old

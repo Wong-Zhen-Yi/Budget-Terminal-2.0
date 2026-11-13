@@ -70,5 +70,10 @@ Use concise, imperative commit subjects, matching history: `Improve charts load 
 update all double click launchers everytime a change is made
 This is a public repo make sure that there are no private information like passwords, emails and API keys especially for the browser page
 
+## Keep MCP Up to Date
+Keep Budget Terminal's local MCP integration in sync with application changes. When adding or changing MCP-relevant services, shared contracts, pages, or permissions, update the tool registry, routes, descriptions, input/output schemas, local plugin, and `docs/local-mcp.md` as applicable in the same change. Preserve intentional desktop-only exclusions and existing privacy and permission controls.
+
+Run `npm run build:mcp` to regenerate schemas and refresh both the standalone adapter and local plugin bundle, then run `npm run probe:mcp` for MCP changes. Keep every double-click launcher on the shared build path so it always builds the current MCP source before opening the app. Reconnect MCP clients after tool or schema changes so they discover the updated catalog. Do not commit generated bundles or local runtime descriptors, session tokens, or private app data.
+
 ## No Global Diagnostics Banners
 The **Page Loading Status banner** (also called the **startup diagnostics banner**, formerly the `LoadingStatus` component) is the full-width strip above page content showing "Pages X/Y ready", "Page needs attention", "Showing saved content", retrieval timestamps, raw errors, and retry buttons. The user has repeatedly requested its removal. Do not restore it or add an equivalent global diagnostics strip. Keep detailed startup progress, failures, and diagnostics in Settings. Preserve startup preloading for every implemented page. Keep page labels free of readiness status notes such as Ready, Refreshing, Incomplete or Failed; detailed diagnostics belong in Settings. The bottom status strip must also remain hidden.

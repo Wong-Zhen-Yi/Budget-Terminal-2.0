@@ -6,7 +6,7 @@ import type { Envelope, MaintenanceAction, MaintenanceResult, StoredDataVerifica
 import { CHANNELS } from '../shared/contract.js'
 import { ok } from '../shared/envelope.js'
 import { yahooProvider } from '../services/provider.js'
-import { verifyStoredData, watchPortfolios } from '../services/portfolioStore.js'
+import { readPortfolios, verifyStoredData, watchPortfolios } from '../services/portfolioStore.js'
 import { isSafeExternalUrl } from '../services/urls.js'
 import { registerServiceHandlers } from './serviceHandlers.js'
 import { cancelMcpCall, configureMcp, getMcpStatus, testMcpConnection } from '../mcp/host.js'
@@ -33,6 +33,8 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
   }
   const provider = yahooProvider
   finnhubQuotes.setCredentialLoader(() => marketApiKeys.getForService('finnhub'))
+  finnhubQuotes.setPortfolioLoader(async () => (await readPortfolios()).portfolios
+    .filter(portfolio => !portfolio.readOnly).flatMap(portfolio => portfolio.tickers))
   finnhubQuotes.start()
   const stopFinnhubUpdates = finnhubQuotes.subscribe(quote => {
     for (const window of BrowserWindow.getAllWindows()) {
@@ -195,6 +197,7 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
   })
 
   const stopSavedData = subscribeSavedDataChanged((payload) => {
+    if (payload.domains.includes('portfolio') && !payload.portfolioMetadataOnly) finnhubQuotes.portfolioChanged()
     for (const window of BrowserWindow.getAllWindows()) window.webContents.send(CHANNELS.savedDataChanged, payload)
   })
 

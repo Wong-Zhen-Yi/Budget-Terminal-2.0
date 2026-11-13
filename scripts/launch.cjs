@@ -53,7 +53,7 @@ function createLauncherOutput({ log = console, environment = process.env, termin
   }
 }
 
-// Crypto routing is shared by all double-click launchers.
+// Portfolio-prioritized Finnhub feeds and crypto routing share every double-click launcher build.
 function launch({ development = false, logs = false, setupOnly = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
   const output = createLauncherOutput({ log, environment })
   const os = platformName(platform)

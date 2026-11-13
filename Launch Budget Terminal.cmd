@@ -1,5 +1,9 @@
 @echo off
-rem Finnhub stock quotes now include live pre-market trades; see docs/finnhub-streaming.md.
+rem Portfolio LLM and ticker exports copy directly to the native clipboard on Windows, macOS and Linux.
+rem Agents chat supports smooth middle-click scrolling in page and embedded views.
+rem MCP tools and schemas rebuild from current source on every launch; see docs/local-mcp.md.
+rem Gold and Oil pages are in the Focus workspace.
+rem Finnhub prioritizes saved portfolio stocks for pre-market/live feeds and REST refreshes; see docs/finnhub-streaming.md.
 rem Dependency security refresh: patched Electron and schema-generation dependencies; see docs/dependency-maintenance.md.
 rem Focus provider verification: npm run probe:maintenance-live -- --focus
 rem Windows terminal command: btd restart saves, rebuilds and reopens the app.
