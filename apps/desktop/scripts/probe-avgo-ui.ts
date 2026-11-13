@@ -23,10 +23,11 @@ try {
       import { avgoFixture } from './scripts/fixtures/avgo'
       import { emptyAvgoPayload } from './electron/shared/avgo'
       import { buildTasks } from './src/api/prefetch'
-      import { useReloadAll } from './src/api/queries'
+      import { useRefreshAvgo } from './src/api/avgoQueries'
       const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnMount: false, refetchOnWindowFocus: false, gcTime: Infinity } } })
       const check = (value, message) => { if (!value) throw Error(message) }
       const settle = () => new Promise(resolve => setTimeout(resolve, 200))
+      const diagnostics = () => client.getQueryCache().getAll().map(query => String(query.state.error ?? '')).join(' ')
       const text = () => document.body.innerText
       const button = label => [...document.querySelectorAll('button')].find(button => button.textContent === label)
       let calls = 0, mode = 'success', lastRequest, opened = '', copied = '', navigation, releaseLoading
@@ -41,12 +42,12 @@ try {
           data.financials.quarterly.operatingCashFlow[0].value = 0
         }
         const errors = ['success', 'waiting', 'sparse'].includes(mode) ? [] : [{ symbol: 'earnings', source: 'fixture', operation: 'avgo-earnings', reason: 'HTTP 503' }]
-        return { data, errors, meta: { source: 'AVGO UI fixture', fetchedAt: Date.now(), freshness: mode === 'waiting' || mode === 'success' ? 'fresh' : mode === 'partial' ? 'partial' : 'failed', failureReason: errors.length ? 'earnings: HTTP 503' : undefined } }
+        return { data, errors, meta: { source: 'AVGO UI fixture', fetchedAt: Date.now(), freshness: ['waiting', 'success', 'sparse'].includes(mode) ? 'fresh' : mode === 'partial' ? 'partial' : 'failed', failureReason: errors.length ? 'earnings: HTTP 503' : undefined } }
       }
       window.api.openExternal = async url => { opened = url }
       window.api.writeClipboard = async contents => { copied = contents }
       function Page() {
-        const reload = useReloadAll()
+        const reload = useRefreshAvgo()
         window.reloadAvgo = reload
         return <AvgoPage onStatusChange={() => {}} onNavigate={(tab, symbol) => { navigation = [tab, symbol] }} />
       }
@@ -88,18 +89,18 @@ try {
         check(document.activeElement.textContent === 'AI & segments', 'Keyboard section navigation failed')
         await selectTab('Overview')
         button('Export snapshot').click(); await settle(); check(JSON.parse(copied).symbol === 'AVGO', 'Snapshot export failed')
-        button('Refresh').click(); await settle(); check(lastRequest.force, 'Refresh did not force service request')
-        mode = 'sparse'; button('Refresh').click(); await settle()
+        void window.reloadAvgo().catch(() => {}); await settle(); check(lastRequest.force, 'Refresh did not force service request')
+        mode = 'sparse'; void window.reloadAvgo().catch(() => {}); await settle()
         check(cashChart().querySelectorAll('svg rect').length === 11 && cashChart().textContent.includes('-2.00B'), 'Missing cash data was zero-filled or negative cash flow was hidden')
-        mode = 'partial'; await client.invalidateQueries({ queryKey: ['avgo'], refetchType: 'none' }); let startupError = ''; try { await task.run(client, 10) } catch (error) { startupError = String(error) }; check(startupError.includes('HTTP 503') && client.getQueryData(['avgo']).data.market, 'Partial startup was treated as ready or discarded useful content'); button('Refresh').click(); await settle()
-        check(text().includes('HTTP 503') && text().includes('Broadcom announces AI networking update'), 'Partial failure hid healthy panels')
-        mode = 'failed'; button('Refresh').click(); await settle()
-        check(text().includes('failed') && button('Export snapshot').disabled, 'Total failure was treated as ready')
-        mode = 'waiting'; button('Refresh').click(); await settle()
-        check(text().includes('Loading AVGO') && button('Refreshing...').disabled, 'Loading state missing')
+        mode = 'partial'; await client.invalidateQueries({ queryKey: ['avgo'], refetchType: 'none' }); let startupError = ''; try { await task.run(client, 10) } catch (error) { startupError = String(error) }; check(startupError.includes('HTTP 503') && client.getQueryData(['avgo']).data.market, 'Partial startup was treated as ready or discarded useful content'); void window.reloadAvgo().catch(() => {}); await settle()
+        check(diagnostics().includes('HTTP 503') && text().includes('Broadcom announces AI networking update'), 'Partial failure hid healthy panels')
+        mode = 'failed'; void window.reloadAvgo().catch(() => {}); await settle()
+        check(diagnostics().length > 0 && !button('Export snapshot').disabled, 'Failed refresh must retain the snapshot and expose diagnostics')
+        mode = 'waiting'; void window.reloadAvgo().catch(() => {}); await settle()
+        check(client.isFetching() > 0, 'Refresh activity missing')
         mode = 'success'; releaseLoading(); await settle()
         check(!document.querySelector('[role=alert]'), 'Successful refresh did not recover')
-        await window.reloadAvgo(); await settle(); check(lastRequest.force, 'Global F5 refresh did not force AVGO')
+        await window.reloadAvgo(); await settle(); check(lastRequest.force, 'Explicit reload did not force AVGO')
         host.render(null); await settle(); const before = calls; render(); await settle()
         check(calls === before, 'Returning to AVGO triggered initial loading again')
         check(client.getQueryData(['avgo']).meta.freshness === 'fresh' && text().includes('Broadcom announces AI networking update') && !document.querySelector('[role=alert]'), 'Final populated AVGO state did not settle')

@@ -22,13 +22,16 @@ try {
       contents: `
         import { createRoot } from 'react-dom/client'
         import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+        import { useRefreshBitcoin } from './src/api/bitcoinQueries'
         import { BitcoinPage } from './src/pages/BitcoinPage'
+        function Page() { window.reloadBitcoin = useRefreshBitcoin(); return <BitcoinPage onStatusChange={panels => { window.panels = panels }} /> }
         const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
         const check = (ok, message) => { if (!ok) throw Error(message) }
         const settle = () => new Promise(resolve => setTimeout(resolve, 150))
+        const diagnostics = () => client.getQueryCache().getAll().map(query => String(query.state.error ?? '')).join(' ')
         const text = () => document.body.innerText
         window.runProbe = async () => {
-          createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><BitcoinPage onStatusChange={panels => { window.panels = panels }} /></QueryClientProvider>)
+          createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><Page /></QueryClientProvider>)
           await settle()
           check(text().includes('Loading Bitcoin'), 'Missing loading state')
           window.ready = true
@@ -37,19 +40,19 @@ try {
           check(document.querySelectorAll('tbody tr').length === 15, 'Missing recent blocks')
           document.querySelector('tbody button').click()
           check(window.opened.startsWith('https://mempool.space/block/'), 'Block explorer link failed')
-          const refresh = () => [...document.querySelectorAll('button')].find(b => b.textContent === 'Refresh').click()
+          const refresh = () => { void window.reloadBitcoin().catch(() => {}) }
           refresh()
           await settle()
           check(window.forced, 'Refresh did not force provider request')
           window.mode = 'partial'
           refresh()
           await settle()
-          check(window.panels[0].envelope.meta.failureReason.includes('stats: HTTP 429') && !document.querySelector('[role=status]'), 'Partial failure remains in diagnostics without a saved-data banner')
+          check(diagnostics().includes('stats: HTTP 429') && !document.querySelector('[role=status]'), 'Partial failure remains in diagnostics without a saved-data banner')
           check(document.querySelectorAll('tbody tr').length === 15, 'Partial failure hid healthy blocks')
           window.mode = 'failed'
           refresh()
           await settle()
-          check(text().includes('Recent blocks unavailable'), 'Missing failed state')
+          check(diagnostics().length > 0 && document.querySelectorAll('tbody tr').length === 15, 'Missing failed state')
           window.mode = 'success'
           refresh()
           await settle()

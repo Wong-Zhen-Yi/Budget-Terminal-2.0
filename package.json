@@ -97,5 +97,10 @@
     "probe:polymarket": "npm run --workspace budget-terminal-desktop probe:polymarket --",
     "probe:polymarket-ui": "npm run --workspace budget-terminal-desktop probe:polymarket-ui --",
     "probe:efficiency": "npm run --workspace budget-terminal-desktop probe:efficiency"
+  },
+  "overrides": {
+    "ts-json-schema-generator": {
+      "glob": "^14.0.6"
+    }
   }
 }

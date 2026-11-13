@@ -157,11 +157,13 @@ export function parseVstOperations(html: string, url: string, periodEnd: string,
       const end = table.rows.findIndex(row => /^Capacity factors/.test(row[0] ?? ''))
       const row = table.rows.slice(start + 1, end < 0 ? undefined : end).find(row => row[0] === label)
       if (!row) return []
-      const numbers = values(row.slice(1))
+      // SEC tables use a dash for reported zero generation, including comparison years.
+      const numbers = values(row.slice(1).map(cell => /^[-–—]$/.test(cell) ? '0' : cell))
       if (numbers.length !== 4 || numbers.some(value => value === null || value < 0)) throw new Error('Vistra production volume is unavailable.')
       return [numbers[0]!]
     })
-    if (amounts.length !== regions) throw new Error(`Vistra ${name} production regions are incomplete.`)
+    // West first reports solar production in Q3 2026; earlier filings have two solar regions.
+    if (amounts.length !== regions && !(name === 'Solar' && amounts.length === 3)) throw new Error(`Vistra ${name} production regions are incomplete.`)
     return { name, gwh: amounts.reduce((total, amount) => total + amount, 0), share: null as number | null, revenue: null }
   })
   const totalGenerationGwh = generation.reduce((total, row) => total + row.gwh, 0)

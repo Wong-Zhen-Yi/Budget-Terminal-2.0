@@ -52,19 +52,20 @@ try {
       import { useEffect } from 'react'
       import { QueryClient, QueryClientProvider, dehydrate, hydrate } from '@tanstack/react-query'
       import { HimsPage } from './src/pages/HimsPage'
-      import { useReloadAll } from './src/api/queries'
+      import { useRefreshHims } from './src/api/himsQueries'
       import { buildTasks } from './src/api/prefetch'
       import { queryFreshness, rendererQueryPersister, shouldPersistRemoteQuery, RENDERER_CACHE_BUSTER } from './src/api/queryPersistence'
       let client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
       const check = (ok, message) => { if (!ok) throw Error(message) }
       const settle = () => new Promise(resolve => setTimeout(resolve, 150))
+      const diagnostics = () => client.getQueryCache().getAll().map(query => String(query.state.error ?? '')).join(' ')
       const text = () => document.body.innerText
       const click = label => {
         const button = [...document.querySelectorAll('button')].find(button => button.textContent.toLowerCase().startsWith(label.toLowerCase()))
         check(button, 'Missing button: ' + label); button.click()
       }
       function Page() {
-        const reload = useReloadAll()
+        const reload = useRefreshHims()
         useEffect(() => { window.reloadAll = reload }, [reload])
         return <HimsPage onStatusChange={panels => { window.health = panels }} onNavigate={(id, symbol) => { window.navigation = [id, symbol] }} />
       }
@@ -102,21 +103,21 @@ try {
         check(text().includes('Monthly online revenue per average subscriber'), 'Historical KPI definition did not change')
         check(window.calls === calls, 'Quarter selection repeated provider load')
         select.value = '2026 Q2'; select.dispatchEvent(new Event('change', { bubbles: true })); await settle()
-        window.ready = false; click('Refresh'); await settle()
+        window.ready = false; void window.reloadAll().catch(() => {}); await settle()
         check(text().includes('Updating cached dashboard') && text().includes('2.9M'), 'Refresh hid cached content or presented another initial load')
         check(!text().includes('Loading Hims & Hers dashboard'), 'Cached refresh is labelled as initial loading')
         window.ready = true; await settle(); check(window.forced, 'Refresh did not force data reload')
-        window.forced = false; await window.reloadAll(); await settle(); check(window.forced, 'F5 reload path did not force HIMS')
-        window.mode = 'partial'; click('Refresh'); await settle()
-        check(window.health[0].envelope.errors.some(error => error.reason.includes('Fixture report unavailable')) && !document.querySelector('[role=alert]'), 'Partial failure stays in diagnostics without a retained-data banner')
+        window.forced = false; await window.reloadAll(); await settle(); check(window.forced, 'Explicit reload did not force HIMS')
+        window.mode = 'partial'; void window.reloadAll().catch(() => {}); await settle()
+        check(diagnostics().includes('Fixture report unavailable') && !document.querySelector('[role=alert]'), 'Partial failure stays in diagnostics without a retained-data banner')
         check(text().toLowerCase().includes('financial history') && text().includes('$100B'), 'Partial failure hid healthy sections')
-        window.mode = 'reject'; click('Refresh'); await settle()
-        check(text().includes('Fixture network offline'), 'Rejected refresh is hidden')
+        window.mode = 'reject'; void window.reloadAll().catch(() => {}); await settle()
+        check(diagnostics().includes('Fixture network offline'), 'Rejected refresh is hidden')
         check(text().includes('$100B'), 'Rejected refresh discarded cached content')
-        window.mode = 'failed'; click('Refresh'); await settle()
-        check(text().includes('all: Fixture providers unavailable'), 'Failed envelope is hidden')
-        check(text().includes('Price history unavailable'), 'Empty market state missing')
-        window.mode = 'good'; click('Refresh'); await settle()
+        window.mode = 'failed'; void window.reloadAll().catch(() => {}); await settle()
+        check(diagnostics().includes('Fixture providers unavailable'), 'Failed envelope is hidden')
+        check(document.querySelector('canvas'), 'Failed refresh discarded the saved chart')
+        window.mode = 'good'; void window.reloadAll().catch(() => {}); await settle()
         check(!document.querySelector('[role=status]'), 'Recovery left a stale error')
         // Age the snapshot past its TTL. A revisit still reuses it until refresh/startup.
         const saved = client.getQueryData(['hims'])
@@ -140,7 +141,7 @@ try {
         hydrate(client, restored.clientState)
         const restoreCalls = window.calls
         root.render(<QueryClientProvider client={client}><Page /></QueryClientProvider>); await settle()
-        check(window.calls === restoreCalls && text().includes('2.9M') && text().includes('stale'), 'Restored expired HIMS content triggered another initial load')
+        check(window.calls === restoreCalls && text().includes('2.9M') && client.getQueryData(['hims']).meta.fetchedAt === expiredAt, 'Restored expired HIMS content triggered another initial load')
         // Startup must still update expired data, including HIMS before its first visit.
         root.render(null); await settle()
         const task = buildTasks(undefined, undefined, { stocks: 'AAPL', fundamentals: 'AAPL' }, { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 }).find(task => task.tab === 'hims')

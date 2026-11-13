@@ -1,4 +1,8 @@
 @echo off
+rem Dependency security refresh: patched Electron and schema-generation dependencies; see docs/dependency-maintenance.md.
+rem Focus provider verification: npm run probe:maintenance-live -- --focus
+rem Windows terminal command: btd restart saves, rebuilds and reopens the app.
+rem Telegram: natural screenshot requests use MCP and send photos without captions or follow-up text.
 rem Trading Volumes defaults to a compact YTD table beside the expanded dot plot.
 rem Crypto prices use Hyperliquid and CoinGecko only; Finnhub remains a stock provider.
 rem Windows double-click entry point; shared setup and startup live in scripts/.

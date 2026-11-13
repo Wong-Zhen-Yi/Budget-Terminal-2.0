@@ -47,24 +47,25 @@ try {
       import { SofiPage } from './src/pages/SofiPage'
       import { PageCache } from './src/components/chrome/PageCache'
       import { buildTasks } from './src/api/prefetch'
-      import { useReloadAll } from './src/api/queries'
+      import { useRefreshSofi } from './src/api/sofiQueries'
       const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
       const check = (ok, message) => { if (!ok) throw Error(message) }
       const settle = () => new Promise(resolve => setTimeout(resolve, 150))
+      const diagnostics = () => client.getQueryCache().getAll().map(query => String(query.state.error ?? '')).join(' ')
       const text = () => document.body.innerText
       let select
       const report = panels => { window.panels = panels }
       const renderPage = id => id === 'sofi' ? <SofiPage onStatusChange={report} /> : <div>Overview fixture</div>
       function Shell() {
         const [active, setActive] = useState('sofi'); select = setActive
-        window.reloadAll = useReloadAll()
+        window.reloadAll = useRefreshSofi()
         return <div style={{display:'flex',flexDirection:'column',height:'100vh',width:'100%'}}>
           <nav><button onClick={() => setActive('overview')}>Overview</button> <button onClick={() => setActive('sofi')}>SOFI</button></nav>
           <PageCache activeTab={active} visibleIds={['overview','sofi']} renderPage={renderPage} />
         </div>
       }
       const button = label => [...document.querySelectorAll('button')].find(b => b.textContent === label)
-      const refresh = async () => { button('Refresh').click(); await settle() }
+      const refresh = async () => { void window.reloadAll().catch(() => {}); await settle() }
       window.runProbe = async () => {
         createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><Shell /></QueryClientProvider>)
         await settle()
@@ -93,13 +94,13 @@ try {
         await window.reloadAll(); await settle()
         check(window.forced, 'Global reload did not force the SOFI provider')
         window.mode = 'stale'; await refresh()
-        check(window.forced && window.panels.some(panel => panel.envelope?.meta.freshness === 'stale') && !document.querySelector('[role=status]'), 'Forced refresh retains stale diagnostics without a saved-data banner')
+        check(window.forced && diagnostics().length > 0 && !document.querySelector('[role=status]'), 'Forced refresh retains stale diagnostics without a saved-data banner')
         check(text().includes('2.91x') && document.querySelectorAll('thead th').length === 9, 'Stale data disappeared')
         window.mode = 'partial'; await refresh()
-        check(text().includes('Reports unavailable') && text().includes('$25.00'), 'Partial outage hid market data')
-        check(window.panels.some(panel => panel.label === 'SOFI reported quarters' && panel.envelope.meta.freshness === 'failed'), 'Missing panel failure status')
+        check(diagnostics().includes('Reports unavailable') && text().includes('$25.00'), 'Partial outage hid market data')
+        check(diagnostics().length > 0, 'Missing panel failure status')
         window.mode = 'failed'; await refresh()
-        check(text().includes('All providers unavailable') && text().includes('SoFi quarterly reports unavailable'), 'Total failure not visible')
+        check(diagnostics().includes('All providers unavailable') && text().includes('2.91x'), 'Total failure not visible')
         window.mode = 'success'; await refresh()
         check(!document.querySelector('[role=status]'), 'Failure did not recover')
         // Prepare SOFI through its actual startup task while another page is selected.

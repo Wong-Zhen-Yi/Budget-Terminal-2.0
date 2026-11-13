@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { TelegramService } from '../electron/services/telegram.js'
 import { agentFailureReason } from '../electron/shared/agentRuns.js'
+import type { ScreenshotPayload } from '../electron/shared/screenshot.js'
+import { ok } from '../electron/shared/envelope.js'
 import { formatTelegramText } from '../electron/shared/telegram.js'
 
 const formattedReply = '## Market update\n\n**Revenue** grew 12.5% — *profit* reached $1,234.\n* Watch #AAPL\n\n\nSource: https://example.com/report#results 😀'
@@ -14,6 +16,10 @@ const requests: { method: string; body: Record<string, unknown> }[] = []
 let stored: unknown = null
 let fail = false
 let updates: unknown[] = []
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64')
+let captures = 0
+let captureResult = ok<ScreenshotPayload>({ screenshots: [{ pageId: 'charts', label: 'Charts', obscured: false, startupLoading: false, status: 'ready', capturedAt: Date.now(), width: 1, height: 1, mimeType: 'image/png', base64: png.toString('base64') }] })
+const uploads: FormData[] = []
 let dispatched = 0
 let resets = 0
 const commands: { command: string; argument: string }[] = []
@@ -21,12 +27,26 @@ const adapter = new TelegramService({
   load: async () => stored,
   save: async config => { stored = structuredClone(config) },
   reset: async () => { resets++ },
+  screenshot: async (page, signal) => { assert(!signal.aborted); assert(['current', 'charts', 'all'].includes(page)); captures++; return captureResult },
   models: async () => [{ id: 'fixture', name: 'Fixture model', current: true, reasoning: [{ id: 'default', name: 'Default', current: true }] }],
   command: async (command, argument) => { commands.push({ command, argument }); return `${command} command result` },
-  reply: async text => { dispatched++; assert.equal(text, 'research'); return 'research result' },
+  reply: async text => {
+    dispatched++
+    assert(['research', 'send me a screenshot of global page'].includes(text))
+    if (text === 'send me a screenshot of global page') {
+      await adapter.sendScreenshots(captureResult)
+      return 'Logging description: screenshot sent successfully.'
+    }
+    return 'research result'
+  },
   fetch: (async (url, init) => {
     const method = String(url).split('/').pop()!
-    const body = JSON.parse(String(init?.body))
+    const body = init?.body instanceof FormData ? { chat_id: init.body.get('chat_id') } : JSON.parse(String(init?.body))
+    if (init?.body instanceof FormData) {
+      uploads.push(init.body)
+      assert.equal(method, 'sendPhoto')
+      assert(!new Headers(init.headers).has('content-type'), 'Fetch must add the multipart boundary')
+    }
     requests.push({ method, body })
     if (fail) throw new Error(String(url))
     let result: unknown = { username: 'fixture_bot' }
@@ -63,31 +83,66 @@ fail = false
 await adapter.send(formattedReply)
 assert.equal(requests.at(-1)?.body.text, plainReply, 'Every delivery path formats text before posting to Telegram')
 await assert.rejects(adapter.send('*** ###'), /readable text/)
+await adapter.sendScreenshot('charts')
+assert.equal(uploads.length, 1)
+assert.equal(uploads[0].get('chat_id'), '123')
+const photo = uploads[0].get('photo') as File
+assert.equal(photo.type, 'image/png')
+assert.deepEqual(Buffer.from(await photo.arrayBuffer()), png)
+assert.equal(uploads[0].has('caption'), false, 'Screenshot photos have no caption or diagnostic description')
+fail = true
+await assert.rejects(adapter.sendScreenshot(), error => !String(error).includes(token) && /0 photos confirmed sent/.test(String(error)))
+assert.equal(uploads.length, 2, 'Uncertain photo delivery is never retried')
+fail = false
+await assert.rejects(adapter.sendScreenshot('../private'), /page ID/)
+const savedCapture = captureResult
+captureResult = ok({ screenshots: [] })
+await assert.rejects(adapter.sendScreenshot(), /No screenshot/)
+captureResult = { ...savedCapture, data: { screenshots: [{ ...savedCapture.data.screenshots[0], width: 10001 }] } }
+await assert.rejects(adapter.sendScreenshot(), /photo limits/)
+captureResult = savedCapture
+const beforeAll = uploads.length
+captureResult = { ...savedCapture, data: { screenshots: [savedCapture.data.screenshots[0], { ...savedCapture.data.screenshots[0], pageId: 'portfolio', label: 'Portfolio' }] }, errors: [{ source: 'fixture', operation: 'screenshot', reason: 'Synthetic missing page' }] }
+assert.deepEqual(await adapter.sendScreenshot('all'), { sent: true, photos: 2, incomplete: true })
+assert.equal(uploads.length, beforeAll + 2)
+assert.equal(uploads.at(-1)?.has('caption'), false, 'Partial-capture details stay out of the photo caption')
+captureResult = savedCapture
+const beforeCapturedDelivery = captures
+await adapter.sendScreenshots(savedCapture)
+assert.equal(captures, beforeCapturedDelivery, 'MCP screenshot delivery uploads the captured image without recapturing')
+const cancelled = new AbortController()
+cancelled.abort()
+const beforeCancel = captures
+await assert.rejects(adapter.sendScreenshot('current', cancelled.signal), /cancelled/)
+assert.equal(captures, beforeCancel, 'Cancelled deliveries do not capture private content')
 const now = Math.floor(Date.now() / 1000)
 const update = (id: number, from: number, type = 'private', date = now, text = 'research') => ({ update_id: id, message: { date, text, chat: { id: 123, type }, from: { id: from } } })
 // Supply updates only after the initial queue-drop call.
 const originalFetch = (adapter as unknown as { options: { fetch: typeof fetch } }).options.fetch
 let seeded = false
 ;(adapter as unknown as { options: { fetch: typeof fetch } }).options.fetch = (async (url, init) => {
-  const body = JSON.parse(String(init?.body))
+  const body = init?.body instanceof FormData ? {} : JSON.parse(String(init?.body))
   if (String(url).endsWith('/getUpdates') && body.timeout && !seeded) {
     seeded = true
-    updates = [update(1, 999), update(2, 123, 'group'), update(3, 123, 'private', now - 600),
-      ...['/start', '/new@fixture_bot', '/reset', '/status', '/history', '/resume saved-id', '/models', '/help', '/model fixture', '/model', '/reasoning', '/reasoning high', '/unknown', '/new@other_bot', '/new research', 'research'].map((text, index) => update(index + 4, 123, 'private', now, text))]
+    updates = [update(1, 999), update(2, 123, 'group', now, '/screenshot'), update(3, 123, 'private', now - 600),
+      ...['/start', '/new@fixture_bot', '/reset', '/status', '/history', '/resume saved-id', '/models', '/help', '/model fixture', '/model', '/reasoning', '/reasoning high', '/unknown', '/new@other_bot', '/screenshot charts', '/new research', 'send me a screenshot of global page', 'research'].map((text, index) => update(index + 4, 123, 'private', now, text))]
   }
   return originalFetch(url, init)
 }) as typeof fetch
 await adapter.configure({ chatId: '123', enabled: true, receive: true })
 for (let i = 0; i < 100 && requests.filter(request => request.body.text === 'research result').length < 2; i++) await new Promise(resolve => setTimeout(resolve, 5))
-assert.equal(dispatched, 2, 'Only questions and /new questions reach research; commands and other bot mentions do not')
-assert.equal((stored as { offset: number }).offset, 20)
+assert.equal(dispatched, 3, 'Only questions and /new questions reach research; commands and other bot mentions do not')
+assert.equal((stored as { offset: number }).offset, 22)
 assert.equal(resets, 4, 'Only configuration and /new reset conversation context; removed aliases do nothing')
 assert.deepEqual(commands, [], 'Slash commands only open model buttons; reasoning is selected through callbacks')
 const menu = requests.find(request => request.method === 'setMyCommands')!
 assert(requests.some(request => request.method === 'sendMessage' && !!request.body.reply_markup), '/model sends selectable buttons')
 assert.deepEqual(menu.body.scope, { type: 'chat', chat_id: '123' })
 assert.deepEqual((menu.body.commands as { command: string }[]).map(command => command.command), ['new', 'model'])
-assert.equal(requests.filter(request => request.body.text === 'Available commands: /new, /model.').length, 9)
+assert.equal(requests.filter(request => request.body.text === 'Available commands: /new, /model. Ask naturally for a screenshot of a page.').length, 10)
+assert.equal(uploads.length, 6, 'Natural screenshot requests deliver a photo through the model')
+assert(!requests.some(request => String(request.body.text).includes('Logging description')), 'Do not post model descriptions after sending a screenshot')
+assert.equal(requests.filter(request => request.body.text === 'research result').length, 2, 'The next ordinary question still receives its text answer')
 await adapter.disconnect()
 assert.equal(stored, null)
 assert.equal(adapter.snapshot().configured, false)
@@ -234,3 +289,5 @@ console.log('PASS: failed reset never dispatches a question with old context; co
 console.log('PASS: natural Telegram plain text removes asterisks, heading/hash symbols and em dashes while preserving numbers, Unicode and source links')
 console.log('PASS: model then reasoning buttons, supported/current/default choices, callback acknowledgement, short tokens, private-chat authorization, one-time selection, expiry and /new invalidation')
 
+
+console.log('PASS: inline multipart screenshot photos, original PNG bytes, private recipient, photo-only natural replies, photo limits, cancellation and no delivery retries')

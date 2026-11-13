@@ -21,6 +21,48 @@ function Assert-Check($Condition, [string]$Message) {
 }
 Write-Host 'PASS: desktop launch detaches with a hidden worker and startup logs.'
 
+& {
+  $Command = 'restart'
+  $script:detachedLaunch = $null
+  function Start-Process {
+    param($FilePath, $ArgumentList, $WindowStyle, $WorkingDirectory, $RedirectStandardOutput, $RedirectStandardError)
+    $script:detachedLaunch = $PSBoundParameters
+  }
+  Start-BudgetTerminal
+  Assert-Check ($script:detachedLaunch.ArgumentList -contains 'restart') 'Forward restart into the detached worker.'
+  Assert-Check ($script:detachedLaunch.WindowStyle -eq 'Hidden') 'Restart must use a hidden worker.'
+}
+& {
+  $expectedPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\node_modules\electron\dist\electron.exe'))
+  $script:closed = 0
+  $script:waited = 0
+  $script:shutdownCompletes = $true
+  $script:running = @(
+    @{ ProcessId = 101; ExecutablePath = $expectedPath; CommandLine = 'electron.exe .' },
+    @{ ProcessId = 102; ExecutablePath = $expectedPath; CommandLine = 'electron.exe --type=renderer' },
+    @{ ProcessId = 103; ExecutablePath = 'C:\unrelated\electron.exe'; CommandLine = 'electron.exe .' }
+  )
+  function Get-CimInstance { $script:running }
+  function Get-Process {
+    param($Id, $ErrorAction)
+    Assert-Check ($Id -eq 101) 'Never close renderer processes or another checkout.'
+    $fixture = [pscustomobject]@{ HasExited = $false; MainWindowTitle = 'Budget Terminal' }
+    $fixture | Add-Member ScriptMethod CloseMainWindow { $script:closed++; return $true }
+    $fixture | Add-Member ScriptMethod WaitForExit { param($Milliseconds); $script:waited++; Assert-Check ($Milliseconds -eq 30000) 'Bound graceful shutdown.'; return $script:shutdownCompletes }
+    return $fixture
+  }
+  Stop-BudgetTerminal
+  Assert-Check ($script:closed -eq 1 -and $script:waited -eq 1) 'Request window close and await save completion.'
+  $script:shutdownCompletes = $false
+  $failure = ''
+  try { Stop-BudgetTerminal } catch { $failure = $_.Exception.Message }
+  Assert-Check ($failure -like '*without forcing*') 'Timeout must stop restart without killing the app.'
+  $script:running = @()
+  Stop-BudgetTerminal
+  Assert-Check ($script:closed -eq 2) 'Restart with no running app proceeds without closing anything.'
+}
+Write-Host 'PASS: restart forwarding, exact executable isolation, clean shutdown wait, timeout and closed-app handling.'
+
 Assert-Check (Test-BudgetNode $NodePath) 'The running supported Node must be detected.'
 Assert-Check (-not (Test-BudgetNode 'missing-node.exe')) 'Missing Node must be rejected.'
 $originalData = $env:LOCALAPPDATA

@@ -9,6 +9,8 @@ import { findCodex } from '../../../../scripts/codex-runtime.cjs'
 import { createServiceRoutes } from '../mcp/routes.js'
 import { captureTerminalScreenshot, getMcpStatus, invokeMcpTool } from '../mcp/host.js'
 import type { AgentsCommand } from '../shared/agents.js'
+import type { Envelope } from '../shared/contract.js'
+import type { ScreenshotPayload } from '../shared/screenshot.js'
 import { failed, ok } from '../shared/envelope.js'
 import { AgentsService } from './agents.js'
 import { AgentWorkspace } from './agentWorkspace.js'
@@ -36,7 +38,7 @@ function telegramWorker() {
   if (!remote) {
     const cwd = join(app.getPath('userData'), 'agents')
     mkdirSync(cwd, { recursive: true })
-    remote = new AgentsService({ executable: executable(), cwd, workspace: telegramWorkspace(), remoteResearch: true, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool })
+    remote = new AgentsService({ executable: executable(), cwd, workspace: telegramWorkspace(), remoteResearch: true, telegramScreenshotDelivery: (result, signal) => telegramAgent().sendScreenshots(result, signal), routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool })
   }
   return remote
 }
@@ -60,6 +62,7 @@ function telegramAgent() {
       reset: () => resetTelegramConversation(telegramWorker()),
       command: (command, argument) => telegramResearchCommand(telegramWorker(), command, argument),
       models: () => telegramModelChoices(telegramWorker()),
+      screenshot: async (page, signal) => await invokeMcpTool('budget_terminal_screenshot', { request: { page } }, signal) as Envelope<ScreenshotPayload>,
       reply: async (text, signal) => {
         const worker = telegramWorker()
         const cancel = () => worker.close()
@@ -122,7 +125,7 @@ function agent() {
     const cwd = join(app.getPath('userData'), 'agents')
     mkdirSync(cwd, { recursive: true })
     workspace ??= new AgentWorkspace({ notifications: notificationCenter, check: checkTracker })
-    service = new AgentsService({ workspace, telegramSend: (text, signal) => telegramAgent().send(text, signal), executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, connectionStatus: getMcpStatus, portfolio: {
+    service = new AgentsService({ workspace, telegramSend: (text, signal) => telegramAgent().send(text, signal), telegramScreenshot: (page, signal) => telegramAgent().sendScreenshot(page, signal), executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, connectionStatus: getMcpStatus, portfolio: {
       read: readPortfolios,
       apply: async (before, after) => {
         const result = await withAutomaticBackup(async () => ok(await applyAgentPortfolioUpdate(before, after), 'portfolio store'))

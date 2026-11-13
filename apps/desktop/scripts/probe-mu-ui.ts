@@ -23,10 +23,11 @@ try {
       import { muFixture } from './scripts/fixtures/mu'
       import { emptyMuPayload } from './electron/shared/mu'
       import { buildTasks } from './src/api/prefetch'
-      import { useReloadAll } from './src/api/queries'
+      import { useRefreshMu } from './src/api/muQueries'
       const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnMount: false, refetchOnWindowFocus: false, gcTime: Infinity } } })
       const check = (value, message) => { if (!value) throw Error(message) }
       const settle = () => new Promise(resolve => setTimeout(resolve, 200))
+      const diagnostics = () => client.getQueryCache().getAll().map(query => String(query.state.error ?? '')).join(' ')
       const text = () => document.body.innerText
       const button = label => [...document.querySelectorAll('button')].find(button => button.textContent === label)
       let calls = 0, mode = 'success', lastRequest, opened = '', copied = '', navigation, releaseLoading
@@ -41,7 +42,7 @@ try {
       window.api.openExternal = async url => { opened = url }
       window.api.writeClipboard = async contents => { copied = contents }
       function Page() {
-        const reload = useReloadAll()
+        const reload = useRefreshMu()
         window.reloadMu = reload
         return <MuPage onStatusChange={() => {}} onNavigate={(tab, symbol) => { navigation = [tab, symbol] }} />
       }
@@ -81,16 +82,16 @@ try {
         button('Investor relations').click(); check(opened.includes('investors.micron.com'), 'IR link failed')
         button('p.3').click(); check(opened.endsWith('#page=3'), 'PDF page source link failed')
         button('Export snapshot').click(); await settle(); check(JSON.parse(copied).symbol === 'MU', 'Snapshot export failed')
-        button('Refresh').click(); await settle(); check(lastRequest.force, 'Refresh did not force service request')
-        mode = 'partial'; button('Refresh').click(); await settle()
-        check(text().includes('HTTP 503') && text().includes('Cloud Memory Business Unit'), 'Partial failure hid healthy panels')
-        mode = 'failed'; button('Refresh').click(); await settle()
-        check(text().includes('failed') && button('Export snapshot').disabled, 'Total failure was treated as ready')
-        mode = 'waiting'; button('Refresh').click(); await settle()
-        check(text().includes('Loading MU') && button('Refreshing...').disabled, 'Loading state missing')
+        void window.reloadMu().catch(() => {}); await settle(); check(lastRequest.force, 'Refresh did not force service request')
+        mode = 'partial'; void window.reloadMu().catch(() => {}); await settle()
+        check(diagnostics().includes('HTTP 503') && text().includes('Cloud Memory Business Unit'), 'Partial failure hid healthy panels')
+        mode = 'failed'; void window.reloadMu().catch(() => {}); await settle()
+        check(diagnostics().length > 0 && !button('Export snapshot').disabled, 'Failed refresh must retain the snapshot and expose diagnostics')
+        mode = 'waiting'; void window.reloadMu().catch(() => {}); await settle()
+        check(client.isFetching() > 0, 'Refresh activity missing')
         mode = 'success'; releaseLoading(); await settle()
         check(!document.querySelector('[role=alert]'), 'Successful refresh did not recover')
-        await window.reloadMu(); await settle(); check(lastRequest.force, 'Global F5 refresh did not force MU')
+        await window.reloadMu(); await settle(); check(lastRequest.force, 'Explicit reload did not force MU')
         host.render(null); await settle(); const before = calls; render(); await settle()
         check(calls === before, 'Returning to MU triggered initial loading again')
         check(client.getQueryData(['mu']).meta.freshness === 'fresh' && text().includes('Cloud Memory Business Unit') && !document.querySelector('[role=alert]'), 'Final populated MU state did not settle')

@@ -52,17 +52,18 @@ try {
       import { useEffect } from 'react'
       import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
       import { HoodPage } from './src/pages/HoodPage'
-      import { useReloadAll } from './src/api/queries'
+      import { useRefreshHood } from './src/api/hoodQueries'
       const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
       const check = (ok, message) => { if (!ok) throw Error(message) }
       const settle = () => new Promise(resolve => setTimeout(resolve, 150))
+      const diagnostics = () => client.getQueryCache().getAll().map(query => String(query.state.error ?? '')).join(' ')
       const text = () => document.body.innerText
       const click = label => {
         const button = [...document.querySelectorAll('button')].find(button => button.textContent.toLowerCase().startsWith(label.toLowerCase()))
         check(button, 'Missing button: ' + label); button.click()
       }
       function Page() {
-        const reload = useReloadAll()
+        const reload = useRefreshHood()
         useEffect(() => { window.reloadAll = reload }, [reload])
         return <HoodPage onStatusChange={panels => { window.health = panels }} onNavigate={(id, symbol) => { window.navigation = [id, symbol] }} />
       }
@@ -97,18 +98,18 @@ try {
         const filing = [...document.querySelectorAll('tbody tr')].find(row => row.textContent.includes('Quarterly report'))
         filing.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
         check(window.opened.includes('sec.gov'), 'Filing link failed')
-        click('Refresh'); await settle(); check(window.forced, 'Refresh did not force data reload')
-        window.forced = false; await window.reloadAll(); await settle(); check(window.forced, 'F5 reload path did not force HOOD')
-        window.mode = 'partial'; click('Refresh'); await settle()
-        check(window.health[0].envelope.errors.some(error => error.reason.includes('Fixture report unavailable')) && !document.querySelector('[role=alert]'), 'Partial failure stays in diagnostics without a retained-data banner')
+        void window.reloadAll().catch(() => {}); await settle(); check(window.forced, 'Refresh did not force data reload')
+        window.forced = false; await window.reloadAll(); await settle(); check(window.forced, 'Explicit reload did not force HOOD')
+        window.mode = 'partial'; void window.reloadAll().catch(() => {}); await settle()
+        check(diagnostics().includes('Fixture report unavailable') && !document.querySelector('[role=alert]'), 'Partial failure stays in diagnostics without a retained-data banner')
         check(text().toLowerCase().includes('financial history') && text().includes('$0.62'), 'Partial failure hid healthy sections')
-        window.mode = 'reject'; click('Refresh'); await settle()
-        check(text().includes('Fixture network offline'), 'Rejected refresh is hidden')
+        window.mode = 'reject'; void window.reloadAll().catch(() => {}); await settle()
+        check(diagnostics().includes('Fixture network offline'), 'Rejected refresh is hidden')
         check(text().includes('$0.62'), 'Rejected refresh discarded cached content')
-        window.mode = 'failed'; click('Refresh'); await settle()
-        check(text().includes('all: Fixture providers unavailable'), 'Failed envelope is hidden')
-        check(text().includes('Price history unavailable'), 'Empty market state missing')
-        window.mode = 'good'; click('Refresh'); await settle()
+        window.mode = 'failed'; void window.reloadAll().catch(() => {}); await settle()
+        check(diagnostics().includes('Fixture providers unavailable'), 'Failed envelope is hidden')
+        check(document.querySelector('canvas'), 'Failed refresh discarded the saved chart')
+        window.mode = 'good'; void window.reloadAll().catch(() => {}); await settle()
         check(!document.querySelector('[role=status]'), 'Recovery left a stale error')
         // Reopening after startup uses the exact warmed query and makes no new request.
         root.render(<QueryClientProvider client={client}><div /></QueryClientProvider>); await settle()

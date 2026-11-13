@@ -42,7 +42,7 @@ function Install-BudgetDesktopCommand {
   if ((Test-Path -LiteralPath $shim -PathType Leaf) -and
       [IO.File]::ReadAllText($shim, [Text.Encoding]::Default) -eq $content -and
       @($userPath -split ';' | Where-Object { $_ -and $_.TrimEnd('\') -ieq $bin.TrimEnd('\') }).Count -gt 0) {
-    if (-not $Quiet) { Write-Host 'BTD is installed. Type btd in a new terminal window to open the desktop app when needed.' }
+    if (-not $Quiet) { Write-Host 'BTD is installed. Type btd to open the app or btd restart to rebuild and restart it.' }
     return
   }
   New-Item -ItemType Directory -Path $bin -Force | Out-Null
@@ -50,7 +50,7 @@ function Install-BudgetDesktopCommand {
   Set-BudgetUserPath ((@($bin) + $entries) -join ';')
   Publish-PathChange
   $env:Path = $bin + ';' + $env:Path
-  if (-not $Quiet) { Write-Host 'BTD installed. Open a new terminal window, then type btd. No administrator access is needed.' }
+  if (-not $Quiet) { Write-Host 'BTD installed. Open a new terminal window, then type btd or btd restart. No administrator access is needed.' }
 }
 
 if ($MyInvocation.InvocationName -ne '.') { Install-BudgetDesktopCommand }

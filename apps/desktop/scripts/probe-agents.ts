@@ -487,6 +487,36 @@ try {
       }
     } finally { live.close() }
   }
+  if (process.argv.includes('--live-telegram-screenshot')) {
+    const { findCodex } = await import('../../../scripts/codex-runtime.cjs')
+    const executable = findCodex({ environment: { ...process.env, ...previous } }) ?? 'codex'
+    let capturedPage = ''
+    let photosDelivered = 0
+    const screenshotRoutes = new Map<Operation, (request: unknown) => unknown>([['screenshot', request => {
+      capturedPage = (request as { page: string }).page
+      return ok({ screenshots: [{ pageId: capturedPage, label: 'Synthetic Global', base64: 'cGl4ZWxz', mimeType: 'image/png' }] }, 'synthetic screenshot probe')
+    }]])
+    const live = new AgentsService({ executable, cwd: directory, routes: screenshotRoutes, remoteResearch: true,
+      telegramScreenshotDelivery: async capture => {
+        assert.equal(capture.data.screenshots[0].pageId, 'global')
+        photosDelivered++
+        return { sent: true, photos: 1 }
+      },
+    })
+    try {
+      await live.command({ type: 'connect' })
+      assert.equal(live.snapshot().connected, true, live.snapshot().error)
+      await live.command({ type: 'send', text: 'send me a screenshot of global page' })
+      const deadline = Date.now() + 90_000
+      while (live.snapshot().busy && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100))
+      assert.equal(live.snapshot().busy, false, 'Natural language screenshot model check timed out')
+      assert.equal(live.snapshot().error, '')
+      assert.equal(capturedPage, 'global')
+      assert.equal(photosDelivered, 1, 'Real model selects the MCP screenshot tool once for the natural request')
+      assert(live.snapshot().messages.findLast(message => message.run)?.run?.tools.some(tool => tool.name === 'budget_terminal_screenshot' && tool.status === 'succeeded'))
+      console.log('PASS: real Telegram model maps a natural Global screenshot request to budget_terminal_screenshot and one synthetic photo delivery')
+    } finally { live.close() }
+  }
   if (process.argv.includes('--live-web')) {
     const { findCodex } = await import('../../../scripts/codex-runtime.cjs')
     const executable = findCodex({ environment: { ...process.env, ...previous } }) ?? 'codex'
@@ -509,24 +539,64 @@ try {
 } finally {
   service.close()
   let delivered = ''
-  const telegramAgent = new AgentsService({ executable: 'unused', cwd: directory, routes, telegramSend: async text => { delivered = text; return { sent: true } }, clientFactory: receive => { receiver = receive; return client } })
+  let screenshotPage = ''
+  const telegramAgent = new AgentsService({ executable: 'unused', cwd: directory, routes, telegramScreenshot: async (page, signal) => { assert(!signal.aborted); screenshotPage = page; return { sent: true, photos: 1 } }, telegramSend: async text => { delivered = text; return { sent: true } }, clientFactory: receive => { receiver = receive; return client } })
   try {
     await telegramAgent.command({ type: 'connect' })
     await telegramAgent.command({ type: 'send', text: 'Send a summary to Telegram' })
     assert.deepEqual(await telegramAgent.callTool('terminal_telegram_send', { text: 'summary' }), { sent: true })
     assert.equal(delivered, 'summary')
+    assert.deepEqual(await telegramAgent.callTool('terminal_telegram_screenshot', { page: 'charts' }), { sent: true, photos: 1 })
+    assert.equal(screenshotPage, 'charts')
+    await telegramAgent.callTool('terminal_telegram_screenshot', {})
+    assert.equal(screenshotPage, 'current')
+    await assert.rejects(telegramAgent.callTool('terminal_telegram_screenshot', { page: 'charts', chatId: 'arbitrary-target' }))
     await assert.rejects(telegramAgent.callTool('terminal_telegram_send', { text: 'summary', chatId: 'arbitrary-target' }))
   } finally { telegramAgent.close() }
-  const remoteAgent = new AgentsService({ executable: 'unused', cwd: directory, routes, remoteResearch: true, clientFactory: receive => { receiver = receive; return client } })
+  let remoteCaptures = 0
+  let remoteDeliveries = 0
+  let deliveryFails = false
+  let captureDenied = false
+  const remoteAgent = new AgentsService({ executable: 'unused', cwd: directory, routes, remoteResearch: true,
+    dispatch: async (name, args, signal) => {
+      assert.equal(name, 'budget_terminal_screenshot')
+      assert.deepEqual(args, { request: { page: 'global' } })
+      assert(!signal?.aborted)
+      remoteCaptures++
+      if (captureDenied) return failed({ screenshots: [] }, 'Screenshot permission denied', 'fixture')
+      return ok({ screenshots: [{ pageId: 'global', label: 'Global', base64: 'cGl4ZWxz', mimeType: 'image/png' }] }, 'fixture')
+    },
+    telegramScreenshotDelivery: async (capture, signal) => {
+      assert(!signal.aborted)
+      assert.equal(capture.data.screenshots[0].pageId, 'global')
+      assert.equal(capture.data.screenshots[0].base64, 'cGl4ZWxz')
+      remoteDeliveries++
+      if (deliveryFails) throw new Error('Telegram delivery uncertain. Do not resend automatically.')
+      return { sent: true, photos: 1 }
+    }, clientFactory: receive => { receiver = receive; return client } })
   try {
     await remoteAgent.command({ type: 'connect' })
     const remoteStart = calls.findLast(call => call.method === 'thread/start')!.params
     const tools = remoteStart.dynamicTools
     assert.equal(remoteStart.config.web_search, 'live', 'Telegram research can use hosted public web research')
     assert(remoteStart.baseInstructions.includes('native web search') && !remoteStart.baseInstructions.includes('To search for websites, use action search'), 'Telegram should use native web research rather than inaccessible shared Browser tools')
-    assert(tools.length > 0 && tools.every((tool: { name: string }) => catalog.some(entry => entry.tool.name === tool.name && entry.tool.annotations?.readOnlyHint)))
-    await remoteAgent.command({ type: 'send', text: 'Research only' })
-    for (const name of ['budget_terminal_mutate_portfolio', 'budget_terminal_screenshot', 'budget_terminal_browser_research', 'terminal_telegram_send', 'terminal_notify', 'terminal_save_tracker']) await assert.rejects(remoteAgent.callTool(name, {}), /research reads only/)
+    assert(tools.length > 0 && tools.every((tool: { name: string }) => tool.name === 'terminal_pages' || catalog.some(entry => entry.tool.name === tool.name && entry.tool.annotations?.readOnlyHint)))
+    assert(tools.some((tool: { name: string }) => tool.name === 'budget_terminal_screenshot'))
+    assert(remoteStart.baseInstructions.includes('send me a screenshot of global page'))
+    await remoteAgent.command({ type: 'send', text: 'send me a screenshot of global page' })
+    assert((await remoteAgent.callTool('terminal_pages', {}) as { id: string }[]).some(page => page.id === 'global'))
+    const screenshotReceipt = await remoteAgent.callTool('budget_terminal_screenshot', { request: { page: 'global' } }) as { data: { delivery: unknown; screenshots: unknown[] } }
+    assert.deepEqual(screenshotReceipt.data.delivery, { sent: true, photos: 1 })
+    assert(!JSON.stringify(screenshotReceipt).includes('cGl4ZWxz'), 'Model receives a receipt, not image bytes to print as text')
+    captureDenied = true
+    await remoteAgent.callTool('budget_terminal_screenshot', { request: { page: 'global' } })
+    assert.equal(remoteDeliveries, 1, 'Permission failures must never send a photo')
+    captureDenied = false
+    deliveryFails = true
+    await assert.rejects(remoteAgent.callTool('budget_terminal_screenshot', { request: { page: 'global' } }), /uncertain/)
+    assert.equal(remoteCaptures, 3)
+    assert.equal(remoteDeliveries, 2, 'Uncertain deliveries are never automatically retried')
+    for (const name of ['budget_terminal_mutate_portfolio', 'budget_terminal_browser_research', 'terminal_telegram_send', 'terminal_telegram_screenshot', 'terminal_notify', 'terminal_save_tracker']) await assert.rejects(remoteAgent.callTool(name, {}), /research reads and user-requested MCP screenshots only/)
     receiver({ method: 'item/started', params: { threadId: nextThreadId, item: { id: 'remote-web', type: 'webSearch' } } })
     assert.equal(remoteAgent.snapshot().activity, 'researching')
     remoteAgent.close()

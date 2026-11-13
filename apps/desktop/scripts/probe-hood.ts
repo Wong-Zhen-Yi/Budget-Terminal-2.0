@@ -121,6 +121,13 @@ Highlights`, { period: '2026-06', url: quarterly.sourceUrl }, 'quarterly')
     assert.equal(stale.data.progress.monthly, 'stale')
     assert.deepEqual(stale.data.monthly, monthly)
     cache.clear()
+    const { pltrFixture } = await import('./fixtures/pltr.js')
+    const financials = pltrFixture().financials
+    const nestedStale = await getHood({ force: true }, { market: fail, report: fail,
+      financials: async () => ({ payload: financials, failures: [], stale: true }) })
+    assert.equal(nestedStale.data.progress.financials, 'stale', 'Inner statement cache fallback must remain stale')
+    assert.equal(nestedStale.meta.freshness, 'stale')
+    cache.clear()
     const failed = await getHood({ force: true }, { market: fail, financials: fail, report: fail })
     assert.equal(failed.meta.freshness, 'failed')
   }

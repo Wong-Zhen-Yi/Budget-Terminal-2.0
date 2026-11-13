@@ -23,10 +23,11 @@ try {
       import { vstFixture } from './scripts/fixtures/vst'
       import { emptyVstPayload } from './electron/shared/vst'
       import { buildTasks } from './src/api/prefetch'
-      import { useReloadAll } from './src/api/queries'
+      import { useRefreshVst } from './src/api/vstQueries'
       const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnMount: false, refetchOnWindowFocus: false, gcTime: Infinity } } })
       const check = (value, message) => { if (!value) throw Error(message) }
       const settle = () => new Promise(resolve => setTimeout(resolve, 200))
+      const diagnostics = () => client.getQueryCache().getAll().map(query => String(query.state.error ?? '')).join(' ')
       const text = () => document.body.innerText
       const button = label => [...document.querySelectorAll('button')].find(button => button.textContent === label)
       window.checkVstLayout = () => {
@@ -69,7 +70,7 @@ try {
       window.api.openExternal = async url => { opened = url }
       window.api.writeClipboard = async contents => { copied = contents }
       function Page() {
-        const reload = useReloadAll()
+        const reload = useRefreshVst()
         window.reloadVst = reload
         return <VstPage onStatusChange={() => {}} onNavigate={(tab, symbol) => { navigation = [tab, symbol] }} />
       }
@@ -97,18 +98,18 @@ try {
         button('Earnings release').click(); check(opened.includes('Vistra-Reports'), 'Disclosure source link failed')
         button('Quarterly filing').click(); check(opened.includes('vistra-20260630.htm'), 'Revenue/generation source link failed')
         button('Export snapshot').click(); await settle(); check(JSON.parse(copied).symbol === 'VST', 'Snapshot export failed')
-        button('Refresh').click(); await settle(); check(lastRequest.force, 'Refresh did not force service request')
-        mode = 'partial'; await client.invalidateQueries({ queryKey: ['vst', 2], refetchType: 'none' }); let startupError = ''; try { await task.run(client, 10) } catch (error) { startupError = String(error) }; check(startupError.includes('HTTP 503') && client.getQueryData(['vst', 2]).data.market, 'Partial startup was treated as ready or discarded useful content'); button('Refresh').click(); await settle()
-        check(text().includes('HTTP 503') && text().includes('Vistra announces generation update'), 'Partial failure hid healthy panels')
-        mode = 'operations-failed'; button('Refresh').click(); await settle()
-        check(client.getQueryData(['vst', 2]).errors.some(error => error.symbol === 'operations' && error.reason.includes('HTTP 503')) && !document.querySelector('[role=alert]') && text().includes('Approximately 94%') && text().includes('Vistra announces generation update'), 'Operations outage retains diagnostics and healthy panels without a banner')
-        mode = 'failed'; button('Refresh').click(); await settle()
-        check(text().includes('failed') && button('Export snapshot').disabled, 'Total failure was treated as ready')
-        mode = 'waiting'; button('Refresh').click(); await settle()
-        check(text().includes('Loading VST') && button('Refreshing...').disabled, 'Loading state missing')
+        void window.reloadVst().catch(() => {}); await settle(); check(lastRequest.force, 'Refresh did not force service request')
+        mode = 'partial'; await client.invalidateQueries({ queryKey: ['vst', 2], refetchType: 'none' }); let startupError = ''; try { await task.run(client, 10) } catch (error) { startupError = String(error) }; check(startupError.includes('HTTP 503') && client.getQueryData(['vst', 2]).data.market, 'Partial startup was treated as ready or discarded useful content'); void window.reloadVst().catch(() => {}); await settle()
+        check(diagnostics().includes('HTTP 503') && text().includes('Vistra announces generation update'), 'Partial failure hid healthy panels')
+        mode = 'operations-failed'; void window.reloadVst().catch(() => {}); await settle()
+        check(diagnostics().includes('HTTP 503') && !document.querySelector('[role=alert]') && text().includes('Approximately 94%') && text().includes('Vistra announces generation update'), 'Operations outage retains diagnostics and healthy panels without a banner')
+        mode = 'failed'; void window.reloadVst().catch(() => {}); await settle()
+        check(diagnostics().length > 0 && !button('Export snapshot').disabled, 'Failed refresh must retain the snapshot and expose diagnostics')
+        mode = 'waiting'; void window.reloadVst().catch(() => {}); await settle()
+        check(client.isFetching() > 0, 'Refresh activity missing')
         mode = 'success'; releaseLoading(); await settle()
         check(!document.querySelector('[role=alert]'), 'Successful refresh did not recover')
-        await window.reloadVst(); await settle(); check(lastRequest.force, 'Global F5 refresh did not force VST')
+        await window.reloadVst(); await settle(); check(lastRequest.force, 'Explicit reload did not force VST')
         host.render(null); await settle(); const before = calls; render(); await settle()
         check(calls === before, 'Returning to VST triggered initial loading again')
         check(client.getQueryData(['vst', 2]).meta.freshness === 'fresh' && text().includes('Vistra announces generation update') && !document.querySelector('[role=alert]'), 'Final populated VST state did not settle')

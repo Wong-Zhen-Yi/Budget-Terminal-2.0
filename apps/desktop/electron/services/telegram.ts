@@ -3,6 +3,8 @@ import { randomBytes } from 'node:crypto'
 import type { TelegramState } from '../shared/telegram.js'
 import { formatTelegramText, TelegramError } from '../shared/telegram.js'
 import { agentsChanged, observableStatus } from './liveStatusEvents.js'
+import type { Envelope } from '../shared/contract.js'
+import type { ScreenshotPayload } from '../shared/screenshot.js'
 
 export const telegramCommands = [
   { command: 'new', description: 'Start a fresh chat: /new [question]' },
@@ -34,6 +36,7 @@ interface Options {
   reset: () => Promise<void>
   command?: (command: TelegramResearchCommand, argument: string) => Promise<string>
   models?: () => Promise<TelegramModelChoice[]>
+  screenshot?: (page: string, signal: AbortSignal) => Promise<Envelope<ScreenshotPayload>>
   fetch?: typeof fetch
 }
 
@@ -46,6 +49,7 @@ export class TelegramService {
   private controller = new AbortController()
   private loop: Promise<void> | null = null
   private sending = false
+  private photosSent = 0
   private deliveryError = ''
   private modelPicker: { nonce: string; choices: TelegramPickerChoice[]; kind: 'model' | 'reasoning'; modelId?: string; expiresAt: number; messageId?: number } | null = null
   constructor(private options: Options) {}
@@ -60,7 +64,7 @@ export class TelegramService {
     if (!config) throw new Error('Configure Telegram in Agents first.')
     try {
       const response = await (this.options.fetch ?? fetch)(`https://api.telegram.org/bot${config.token}/${method}`, {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+        method: 'POST', ...(body instanceof FormData ? { body } : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
         signal: AbortSignal.any([signal, AbortSignal.timeout(35_000)]), redirect: 'error',
       })
       const result = await response.json() as { ok: boolean; result: T; error_code?: number; description?: string }
@@ -160,6 +164,47 @@ export class TelegramService {
       throw new TelegramError(this.state.error)
     } finally { this.sending = false }
   }
+  async sendScreenshot(page = 'current', signal = this.controller.signal) {
+    if (!this.options.screenshot) throw new TelegramError('Telegram screenshot capture is unavailable.')
+    if (!/^[a-z][a-z0-9-]{0,79}$/.test(page)) throw new TelegramError('Use an implemented page ID, current or all.')
+    return this.deliverScreenshots(signal => this.options.screenshot!(page, signal), signal)
+  }
+  async sendScreenshots(result: Envelope<ScreenshotPayload>, signal = this.controller.signal) {
+    return this.deliverScreenshots(async () => result, signal)
+  }
+  private async deliverScreenshots(capture: (signal: AbortSignal) => Promise<Envelope<ScreenshotPayload>>, signal: AbortSignal) {
+    if (!this.config?.enabled) throw new TelegramError('Telegram messaging is disabled. Configure it in Agents.')
+    if (this.sending) throw new TelegramError('Another Telegram message is being delivered. Wait before sending again.')
+    this.sending = true
+    const config = this.config
+    signal = AbortSignal.any([signal, this.controller.signal])
+    let sent = 0
+    try {
+      if (signal.aborted) throw new TelegramError('Telegram screenshot cancelled.')
+      const result = await capture(signal)
+      if (signal.aborted) throw new TelegramError('Telegram screenshot cancelled.')
+      if (!result.data.screenshots.length) throw new TelegramError('No screenshot was captured. Check the page ID, screenshot permissions and desktop window in Budget Terminal Settings.')
+      for (const image of result.data.screenshots) {
+        const bytes = Buffer.from(image.base64, 'base64')
+        if (!bytes.length || bytes.length > 10_000_000 || !Number.isSafeInteger(image.width) || !Number.isSafeInteger(image.height) || image.width < 1 || image.height < 1 || image.width + image.height > 10000 || Math.max(image.width, image.height) / Math.min(image.width, image.height) > 20) {
+          throw new TelegramError('Screenshot exceeds Telegram photo limits. Use a smaller desktop window and request a new screenshot.')
+        }
+        const form = new FormData()
+        form.set('chat_id', config.chatId)
+        form.set('photo', new Blob([bytes], { type: 'image/png' }), 'screenshot.png')
+        await this.api('sendPhoto', form, signal, config)
+        sent++
+        this.photosSent++
+      }
+      this.deliveryError = ''; this.state.error = ''
+      return { sent: true, photos: sent, incomplete: result.errors.length > 0 }
+    } catch (error) {
+      // Capture/provider errors can contain private content. Only expose safe delivery errors.
+      this.deliveryError = `${error instanceof TelegramError ? error.message : 'Screenshot capture failed. Check screenshot permissions and the desktop window in Budget Terminal Settings.'} ${sent} photos confirmed sent. Do not resend automatically.`
+      this.state.error = this.deliveryError
+      throw new TelegramError(this.deliveryError)
+    } finally { this.sending = false }
+  }
   private async showModelPicker(signal: AbortSignal) {
     this.modelPicker = null
     if (!this.options.models) throw new Error('Model choices are unavailable.')
@@ -243,18 +288,20 @@ export class TelegramService {
               }
               catch { await this.send('Telegram command could not complete. Check Codex and local history in the desktop app. No research request was sent.', signal) }
               continue
-            } else { await this.send('Available commands: /new, /model.', signal); continue }
+            } else { await this.send('Available commands: /new, /model. Ask naturally for a screenshot of a page.', signal); continue }
           }
           await this.api('sendChatAction', { chat_id: config.chatId, action: 'typing' }, signal)
+          const photosBeforeReply = this.photosSent
           let reply: string
           try { reply = await this.options.reply(text, signal) }
           catch {
             if (signal.aborted) return
-            await this.send('Budget Terminal could not complete this research request. Check Codex sign-in and connectivity in the desktop app, then send a new request.', signal)
+            if (this.photosSent === photosBeforeReply) await this.send('Budget Terminal could not complete this research request. Check Codex sign-in and connectivity in the desktop app, then send a new request.', signal)
             this.state.error = 'Telegram research failed. Check Codex sign-in and connectivity.'
             continue
           }
-          if (!signal.aborted) await this.send(reply.slice(0, 20_000), signal)
+          // A screenshot response is photo-only, even if the model writes a delivery summary.
+          if (!signal.aborted && this.photosSent === photosBeforeReply) await this.send(reply.slice(0, 20_000), signal)
         }
       } catch (error) {
         if (signal.aborted) return

@@ -28,7 +28,7 @@ try {
         import { useDashboard } from './src/stores/dashboard'
         import { useDataHealth } from './src/stores/dataHealth'
         import { manageQueryMemory } from './src/api/queryMemory'
-        import { useReloadAll } from './src/api/queries'
+        import { trackPageQuery } from './src/api/pageProgress'
         useChartsStore.getState().setSymbol('AAPL')
         const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
         const check = (value, message) => { if (!value) throw Error(message) }
@@ -163,10 +163,7 @@ try {
           }
           window.clearInterval = id => { timers.delete(id); clearIntervalOriginal(id) }
           const app = createRoot(document.getElementById('root'))
-          let reload
-          function RefreshOwner() { reload = useReloadAll(); return null }
           const render = (chart = false) => app.render(<QueryClientProvider client={prepared}><div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            <RefreshOwner />
             <div style={{ padding: 10 }}><PortfolioChartsStatus enabled /></div>
             {chart ? <MainWorkspace onStatus={() => {}} /> : null}
           </div></QueryClientProvider>)
@@ -191,8 +188,8 @@ try {
             check(calls.length > beforeRefresh, 'Holding charts must refresh while the window is unfocused')
             focusManager.setFocused(true)
             const beforeReload = calls.length
-            await reload(); await settle()
-            check(calls.length > beforeReload && calls.slice(beforeReload).every(([, request]) => request.force), 'Explicit Reload must still bypass provider caches for prepared holdings')
+            await trackPageQuery(queryKeys.stocks('MSFT'), () => prepared.refetchQueries({ queryKey: queryKeys.stocks('MSFT'), exact: true }), true); await settle()
+            check(calls.length === beforeReload + 1 && calls.at(-1)[0] === 'stocks' && calls.at(-1)[1].symbol === 'MSFT' && calls.at(-1)[1].force, 'Targeted Reload must bypass the provider cache without refreshing unrelated holdings')
             const previous = prepared.getQueryData(queryKeys.stocks('MSFT'))
             failMsft = true
             await prepared.refetchQueries({ queryKey: queryKeys.stocks('MSFT'), exact: true }); await settle()

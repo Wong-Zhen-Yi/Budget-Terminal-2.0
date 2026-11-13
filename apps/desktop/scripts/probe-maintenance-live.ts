@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os'
 import { join, relative, resolve } from 'node:path'
 import { TABS } from '../electron/shared/contract.js'
 import type { Envelope } from '../electron/shared/contract.js'
+import { WORKSPACES } from '../electron/shared/navigation.js'
+import { pltrHistory } from '../electron/shared/pltr.js'
 
 const root = resolve(import.meta.dirname, '..')
 const output = join(root, 'out', 'maintenance')
@@ -19,6 +21,8 @@ const { getForexQuotes, getForexHistory, getForexNews } = await import('../elect
 const { cache } = await import('../electron/services/cache.js')
 const { yahoo, paced } = await import('../electron/services/yahoo/client.js')
 const only = process.argv.find(value => value.startsWith('--only='))?.slice(7).split(',')
+const focusPages = WORKSPACES.find(workspace => workspace.id === 'focus')!.pages
+const focus = process.argv.includes('--focus')
 const fullScans = process.argv.includes('--full-scans')
 const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Singapore', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date())
 const datePart = (type: Intl.DateTimeFormatPartTypes) => parts.find(part => part.type === type)!.value
@@ -60,6 +64,24 @@ const tasks: Task[] = [
   { name: 'forexNews', pages: ['forex'], run: () => getForexNews({ pair: 'EUR/USD' }) },
   { name: 'crypto', pages: ['crypto'], run: () => provider.crypto({}) },
   { name: 'bitcoin', pages: ['bitcoin'], run: () => getBitcoin({}) },
+  { name: 'pltrMarket', pages: ['pltr'], run: () => provider.stocks({ symbol: 'PLTR', force: true }), check: result => {
+    const data = result.data as Awaited<ReturnType<typeof provider.stocks>>['data']
+    assert.equal(data.symbol, 'PLTR')
+    assert.ok(data.chart.candles.length && data.chart.stats.price > 0, 'PLTR quote/history unavailable')
+  } },
+  { name: 'pltrFinancials', pages: ['pltr'], run: () => provider.fundamentalsPage({ symbol: 'PLTR', force: true }), check: result => {
+    const data = result.data as Awaited<ReturnType<typeof provider.fundamentalsPage>>['data']
+    assert.equal(data.symbol, 'PLTR')
+    assert.ok(pltrHistory(data).some(quarter => quarter.revenue !== null && quarter.revenue > 0), 'PLTR fiscal history unavailable')
+  } },
+  { name: 'semiconductors', pages: ['semiconductors'], run: () => provider.semiconductors({ force: true }), check: result => {
+    const data = result.data as Awaited<ReturnType<typeof provider.semiconductors>>['data']
+    assert.ok(data.rows.length, 'Semiconductor catalog unavailable')
+    for (const row of data.rows) {
+      assert.ok(row.market?.price && row.market.price > 0 && row.market.history.length, `${row.company.symbol}: price/history unavailable`)
+      assert.ok(row.profile?.description, `${row.company.symbol}: profile unavailable`)
+    }
+  } },
   { name: 'stocks', pages: ['stocks'], run: () => provider.stocks({ symbol: 'AAPL' }) },
   { name: 'fundamentalsPage', pages: ['fundamentals'], run: () => provider.fundamentalsPage({ symbol: 'AAPL' }) },
   { name: 'chartsHistory', pages: ['charts'], run: () => provider.chartsHistory({ symbol: 'AAPL', interval: '1 Day', range: '1Y' }) },
@@ -170,7 +192,9 @@ async function persist() {
     timezone: 'Asia/Singapore', isolated: true, fullScans, pages, results }, null, 2) + '\n')
 }
 try {
-  for (const task of tasks.filter(task => !only || only.includes(task.name))) {
+  const selected = tasks.filter(task => (!only || only.includes(task.name)) && (!focus || task.pages.some(page => focusPages.includes(page))))
+  if (focus) for (const page of focusPages) assert.ok(selected.some(task => task.pages.includes(page)), `Focus page missing live coverage: ${page}`)
+  for (const task of selected) {
     const started = Date.now()
     console.log(`RUN: ${task.name}`)
     const record: Result = { name: task.name, pages: task.pages, status: 'failed', startedAt: new Date(started).toISOString(), durationMs: 0 }
@@ -182,6 +206,13 @@ try {
       assertFinite(result.data)
       if (result.meta.freshness === 'failed') throw Error(result.meta.failureReason || 'Provider returned failed data')
       task.check?.(result)
+      // A partially populated Focus page must never pass merely because its envelope exists.
+      if (task.pages.some(page => focusPages.includes(page))) {
+        const data = result.data as { progress?: Record<string, string>; market?: { symbol: string; chart: { candles: unknown[]; stats: { price: number } } }; financials?: { quarterly: { revenue: unknown[] } } }
+        if (data.progress) for (const [lane, status] of Object.entries(data.progress)) assert.ok(status === 'loaded', `${task.name}/${lane}: ${status}`)
+        if ('market' in data && task.name !== 'bmnr') assert.ok(data.market?.chart.candles.length && data.market.chart.stats.price > 0, `${task.name}: quote/history unavailable`)
+        if ('financials' in data) assert.ok(data.financials?.quarterly.revenue.length, `${task.name}: fiscal statements unavailable`)
+      }
       record.status = ['stale', 'partial'].includes(result.meta.freshness) ? 'degraded' : 'passed'
       record.reason = result.meta.failureReason
       if (task.name === 'quotes') {

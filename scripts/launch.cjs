@@ -1,4 +1,6 @@
 const { spawnSync } = require('node:child_process')
+// Windows terminal command: btd restart saves, rebuilds and reopens the app.
+// Telegram: natural screenshot requests use MCP and send photos without captions or follow-up text.
 const path = require('node:path')
 const { supportedNodeVersion, supportedNpmVersion, runtimeEnvironment, assertCertificateEnvironment } = require('./runtime.cjs')
 const { engines, version } = require('../package.json')

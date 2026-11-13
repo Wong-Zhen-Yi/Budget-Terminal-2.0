@@ -1,4 +1,8 @@
 #!/bin/sh
+# Dependency security refresh: patched Electron and schema-generation dependencies; see docs/dependency-maintenance.md.
+# Focus provider verification: npm run probe:maintenance-live -- --focus
+# Windows terminal command: btd restart saves, rebuilds and reopens the app.
+# Telegram: natural screenshot requests use MCP and send photos without captions or follow-up text.
 # Trading Volumes defaults to a compact YTD table beside the expanded dot plot.
 # Crypto prices use Hyperliquid and CoinGecko only; Finnhub remains a stock provider.
 # macOS Finder entry point. Share runtime checks and startup updates with Linux.

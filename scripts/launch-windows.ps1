@@ -1,4 +1,6 @@
-param([switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Setup, [switch]$Attached)
+param([Parameter(Position = 0)][ValidateSet('start', 'restart')][string]$Command = 'start', [switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Setup, [switch]$Attached)
+# btd restart gracefully closes this checkout before rebuilding and reopening it.
+# Telegram: natural screenshot requests use MCP and send photos without captions or follow-up text.
 # Trading Volumes defaults to a compact YTD table beside the expanded dot plot.
 # Crypto prices use Hyperliquid and CoinGecko only; Finnhub remains a stock provider.
 # Convex snapshot writes are restored; record-era cloud tables are retained as an archive.
@@ -107,18 +109,42 @@ function Get-BudgetNode {
   }
 }
 
+function Stop-BudgetTerminal {
+  $electronPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\node_modules\electron\dist\electron.exe'))
+  $running = @(Get-CimInstance Win32_Process -Filter "Name = 'electron.exe'" | Where-Object {
+    $_.ExecutablePath -and $_.ExecutablePath -ieq $electronPath -and $_.CommandLine -notmatch '\s--type='
+  })
+  foreach ($candidate in $running) {
+    $process = Get-Process -Id $candidate.ProcessId -ErrorAction SilentlyContinue
+    if (-not $process -or $process.HasExited) { continue }
+    # Only close the application window, never unrelated Electron tools or test fixtures.
+    if ($process.MainWindowTitle -ne 'Budget Terminal') {
+      throw 'Budget Terminal is still starting or has no application window. Wait for it to open, then run btd restart again.'
+    }
+    Write-Host 'Closing Budget Terminal and saving pending data...'
+    if (-not $process.CloseMainWindow()) { throw 'Could not request a clean shutdown. Close Budget Terminal, then run btd restart again.' }
+    if (-not $process.WaitForExit(30000)) {
+      throw 'Budget Terminal did not finish saving within 30 seconds. Restart stopped without forcing it closed. Check the app before trying again.'
+    }
+    Write-Host 'Budget Terminal closed. Preparing the latest desktop build...'
+  }
+}
+
 function Start-BudgetTerminal {
   # Incremental charts, indexed live updates and cache checkpoints: docs/performance.md.
   # Settings uses compact horizontal categories without the redundant Preferences label, overview or introductory header.
   try {
+    if ($Command -eq 'restart' -and ($RuntimeOnly -or $Setup)) { throw 'Restart cannot be combined with setup or runtime-only options.' }
     if (-not ($Attached -or $RuntimeOnly -or $Dev -or $Setup)) {
       $logDirectory = Join-Path $env:LOCALAPPDATA 'BudgetTerminal\launcher-logs'
       New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
       $session = [Guid]::NewGuid().ToString('N')
       $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + (Join-Path $PSScriptRoot 'launch-windows.ps1') + '"'), '-Attached')
+      if ($Command -eq 'restart') { $arguments += '-Command'; $arguments += 'restart' }
       if ($Logs) { $arguments += '-Logs' }
       Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList $arguments -WindowStyle Hidden -WorkingDirectory (Split-Path -Parent $PSScriptRoot) -RedirectStandardOutput (Join-Path $logDirectory "$session.log") -RedirectStandardError (Join-Path $logDirectory "$session.error.log") | Out-Null
-      Write-Host "Budget Terminal is starting independently. You can close this terminal. Startup logs: $logDirectory"
+      $action = if ($Command -eq 'restart') { 'restarting' } else { 'starting' }
+      Write-Host "Budget Terminal is $action independently. You can close this terminal. Startup logs: $logDirectory"
       return
     }
     if ($Setup -and ($RuntimeOnly -or $Dev -or $Logs)) {
@@ -128,6 +154,7 @@ function Start-BudgetTerminal {
     # The selected complete toolchain also owns npm.cmd and all nested scripts.
     $env:PATH = (Split-Path -Parent $node) + [IO.Path]::PathSeparator + $env:PATH
     if ($RuntimeOnly) { Write-Output $node; return }
+    if ($Command -eq 'restart') { Stop-BudgetTerminal }
     if (-not $Setup) { & (Join-Path $PSScriptRoot 'install-bt.ps1') -Quiet }
     $launchArguments = @()
     if ($Setup) { $launchArguments += '--setup' }

@@ -23,17 +23,21 @@ try {
     import { useEffect } from 'react'
     import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
     import { PltrPage } from './src/pages/PltrPage'
-    import { useReloadAll } from './src/api/queries'
+    import { useRefreshStocks } from './src/api/stocksQueries'
+    import { useRefreshFundamentalsPage } from './src/api/fundamentalsPageQueries'
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     const settle = () => new Promise(resolve => setTimeout(resolve, 180))
     const check = (ok, message) => { if (!ok) throw Error(message) }
+    const diagnostics = () => client.getQueryCache().getAll().map(query => String(query.state.error ?? '')).join(' ')
     const text = () => document.body.innerText
     const click = label => {
       const button = [...document.querySelectorAll('button')].find(b => b.textContent.toLowerCase().startsWith(label.toLowerCase()))
       check(button, 'Missing button: ' + label); button.click()
     }
     function Page() {
-      const reload = useReloadAll()
+      const market = useRefreshStocks()
+      const financials = useRefreshFundamentalsPage()
+      const reload = () => Promise.all([market('PLTR'), financials('PLTR')])
       useEffect(() => { window.reloadAll = reload }, [reload])
       return <PltrPage onStatusChange={panels => window.health = panels} onNavigate={(...args) => window.navigation = args} />
     }
@@ -41,7 +45,7 @@ try {
     window.runProbe = async () => {
       const root = createRoot(document.getElementById('root'))
       root.render(page); await settle()
-      check(text().includes('Loading PLTR'), 'Initial loading missing')
+      check(client.isFetching() === 2, 'Initial loading missing')
       window.ready = true; await settle()
       check(text().includes('$1.2B') && text().includes('+50.00%') && text().includes('+30.00%'), 'Financial KPIs incorrect')
       check(text().includes('+$0.07'), 'Daily dollar change lost its cents')
@@ -79,19 +83,19 @@ try {
         document.querySelector('button[aria-label="Open PLTR ' + id + '"]').click(); check(JSON.stringify(window.navigation) === JSON.stringify([id, 'PLTR']), 'Ticker shortcut failed')
       }
       [...document.querySelectorAll('button')].find(button => button.textContent.includes('Palantir fixture headline ↗')).click(); check(window.opened.includes('palantir.com'), 'News source failed')
-      click('Refresh'); await settle()
+      void window.reloadAll().catch(() => {}); await settle()
       check(window.calls.slice(-2).every(call => call.force && call.symbol === 'PLTR'), 'Refresh must force both sources')
       const reloadCalls = window.calls.length; await window.reloadAll(); await settle()
       check(window.calls.length === reloadCalls + 2 && window.calls.slice(-2).every(call => call.force), 'F5 must refresh both active PLTR queries')
-      window.mode = 'partial'; click('Refresh'); await settle()
-      check(window.health.some(panel => panel.envelope.meta.failureReason.includes('Fixture filings unavailable')) && text().includes('$1.2B') && !document.querySelector('[role=status]'), 'Partial failure stays in diagnostics with usable panels and no banner')
-      window.mode = 'reject'; click('Refresh'); await settle()
-      check(text().includes('Fixture network offline') && text().includes('$1.2B'), 'Refresh failure discarded content or hid error')
-      window.mode = 'good'; click('Refresh'); await settle()
+      window.mode = 'partial'; void window.reloadAll().catch(() => {}); await settle()
+      check(diagnostics().includes('Fixture filings unavailable') && text().includes('$1.2B') && !document.querySelector('[role=status]'), 'Partial failure stays in diagnostics with usable panels and no banner')
+      window.mode = 'reject'; void window.reloadAll().catch(() => {}); await settle()
+      check(diagnostics().includes('Fixture network offline') && text().includes('$1.2B'), 'Refresh failure discarded content or hid error')
+      window.mode = 'good'; void window.reloadAll().catch(() => {}); await settle()
       check(!document.querySelector('[role=status]'), 'Recovery retained error')
-      window.mode = 'empty'; click('Refresh'); await settle()
-      check(window.health.some(panel => panel.envelope.meta.failureReason.includes('Fixture providers unavailable')) && text().includes('Price history unavailable.') && text().includes('Financial history unavailable.'), 'Complete failure must retain diagnostic errors and show empty states')
-      window.mode = 'good'; click('Refresh'); await settle()
+      window.mode = 'empty'; void window.reloadAll().catch(() => {}); await settle()
+      check(diagnostics().includes('Fixture providers unavailable') && text().includes('$1.2B'), 'Complete refresh failure must retain diagnostic errors and the saved snapshot')
+      window.mode = 'good'; void window.reloadAll().catch(() => {}); await settle()
       root.render(<div />); await settle()
       const warmCalls = window.calls.length
       root.render(page); await settle()

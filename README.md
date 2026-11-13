@@ -226,6 +226,7 @@ terminal to stay open.
 directory and checks dependencies and builds the latest desktop source before opening it.
 To install or repair it manually on Windows, run `npm run setup:desktop` from the checkout.
 Background `btd` startup logs are saved under `%LOCALAPPDATA%\BudgetTerminal\launcher-logs`.
+`btd restart` gracefully closes the running app, waits for pending saves, rebuilds the latest source and reopens it. If the app is closed, it starts it. Restart never forces termination; a shutdown timeout stops the launch and leaves an error in the startup logs.
 Optional arguments include `btd -Dev`
 for live updates and `btd -Logs` to open diagnostics. To remove only this command,
 run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-bt.ps1 -Uninstall`.

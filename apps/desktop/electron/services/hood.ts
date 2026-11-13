@@ -79,7 +79,7 @@ export async function getHood({ force = false }: HoodRequest = {}, fetchers: Hoo
       fromCache ||= result.fromCache
       const warnings = apply(result.value)
       if (result.stale) warnings.push('Refresh failed; showing cached data.')
-      payload.progress[block] = result.stale ? 'stale' : warnings.length ? 'partial' : 'loaded'
+      payload.progress[block] = result.stale || warnings.some(warning => /showing cached/i.test(warning)) ? 'stale' : warnings.length ? 'partial' : 'loaded'
       times.push(Date.now() - result.ageSeconds * 1000)
       for (const warning of warnings) errors.push(err(SOURCE, warning, `hood-${block}`, block))
     } catch (error) { errors.push(err(SOURCE, describeError(error), `hood-${block}`, block)) } finally { publishPageProgress(payload, SOURCE, errors, CHANNELS.hood) }
