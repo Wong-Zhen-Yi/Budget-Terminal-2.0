@@ -1,4 +1,14 @@
 #!/bin/sh
+# Homebuilders has an independent housing-economics layout with mortgage scenarios and a builder capital map.
+# Homebuilders Focus page and read-only MCP tool rebuild from current source through the shared launcher.
+# Crypto panels fit the viewport with bounded data lists; rebuilt through the shared launcher.
+# Calendar fits the viewport with responsive month rows and bounded information panels; rebuilt through the shared launcher.
+# Agents live status isolates intermittent Telegram failures; rebuilt through the shared launcher.
+# Trading Volumes and Beta support pointer-centered scroll zoom and reset; rebuilt through the shared launcher.
+# TickerTick news and MCP descriptions rebuild from current source through the shared launcher.
+# Scorecard uses a company comparison matrix and focused analysis panel; rebuilt through the shared launcher.
+# Price page omits the successful-results source summary; rebuilt through the shared launcher.
+# Settings Page Load Order uses stable, readable columns; rebuilt through the shared launcher.
 # Portfolio LLM and ticker exports copy directly to the native clipboard on Windows, macOS and Linux.
 # Agents chat supports smooth middle-click scrolling in page and embedded views.
 # MCP tools and schemas rebuild from current source on every launch; see docs/local-mcp.md.

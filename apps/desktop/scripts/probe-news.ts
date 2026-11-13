@@ -42,6 +42,8 @@ import { extractReadableText } from '../electron/services/news/extract.js'
 import { MACRO_SYMBOLS } from '../electron/services/yahoo/newsPage.js'
 import { yahooProvider } from '../electron/services/provider.js'
 import { runNewsSecurityChecks } from './probe-news-security.js'
+import { runTickerTickChecks, runTickerTickLiveChecks } from './probe-news-tickertick.js'
+import { tickerTickRateGate } from '../electron/services/news/tickerTick.js'
 
 function pad(text: string, width: number, align: 'left' | 'right' = 'left'): string {
   const value = text.length > width ? `${text.slice(0, width - 1)}…` : text
@@ -400,14 +402,21 @@ async function runImages(articles: NewsArticle[]): Promise<void> {
 /** Exercise the real service/cache chain with deterministic provider responses. */
 async function runRefreshChecks(): Promise<void> {
   cache.clear()
-  let edition = 1, offline = false, searches = 0, feeds = 0
+  let edition = 1, offline = false, searches = 0, feeds = 0, tickerTickCalls = 0
   const publishedAt = Date.now() - 7 * 86_400_000
   const search = mock.method(yahoo, 'search', async (symbol: string) => {
     searches++
     if (offline) throw new Error('Fixture publisher unavailable')
     return { news: [{ uuid: `edition-${edition}`, relatedTickers: [symbol], title: `Headline edition ${edition}`, publisher: 'Fixture publisher', providerPublishTime: new Date(publishedAt), link: `https://example.com/edition-${edition}` }] }
   })
-  const feed = mock.method(globalThis, 'fetch', async () => {
+  const gate = mock.method(tickerTickRateGate, 'run', async (task: () => Promise<unknown>) => task())
+  const feed = mock.method(globalThis, 'fetch', async (input: string | URL | Request) => {
+    if (String(input).startsWith('https://api.tickertick.com/')) {
+      tickerTickCalls++
+      if (offline) throw new Error('Fixture TickerTick unavailable')
+      return Response.json({ stories: [{ id: `edition-${edition}`, title: `Headline edition ${edition}`, site: 'example.com',
+        time: publishedAt, url: `https://example.com/tickertick-edition-${edition}`, tickers: ['test'], tags: ['test'] }] })
+    }
     feeds++
     if (offline) throw new Error('Fixture publisher unavailable')
     return new Response(`<rss><channel><item><title>Fed market headline edition ${edition}</title><link>https://example.com/feed-${edition}</link><pubDate>${new Date(publishedAt).toUTCString()}</pubDate><description>Fixture market evidence</description></item></channel></rss>`, { headers: { 'content-type': 'application/rss+xml' } })
@@ -420,7 +429,7 @@ async function runRefreshChecks(): Promise<void> {
   try {
     await yahooProvider.news({ tickers: ['TEST'] })
     await yahooProvider.newsPage({ tickers: ['TEST'] })
-    const previousSearches = searches, previousFeeds = feeds
+    const previousTickerTickCalls = tickerTickCalls, previousFeeds = feeds
     edition = 2
     const cached = await yahooProvider.newsTickerSearch({ tickers: ['TEST'] })
     assert(cached.data.articles.every(article => article.title.includes('edition 1')), 'Fixture must begin with a usable, unexpired old snapshot')
@@ -430,7 +439,7 @@ async function runRefreshChecks(): Promise<void> {
     assert(ticker.data.articles.every(article => article.title.includes('edition 2')) && ticker.data.articles.length > 0, 'Agent ticker news must bypass the shared portfolio-news cache')
     const page = await dispatcher.invoke('budget_terminal_news_page', { request: { tickers: ['TEST'], force: false } }, 'agent') as Envelope<NewsPagePayload>
     assert(page.data.articles.length > 0 && page.data.articles.every(article => article.title.includes('edition 2')), 'Refresh must reach both outer news lists and underlying Yahoo/RSS caches')
-    assert(searches > previousSearches && feeds > previousFeeds, 'A news read must actually contact the provider fixtures')
+    assert(tickerTickCalls > previousTickerTickCalls && feeds > previousFeeds, 'A news read must actually contact the TickerTick/RSS provider fixtures')
     assert(page.data.articles.every(article => article.publishedAt === publishedAt || Math.abs(article.publishedAt - publishedAt) < 1000), 'Fresh retrieval must retain old publication dates rather than relabel old stories as new')
     assert.equal(page.meta.freshness, 'fresh')
     offline = true
@@ -442,7 +451,7 @@ async function runRefreshChecks(): Promise<void> {
     assert(empty.errors.length > 0 && empty.meta.freshness !== 'fresh', 'Unavailable news is a refresh failure, not evidence of no new stories')
     console.log('PASS: MCP/Agent news bypasses unexpired list and source caches, retains publication dates, and reports failed refresh/stale fallback')
   } finally {
-    dispatcher.close(); search.mock.restore(); feed.mock.restore(); cache.clear()
+    dispatcher.close(); search.mock.restore(); feed.mock.restore(); gate.mock.restore(); await cache.clear()
   }
 }
 
@@ -456,8 +465,14 @@ async function main(): Promise<void> {
 
   if (flag('--offline')) {
     await runNewsSecurityChecks()
+    await runTickerTickChecks()
     await runRefreshChecks()
     runOffline()
+    return report()
+  }
+
+  if (flag('--tickertick-only')) {
+    await runTickerTickLiveChecks()
     return report()
   }
 

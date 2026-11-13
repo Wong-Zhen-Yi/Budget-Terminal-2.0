@@ -73,8 +73,14 @@ export function PageLoadOrderPanel() {
         {notice ? <p role={notice.error ? 'alert' : 'status'} className={`text-2xs ${notice.error ? 'text-warn' : 'text-text-muted'}`}>{notice.text}</p> : null}
         {order.length ? <>
           <div className="max-h-72 overflow-auto border border-border" data-startup-order-scroll>
-            <table className="w-full text-2xs" aria-label="Startup page load order">
-              <thead className="sticky top-0 bg-surface-raised text-text-muted">
+            <table className="startup-order-table w-full text-xs" aria-label="Startup page load order">
+              <colgroup>
+                <col className="startup-order-table__order" />
+                <col className="startup-order-table__page" />
+                <col />
+                <col className="startup-order-table__time" />
+              </colgroup>
+              <thead className="sticky top-0 z-10 bg-surface-raised text-text-muted">
                 <tr>
                   <th scope="col" className="w-14 px-2 py-1 text-left font-medium">Order</th>
                   <th scope="col" className="px-2 py-1 text-left font-medium">Page</th>

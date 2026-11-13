@@ -1,0 +1,142 @@
+import { CHANNELS } from '../shared/contract.js'
+import { publishPageProgress } from './pageProgress.js'
+import type { Envelope, EnvelopeError, NewsArticle } from '../shared/contract.js'
+import { describeError, err, meta } from '../shared/envelope.js'
+import { HOMEBUILDER_CATALOG, HOMEBUILDER_REVIEW_DATE } from '../shared/homebuilderCatalog.js'
+import { finite } from '../shared/homebuilders.js'
+import type { HomebuilderCompany, HomebuilderMarket, HomebuilderProfile, HomebuilderRow, HomebuildersPayload, HomebuildersRequest } from '../shared/homebuilders.js'
+import { cache, TTL, type TtlCache } from './cache.js'
+import { paced, yahoo } from './yahoo/client.js'
+import { getYahooSeries } from './yahoo/series.js'
+import { withYahooSummary } from './yahoo/requests.js'
+import { fetchPortfolioNews } from './yahoo/newsPage.js'
+import { equityMarket } from '../shared/equityMarkets.js'
+import { getQuote } from './yahoo/quotes.js'
+import { finnhubQuotes } from './finnhubQuotes.js'
+
+const SOURCE = 'Yahoo Finance; company and ETF issuer catalog'
+const DAY = 86_400_000
+type Lane = 'market' | 'profile' | 'news'
+interface LaneData<T> { value: T; warnings: string[]; fetchedAt: number }
+export interface HomebuilderFetchers {
+  market: (symbol: string, force: boolean) => Promise<{ value: HomebuilderMarket; warnings: string[] }>
+  profile: (symbol: string) => Promise<HomebuilderProfile>
+  news: (symbol: string) => Promise<NewsArticle[]>
+}
+function object(value: unknown): Record<string, unknown> { return value && typeof value === 'object' ? value as Record<string, unknown> : {} }
+function timestamp(value: unknown): number | null {
+  if (value instanceof Date) return finite(value.getTime())
+  const number = finite(value)
+  return number === null ? null : number < 1e12 ? number * 1000 : number
+}
+
+const defaults: HomebuilderFetchers = {
+  async market(symbol, force) {
+    const [quote, series] = await Promise.allSettled([
+      paced(() => yahoo.quote(symbol)),
+      getYahooSeries({ symbol, start: new Date(Date.now() - 400 * DAY), interval: '1d', force }),
+    ])
+    const warnings: string[] = []
+    const raw = quote.status === 'fulfilled' ? object(quote.value) : {}
+    if (quote.status === 'rejected') warnings.push(`Quote failed: ${describeError(quote.reason)}`)
+    const history = series.status === 'fulfilled' ? series.value.rows.flatMap(point => {
+      // Raw prices must never silently replace split/dividend-adjusted closes.
+      const close = finite(point.adjclose)
+      return close !== null && close > 0 ? [{ date: new Date(point.time * 1000).toISOString().slice(0, 10), close }] : []
+    }).sort((a, b) => a.date.localeCompare(b.date)) : []
+    if (series.status === 'rejected') warnings.push(`History failed: ${describeError(series.reason)}`)
+    else if (series.value.stale) warnings.push('History refresh failed; showing cached data.')
+    if (!history.length) warnings.push('Adjusted price history unavailable.')
+    if (finite(raw.regularMarketPrice) === null) warnings.push('Share price unavailable.')
+    const perp = equityMarket(symbol) || await finnhubQuotes.configured(symbol) ? await getQuote(symbol, force).catch(error => {
+      warnings.push(`Selected price refresh failed; showing Yahoo stock quote: ${describeError(error)}`)
+      return undefined
+    }) : undefined
+    const price = perp?.price ?? finite(raw.regularMarketPrice)
+    const previous = finite(raw.regularMarketPreviousClose)
+    if (price === null && !history.length) throw new Error(warnings.join(' · '))
+    return { value: { price, dailyChange: perp?.change ?? finite(raw.regularMarketChangePercent) ?? (price !== null && previous !== null && previous > 0 ? (price / previous - 1) * 100 : null),
+      marketCap: finite(raw.marketCap), quoteTime: perp?.asOf ?? timestamp(raw.regularMarketTime), history,
+      priceSource: perp?.source ?? 'Yahoo Finance', changeBasis: perp?.changeBasis ?? 'previous-close' }, warnings }
+  },
+  async profile(symbol) {
+    const raw = await withYahooSummary(symbol, () => paced(() => yahoo.quoteSummary(symbol, { modules: ['assetProfile', 'summaryDetail', 'defaultKeyStatistics', 'financialData', 'calendarEvents'] })))
+    const profile = object(raw.assetProfile)
+    const detail = object(raw.summaryDetail)
+    const statistics = object(raw.defaultKeyStatistics)
+    const financial = object(raw.financialData)
+    const calendar = object(object(raw.calendarEvents).earnings)
+    const dates = Array.isArray(calendar.earningsDate) ? calendar.earningsDate.flatMap(value => timestamp(value) === null ? [] : [timestamp(value)!]).filter(date => date >= Date.now() - DAY).sort((a, b) => a - b) : []
+    if (!raw.assetProfile && !raw.summaryDetail && !raw.financialData) throw new Error('Company profile unavailable.')
+    return { description: typeof profile.longBusinessSummary === 'string' ? profile.longBusinessSummary : '',
+      trailingPe: finite(detail.trailingPE), forwardPe: finite(detail.forwardPE) ?? finite(statistics.forwardPE),
+      priceToBook: finite(statistics.priceToBook), returnOnEquity: finite(financial.returnOnEquity),
+      revenue: finite(financial.totalRevenue), revenueGrowth: finite(financial.revenueGrowth), grossMargin: finite(financial.grossMargins), earningsDate: dates[0] ?? null }
+  },
+  // The page owns a ten-minute stale-fallback cache. Refresh the underlying news
+  // service on expiry so its fifteen-minute cache cannot extend this TTL.
+  news: symbol => fetchPortfolioNews(symbol, true),
+}
+
+export function emptyHomebuildersPayload(companies: readonly HomebuilderCompany[] = HOMEBUILDER_CATALOG): HomebuildersPayload {
+  return { rows: companies.map(company => ({ company, market: null, profile: null, news: [],
+    progress: { market: 'unavailable', profile: 'unavailable', news: 'unavailable' },
+    fetchedAt: { market: null, profile: null, news: null } })), fetchedAt: 0, catalogReviewedAt: HOMEBUILDER_REVIEW_DATE }
+}
+
+export async function getHomebuilders({ force = false }: HomebuildersRequest = {}, fetchers = defaults, storage: TtlCache = cache,
+  companies: readonly HomebuilderCompany[] = HOMEBUILDER_CATALOG): Promise<Envelope<HomebuildersPayload>> {
+  const payload = emptyHomebuildersPayload(companies)
+  const errors: EnvelopeError[] = []
+  let cached = false
+  // Publish the entire saved grid before any provider refresh can delay it.
+  // Preview reads must not become dependencies of the final refreshed envelope.
+  await Promise.all(payload.rows.map(async row => {
+    await Promise.all((['market', 'profile', 'news'] as const).map(async block => {
+      const saved = await storage.get<LaneData<HomebuilderMarket | HomebuilderProfile | NewsArticle[]>>(
+        `homebuilders:v2:${row.company.symbol}:${block}`, { allowStale: true, observe: false })
+      if (!saved) return
+      if (block === 'market') row.market = saved.value.value as HomebuilderMarket
+      else if (block === 'profile') row.profile = saved.value.value as HomebuilderProfile
+      else row.news = saved.value.value as NewsArticle[]
+      row.fetchedAt[block] = saved.value.fetchedAt
+      row.progress[block] = saved.snapshot?.stale || (saved.snapshot?.expiresAt ?? Infinity) < Date.now()
+        ? 'stale' : saved.value.warnings.length ? 'partial' : 'loaded'
+    }))
+  }))
+  publishPageProgress(payload, SOURCE, errors, CHANNELS.homebuilders)
+  const lane = async <T>(row: HomebuilderRow, block: Lane, ttl: number, loader: () => Promise<{ value: T; warnings: string[] }>, apply: (value: T) => void) => {
+    try {
+      const result = await storage.resolveWithStaleFallback<LaneData<T>>(`homebuilders:v2:${row.company.symbol}:${block}`, ttl,
+        async () => ({ ...await loader(), fetchedAt: Date.now() }), { force })
+      apply(result.value.value)
+      const warnings = [...result.value.warnings]
+      if (result.stale) warnings.push('Refresh failed; showing cached data.')
+      row.progress[block] = result.stale || warnings.some(warning => /cached data/i.test(warning)) ? 'stale' : warnings.length ? 'partial' : 'loaded'
+      row.fetchedAt[block] = Math.min(result.value.fetchedAt, result.snapshot?.fetchedAt ?? Infinity)
+      cached ||= result.fromCache
+      warnings.forEach(reason => errors.push(err(SOURCE, reason, `homebuilders-${block}`, row.company.symbol)))
+    } catch (error) { errors.push(err(SOURCE, describeError(error), `homebuilders-${block}`, row.company.symbol)) } finally { publishPageProgress(payload, SOURCE, errors, CHANNELS.homebuilders) }
+  }
+  // Four workers per lane let slow news finish independently of market/profile
+  // work. The shared Yahoo gate still admits every individual provider request.
+  await Promise.all((['market', 'profile', 'news'] as const).map(async block => {
+    let cursor = 0
+    await Promise.all(Array.from({ length: Math.min(4, payload.rows.length) }, async () => {
+      while (cursor < payload.rows.length) {
+        const row = payload.rows[cursor++]
+        if (block === 'market') await lane(row, block, TTL.homebuilders, () => fetchers.market(row.company.symbol, force), value => { row.market = value })
+        else if (block === 'profile' && row.company.kind === 'benchmark') continue
+        else if (block === 'profile') await lane(row, block, TTL.profile, async () => ({ value: await fetchers.profile(row.company.symbol), warnings: [] }), value => { row.profile = value })
+        else await lane(row, block, TTL.news, async () => ({ value: await fetchers.news(row.company.symbol), warnings: [] }), value => { row.news = value })
+      }
+    }))
+  }))
+  payload.fetchedAt = Date.now()
+  const usable = payload.rows.some(row => row.market || row.profile)
+  const freshness = !usable ? 'failed' : errors.length ? 'partial' : cached ? 'cached' : 'fresh'
+  return { data: payload, meta: meta(SOURCE, freshness, {
+    fetchedAt: Math.min(...payload.rows.flatMap(row => Object.values(row.fetchedAt).filter((time): time is number => time !== null)), payload.fetchedAt),
+    ...(errors.length ? { failureReason: `${errors.length} data issue(s); inspect company and panel warnings.` } : {}),
+  }), errors }
+}

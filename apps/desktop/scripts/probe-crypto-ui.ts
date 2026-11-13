@@ -14,7 +14,8 @@ try {
   const assets = join(root, 'out/renderer/assets')
   const css = (await readdir(assets)).find(name => name.endsWith('.css'))
   assert.ok(css, 'Run npm run build before this UI probe')
-  await writeFile(join(directory, 'theme.css'), await readFile(join(assets, css)))
+  // Exercise current page styles even when a full desktop rebuild is unavailable.
+  await writeFile(join(directory, 'theme.css'), `${await readFile(join(assets, css), 'utf8')}\n${await readFile(join(root, 'src/styles/crypto.css'), 'utf8')}`)
   const bundle = await build({
     stdin: {
       resolveDir: root,
@@ -31,6 +32,28 @@ try {
         const check = (ok, message) => { if (!ok) throw Error(message) }
         const settle = () => new Promise(resolve => setTimeout(resolve, 200))
         const text = () => document.body.innerText
+        window.checkViewport = () => {
+          const page = document.querySelector('.crypto-workspace')
+          check(page.scrollWidth <= page.clientWidth + 1, 'Crypto page overflows horizontally at ' + innerWidth)
+          check(page.scrollHeight <= page.clientHeight + 1, 'Crypto page needs vertical scrolling at ' + innerWidth + 'x' + innerHeight)
+          const bounds = page.getBoundingClientRect()
+          check(bounds.bottom <= innerHeight + 1, 'Crypto page exceeds app viewport')
+          for (const panel of document.querySelector('.crypto-layout').children) {
+            const rect = panel.getBoundingClientRect()
+            check(rect.height > 0 && rect.right <= bounds.right + 1 && rect.bottom <= bounds.bottom + 1, 'Crypto panel outside viewport: ' + panel.className)
+          }
+          const breadth = document.querySelector('.crypto-breadth').getBoundingClientRect()
+          const right = document.querySelector('.crypto-right').getBoundingClientRect()
+          for (const panel of document.querySelector('.crypto-right').children) {
+            check(panel.getBoundingClientRect().bottom <= right.bottom + 1, 'Right column clips ' + panel.className)
+          }
+          for (const cell of document.querySelectorAll('.crypto-heatmap-cell')) {
+            const rect = cell.getBoundingClientRect()
+            check(rect.bottom <= breadth.bottom + 1 && rect.height >= 20, 'Heatmap row clipped or too short at ' + innerWidth + 'x' + innerHeight)
+            for (const label of cell.children) check(label.scrollWidth <= cell.clientWidth, 'Heatmap label clipped at ' + innerWidth)
+          }
+          check(document.querySelector('.crypto-chart-canvas').getBoundingClientRect().height >= 80, 'Price chart squeezed out of viewport')
+        }
         let mode = 'success'
         let ready = false
         let forced = false
@@ -169,6 +192,13 @@ try {
           check(opened === 'https://example.com/crypto', 'News link failed')
           const lastCell = document.querySelector('.crypto-heatmap-cell:last-child')
           check(lastCell.getBoundingClientRect().bottom <= document.querySelector('.crypto-breadth').getBoundingClientRect().bottom, 'The last heatmap row is clipped')
+          const complete = client.getQueryData(queryKeys.crypto)
+          client.setQueryData(queryKeys.crypto, { ...complete, data: { ...complete.data,
+            hyperliquid: { ...good.hyperliquid, markets: [...good.hyperliquid.markets, ...Array.from({ length: 248 }, (_, i) => ({ ...good.hyperliquid.markets[i % 2], symbol: 'COIN' + i }))] },
+            news: Array.from({ length: 10 }, (_, i) => ({ ...good.news[0], id: 'news-' + i, title: 'Crypto market fixture headline with a longer title to exercise wrapping in the news panel ' + i }))
+          } })
+          await settle()
+          window.checkViewport()
           return 'PASS: prepared startup chart, watchlist/timeframes, real candlestick rendering, market search/sort, source separation, removed workspace header, news actions, cooldown, partial readiness and recovery'
         }
       `,
@@ -180,7 +210,7 @@ try {
   })
   await writeFile(join(directory, 'renderer.js'), bundle.outputFiles[0].text)
   await writeFile(join(directory, 'index.html'), `
-    <html><head><link rel="stylesheet" href="theme.css"></head><body><div id="root" style="height:100vh;display:flex"></div>
+    <html><head><link rel="stylesheet" href="theme.css"></head><body><div id="root" style="height:calc(100vh - 100px);width:calc(100vw - 220px);margin:100px 0 0 220px;display:flex"></div>
     <script>window.api = {}</script><script src="renderer.js"></script></body></html>
   `)
   await writeFile(join(directory, 'main.cjs'), `
@@ -197,17 +227,14 @@ try {
         await new Promise(resolve => setTimeout(resolve, 300));
         window.webContents.invalidate();
         fs.writeFileSync(${JSON.stringify(screenshot)}, (await window.webContents.capturePage()).toPNG());
-        window.setSize(1600, 1200);
-        await new Promise(resolve => setTimeout(resolve, 200));
-        fs.writeFileSync(${JSON.stringify(join(root, 'out', 'crypto-smoke-full.png'))}, (await window.webContents.capturePage()).toPNG());
-        window.setSize(1280, 720);
-        await new Promise(resolve => setTimeout(resolve, 200));
-        if (await window.webContents.executeJavaScript('document.documentElement.scrollWidth > window.innerWidth')) throw Error('Narrow layout overflows');
-        window.setSize(720, 850);
-        await new Promise(resolve => setTimeout(resolve, 200));
-        if (await window.webContents.executeJavaScript('document.documentElement.scrollWidth > window.innerWidth')) throw Error('Mobile layout overflows');
-        fs.writeFileSync(${JSON.stringify(join(root, 'out', 'crypto-smoke-narrow.png'))}, (await window.webContents.capturePage()).toPNG());
-        console.log('PASS: minimum supported window size and screenshot'); app.exit(0);
+        for (const [width, height] of [[1920, 1080], [1440, 900], [1280, 720], [960, 600]]) {
+          window.setContentSize(width, height);
+          await new Promise(resolve => setTimeout(resolve, 250));
+          const failure = await window.webContents.executeJavaScript('(() => { try { window.checkViewport(); return null } catch (error) { return error.stack } })()');
+          fs.writeFileSync(${JSON.stringify(join(root, 'out'))} + '/crypto-smoke-' + width + 'x' + height + '.png', (await window.webContents.capturePage()).toPNG());
+          if (failure) throw Error(failure);
+        }
+        console.log('PASS: viewport fit at 1920x1080, 1440x900, 1280x720 and 960x600 with app chrome, 250 markets and 10 headlines'); app.exit(0);
       } catch (error) { console.error(error); app.exit(1); }
     });
   `)

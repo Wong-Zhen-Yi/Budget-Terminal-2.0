@@ -24,17 +24,49 @@ try {
         import { useCalendarPage } from './src/stores/calendar'
         const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
         const check = (ok, message) => { if (!ok) throw Error(message) }
-        const settle = () => new Promise(resolve => setTimeout(resolve, 220))
+        const settle = async () => {
+          await new Promise(resolve => setTimeout(resolve, 220))
+          await new Promise(requestAnimationFrame)
+          await new Promise(requestAnimationFrame)
+        }
         const text = () => document.body.innerText
         const button = label => [...document.querySelectorAll('button')].find(b => b.textContent === label)
         const day = date => document.querySelector('button[aria-label^="' + date + '"]')
-        window.checkLayout = async () => {
-          await settle()
+        const checkViewport = () => {
           check(document.documentElement.scrollWidth <= innerWidth, 'Document overflows at ' + innerWidth)
           const page = document.querySelector('.calendar-month-page')
-          check(page.scrollWidth <= page.clientWidth + 1, 'Calendar overflows at ' + innerWidth)
+          check(page.scrollWidth <= page.clientWidth + 1, 'Calendar overflows horizontally at ' + innerWidth)
+          check(page.scrollHeight <= page.clientHeight + 1, 'Calendar needs vertical scrolling at ' + innerWidth + 'x' + innerHeight)
+          const grid = document.querySelector('.calendar-month-grid').getBoundingClientRect()
+          check(grid.height > 0 && grid.bottom <= innerHeight, 'Month grid outside viewport')
+          for (const day of document.querySelectorAll('.calendar-day')) {
+            const rect = day.getBoundingClientRect()
+            check(rect.bottom <= grid.bottom + 1, 'Last week is clipped')
+            for (const item of day.children) check(item.getBoundingClientRect().bottom <= rect.bottom + 1, 'Day summary is clipped: ' + item.className + ' on ' + day.getAttribute('aria-label') + ', row height ' + rect.height + ', overflow ' + (item.getBoundingClientRect().bottom - rect.bottom))
+          }
+          const details = document.querySelector('#calendar-details')
+          if (!details.hidden) for (const panel of details.children) {
+            const rect = panel.getBoundingClientRect()
+            check(rect.bottom <= page.getBoundingClientRect().bottom && rect.height >= panel.firstElementChild.clientHeight, 'Information panel outside viewport')
+          }
+        }
+        window.checkMonthLayouts = async () => {
+          for (const [year, month, weeks] of [[2021, 2, 4], [2026, 4, 5], [2026, 8, 6]]) {
+            for (const detailsCollapsed of [false, true]) {
+              useCalendarPage.setState({ year, month, detailsCollapsed })
+              await settle()
+              check(document.querySelectorAll('.calendar-day').length === weeks * 7, 'Wrong week count')
+              checkViewport()
+            }
+          }
+          useCalendarPage.setState({ detailsCollapsed: false })
+          await settle()
+        }
+        window.checkLayout = async () => {
+          await settle()
+          checkViewport()
           const fontSize = selector => parseFloat(getComputedStyle(document.querySelector(selector)).fontSize)
-          check(fontSize('.calendar-grid-event') >= 13, 'Calendar event text is too small')
+          if (document.querySelector('.calendar-grid-event')) check(fontSize('.calendar-grid-event') >= 13, 'Calendar event text is too small')
           check(fontSize('.calendar-day-number') >= 17, 'Calendar dates are too small')
           for (const more of document.querySelectorAll('.calendar-more')) {
             check(more.getBoundingClientRect().bottom <= more.closest('.calendar-day').getBoundingClientRect().bottom, 'Larger text clips event overflow count')
@@ -99,13 +131,15 @@ try {
           await settle()
           check(window.exported.includes('0.3%'), 'Export should contain readings')
           window.mode = 'partial'
-          button('Refresh').click()
+          await client.refetchQueries()
           await settle()
-          check(window.forced, 'Refresh did not force request')
           check(text().includes('Some FRED readings unavailable'), 'Partial failure not visible')
-          check(text().includes('CPI 0.3% MoM'), 'Partial failure removed healthy readings')
+          day('2026-08-31').click()
+          await settle()
+          check(document.querySelector('.calendar-day-preview')?.innerText.includes('0.3%'), 'Partial failure removed healthy readings')
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
           window.mode = 'success'
-          button('Refresh').click()
+          await client.refetchQueries()
           await settle()
           await window.checkLayout()
           return 'PASS: loading, readings, pointer hover, pin, keyboard, empty day, filters, collapse, export, refresh and partial failure'
@@ -118,7 +152,7 @@ try {
   })
   for (const file of bundle.outputFiles) await writeFile(file.path, file.contents)
   await writeFile(join(directory, 'index.html'), `
-    <html><head><link rel="stylesheet" href="theme.css"></head><body><div id="root" style="height:100vh;display:flex;min-width:0"></div>
+    <html><head><link rel="stylesheet" href="theme.css"><link rel="stylesheet" href="renderer.css"></head><body><div id="root" style="height:calc(100vh - 80px);display:flex;min-width:0"></div>
     <script>
       window.mode = 'success'; window.ready = false;
       const readings = label => [
@@ -154,18 +188,27 @@ try {
     const fs = require('fs');
     app.setPath('userData', ${JSON.stringify(join(directory, 'userData'))});
     app.whenReady().then(async () => {
-      const window = new BrowserWindow({ show: false, width: 1440, height: 1000, webPreferences: { backgroundThrottling: false } });
+      const window = new BrowserWindow({ show: false, width: 1440, height: 1000, webPreferences: { backgroundThrottling: false, offscreen: true } });
       try {
         await window.loadFile(${JSON.stringify(join(directory, 'index.html'))});
         console.log(await window.webContents.executeJavaScript('window.runProbe().catch(error => { throw Error(error.stack) })'));
         fs.writeFileSync(${JSON.stringify(screenshot)}, (await window.webContents.capturePage()).toPNG());
-        for (const width of [900, 600, 390]) {
-          window.setSize(width, 800);
+        for (const [width, height] of [[1440, 900], [1280, 720], [960, 600], [768, 600], [900, 800], [600, 800], [390, 800]]) {
+          window.setContentSize(width, height);
           await new Promise(resolve => setTimeout(resolve, 250));
+          await window.webContents.executeJavaScript('window.checkMonthLayouts().catch(error => { throw Error(error.stack) })');
           await window.webContents.executeJavaScript('window.checkLayout().catch(error => { throw Error(error.stack) })');
         }
-        console.log('PASS: responsive grid and bounded day previews at desktop, tablet and phone widths'); app.exit(0);
-      } catch (error) { console.error(error); app.exit(1); }
+        window.setContentSize(1280, 720);
+        await new Promise(resolve => setTimeout(resolve, 250));
+        fs.writeFileSync(${JSON.stringify(screenshot)}, (await window.webContents.capturePage()).toPNG());
+        console.log('PASS: four-, five- and six-week months fit without page scrolling, expanded/collapsed information and bounded day previews'); app.exit(0);
+      } catch (error) {
+        fs.writeFileSync(${JSON.stringify(screenshot)}, (await window.webContents.capturePage()).toPNG());
+        console.error(error);
+        console.error(await window.webContents.executeJavaScript("JSON.stringify([...document.querySelectorAll('.calendar-month-page, .calendar-grid-container, .calendar-month-grid, .calendar-details, .calendar-day')].slice(0, 5).map(element => ({ className: element.className, width: element.clientWidth, height: element.clientHeight, scrollHeight: element.scrollHeight, text: element.innerText.slice(0, 150) })))"));
+        app.exit(1);
+      }
     });
   `)
   const env: NodeJS.ProcessEnv = { ...process.env, APPDATA: directory, LOCALAPPDATA: directory }
@@ -175,7 +218,7 @@ try {
     let output = ''
     child.stdout.on('data', data => { output += data })
     child.stderr.on('data', data => { output += data })
-    const timer = setTimeout(() => { child.kill(); reject(new Error('Calendar UI probe timed out')) }, 40_000)
+    const timer = setTimeout(() => { child.kill(); reject(new Error('Calendar UI probe timed out')) }, 60_000)
     child.on('error', error => { clearTimeout(timer); reject(error) })
     child.on('exit', code => { clearTimeout(timer); resolveRun({ code, output }) })
   })

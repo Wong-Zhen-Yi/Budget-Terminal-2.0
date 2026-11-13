@@ -39,7 +39,7 @@ export function MarketApiKeysPanel() {
         setStatus(result.data)
         setDrafts(previous => ({ ...previous, [request.provider]: '' }))
         if (request.provider === 'finnhub') {
-          const roots = new Set(['quotes', 'backtestQuotes', 'stocks', 'chart', 'chartsHistory', 'amzn', 'avgo', 'mu', 'sofi', 'vst', 'hood', 'hims', 'pltr', 'bmnr', 'fundamentalsPage', 'valuation', 'heatmap', 'marketCap', 'priceScreen', 'semiconductors'])
+          const roots = new Set(['quotes', 'backtestQuotes', 'stocks', 'chart', 'chartsHistory', 'amzn', 'avgo', 'mu', 'sofi', 'vst', 'hood', 'hims', 'pltr', 'bmnr', 'fundamentalsPage', 'valuation', 'heatmap', 'marketCap', 'priceScreen', 'semiconductors', 'homebuilders'])
           void client.invalidateQueries({ predicate: query => roots.has(String(query.queryKey[0])), refetchType: 'all' })
         }
       }

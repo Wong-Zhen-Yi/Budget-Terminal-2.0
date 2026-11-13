@@ -1,0 +1,151 @@
+.homebuilders-page { display:flex; flex:1; min-width:0; min-height:0; flex-direction:column; gap:10px; overflow:hidden; padding:14px; }
+.hb-heading { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-shrink:0; }
+.hb-heading h1 { font-size:25px; font-weight:600; letter-spacing:-.5px; line-height:1.2; margin-top:2px; }
+.hb-kicker { font-size:10px; text-transform:uppercase; letter-spacing:1.2px; color:var(--color-text-dim); }
+.hb-heading nav { display:flex; gap:6px; border-bottom:1px solid var(--color-border); }
+.hb-heading nav button { padding:9px 10px; border-bottom:2px solid transparent; color:var(--color-text-muted); font-size:12px; }
+.hb-heading nav button[aria-pressed=true] { color:var(--color-text); border-bottom-color:var(--color-accent); }
+.homebuilders-page button { cursor:pointer; }
+.homebuilders-page button:focus-visible, .homebuilders-page input:focus-visible, .homebuilders-page select:focus-visible { outline:2px solid var(--color-accent); outline-offset:2px; }
+.hb-ticker-street { display:flex; gap:12px; flex-shrink:0; }
+.hb-builder-tickers { flex:1; display:grid; grid-template-columns:repeat(10,minmax(0,1fr)); border-block:1px solid var(--color-border); }
+.hb-builder-tickers button { min-width:0; padding:9px 5px; text-align:center; border-right:1px solid var(--color-border); position:relative; background:var(--color-surface); }
+.hb-builder-tickers button:last-child { border-right:0; }
+.hb-ticker-street strong, .hb-ticker-street span { display:block; }
+.hb-ticker-street strong { font-family:var(--font-mono); font-size:12px; }
+.hb-ticker-street span { font-family:var(--font-mono); font-size:10px; margin-top:3px; }
+.hb-ticker-street [aria-pressed=true] { background:var(--color-surface-hover); box-shadow:inset 0 -2px var(--color-accent); }
+.hb-benchmarks { display:flex; gap:8px; }
+.hb-benchmarks button { padding:5px 12px; min-width:78px; text-align:left; border:1px dashed var(--color-border-strong); }
+.hb-benchmarks small { font-size:9px; color:var(--color-text-dim); }
+.hb-market-context { display:flex; justify-content:space-between; gap:10px; flex-shrink:0; font-size:10px; color:var(--color-text-muted); }
+.hb-market-context > div { display:flex; gap:14px; }
+.hb-source { color:var(--color-accent-hover); font-size:10px; text-align:left; }
+.hb-source:hover { text-decoration:underline; }
+.hb-workspace { flex:1; min-height:0; min-width:0; }
+.hb-economics { height:100%; display:grid; grid-template-columns:minmax(240px,.95fr) minmax(290px,1.5fr) minmax(250px,.95fr); gap:16px; }
+.hb-economics[hidden] { display:none; }
+.hb-buyer, .hb-capital, .hb-dossier { min-width:0; min-height:0; overflow:auto; }
+.hb-buyer, .hb-dossier { background:var(--color-surface); border:1px solid var(--color-border); padding:14px; }
+.hb-buyer > header h2, .hb-capital > header h2 { font-size:15px; line-height:1.35; font-weight:600; margin:5px 0; }
+.hb-buyer > header p, .hb-capital > header p { font-size:10px; color:var(--color-text-muted); }
+.hb-payment { margin:18px 0; }
+.hb-payment output { display:block; font-family:var(--font-mono); font-size:30px; line-height:1.2; letter-spacing:-1px; color:var(--color-text); }
+.hb-payment > span { font-size:10px; color:var(--color-text-muted); display:block; margin-top:5px; }
+.hb-scenario-fields { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.hb-scenario-fields > :first-child { grid-column:1 / -1; }
+.hb-scenario-fields label { font-size:10px; color:var(--color-text-muted); }
+.hb-scenario-fields input { width:100%; margin-top:4px; padding:6px 8px; background:var(--color-bg); border:1px solid var(--color-border-strong); color:var(--color-text); font-family:var(--font-mono); font-size:12px; min-width:0; }
+.hb-term { display:flex; align-items:center; gap:5px; margin:12px 0; font-size:10px; }
+.hb-term > span { color:var(--color-text-muted); margin-right:auto; }
+.hb-term button { padding:4px 6px; border:1px solid var(--color-border-strong); color:var(--color-text-muted); }
+.hb-term [aria-pressed=true] { border-color:var(--color-accent); color:var(--color-text); }
+.hb-financed { display:flex; justify-content:space-between; font-size:10px; padding:8px 0; border-block:1px solid var(--color-border); color:var(--color-text-muted); }
+.hb-financed b { color:var(--color-text); font-weight:400; font-family:var(--font-mono); }
+.hb-rate-ladder { display:grid; gap:10px; margin:16px 0; }
+.hb-rate-ladder > div { display:grid; grid-template-columns:40px 1fr 73px; gap:8px; align-items:center; font-size:10px; font-family:var(--font-mono); color:var(--color-text-muted); }
+.hb-rate-ladder > div > div { height:6px; background:var(--color-surface-raised); }
+.hb-rate-ladder i { display:block; height:100%; background:var(--color-accent-dim); }
+.hb-rate-ladder [data-rate-step="1"] i { background:var(--color-accent); }
+.hb-rate-ladder b { text-align:right; color:var(--color-text); font-weight:400; }
+.hb-buying-power { border-left:2px solid var(--color-warn); padding-left:10px; margin-top:16px; }
+.hb-buying-power > span { display:block; font-size:11px; color:var(--color-text-muted); }
+.hb-buying-power strong { display:block; font-family:var(--font-mono); font-size:22px; margin:5px 0; }
+.hb-buying-power small { display:block; font-size:10px; color:var(--color-text-muted); }
+.hb-method { font-size:10px; line-height:1.5; color:var(--color-text-dim); margin:12px 0; }
+.hb-capital { display:flex; flex-direction:column; padding:12px 0 0; }
+.hb-capital-plot { display:flex; align-items:center; justify-content:center; flex:1; min-height:180px; }
+.hb-capital-plot svg { width:100%; max-height:100%; display:block; overflow:visible; }
+.hb-capital-plot text { fill:var(--color-text-muted); font-size:13px; font-family:var(--font-mono); }
+.hb-map-point text { font-size:14px; }
+.hb-map-grid { stroke:var(--color-border); stroke-width:1; stroke-dasharray:3 5; }
+.hb-map-point { cursor:pointer; outline:none; }
+.hb-map-point circle { fill:var(--color-accent-dim); stroke:var(--color-accent); stroke-width:1.5; }
+.hb-map-point[aria-pressed=true] circle, .hb-map-point:focus-visible circle { fill:var(--color-accent); stroke:var(--color-text); stroke-width:2; }
+.hb-map-point[aria-pressed=true] text { fill:var(--color-text); }
+.hb-map-point:hover circle { stroke:var(--color-text); }
+.hb-map-caption { color:var(--color-text-dim); font-size:10px; margin:4px 0 12px; }
+.hb-capital-context { padding:12px 0; border-block:1px solid var(--color-border); font-size:11px; }
+.hb-capital-context strong { font-weight:500; }
+.hb-capital-context p { font-size:10px; line-height:1.5; color:var(--color-text-muted); margin-top:5px; }
+.hb-report-questions { padding:12px 0 0; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.hb-report-questions > span { grid-column:1 / -1; color:var(--color-text-dim); font-size:10px; }
+.hb-report-questions b { display:block; font-size:11px; font-weight:500; }
+.hb-report-questions small { display:block; margin-top:4px; font-size:10px; line-height:1.5; color:var(--color-text-muted); }
+.hb-company-name { display:flex; flex-direction:column; margin-top:10px; gap:4px; }
+.hb-company-name strong { font-family:var(--font-mono); font-size:20px; }
+.hb-company-name span { color:var(--color-text-muted); font-size:12px; }
+.hb-quote { display:flex; gap:10px; align-items:baseline; margin:14px 0 4px; }
+.hb-quote strong { font-family:var(--font-mono); font-size:24px; }
+.hb-quote > span { font-size:11px; }
+.hb-quote-source { color:var(--color-text-dim); font-size:9px; line-height:1.6; }
+.hb-business { font-size:11px; line-height:1.5; margin:12px 0; }
+.hb-facts { display:grid; grid-template-columns:1fr 1fr; gap:12px 8px; border-block:1px solid var(--color-border); padding:12px 0; }
+.hb-facts dt { color:var(--color-text-muted); font-size:9px; }
+.hb-facts dd { font-family:var(--font-mono); font-size:13px; margin-top:3px; }
+.hb-company-actions { display:flex; flex-wrap:wrap; gap:4px; margin:12px 0; }
+.hb-next-report { display:flex; justify-content:space-between; gap:8px; padding:10px 0; border-top:1px solid var(--color-border); font-size:10px; }
+.hb-next-report span { color:var(--color-text-muted); }
+.hb-next-report strong { font-weight:400; }
+.hb-empty { display:flex; flex:1; align-items:center; justify-content:center; font-size:11px; color:var(--color-text-dim); text-align:center; padding:16px; }
+.hb-stocks-layout { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(340px,1fr); gap:12px; height:100%; min-height:0; }
+.hb-price-workspace { display:grid; grid-template-rows:1.2fr 1fr; gap:12px; min-height:0; min-width:0; }
+.hb-stocks-layout section { min-width:0; }
+.homebuilders-toolbar { display:flex; align-items:center; gap:5px; padding:6px 8px; border-bottom:1px solid var(--color-border); flex-shrink:0; flex-wrap:wrap; }
+.homebuilders-toolbar input, .homebuilders-toolbar select { border:1px solid var(--color-border-strong); background:var(--color-bg); padding:4px 6px; min-width:0; color:var(--color-text); font-size:11px; }
+.homebuilders-toolbar input { flex:1; width:100px; }
+.homebuilders-chip { border:1px solid var(--color-border-strong); padding:3px 7px; font-size:11px; color:var(--color-text); }
+.homebuilders-footnote { flex-shrink:0; padding:5px 8px; font-size:10px; color:var(--color-text-dim); border-top:1px solid var(--color-border); }
+.homebuilders-comparison-chart { display:flex; flex-direction:column; flex:1; min-height:0; overflow:hidden; padding:6px 8px; }
+.hb-reports-layout { display:grid; grid-template-columns:minmax(0,2fr) minmax(280px,1fr); height:100%; gap:14px; }
+.homebuilders-feed { flex:1; overflow:auto; min-height:0; }
+.homebuilders-feed > button { width:100%; text-align:left; display:block; padding:14px 12px; border-bottom:1px solid var(--color-border); font-size:12px; }
+.homebuilders-feed > button:hover { background:var(--color-surface-hover); }
+.homebuilders-feed small { display:block; margin-top:5px; color:var(--color-text-dim); font-size:10px; }
+.hb-coverage { flex-shrink:0; font-size:9px; color:var(--color-text-dim); }
+@media (max-height:820px) and (min-width:1001px) {
+  .hb-buyer, .hb-dossier { padding:10px; }
+  .hb-payment { margin:12px 0; }
+  .hb-payment output { font-size:26px; }
+  .hb-rate-ladder { margin:12px 0; gap:8px; }
+  .hb-buying-power { margin-top:10px; }
+  .hb-buyer .hb-method { margin:8px 0; }
+  .hb-dossier .hb-method { margin:8px 0; }
+  .hb-facts { gap:10px 8px; padding:10px 0; }
+  .hb-company-name { margin-top:6px; }
+  .hb-quote { margin-top:10px; }
+  .hb-business { margin:8px 0; }
+  .hb-company-actions { margin:8px 0; }
+  .hb-company-actions button { height:28px; padding-inline:6px; font-size:10px; }
+  .hb-next-report { padding:8px 0; }
+  .hb-buying-power strong { font-size:21px; margin:4px 0; }
+  .hb-scenario-fields input { padding:5px 8px; }
+}
+@media (max-width:1100px) {
+  .homebuilders-page { padding:10px; gap:8px; }
+  .hb-economics { grid-template-columns:minmax(220px,.9fr) minmax(260px,1.2fr) minmax(220px,.9fr); gap:10px; }
+  .hb-buyer, .hb-dossier { padding:10px; }
+  .hb-heading nav button { font-size:11px; padding:7px; }
+  .hb-benchmarks button { min-width:65px; padding:5px 8px; }
+}
+@media (max-width:900px) {
+  .homebuilders-page { overflow-y:auto; }
+  .hb-economics { height:auto; grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+  .hb-capital { min-height:480px; }
+  .hb-dossier { grid-column:1 / -1; }
+  .hb-economics .hb-dossier .hb-facts { grid-template-columns:repeat(4,1fr); }
+  .hb-builder-tickers { grid-template-columns:repeat(5,minmax(0,1fr)); }
+  .hb-workspace { flex:none; }
+  .hb-stocks-layout { min-height:700px; grid-template-columns:minmax(0,1fr); grid-template-rows:350px 450px; }
+  .hb-reports-layout { min-height:700px; grid-template-columns:minmax(0,1fr); grid-template-rows:360px auto; }
+  .hb-heading { align-items:flex-start; }
+}
+@media (max-width:560px) {
+  .hb-economics { grid-template-columns:minmax(0,1fr); }
+  .hb-heading { flex-direction:column; }
+  .hb-heading nav { width:100%; }
+  .hb-market-context { flex-wrap:wrap; }
+  .hb-ticker-street { gap:6px; }
+  .hb-benchmarks { flex-direction:column; gap:3px; }
+  .hb-benchmarks small { display:none; }
+}

@@ -1,4 +1,4 @@
-import { retainedLoader } from './snapshotResult'
+import { fetchRetainedQuery, retainedLoader } from './snapshotResult'
 import { useQueries, useQueryClient } from '@tanstack/react-query'
 import type { BackgroundRequest } from '@shared/contract'
 import { api, queryKeys } from './client'
@@ -20,4 +20,11 @@ export function useScorecardCompanies(symbols: string[]) {
     refetchOnMount: false,
     refetchInterval: false as const,
   })) })
+}
+
+/** Refresh the shared Fundamentals cache, retaining each company's usable snapshot. */
+export function useRefreshScorecard() {
+  const client = useQueryClient()
+  return (symbols: string[]) => Promise.allSettled(symbols.map(symbol =>
+    fetchRetainedQuery(client, queryKeys.fundamentalsPage(symbol), () => loadScorecardCompany(symbol, { force: true }))))
 }

@@ -86,8 +86,10 @@ export function CalendarMonthGrid({ year, month, today, payload, options, showEc
   // Avoid a wasted sixth row in months that fit in four or five weeks.
   while (cells.length > 28 && cells.slice(-7).every(day => day === null)) cells.splice(-7)
   const weeks = cells.length / 7
-  // Reserve space for the larger day heading and overflow count before fitting 24px event lines.
-  const limit = Math.max(1, Math.min(size.width < 600 ? 1 : size.width < 950 ? 3 : 5, Math.floor(((size.height - 34) / weeks - 60) / 24)))
+  // Fit summaries to the available row height, keeping dates and event counts visible
+  // even in short windows. Every event remains available in the day preview.
+  const dayHeight = (size.height - 28) / weeks
+  const limit = Math.max(0, Math.min(size.width < 600 ? 1 : size.width < 950 ? 3 : 5, Math.floor((dayHeight - 49) / 20)))
   const cancelClose = () => clearTimeout(closeTimer.current)
   const scheduleClose = () => {
     cancelClose()
@@ -139,7 +141,7 @@ export function CalendarMonthGrid({ year, month, today, payload, options, showEc
 
   const activeEvents = active ? events.get(active.date) ?? [] : []
   return <>
-    <div ref={gridRef} className="calendar-month-grid" style={{ gridTemplateRows: `34px repeat(${weeks}, minmax(110px, 1fr))` }} aria-label="Monthly event calendar">
+    <div ref={gridRef} className="calendar-month-grid" style={{ gridTemplateRows: `28px repeat(${weeks}, minmax(0, 1fr))` }} aria-label="Monthly event calendar">
       {WEEKDAYS.map(day => <div key={day} className="calendar-weekday">{day}</div>)}
       {cells.map((day, index) => {
         const date = `${prefix}-${String(day).padStart(2, '0')}`
@@ -152,7 +154,7 @@ export function CalendarMonthGrid({ year, month, today, payload, options, showEc
           onClick={event => { cancelClose(); const anchor = event.currentTarget; setActive(current => current?.date === date && current.pinned ? null : { date, anchor, pinned: true }) }}>
           <span className="calendar-day-heading"><span className="calendar-day-number num">{day}</span>{rows.length > 0 ? <span className="calendar-day-count">{rows.length}</span> : null}</span>
           {rows.slice(0, limit).map((event, i) => <span className="calendar-grid-event" key={i} style={{ color: event.color }}><span className="calendar-event-dot" />{event.compact}</span>)}
-          {rows.length > limit ? <span className="calendar-more">+{rows.length - limit} more</span> : null}
+          {rows.length > limit && dayHeight >= 49 ? <span className="calendar-more">+{rows.length - limit} more</span> : null}
         </button> : <div key={`blank-${index}`} className="calendar-day is-empty" />
       })}
     </div>

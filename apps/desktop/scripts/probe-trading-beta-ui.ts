@@ -17,6 +17,7 @@ try {
       contents: `
         import { createRoot } from 'react-dom/client'
         import { BetaDotPlot } from './src/components/tradingvolumes/BetaDotPlot'
+        import { verifyPlotZoom, scrollPlot, resetZoomButton } from './scripts/fixtures/plot-zoom'
         const check = (value, message) => { if (!value) throw Error(message) }
         const settle = () => new Promise(resolve => setTimeout(resolve, 120))
         const row = (ticker, volume, history = true) => ({
@@ -45,14 +46,22 @@ try {
           await render(rows)
           check(dots().length === 5, 'Only finite positive volumes with Beta history plotted')
           centered()
+          await verifyPlotZoom()
           const xs = positions()
           check(Math.abs((xs[1] - xs[0]) / (xs[2] - xs[0]) - Math.log10(2) / Math.log10(3)) < 1e-10, 'Preserve logarithmic volume spacing')
           const ticks = () => [...document.querySelectorAll('svg text')].filter(text => text.textContent.startsWith('$')).map(text => text.textContent).join('|')
           const before = ticks()
+          scrollPlot(); await settle()
+          const zoomXs = positions()
+          const zoomTicks = ticks()
           ;[...document.querySelectorAll('button')].find(button => button.textContent === 'Replay').click()
           await settle()
-          check(JSON.stringify(positions()) === JSON.stringify(xs) && ticks() === before, 'Replay keeps horizontal positions and scale fixed')
+          check(JSON.stringify(positions()) === JSON.stringify(zoomXs) && ticks() === zoomTicks && !resetZoomButton().disabled, 'Replay keeps zoomed positions and scale fixed')
+          resetZoomButton().click(); await settle()
+          check(JSON.stringify(positions()) === JSON.stringify(xs) && ticks() === before, 'Reset during replay restores full extent')
+          scrollPlot(); await settle()
           await render(rows.slice(0, 4))
+          check(resetZoomButton().disabled, 'Filtering Beta data resets zoom')
           centered()
           await render([rows[0]])
           centered()
@@ -65,10 +74,10 @@ try {
           await settle(); await settle()
           centered()
           await render([row('MISSING', 1e7, false)])
-          check(!document.querySelector('svg') && document.body.textContent.includes('Refresh to load Beta history'), 'Missing history remains visible as empty state')
+          check(!document.querySelector('svg') && document.body.textContent.includes('Reload (F5) to load Beta history'), 'Missing history remains visible as empty state')
           await render([])
           check(!document.querySelector('svg'), 'Empty filter is safe')
-          return 'PASS: Beta cluster centered, outliers visible, log spacing, replay stability, even/odd/single/equal volumes, filtering, intervals, resize and missing data'
+          return 'PASS: scroll zoom, pointer anchoring, limits, reset, clipping, Beta cluster centered, outliers visible, log spacing, replay stability, even/odd/single/equal volumes, filtering, intervals, resize and missing data'
         }
       `,
     },

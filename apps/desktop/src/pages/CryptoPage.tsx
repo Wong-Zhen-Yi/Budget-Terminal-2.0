@@ -136,12 +136,18 @@ export function CryptoPage({ onStatusChange }: { onStatusChange: (panels: PanelS
       <div className="crypto-right">
         <Section title="Market breadth" subtitle={`Snapshot coverage ${coverage?.loaded ?? 0}/${coverage?.total ?? 30} | ${freshness} | Updated ${payload ? clockTail(payload.heatmap.updatedAt) : '--'}`} className="crypto-breadth"
           badge={<span className="crypto-badge">Top 30 · {breadthSources || 'Awaiting data'}</span>}><Breadth payload={payload} /></Section>
-        <Section title="Market context">
+        <Section title="Market context" className="crypto-context">
           <div className="crypto-context-row"><span>BTC dominance</span><strong className="num">{payload?.global?.btcDominance == null ? '--' : `${payload.global.btcDominance.toFixed(1)}%`}</strong></div>
           <div className="crypto-context-row"><span>24h spot volume</span><strong className="num">{cryptoMoney(payload?.global?.volume24h)}</strong></div>
           <div className="crypto-chart-caption">CoinGecko snapshot · {freshness}</div>
           <div className="crypto-context-row"><span>Fear &amp; Greed</span><strong className="crypto-warning">{payload?.fearGreed?.value ?? '--'} / 100</strong></div>
           <div className="crypto-chart-caption">Alternative.me · {payload?.fearGreed?.timestamp || 'Awaiting observation date'}</div>
+        </Section>
+        <Section title="Latest news" className="crypto-news" badge={<span className="crypto-badge">{payload?.news.length ?? 0} headlines</span>}>
+          <div className="crypto-news-list">{payload?.news.length ? payload.news.map(article => <button type="button" className="crypto-news-item" key={article.id}
+            onClick={() => { if (article.url) void api.openExternal(article.url) }} title={article.title}>
+            {article.title}<small>{article.source} · {article.time || (article.publishedAt ? new Date(article.publishedAt).toLocaleString() : 'Time unavailable')}</small>
+          </button>) : <div className="crypto-empty">{loading ? 'Loading market news...' : 'No crypto news available.'}</div>}</div>
         </Section>
       </div>
 
@@ -149,12 +155,6 @@ export function CryptoPage({ onStatusChange }: { onStatusChange: (panels: PanelS
         badge={<span className={`crypto-badge ${venueRecent ? 'crypto-positive' : 'crypto-muted'}`}>{ageText(payload?.hyperliquid?.fetchedAt, now)}</span>}>
         <div className="crypto-search-wrap"><label className="crypto-sr-only" htmlFor="crypto-market-search">Search perpetual markets</label><input id="crypto-market-search" className="crypto-search" placeholder="Search markets..." value={search} onChange={event => setSearch(event.target.value)} /></div>
         <PerpetualTable markets={markets} loading={loading} selected={symbol} select={selectSymbol} />
-      </Section>
-      <Section title="Latest news" className="crypto-news" badge={<span className="crypto-badge">{payload?.news.length ?? 0} headlines</span>}>
-        <div className="crypto-news-list">{payload?.news.length ? payload.news.map(article => <button type="button" className="crypto-news-item" key={article.id}
-          onClick={() => { if (article.url) void api.openExternal(article.url) }} title={article.title}>
-          {article.title}<small>{article.source} · {article.time || (article.publishedAt ? new Date(article.publishedAt).toLocaleString() : 'Time unavailable')}</small>
-        </button>) : <div className="crypto-empty">{loading ? 'Loading market news...' : 'No crypto news available.'}</div>}</div>
       </Section>
     </div>
     <footer className="crypto-footer"><div className="crypto-feed-states">

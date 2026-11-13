@@ -12,8 +12,9 @@ import {
   dedupeArticles,
   selectDiverseOtherNews,
 } from '../../shared/news.js'
-import { MACRO_SYMBOLS, fetchMacroNews, fetchPortfolioNews } from '../yahoo/newsPage.js'
+import { MACRO_SYMBOLS, fetchMacroNews } from '../yahoo/newsPage.js'
 import { getOtherNews, type FeedOutcome } from './feeds.js'
+import { getTickerNews } from './tickers.js'
 
 /**
  * The News page's three lanes, merged — `_collect_news_page_payload` in `workers/data.py`.
@@ -23,7 +24,7 @@ import { getOtherNews, type FeedOutcome } from './feeds.js'
  * own section a warning dot rather than taking the page down.
  */
 
-export const NEWS_SOURCE = 'yahoo search + rss'
+export const NEWS_SOURCE = 'TickerTick + Yahoo + RSS'
 
 /** The section headings the page looks its warnings up by, via `warningOf`. */
 export const PORTFOLIO_SECTION = 'Portfolio Spotlight'
@@ -33,6 +34,19 @@ interface LaneResult {
   articles: NewsArticle[]
   status: NewsLaneStatus
   errors: EnvelopeError[]
+}
+
+async function portfolioLane(symbols: string[], force: boolean): Promise<LaneResult> {
+  const outcomes = await getTickerNews(symbols, force)
+  return {
+    articles: outcomes.flatMap(outcome => outcome.articles.slice(0, 8)),
+    status: {
+      lane: 'portfolio', label: PORTFOLIO_SECTION,
+      fresh: outcomes.filter(outcome => !outcome.failed).map(outcome => outcome.symbol),
+      stale: [], failed: outcomes.filter(outcome => outcome.failed).map(outcome => outcome.symbol),
+    },
+    errors: outcomes.flatMap(outcome => outcome.errors),
+  }
 }
 
 /**
@@ -86,7 +100,7 @@ export async function getNewsPage(tickers: string[], force = false): Promise<New
   const holdings = [...new Set(tickers.map((value) => value.trim().toUpperCase()).filter(Boolean))]
 
   const [portfolio, macro, other] = await Promise.all([
-    yahooLane('portfolio', PORTFOLIO_SECTION, holdings, fetchPortfolioNews, force, 'newsPortfolio'),
+    portfolioLane(holdings, force),
     yahooLane('macro', MARKET_SECTION, MACRO_SYMBOLS, fetchMacroNews, force, 'newsMacro'),
     getOtherNews(force),
   ])
@@ -103,11 +117,11 @@ export async function getNewsPage(tickers: string[], force = false): Promise<New
   const errors = [...portfolio.errors, ...macro.errors, ...other.errors]
   // A second error per degraded *section*, keyed by the label the page looks up. Pre-Market
   // established the convention; without it a failing feed has no dot to light.
-  if (portfolio.status.failed.length) {
+  if (portfolio.errors.length) {
     errors.push(
       err(
         NEWS_SOURCE,
-        `${portfolio.status.failed.length} holding(s) returned no news.`,
+        `${portfolio.errors.length} portfolio news source(s) were unavailable.`,
         'newsLane',
         PORTFOLIO_SECTION,
       ),
@@ -140,9 +154,8 @@ export async function getNewsPage(tickers: string[], force = false): Promise<New
  * `fetch_ticker_news_only(max_per_ticker=3)`: temporary news for symbols the user typed,
  * which never joins the portfolio lane or the store.
  *
- * It reuses `fetchPortfolioNews` **and its cache key**, so searching a ticker already held
- * is free — the reference shares `_portfolio_news_cache` between the two paths for exactly
- * that reason. The only differences are the three-per-ticker cap and the `search` stamp.
+ * It shares TickerTick batch and Yahoo fallback caches with the portfolio lane.
+ * The only differences are the three-per-ticker cap and the `search` stamp.
  */
 export async function getNewsTickerSearch(
   tickers: string[],
@@ -151,29 +164,25 @@ export async function getNewsTickerSearch(
   const queried = [...new Set(tickers.map((value) => value.trim().toUpperCase()).filter(Boolean))]
     .slice(0, TICKER_SEARCH_MAX_SYMBOLS)
 
-  const settled = await Promise.allSettled(
-    queried.map((symbol) => fetchPortfolioNews(symbol, force)),
-  )
+  const outcomes = await getTickerNews(queried, force)
 
   const articles: NewsArticle[] = []
   const empty: string[] = []
   const failed: string[] = []
   const errors: EnvelopeError[] = []
 
-  settled.forEach((outcome, index) => {
-    const symbol = queried[index] as string
-    if (outcome.status !== 'fulfilled') {
+  outcomes.forEach((outcome) => {
+    const symbol = outcome.symbol
+    errors.push(...outcome.errors)
+    if (outcome.failed) {
       failed.push(symbol)
-      const reason =
-        outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason)
-      errors.push(err('yahoo search', reason, 'newsTickerSearch', symbol))
       return
     }
-    if (!outcome.value.length) {
+    if (!outcome.articles.length) {
       empty.push(symbol)
       return
     }
-    for (const article of outcome.value.slice(0, TICKER_SEARCH_PER_TICKER)) {
+    for (const article of outcome.articles.slice(0, TICKER_SEARCH_PER_TICKER)) {
       articles.push({ ...article, category: 'search' })
     }
   })

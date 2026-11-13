@@ -9,6 +9,7 @@ interface ScorecardState extends ScorecardPreferences {
   setChartMetric: (key: ScorecardMetricKey) => void
   saveComparison: (name: string) => string
   loadComparison: (id: string) => void
+  clearSelection: () => void
   deleteComparison: (id: string) => void
 }
 
@@ -34,6 +35,7 @@ export const useScorecard = create<ScorecardState>()(persist((set, get) => ({
     const saved = get().comparisons.find(entry => entry.id === id)
     if (saved) set({ symbols: [...saved.symbols], columns: [...saved.columns], chartMetric: saved.chartMetric, selectedId: id })
   },
+  clearSelection: () => set({ selectedId: '' }),
   deleteComparison: id => set(state => ({ comparisons: state.comparisons.filter(entry => entry.id !== id), selectedId: state.selectedId === id ? '' : state.selectedId })),
 }), {
   name: 'budget-terminal:scorecard',

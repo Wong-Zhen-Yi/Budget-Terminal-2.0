@@ -37,6 +37,7 @@ import { HimsPage } from '@/pages/HimsPage'
 import { MuPage } from '@/pages/MuPage'
 import { AmznPage } from '@/pages/AmznPage'
 import { AvgoPage } from '@/pages/AvgoPage'
+import { HomebuildersPage } from '@/pages/HomebuildersPage'
 import { SemiconductorsPage } from '@/pages/SemiconductorsPage'
 import { VstPage } from '@/pages/VstPage'
 import { MoneyPage } from '@/pages/MoneyPage'
@@ -557,6 +558,8 @@ function renderPage({
       <VstPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'avgo' ? (
       <AvgoPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
+    ) : tabId === 'homebuilders' ? (
+      <HomebuildersPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'semiconductors' ? (
       <SemiconductorsPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'mu' ? (

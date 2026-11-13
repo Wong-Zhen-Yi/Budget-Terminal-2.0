@@ -335,6 +335,7 @@
               "mu",
               "amzn",
               "avgo",
+              "homebuilders",
               "semiconductors",
               "vst",
               "hood",
@@ -2601,6 +2602,23 @@
         "$ref": "#/definitions/AvgoRequest"
       },
       "AvgoRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "homebuilders": {
+    "$ref": "#/definitions/Input_homebuilders",
+    "definitions": {
+      "Input_homebuilders": {
+        "$ref": "#/definitions/HomebuildersRequest"
+      },
+      "HomebuildersRequest": {
         "type": "object",
         "properties": {
           "force": {

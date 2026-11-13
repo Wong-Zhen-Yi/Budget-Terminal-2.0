@@ -109,6 +109,8 @@ export async function warmQuery<T>(client: QueryClient, options: {
   staleTime: number
   force?: boolean
   gcTime?: number
+  /** Live control state remains authoritative when a channel reports a failure. */
+  snapshotPolicy?: 'retain' | 'replace'
 }, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
   const cached = client.getQueryData<Envelope<unknown>>(options.queryKey)
   const lifetime = queryFreshness(options.queryKey)
@@ -133,11 +135,12 @@ export async function warmQuery<T>(client: QueryClient, options: {
     retry: false,
     networkMode: 'always',
     queryFn: () => withDeadline(async () => {
-      const result = retainUsableSnapshot(client.getQueryData(options.queryKey), await trackPageQuery(options.queryKey, options.queryFn, options.force))
+      const incoming = await trackPageQuery(options.queryKey, options.queryFn, options.force)
+      const result = options.snapshotPolicy === 'replace' ? incoming : retainUsableSnapshot(client.getQueryData(options.queryKey), incoming)
       const meta = (result as { meta?: { freshness?: string; failureReason?: string } } | null)?.meta
       // A failed envelope is otherwise cached as success forever by Infinity queries.
       // Keep partial/stale payloads, but let a wholly failed page retry on mount.
-      if (meta?.freshness === 'failed') throw new StartupLoadError(startupFailureReason(result, 'Background page load failed'), 'failed')
+      if (meta?.freshness === 'failed' && options.snapshotPolicy !== 'replace') throw new StartupLoadError(startupFailureReason(result, 'Background page load failed'), 'failed')
       registerSnapshot(result, queryFreshness(options.queryKey))
       return result
     }, timeoutMs),

@@ -1,5 +1,7 @@
 # Agents
 
+Live Agents status always updates the desktop conversation and controls, including during an intermittent Telegram failure. Telegram connection errors remain in **Agents > Telegram** instead of becoming a desktop chat query error or freezing an older transcript. Startup failures still appear in Settings, and failed startup status is retained so unvisited Agents pages can show the current connection details. This does not retry Telegram messages or screenshots.
+
 ## Telegram
 
 Open **Agents > Telegram** to connect a bot created with Telegram's **@BotFather** (`/newbot`). Start a private conversation with the bot first. Paste its token into the password field and enter your own numeric Telegram user ID as the private home chat ID. Save, use **Check private chat** to verify access without sending, then use **Send test message** to confirm delivery. Startup checks the configured private chat as well as the token. Delivery errors remain visible even while incoming polling succeeds, and explain rejected tokens, inaccessible chats, blocked bots and competing gateways. Never paste a token into agent chat, commit it, or put it in a launcher. The token and connection settings are encrypted with Electron's OS-backed `safeStorage` in `telegram-settings.bin` under the app's private user-data directory. Linux requires a real system keyring; plaintext fallback is refused.

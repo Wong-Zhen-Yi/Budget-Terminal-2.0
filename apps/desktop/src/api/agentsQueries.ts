@@ -1,5 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query'
-import { useQuery } from '@/api/progressiveQuery'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { QueryClient } from '@tanstack/react-query'
 import type { AgentsCommand } from '@shared/agents'
 import { api, queryKeys } from './client'
@@ -12,7 +11,7 @@ export const loadAgents = () => api.agentsStatus()
 
 /** Warm all charts in the restored conversation, even if Agents has not been visited. */
 export async function warmAgentWorkspace(client: QueryClient, backgroundOrder?: number, observe?: StartupSnapshotObserver) {
-  const result = await warmStartupSnapshot(client, { queryKey: queryKeys.agents, queryFn: loadAgents, staleTime: Infinity }, observe)
+  const result = await warmStartupSnapshot(client, { queryKey: queryKeys.agents, queryFn: loadAgents, staleTime: Infinity, snapshotPolicy: 'replace' }, observe)
   const charts = await Promise.allSettled(agentChartSymbols(result.data.messages).map(async symbol => {
     const queryKey = queryKeys.chartsHistory(symbol, '1 Day', 'Max')
     try {
@@ -36,6 +35,8 @@ export async function warmAgentWorkspace(client: QueryClient, backgroundOrder?: 
 }
 
 export function useAgents(poll = false) {
+  // This is live control state, including channel failures. Retaining an older
+  // healthy snapshot would freeze chat and turn a Telegram outage into a query error.
   return useQuery({ queryKey: queryKeys.agents, queryFn: loadAgents, staleTime: Infinity, retry: false,
     refetchInterval: !poll ? false : query => {
       if (api.onLiveStatusChanged) return 30_000 // Bounded reconnect recovery; pushes own streaming cadence.

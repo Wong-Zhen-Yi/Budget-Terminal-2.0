@@ -10,12 +10,11 @@ import { DataTable, type Column } from '@/components/ui/DataTable'
 import { NumberInput } from '@/components/ui/NumberInput'
 import { Splitter } from '@/components/ui/Splitter'
 
-type Tone = 'muted' | 'positive' | 'warning' | 'negative'
+type Tone = 'muted' | 'warning' | 'negative'
 type RankedPriceRow = PriceScreenRow & { rank: number }
 
 const toneClass: Record<Tone, string> = {
   muted: 'text-text-muted',
-  positive: 'text-up',
   warning: 'text-warn',
   negative: 'text-down',
 }
@@ -71,7 +70,7 @@ export function PricePage({
     tickerElements.current.get(selectedTicker)?.scrollIntoView({ block: 'nearest' })
   }, [selectedTicker])
 
-  const status = useMemo<{ text: string; tone: Tone }>(() => {
+  const status = useMemo<{ text: string; tone: Tone } | null>(() => {
     if (notice) return notice
     if (screen.isFetching) {
       return {
@@ -89,14 +88,7 @@ export function PricePage({
     if (!payload.rows.length) {
       return { text: 'No qualifying companies found in this price range.', tone: 'warning' }
     }
-    const candidate = payload.candidateCount
-      ? ` from ${payload.candidateCount.toLocaleString('en-US')} candidates`
-      : ''
-    const suffix = `${payload.source ? ` via ${payload.source}` : ''}${payload.asOf ? ` at ${payload.asOf}` : ''}`
-    return {
-      text: `Showing ${payload.rows.length} largest matching companies${candidate}${suffix}`,
-      tone: 'positive',
-    }
+    return null
   }, [notice, screen.isFetching, screen.data, minimumPrice, maximumPrice, payload])
 
   const fetchRange = useCallback(async () => {
@@ -227,9 +219,11 @@ export function PricePage({
           <Button variant="accent" onClick={() => void fetchRange()} disabled={screen.isFetching}>
             {screen.isFetching ? 'Fetching...' : 'Fetch'}
           </Button>
-          <span className={`ml-auto px-1 text-right text-2xs ${toneClass[status.tone]}`}>
-            {status.text}
-          </span>
+          {status && (
+            <span className={`ml-auto px-1 text-right text-2xs ${toneClass[status.tone]}`}>
+              {status.text}
+            </span>
+          )}
         </div>
 
         <div className="flex min-h-0 flex-1">

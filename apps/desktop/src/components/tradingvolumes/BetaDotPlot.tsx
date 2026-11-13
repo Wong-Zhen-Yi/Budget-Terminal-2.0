@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { TradingVolumeInterval } from '@shared/contract'
 import { intervalMarketCapHistory, metricValue, TRADING_VOLUME_METRICS, type RankedTradingVolumeRow } from '@shared/tradingVolumes'
 import { compactCurrency } from '@/lib/format'
 import { Button } from '@/components/ui/Button'
+import { usePlotZoom } from './usePlotZoom'
 
 export function BetaDotPlot({ rows, interval }: { rows: RankedTradingVolumeRow[]; interval: TradingVolumeInterval }) {
   const svgRef = useRef<SVGSVGElement>(null)
+  const clipId = useId()
   const [size, setSize] = useState({ width: 800, height: 475 })
   useEffect(() => {
     const svg = svgRef.current
@@ -51,24 +53,35 @@ export function BetaDotPlot({ rows, interval }: { rows: RankedTradingVolumeRow[]
     const beta = s.history.get(date)
     return beta !== undefined && s.volume !== null && Number.isFinite(s.volume) && s.volume > 0 ? [{ ticker: s.ticker, beta, volume: s.volume }] : []
   })
-  const { xmin, xmax } = data
+  const { view, resetZoom, zoomed } = usePlotZoom(svgRef, { left: 65, top: 25, width: right - 65, height: bottom - 25 }, data)
+  const xmin = data.xmin + view.xMin * (data.xmax - data.xmin)
+  const xmax = data.xmin + view.xMax * (data.xmax - data.xmin)
+  const ymin = data.low + view.yMin * (data.high - data.low)
+  const ymax = data.low + view.yMax * (data.high - data.low)
   const x = (value: number) => 65 + (value - xmin) / (xmax - xmin) * (right - 65)
-  const y = (value: number) => bottom - (value - data.low) / (data.high - data.low) * (bottom - 25)
+  const y = (value: number) => bottom - (value - ymin) / (ymax - ymin) * (bottom - 25)
   return <div className="flex min-h-0 flex-1 flex-col">
     <div className="flex flex-wrap items-center gap-2 px-2 py-1 text-2xs text-text-muted">
       <Button disabled={data.timeline.length < 2} onClick={() => { if (playing) setPlaying(false); else { setIndex(0); setPlaying(true) } }}>{playing ? 'Stop' : 'Replay'}</Button>
+      <Button disabled={!zoomed} onClick={resetZoom} title="Scroll over the plot to zoom. Double-click to reset.">Reset zoom</Button>
       <input aria-label="Beta date" type="range" className="min-w-20 flex-1" min={0} max={Math.max(0, data.timeline.length - 1)} value={Math.max(0, current)} disabled={!data.timeline.length} onChange={(event) => { setPlaying(false); setIndex(Number(event.target.value)) }} />
       <span>{date ?? 'No Beta history'}</span>
       <span>{points.length}/{rows.length} stocks{points.length < rows.length ? ' • others lack matched history or volume' : ''}</span>
     </div>
     <p className="px-2 text-2xs text-text-dim">β = 1: market-like sensitivity; above 1: greater sensitivity; negative: opposite direction. Rolling 60 daily returns; measures market risk, not total risk.</p>
     {!data.timeline.length ? <div className="flex flex-1 items-center justify-center p-4 text-2xs text-text-dim">Reload (F5) to load Beta history. Requires 60 matching daily returns and S&P 500 data.</div> :
-      <svg ref={svgRef} viewBox={`0 0 ${size.width} ${size.height}`} className="min-h-0 w-full flex-1" role="img" aria-label={`Stock Beta dot plot for ${date}`}>
-        {Array.from({ length: 6 }, (_, i) => data.low + (data.high - data.low) * i / 5).filter((tick) => Math.abs(y(tick) - y(1)) > 14).map((tick) => <g key={tick}><line x1={65} x2={right} y1={y(tick)} y2={y(tick)} stroke="var(--color-border)" /><text x={58} y={y(tick) + 4} textAnchor="end" fill="var(--color-text-muted)" fontSize={11}>{tick.toFixed(2)}</text></g>)}
-        <line x1={65} x2={right} y1={y(1)} y2={y(1)} stroke="var(--color-warn)" strokeDasharray="5 4"><title>β = 1.0</title></line>
-        <text x={58} y={y(1) + 4} textAnchor="end" fill="var(--color-warn)" fontSize={11}>1.0</text>
+      <svg ref={svgRef} viewBox={`0 0 ${size.width} ${size.height}`} className="min-h-0 w-full flex-1" role="img" aria-label={`Stock Beta dot plot for ${date}. Scroll to zoom; double-click to reset.`} onDoubleClick={resetZoom}>
+        <title>Scroll to zoom around the pointer. Double-click to reset zoom.</title>
+        <defs><clipPath id={clipId}><rect x={65} y={25} width={right - 65} height={bottom - 25} /></clipPath></defs>
+        {Array.from({ length: 6 }, (_, i) => ymin + (ymax - ymin) * i / 5).filter((tick) => Math.abs(y(tick) - y(1)) > 14).map((tick) => <g key={tick}><line x1={65} x2={right} y1={y(tick)} y2={y(tick)} stroke="var(--color-border)" /><text x={58} y={y(tick) + 4} textAnchor="end" fill="var(--color-text-muted)" fontSize={11}>{tick.toFixed(2)}</text></g>)}
+        {ymin <= 1 && ymax >= 1 && <g>
+          <line x1={65} x2={right} y1={y(1)} y2={y(1)} stroke="var(--color-warn)" strokeDasharray="5 4"><title>β = 1.0</title></line>
+          <text x={58} y={y(1) + 4} textAnchor="end" fill="var(--color-warn)" fontSize={11}>1.0</text>
+        </g>}
         {Array.from({ length: 5 }, (_, i) => xmin + (xmax - xmin) * i / 4).map((tick) => <text key={tick} x={x(tick)} y={bottom + 19} textAnchor="middle" fill="var(--color-text-muted)" fontSize={11}>{compactCurrency(10 ** tick)}</text>)}
-        {points.map((p) => <g key={p.ticker}><circle cx={x(Math.log10(p.volume))} cy={y(p.beta)} r={4} fill={p.beta < 1 ? 'var(--color-down)' : 'var(--color-up)'}><title>{p.ticker} | {date} | β {p.beta.toFixed(3)} | {metric.label} ADV {compactCurrency(p.volume)}</title></circle><text x={x(Math.log10(p.volume))} y={y(p.beta) - 7} textAnchor="middle" fill={p.beta < 1 ? 'var(--color-down)' : 'var(--color-up)'} fontSize={9}>{p.ticker}</text></g>)}
+        <g clipPath={`url(#${clipId})`}>
+          {points.map((p) => <g key={p.ticker}><circle cx={x(Math.log10(p.volume))} cy={y(p.beta)} r={4} fill={p.beta < 1 ? 'var(--color-down)' : 'var(--color-up)'}><title>{p.ticker} | {date} | β {p.beta.toFixed(3)} | {metric.label} ADV {compactCurrency(p.volume)}</title></circle><text x={x(Math.log10(p.volume))} y={y(p.beta) - 7} textAnchor="middle" fill={p.beta < 1 ? 'var(--color-down)' : 'var(--color-up)'} fontSize={9}>{p.ticker}</text></g>)}
+        </g>
         <text x={(65 + right) / 2} y={size.height - 7} textAnchor="middle" fill="var(--color-text-muted)" fontSize={12}>{metric.axisLabel} • median-centered log scale • fixed during replay</text>
         <text transform={`translate(16 ${bottom / 2}) rotate(-90)`} textAnchor="middle" fill="var(--color-text-muted)" fontSize={12}>Beta (β) vs S&P 500</text>
       </svg>}

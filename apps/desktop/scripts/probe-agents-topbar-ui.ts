@@ -31,7 +31,7 @@ try {
         model: 'fixture', thinking: null, models: [{ id: 'fixture', name: 'Fixture Codex', defaultThinking: 'low', thinkingModes: [{ id: 'low', description: 'Quick' }] }],
         connected: true, busy: false, autonomy: false, objective: '', intervalMinutes: 15, runsRemaining: 0, nextRunAt: null,
         messages: [{ id: 'hello', role: 'assistant', text: '## Research ready\\n\\nYour existing conversation is available here.', at: Date.now() }], error: '', navigation: null }
-      const envelope = () => ({ data: structuredClone(state), meta: { freshness: 'fresh', source: 'fixture', fetchedAt: Date.now() }, errors: [] })
+      const envelope = () => ({ data: structuredClone(state), meta: { freshness: state.telegram?.error ? 'failed' : 'fresh', source: 'fixture', fetchedAt: Date.now() }, errors: state.telegram?.error ? [{ reason: state.telegram.error }] : [] })
       const publish = async () => { client.setQueryData(['agents'], envelope()); await settle() }
       window.api.platform = 'win32'
       window.api.mcpStatus = async () => ({ available: true, active: false, connected: true })
@@ -75,6 +75,14 @@ try {
         check(document.querySelector('.terminal-brand img').naturalWidth > 0 && document.querySelector('.terminal-brand-icon').naturalWidth > 0, 'Fold wordmark and compact icon load successfully')
         check(input() && !dialog() && reads === 0 && commands.length === 0, 'Warmed top bar starts closed without connection, inference or reload')
         check(activity().textContent === 'Ready', 'Saved assistant text must not be mistaken for a newly completed run')
+        state.telegram = { configured: true, enabled: true, receive: true, connected: false, bot: 'fixture_bot', chatId: '123', error: 'Telegram request could not complete.' }
+        state.messages[0].text += '\\n\\nDesktop remains live during a Telegram outage.'
+        await client.refetchQueries({ queryKey: ['agents'] }); await settle()
+        check(activity().textContent === 'Ready' && !document.querySelector('.agents-error'), 'A Telegram outage must not change the healthy desktop agent badge to Error')
+        check(document.querySelector('.agents-transcript').textContent.includes('Desktop remains live'), 'Desktop receives the latest transcript during a Telegram outage')
+        state.telegram = undefined
+        await client.refetchQueries({ queryKey: ['agents'] }); await settle()
+        check(activity().textContent === 'Ready', 'An intermittent Telegram outage recovers without reconnecting desktop chat')
         input().click(); await settle()
         check(dialog().getAttribute('role') === 'dialog' && dialog().getAttribute('aria-modal') === 'false', 'Input opens a nonmodal full chat dropdown')
         check(dialog().textContent.includes('existing conversation') && input().getAttribute('aria-expanded') === 'true', 'Shared transcript and expanded state')

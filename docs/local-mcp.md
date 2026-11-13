@@ -19,6 +19,33 @@ Portfolio **Export for LLM** and **Export Tickers** copy text directly to the
 native clipboard on Windows, macOS and Linux. Clipboard access remains a UI-only
 operation; these actions do not add MCP tools or file-save dialogs.
 
+Homebuilders is available in Focus and preloads at startup. The read-only
+`budget_terminal_homebuilders` tool accepts `{ "request": {} }` (or
+`{ "request": { "force": true } }`) and returns ten selected public builders
+plus ITB/XHB housing ETF benchmarks. Builder rows include quotes, adjusted-close
+histories, P/E, price-to-book, ROE, revenue, consolidated TTM gross margin,
+earnings estimates and company news. ETF corporate profiles are intentionally
+omitted, and ETFs are excluded from builder breadth and market-cap totals.
+Missing values remain null; each market/profile/news lane retains timestamps,
+partial failures and stale-cache status. The existing market-research permission
+covers this route; no private records or new write permissions are added.
+The desktop page has its own housing-specific design: a mortgage affordability
+scenario, a price/book versus ROE capital map, a builder ticker strip, and
+separate stock-return and reporting views. Mortgage inputs are illustrative,
+not fetched rates or company forecasts. The calculator holds P&I and the
+down-payment percentage constant for its buying-power scenario and excludes
+ownership costs. It is a desktop-only calculation; the research tool contract
+and permissions are unchanged by this layout.
+Use `request.page: "homebuilders"` for screenshots. Run `npm run build:mcp`
+and reconnect MCP clients after this catalog change.
+
+Scorecard compares 3–6 companies in a company-column matrix with selectable
+metrics and Chart, Method and Sources views. It continues to use the shared
+`fundamentalsPage` service and caches; MCP research clients can use
+`budget_terminal_fundamentals_page` for each company. Named Scorecard views and
+matrix sorting remain desktop preferences. This layout adds no service routes,
+permissions or MCP schemas. Page screenshots continue to use the `scorecard` key.
+
 News reads (`news`, `newsPage`, `newsTickerSearch`, `newsArticle`, `forexNews`)
 always request a source refresh before returning, including when `request.force`
 is omitted or false. This applies to external clients and embedded manual,
@@ -28,6 +55,22 @@ Check each article's publication date separately from the retrieval timestamp,
 cite its link and say when no recent stories were found. Publication dates remain
 in response provenance when fields are projected out. Regular page reads keep
 their existing caches and startup preloading behavior.
+
+Portfolio headlines (`news`, `newsTickerSearch`, and the portfolio lane of
+`newsPage`) use [TickerTick](https://github.com/hczhu/TickerTick-API) first, with
+Yahoo search for unsupported symbols, empty ticker coverage, or request failures.
+The market lane also includes TickerTick's `T:market` feed alongside the existing
+RSS feeds; Yahoo continues to supply macro/index/futures headlines. TickerTick is
+keyless and runs only in the main process. Up to 25 US symbols share each OR query,
+and identical concurrent reads share the same cached request. All TickerTick
+requests share one gate enforcing at most five requests per 30 seconds and ten per
+minute, including forced MCP refreshes. Busy budgets and HTTP 429 cooldowns use
+fallback coverage with explicit errors, rather than silently calling cached news
+current. Failed market refreshes may retain a labelled snapshot for at most a day.
+Publisher URLs, summaries, millisecond publication dates and string story IDs are
+preserved; publisher favicons are not presented as article photos. The existing
+tool routes, input/output contracts and permissions are unchanged. Rebuild with
+`npm run build:mcp` and reconnect MCP clients to load the updated descriptions.
 
 Options reads (`options`, `optionsChain`, `optionsExpirations`, `optionQuotes`)
 also force a refresh when `force` is omitted or false. For highest-volume contracts

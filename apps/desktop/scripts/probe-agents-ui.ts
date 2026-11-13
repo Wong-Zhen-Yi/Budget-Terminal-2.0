@@ -72,7 +72,7 @@ try {
       const trackerFixture = { id: 'tracker-fixture', title: 'Custom catalyst research', instructions: 'Use fresh research tools to evaluate my custom catalyst conditions. Compare with saved evidence and report unknown if coverage is missing.', intervalMinutes: 15, cooldownMinutes: 60, runLimit: 4, runsRemaining: 4, enabled: false, running: false, createdAt: Date.now(), updatedAt: Date.now(), nextRunAt: null, lastRunAt: null, lastNotifiedAt: null, lastOutcome: null, lastSummary: '', memory: '', error: '' }
       const state = { currentChatId: 'chat-current', history: [{ id: 'chat-current', title: 'New chat', createdAt: Date.now(), updatedAt: Date.now(), model: null, thinking: null, messageCount: 0 }, { id: 'chat-saved', title: 'Saved research', createdAt: Date.now(), updatedAt: Date.now(), model: 'fixture-fast', thinking: null, messageCount: 2 }], notifications: [{ id: 'notice-1', title: 'Monitoring update', body: 'Synthetic cited evidence · fresh. <img src=x onerror=alert(1)>', at: Date.now(), read: false, eventKey: 'fixture-1', source: 'autonomy', deliveryError: 'OS notifications blocked' }], trackers: [trackerFixture], storageError: '', portfolioProposal: null, model: null, thinking: null, models: [], connected: false, busy: false, autonomy: false, objective: '', intervalMinutes: 15, runsRemaining: 0, nextRunAt: null, messages: [], error: '', navigation: null }
       const historyMessages = new Map([['chat-saved', [{ id: 'saved-user', role: 'user', text: 'Previous research question', at: Date.now() }, { id: 'saved-answer', role: 'assistant', text: 'Saved answer with source dates', at: Date.now() }]]])
-      const envelope = () => ({ data: structuredClone(state), meta: { freshness: 'fresh', source: 'fixture', fetchedAt: Date.now() }, errors: [] })
+      const envelope = () => ({ data: structuredClone(state), meta: { freshness: state.telegram?.error ? 'failed' : 'fresh', source: 'fixture', fetchedAt: Date.now() }, errors: state.telegram?.error ? [{ reason: state.telegram.error }] : [] })
       window.api.agentsStatus = async () => {
         reads++
         if (reads === 1) {
@@ -134,6 +134,23 @@ try {
         const telegramSize = telegram.closest('.agents-workspace-content').getBoundingClientRect()
         check(telegramSize.height < innerHeight / 2, 'Expanded Telegram setup leaves space for chat')
         await click('Telegram · Off')
+        state.telegram = { configured: true, enabled: true, receive: true, connected: false, bot: 'fixture_bot', chatId: '123', error: 'Telegram request could not complete. Check connectivity; delivery may be uncertain. Do not resend automatically.' }
+        const failedStartupClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } })
+        let startupFailed = false
+        try { await tasks[0].run(failedStartupClient) } catch { startupFailed = true }
+        check(startupFailed, 'Telegram startup failures must still fail readiness for Settings')
+        check(failedStartupClient.getQueryData(['agents'])?.data.telegram.error === state.telegram.error, 'Failed Telegram startup must retain the current channel status for unvisited Agents')
+        failedStartupClient.clear()
+        state.messages.push({ id: 'telegram-isolation', role: 'assistant', text: 'Desktop chat still updates during Telegram failure.', at: Date.now() })
+        await client.refetchQueries({ queryKey: ['agents'] }); await settle()
+        check(document.querySelector('.agents-transcript').textContent.includes('Desktop chat still updates'), 'A Telegram error must not freeze the desktop transcript')
+        check(!document.querySelector('.agents-error'), 'Telegram failure must not become a desktop chat error')
+        await click('Telegram · Needs attention')
+        check(document.querySelector('.agents-telegram [role=alert]')?.textContent === state.telegram.error, 'Telegram failure remains visible in its settings')
+        await click('Telegram · Needs attention')
+        state.messages = []; state.telegram = undefined
+        await client.refetchQueries({ queryKey: ['agents'] }); await settle()
+        check(!document.querySelector('.agents-error') && document.querySelector('.agents-workspace-tabs').textContent.includes('Telegram · Off'), 'Telegram recovery clears its error without reconnecting Codex')
         const suggestions = [...document.querySelectorAll('.agents-suggestions button')]
         check(suggestions.length === 3, 'Quiet startup shows all three portfolio quick prompts')
         check(!document.querySelector('.agents-transcript').textContent.includes('Codex connected.'), 'Startup must not show a connection announcement in chat')

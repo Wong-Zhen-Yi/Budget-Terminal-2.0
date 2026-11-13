@@ -32,5 +32,6 @@ export const PAGE_REFRESH_INTERVAL_MS: Readonly<Record<string, number>> = {
   hims: FRESHNESS.hims,
   hood: FRESHNESS.hood,
   bmnr: FRESHNESS.bmnr,
+  homebuilders: FRESHNESS.homebuilders,
   semiconductors: FRESHNESS.semiconductors,
 }

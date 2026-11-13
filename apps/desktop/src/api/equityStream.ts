@@ -7,6 +7,7 @@ import { markLiveQuerySnapshot } from './queryPersistence'
 import { targetUpside } from '@shared/stocks'
 import { sofiBookRatios, type SofiPayload } from '@shared/sofi'
 import { markBmnrPayload } from '@shared/bmnr'
+import type { HomebuildersPayload } from '@shared/homebuilders'
 import type { SemiconductorsPayload } from '@shared/semiconductors'
 import { equityPriceSource } from '@shared/equityMarkets'
 import { cryptoPerpSymbol } from '@shared/cryptoWorkspace'
@@ -92,8 +93,8 @@ export function applyEquityMarketUpdate(client: QueryClient, update: EquityMarke
       const quote = quotes.get(payload.ticker)
       if (quote) data = { ...payload, metrics: { ...payload.metrics, price: quote.price },
         sources: { ...payload.sources, quote: `${quote.source}; Yahoo stock monthly history` } }
-    } else if (root === 'semiconductors') {
-      const payload = data as SemiconductorsPayload
+    } else if (root === 'semiconductors' || root === 'homebuilders') {
+      const payload = data as SemiconductorsPayload | HomebuildersPayload
       let changed = false
       const rows = payload.rows.map(row => {
         const quote = quotes.get(row.company.symbol)

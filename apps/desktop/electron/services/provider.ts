@@ -17,6 +17,8 @@ import { getMu } from './mu.js'
 import { getVst } from './vst.js'
 import type { VstPayload, VstRequest } from '../shared/vst.js'
 import { getAvgo } from './avgo.js'
+import { getHomebuilders } from './homebuilders.js'
+import type { HomebuildersPayload, HomebuildersRequest } from '../shared/homebuilders.js'
 import { getSemiconductors } from './semiconductors.js'
 import type { SemiconductorsPayload, SemiconductorsRequest } from '../shared/semiconductors.js'
 import type { AvgoPayload, AvgoRequest } from '../shared/avgo.js'
@@ -277,7 +279,7 @@ import { getStocks, refreshStocksQuote, STOCKS_SOURCE } from './yahoo/stocks.js'
 import { getDiscoverySnapshot, getDiscoveryUniverse } from './yahoo/discovery.js'
 import { getCloses, getClosesBatch, getDailyBarsBatch, periodReturn } from './yahoo/history.js'
 import { getOptionQuotes } from './yahoo/optionQuotes.js'
-import { getNews } from './yahoo/news.js'
+import { getNews, TICKER_NEWS_SOURCE } from './news/tickers.js'
 import {
   NEWS_SOURCE,
   getNewsPage,
@@ -393,6 +395,7 @@ export interface MarketDataProvider {
   mu(request: MuRequest): Promise<Envelope<MuPayload>>
   amzn(request: AmznRequest): Promise<Envelope<AmznPayload>>
   avgo(request: AvgoRequest): Promise<Envelope<AvgoPayload>>
+  homebuilders(request: HomebuildersRequest): Promise<Envelope<HomebuildersPayload>>
   semiconductors(request: SemiconductorsRequest): Promise<Envelope<SemiconductorsPayload>>
   vst(request: VstRequest): Promise<Envelope<VstPayload>>
   sp500(request: Sp500Request): Promise<Envelope<Sp500Data>>
@@ -888,10 +891,10 @@ const providerImplementation: MarketDataProvider = {
 
   async news({ tickers, force }) {
     try {
-      const items = await getNews(tickers, force)
-      return ok({ items }, 'yahoo search')
+      const { items, errors } = await getNews(tickers, force)
+      return errors.length ? partial({ items }, errors, TICKER_NEWS_SOURCE) : ok({ items }, TICKER_NEWS_SOURCE)
     } catch (error) {
-      return failed({ items: [] }, describeError(error), 'yahoo search')
+      return failed({ items: [] }, describeError(error), TICKER_NEWS_SOURCE)
     }
   },
 
@@ -1409,6 +1412,7 @@ const providerImplementation: MarketDataProvider = {
   mu: getMu,
   amzn: getAmzn,
   avgo: getAvgo,
+  homebuilders: getHomebuilders,
   semiconductors: getSemiconductors,
   vst: getVst,
 

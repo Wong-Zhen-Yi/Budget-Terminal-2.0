@@ -68,6 +68,14 @@
 .settings-card .terminal-panel table th { font-size: 11px; }
 .settings-card .terminal-panel table td { padding-top: 8px; padding-bottom: 8px; }
 .settings-card .terminal-panel table { overflow-wrap: anywhere; }
+/* Keep long startup failures inside their column instead of squeezing labels to letters. */
+.settings-card .terminal-panel .startup-order-table { min-width: 640px; table-layout: fixed; overflow-wrap: normal; }
+.startup-order-table__order { width: 64px; }
+.startup-order-table__page { width: 25%; }
+.startup-order-table__time { width: 144px; }
+.settings-card .terminal-panel .startup-order-table :is(th, td) { padding: 8px 10px; vertical-align: top; font-size: 12px; }
+.startup-order-table thead th, .startup-order-table tbody th, .startup-order-table td:last-child { white-space: nowrap; }
+.startup-order-table tbody td:nth-child(3) { overflow-wrap: anywhere; }
 .settings-card .terminal-panel .flex.items-center.gap-2 { flex-wrap: wrap; }
 .settings-path { margin-top: 6px; font-size: 11px; color: var(--color-text-muted); }
 .settings-path summary { cursor: pointer; color: #8eb7f1; }

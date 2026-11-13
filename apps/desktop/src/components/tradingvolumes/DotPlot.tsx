@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 
 import type { TradingVolumeInterval } from '@shared/contract'
 import {
@@ -11,6 +11,8 @@ import {
   type ReplayPlan,
 } from '@shared/tradingVolumes'
 import { compactCurrency, percent } from '@/lib/format'
+import { Button } from '@/components/ui/Button'
+import { usePlotZoom } from './usePlotZoom'
 
 /**
  * Market cap against average daily dollar volume, both on log10 axes, with a
@@ -116,6 +118,8 @@ function dotColor(returnPct: number | null): string {
 export function DotPlot({ rows, interval, loaded, frame = null, plan = null, highlightedTickers, activeTicker = null }: DotPlotProps) {
   const metric = TRADING_VOLUME_METRICS[interval]
   const containerRef = useRef<HTMLDivElement>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
+  const clipId = useId()
   const [size, setSize] = useState({ width: 0, height: 0 })
   const [hoveredTicker, setHoveredTicker] = useState<string | null>(null)
 
@@ -209,6 +213,10 @@ export function DotPlot({ rows, interval, loaded, frame = null, plan = null, hig
     return { xMin, xMax, staticYMin, staticYMax, plotWidth, plotHeight, labelled }
   }, [points, size])
 
+  const { view, resetZoom, zoomed } = usePlotZoom(svgRef, {
+    left: PAD.left, top: PAD.top, width: base?.plotWidth ?? 0, height: base?.plotHeight ?? 0,
+  }, points)
+
   const scene = useMemo(() => {
     if (!base) return null
 
@@ -216,11 +224,15 @@ export function DotPlot({ rows, interval, loaded, frame = null, plan = null, hig
     // aligned value, so dots move against a still axis instead of one rescaling under
     // them. `setYRange` at the top of `_p20_replay_market_cap_animation` does the same.
     const animating = Boolean(frame && plan)
-    const yMin = animating ? plan!.yMin : base.staticYMin
-    const yMax = animating ? plan!.yMax : base.staticYMax
+    const fullYMin = animating ? plan!.yMin : base.staticYMin
+    const fullYMax = animating ? plan!.yMax : base.staticYMax
+    const xMin = base.xMin + view.xMin * (base.xMax - base.xMin)
+    const xMax = base.xMin + view.xMax * (base.xMax - base.xMin)
+    const yMin = fullYMin + view.yMin * (fullYMax - fullYMin)
+    const yMax = fullYMin + view.yMax * (fullYMax - fullYMin)
 
     const toX = (value: number) =>
-      PAD.left + ((value - base.xMin) / (base.xMax - base.xMin)) * base.plotWidth
+      PAD.left + ((value - xMin) / (xMax - xMin)) * base.plotWidth
     const toY = (value: number) =>
       PAD.top + base.plotHeight - ((value - yMin) / (yMax - yMin)) * base.plotHeight
 
@@ -258,8 +270,8 @@ export function DotPlot({ rows, interval, loaded, frame = null, plan = null, hig
       labels,
       trend,
       xTicks: logTicks(
-        base.xMin,
-        base.xMax,
+        xMin,
+        xMax,
         Math.max(2, Math.floor(base.plotWidth / 70)),
       ).map((value) => ({ value, position: toX(value) })),
       yTicks: logTicks(yMin, yMax, Math.max(2, Math.floor(base.plotHeight / 44))).map((value) => ({
@@ -267,7 +279,7 @@ export function DotPlot({ rows, interval, loaded, frame = null, plan = null, hig
         position: toY(value),
       })),
     }
-  }, [base, points, frame, plan, highlightedTickers, activeTicker])
+  }, [base, points, frame, plan, highlightedTickers, activeTicker, view])
 
   const hovered = useMemo(
     () => scene?.placed.find((entry) => entry.point.ticker === hoveredTicker) ?? null,
@@ -290,11 +302,17 @@ export function DotPlot({ rows, interval, loaded, frame = null, plan = null, hig
 
       {!message && scene ? (
         <svg
+          ref={svgRef}
           width={size.width}
           height={size.height}
           className="block"
           onMouseLeave={() => setHoveredTicker(null)}
+          onDoubleClick={resetZoom}
+          role="img"
+          aria-label="Trading Volumes dot plot. Scroll to zoom; double-click to reset."
         >
+          <title>Scroll to zoom around the pointer. Double-click to reset zoom.</title>
+          <defs><clipPath id={clipId}><rect x={PAD.left} y={PAD.top} width={base!.plotWidth} height={base!.plotHeight} /></clipPath></defs>
           {scene.yTicks.map((tick) => (
             <g key={`y-${tick.value.toFixed(4)}`}>
               <line
@@ -338,70 +356,72 @@ export function DotPlot({ rows, interval, loaded, frame = null, plan = null, hig
           ))}
 
           {/* Least squares through the log-log points, as `chart_ma` dashed. */}
-          {scene.trend ? (
-            <line
-              x1={scene.trend.x1}
-              y1={scene.trend.y1}
-              x2={scene.trend.x2}
-              y2={scene.trend.y2}
-              stroke="var(--color-warn)"
-              strokeWidth={1.5}
-              strokeDasharray="6 4"
-            />
-          ) : null}
+          <g clipPath={`url(#${clipId})`}>
+            {scene.trend ? (
+              <line
+                x1={scene.trend.x1}
+                y1={scene.trend.y1}
+                x2={scene.trend.x2}
+                y2={scene.trend.y2}
+                stroke="var(--color-warn)"
+                strokeWidth={1.5}
+                strokeDasharray="6 4"
+              />
+            ) : null}
 
-          {scene.placed.map((entry) => (
-            <circle
-              key={entry.point.ticker}
-              cx={entry.cx}
-              cy={entry.cy}
-              r={hoveredTicker === entry.point.ticker ? DOT_RADIUS + 2 : DOT_RADIUS}
-              fill={dotColor(entry.point.returnPct)}
-              stroke="var(--color-border-strong)"
-              strokeWidth={0.6}
-              onMouseEnter={() => setHoveredTicker(entry.point.ticker)}
-            />
-          ))}
+            {scene.placed.map((entry) => (
+              <circle
+                key={entry.point.ticker}
+                cx={entry.cx}
+                cy={entry.cy}
+                r={hoveredTicker === entry.point.ticker ? DOT_RADIUS + 2 : DOT_RADIUS}
+                fill={dotColor(entry.point.returnPct)}
+                stroke="var(--color-border-strong)"
+                strokeWidth={0.6}
+                onMouseEnter={() => setHoveredTicker(entry.point.ticker)}
+              />
+            ))}
 
-          {scene.placed.filter((entry) => highlightedTickers?.has(entry.point.ticker)).map((entry) => (
-            <circle
-              key={`outlier-${entry.point.ticker}`}
-              aria-label={`Remove outlier ${entry.point.ticker}`}
-              cx={entry.cx}
-              cy={entry.cy}
-              r={DOT_RADIUS + 5}
-              fill="none"
-              stroke="var(--color-warn)"
-              strokeWidth={2}
-              className="pointer-events-none"
-            />
-          ))}
+            {scene.placed.filter((entry) => highlightedTickers?.has(entry.point.ticker)).map((entry) => (
+              <circle
+                key={`outlier-${entry.point.ticker}`}
+                aria-label={`Remove outlier ${entry.point.ticker}`}
+                cx={entry.cx}
+                cy={entry.cy}
+                r={DOT_RADIUS + 5}
+                fill="none"
+                stroke="var(--color-warn)"
+                strokeWidth={2}
+                className="pointer-events-none"
+              />
+            ))}
 
-          {scene.placed.filter((entry) => entry.point.ticker === activeTicker).map((entry) => (
-            <circle
-              key={`hover-${entry.point.ticker}`}
-              aria-label={`Hovered ticker ${entry.point.ticker}`}
-              cx={entry.cx}
-              cy={entry.cy}
-              r={DOT_RADIUS + 5}
-              fill="none"
-              stroke="var(--color-accent)"
-              strokeWidth={2}
-              className="pointer-events-none"
-            />
-          ))}
+            {scene.placed.filter((entry) => entry.point.ticker === activeTicker).map((entry) => (
+              <circle
+                key={`hover-${entry.point.ticker}`}
+                aria-label={`Hovered ticker ${entry.point.ticker}`}
+                cx={entry.cx}
+                cy={entry.cy}
+                r={DOT_RADIUS + 5}
+                fill="none"
+                stroke="var(--color-accent)"
+                strokeWidth={2}
+                className="pointer-events-none"
+              />
+            ))}
 
-          {scene.labels.map((label) => (
-            <text
-              key={label.ticker}
-              x={label.x}
-              y={label.y}
-              textAnchor="middle"
-              className="pointer-events-none fill-text text-[9px]"
-            >
-              {label.ticker}
-            </text>
-          ))}
+            {scene.labels.map((label) => (
+              <text
+                key={label.ticker}
+                x={label.x}
+                y={label.y}
+                textAnchor="middle"
+                className="pointer-events-none fill-text text-[9px]"
+              >
+                {label.ticker}
+              </text>
+            ))}
+          </g>
 
           <text
             x={PAD.left + (size.width - PAD.left - PAD.right) / 2}
@@ -422,6 +442,7 @@ export function DotPlot({ rows, interval, loaded, frame = null, plan = null, hig
           </text>
         </svg>
       ) : null}
+      {!message && scene ? <Button className="absolute top-1 right-1" onClick={resetZoom} disabled={!zoomed} title="Scroll over the plot to zoom. Double-click to reset.">Reset zoom</Button> : null}
 
       {/* `_p20_market_cap_tooltip`. Also how a dot whose label was suppressed is named. */}
       {hovered ? (

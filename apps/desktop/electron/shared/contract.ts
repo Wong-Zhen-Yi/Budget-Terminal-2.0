@@ -17,6 +17,8 @@ import type { SofiPayload, SofiRequest } from './sofi.js'
 export type { SofiPayload, SofiRequest } from './sofi.js'
 import type { VstPayload, VstRequest } from './vst.js'
 export type { VstPayload, VstRequest } from './vst.js'
+import type { HomebuildersPayload, HomebuildersRequest } from './homebuilders.js'
+export type { HomebuildersPayload, HomebuildersRequest } from './homebuilders.js'
 import type { SemiconductorsPayload, SemiconductorsRequest } from './semiconductors.js'
 export type { SemiconductorsPayload, SemiconductorsRequest } from './semiconductors.js'
 import type { AvgoPayload, AvgoRequest } from './avgo.js'
@@ -1367,6 +1369,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'mu', label: 'MU', implemented: true },
   { id: 'amzn', label: 'AMZN', implemented: true },
   { id: 'avgo', label: 'AVGO', implemented: true },
+  { id: 'homebuilders', label: 'Homebuilders', implemented: true },
   { id: 'semiconductors', label: 'Semiconductors', implemented: true },
   { id: 'vst', label: 'VST', implemented: true },
   { id: 'hood', label: 'HOOD', implemented: true },
@@ -3579,6 +3582,7 @@ export const CHANNELS = {
   mu: 'mu:read',
   amzn: 'amzn:read',
   avgo: 'avgo:read',
+  homebuilders: 'homebuilders:read',
   semiconductors: 'semiconductors:read',
   vst: 'vst:read',
   hood: 'hood:read',
@@ -3821,6 +3825,7 @@ export interface DesktopApi {
   mu(request: MuRequest): Promise<Envelope<MuPayload>>
   amzn(request: AmznRequest): Promise<Envelope<AmznPayload>>
   avgo(request: AvgoRequest): Promise<Envelope<AvgoPayload>>
+  homebuilders(request: HomebuildersRequest): Promise<Envelope<HomebuildersPayload>>
   semiconductors(request: SemiconductorsRequest): Promise<Envelope<SemiconductorsPayload>>
   vst(request: VstRequest): Promise<Envelope<VstPayload>>
   hood(request: HoodRequest): Promise<Envelope<HoodPayload>>

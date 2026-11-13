@@ -13,6 +13,7 @@ import {
 import { cache, TTL } from '../cache.js'
 import { BROWSER_USER_AGENT } from '../userAgent.js'
 import { parseFeed } from './rss.js'
+import { fetchTickerTickMarket, TICKERTICK_MARKET_FEED } from './tickerTick.js'
 
 /**
  * The six keyless market RSS feeds, ported from `fetch_keyless_trader_news_with_status`
@@ -173,13 +174,34 @@ export interface OtherLaneResult {
   errors: EnvelopeError[]
 }
 
+async function loadTickerTickMarket(force: boolean): Promise<FeedOutcome> {
+  const base: FeedOutcome = { feed: TICKERTICK_MARKET_FEED, articles: [], parsed: 0,
+    status: 'failed', staleHours: 0, reason: '', contentType: 'application/json' }
+  try {
+    const hit = await cache.resolveWithStaleFallback('news:tickertick:market', TTL.newsPage,
+      () => fetchTickerTickMarket(force), { force })
+    if (hit.stale && hit.ageSeconds * 1000 > NEWS_FEED_STALE_FALLBACK_MS) {
+      throw new Error('Last TickerTick snapshot is over a day old.')
+    }
+    const staleHours = hit.stale ? Math.floor(hit.ageSeconds / 3600) : 0
+    return { ...base, articles: hit.value, parsed: hit.value.length,
+      status: hit.stale ? 'stale' : 'fresh', staleHours,
+      reason: hit.stale ? `TickerTick refresh failed; serving a ${staleHours}h-old snapshot.` : '' }
+  } catch (error) {
+    return { ...base, reason: error instanceof Error ? error.message : String(error) }
+  }
+}
+
 /**
  * Every feed at once, merged, deduped across feeds and ranked the way
  * `fetch_keyless_trader_news_with_status` ranks: score first, recency to break ties.
  */
 async function collectFeeds(force: boolean): Promise<OtherLaneResult> {
   const universe = normalizeTickerUniverse(otherFocusTickers())
-  const outcomes = await Promise.all(NEWS_FEEDS.map((feed) => loadFeed(feed, universe, force)))
+  const outcomes = await Promise.all([
+    loadTickerTickMarket(force),
+    ...NEWS_FEEDS.map((feed) => loadFeed(feed, universe, force)),
+  ])
 
   const merged: NewsArticle[] = []
   const errors: EnvelopeError[] = []
@@ -204,6 +226,6 @@ async function collectFeeds(force: boolean): Promise<OtherLaneResult> {
  */
 export function getOtherNews(force = false): Promise<OtherLaneResult> {
   return cache
-    .resolve(`news-page:other`, TTL.newsPage, () => collectFeeds(force), { force })
+    .resolve(`news-page:other:v2`, TTL.newsPage, () => collectFeeds(force), { force })
     .then((result) => result.value)
 }

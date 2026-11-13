@@ -15,7 +15,7 @@ const use = (pages: string, purpose: string): ApiUse => ({ pages: pages.split('|
 /** Public service inventory. Dependencies include fallback and shared data consumers, not request attribution. */
 export const API_CATALOG: ApiDefinition[] = [
   ...MARKET_API_PROVIDERS.filter(provider => provider.id !== 'finnhub').map(provider => ({ id: provider.id, label: provider.label, inactive: true, uses: [] })),
-  { id: 'finnhub', label: 'Finnhub', uses: [use('dashboard|dashboard-2|portfolio|stocks|charts|price|market-cap|heatmap|cards|up-down|fundamentals|valuation|semiconductors|amzn|avgo|mu|sofi|vst|hood|hims|pltr|bmnr', 'Preferred supported US stock quotes when a key is saved. Large batches queue within a 60 requests/minute budget. Failed refreshes retain a stale Finnhub quote or use Yahoo stock quotes; perpetual marks cannot replace them. Other providers retain history and other data.')] },
+  { id: 'finnhub', label: 'Finnhub', uses: [use('dashboard|dashboard-2|portfolio|stocks|charts|price|market-cap|heatmap|cards|up-down|fundamentals|valuation|homebuilders|semiconductors|amzn|avgo|mu|sofi|vst|hood|hims|pltr|bmnr', 'Preferred supported US stock quotes when a key is saved. Large batches queue within a 60 requests/minute budget. Failed refreshes retain a stale Finnhub quote or use Yahoo stock quotes; perpetual marks cannot replace them. Other providers retain history and other data.')] },
   { id: 'coinbase', label: 'Coinbase', inactive: true, uses: [] },
   { id: 'binance', label: 'Binance', inactive: true, uses: [] },
   { id: 'world-bank', label: 'World Bank', uses: [use('economic', 'Annual US CPI inflation, distinct from monthly releases.')] },
@@ -24,7 +24,7 @@ export const API_CATALOG: ApiDefinition[] = [
     use('dashboard|dashboard-2|portfolio|global|pre-market|trading-volumes|heatmap|cards|up-down|stocks|stock-discovery|price|market-cap', 'Quotes, market snapshots, screeners and price/history fallbacks.'),
     use('charts|technical-screen|quant|backtest|beta|projections', 'Historical bars, technical indicators, correlations, simulations and projections.'),
     use('fundamentals|scorecard|valuation|options|etf|sp500', 'Financial statements, valuation inputs, option chains, fund data and index prices.'),
-    use('forex|crypto|bitcoin|bmnr|sofi|mu|amzn|avgo|semiconductors|vst|hood|pltr|hims|gold|oil|bonds', 'Currency, commodity, benchmark and company market data.'),
+    use('forex|crypto|bitcoin|bmnr|sofi|mu|amzn|avgo|homebuilders|semiconductors|vst|hood|pltr|hims|gold|oil|bonds', 'Currency, commodity, benchmark and company market data.'),
     use('news|calendar|ipo', 'Headlines, earnings events and IPO calendar fallback.'),
   ] },
   { id: 'hyperliquid', label: 'Hyperliquid', uses: [

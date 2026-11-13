@@ -24,8 +24,8 @@ import { newsHero, newsQuoteTickers } from '@/api/initialContent'
 /**
  * The News page, ported from `NewsMixin` (`mixins/news.py`).
  *
- * Three lanes of articles as a reflowing card grid — Portfolio Spotlight from Yahoo's
- * per-holding search, Market & Macro from Yahoo's per-symbol headline feeds and six keyless
+ * Three lanes of articles as a reflowing card grid — Portfolio Spotlight from TickerTick
+ * with Yahoo fallback, Market & Macro from TickerTick, Yahoo macro headlines and keyless
  * publisher RSS feeds — with a reader rail, a signal heuristic and an outside-portfolio
  * ticker search.
  *
@@ -389,7 +389,7 @@ export function NewsPage({
               loading
                 ? 'Loading portfolio news...'
                 : holdings.length
-                  ? 'No headlines Yahoo associates with your holdings right now.'
+                  ? 'No headlines associated with your holdings right now.'
                   : 'Add a holding to see its news here.'
             }
             now={now}

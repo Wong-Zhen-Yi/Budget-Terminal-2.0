@@ -20,6 +20,7 @@ try {
         import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
         import { TradingVolumesPage } from './src/pages/TradingVolumesPage'
         import { useTradingVolumesPage } from './src/stores/tradingVolumes'
+        import { verifyPlotZoom, scrollPlot, resetZoomButton } from './scripts/fixtures/plot-zoom'
         const check = (value, message) => { if (!value) throw Error(message) }
         const settle = () => new Promise(resolve => setTimeout(resolve, 100))
         const makeRow = (ticker, volume, cap) => ({
@@ -108,6 +109,7 @@ try {
           createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><TradingVolumesPage onStatusChange={() => {}} /></QueryClientProvider>)
           await settle(); await settle()
           check(calls === 1 && document.querySelector('svg circle'), 'Page loads and plots fixture once')
+          await verifyPlotZoom()
           check(!ring(), 'No hover ring initially')
           check(![...document.querySelectorAll('svg text')].some(label => label.textContent === 'DUP'), 'Collision fixture label initially suppressed')
           await hover('DUP'); checkRing('DUP')
@@ -122,7 +124,9 @@ try {
           slider.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: document.body })); await settle()
           check(document.querySelector('circle[aria-label="Remove outlier LOW"]'), 'Outlier preview still works')
           slider.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body })); await settle()
+          scrollPlot(); await settle()
           await click('5D')
+          check(resetZoomButton().disabled, 'Changing volume interval resets zoom')
           check(document.querySelectorAll('th').length === 5 && document.querySelectorAll('th')[4].textContent.includes('5D ADV ($m)'), 'Interval switches the visible volume header')
           check(document.querySelector('tbody tr').dataset.rowKey === 'N0', 'Selected interval determines table rank')
           check(document.querySelector('tbody tr').lastElementChild.textContent === '2,000', 'Selected interval determines displayed volume in millions')
@@ -132,11 +136,18 @@ try {
           await new Promise(resolve => setTimeout(resolve, 250))
           checkRing('N20')
           check(ring().getAttribute('cy') !== before, 'Hover ring follows moving replay dot: ' + before + ' -> ' + ring().getAttribute('cy'))
+          scrollPlot(); await settle()
+          const replayXs = [...document.querySelectorAll('svg circle')].filter(dot => dot.getAttribute('fill') !== 'none').map(dot => dot.getAttribute('cx'))
+          await new Promise(resolve => setTimeout(resolve, 200))
+          check(!resetZoomButton().disabled && JSON.stringify(replayXs) === JSON.stringify([...document.querySelectorAll('svg circle')].filter(dot => dot.getAttribute('fill') !== 'none').map(dot => dot.getAttribute('cx'))), 'Replay retains zoom and horizontal positions')
+          resetZoomButton().click(); await settle()
           await leave('N20'); await click('Stop')
+          scrollPlot(); await settle()
           await hover('LOW'); checkRing('LOW')
           // A new row set must clear transient hover state, including after a refresh.
           await client.refetchQueries(); await settle()
           check(!ring(), 'Refreshing clears obsolete table hover')
+          check(resetZoomButton().disabled, 'Refreshed data resets zoom')
           check(calls === 2, 'Hover, intervals and replay reuse loaded data without extra requests')
           for (const label of ['1D', '30D', '1Y', '3Y', 'YTD']) {
             await click(label)
@@ -147,7 +158,7 @@ try {
           check(useTradingVolumesPage.getState().interval === '30d' && useTradingVolumesPage.getState().tableWidth === 500, 'New selections survive rehydration')
           useTradingVolumesPage.setState({ interval: 'ytd', tableWidth: 430 })
           await settle()
-          return 'PASS: default layout, migration, persistence, selected volume and sorting, table hover, hidden labels, missing values, outlier preview, replay and refresh'
+          return 'PASS: scroll zoom, pointer anchoring, limits, reset, clipping, default layout, migration, persistence, selected volume and sorting, table hover, hidden labels, missing values, outlier preview, replay and refresh'
         }
       `,
     },

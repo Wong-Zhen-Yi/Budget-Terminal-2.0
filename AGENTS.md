@@ -57,6 +57,9 @@ Reuse these tokens instead of adding competing hard-coded theme colours. Preserv
 ## Page Layout
 Pages should always aim to fit neatly within a single application viewport without scrollbars or large unused empty spaces (voids), unless explicitly specified otherwise. Keep content readable, balanced, and well spaced when designing or changing a page. Apply this guideline to future UI work; do not proactively redesign existing pages solely to enforce it.
 
+## Independent Focus Page Designs
+Every Focus page must have its own topic-specific information architecture, visual hierarchy and interactions. Do not copy or take design inspiration from another Focus page. Choose the layout, metrics and visualizations from the questions that matter for that subject. Shared low-level controls, charts, accessibility patterns and the locked palette remain reusable; whole-page templates and panel arrangements do not. Apply this rule to new Focus pages and requested redesigns.
+
 ## Startup Page Readiness
 When Budget Terminal opens, start loading every implemented page, including pages the user has not visited. Once startup loading completes, switching to any page must show its ready content without a first-visit load. Do not limit startup loading to the active page, favorites, or recent pages, and do not defer a page's initial data load until its tab is selected. Keep startup progress and failures visible in Settings so a page that could not load is not silently treated as ready. Preserve this behavior when changing navigation, caching, query hooks, or data services.
 
@@ -69,6 +72,7 @@ Use concise, imperative commit subjects, matching history: `Improve charts load 
 ## User notes
 update all double click launchers everytime a change is made
 This is a public repo make sure that there are no private information like passwords, emails and API keys especially for the browser page
+Focus pages should not look the same nor take inspiration from one another it should all be differentiated based on the topic of the page
 
 ## Keep MCP Up to Date
 Keep Budget Terminal's local MCP integration in sync with application changes. When adding or changing MCP-relevant services, shared contracts, pages, or permissions, update the tool registry, routes, descriptions, input/output schemas, local plugin, and `docs/local-mcp.md` as applicable in the same change. Preserve intentional desktop-only exclusions and existing privacy and permission controls.

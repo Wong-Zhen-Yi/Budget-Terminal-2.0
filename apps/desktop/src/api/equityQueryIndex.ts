@@ -31,7 +31,7 @@ export function createEquityQueryIndex(client: QueryClient) {
         for (const row of data.rows as Array<{ ticker: string }> ?? []) next.add(row.ticker)
       } else if (root === 'heatmap') {
         for (const row of data.holdings as Array<{ symbol: string }> ?? []) next.add(row.symbol)
-      } else if (root === 'semiconductors') {
+      } else if (root === 'semiconductors' || root === 'homebuilders') {
         for (const row of data.rows as Array<{ company: { symbol: string } }> ?? []) next.add(row.company.symbol)
       } else if (root === 'bmnr') next.add('BMNR')
       else if (root === 'valuation' && typeof data.ticker === 'string') next.add(data.ticker)

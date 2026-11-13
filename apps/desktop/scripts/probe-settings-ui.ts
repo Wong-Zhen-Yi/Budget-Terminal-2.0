@@ -205,6 +205,31 @@ try {
         check(getComputedStyle(document.querySelector('.settings-content')).padding === padding, 'Content spacing changed in ' + category)
         window.checkLayout()
       }
+      await window.checkStartupOrderLayout()
+    }
+    window.checkStartupOrderLayout = async () => {
+      const pageOrder = TABS.filter(tab => tab.implemented).map(tab => tab.id)
+      useDataHealth.setState({ startup: { durationMs: 1200, planned: pageOrder.length, timings: [], pageOrder,
+        pages: Object.fromEntries(pageOrder.map((page, index) => [page, index === 2
+          ? { state: 'failed', reason: 'Provider request timed out. '.repeat(12) + 'DiagnosticDetail'.repeat(40) }
+          : { state: index === 1 ? 'loading' : 'ready' }])) },
+        startupLoads: { [pageOrder[0]]: { durationMs: 12300, samples: 2 } } })
+      choose('diagnostics'); await wait(80)
+      const scroll = document.querySelector('[data-startup-order-scroll]')
+      const table = scroll.querySelector('table')
+      const headers = [...table.querySelectorAll('thead th')]
+      check(headers.every(header => header.getBoundingClientRect().height < 40), 'Page load headings wrap into unreadable columns at ' + innerWidth)
+      check(headers[1].getBoundingClientRect().width >= 150 && headers[3].getBoundingClientRect().width >= 140, 'Page names or timings squeezed by failure details')
+      check([...table.querySelectorAll('tbody th')].every(cell => { const range = document.createRange(); range.selectNodeContents(cell); return range.getBoundingClientRect().height < 20 }), 'Page names wrap vertically')
+      check(table.querySelector('tbody td:last-child').textContent.includes('12.3s') && table.textContent.includes('Not measured'), 'Saved and missing timings must remain visible')
+      check(table.textContent.includes('DiagnosticDetail'.repeat(40)), 'Failure details were removed')
+      check(scroll.scrollHeight > scroll.clientHeight && scroll.clientHeight <= 245, 'Page load list must keep its bounded scroll area')
+      const headerTop = table.tHead.getBoundingClientRect().top
+      scroll.scrollTop = 100
+      check(Math.abs(table.tHead.getBoundingClientRect().top - headerTop) < 2, 'Page load headings must remain visible while scrolling')
+      scroll.scrollTop = 0
+      window.checkLayout()
+      return 'PASS: readable startup columns, long failures, saved timings and sticky scrolling at ' + innerWidth + 'px'
     }
     window.checkController = async () => {
       choose('controller'); await wait(100)
@@ -327,24 +352,37 @@ try {
       win.setContentSize(1600, 1000)
       try {
         await win.loadFile(${JSON.stringify(join(directory, 'index.html'))})
-        console.log(await win.webContents.executeJavaScript('window.runProbe()'))
-        console.log(await win.webContents.executeJavaScript('window.checkController()'))
-        await win.webContents.executeJavaScript('window.checkNavigationSizing()')
+        if (process.env.PAGE_LOAD_ORDER_ONLY) {
+          for (const width of [1920, 1366, 1024, 768, 480]) {
+            win.setContentSize(width, 900)
+            console.log(await win.webContents.executeJavaScript('window.checkStartupOrderLayout()'))
+          }
+          win.setContentSize(1600, 1000)
+          await win.webContents.executeJavaScript('window.checkStartupOrderLayout()')
+        } else {
+          console.log(await win.webContents.executeJavaScript('window.runProbe()'))
+          console.log(await win.webContents.executeJavaScript('window.checkController()'))
+          await win.webContents.executeJavaScript('window.checkNavigationSizing()')
+        }
         await new Promise(resolve => setTimeout(resolve, 400))
         if (process.env.SETTINGS_SCREENSHOT) {
-          for (const category of ['controller']) {
+          for (const category of process.env.PAGE_LOAD_ORDER_ONLY ? ['diagnostics'] : ['controller', 'diagnostics']) {
             await win.webContents.executeJavaScript('document.querySelector(' + JSON.stringify('[data-settings-category="' + category + '"]') + ').click()')
             await new Promise(resolve => setTimeout(resolve, 120))
+            if (category === 'diagnostics') {
+              await win.webContents.executeJavaScript('document.querySelector("[data-startup-order-scroll]").closest(".settings-card").scrollIntoView({ block: "center" })')
+              await new Promise(resolve => setTimeout(resolve, 250))
+            }
             require('node:fs').writeFileSync(process.env.SETTINGS_SCREENSHOT.replace(/\\.png$/, '-' + category + '.png'), (await win.webContents.capturePage()).toPNG())
           }
         }
-        for (const width of [1280, 1024, 768, 480]) {
+        for (const width of process.env.PAGE_LOAD_ORDER_ONLY ? [] : [1280, 1024, 768, 480]) {
           win.setSize(width, 900)
           await new Promise(resolve => setTimeout(resolve, 120))
           await win.webContents.executeJavaScript('window.checkNavigationSizing()')
           console.log(await win.webContents.executeJavaScript('window.checkLayout()'))
         }
-        for (const [width, height] of [[1600,1000], [1366,768], [1280,800], [1024,768], [480,900]]) {
+        for (const [width, height] of process.env.PAGE_LOAD_ORDER_ONLY ? [] : [[1600,1000], [1366,768], [1280,800], [1024,768], [480,900]]) {
           win.setContentSize(width, height)
           console.log(await win.webContents.executeJavaScript('window.checkControllerLayout()'))
         }

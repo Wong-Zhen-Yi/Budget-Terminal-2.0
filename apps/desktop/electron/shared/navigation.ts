@@ -7,7 +7,7 @@ export const WORKSPACES = [
   { id: 'overview', label: 'Overview', pages: ['dashboard', 'dashboard-2', 'news', 'calendar', 'youtube', 'dictionary'] },
   { id: 'markets', label: 'Markets', pages: ['pre-market', 'heatmap', 'up-down', 'trading-volumes', 'beta', 'market-cap', 'price', 'etf', 'sp500', 'forex', 'crypto', 'polymarket'] },
   { id: 'research', label: 'Research', pages: ['browser', 'stocks', 'stock-discovery', 'fundamentals', 'scorecard', 'defeatbeta', 'valuation', 'institutions'] },
-  { id: 'focus', label: 'Focus', pages: ['bmnr', 'bitcoin', 'pltr', 'hood', 'hims', 'sofi', 'mu', 'amzn', 'avgo', 'semiconductors', 'vst', 'gold', 'oil'] },
+  { id: 'focus', label: 'Focus', pages: ['bmnr', 'bitcoin', 'pltr', 'hood', 'hims', 'sofi', 'mu', 'amzn', 'avgo', 'semiconductors', 'homebuilders', 'vst', 'gold', 'oil'] },
   { id: 'trading', label: 'Trading', pages: ['charts', 'options', 'technical-screen', 'quant', 'backtest'] },
   { id: 'macro', label: 'Macro & events', pages: ['global', 'economic', 'bonds', 'money', 'ipo', 'politics'] },
   { id: 'money', label: 'My money', pages: ['portfolio', 'personal-finance', 'cards', 'projections'] },

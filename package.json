@@ -48,6 +48,8 @@
     "probe:bmnr": "npm run --workspace budget-terminal-desktop probe:bmnr --",
     "probe:avgo": "npm run --workspace budget-terminal-desktop probe:avgo --",
     "probe:avgo-ui": "npm run --workspace budget-terminal-desktop probe:avgo-ui --",
+    "probe:homebuilders": "npm run --workspace budget-terminal-desktop probe:homebuilders --",
+    "probe:homebuilders-ui": "npm run --workspace budget-terminal-desktop probe:homebuilders-ui --",
     "probe:mu": "npm run --workspace budget-terminal-desktop probe:mu --",
     "probe:mu-ui": "npm run --workspace budget-terminal-desktop probe:mu-ui --",
     "probe:sofi": "npm run --workspace budget-terminal-desktop probe:sofi --",

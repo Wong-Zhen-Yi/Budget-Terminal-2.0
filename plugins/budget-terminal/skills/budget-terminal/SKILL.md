@@ -9,6 +9,12 @@ Use `budget_terminal_screenshot` with `{ "request": {} }` for the current page, 
 
 Preserve source, snapshot time, freshness, partial coverage and errors when interpreting results. Prefer existing cached results; request `force` only when a fresh provider fetch is necessary. Calls share the app's provider rate gate.
 
+News tools refresh sources on every call. Portfolio and ticker headlines use keyless
+TickerTick with Yahoo fallback; the full news page adds TickerTick market news,
+Yahoo macro headlines and RSS. TickerTick batches share a five-per-30-second,
+ten-per-minute IP budget with the app. Preserve fallback/cooldown warnings and
+publication dates; a new retrieval does not make an older story current.
+
 For current prices and portfolio values, call `budget_terminal_quotes` with
 `{ "request": { "holdings": ["AAPL", "NVDA"] } }`. This uses the app's shared live
 Hyperliquid stream first and refreshes its quote snapshot even when `force` is
@@ -31,3 +37,5 @@ its omission warnings and disclose stale data, outages and fallbacks.
 Read a saved record before editing it and verify the returned record afterward. Portfolio and options edits record holdings and contracts; they never place broker orders. Deletion tools can remove records. If a connection is interrupted during a write, read the record before trying again; the write may have completed.
 
 Bulk import/export, clearing all user data, and cache reset stay in the desktop app. The server has no arbitrary filesystem or shell tools. Local client execution is required; a local stdio package alone does not make this app available to cloud or web tasks.
+
+Use `budget_terminal_homebuilders` with `{ "request": {} }` for the Homebuilders Focus universe, adjusted histories, corporate valuations, earnings estimates and news. ITB/XHB are broader housing ETF benchmarks; their corporate profiles are omitted. Inspect per-lane timestamps and errors before treating data as current. Screenshots use page `homebuilders`. Reconnect clients after rebuilding the tool catalog.

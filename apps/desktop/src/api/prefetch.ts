@@ -779,6 +779,14 @@ export function buildTasks(
     }, onSnapshot),
   })
   tasks.push({
+    tab: 'homebuilders', label: 'Homebuilding stocks',
+    run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
+      queryKey: queryKeys.homebuilders,
+      queryFn: () => api.homebuilders({ background: true, backgroundOrder }),
+      staleTime: queryFreshness(queryKeys.homebuilders),
+    }, onSnapshot),
+  })
+  tasks.push({
     tab: 'vst', label: 'VST company dashboard',
     run: async (client, backgroundOrder, onSnapshot) => {
       const result = await warmStartupQuery(client, {
