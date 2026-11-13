@@ -33,6 +33,7 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
   }
   const provider = yahooProvider
   finnhubQuotes.setCredentialLoader(() => marketApiKeys.getForService('finnhub'))
+  finnhubQuotes.start()
   const stopFinnhubUpdates = finnhubQuotes.subscribe(quote => {
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.webContents.isDestroyed()) window.webContents.send(CHANNELS.equityMarketChanged, { quotes: [quote], candles: [] })
@@ -206,6 +207,7 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
     stopEquityUpdates()
     stopFinnhubUpdates()
     clearInterval(finnhubPoll)
+    finnhubQuotes.close()
     hyperliquidEquities.close()
     for (const channel of Object.values(CHANNELS)) ipcMain.removeHandler(channel)
   }

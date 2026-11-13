@@ -1,4 +1,5 @@
 param([Parameter(Position = 0)][ValidateSet('start', 'restart')][string]$Command = 'start', [switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Setup, [switch]$Attached)
+# Finnhub stock quotes now include live pre-market trades; see docs/finnhub-streaming.md.
 # btd restart gracefully closes this checkout before rebuilding and reopening it.
 # Telegram: natural screenshot requests use MCP and send photos without captions or follow-up text.
 # Trading Volumes defaults to a compact YTD table beside the expanded dot plot.

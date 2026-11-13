@@ -1,4 +1,5 @@
 #!/bin/sh
+# Finnhub stock quotes now include live pre-market trades; see docs/finnhub-streaming.md.
 # Dependency security refresh: patched Electron and schema-generation dependencies; see docs/dependency-maintenance.md.
 # Focus provider verification: npm run probe:maintenance-live -- --focus
 # Windows terminal command: btd restart saves, rebuilds and reopens the app.

@@ -5,6 +5,9 @@ import { observeSource } from './sourceHealth.js'
 
 const QUOTE_TTL = 30_000
 type QuoteResult = CachedResult<Quote> & { stale: boolean }
+type ReferenceQuote = { price: number; previousClose: number; asOf: number }
+type Trade = { price: number; asOf: number }
+const marketDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' })
 
 /** US listings and share classes only. Other instruments retain their existing providers. */
 export function finnhubSymbol(symbol: string): string | undefined {
@@ -23,12 +26,45 @@ export class FinnhubQuotes {
   private times: number[] = []
   private until = 0
   private listeners = new Set<(quote: Quote) => void>()
+  private references = new Map<string, ReferenceQuote>()
+  private trades = new Map<string, Trade>()
+  private streaming = false
+  private socket?: WebSocket
+  private subscriptions = new Set<string>()
+  private reconnectAt = 0
+  private retryMs = 1_000
+  private lastMessageAt = 0
+  private rotationAt = 0
+  private rotation = 0
+  private changed = new Map<string, Quote>()
+  private flushTimer?: ReturnType<typeof setTimeout>
 
   constructor(
     private getKey: () => Promise<string | undefined>,
     private request: typeof fetch = (...args) => fetch(...args),
     private now = Date.now,
+    private socketFactory: (url: string) => WebSocket = url => new WebSocket(url),
   ) {}
+
+  start(): void {
+    this.streaming = true
+    void this.connect()
+  }
+
+  close(): void {
+    this.streaming = false
+    this.disconnect()
+  }
+
+  private disconnect(): void {
+    const socket = this.socket
+    this.socket = undefined
+    this.subscriptions.clear()
+    clearTimeout(this.flushTimer)
+    this.flushTimer = undefined
+    this.changed.clear()
+    try { socket?.close() } catch { /* Never expose authenticated socket URLs. */ }
+  }
 
   setCredentialLoader(loader: () => Promise<string | undefined>): void {
     this.getKey = loader
@@ -53,6 +89,11 @@ export class FinnhubQuotes {
     this.credential = undefined
     this.quotes.clear()
     this.pending.clear()
+    this.references.clear()
+    this.trades.clear()
+    this.disconnect()
+    this.reconnectAt = 0
+    this.retryMs = 1_000
     this.until = 0
     // Keep the request budget across key changes; saving a key must not bypass it.
   }
@@ -68,9 +109,14 @@ export class FinnhubQuotes {
 
   /** Rotate all requested stock symbols within the shared minute budget. */
   async poll(): Promise<void> {
+    if (this.streaming) {
+      if (this.socket && this.now() - this.lastMessageAt > 90_000) this.disconnect()
+      await this.connect()
+      this.syncSubscriptions()
+    }
     const next = [...this.watched].sort((a, b) => a[1] - b[1])
       .find(([symbol, checkedAt]) => !this.pending.has(symbol) && this.now() - checkedAt >= QUOTE_TTL)
-    if (next) await this.resolve(next[0]).catch(() => undefined)
+    if (next) await this.resolve(next[0], true).catch(() => undefined)
   }
 
   async resolve(symbol: string, force = false): Promise<QuoteResult | null> {
@@ -84,6 +130,10 @@ export class FinnhubQuotes {
     if (generation !== this.generation) return this.resolve(symbol, force)
     this.enabled = Boolean(key)
     if (!key) return null
+    if (this.streaming) {
+      void this.connect()
+      this.syncSubscriptions()
+    }
     const saved = this.quotes.get(symbol)
     if (!force && saved && this.now() - saved.fetchedAt < QUOTE_TTL) {
       const result = { value: saved.value, ageSeconds: Math.max(0, (this.now() - saved.fetchedAt) / 1_000), fromCache: true, stale: false as const }
@@ -95,10 +145,14 @@ export class FinnhubQuotes {
     const task = this.load(symbol, upstreamSymbol, key, generation).catch(error => {
       // A rate limit or temporary outage must not replace a known stock quote
       // with a perpetual mark. Preserve its trade time and expose stale status.
-      if (!saved || generation !== this.generation) throw error
+      const latest = this.quotes.get(symbol)
+      if (!latest || generation !== this.generation) throw error
+      if (this.trades.get(symbol)?.asOf === latest.value.asOf && this.now() - latest.fetchedAt < QUOTE_TTL) {
+        return { value: latest.value, ageSeconds: (this.now() - latest.fetchedAt) / 1_000, fromCache: false, stale: false }
+      }
       const reason = error instanceof Error ? error.message : 'Finnhub quote refresh unavailable.'
-      return { value: { ...saved.value, fallbackReason: `${reason} Showing the last Finnhub stock quote.` },
-        ageSeconds: Math.max(0, (this.now() - saved.fetchedAt) / 1_000), fromCache: true, stale: true }
+      return { value: { ...latest.value, fallbackReason: `${reason} Showing the last Finnhub stock quote.` },
+        ageSeconds: Math.max(0, (this.now() - latest.fetchedAt) / 1_000), fromCache: true, stale: true }
     })
     this.pending.set(symbol, task)
     try { const result = await task; this.observe(result); return result }
@@ -148,9 +202,14 @@ export class FinnhubQuotes {
         if (![row.c, row.pc, row.t].every(value => typeof value === 'number' && Number.isFinite(value) && value > 0)
           || row.t * 1_000 > this.now() + 300_000 || row.t * 1_000 < Date.UTC(2000, 0, 1)) throw new Error('Invalid quote')
         if (generation !== this.generation) throw new Error('Credentials changed')
-        const quote: Quote = { symbol, price: row.c, absChange: row.c - row.pc, change: (row.c / row.pc - 1) * 100,
+        this.references.set(symbol, { price: row.c, previousClose: row.pc, asOf: row.t * 1_000 })
+        let quote: Quote = { symbol, price: row.c, absChange: row.c - row.pc, change: (row.c / row.pc - 1) * 100,
           asOf: row.t * 1_000, currency: 'USD', source: 'Finnhub', changeBasis: 'previous-close' }
+        // A periodic REST close must never overwrite a newer extended-hours trade.
+        const trade = this.trades.get(symbol)
+        if (trade && trade.asOf > quote.asOf!) quote = this.tradeQuote(symbol, trade) ?? quote
         this.quotes.set(symbol, { value: quote, fetchedAt: this.now() })
+        this.changed.delete(symbol)
         for (const listener of this.listeners) listener(quote)
         return { value: quote, ageSeconds: 0, fromCache: false, stale: false }
       } catch {
@@ -158,6 +217,113 @@ export class FinnhubQuotes {
         throw new Error('Finnhub: quote request failed or no supported quote was returned.')
       }
     })
+  }
+
+  private tradeQuote(symbol: string, trade: Trade): Quote | undefined {
+    const reference = this.references.get(symbol)
+    if (!reference) return undefined
+    // Before today's open REST still reports yesterday's c and the day before's pc.
+    const previousClose = marketDate.format(trade.asOf) > marketDate.format(reference.asOf)
+      ? reference.price : reference.previousClose
+    return { symbol, price: trade.price, asOf: trade.asOf, currency: 'USD', source: 'Finnhub',
+      absChange: trade.price - previousClose, change: (trade.price / previousClose - 1) * 100, changeBasis: 'previous-close' }
+  }
+
+  private async connect(): Promise<void> {
+    if (!this.streaming || this.socket || !this.watched.size || this.now() < this.reconnectAt) return
+    const generation = this.generation
+    let key: string | undefined
+    try { key = await (this.credential ??= this.getKey()) } catch { return }
+    if (!key || generation !== this.generation || !this.streaming || this.socket) return
+    let socket: WebSocket
+    try {
+      // Finnhub requires query authentication for WebSockets. This URL stays in main;
+      // never forward socket errors, URLs, payloads or close reasons to diagnostics.
+      socket = this.socketFactory(`wss://ws.finnhub.io?token=${encodeURIComponent(key)}`)
+    } catch {
+      this.reconnectAt = this.now() + this.retryMs
+      this.retryMs = Math.min(this.retryMs * 2, 60_000)
+      return
+    }
+    this.socket = socket
+    this.lastMessageAt = this.now()
+    socket.addEventListener('open', () => {
+      if (this.socket !== socket) return
+      this.lastMessageAt = this.now()
+      this.syncSubscriptions()
+    })
+    const failed = () => {
+      if (this.socket !== socket) return
+      this.disconnect()
+      this.reconnectAt = this.now() + this.retryMs
+      this.retryMs = Math.min(this.retryMs * 2, 60_000)
+    }
+    socket.addEventListener('error', failed)
+    socket.addEventListener('close', failed)
+    socket.addEventListener('message', event => {
+      if (this.socket !== socket || generation !== this.generation) return
+      const text = typeof event.data === 'string' ? event.data : ''
+      if (!text || text.length > 1_000_000) return
+      let message: { type?: string; data?: unknown[] }
+      try { message = JSON.parse(text) } catch { return }
+      if (!message || typeof message !== 'object') return
+      this.lastMessageAt = this.now()
+      if (message.type === 'error') { failed(); return }
+      this.retryMs = 1_000
+      if (message.type !== 'trade' || !Array.isArray(message.data)) return
+      for (const value of message.data) {
+        if (!value || typeof value !== 'object') continue
+        const row = value as { s?: unknown; p?: unknown; t?: unknown }
+        if (typeof row.s !== 'string' || !this.subscriptions.has(row.s)
+          || typeof row.p !== 'number' || !Number.isFinite(row.p) || row.p <= 0
+          || typeof row.t !== 'number' || !Number.isFinite(row.t)
+          || row.t < Date.UTC(2000, 0, 1) || row.t > this.now() + 30_000) continue
+        for (const symbol of this.watched.keys()) {
+          if (finnhubSymbol(symbol) !== row.s || row.t <= (this.trades.get(symbol)?.asOf ?? 0)
+            || row.t <= (this.quotes.get(symbol)?.value.asOf ?? 0)) continue
+          const trade = { price: row.p, asOf: row.t }
+          this.trades.set(symbol, trade)
+          const quote = this.tradeQuote(symbol, trade)
+          if (!quote) continue // Keep early trades until the initial REST reference arrives.
+          this.quotes.set(symbol, { value: quote, fetchedAt: this.now() })
+          this.changed.set(symbol, quote)
+        }
+      }
+      if (this.changed.size && !this.flushTimer) {
+        this.flushTimer = setTimeout(() => {
+          this.flushTimer = undefined
+          const quotes = [...this.changed.values()]
+          this.changed.clear()
+          for (const quote of quotes) for (const listener of this.listeners) listener(quote)
+        }, 250)
+        this.flushTimer.unref?.()
+      }
+    })
+  }
+
+  private syncSubscriptions(): void {
+    const socket = this.socket
+    if (!socket || socket.readyState !== 1) return
+    const symbols = [...new Set([...this.watched.keys()].map(finnhubSymbol).filter((value): value is string => Boolean(value)))]
+    // Stay within the free feed's symbol budget; rotate larger startup universes.
+    if (this.now() >= this.rotationAt) {
+      this.rotation = symbols.length > 50 ? (this.rotation + 50) % symbols.length : 0
+      this.rotationAt = this.now() + 30_000
+    }
+    const desired = new Set([...symbols.slice(this.rotation), ...symbols.slice(0, this.rotation)].slice(0, 50))
+    try {
+      for (const symbol of this.subscriptions) if (!desired.has(symbol)) {
+        socket.send(JSON.stringify({ type: 'unsubscribe', symbol }))
+        this.subscriptions.delete(symbol)
+      }
+      for (const symbol of desired) if (!this.subscriptions.has(symbol)) {
+        socket.send(JSON.stringify({ type: 'subscribe', symbol }))
+        this.subscriptions.add(symbol)
+      }
+    } catch {
+      this.disconnect()
+      this.reconnectAt = this.now() + this.retryMs
+    }
   }
 
   private observe(result: QuoteResult): void {

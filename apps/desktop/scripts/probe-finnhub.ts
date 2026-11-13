@@ -20,7 +20,155 @@ const { hyperliquidEquities } = await import('../electron/services/hyperliquidEq
 const { captureSources } = await import('../electron/services/sourceHealth.js')
 const original = { fetch, quote: hyperliquidEquities.getQuote, chart: yahoo.chart }
 
+class TestSocket extends EventTarget {
+  readyState = 0
+  sent: Array<{ type: string; symbol: string }> = []
+  send(value: string): void { this.sent.push(JSON.parse(value)) }
+  open(): void { this.readyState = 1; this.dispatchEvent(new Event('open')) }
+  message(value: unknown): void { this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(value) })) }
+  close(): void { this.readyState = 3; this.dispatchEvent(new Event('close')) }
+}
+
+async function probeStream(): Promise<void> {
+  let now = Date.parse('2026-11-13T10:00:00Z')
+  let reference = { c: 110, pc: 100, t: Date.parse('2026-11-12T21:00:00Z') / 1_000 }
+  const sockets: TestSocket[] = []
+  const updates: import('../electron/shared/contract.js').Quote[] = []
+  let finishRest: ((response: Response) => void) | undefined
+  let rateLimited = false
+  const client = new FinnhubQuotes(async () => 'fixture-stream-secret', async () => rateLimited ? new Response('', { status: 429 }) : finishRest
+    ? new Promise<Response>(done => { finishRest = done }) : Response.json(reference), () => now, url => {
+    assert.equal(new URL(url).origin, 'wss://ws.finnhub.io')
+    const socket = new TestSocket()
+    sockets.push(socket)
+    return socket as unknown as WebSocket
+  })
+  client.subscribe(quote => updates.push(quote))
+  client.start()
+  try {
+    await client.resolve('AAPL')
+    await new Promise(done => setImmediate(done))
+    assert.equal(sockets.length, 1, 'Consumers opened duplicate authenticated connections')
+    const socket = sockets[0]
+    socket.open()
+    assert.deepEqual(socket.sent, [{ type: 'subscribe', symbol: 'AAPL' }])
+    socket.message({ type: 'trade', data: [{ s: 'AAPL', p: 121, t: now - 100 }] })
+    const pre = await client.resolve('AAPL')
+    assert.equal(pre?.value.price, 121)
+    assert.equal(pre?.value.asOf, now - 100)
+    assert(Math.abs(pre!.value.change - 10) < 1e-9, 'Pre-market used the day-before-yesterday close')
+    assert.equal(pre?.value.absChange, 11)
+    assert.equal(pre?.value.source, 'Finnhub')
+    assert.equal(pre?.value.priceBasis, undefined)
+    await client.resolve('AAPL', true)
+    assert.equal((await client.resolve('AAPL'))?.value.price, 121, 'REST close overwrote a pre-market trade')
+    for (const row of [{ s: 'AAPL', p: -1, t: now }, { s: 'AAPL', p: 999, t: now + 60_000 },
+      { s: 'AAPL', p: 999, t: now - 1000 }, { s: 'UNKNOWN', p: 999, t: now }, { s: 'AAPL', p: '999', t: now }]) {
+      socket.message({ type: 'trade', data: [row] })
+    }
+    socket.message(null)
+    socket.message({ type: 'trade', data: null })
+    assert.equal((await client.resolve('AAPL'))?.value.price, 121)
+    // A trade received while the first reference request is in flight is retained.
+    finishRest = () => {}
+    const early = client.resolve('MSFT')
+    await new Promise(done => setImmediate(done))
+    socket.message({ type: 'trade', data: [{ s: 'MSFT', p: 132, t: now }] })
+    finishRest!(Response.json(reference))
+    finishRest = undefined
+    assert.equal((await early)?.value.price, 132)
+    // Late REST completions cannot erase a trade received during the refresh.
+    finishRest = () => {}
+    const race = client.resolve('AAPL', true)
+    await new Promise(done => setImmediate(done))
+    socket.message({ type: 'trade', data: [{ s: 'AAPL', p: 122, t: now }] })
+    finishRest!(Response.json(reference))
+    finishRest = undefined
+    assert.equal((await race)?.value.price, 122)
+    await new Promise(done => setTimeout(done, 300))
+    assert(updates.some(quote => quote.symbol === 'AAPL' && quote.price === 122), 'Live price never reached renderer subscribers')
+    assert(!JSON.stringify(updates).includes('fixture-stream-secret'))
+    rateLimited = true
+    const freshStream = await client.resolve('AAPL', true)
+    assert.equal(freshStream?.stale, false, 'REST rate limit marked a current streamed trade stale')
+    assert.equal(freshStream?.value.price, 122)
+    rateLimited = false
+    // Refresh the REST reference even if continuous trades keep the cache warm.
+    now = Date.parse('2026-11-13T15:00:00Z')
+    reference = { c: 125, pc: 110, t: now / 1_000 - 1 }
+    socket.message({ type: 'trade', data: [{ s: 'AAPL', p: 126, t: now }] })
+    await client.poll()
+    assert(Math.abs((await client.resolve('AAPL'))!.value.change - (126 / 110 - 1) * 100) < 1e-9)
+    socket.close()
+    await client.poll()
+    assert.equal(sockets.length, 1, 'Reconnect ignored backoff')
+    now += 1_001
+    await client.poll()
+    assert.equal(sockets.length, 2)
+    sockets[1].open()
+    assert(sockets[1].sent.some(row => row.symbol === 'AAPL'), 'Reconnect did not restore subscriptions')
+    now = Date.parse('2026-11-13T22:00:00Z')
+    reference = { c: 150, pc: 110, t: Date.parse('2026-11-13T21:00:00Z') / 1_000 }
+    await client.resolve('AAPL', true)
+    sockets[1].message({ type: 'trade', data: [{ s: 'AAPL', p: 154, t: now }] })
+    assert(Math.abs((await client.resolve('AAPL'))!.value.change - 40) < 1e-9, 'Same-day trade did not use REST previous close')
+    now += 10
+    sockets[1].message({ type: 'trade', data: [{ s: 'AAPL', p: 155, t: now }] })
+    reference = { c: 156, pc: 110, t: (now + 1) / 1_000 }
+    await client.resolve('AAPL', true)
+    await new Promise(done => setTimeout(done, 300))
+    assert.equal(updates.at(-1)?.price, 156, 'Queued trade overwrote a newer REST emission')
+    // Same rules operate after the DST transition (New York summer time).
+    now = Date.parse('2027-07-12T12:00:00Z')
+    reference = { c: 140, pc: 130, t: Date.parse('2027-07-09T20:00:00Z') / 1_000 }
+    await client.resolve('AAPL', true)
+    sockets[1].message({ type: 'trade', data: [{ s: 'AAPL', p: 154, t: now }] })
+    assert(Math.abs((await client.resolve('AAPL'))!.value.change - 10) < 1e-9, 'Summer pre-market/holiday gap baseline failed')
+    client.credentialsChanged()
+    sockets[1].message({ type: 'trade', data: [{ s: 'AAPL', p: 999, t: now + 1 }] })
+    assert.equal(sockets[1].readyState, 3)
+    const emissions = updates.length
+    await new Promise(done => setTimeout(done, 300))
+    assert.equal(updates.length, emissions, 'Removed key emitted queued trades')
+  } finally { client.close() }
+
+  const budgetSockets: TestSocket[] = []
+  const budget = new FinnhubQuotes(async () => 'fixture', async () => Response.json(reference), () => now, () => {
+    const socket = new TestSocket()
+    budgetSockets.push(socket)
+    return socket as unknown as WebSocket
+  })
+  budget.start()
+  try {
+    await Promise.all(Array.from({ length: 55 }, (_, i) => budget.resolve(`TEST${i}`)))
+    await budget.resolve('BRK-B')
+    await budget.resolve('BRK.B')
+    budgetSockets[0].open()
+    let active = new Set<string>()
+    const apply = (rows: TestSocket['sent']) => {
+      for (const row of rows) {
+        if (row.type === 'subscribe') active.add(row.symbol)
+        else active.delete(row.symbol)
+        assert(active.size <= 50, 'Feed subscription budget exceeded')
+      }
+    }
+    apply(budgetSockets[0].sent)
+    const first = [...active]
+    budgetSockets[0].sent = []
+    now += 31_000
+    await budget.poll()
+    apply(budgetSockets[0].sent)
+    assert.notDeepEqual([...active], first, 'Large startup universe did not rotate')
+    assert(active.has('BRK.B'))
+    budgetSockets[0].message({ type: 'trade', data: [{ s: 'BRK.B', p: 155, t: now }] })
+    assert.equal((await budget.resolve('BRK-B'))?.value.price, 155)
+    assert.equal((await budget.resolve('BRK.B'))?.value.price, 155)
+  } finally { budget.close() }
+  console.log('PASS: pre-market streaming, close reference/DST, early trades, REST races, validation, batching, reconnect, key removal, aliases and bounded subscription rotation')
+}
+
 try {
+  await probeStream()
   let now = Date.now()
   let calls = 0
   let currentKey: string | undefined = 'fixture-finnhub-secret'
@@ -225,6 +373,25 @@ try {
           const quote = await liveClient.resolve('AAPL', true)
           if (!quote || quote.value.price <= 0) throw Error('No live quote')
           console.log('PASS live Finnhub: AAPL quote, timestamp and authentication validated; key redacted')
+          if (${process.argv.includes('--stream')}) {
+            stage = 'live WebSocket trades'
+            liveClient.start()
+            const poll = setInterval(() => { void liveClient.poll() }, 1_200)
+            const seen = new Map()
+            const stop = liveClient.subscribe(value => {
+              if (value.asOf > quote.value.asOf && value.price > 0) seen.set(value.symbol, value.asOf)
+            })
+            try {
+              await Promise.all(['AAPL', 'NVDA', 'TSLA'].map(symbol => liveClient.resolve(symbol)))
+              await new Promise(done => setTimeout(done, 45_000))
+              if (!seen.size) throw Error('No live trade received during observation window')
+              console.log('PASS live stream: newer trades received for ' + [...seen.keys()].join(', ') + '; timestamps ' + [...seen.values()].map(time => new Date(time).toISOString()).join(', '))
+              const latest = await liveClient.resolve('AAPL')
+              const refreshed = await liveClient.resolve('AAPL', true)
+              if (refreshed.value.asOf < latest.value.asOf) throw Error('REST overwrote a newer trade')
+              console.log('PASS live stream: REST refresh retains newest trade')
+            } finally { stop(); clearInterval(poll); liveClient.close() }
+          }
           const symbols = ${JSON.stringify(portfolioSymbols)}
           if (symbols.length) {
             stage = 'portfolio stock quotes'
@@ -247,7 +414,7 @@ try {
       let output = ''
       child.stdout.on('data', data => { output += data })
       child.stderr.on('data', data => { output += data })
-      const timer = setTimeout(() => { child.kill(); reject(Error('Live Finnhub probe timed out')) }, 45_000)
+      const timer = setTimeout(() => { child.kill(); reject(Error('Live Finnhub probe timed out')) }, process.argv.includes('--stream') ? 90_000 : 45_000)
       child.on('error', error => { clearTimeout(timer); reject(error) })
       child.on('exit', code => { clearTimeout(timer); done({ code, output }) })
     })
