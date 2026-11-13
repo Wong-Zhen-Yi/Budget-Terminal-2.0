@@ -1,4 +1,5 @@
 const { spawnSync } = require('node:child_process')
+// Convex Auth v2 runs in the main process; launch always builds current desktop and MCP sources.
 // Windows terminal command: btd restart saves, rebuilds and reopens the app.
 // Telegram: natural screenshot requests use MCP and send photos without captions or follow-up text.
 const path = require('node:path')

@@ -2,6 +2,13 @@
 
 [Back to the README](../README.md)
 
+Cloud sync now uses Convex Auth v2. Sign-in, sign-out, session rotation, provider
+credentials and sync conflict choices remain desktop-only. MCP cannot access auth
+tokens, change the cloud account or bypass local read/write permissions. Existing
+MCP writes still save through local stores; optional sync observes those saved-data
+changes. No tools or permissions are added for authentication. See
+[Convex setup and account reconnection](convex-sync.md).
+
 Budget Terminal exposes MCP tools for service operations, page screenshots,
 and connection status. Research tools use the same caches and provider rate gate as the app.
 When Finnhub is configured, saved portfolio stock tickers take priority for REST

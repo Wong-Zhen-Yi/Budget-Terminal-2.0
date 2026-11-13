@@ -11,6 +11,11 @@
     "apps/desktop"
   ],
   "scripts": {
+    "convex:dev": "npm run --workspace budget-terminal-desktop convex:dev --",
+    "convex:codegen": "npm run --workspace budget-terminal-desktop convex:codegen --",
+    "convex:setup": "npm run --workspace budget-terminal-desktop convex:setup --",
+    "convex:deploy": "npm run --workspace budget-terminal-desktop convex:deploy --",
+    "probe:convex-auth-live": "npm run --workspace budget-terminal-desktop probe:convex-auth-live --",
     "probe:finnhub": "npm run --workspace budget-terminal-desktop probe:finnhub --",
     "probe:controller": "npm run --workspace budget-terminal-desktop probe:controller",
     "setup:linux": "node scripts/install-linux-launcher.cjs",

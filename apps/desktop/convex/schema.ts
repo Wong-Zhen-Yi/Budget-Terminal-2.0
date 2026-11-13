@@ -1,9 +1,9 @@
 import { defineSchema, defineTable } from 'convex/server'
 import { v } from 'convex/values'
-import { authTables } from '@convex-dev/auth/server'
+import { legacyAuthTables } from './legacyAuthTables'
 
 export default defineSchema({
-  ...authTables,
+  ...legacyAuthTables,
   // Retain record-era tables and indexes as an archive when restoring snapshot sync.
   // The active sync API only reads/writes syncSnapshots; do not discard archived data.
   authVerifiers: defineTable({ sessionId: v.optional(v.id('authSessions')), signature: v.optional(v.string()) })

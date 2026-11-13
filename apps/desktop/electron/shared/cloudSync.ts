@@ -15,8 +15,6 @@ export interface CloudSyncStatus {
 export type CloudSyncCommand =
   | { type: 'signInGitHub'; url: string }
   | { type: 'cancelSignIn' }
-  | { type: 'sendCode'; url: string; email: string }
-  | { type: 'verifyCode'; url: string; email: string; code: string }
   | { type: 'sync' }
   | { type: 'resolve'; use: 'local' | 'cloud' }
   | { type: 'disconnect' }

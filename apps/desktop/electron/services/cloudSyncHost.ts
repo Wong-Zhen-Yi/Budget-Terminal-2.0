@@ -10,26 +10,25 @@ import { CloudSyncEngine, type SyncCheckpoint } from './cloudSyncEngine.js'
 import { applySyncData, atomicSyncFile, cloudDataPath, readLocalSyncData, readSyncData, recoverSyncData } from './cloudSyncData.js'
 import { withSavedDataLock } from './automaticBackup.js'
 import { subscribeSavedDataChanged } from './savedDataEvents.js'
-import { beginGitHubSignIn, GitHubSetupError, type GitHubSignIn, type OAuthTokens } from './cloudSyncOAuth.js'
+import { beginGitHubSignIn, GitHubSetupError, type GitHubSignIn, type OAuthTokens, type OAuthCompletion } from './cloudSyncOAuth.js'
 import { convexDeploymentUrl } from '../shared/cloudOAuth.js'
 
 const readRef = makeFunctionReference<'query', Record<string, never>, CloudSnapshot | null>('sync:read')
 const userRef = makeFunctionReference<'query', Record<string, never>, string>('sync:identity')
-const authConfigRef = makeFunctionReference<'query', Record<string, never>, { githubConfigured: boolean }>('sync:authConfiguration')
+const authConfigRef = makeFunctionReference<'query', Record<string, never>, { authVersion?: number; githubConfigured: boolean }>('sync:authConfiguration')
 const writeRef = makeFunctionReference<'mutation', { expectedRevision: number; payload: string }, { accepted: boolean; revision: number; updatedAt: number }>('sync:write')
-const signInRef = makeFunctionReference<'action', { provider?: string; params?: Record<string, string>; refreshToken?: string; verifier?: string },
-  { tokens?: { token: string; refreshToken: string } | null; started?: boolean; redirect?: string; verifier?: string }>('auth:signIn')
-const signOutRef = makeFunctionReference<'action', Record<string, never>, null>('auth:signOut')
-const tokensSchema = z.object({ token: z.string().min(1), refreshToken: z.string().min(1) })
-const sessionSchema = z.object({ url: z.string(), userId: z.string(), tokens: tokensSchema })
+const startSignInRef = makeFunctionReference<'mutation', { redirectTo: string }, { redirect: string; state: string }>('auth:startSignInWithGithub')
+const completeSignInRef = makeFunctionReference<'mutation', { code: string; state: string }, OAuthCompletion>('auth:completeSignInWithGithub')
+const refreshRef = makeFunctionReference<'mutation', { refreshToken: string }, { kind: 'rotated'; tokens: OAuthTokens } | { kind: 'noSession' }>('auth:refreshSession')
+const signOutRef = makeFunctionReference<'mutation', { refreshToken: string }, null>('auth:signOut')
+const tokensSchema = z.object({ accessToken: z.string().min(1), refreshToken: z.string().min(1), refreshTokenExpiresAt: z.number().finite(), userId: z.string().min(1) })
+const sessionSchema = z.object({ authVersion: z.literal(2), url: z.string(), userId: z.string(), tokens: tokensSchema })
 type Session = z.infer<typeof sessionSchema>
 const checkpointSchema = z.object({ account: z.string(), baseline: z.string().optional(), revision: z.number().int().nonnegative(), lastSyncedAt: z.number().optional(), cloudUpdatedAt: z.number().optional() })
 const urlSchema = z.string().trim().url().transform(convexDeploymentUrl)
 const commandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('signInGitHub'), url: urlSchema }),
   z.object({ type: z.literal('cancelSignIn') }),
-  z.object({ type: z.literal('sendCode'), url: urlSchema, email: z.string().trim().email().max(254) }),
-  z.object({ type: z.literal('verifyCode'), url: urlSchema, email: z.string().trim().email().max(254), code: z.string().trim().min(1).max(64) }),
   z.object({ type: z.literal('sync') }), z.object({ type: z.literal('disconnect') }),
   z.object({ type: z.literal('resolve'), use: z.enum(['local', 'cloud']) }),
 ])
@@ -42,6 +41,7 @@ const http = (url: string) => new ConvexHttpClient(url, { logger: false,
   fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(12_000) }) })
 
 let session: Session | undefined
+let savedUrl = ''
 let engine: CloudSyncEngine | undefined
 let client: ConvexHttpClient | undefined
 let subscription: ConvexClient | undefined
@@ -74,9 +74,10 @@ async function saveSession(value: Session) {
 async function connectTokens(url: string, value: OAuthTokens) {
   const tokens = tokensSchema.parse(value)
   const login = http(url)
-  login.setAuth(tokens.token)
+  login.setAuth(tokens.accessToken)
   const userId = await login.query(userRef, {})
-  const next = { url, userId, tokens }
+  if (userId !== tokens.userId) throw new Error('Sign-in identity mismatch.')
+  const next: Session = { authVersion: 2, url, userId, tokens }
   await saveSession(next)
   await attach(next)
   authError = false
@@ -86,15 +87,27 @@ async function connectTokens(url: string, value: OAuthTokens) {
 async function authenticatedClient(forceRefresh = false) {
   if (!session || !client) throw new Error('Sign in first.')
   // Refresh tokens are serialized with every other sync operation and persisted before use.
-  const expires = JSON.parse(Buffer.from(session.tokens.token.split('.')[1], 'base64url').toString()).exp as number
-  if (forceRefresh || !Number.isFinite(expires) || expires * 1000 < Date.now() + 60_000) {
-    const result = await http(session.url).action(signInRef, { refreshToken: session.tokens.refreshToken })
-    if (!result.tokens) throw new Error('Session expired.')
+  const expires = JSON.parse(Buffer.from(session.tokens.accessToken.split('.')[1], 'base64url').toString()).exp as number
+  if (forceRefresh || !Number.isFinite(expires) || expires * 1000 < Date.now() + 30_000) {
+    const result = await http(session.url).mutation(refreshRef, { refreshToken: session.tokens.refreshToken })
+    if (result.kind === 'noSession') {
+      savedUrl = session.url
+      await rm(sessionPath(), { force: true })
+      session = undefined
+      client = undefined
+      engine = undefined
+      void subscription?.close()
+      subscription = undefined
+      authError = true
+      message = 'Your cloud session expired. Sign in with GitHub again. Local data is available.'
+      throw new Error('Session expired.')
+    }
+    if (result.tokens.userId !== session.userId) throw new Error('Refreshed identity mismatch.')
     const next = { ...session, tokens: tokensSchema.parse(result.tokens) }
     await saveSession(next)
     session = next
   }
-  client.setAuth(session.tokens.token)
+  client.setAuth(session.tokens.accessToken)
   return client
 }
 
@@ -111,6 +124,7 @@ async function attach(value: Session) {
   await subscription?.close()
   subscription = undefined
   session = value
+  savedUrl = value.url
   client = http(value.url)
   const account = `${value.url}|${value.userId}`
   let checkpoint: SyncCheckpoint = { account, revision: 0 }
@@ -136,7 +150,7 @@ async function attach(value: Session) {
   subscription.setAuth(async ({ forceRefreshToken }) => {
     // Convex can request this independently; serialize token rotation with HTTP sync.
     return enqueue(async () => {
-      try { await authenticatedClient(forceRefreshToken); return session?.tokens.token ?? null } catch { return null }
+      try { await authenticatedClient(forceRefreshToken); return session?.tokens.accessToken ?? null } catch { return null }
     })
   })
   subscription.onUpdate(readRef, {}, () => schedule(), () => { /* HTTP retry reports failures in Settings. */ })
@@ -144,7 +158,7 @@ async function attach(value: Session) {
 }
 
 export function cloudSyncStatus(): CloudSyncStatus {
-  return { url: session?.url ?? '', signedIn: Boolean(session), encryptionAvailable: encryptionAvailable(),
+  return { url: session?.url ?? savedUrl, signedIn: Boolean(session), encryptionAvailable: encryptionAvailable(),
     state: engine?.state ?? (authError ? 'error' : 'disconnected'), pending: engine?.pending ?? false,
     signInPending: Boolean(pendingGitHub),
     localUpdatedAt: engine?.localUpdatedAt,
@@ -169,7 +183,13 @@ export async function startCloudSync(): Promise<void> {
     try {
       const bytes = await readFile(sessionPath())
       if (!encryptionAvailable()) throw new Error('Encryption unavailable')
-      const stored = sessionSchema.parse(JSON.parse(safeStorage.decryptString(bytes)))
+      const decoded = JSON.parse(safeStorage.decryptString(bytes))
+      if (decoded.authVersion !== 2) {
+        savedUrl = urlSchema.parse(decoded.url)
+        message = 'Cloud sync now uses Convex Auth v2. Sign in with the same GitHub account again to reconnect your saved cloud data.'
+        return
+      }
+      const stored = sessionSchema.parse(decoded)
       stored.url = urlSchema.parse(stored.url)
       if (!closed) await attach(stored)
     } catch (error) {
@@ -191,8 +211,13 @@ export function cloudSyncCommand(input: CloudSyncCommand) {
         if (session || pendingGitHub || !encryptionAvailable()) throw new Error('Sign-in unavailable')
         const login = http(command.url)
         const flow = await beginGitHubSignIn(command.url, {
-          isConfigured: async () => (await login.query(authConfigRef, {})).githubConfigured,
-          signIn: args => login.action(signInRef, args), openExternal: url => shell.openExternal(url),
+          isConfigured: async () => {
+            const config = await login.query(authConfigRef, {})
+            if (config.authVersion !== 2) throw new GitHubSetupError('This backend needs the Convex Auth v2 update. Run npm run convex:setup from the repository, then retry. Local data is available.')
+            return config.githubConfigured
+          },
+          startSignIn: args => login.mutation(startSignInRef, args),
+          completeSignIn: args => login.mutation(completeSignInRef, args), openExternal: url => shell.openExternal(url),
         })
         pendingGitHub = flow
         message = 'Complete GitHub sign-in in your browser. This request expires in 5 minutes.'
@@ -211,29 +236,20 @@ export function cloudSyncCommand(input: CloudSyncCommand) {
       } else if (command.type === 'cancelSignIn') {
         pendingGitHub?.cancel()
         pendingGitHub = undefined
-      } else if (command.type === 'sendCode' || command.type === 'verifyCode') {
-        if (session || pendingGitHub) throw new Error('Disconnect before changing accounts.')
-        if (!encryptionAvailable()) throw new Error('OS encryption unavailable')
-        const login = http(command.url)
-        const params: Record<string, string> = { email: command.email.toLowerCase() }
-        if (command.type === 'verifyCode') params.code = command.code.toUpperCase()
-        const result = await login.action(signInRef, { provider: 'email', params })
-        if (command.type === 'verifyCode') {
-          await connectTokens(command.url, tokensSchema.parse(result.tokens))
-        } else message = 'Code sent. Check your email, then enter the code within 15 minutes.'
       } else if (command.type === 'disconnect') {
         pendingGitHub?.cancel()
         pendingGitHub = undefined
         // Remove local credentials first. Failed server revocation must never prevent disconnect.
         await rm(sessionPath(), { force: true })
         const previous = client
-        if (previous && session) previous.setAuth(session.tokens.token)
+        const refreshToken = session?.tokens.refreshToken
+        previous?.clearAuth()
         session = undefined
         engine = undefined
         client = undefined
         await subscription?.close()
         subscription = undefined
-        try { await previous?.action(signOutRef, {}) } catch { /* Local session is already removed. */ }
+        try { if (refreshToken) await previous?.mutation(signOutRef, { refreshToken }) } catch { /* Local session is already removed. */ }
       } else {
         if (!engine) throw new Error('Sign in first.')
         await engine.sync(command.type === 'resolve' ? command.use : undefined)

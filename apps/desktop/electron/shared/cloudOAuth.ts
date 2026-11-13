@@ -9,13 +9,21 @@ export function desktopOAuthRedirect(value: string): string {
   return url.href
 }
 
-/** The OS browser opens only this deployment's Convex Auth GitHub entry point. */
-export function githubSignInUrl(deploymentUrl: string, redirect: string): string {
+/** The OS browser opens only GitHub, bound to this deployment and the initiating state. */
+export function githubSignInUrl(deploymentUrl: string, redirect: string, state: string): string {
   const deployment = new URL(convexDeploymentUrl(deploymentUrl))
   const url = new URL(redirect)
   const siteHost = deployment.hostname.replace(/\.convex\.cloud$/, '.convex.site')
-  if (url.protocol !== 'https:' || url.hostname !== siteHost || url.port || url.username || url.password ||
-    url.hash || url.pathname !== '/api/auth/signin/github') throw new Error('Invalid GitHub sign-in URL')
+  const callback = new URL(`https://${siteHost}/api/auth/callback/github/callback`)
+  if (url.protocol !== 'https:' || url.hostname !== 'github.com' || url.port || url.username || url.password ||
+    url.hash || url.pathname !== '/login/oauth/authorize' ||
+    url.searchParams.getAll('state').length !== 1 || url.searchParams.get('state') !== state || !state ||
+    url.searchParams.getAll('redirect_uri').length !== 1 || url.searchParams.get('redirect_uri') !== callback.href ||
+    url.searchParams.getAll('client_id').length !== 1 || !url.searchParams.get('client_id') ||
+    ['undefined', 'null'].includes(url.searchParams.get('client_id')!) ||
+    url.searchParams.get('code_challenge_method') !== 'S256' || !url.searchParams.get('code_challenge')) {
+    throw new Error('Invalid GitHub sign-in URL')
+  }
   return url.href
 }
 /** Convex cloud endpoints may include a region between the deployment and convex.cloud. */
@@ -27,4 +35,8 @@ export function convexDeploymentUrl(value: string): string {
   }
   return url.origin
 }
+
+// V2 requires explicit origins. Try a small port range to allow concurrent checkouts.
+export const DESKTOP_AUTH_PORTS = [43871, 43872, 43873, 43874, 43875]
+export const DESKTOP_AUTH_ORIGINS = DESKTOP_AUTH_PORTS.map(port => `http://127.0.0.1:${port}`)
 

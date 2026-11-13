@@ -7,7 +7,7 @@ export const authConfiguration = queryGeneric({
   args: {},
   handler: async () => {
     const configured = (value: string | undefined) => Boolean(value?.trim() && !['undefined', 'null'].includes(value.trim()))
-    return { githubConfigured: configured(process.env.AUTH_GITHUB_ID) && configured(process.env.AUTH_GITHUB_SECRET) }
+    return { authVersion: 2 as const, githubConfigured: configured(process.env.AUTH_GITHUB_ID) && configured(process.env.AUTH_GITHUB_SECRET) }
   },
 })
 

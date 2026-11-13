@@ -169,7 +169,12 @@ try {
   type Row = { _id: string; userId: string; revision: number; payload: string; updatedAt: number }
   const rows = new Map<string, Row>()
   let owner: string | null = 'owner-a'
-  const ctx = { auth: { getUserIdentity: async () => owner ? { subject: `${owner}|session` } : null }, db: {
+  let revoked = false
+  const ctx = { auth: { getUserIdentity: async () => owner ? { subject: 'v2-session' } : null },
+    runQuery: async (_ref: unknown, args: { sessionId: string }) => {
+      assert.equal(args.sessionId, 'v2-session', 'V2 must resolve the session through the auth component')
+      return owner && !revoked ? { userId: owner } : null
+    }, db: {
     query: () => ({ withIndex: (_index: string, select: (q: { eq: (key: string, value: string) => void }) => void) => {
       let selected = ''
       select({ eq: (_key, value) => { selected = value } })
@@ -196,10 +201,41 @@ try {
   assert.equal(laterWrite.revision, 2)
   assert(laterWrite.updatedAt > initialWrite.updatedAt, 'Accepted updates must have a strictly increasing server timestamp')
   await assert.rejects(write(ctx, { expectedRevision: 1, payload: 'x'.repeat(750_001) }))
+  revoked = true
+  await assert.rejects(read(ctx, {}), 'A signed JWT must not authorize a revoked session')
+  await assert.rejects(write(ctx, { expectedRevision: 2, payload: baseline }))
   owner = null
   await assert.rejects(read(ctx, {}))
   await assert.rejects(write(ctx, { expectedRevision: 0, payload: baseline }))
-  console.log('PASS: automatic fresh-device restore, persisted offline timestamps, monotonic server timestamps, stale-revision protection, two-device sync, conflicts, retries, account isolation, backups and interrupted-download recovery')
+  const users = await import('../convex/users.js')
+  const createUser = (users.createGithubUser as unknown as { _handler: (ctx: unknown, args: unknown) => Promise<string> })._handler
+  let legacy: { userId: string } | null = { userId: 'original-owner' }
+  let userExists = true
+  let inserts = 0
+  const migrationCtx = { db: {
+    query: (table: string) => {
+      assert.equal(table, 'authAccounts')
+      return { withIndex: (index: string, select: (q: unknown) => void) => {
+        assert.equal(index, 'providerAndAccountId')
+        const filters: Record<string, string> = {}
+        const q = { eq: (key: string, value: string) => { filters[key] = value; return q } }
+        select(q)
+        assert.deepEqual(filters, { provider: 'github', providerAccountId: 'verified-github-id' })
+        return { unique: async () => legacy }
+      } }
+    },
+    get: async (id: string) => { assert.equal(id, 'original-owner'); return userExists ? { _id: id } : null },
+    insert: async (table: string, data: unknown) => { assert.equal(table, 'users'); assert.deepEqual(data, {}); inserts++; return 'new-owner' },
+  } }
+  const verified = { method: { name: 'github', profile: { id: 'verified-github-id', login: 'fixture', email: 'untrusted@example.invalid', emailVerified: false } } }
+  assert.equal(await createUser(migrationCtx, verified), 'original-owner', 'V2 must retain the existing owner and snapshots by GitHub provider ID')
+  assert.equal(inserts, 0, 'Migration must not duplicate an existing account')
+  userExists = false
+  await assert.rejects(createUser(migrationCtx, verified), 'A broken legacy link must not create a competing account')
+  legacy = null
+  assert.equal(await createUser(migrationCtx, verified), 'new-owner', 'A new GitHub account must never link by matching email or login')
+  assert.equal(inserts, 1)
+  console.log('PASS: v2 legacy GitHub ownership migration, revoked-session isolation, fresh-device restore, persisted offline timestamps, monotonic server timestamps, stale-revision protection, two-device sync, conflicts, retries, backups and interrupted-download recovery')
 } finally {
   for (const key of ['APPDATA', 'LOCALAPPDATA'] as const) {
     if (previous[key] === undefined) delete process.env[key]

@@ -1,83 +1,99 @@
-# Optional Convex sync
+# Convex Auth v2 and optional cloud sync
 
-Budget Terminal always reads and writes its existing local JSON stores. Convex is an optional remote copy. No account, deployment URL or internet connection is required to use the app. Disabling or disconnecting sync keeps local data intact. Startup page preloading does not wait for Convex.
+Budget Terminal reads and writes its local stores first. Convex is an optional remote copy; no account or internet connection is required to use the application. Startup preloads every implemented page independently of cloud sign-in. Sync progress and failures appear only in Settings.
 
-## Deploy your backend once
+## Configure with the CLI
 
-Use a private Convex project shared by your devices. Run the following from `apps/desktop` (PowerShell users may need `npx.cmd` and `npm.cmd`):
+Use the repository's existing Convex project when upgrading. From the repository root:
 
 ```sh
-npx convex dev --once
-node scripts/create-convex-auth-keys.mjs
-npx convex env set --from-file .env.convex-auth.local
+npm install
+npm run convex:setup
 ```
 
-The first command signs into Convex, selects/creates your project, generates types and deploys `convex/`. The keys script creates a private ignored local file and refuses to overwrite an existing one. After successfully uploading the keys, remove `.env.convex-auth.local` with your file manager. These signing keys belong only on the backend; never put them in the desktop configuration.
+The setup command uses the deployment selected in the ignored `apps/desktop/.env.local`. It generates component bindings, runs the application typecheck, exports the complete existing deployment (including file storage) outside the repository, deploys the v2 components and functions, and checks public authentication configuration. It stops before deployment if the typecheck, credentials check or recovery export fails. The compiler runs through the workspace's resolved TypeScript installation because Convex's built-in compiler lookup does not resolve hoisted npm dependencies.
 
-In the **same Convex deployment's dashboard environment variables**, configure:
+The private recovery ZIP is stored under `BudgetTerminal/convex-backups` in LOCALAPPDATA on Windows (or the user's home directory otherwise). It contains sensitive account and saved data. Never upload it to Git or share it publicly. Environment variables are not part of this export; setup preserves the existing provider credentials and legacy signing configuration.
 
-| Variable | Value |
+For a new project, run `npm run convex:dev` to authenticate the CLI and select/create the deployment, then stop the watcher after project selection. Configure the following deployment environment variables in the Convex dashboard or using `npx convex env set` from `apps/desktop`, and run `npm run convex:setup`:
+
+| Variable | Backend-only value |
 | --- | --- |
-| `AUTH_GITHUB_ID` | The Client ID of your Budget Terminal GitHub OAuth App |
-| `AUTH_GITHUB_SECRET` | The Client Secret of that GitHub OAuth App |
-| `SITE_URL` | The deployment's HTTPS site URL, ending in `.convex.site` |
+| `AUTH_GITHUB_ID` | GitHub OAuth App client ID |
+| `AUTH_GITHUB_SECRET` | GitHub OAuth App client secret |
 
-Register a **GitHub OAuth App** at GitHub → Settings → Developer settings → OAuth Apps. Use your `.convex.site` URL as the homepage, and `https://YOUR-DEPLOYMENT.convex.site/api/auth/callback/github` as the authorization callback URL. Configure its Client ID and Client Secret only in the Convex dashboard; the secret never goes into the repository or desktop app. GitHub redirects to Convex first, so the registered callback is the backend URL rather than a desktop port.
+The existing variable names are retained so an upgrade reuses the deployment's GitHub OAuth App. They are bound to the v2 GitHub component's `CLIENT_ID` and `CLIENT_SECRET`. Neither value is returned by the app's configuration query. `authConfiguration` exposes only `authVersion: 2` and `githubConfigured`.
 
-If GitHub shows 404 and the authorization URL contains `client_id=undefined`, the deployment is missing its GitHub Client ID. Configure both `AUTH_GITHUB_ID` and `AUTH_GITHUB_SECRET` on the deployment whose URL you entered in Settings. The app checks a public configuration boolean before opening the browser and reports missing credentials in Settings; the credentials themselves are never returned to the app.
+Register this authorization callback URL on the GitHub OAuth App, using the deployment's exact site host (including a regional label if present):
 
-`CONVEX_SITE_URL` is provided by Convex. `JWT_PRIVATE_KEY` and `JWKS` were installed by the commands above. For the optional **Use email code instead** method, also configure `AUTH_RESEND_KEY` (a Resend delivery key) and `AUTH_EMAIL_FROM` (a verified sender address) on the backend. Email codes expire after 15 minutes. GitHub sign-in does not require Resend or an email sender.
+```text
+https://YOUR-DEPLOYMENT.convex.site/api/auth/callback/github/callback
+```
 
-For a production deployment, run `npx convex deploy`, repeat key generation/upload with `npx convex env set --prod --from-file .env.convex-auth.local`, and configure the GitHub variables in the production dashboard. Register a separate GitHub OAuth App for that production deployment's callback URL. Dev and production environments have separate data, keys and settings. Do not run the generic Convex Auth scaffolder over this repository: the auth files are already implemented.
+This callback is served by the mounted v2 GitHub component. The path is below the old `/api/auth/callback/github` callback so existing OAuth Apps with GitHub's legacy wildcard matching continue to work. Apps using exact matching must register the full new callback URL. Prefer registering the exact URL; do not enable wildcard matching just for this integration. See [GitHub redirect URL matching](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#redirect-urls).
 
-## Connect each device
+V2 uses the deployment's built-in signing keys. Do not generate `JWT_PRIVATE_KEY` or `JWKS` for v2, run a v1 scaffolder, or put administrator keys in the renderer. Existing v1 signing variables may remain unused for rollback. `CONVEX_SITE_URL` and `CONVEX_CLOUD_URL` are managed by Convex.
 
-1. Open **Settings → Data & storage → Cloud sync · Convex**.
-2. Enter the deployment URL ending in `.convex.cloud` and click **Sign in with GitHub**. Regional URLs such as `https://YOUR-DEPLOYMENT.ap-southeast-2.convex.cloud` are supported; copy the exact URL from your dashboard.
-3. Approve in your system browser. The response returns automatically to the desktop app; Settings updates when sign-in completes. Close the browser tab when finished.
-4. Repeat with the same deployment and GitHub account on other devices. Use **Cancel sign-in** to stop a pending request; pending requests expire after five minutes.
+Useful root commands:
 
-This signs into Budget Terminal's own user-data backend. Signing into the Convex dashboard through GitHub, or authorizing the Convex developer CLI, is a separate developer action and does not sign into the app. No CLI login or Convex administrator credential is needed on other devices.
+```sh
+npm run convex:codegen           # Refresh generated bindings without deploying
+npm run convex:dev               # Watch and deploy development changes
+npm run convex:setup             # Back up, check and upgrade configured development
+npm run convex:deploy            # Back up, check and deploy production explicitly
+npm run probe:convex-auth-live   # Validate the configured development auth endpoints
+```
 
-The desktop creates a temporary listener bound only to `127.0.0.1`, using a random port and a random callback path. The backend allows only that constrained return URL. A Convex Auth verifier binds the exchanged code to the device that started sign-in; codes, verifiers and session tokens are kept out of the renderer. The listener closes after one valid callback, cancellation or expiry. Browser/OS policy must permit a loopback return to the desktop. Local use remains available if sign-in is cancelled or fails.
+Production is separate: configure its own GitHub OAuth App and variables first. `convex:deploy` exports production before deploying it. Upgrading development does not update production.
 
-The first device uploads its local copy if the cloud is empty. A fresh device with only factory defaults automatically downloads the latest cloud snapshot after signing into the same account. It does not upload freshly generated empty stores over your saved work. An existing device with unsynced work still requires an explicit choice when both copies differ: **Keep this device's copy** or **Use cloud copy**. Confirming replaces the complete selected snapshot, including preferences; records from competing copies are not automatically merged.
+## Reconnect after a v1 upgrade
 
-## Offline operation and conflicts
+1. Relaunch Budget Terminal using any double-click launcher.
+2. Open **Settings > Data & storage > Cloud sync**.
+3. Enter the exact `.convex.cloud` deployment URL and choose **Sign in with GitHub**. Regional hosts are supported.
+4. Approve in your system browser and return to the application. Repeat on each device with the same GitHub account.
 
-- Local edits save through the normal stores and backups. They do not wait for a network request.
-- Each local data change records a durable edit timestamp, including while disconnected. Reading data, retrying sync or exporting a backup does not change that timestamp. Factory defaults have no edit timestamp and are distinguished from existing work. Returning user data to its defaults does not erase its edit history.
-- Each accepted cloud snapshot has a strictly increasing server `updatedAt` timestamp and a revision. Queries return both, and checkpoints preserve them across restarts. Settings shows the local data time, cloud data time and revision separately from the last successful sync. Retry of an already stored payload does not falsely make it newer.
-- Ordering uses the server revision rather than comparing clocks on different devices. An older server revision cannot replace a newer acknowledged copy. Conflicting offline edits are preserved even if one machine's clock is wrong.
-- Sync compares the on-disk data to the last acknowledged snapshot. This is the durable pending queue: offline edits survive app restarts without relying on Convex's in-memory mutation queue.
-- An authenticated live subscription wakes sync when the remote copy changes. A 15-second background check also detects local edits and retries failures while the app is running.
-- Convex mutations atomically compare revisions. If both devices edited since their shared baseline, neither copy is silently overwritten. Settings shows the conflict and requires an explicit selection. If either copy changes again while selecting, the selection must be confirmed again.
-- A download checks that local data has not changed since the network read. It validates the stores, writes a complete local recovery backup, journals the replacement and updates the existing stores through the save queue. An interrupted replacement is rolled back from the journal before the next window opens.
-- Recovery copies are in `BudgetTerminalElectron/sync-backups` inside the app's existing APPDATA directory. They contain sensitive user data; keep them private. Restore a recovery copy through the normal **Import User Data** control in Settings.
-- Sync state, failures, pending changes and retry controls are confined to Settings. There are no global readiness/status banners.
+V1 sessions cannot be reused as v2 sessions. An encrypted legacy session is left intact until a successful replacement or explicit disconnect, but the app asks for a new GitHub sign-in. The deployment URL is remembered. Local data and sync checkpoints remain available.
 
-## Scope and limits
+The internal user-creation callback looks up the verified, stable GitHub provider ID in the retained v1 `authAccounts` table. If present, it returns that original user ID, preserving snapshot ownership and archived records. New GitHub accounts receive a new empty user row. Email addresses, login names and display names never link accounts. Legacy auth and record-era tables and indexes are retained for recovery; no v1 sign-in endpoints are deployed.
 
-Synced: portfolios and options, personal finance, custom cards, articles, and preferences in the settings store. Device-only browser profiles, cookies, provider keys, agent histories, market caches, renderer-only page state and backup timestamps are excluded. Device paths are excluded from the payload.
+Convex Auth v2 currently lacks the old standalone email-code sign-in method, so the desktop now offers GitHub only. An email-only legacy account without a linked GitHub identity needs a separately reviewed account migration; an email match does not prove ownership. Do not create a new cloud copy over that account's saved data. Local saves and recovery exports remain available.
 
-This initial implementation uses one versioned snapshot per account with a **750 KB UTF-8 payload limit** to stay within Convex's document limit. Larger libraries keep working locally, but sync reports an error until the payload is reduced. It uses complete-copy conflict resolution rather than automatic record merging. The Convex backend enforces the signed-in account on every snapshot query and mutation; clients cannot select another owner.
+The Convex developer CLI login is separate from Budget Terminal user sign-in. Other devices only need the application, deployment URL and GitHub account, with no developer credentials.
 
-Session and refresh tokens are encrypted with Electron safeStorage in `sync-session.bin`. Sync requires a working OS keyring and refuses plaintext storage. The local checkpoint contains a copy of user data and is excluded from Git, as are local timestamp metadata (`sync-local-metadata.json`), sessions, journals, recovery backups and `.env` files. The deployment URL is public configuration; deploy/admin keys and provider secrets must never enter the renderer, repository or desktop bundle.
+## Desktop authentication and privacy
 
-Cloud sync is implemented but a live end-to-end check requires your deployed Convex project and configured GitHub OAuth App. The offline probes use an actual local callback listener with mocked provider responses; they do not contact GitHub/Convex or send mail.
+Authentication runs in Electron's main process behind `window.api`. OAuth state, one-time codes, access tokens and refresh tokens never enter the renderer, local MCP tools or browser response text. Sessions are encrypted with Electron safeStorage in `sync-session.bin`; a working OS keyring is required and plaintext storage is refused.
 
-References: [Convex Auth manual setup](https://labs.convex.dev/auth/setup/manual), [GitHub authentication](https://labs.convex.dev/auth/config/oauth/github), [email authentication](https://labs.convex.dev/auth/config/otps), [Convex JavaScript clients](https://docs.convex.dev/client/javascript).
+V2 requires an explicit redirect-origin allowlist. The desktop binds only `127.0.0.1`, trying ports 43871 through 43875, and uses a fresh random 256-bit callback path for each attempt. Only those five loopback origins are allowed by the backend. If all ports are occupied, sign-in fails safely. The listener validates the Host, path, method, parameter names and duplicate parameters, and closes after success, cancellation or five minutes. Provider cancellation and expiry return to Settings immediately.
 
-## Rollback and deployment history
+Before opening the system browser, the app validates GitHub's HTTPS authorization host and path, the deployment-specific callback, state and PKCE parameters. Completion presents the one-time code with the initiating state to `completeSignInWithGithub`. V2 `refreshSession` rotates credentials serially and the replacement is encrypted before use. `noSession` removes expired local credentials and asks for sign-in. Disconnect removes local credentials first and attempts server revocation with the refresh token. Backend data reads resolve a live v2 session through the auth component, so a revoked session cannot access snapshots even if its access token has not expired.
 
-Follow-up repair on 2026-11-10: the configured saved-data development service was still running protocol 2, whose snapshot upload endpoint returned `UPGRADE_REQUIRED`. A complete private deployment export was saved outside the repository before changes. Its 85 cloud records reconstructed to exactly the existing revision-21 snapshot; no newer cloud edits needed migration. The snapshot backend was then deployed to that existing service. Record-era tables and their indexes remain in the schema as an inactive archive, and the existing account, GitHub OAuth settings, signing keys and saved session were retained. The desktop subsequently uploaded successfully to revision 22 with no pending local changes. The separate production service was not changed. The app now explains this specific backend mismatch without exposing provider errors or credentials.
+## Local saves, sync and recovery
 
-Validation: typecheck, build, offline cloud-sync/OAuth probes, launcher probe and Agents/browser privacy checks passed. Live verification confirmed the matching snapshot backend, GitHub configuration, a new acknowledged cloud revision and a local snapshot hash matching the saved checkpoint.
+Synced: portfolios and options, personal finance, custom cards, articles, charts watchlists and shared preferences. Browser profiles, cookies, provider keys, agent histories, market caches and device paths stay on the device.
 
-The repository feature was restored to `3208321debc5e46712d95fb36db563c59e9ba80c`: snapshot sync, explicit deployment URL entry, GitHub sign-in and optional email codes. Record sync, record conflicts, account review/export/deletion controls and the protocol 2 release gate have been removed from this checkout. Later backup import validation and single-capture performance improvements remain. No deployed backend or stored account data was modified by this rollback.
+The first device uploads if the cloud is empty. A fresh device with only factory defaults restores the cloud snapshot. Existing devices with competing edits require **Keep this device's copy** or **Use cloud copy**, followed by explicit confirmation. A selection must be confirmed again if either copy changes. Records from competing snapshots are not merged.
 
-An upgraded protocol 2 service is not downgraded by changing desktop source. Use a backend running the matching snapshot implementation. Do not deploy the older schema over an existing service without separately backing up and reviewing its newer records; its legacy snapshot can predate record-sync edits.
+Local edits save without waiting for network requests. Durable edit timestamps and the last acknowledged checkpoint preserve pending work across restarts. Server revisions order changes independently of device clocks; accepted updates have strictly increasing server timestamps. An authenticated subscription and a 15-second background check detect changes and retry failures.
 
-The following verification describes the superseded deployment work, retained as operator history:
+Downloads validate all stores, save a recovery backup, check for intervening local edits and journal the replacement. An interrupted replacement rolls back before the next window opens. Recovery copies live under the private application-data `sync-backups` directory. Disconnect keeps local data and the cloud copy. Complete snapshots have a 750 KB UTF-8 payload limit; larger libraries continue working locally and show a sync error.
 
-Verification on 2026-11-10: the existing saved-data deployment was backed up and upgraded in place. Live checks reached its configured GitHub authorization redirect and successfully exercised the deployed identity/account-label queries for an existing account without printing profile details. The subsequent production-configuration run backed up the separate production deployment, deployed protocol 2 and configured independent signing material. The operator then supplied separate production GitHub credentials through secure inputs; both were installed only on production. Production preflight and the live GitHub authorization redirect passed. A completed production browser login and the remaining live acceptance checks are still required. The former email-delivery requirements are superseded by the user’s GitHub-only choice.
+## Verification
+
+```sh
+npm run typecheck
+npm run probe:cloud-oauth
+npm run probe:cloud-sync
+npm run probe:convex-auth-live
+npm run probe:settings-ui --workspace budget-terminal-desktop
+npm run build
+npm run probe:mcp
+npm run probe:launcher
+```
+
+Offline probes exercise the real callback listener, state-bound redemption, hostile requests, allowed-port fallback, cancellation, account linking, revoked-session isolation, snapshot conflicts and recovery. The live probe checks the deployed v2 component endpoints, GitHub authorization entry, callback routing and rejection of unauthorized access. It creates only an expiring OAuth request and does not modify saved user data. A completed browser login, successful token rotation and authenticated cross-device sync require user approval in the system browser and are not claimed by that probe.
+
+Deployment on 2026-11-14: the locally configured development backend was exported privately and upgraded to the `auth` and `authGithub` components. Existing GitHub variables and legacy records were retained. Production was not changed.
+
+References: [Convex Auth v2 setup](https://docs.convex.dev/auth/convex-auth/getting-started), [GitHub OAuth](https://docs.convex.dev/auth/convex-auth/methods/oauth), [v1 migration status](https://docs.convex.dev/auth/convex-auth/migrating/from-convex-auth-v1).

@@ -14,7 +14,10 @@
     "probe:cloud-oauth": "tsx scripts/probe-cloud-oauth.ts",
     "probe:cloud-sync": "tsx scripts/probe-cloud-sync.ts",
     "convex:dev": "convex dev",
-    "convex:deploy": "convex deploy",
+    "convex:codegen": "convex codegen",
+    "convex:setup": "node scripts/setup-convex.mjs",
+    "convex:deploy": "node scripts/setup-convex.mjs --prod",
+    "probe:convex-auth-live": "tsx scripts/probe-convex-auth-live.ts",
     "probe:public-providers": "tsx scripts/probe-public-providers.ts",
     "probe:settings-dashboard-ui": "tsx scripts/probe-settings-dashboard-ui.ts",
     "probe:settings-ui": "tsx scripts/probe-settings-ui.ts",
@@ -177,8 +180,7 @@
     "vite": "^8.3.8"
   },
   "dependencies": {
-    "@auth/core": "^0.41.3",
-    "@convex-dev/auth": "^0.0.96",
+    "@convex-dev/auth": "^2.0.0",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@tanstack/react-query": "^5.107.1",
     "@tanstack/react-query-persist-client": "^5.107.1",

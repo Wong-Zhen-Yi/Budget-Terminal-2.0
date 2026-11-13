@@ -124,16 +124,8 @@ try {
       clickText(sync, 'Confirm replacement'); await wait(80)
       check(window.syncCommands.some(command => command.type === 'resolve' && command.use === 'cloud'), 'Cloud choice did not reach the host')
       clickText(sync, 'Disconnect sync'); await wait(80)
-      check(sync.querySelector('input[type=email]') && sync.textContent.includes('Not connected'), 'Disconnect must retain normal local operation and restore sign-in')
-      await setInput('Convex deployment URL', 'https://fixture.convex.cloud')
-      sync.querySelector('details').open = true
-      await setInput('Sync account email', 'fixture@example.invalid')
-      sync.querySelector('button[type=submit]').click(); await wait(80)
-      check(sync.querySelector('[aria-label="Sync email code"]'), 'Optional email code entry missing')
-      await setInput('Sync email code', 'TESTCODE')
-      sync.querySelector('button[type=submit]').click(); await wait(80)
-      check(!sync.querySelector('input[type=email]') && !sync.textContent.includes('fixture@example.invalid'), 'Sign-in drafts retained after connecting')
-      clickText(sync, 'Disconnect sync'); await wait(80)
+      check(sync.querySelector('input[type=url]') && sync.textContent.includes('Not connected'), 'Disconnect must retain normal local operation and restore sign-in')
+      check(sync.textContent.includes('Convex Auth v2') && !sync.querySelector('input[type=email]'), 'V2 must explain GitHub reconnection and omit unsupported email-code controls')
       clickText(card('maintenance'), 'Reset Cache'); await wait(80)
       clickText(document.querySelector('[role=dialog]'), 'Reset Cache'); await wait(80)
       check(window.maintenanceCalls.join() === 'resetCache', 'Confirmed maintenance did not run exactly once')
@@ -153,7 +145,7 @@ try {
       await setSearch('world bank')
       check(visible(keys) && !visible(card('mcp')), 'New API settings are not searchable')
       await setSearch('')
-      for (const label of ['Binance', 'Coinbase', 'World Bank', 'IMF']) {
+      for (const label of ['Hyperliquid', 'CoinGecko', 'World Bank', 'IMF']) {
         check([...card('api').querySelectorAll('.api-usage__dependency > summary')].some(entry => entry.textContent.includes(label) && !entry.textContent.includes('Inactive')), 'API directory entry missing: ' + label)
       }
       const keyInput = keys.querySelector('input')
@@ -181,7 +173,7 @@ try {
       document.querySelector('[aria-label="Dismiss settings message"]').click(); await wait(80)
       window.checkLayout()
       check(!window.renderErrors.length, 'Renderer errors: ' + window.renderErrors.join('; '))
-      return 'PASS: category/search recovery, retained diagnostic panels, clock persistence/rejection, hidden paths, failure visibility, maintenance confirmation/cancellation and renderer health'
+      return 'PASS: Convex Auth v2 sign-in/cancellation/reconnection, cloud conflict choices, category/search recovery, retained diagnostics, clock persistence/rejection, hidden paths, maintenance confirmation and renderer health'
     }
     window.checkLayout = () => {
       check(document.documentElement.scrollWidth <= innerWidth, 'Window overflows horizontally')
@@ -314,7 +306,7 @@ try {
           window.fixtureSync = { ...window.fixtureSync, state: 'error', message, signInPending: false }
           return { ...envelope(window.fixtureSync), meta: { freshness: 'failed', failureReason: message } }
         }
-        const signedOut = ['disconnect', 'cancelSignIn', 'sendCode', 'signInGitHub'].includes(command.type)
+        const signedOut = ['disconnect', 'cancelSignIn', 'signInGitHub'].includes(command.type)
         window.fixtureSync = { ...window.fixtureSync, state: signedOut ? 'disconnected' : command.type === 'sync' ? 'conflict' : 'synced', signedIn: !signedOut,
           signInPending: command.type === 'signInGitHub', message: command.type === 'signInGitHub' ? 'Complete GitHub sign-in in your browser.' : undefined }
         return envelope(window.fixtureSync)
