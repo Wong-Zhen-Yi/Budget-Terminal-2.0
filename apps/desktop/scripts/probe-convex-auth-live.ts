@@ -27,12 +27,15 @@ const redirectTo = `${DESKTOP_AUTH_ORIGINS[0]}/convex-sync-callback/${randomByte
 const started = await client.mutation(api.auth.startSignInWithGithub, { redirectTo })
 githubSignInUrl(url, started.redirect, started.state)
 const authorization = await fetch(started.redirect, { redirect: 'manual', signal: AbortSignal.timeout(15_000) })
-assert.equal(authorization.status, 302, 'GitHub must accept the authorization request')
+// Signed-out GitHub redirects even a misconfigured OAuth App to /login. This
+// checks availability only; exact callback registration needs a signed-in browser.
+assert.equal(authorization.status, 302, 'The signed-out GitHub login entry must be reachable')
 const location = new URL(authorization.headers.get('location')!, 'https://github.com')
 assert.equal(location.hostname, 'github.com')
-assert.equal(location.pathname, '/login', 'GitHub must request user approval rather than return a configuration error')
+assert.equal(location.pathname, '/login', 'Expected the signed-out GitHub login entry')
 assert(!location.searchParams.has('error'))
 const callback = new URL(started.redirect).searchParams.get('redirect_uri')!
 const rejected = await fetch(`${callback}?code=invalid&state=invalid`, { redirect: 'manual', signal: AbortSignal.timeout(15_000) })
 assert.equal(rejected.status, 400, 'The mounted component must reject an unknown callback state')
-console.log('PASS: live v2 components, GitHub authorization entry, callback routing, redirect allowlist, invalid-code/refresh rejection and unauthenticated data isolation. Browser approval and authenticated sync still require a user sign-in.')
+console.log('PASS: live v2 components, signed-out GitHub login entry, callback routing, redirect allowlist, invalid-code/refresh rejection and unauthenticated data isolation.')
+console.log('NOT VERIFIED: GitHub callback registration or completed sign-in. A signed-out /login redirect also occurs with an invalid redirect_uri; validate the exact callback in GitHub OAuth App settings and complete a signed-in browser flow.')

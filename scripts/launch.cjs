@@ -1,4 +1,5 @@
 const { spawnSync } = require('node:child_process')
+// GitHub sign-in requires the exact v2 callback registered in its OAuth App; see docs/convex-sync.md.
 // Convex Auth v2 runs in the main process; launch always builds current desktop and MCP sources.
 // Windows terminal command: btd restart saves, rebuilds and reopens the app.
 // Telegram: natural screenshot requests use MCP and send photos without captions or follow-up text.

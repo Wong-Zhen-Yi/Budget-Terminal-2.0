@@ -62,10 +62,23 @@ assert.deepEqual(await cancelled.result, { reason: 'cancelled' })
 const expired = await createOAuthCallback(25)
 assert.deepEqual(await expired.result, { reason: 'expired' })
 const occupied = createServer()
-await new Promise<void>(resolve => occupied.listen(DESKTOP_AUTH_PORTS[0], '127.0.0.1', resolve))
+let occupiedPort: number | undefined
+for (const port of DESKTOP_AUTH_PORTS) {
+  try {
+    await new Promise<void>((resolve, reject) => {
+      occupied.once('error', reject)
+      occupied.listen(port, '127.0.0.1', () => { occupied.removeListener('error', reject); resolve() })
+    })
+    occupiedPort = port
+    break
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw error
+  }
+}
+assert(occupiedPort, 'The fallback fixture needs an available loopback port')
 try {
   const fallback = await createOAuthCallback()
-  assert.notEqual(new URL(fallback.url).port, String(DESKTOP_AUTH_PORTS[0]))
+  assert.notEqual(new URL(fallback.url).port, String(occupiedPort))
   fallback.cancel()
 } finally { await new Promise<void>(resolve => occupied.close(() => resolve())) }
 

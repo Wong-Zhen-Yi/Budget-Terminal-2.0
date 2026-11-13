@@ -30,7 +30,9 @@ Register this authorization callback URL on the GitHub OAuth App, using the depl
 https://YOUR-DEPLOYMENT.convex.site/api/auth/callback/github/callback
 ```
 
-This callback is served by the mounted v2 GitHub component. The path is below the old `/api/auth/callback/github` callback so existing OAuth Apps with GitHub's legacy wildcard matching continue to work. Apps using exact matching must register the full new callback URL. Prefer registering the exact URL; do not enable wildcard matching just for this integration. See [GitHub redirect URL matching](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#redirect-urls).
+This callback is served by the mounted v2 GitHub component. Register the full exact URL, including the final `/callback`; the old v1 `/api/auth/callback/github` URL does not match when exact matching is enabled. You may keep the old registration alongside the v2 URI. Keep wildcard matching disabled. Setup prints the deployment's actual callback URL for registration. See [GitHub redirect URL matching](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps#redirect-urls).
+
+If GitHub displays **Invalid Redirect URI** or **The redirect_uri is not associated with this application**, open that OAuth App's **General > Redirect URIs**, add the exact v2 callback URL and click **Update application**. Cancel the pending sign-in in Budget Terminal and start a fresh one. A signed-out HTTP redirect to GitHub's `/login` does not validate callback registration: GitHub can defer the error until after login. The CLI cannot verify this GitHub account setting.
 
 V2 uses the deployment's built-in signing keys. Do not generate `JWT_PRIVATE_KEY` or `JWKS` for v2, run a v1 scaffolder, or put administrator keys in the renderer. Existing v1 signing variables may remain unused for rollback. `CONVEX_SITE_URL` and `CONVEX_CLOUD_URL` are managed by Convex.
 
@@ -92,8 +94,10 @@ npm run probe:mcp
 npm run probe:launcher
 ```
 
-Offline probes exercise the real callback listener, state-bound redemption, hostile requests, allowed-port fallback, cancellation, account linking, revoked-session isolation, snapshot conflicts and recovery. The live probe checks the deployed v2 component endpoints, GitHub authorization entry, callback routing and rejection of unauthorized access. It creates only an expiring OAuth request and does not modify saved user data. A completed browser login, successful token rotation and authenticated cross-device sync require user approval in the system browser and are not claimed by that probe.
+Offline probes exercise the real callback listener, state-bound redemption, hostile requests, allowed-port fallback, cancellation, account linking, revoked-session isolation, snapshot conflicts and recovery. The live probe checks the deployed v2 component endpoints, the signed-out GitHub login entry, callback routing and rejection of unauthorized access. It creates only an expiring OAuth request and does not modify saved user data. It explicitly does not verify GitHub callback registration. A completed browser login, successful token rotation and authenticated cross-device sync require a signed-in browser and are not claimed by that probe.
 
 Deployment on 2026-11-14: the locally configured development backend was exported privately and upgraded to the `auth` and `authGithub` components. Existing GitHub variables and legacy records were retained. Production was not changed.
+
+Callback repair on 2026-11-14: the development GitHub OAuth App still registered only the exact v1 URI. The exact v2 URI was added alongside it with wildcard matching left disabled. A signed-in browser completed the real v2 flow; authenticated access found the existing cloud snapshot, token rotation preserved the user identity, and revoking the temporary test session immediately blocked snapshot access. No saved user data was changed and no credentials were saved by this check.
 
 References: [Convex Auth v2 setup](https://docs.convex.dev/auth/convex-auth/getting-started), [GitHub OAuth](https://docs.convex.dev/auth/convex-auth/methods/oauth), [v1 migration status](https://docs.convex.dev/auth/convex-auth/migrating/from-convex-auth-v1).

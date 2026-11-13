@@ -1,4 +1,5 @@
 #!/bin/sh
+# GitHub sign-in requires the exact v2 callback registered in its OAuth App; see docs/convex-sync.md.
 # Convex Auth v2 and MCP rebuild through the shared launcher; reconnect cloud sync in Settings after upgrading.
 # Homebuilders has an independent housing-economics layout with mortgage scenarios and a builder capital map.
 # Homebuilders Focus page and read-only MCP tool rebuild from current source through the shared launcher.
