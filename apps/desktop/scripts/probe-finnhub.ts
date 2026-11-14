@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { build } from 'esbuild'
 import { QueryClient } from '@tanstack/react-query'
+import { createEquityQueryIndex } from '../src/api/equityQueryIndex.js'
 
 const previous = { APPDATA: process.env.APPDATA, LOCALAPPDATA: process.env.LOCALAPPDATA }
 const keyPath = join(previous.APPDATA ?? '', 'budget-terminal-desktop', 'market-api-keys.bin')
@@ -27,6 +28,80 @@ class TestSocket extends EventTarget {
   open(): void { this.readyState = 1; this.dispatchEvent(new Event('open')) }
   message(value: unknown): void { this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(value) })) }
   close(): void { this.readyState = 3; this.dispatchEvent(new Event('close')) }
+}
+
+async function probeRefreshPolicy(): Promise<void> {
+  let now = Date.parse('2026-11-13T15:00:00Z')
+  let foreground = true
+  const calls: string[] = []
+  const socket = new TestSocket()
+  const client = new FinnhubQuotes(async () => 'fixture', async input => {
+    calls.push(new URL(String(input)).searchParams.get('symbol')!)
+    return Response.json({ c: 110, pc: 100, t: now / 1000 - 1 })
+  }, () => now, () => socket as unknown as WebSocket)
+  client.setForegroundLoader(() => foreground)
+  client.setVisibleSymbols(['AAPL'])
+  client.start()
+  try {
+    await client.resolve('AAPL')
+    await client.resolve('BACK')
+    socket.open()
+    const initial = calls.length
+    for (let i = 0; i < 9; i += 1) {
+      now += 31_000
+      socket.message({ type: 'trade', data: [{ s: 'AAPL', p: 120, t: now }] })
+      await client.poll()
+      await client.resolve('AAPL')
+    }
+    assert.equal(calls.length, initial, 'Healthy streaming or background reads caused early REST calls')
+    now += 22_000
+    socket.message({ type: 'trade', data: [{ s: 'AAPL', p: 121, t: now }] })
+    await client.poll()
+    assert.equal(calls.at(-1), 'AAPL', 'Visible reference was not maintained after five minutes')
+    await client.poll()
+    assert.equal(calls.at(-1), 'BACK', 'Background did not refresh after five minutes')
+    socket.close()
+    now += 31_000
+    await client.resolve('AAPL')
+    assert.equal(calls.at(-1), 'AAPL', 'Quiet/disconnected visible stock did not resume fallback polling')
+    foreground = false
+    const beforeIdle = calls.length
+    now += 31_000
+    await client.resolve('AAPL')
+    await client.resolve('BACK')
+    await client.poll()
+    assert.equal(calls.length, beforeIdle, 'Minimized app kept fast REST polling')
+    foreground = true
+    now = Date.parse('2026-11-13T22:00:00Z')
+    await client.resolve('AAPL')
+    const extended = calls.length
+    now += 31_000
+    await client.resolve('AAPL')
+    assert.equal(calls.length, extended, 'After-hours fallback ignored slower cadence')
+    now += 30_000
+    await client.resolve('AAPL')
+    assert.equal(calls.length, extended + 1, 'After-hours fallback stopped entirely')
+    now = Date.parse('2026-11-14T15:00:00Z')
+    await client.resolve('AAPL')
+    const closed = calls.length
+    now += 5 * 60_000
+    await client.resolve('AAPL')
+    await client.poll()
+    assert.equal(calls.filter(symbol => symbol === 'AAPL').length, calls.slice(0, closed).filter(symbol => symbol === 'AAPL').length, 'Weekend retained fast polling')
+    now += 10 * 60_000
+    await client.resolve('AAPL')
+    assert.equal(calls.at(-1), 'AAPL')
+    // Summer pre-market begins at 08:00 UTC, winter at 09:00 UTC.
+    for (const start of ['2027-07-12T08:00:00Z', '2026-11-16T09:00:00Z']) {
+      now = Date.parse(start)
+      await client.resolve('AAPL', true)
+      const before = calls.length
+      now += 61_000
+      await client.resolve('AAPL')
+      assert.equal(calls.length, before + 1, 'DST pre-market treated as closed')
+    }
+  } finally { client.close() }
+  console.log('PASS: streaming reference cadence, visible/background priorities, stream fallback, minimized, weekend and extended-hours/DST policies')
 }
 
 async function probeStream(): Promise<void> {
@@ -227,7 +302,7 @@ async function probePortfolioPriority(): Promise<void> {
     assert(active.has('MSFT'), 'Portfolio edits did not update the live feed')
     // Frequent cached reads must not postpone the portfolio reference refresh.
     for (let i = 0; i < 2; i += 1) { now += 10_000; await client.resolve('MSFT') }
-    now += 11_000
+    now += 41_000
     const refreshed = calls.length
     await client.poll()
     assert.equal(calls[refreshed], 'MSFT')
@@ -275,9 +350,21 @@ async function probePortfolioPriority(): Promise<void> {
 }
 
 try {
+  const visibleClient = new QueryClient()
+  const visibleIndex = createEquityQueryIndex(visibleClient)
+  visibleClient.setQueryData(['stocks', 'AAPL'], { data: { symbol: 'AAPL' } })
+  visibleClient.setQueryData(['stocks', 'MSFT'], { data: { symbol: 'MSFT' } })
+  visibleClient.setQueryData(['marketCap'], { data: { rows: [{ ticker: 'NVDA' }, { ticker: 'AAPL' }] } })
+  assert.deepEqual(visibleIndex.symbolsFor([['stocks', 'AAPL']]), ['AAPL'])
+  assert.deepEqual(visibleIndex.symbolsFor([['stocks', 'MSFT'], ['marketCap']]), ['MSFT', 'NVDA', 'AAPL'])
+  visibleClient.removeQueries({ queryKey: ['stocks', 'AAPL'], exact: true })
+  assert.deepEqual(visibleIndex.symbolsFor([['stocks', 'AAPL']]), [])
+  visibleIndex.stop()
+  visibleClient.clear()
+  await probeRefreshPolicy()
   await probeStream()
   await probePortfolioPriority()
-  let now = Date.now()
+  let now = Date.parse('2026-11-13T15:00:00Z')
   let calls = 0
   let currentKey: string | undefined = 'fixture-finnhub-secret'
   const timestamps: number[] = []
@@ -309,7 +396,7 @@ try {
   assert(captured.value?.fromCache)
   assert(captured.snapshot?.sources?.includes('Finnhub'))
   assert.equal(calls, 1)
-  now += 31_000
+  now += 301_000
   await client.poll()
   assert.equal(calls, 2, 'Automatic poll did not refresh requested stock')
   currentKey = undefined
@@ -344,7 +431,7 @@ try {
   const retained = new FinnhubQuotes(async () => 'fixture', async () => outage
     ? new Response('', { status: 429 }) : Response.json({ c: 110, pc: 100, t: now / 1_000 }), () => now)
   const lastGood = await retained.resolve('AAPL')
-  now += 61_000
+  now += 301_000
   outage = true
   const stale = await captureSources(() => retained.resolve('AAPL'))
   assert.equal(stale.value?.value.source, 'Finnhub')

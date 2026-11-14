@@ -27,6 +27,7 @@ try {
         import { queryKeys } from './src/api/client'
         import { fetchRetainedQuery } from './src/api/snapshotResult'
         import { applyEquityMarketUpdate } from './src/api/equityStream'
+        import { createEquityQueryIndex } from './src/api/equityQueryIndex'
         import { buildTasks } from './src/api/prefetch'
         const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } })
         const check = (ok, message) => { if (!ok) throw Error(message) }
@@ -123,6 +124,17 @@ try {
           check(perps.querySelector('tbody tr').textContent.startsWith('BTC-PERP'), 'Perpetual market sorting failed')
           check(text().includes('Live feed') && text().includes('REST fallback'), 'Live feed and fallback must be visible')
           check(document.querySelector('[title="Yahoo Finance stock volume (shares)"]').textContent === '1M sh', 'Stock volume must show shares instead of dollars')
+          const quoteIndex = createEquityQueryIndex(client)
+          check(quoteIndex.symbolsFor([queryKeys.crypto]).length === 0, 'Crypto proxies were published as Finnhub-visible stocks')
+          quoteIndex.stop()
+          const beforeFinnhub = client.getQueryData(queryKeys.crypto)
+          applyEquityMarketUpdate(client, { quotes: [{ symbol: 'COIN', price: 999, change: 99, absChange: 900, source: 'Finnhub stock trades' }], candles: [] })
+          await settle()
+          check(client.getQueryData(queryKeys.crypto) === beforeFinnhub, 'Finnhub stream changed Crypto proxy data')
+          check(!text().includes('Finnhub'), 'Finnhub appeared in the Crypto page')
+          applyEquityMarketUpdate(client, { quotes: [{ symbol: 'COIN', price: 125, change: 5, absChange: 6, source: 'Hyperliquid equity perp (xyz:COIN)' }], candles: [] })
+          await settle()
+          check(client.getQueryData(queryKeys.crypto).data.quotes.COIN.price === 125, 'Hyperliquid proxy stream stopped updating')
           const beforeStream = client.getQueryState(queryKeys.crypto).dataUpdatedAt
           applyEquityMarketUpdate(client, { quotes: [], candles: [], hyperliquid: { ...good.hyperliquid,
             markets: good.hyperliquid.markets.map(row => ({ ...row, markPrice: 12345 })) } })

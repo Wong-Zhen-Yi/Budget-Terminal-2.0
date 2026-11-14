@@ -1,4 +1,6 @@
 #!/bin/sh
+# News reader and scoped clipboard exports rebuild through the shared launcher.
+# Finnhub streaming-first refresh, visible-stock priorities and idle/session savings rebuild through the shared launcher.
 # Settings dashboard keeps the five slowest pages stable during startup updates; rebuilt through the shared launcher.
 # Shared snapshot validation, account quotas and typed cloud contracts rebuild through the shared launcher; deploy backend policies separately.
 # Live two-device sign-in, rotation and isolated revocation verified; the shared launcher builds current auth source.
@@ -26,7 +28,7 @@
 # Windows terminal command: btd restart saves, rebuilds and reopens the app.
 # Telegram: natural screenshot requests use MCP and send photos without captions or follow-up text.
 # Trading Volumes defaults to a compact YTD table beside the expanded dot plot.
-# Crypto prices use Hyperliquid and CoinGecko only; Finnhub remains a stock provider.
+# Crypto bypasses Finnhub for coins, stock proxies and live updates; shared builds refresh app and MCP.
 # Linux/macOS entry point; shared runtime checks and startup live in scripts/.
 # Keep dependency checks and build output visible in this terminal before opening the app.
 # Shared launcher presents five numbered stages with measured completion times.

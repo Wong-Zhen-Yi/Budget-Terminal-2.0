@@ -1,4 +1,5 @@
 const { spawnSync } = require('node:child_process')
+// Finnhub streaming-first refresh, visible-stock priorities and idle/session savings rebuild through the shared launcher.
 // Shared snapshot validation, account quotas and typed cloud contracts rebuild here; backend policies deploy separately.
 // Auth lifecycle passed live two-device acceptance; the shared launcher rebuilds current source.
 // Auth workspace ownership, async credential storage and session controls rebuild on every launch.
@@ -59,7 +60,7 @@ function createLauncherOutput({ log = console, environment = process.env, termin
   }
 }
 
-// Portfolio-prioritized Finnhub feeds and crypto routing share every double-click launcher build.
+// Every double-click launcher rebuilds Finnhub-free Crypto proxies/live updates and the MCP bundle.
 function launch({ development = false, logs = false, setupOnly = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
   const output = createLauncherOutput({ log, environment })
   const os = platformName(platform)

@@ -39,6 +39,11 @@ does not gain portfolio priority unless it is saved in a portfolio. Portfolios t
 fit within the 50-symbol stream limit stay subscribed while spare slots rotate;
 larger portfolios rotate before background stocks. The shared 60-request/minute
 REST budget and provider cooldowns remain enforced. See [Finnhub streaming](finnhub-streaming.md).
+The `crypto` tool and Crypto page never use Finnhub, including for stock/ETF proxy
+rows. Coins use CoinGecko with labelled Hyperliquid perp fallbacks; stock proxies
+use Hyperliquid equity perps with Yahoo fallback. ETFs and stock metadata use Yahoo.
+The updated description and output-schema documentation ship in the local plugin;
+reconnect MCP clients after rebuilding to refresh their catalog. No permissions change.
 Write tools edit saved portfolios, options records, Cards, personal finance and
 settings through the existing stores and automatic backup. These are local record
 edits, not broker orders. Bulk import/export, clear-all, cache reset and shell
@@ -46,6 +51,9 @@ operations remain in the desktop UI.
 Portfolio **Export for LLM** and **Export Tickers** copy text directly to the
 native clipboard on Windows, macOS and Linux. Clipboard access remains a UI-only
 operation; these actions do not add MCP tools or file-save dialogs.
+News **Copy News for AI** also uses the native clipboard, with an explicit choice
+of filtered results or all loaded news. Reader layout, preview coverage labels
+and clipboard scope are UI-only controls; the news MCP contracts are unchanged.
 
 Homebuilders is available in Focus and preloads at startup. The read-only
 `budget_terminal_homebuilders` tool accepts `{ "request": {} }` (or
@@ -365,3 +373,5 @@ Settings > Local MCP independently controls market research, portfolio/Card read
 Errors return `structuredContent.error` with `code`, `message`, `retryable` and `nextStep`, plus the same details in text and `isError: true`. Codes include APP_CLOSED, INVALID_ARGUMENTS, UNKNOWN_TOOL, STALE_REVISION, APPROVAL_DENIED, ACCESS_DENIED, RATE_LIMITED, CANCELLED, CONNECTION_INTERRUPTED, JOURNAL_UNAVAILABLE and SERVICE_FAILED. Retry guidance never authorizes repeating an uncertain write. Provider failed/partial envelopes keep their original source errors.
 
 `npm run probe:mcp` includes deterministic workflow scenarios covering selective calls, retained news dates and source warnings, snapshot reuse, category enforcement for both callers, journal recovery and stale UI revisions. These verify the tool workflows; they do not benchmark a language model's tool-selection accuracy or live provider latency.
+
+Finnhub quotes share the desktop streaming-first cache: REST reference maintenance is slower while trades are healthy, for background stocks, outside extended trading hours, and while all app windows are hidden/minimized. Initial page preloading is unchanged. Visible-stock hints are desktop-only and do not add an MCP tool or permission. Explicit force requests remain subject to provider budgets and cooldowns. See [Finnhub streaming](finnhub-streaming.md).

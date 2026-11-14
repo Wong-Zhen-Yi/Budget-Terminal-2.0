@@ -1,4 +1,4 @@
-import type { Query, QueryClient } from '@tanstack/react-query'
+import type { Query, QueryClient, QueryKey } from '@tanstack/react-query'
 import type { EquityMarketUpdate } from '@shared/contract'
 
 const companyRoots = new Set(['amzn', 'avgo', 'mu', 'sofi', 'vst', 'hood', 'hims', 'pltr'])
@@ -59,6 +59,16 @@ export function createEquityQueryIndex(client: QueryClient) {
     else if (event.type === 'added' || event.type === 'updated') register(event.query)
   })
   return {
+    symbolsFor(keys: QueryKey[]): string[] {
+      const result = new Set<string>()
+      for (const key of keys) {
+        // Crypto has an independent provider policy, including its stock proxies.
+        if (key[0] === 'crypto') continue
+        const query = cache.find({ queryKey: key, exact: true })
+        if (query) for (const symbol of memberships.get(query)?.symbols ?? []) result.add(symbol)
+      }
+      return [...result]
+    },
     matching(update: EquityMarketUpdate): Set<Query> {
       const queries = new Set<Query>(update.hyperliquid ? crypto : [])
       for (const item of [...update.quotes, ...update.candles]) {

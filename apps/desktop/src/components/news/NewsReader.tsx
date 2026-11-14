@@ -20,6 +20,7 @@ export function NewsReader({
   article,
   preview,
   loading,
+  failed,
   onOpen,
   onClose,
   now,
@@ -27,12 +28,13 @@ export function NewsReader({
   article: NewsArticle | null
   preview: NewsPreviewPayload | undefined
   loading: boolean
+  failed?: boolean
   onOpen: (article: NewsArticle) => void
   onClose: () => void
   now: number
 }) {
   return (
-    <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden border border-border bg-surface">
+    <aside className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border border-border bg-surface">
       <header className="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-surface-raised px-2">
         <h2 className="truncate text-2xs font-semibold tracking-wide text-text uppercase">
           {article ? categoryLabel(article) : 'Selected story'}
@@ -77,6 +79,9 @@ export function NewsReader({
           ) : null}
 
           <div className="min-h-0 flex-1 overflow-y-auto border-t border-border pt-2">
+            <p role="status" className="mb-2 text-2xs text-text-muted">
+              {loading ? 'Loading preview' : failed || !preview?.text?.trim() ? 'Preview unavailable — open the original article.' : preview.origin === 'fallback' ? 'Summary only' : preview.truncated ? 'Article preview — shortened' : 'Full extracted preview'}
+            </p>
             {loading ? (
               <p className="text-2xs text-text-dim">Loading a readable preview...</p>
             ) : (

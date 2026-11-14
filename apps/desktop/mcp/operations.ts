@@ -47,7 +47,7 @@ export const operations = {
   priceScreen: 'Screen securities by price.',
   calendarMonth: 'Get market events for a calendar month.',
   earningsCalendar: 'Get upcoming earnings events.',
-  crypto: 'Get cryptocurrency market research, including public Hyperliquid perpetual-market marks, funding, open interest and volume. Hyperliquid perps and spot-provider quotes are separate labelled sources.',
+  crypto: 'Get cryptocurrency market research, including public Hyperliquid perpetual-market marks, funding, open interest and volume. Coins use CoinGecko spot quotes with labelled Hyperliquid perp fallbacks. Stock proxies use Hyperliquid equity perps with Yahoo fallback; ETFs and stock metadata use Yahoo. This tool never uses Finnhub.',
   bitcoin: 'Get Bitcoin research and metrics.',
   bmnr: 'Get BMNR company and asset research.',
   sofi: 'Get SOFI market data, book valuation, operating metrics and eight quarters of earnings results.',

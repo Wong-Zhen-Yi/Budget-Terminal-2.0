@@ -11,7 +11,7 @@ param([Parameter(Position = 0)][ValidateSet('start', 'restart')][string]$Command
 # btd restart gracefully closes this checkout before rebuilding and reopening it.
 # Telegram: natural screenshot requests use MCP and send photos without captions or follow-up text.
 # Trading Volumes defaults to a compact YTD table beside the expanded dot plot.
-# Crypto prices use Hyperliquid and CoinGecko only; Finnhub remains a stock provider.
+# Crypto bypasses Finnhub for coins, stock proxies and live updates; shared builds refresh app and MCP.
 # Convex snapshot writes are restored; record-era cloud tables are retained as an archive.
 # Database sync restored to 3208321: optional Convex snapshots, GitHub sign-in and complete-copy conflict choices.
 # Efficiency updates preserve all-page startup readiness; verification is recorded in docs/efficiency-results.md.

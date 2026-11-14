@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { notifyManager, useQueryClient, type Query, type QueryClient } from '@tanstack/react-query'
 import type { BmnrPayload, Candle, ChartPayload, ChartsComparePayload, ChartsHistoryPayload, CryptoPayload, EquityMarketUpdate, Envelope, FundamentalsPagePayload, HeatmapPayload, MarketCapPayload, PriceScreenPayload, Quote, QuotesPayload, StocksPayload, ValuationPayload } from '@shared/contract'
+import { pageQueryKeys } from './pageQueryScope'
 import { liveIndicators, retainLiveIndicatorState } from './liveIndicators'
 import { createEquityQueryIndex } from './equityQueryIndex'
 import { markLiveQuerySnapshot } from './queryPersistence'
@@ -50,7 +51,8 @@ export function applyEquityMarketUpdate(client: QueryClient, update: EquityMarke
       const payload = data as CryptoPayload
       const next = { ...payload.quotes }
       let changed = false
-      for (const [symbol, quote] of quotes) if (next[symbol]) {
+      // Crypto proxies stay on their own providers even when other pages use Finnhub.
+      for (const [symbol, quote] of quotes) if (next[symbol] && quote.source?.startsWith('Hyperliquid equity perp')) {
         next[symbol] = { ...next[symbol], price: quote.price, changePct: quote.change, source: quote.source ?? next[symbol].source }
         changed = true
       }
@@ -165,13 +167,24 @@ export function applyEquityMarketUpdate(client: QueryClient, update: EquityMarke
   }
 }
 
-export function useEquityMarketStream(): void {
+export function useEquityMarketStream(activePage: string): void {
   const client = useQueryClient()
   useEffect(() => {
+    const index = createEquityQueryIndex(client)
+    let last = ''
+    const publish = () => {
+      const symbols = index.symbolsFor(pageQueryKeys(activePage)).sort().slice(0, 2000)
+      const signature = JSON.stringify(symbols)
+      if (signature === last) return
+      last = signature
+      void window.api.setEquityQuoteVisibility?.(symbols).catch(() => undefined)
+    }
+    publish()
+    const timer = setInterval(publish, 1_000)
     const stream = createBatchedEquityUpdates(client)
     const stop = window.api.onEquityMarketChanged?.(stream.enqueue)
-    return () => { stop?.(); stream.stop() }
-  }, [client])
+    return () => { clearInterval(timer); index.stop(); stop?.(); stream.stop() }
+  }, [client, activePage])
 }
 
 /** Retain every distinct candle timestamp while coalescing repeated marks/live bars. */

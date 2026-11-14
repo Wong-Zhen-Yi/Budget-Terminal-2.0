@@ -50,6 +50,7 @@ try {
           const result = await window.webContents.executeJavaScript(
             '(async () => { const cache = await window.api.cacheStatus(); return { sync: await window.api.cloudSyncStatus(), mcp: await window.api.testMcpConnection(), cache, configured: await window.api.configureCache(cache.data.settings), progress: await window.api.heatmapProgress("SPY") } })()',
           )
+          assert.equal(await window.webContents.executeJavaScript('(async () => { await window.api.setEquityQuoteVisibility(["AAPL"]); try { await window.api.setEquityQuoteVisibility([42]); return false } catch { return true } })()'), true, 'Visible quote IPC must accept symbols and reject malformed hints')
           assert.equal(result.mcp.available, true, result.mcp.error)
           assert.equal(result.sync.data.signedIn, false)
           assert.equal(result.sync.data.state, 'disconnected', 'Local startup must work without Convex configuration')

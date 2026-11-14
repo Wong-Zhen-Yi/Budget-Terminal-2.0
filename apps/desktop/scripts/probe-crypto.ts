@@ -37,6 +37,7 @@ import { cryptoChartRequest } from '../electron/shared/cryptoWorkspace.js'
 import { finnhubQuotes } from '../electron/services/finnhubQuotes.js'
 import { getQuote, getQuotes } from '../electron/services/yahoo/quotes.js'
 import { diversifiedData } from '../electron/services/diversifiedData.js'
+import { captureSources } from '../electron/services/sourceHealth.js'
 
 const directCoinGecko = async (url: string): Promise<unknown> => {
   const response = await fetch(url)
@@ -263,6 +264,10 @@ async function checkSharedCryptoRouting(): Promise<void> {
 }
 
 async function checkCryptoHyperliquidStage(): Promise<void> {
+  finnhubQuotes.setCredentialLoader(async () => 'fixture-stock-only-key')
+  assert.equal(await finnhubQuotes.configured('COIN'), true)
+  const finnhub = mock.method(finnhubQuotes, 'resolve', async () => { throw new Error('Forbidden Finnhub crypto-page request') })
+  const credentials = mock.method(finnhubQuotes, 'configured', async () => { throw new Error('Crypto must not check Finnhub credentials') })
   const primary = mock.method(coinGeckoClient, 'getJson', directCoinGecko)
   const equityQuote = mock.method(hyperliquidEquities, 'getQuote', async (symbol: string) => ({ symbol, price: 110, change: 10, absChange: 10,
     currency: 'USD', source: `Hyperliquid equity perp (xyz:${symbol})` }))
@@ -330,6 +335,24 @@ async function checkCryptoHyperliquidStage(): Promise<void> {
       assert.equal(publicSpot.payload.quotes.BTC.volumeSource, 'CoinGecko')
       assert.equal(marketRequests, 1, 'Heatmap and quote metadata must share one CoinGecko upstream request')
     } finally { spot.mock.restore() }
+    equityQuote.mock.mockImplementation(async () => { throw new Error('Hyperliquid offline') })
+    chart.mock.mockImplementation(async () => ({ quotes: [
+      { date: new Date('2026-11-12'), close: 100 }, { date: new Date('2026-11-13'), close: 105 },
+    ] }))
+    const fallback = await captureSources(() => fetchMappedProxyQuote('COIN', true))
+    assert.equal(fallback.value.price, 105)
+    assert.equal(fallback.value.changePct, 5)
+    assert.equal(fallback.value.source, 'Yahoo Finance (Hyperliquid fallback)')
+    assert.ok(fallback.snapshot?.failures.some(reason => /Hyperliquid offline/.test(reason)))
+    chart.mock.mockImplementation(async () => { throw new Error('Yahoo offline') })
+    const unavailable = await captureSources(() => fetchMappedProxyQuote('COIN', true))
+    assert.equal(unavailable.value.price, 105, 'Yahoo may retain its own stale stock snapshot')
+    assert.equal(unavailable.snapshot?.stale, true)
+    const missing = await captureSources(() => fetchMappedProxyQuote('MSTR', true))
+    assert.equal(missing.value.price, null, 'Without a saved Yahoo quote, dual-provider failure must remain unavailable')
+    assert.equal(finnhub.mock.callCount(), 0, 'Entire Crypto page, including stock proxies and fallback, must bypass Finnhub')
+    assert.equal(credentials.mock.callCount(), 0)
+    assert.ok(!JSON.stringify([fallback, unavailable, missing]).includes('Finnhub'), 'Crypto errors must not contain Finnhub failures')
     console.log('Crypto Hyperliquid integration passed: stage readiness, shared cache, force refresh and isolated provider failure.')
   } finally {
     primary.mock.restore()
@@ -339,6 +362,9 @@ async function checkCryptoHyperliquidStage(): Promise<void> {
     screen.mock.restore()
     hyperliquid.mock.restore()
     equityQuote.mock.restore()
+    finnhub.mock.restore()
+    credentials.mock.restore()
+    finnhubQuotes.setCredentialLoader(async () => undefined)
   }
 }
 

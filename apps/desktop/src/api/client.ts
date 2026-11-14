@@ -84,7 +84,7 @@ export const queryKeys = {
   forexQuotes: ['forexQuotes'] as const,
   forexHistory: (pair: string, range: string) => ['forexHistory', pair, range] as const,
   forexNews: (pair: string) => ['forexNews', pair] as const,
-  crypto: ['crypto', 'hyperliquid-coingecko-v2'] as const,
+  crypto: ['crypto', 'hyperliquid-coingecko-v3'] as const,
   bitcoin: ['bitcoin'] as const,
   bmnr: ['bmnr'] as const,
   sofi: ['sofi'] as const,

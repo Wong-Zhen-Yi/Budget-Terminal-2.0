@@ -2147,8 +2147,9 @@ export interface EarningsExportInput {
  * One row of the Crypto page's quote map, keyed by the short label (`BTC`, `COIN`).
  *
  * Coins use CoinGecko spot prices with labelled Hyperliquid perpetual fallbacks.
- * Price and change always describe the same instrument; stock/ETF proxies retain
- * their stock providers. Volume and market cap have independent source labels.
+ * Price and change always describe the same instrument. Stock proxies use Hyperliquid
+ * equity perps with Yahoo fallback; ETFs use Yahoo. Finnhub is excluded from this page.
+ * Volume and market cap have independent source labels.
  */
 export interface CryptoQuote {
   volumeSource?: string
@@ -3541,6 +3542,7 @@ export const CHANNELS = {
   startupPriority: 'system:startup-priority',
   cacheStatus: 'system:cache-status',
   configureCache: 'system:cache-configure',
+  equityQuoteVisibility: 'equity:quote-visibility',
   equityMarketChanged: 'market:equity-changed',
   quotes: 'dashboard:quotes',
   chart: 'dashboard:chart',
@@ -3747,6 +3749,7 @@ export interface DesktopApi {
   diagnosticsInitial: () => Promise<boolean>
   onOpenDiagnostics: (listener: () => void) => () => void
   reportDiagnostics: (report: { kind: 'pages'; pages: { page: string; state: string }[] } | { kind: 'error' | 'unhandled-rejection'; line?: number; column?: number }) => void
+  setEquityQuoteVisibility?(symbols: string[]): Promise<void>
   onEquityMarketChanged(listener: (update: EquityMarketUpdate) => void): () => void
   browserStatus(): Promise<Envelope<BrowserState>>
   browserResearch(request: BrowserRequest): Promise<Envelope<BrowserResult>>

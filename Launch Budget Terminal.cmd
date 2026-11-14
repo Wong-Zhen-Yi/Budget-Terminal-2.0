@@ -1,4 +1,6 @@
 @echo off
+rem News reader and scoped clipboard exports rebuild through the shared launcher.
+rem Finnhub streaming-first refresh, visible-stock priorities and idle/session savings rebuild through the shared launcher.
 rem Settings dashboard keeps the five slowest pages stable during startup updates; rebuilt through the shared launcher.
 rem Shared snapshot validation, account quotas and typed cloud contracts rebuild through the shared launcher; deploy backend policies separately.
 rem Live two-device sign-in, rotation and isolated revocation verified; the shared launcher builds current auth source.
@@ -26,7 +28,7 @@ rem Focus provider verification: npm run probe:maintenance-live -- --focus
 rem Windows terminal command: btd restart saves, rebuilds and reopens the app.
 rem Telegram: natural screenshot requests use MCP and send photos without captions or follow-up text.
 rem Trading Volumes defaults to a compact YTD table beside the expanded dot plot.
-rem Crypto prices use Hyperliquid and CoinGecko only; Finnhub remains a stock provider.
+rem Crypto bypasses Finnhub for coins, stock proxies and live updates; shared builds refresh app and MCP.
 rem Windows double-click entry point; shared setup and startup live in scripts/.
 rem Keep dependency checks and build output visible in this terminal before opening the app.
 rem Shared launcher presents five numbered stages with measured completion times.

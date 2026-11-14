@@ -91,7 +91,6 @@ import { useAuthPrompt } from '@/stores/authPrompt'
 const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
 
 export function App() {
-  useEquityMarketStream()
   const isMac = window.api.platform === 'darwin'
   const [selectedTab, setActiveTab] = useState(DEFAULT_TAB_ID)
   useEffect(() => {
@@ -107,6 +106,7 @@ export function App() {
   const { command: screenshot, complete: completeScreenshot } = useMcpScreenshot()
   const screenshotPage = screenshot?.page ?? null
   const activeTab = screenshotPage ?? selectedTab
+  useEquityMarketStream(activeTab)
   const auth = useCloudSyncStatus()
   const [authDismissed, setAuthDismissed] = useState(false)
   const hideAuthPrompt = useAuthPrompt((state) => state.hidden)

@@ -35,7 +35,7 @@ import { trackApiRequest } from './apiUsage.js'
 import { coinGeckoClient } from './coingecko.js'
 import { hyperliquidClient } from './hyperliquid.js'
 import { equityMarket } from '../shared/equityMarkets.js'
-import { getQuote } from './yahoo/quotes.js'
+import { resolveYahooQuote } from './yahoo/quotes.js'
 import { observeSource } from './sourceHealth.js'
 import { hyperliquidEquities } from './hyperliquidEquities.js'
 import { markCryptoPerpetuals } from '../shared/hyperliquid.js'
@@ -50,7 +50,8 @@ import { CRYPTO_MARKETS_URL, fetchCoinGeckoQuotes } from './cryptoQuotes.js'
  *
  * CoinGecko has its own endpoint cache, pacing and enforced cooldown, shared with
  * BMNR. Coin prices use only CoinGecko and labelled Hyperliquid perpetuals. Stock
- * proxies retain stock providers. Alternative.me has an independent budget.
+ * proxies use Hyperliquid equity perps with Yahoo fallback, never Finnhub.
+ * Alternative.me has an independent budget.
  */
 
 export const CRYPTO_SOURCE = 'crypto market'
@@ -196,7 +197,7 @@ const EMPTY_QUOTE: RawQuote = {
 /** Stock metadata has its own cache; a fresh perpetual mark never refreshes it. */
 export async function fetchMappedProxyQuote(symbol: string, force = false): Promise<RawQuote> {
   const [quote, metadata] = await Promise.allSettled([
-    getQuote(symbol, force),
+    fetchProxyPrice(symbol, force),
     cache.resolveWithStaleFallback(`crypto:proxy-metadata:v1:${symbol}`, 15 * 60_000, async () => {
       const summary = await paced(() => yahoo.quoteSummary(symbol, { modules: ['price', 'summaryDetail'] }))
       const marketCap = firstNumber(summary?.price?.marketCap, summary?.summaryDetail?.marketCap, summary?.summaryDetail?.totalAssets)
@@ -217,7 +218,20 @@ export async function fetchMappedProxyQuote(symbol: string, force = false): Prom
     volumeSource: 'Yahoo Finance stock volume (shares)', marketCapSource: YAHOO_SOURCE, metadataAsOf: snapshot?.asOf }
 }
 
-/** Stock and ETF proxies retain their existing price and metadata providers. */
+/** Keep Crypto's proxies independent of the shared Finnhub-first stock path. */
+async function fetchProxyPrice(symbol: string, force: boolean) {
+  try {
+    return await hyperliquidEquities.getQuote(symbol, force)
+  } catch (error) {
+    const fallback = await resolveYahooQuote(symbol, force)
+    observeSource({ fetchedAt: Date.now(), stale: fallback.stale, fromCache: fallback.fromCache,
+      failures: [`${symbol}: Hyperliquid unavailable; using Yahoo stock quote. ${describeError(error)}`],
+      sources: ['Yahoo stock quote fallback'] })
+    return { ...fallback.value, source: 'Yahoo Finance (Hyperliquid fallback)' }
+  }
+}
+
+/** Stock proxies use Hyperliquid/Yahoo; ETF prices and metadata use Yahoo. */
 async function fetchYahooQuote(symbol: string, force = false): Promise<RawQuote> {
   if (equityMarket(symbol)) return fetchMappedProxyQuote(symbol, force)
   const result: RawQuote = { ...EMPTY_QUOTE }
@@ -462,7 +476,7 @@ async function fetchCrypto(force: boolean): Promise<CryptoFetchResult> {
  */
 export function getCrypto(force = false): Promise<CryptoFetchResult> {
   return cache
-    .resolve('crypto:page:hyperliquid-coingecko-v4', TTL.crypto, () => fetchCrypto(force), { force })
+    .resolve('crypto:page:hyperliquid-coingecko-v5', TTL.crypto, () => fetchCrypto(force), { force })
     .then((result) => {
       const live = hyperliquidEquities.getCryptoMarkets()
       return live ? { ...result.value, payload: markCryptoPerpetuals(result.value.payload, live) } : result.value

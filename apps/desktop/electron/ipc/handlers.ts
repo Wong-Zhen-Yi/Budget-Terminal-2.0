@@ -35,6 +35,11 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
   finnhubQuotes.setCredentialLoader(() => marketApiKeys.getForService('finnhub'))
   finnhubQuotes.setPortfolioLoader(async () => (await readPortfolios()).portfolios
     .filter(portfolio => !portfolio.readOnly).flatMap(portfolio => portfolio.tickers))
+  finnhubQuotes.setForegroundLoader(() => BrowserWindow.getAllWindows().some(window => !window.isDestroyed() && window.isVisible() && !window.isMinimized()))
+  handle(CHANNELS.equityQuoteVisibility, (_event, symbols: unknown) => {
+    if (!Array.isArray(symbols) || symbols.length > 2000 || symbols.some(symbol => typeof symbol !== 'string' || symbol.length > 32)) throw new Error('Invalid visible symbols')
+    finnhubQuotes.setVisibleSymbols(symbols)
+  })
   finnhubQuotes.start()
   const stopFinnhubUpdates = finnhubQuotes.subscribe(quote => {
     for (const window of BrowserWindow.getAllWindows()) {

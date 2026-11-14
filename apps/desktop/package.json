@@ -84,6 +84,7 @@
     "probe:price": "tsx scripts/probe-price.ts",
     "probe:signals": "tsx scripts/probe-signals.ts",
     "probe:news": "tsx scripts/probe-news.ts",
+    "probe:news-ui": "tsx scripts/probe-news-ui.ts",
     "probe:stocks": "tsx scripts/probe-stocks.ts",
     "probe:defeatbeta": "tsx scripts/probe-defeatbeta.ts",
     "probe:defeatbeta-terminal": "tsx scripts/probe-defeatbeta-terminal.ts",

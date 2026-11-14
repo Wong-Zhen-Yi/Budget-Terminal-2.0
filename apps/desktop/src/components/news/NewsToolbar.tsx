@@ -64,6 +64,9 @@ export const NewsToolbar = forwardRef<
     showImages: boolean
     onToggleImages: () => void
     readerOpen: boolean
+    readerAvailable: boolean
+    exportScope: 'filtered' | 'all'
+    onExportScope: (scope: 'filtered' | 'all') => void
     onToggleReader: () => void
     onExport: () => void
     busy: boolean
@@ -113,17 +116,22 @@ export const NewsToolbar = forwardRef<
       >
         Images
       </Button>
-      <Button variant="toggle" active={props.readerOpen} onClick={props.onToggleReader}>
+      <Button variant="toggle" disabled={!props.readerAvailable} title={props.readerAvailable ? 'Toggle the selected story' : 'Select a story to open the reader'} active={props.readerOpen} onClick={props.onToggleReader}>
         Reader
       </Button>
 
 
+      <div className="w-44 shrink-0">
+        <Select value={props.exportScope} onChange={props.onExportScope}
+          options={[{ value: 'filtered', label: 'Filtered results' }, { value: 'all', label: 'All loaded news' }]}
+          aria-label="News export scope" className="h-8" />
+      </div>
       <Button
         variant="positive"
         onClick={props.onExport}
-        title="Export every loaded article, ignoring the filter and the search box."
+        title="Copy news in the selected scope to the clipboard for AI."
       >
-        Export News for AI
+        Copy News for AI
       </Button>
 
       <span className={`ml-auto pl-2 text-2xs ${toneClass[props.status.tone]}`}>

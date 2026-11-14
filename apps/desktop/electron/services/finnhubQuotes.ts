@@ -14,7 +14,42 @@ export function finnhubSymbol(symbol: string): string | undefined {
   return /^[A-Z][A-Z0-9]{0,9}(?:[.-][AB])?$/.test(symbol) ? symbol.replace('-', '.') : undefined
 }
 
+const sessionClock = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+
 export class FinnhubQuotes {
+  private visible = new Set<string>()
+  private foreground = () => true
+
+  setForegroundLoader(loader: () => boolean): void { this.foreground = loader }
+
+  setVisibleSymbols(symbols: string[]): void {
+    this.visible = new Set(symbols.map(finnhubSymbol).filter((symbol): symbol is string => Boolean(symbol)))
+    this.rotationAt = 0
+    this.syncSubscriptions()
+  }
+
+  private priority(symbol: string): number {
+    return this.isPortfolio(symbol) ? 2 : this.visible.has(finnhubSymbol(symbol) ?? '') ? 1 : 0
+  }
+
+  private refreshInterval(symbol: string): number {
+    const parts = sessionClock.formatToParts(this.now())
+    const part = (type: string) => parts.find(value => value.type === type)?.value ?? ''
+    const minutes = Number(part('hour')) * 60 + Number(part('minute'))
+    const weekday = !['Sat', 'Sun'].includes(part('weekday'))
+    // Include pre-market and after-hours in New York time, including DST.
+    // Holidays conservatively follow weekday hours without a calendar request.
+    if (!weekday || minutes < 240 || minutes >= 1200) return 15 * 60_000
+    const regular = minutes >= 570 && minutes < 960
+    const priority = this.priority(symbol) > 0
+    const trade = this.trades.get(symbol)
+    const healthy = this.socket?.readyState === 1 && this.subscriptions.has(finnhubSymbol(symbol) ?? '')
+      && trade && this.now() - trade.asOf < 90_000
+    const interval = healthy ? (regular ? 5 : 10) * 60_000
+      : priority ? (regular ? 30_000 : 60_000) : 5 * 60_000
+    return Math.max(interval, this.foreground() ? 0 : priority ? 5 * 60_000 : 15 * 60_000)
+  }
+
   private credential?: Promise<string | undefined>
   private generation = 0
   private enabled = false
@@ -31,6 +66,7 @@ export class FinnhubQuotes {
   private backgroundTimes: number[] = []
   private until = 0
   private listeners = new Set<(quote: Quote) => void>()
+  private referenceFetchedAt = new Map<string, number>()
   private references = new Map<string, ReferenceQuote>()
   private trades = new Map<string, Trade>()
   private streaming = false
@@ -94,6 +130,7 @@ export class FinnhubQuotes {
     this.credential = undefined
     this.quotes.clear()
     this.pending.clear()
+    this.referenceFetchedAt.clear()
     this.references.clear()
     this.trades.clear()
     this.disconnect()
@@ -160,8 +197,8 @@ export class FinnhubQuotes {
       await Promise.all(initial.map(symbol => this.resolve(symbol).catch(() => undefined)))
       return
     }
-    const next = [...this.watched].sort((a, b) => Number(this.isPortfolio(b[0])) - Number(this.isPortfolio(a[0])) || a[1] - b[1])
-      .find(([symbol, checkedAt]) => !this.pending.has(symbol) && this.now() - checkedAt >= QUOTE_TTL)
+    const next = [...this.watched].sort((a, b) => this.priority(b[0]) - this.priority(a[0]) || a[1] - b[1])
+      .find(([symbol, checkedAt]) => !this.pending.has(symbol) && this.now() - checkedAt >= this.refreshInterval(symbol))
     if (next) await this.resolve(next[0], true).catch(() => undefined)
   }
 
@@ -182,7 +219,7 @@ export class FinnhubQuotes {
       this.syncSubscriptions()
     }
     const saved = this.quotes.get(symbol)
-    if (!force && saved && this.now() - saved.fetchedAt < QUOTE_TTL) {
+    if (!force && saved && this.now() - (this.referenceFetchedAt.get(symbol) ?? -Infinity) < this.refreshInterval(symbol)) {
       const result = { value: saved.value, ageSeconds: Math.max(0, (this.now() - saved.fetchedAt) / 1_000), fromCache: true, stale: false as const }
       this.observe(result)
       return result
@@ -213,7 +250,7 @@ export class FinnhubQuotes {
     else await new Promise<void>(resume => { this.waiters.push({ symbol, resume }) })
     try { return await this.requestQuote(symbol, upstreamSymbol, key, generation) }
     finally {
-      const priority = this.waiters.findIndex(waiter => this.isPortfolio(waiter.symbol))
+      const priority = this.waiters.reduce((best, waiter, index, rows) => this.priority(waiter.symbol) > (best < 0 ? -1 : this.priority(rows[best].symbol)) ? index : best, -1)
       const next = this.waiters.splice(priority < 0 ? 0 : priority, 1)[0]
       if (next) next.resume()
       else this.active -= 1
@@ -257,6 +294,7 @@ export class FinnhubQuotes {
         if (![row.c, row.pc, row.t].every(value => typeof value === 'number' && Number.isFinite(value) && value > 0)
           || row.t * 1_000 > this.now() + 300_000 || row.t * 1_000 < Date.UTC(2000, 0, 1)) throw new Error('Invalid quote')
         if (generation !== this.generation) throw new Error('Credentials changed')
+        this.referenceFetchedAt.set(symbol, this.now())
         this.references.set(symbol, { price: row.c, previousClose: row.pc, asOf: row.t * 1_000 })
         let quote: Quote = { symbol, price: row.c, absChange: row.c - row.pc, change: (row.c / row.pc - 1) * 100,
           asOf: row.t * 1_000, currency: 'USD', source: 'Finnhub', changeBasis: 'previous-close' }
@@ -363,8 +401,8 @@ export class FinnhubQuotes {
       .filter((value): value is string => value !== undefined && !this.portfolio.has(value)))]
     // Pin portfolios that fit; only spare slots rotate through the startup universe.
     // Oversized portfolios rotate among themselves before any background symbols.
-    const pinned = this.portfolio.size <= 50 ? [...this.portfolio] : []
-    const rotating = this.portfolio.size > 50 ? [...this.portfolio] : background
+    const pinned = this.portfolio.size <= 50 ? [...this.portfolio, ...background.filter(symbol => this.visible.has(symbol)).slice(0, 50 - this.portfolio.size)] : []
+    const rotating = this.portfolio.size > 50 ? [...this.portfolio] : background.filter(symbol => !pinned.includes(symbol))
     const capacity = 50 - pinned.length
     if (this.now() >= this.rotationAt) {
       this.rotation = rotating.length > capacity && capacity > 0
@@ -389,7 +427,7 @@ export class FinnhubQuotes {
 
   private observe(result: QuoteResult): void {
     const fetchedAt = this.now() - result.ageSeconds * 1_000
-    observeSource({ fetchedAt, expiresAt: fetchedAt + QUOTE_TTL, asOf: result.value.asOf,
+    observeSource({ fetchedAt, expiresAt: fetchedAt + this.refreshInterval(result.value.symbol), asOf: result.value.asOf,
       fromCache: result.fromCache, stale: result.stale, failures: result.value.fallbackReason ? [result.value.fallbackReason] : [], sources: ['Finnhub'] })
   }
 }

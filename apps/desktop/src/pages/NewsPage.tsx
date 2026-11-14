@@ -67,6 +67,16 @@ export function NewsPage({
   const setReaderWidth = useNewsPageStore((state) => state.setReaderWidth)
 
   const [queryText, setQueryText] = useState('')
+  const [exportScope, setExportScope] = useState<'filtered' | 'all'>('filtered')
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [contentWidth, setContentWidth] = useState(0)
+  useEffect(() => {
+    const element = contentRef.current
+    if (!element) return
+    const observer = new ResizeObserver(([entry]) => setContentWidth(entry?.contentRect.width ?? 0))
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
   const [searchTickers, setSearchTickers] = useState<string[]>([])
   const [selectedId, setSelectedId] = useState('')
   const [refreshing] = useState(false)
@@ -126,7 +136,10 @@ export function NewsPage({
     () => ordered.find((article) => article.id === selectedId) ?? null,
     [ordered, selectedId],
   )
-  const preview = useNewsPreview(selected)
+  const showReader = readerOpen && selected !== null
+  const overlayReader = contentWidth < MIN_GRID + MIN_READER + 16
+  const effectiveReaderWidth = Math.min(Math.max(readerWidth, MIN_READER), Math.max(MIN_READER, contentWidth - MIN_GRID - 16))
+  const preview = useNewsPreview(showReader ? selected : null)
 
   /**
    * The top story: highest score, recency breaking ties, but only from the last day —
@@ -228,34 +241,29 @@ export function NewsPage({
 
 
   const onExport = useCallback(async () => {
-    const total = articles.length + searchArticles.length
+    const filtered = exportScope === 'filtered'
+    const portfolio = filtered ? groups.portfolio : articles.filter(article => article.category === 'portfolio')
+    const market = filtered ? groups.market : articles.filter(article => article.category !== 'portfolio')
+    const searched = filtered ? visibleSearch : searchArticles
+    const total = portfolio.length + market.length + searched.length
     if (!total) {
       setNotice({ text: 'No News articles to export.', tone: 'warning' })
       return
     }
-    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
-    const path = await api.saveText(
-      `BudgetTerminal_News_${stamp}.txt`,
-      buildNewsExportText({
-        portfolio: articles.filter((article) => article.category === 'portfolio'),
-        market: articles.filter(
-          (article) => article.category === 'macro' || article.category === 'other',
-        ),
-        searched: searchArticles,
-        searchedTickers: searchTickers,
-      }),
-    )
-    setNotice(
-      path ? { text: `Exported ${total} News article(s) to ${path}`, tone: 'positive' } : null,
-    )
-  }, [articles, searchArticles, searchTickers])
+    try {
+      await api.writeClipboard(buildNewsExportText({ portfolio, market, searched, searchedTickers: searchTickers }))
+      setNotice({ text: `Copied ${total} ${filtered ? 'filtered' : 'loaded'} article(s) to clipboard.`, tone: 'positive' })
+    } catch {
+      setNotice({ text: 'Could not copy news to clipboard. Please try again.', tone: 'negative' })
+    }
+  }, [exportScope, groups, visibleSearch, articles, searchArticles, searchTickers])
 
   const onDrag = useCallback(
     (clientX: number) => {
-      const width = window.innerWidth - clientX
-      setReaderWidth(Math.min(Math.max(width, MIN_READER), window.innerWidth - MIN_GRID))
+      const width = (contentRef.current?.getBoundingClientRect().right ?? window.innerWidth) - clientX
+      setReaderWidth(Math.min(Math.max(width, MIN_READER), Math.max(MIN_READER, contentWidth - MIN_GRID - 16)))
     },
-    [setReaderWidth],
+    [setReaderWidth, contentWidth],
   )
 
   /* -------------------------------------------------------------- keyboard */
@@ -318,9 +326,12 @@ export function NewsPage({
         onSort={setSort}
         showImages={showImages}
         onToggleImages={toggleImages}
-        readerOpen={readerOpen}
+        readerOpen={showReader}
+        readerAvailable={selected !== null}
         onToggleReader={() => setReaderOpen(!readerOpen)}
 
+        exportScope={exportScope}
+        onExportScope={setExportScope}
         onExport={() => void onExport()}
         busy={busy}
         status={status}
@@ -340,7 +351,7 @@ export function NewsPage({
         active={searchTickers.length > 0}
       />
 
-      <div className="flex min-h-0 flex-1 gap-2">
+      <div ref={contentRef} className="relative flex min-h-0 flex-1 gap-2">
         <div
           ref={gridRef}
           className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto pr-1"
@@ -410,13 +421,14 @@ export function NewsPage({
           />
         </div>
 
-        {readerOpen ? (
+        {showReader ? (
           <>
-            <Splitter onDrag={onDrag} />
-            <div className="flex min-h-0 shrink-0 flex-col" style={{ width: readerWidth }}>
+            {!overlayReader ? <Splitter onDrag={onDrag} /> : null}
+            <div className={overlayReader ? 'absolute inset-0 z-10 flex min-h-0 flex-col bg-surface' : 'flex min-h-0 shrink-0 flex-col'} style={overlayReader ? undefined : { width: effectiveReaderWidth }}>
               <NewsReader
                 article={selected}
                 preview={preview.data?.data}
+                failed={preview.isError || preview.data?.meta.freshness === 'failed'}
                 loading={preview.isFetching}
                 onOpen={openArticle}
                 onClose={() => setReaderOpen(false)}
