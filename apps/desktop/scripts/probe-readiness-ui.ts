@@ -62,6 +62,7 @@ try {
     import { backtestQuotesKey } from './src/api/backtestQueries'
     import { useDataHealth } from './src/stores/dataHealth'
     import { useAuthPrompt } from './src/stores/authPrompt'
+    import { CloudSyncPanel } from './src/components/settings/CloudSyncPanel'
     import { useStocksPage } from './src/stores/stocks'
     import { useFundamentalsStore } from './src/stores/fundamentals'
     import { useCalendarPage } from './src/stores/calendar'
@@ -127,7 +128,10 @@ try {
       }
       if (method === 'cloudSyncCommand') {
         if (authRejected) return { ...ok(fixtureAuth), meta: { freshness: 'failed', failureReason: 'Synthetic sign-in failure. Try again.' } }
-        fixtureAuth = { ...fixtureAuth, url: request.url ?? fixtureAuth.url, signInPending: request.type === 'signInGitHub', message: request.type === 'signInGitHub' ? 'Complete GitHub sign-in in your browser.' : undefined }
+        fixtureAuth = { ...fixtureAuth, url: request.url ?? fixtureAuth.url, signInPending: ['signInGitHub', 'revokeOtherSessions'].includes(request.type),
+          credentialCleanupRequired: request.type === 'retryCredentialCleanup' ? false : fixtureAuth.credentialCleanupRequired,
+          workspaceApprovalRequired: request.type === 'confirmWorkspace' ? false : fixtureAuth.workspaceApprovalRequired,
+          message: request.type === 'signInGitHub' ? 'Complete GitHub sign-in in your browser.' : undefined }
         return ok(fixtureAuth)
       }
       if (method === 'cacheStatus') {
@@ -319,7 +323,44 @@ try {
           preference.click(); await wait()
           check(popup() && !useAuthPrompt.getState().hidden, 'Settings must be able to restore the auth popup')
           unmount()
-          return 'PASS: polished responsive auth, default persistent sign-in, signed-in session suppression, permanent dismissal and Settings recovery, browser approval/cancellation, error recovery and all-page preloading'
+          await wait()
+          fixtureAuth = { ...fixtureAuth, signedIn: true, url: 'https://fixture.convex.cloud', state: 'disconnected', authState: 'authenticated', githubLogin: 'fixture-user', workspaceApprovalRequired: true, message: undefined }
+          const accountClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+          const accountRoot = createRoot(element)
+          accountRoot.render(<QueryClientProvider client={accountClient}><CloudSyncPanel /></QueryClientProvider>)
+          await wait(); await wait()
+          const panel = () => document.querySelector('[data-cloud-sync]')
+          const accountClick = text => { const button = [...panel().querySelectorAll('button')].find(button => button.textContent.trim() === text); check(button && !button.disabled, 'Missing account control: ' + text); button.click() }
+          check(panel().textContent.includes('@fixture-user') && panel().textContent.includes('https://fixture.convex.cloud'), 'Connected account and deployment must be visible')
+          check([...panel().querySelectorAll('button')].find(button => button.textContent === 'Sync now').disabled, 'Sync must stay paused until ownership is approved')
+          accountClick('Import this device’s data'); await wait()
+          check(panel().textContent.includes('Allow this account to receive'), 'Import requires a reviewable confirmation')
+          for (const [width, height] of [[1366, 768], [1024, 768], [480, 700]]) {
+            await window.resizeFixture(width, height); await paint()
+            const bounds = panel().getBoundingClientRect()
+            check(bounds.right <= innerWidth && bounds.bottom <= innerHeight && panel().scrollWidth <= panel().clientWidth, 'Account controls leave the viewport at ' + width + 'x' + height)
+          }
+          await window.captureFixture('auth-workspace-approval')
+          accountClick('Confirm workspace choice'); await wait()
+          check(calls.some(call => call.method === 'cloudSyncCommand' && call.request.type === 'confirmWorkspace' && call.request.use === 'local'), 'Import did not invoke explicit workspace consent')
+          check(!panel().querySelector('[data-workspace-approval]'), 'Approved workspace must leave the consent state')
+          accountClick('Sign out other devices'); await wait()
+          accountClick('Verify with GitHub'); await wait()
+          check(panel().textContent.includes('same account') && panel().textContent.includes('Cancel sign-in'), 'Other-device sign-out must request GitHub verification')
+          accountClick('Cancel sign-in'); await wait()
+          fixtureAuth = { ...fixtureAuth, signedIn: false, signInPending: false, authState: 'signedOut', revocation: 'unconfirmed' }
+          await accountClient.refetchQueries({ queryKey: ['cloudSyncStatus'] }); await wait()
+          check(panel().textContent.includes('Server revocation is unconfirmed'), 'Offline disconnect must report revocation uncertainty')
+          fixtureAuth = { ...fixtureAuth, authState: 'keyringUnavailable', encryptionAvailable: false }
+          await accountClient.refetchQueries({ queryKey: ['cloudSyncStatus'] }); await wait()
+          check([...panel().querySelectorAll('button')].some(button => button.textContent === 'Retry saved sign-in'), 'A locked keyring must offer saved-session recovery')
+          fixtureAuth = { ...fixtureAuth, authState: 'storageError', encryptionAvailable: true, credentialCleanupRequired: true }
+          await accountClient.refetchQueries({ queryKey: ['cloudSyncStatus'] }); await wait()
+          check([...panel().querySelectorAll('button')].find(button => button.textContent === 'Sign in with GitHub').disabled, 'Credential cleanup must be completed before signing in again')
+          accountClick('Retry credential cleanup'); await wait()
+          check(calls.some(call => call.method === 'cloudSyncCommand' && call.request.type === 'retryCredentialCleanup'), 'Credential cleanup must call the main process')
+          accountRoot.unmount(); accountClient.clear()
+          return 'PASS: responsive auth and account controls, workspace consent, GitHub session verification, revocation uncertainty, keyring recovery, persistent dismissal and all-page preloading'
         }
         if (document.querySelector('dialog.auth-popup[open]')) {
           ;[...document.querySelector('dialog.auth-popup').querySelectorAll('button')].find(button => button.textContent === 'Continue locally').click()

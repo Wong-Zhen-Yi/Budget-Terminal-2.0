@@ -2,6 +2,8 @@ import type { CloudSnapshot, CloudSyncStatus, LocalSyncSnapshot } from '../share
 import { syncDecision } from '../shared/cloudSync.js'
 import { ConvexError } from 'convex/values'
 
+const writeAllowanceMessage = 'This account reached its cloud write allowance. Local changes are saved and sync will retry automatically after the allowance resets.'
+
 export interface SyncCheckpoint { account: string; baseline?: string; revision: number; lastSyncedAt?: number; cloudUpdatedAt?: number }
 
 export interface SyncDependencies {
@@ -21,6 +23,7 @@ export class CloudSyncEngine {
   cloudUpdatedAt: number | undefined
   cloudRevision: number | undefined
   private conflict: { local: string; remote: CloudSnapshot } | undefined
+  private retryAt = 0
 
   constructor(public checkpoint: SyncCheckpoint, private readonly deps: SyncDependencies) {}
 
@@ -79,6 +82,13 @@ export class CloudSyncEngine {
         await this.remember(remote!.payload, remote!.revision, remote!.updatedAt)
         return
       }
+      // A write allowance must never prevent cloud downloads or conflict inspection.
+      if (Date.now() < this.retryAt) {
+        this.state = 'error'
+        this.pending = true
+        this.message = writeAllowanceMessage
+        return
+      }
       const result = await this.deps.writeRemote(remote?.revision ?? 0, local)
       if (!result.accepted) {
         this.state = 'idle'
@@ -92,9 +102,23 @@ export class CloudSyncEngine {
       // Never send provider errors, request arguments, tokens or user data to diagnostics/UI.
       const code = error instanceof ConvexError && error.data && typeof error.data === 'object'
         && !Array.isArray(error.data) ? error.data.code : undefined
-      this.message = code === 'UPGRADE_REQUIRED'
-        ? 'This Convex server still uses record sync. Restore its snapshot-sync backend to match this app, then retry. Local data is still available.'
-        : 'Sync could not complete. Local data is still available. Check your connection, sign-in and Convex setup; snapshots must be under 750 KB.'
+      if (code === 'SYNC_RATE_LIMITED' && error instanceof ConvexError) {
+        const retryAfterMs = (error.data as { retryAfterMs?: unknown }).retryAfterMs
+        // Only a bounded duration is accepted; provider text and payloads stay private.
+        const delay = typeof retryAfterMs === 'number' && Number.isFinite(retryAfterMs)
+          ? Math.min(24 * 60 * 60_000, Math.max(1000, retryAfterMs)) : 60_000
+        this.retryAt = Date.now() + delay
+        this.pending = true
+        this.message = writeAllowanceMessage
+        return
+      }
+      this.message = code === 'SNAPSHOT_INVALID'
+        ? 'Saved data does not match the supported cloud format. Local data is preserved. Update the app or check your saved data before retrying.'
+        : code === 'SNAPSHOT_TOO_LARGE'
+          ? 'Saved data exceeds the 750 KB cloud sync limit. Local saves remain available.'
+          : code === 'UPGRADE_REQUIRED'
+            ? 'This Convex server still uses record sync. Restore its snapshot-sync backend to match this app, then retry. Local data is still available.'
+            : 'Sync could not complete. Local data is still available. Check your connection, sign-in and Convex setup; snapshots must be under 750 KB.'
     }
   }
 }

@@ -9,6 +9,23 @@ MCP writes still save through local stores; optional sync observes those saved-d
 changes. No tools or permissions are added for authentication. See
 [Convex setup and account reconnection](convex-sync.md).
 
+Workspace ownership approval, public GitHub account display, keyring recovery and
+other-device sign-out are also desktop-only. Switching cloud accounts pauses sync
+until the user chooses an import or restore in Settings. MCP cannot approve that
+choice, inspect account profiles, or revoke sessions; existing tools, schemas and
+permissions are unchanged.
+
+OAuth request budgets, single-use session-management grants, abandoned-session
+revocation and credential-file cleanup also remain desktop-only. Raw grants and
+credentials never reach the renderer, MCP, screenshots or diagnostics.
+Existing MCP writes still respect the workspace ownership gate before cloud sync.
+
+Cloud snapshots now share strict nested validation between the desktop and Convex,
+with per-account upload allowances and separate authenticated security-action
+capacity. MCP edits still save locally even when an upload is invalid or throttled;
+cloud retry messages stay in Settings. This adds no MCP tools, schemas, account
+access or permissions. The shared launcher still regenerates the MCP bundle.
+
 The desktop account popup restores saved sign-in before opening. Its **Don’t show
 again** preference stays on the device and can be reset in Settings. This changes
 no MCP tools, authentication access or permission checks.

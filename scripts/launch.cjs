@@ -1,4 +1,7 @@
 const { spawnSync } = require('node:child_process')
+// Shared snapshot validation, account quotas and typed cloud contracts rebuild here; backend policies deploy separately.
+// Auth lifecycle passed live two-device acceptance; the shared launcher rebuilds current source.
+// Auth workspace ownership, async credential storage and session controls rebuild on every launch.
 // Auth restores saved sign-in before opening and remembers the device's Don't show again preference.
 // GitHub sign-in requires the exact v2 callback registered in its OAuth App; see docs/convex-sync.md.
 // Convex Auth v2 runs in the main process; launch always builds current desktop and MCP sources.

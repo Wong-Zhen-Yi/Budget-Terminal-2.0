@@ -45,7 +45,7 @@ try {
     app.whenReady().then(async () => {
       let host
       try {
-        if (!safeStorage.isEncryptionAvailable() || (process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text')) {
+        if (!await safeStorage.isAsyncEncryptionAvailable() || (process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text')) {
           console.log('SKIP: secure OS keyring unavailable; persistent cloud sessions remain disabled')
           app.exit(0); return
         }
@@ -58,7 +58,14 @@ try {
         const accessToken = 'fixture.' + Buffer.from(JSON.stringify({ exp: Math.floor(Date.now()/1000) + 3600 })).toString('base64url') + '.fixture'
         const session = { authVersion: 2, url: 'https://fixture.convex.cloud', userId: 'fixture-user',
           tokens: { accessToken, refreshToken: 'fixture-refresh', refreshTokenExpiresAt: Date.now()+86400000, userId: 'fixture-user' } }
-        const encrypted = safeStorage.encryptString(JSON.stringify(session))
+        // Retain one deliberate legacy fixture to verify migration from sync encryption.
+        if (typeof safeStorage.encryptString === 'function') {
+          await writeFile(target, safeStorage.encryptString(JSON.stringify(session)))
+          host = freshHost(); await host.startCloudSync()
+          assert.equal(host.cloudSyncStatus().signedIn, true, 'The async API must restore legacy encrypted sessions')
+          await host.closeCloudSync()
+        }
+        const encrypted = await safeStorage.encryptStringAsync(JSON.stringify(session))
         await writeFile(target, encrypted)
         assert(!encrypted.includes(Buffer.from('fixture-refresh')), 'Credentials must remain encrypted on disk')
         for (let restart = 0; restart < 2; restart++) {

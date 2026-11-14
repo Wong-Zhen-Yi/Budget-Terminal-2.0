@@ -1,4 +1,7 @@
 param([Parameter(Position = 0)][ValidateSet('start', 'restart')][string]$Command = 'start', [switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Setup, [switch]$Attached)
+# Shared snapshot validation, account quotas and typed cloud contracts rebuild through the shared launcher; backend policies deploy separately.
+# Auth lifecycle passed live two-device acceptance; the shared launcher rebuilds current source.
+# Auth workspace ownership, async credential storage and session controls rebuild through the shared launcher.
 # Auth restores saved sign-in and remembers Don't show again; rebuilt through the shared launcher.
 # GitHub sign-in requires the exact v2 callback registered in its OAuth App; see docs/convex-sync.md.
 # Convex Auth v2 and MCP rebuild through the shared launcher; reconnect cloud sync in Settings after upgrading.

@@ -17,3 +17,12 @@ export const createGithubUser = internalMutation({
     return await ctx.db.insert('users', {})
   },
 })
+
+export const updateGithubProfile = internalMutation({
+  args: { method: v.object({ name: v.literal('github'), profile: vGithubProfile }), userId: v.id('users') },
+  returns: v.null(),
+  handler: async (ctx, { method, userId }) => {
+    await ctx.db.patch(userId, { githubLogin: method.profile.login })
+    return null
+  },
+})

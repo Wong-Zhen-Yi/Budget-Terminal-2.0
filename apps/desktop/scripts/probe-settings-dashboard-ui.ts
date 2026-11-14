@@ -59,6 +59,26 @@ try {
     const root = createRoot(document.getElementById('root'))
     const render = () => root.render(<QueryClientProvider client={client}><div className="settings-page"><header className="settings-toolbar"><nav className="settings-tabs"><button aria-pressed="true">App dashboard</button><button>Workspace</button><button>Privacy</button><button>Data &amp; storage</button><button>Integrations</button><button>Diagnostics</button></nav></header><div className="settings-dashboard-host"><AppDashboard settings={settings} /></div></div></QueryClientProvider>)
     render()
+    window.checkTimingUpdates = async () => {
+      const startup = useDataHealth.getState().startup
+      const pageIds = ['stocks', 'dashboard', 'charts', 'news', 'crypto', 'forex', 'options']
+      for (let update = 0; update < 13; update++) {
+        const timings = pageIds.slice(0, update === 11 ? 2 : pageIds.length).flatMap((tab, index) => [
+          { tab, label: tab + ' quotes', durationMs: 1000 + (index + update) % pageIds.length * 1000, failed: false },
+          { tab, label: tab + ' history', durationMs: 500 + (index + update) % pageIds.length * 1000, failed: false },
+        ])
+        useDataHealth.setState({ startup: { ...startup, timings } })
+        await wait()
+        const card = [...document.querySelectorAll('.app-dash-card')].find(card => card.querySelector('h3').textContent === 'Slowest page loads')
+        const rows = [...card.querySelectorAll('.app-dash-bar')]
+        check(rows.length <= 5, 'Timing updates accumulated stale bars: ' + rows.length)
+        check(new Set(rows.map(row => row.querySelector('span').textContent)).size === rows.length, 'Slowest loads must show each page once')
+        const expected = timings.filter((_, index) => index % 2 === 0).sort((a, b) => b.durationMs - a.durationMs).slice(0, 5)
+        check(rows.length === expected.length, 'Slowest loads did not remove departed pages')
+        check(rows.every((row, index) => Number(row.querySelector('b').textContent) === expected[index].durationMs / 1000), 'Page timing must use its longest task, ordered slowest first')
+      }
+      return 'PASS: repeated timing reordering and shrinking keep at most five distinct page rows'
+    }
     window.checkLayout = async () => {
       await wait()
       check(document.querySelectorAll('.app-dash-card').length === 18, 'Expected all 18 chart cards')
@@ -116,6 +136,7 @@ try {
       const window = new BrowserWindow({ width: 1600, height: 1000, useContentSize: true, show: false })
       try {
         await window.loadFile(${JSON.stringify(join(directory, 'index.html'))})
+        console.log(await window.webContents.executeJavaScript('window.checkTimingUpdates()'))
         for (const [width, height] of [[1600,1000],[1920,1080],[1366,768]]) {
           window.setContentSize(width, height)
           console.log(width + 'x' + height + ': ' + await window.webContents.executeJavaScript('window.checkLayout()'))

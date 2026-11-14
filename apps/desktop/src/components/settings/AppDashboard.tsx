@@ -13,7 +13,7 @@ import { sortRecords, useDataHealth } from '@/stores/dataHealth'
 import '@/styles/appDashboard.css'
 
 const colors = ['#20c9ad', '#399dff', '#f5bd50', '#ad7aeb', '#f16f78', '#7895ab']
-interface Datum { label: string; value: number; color?: string }
+interface Datum { id?: string; label: string; value: number; color?: string }
 interface Sample { at: number; active: number; queued?: number }
 function activitySample(usage: ApiUsageSnapshot): Sample {
   const queues = usage.providers.filter(provider => provider.queued !== undefined)
@@ -56,7 +56,7 @@ function Bars({ rows, unit, capacities }: { rows: Datum[]; unit: string; capacit
   const max = Math.max(1, ...data.map(row => Math.abs(row.value)))
   const signed = !capacities && data.some(row => row.value < 0)
   return <div className={`app-dash-bars${data.length > 6 ? ' app-dash-bars--dense' : ''}`} role="img" aria-label={`${unit}: ${data.map(row => `${row.label} ${number(row.value)}`).join(', ')}`}>
-    {data.map((row, index) => <div className="app-dash-bar" key={row.label} title={`${row.label}: ${number(row.value)}${capacities ? ` / ${number(capacities[index])}` : ''} ${unit}`}>
+    {data.map((row, index) => <div className="app-dash-bar" key={row.id ?? row.label} title={`${row.label}: ${number(row.value)}${capacities ? ` / ${number(capacities[index])}` : ''} ${unit}`}>
       <span>{row.label}</span><div className={signed ? 'app-dash-bar-signed' : undefined}><i style={{ width: `${Math.min(signed ? 50 : 100, Math.abs(row.value) / Math.max(1, capacities?.[index] ?? max) * (signed ? 50 : 100))}%`, background: row.color ?? colors[1], ...(signed ? { position: 'absolute', [row.value < 0 ? 'right' : 'left']: '50%' } : {}) }} /></div>
       <b>{number(row.value)}{capacities ? ` / ${number(capacities[index])}` : ''}</b>
     </div>)}<small>{unit}</small>
@@ -154,6 +154,15 @@ export function AppDashboard({ settings }: { settings: AppSettings }) {
   const service = cache?.service
   const providers = snapshot.usage?.providers ?? []
   const pages = Object.values(startup?.pages ?? {})
+  // Match the startup scheduler's page duration: its longest concurrent task.
+  // Key rows by page ID so live rank changes cannot retain duplicate task bars.
+  const pageDurations = new Map<string, number>()
+  for (const timing of startup?.timings ?? []) {
+    if (!Number.isFinite(timing.durationMs) || timing.durationMs < 0) continue
+    pageDurations.set(timing.tab, Math.max(pageDurations.get(timing.tab) ?? 0, timing.durationMs))
+  }
+  const slowestPages = [...pageDurations].sort((a, b) => b[1] - a[1]).slice(0, 5)
+    .map(([id, durationMs]) => ({ id, label: TABS.find(tab => tab.id === id)?.label ?? 'Page', value: durationMs / 1000 }))
   const ready = pages.filter(page => page.state === 'ready').length
   const health = sortRecords(records).filter(record => !record.previousSession)
   const pageStates = ['ready', 'loading', 'degraded', 'failed', 'idle'] as const
@@ -181,7 +190,7 @@ export function AppDashboard({ settings }: { settings: AppSettings }) {
   const columns: { title: string; cards: ReactNode[] }[] = [
     { title: 'Startup & reliability', cards: [
       <Card title="Page loading" note="All implemented pages preload" key="pages"><Donut unit="pages" rows={pages.length ? pageStates.map((state, index) => ({ label: pageLabels[index], value: pages.filter(page => page.state === state).length, color: [colors[0], colors[1], colors[2], colors[4], colors[5]][index] })) : []} /></Card>,
-      <Card title="Slowest page loads" key="timings"><Bars unit="seconds" rows={[...(startup?.timings ?? [])].sort((a, b) => b.durationMs - a.durationMs).slice(0, 5).map(item => ({ label: TABS.find(tab => tab.id === item.tab)?.label ?? 'Page', value: item.durationMs / 1000 }))} /></Card>,
+      <Card title="Slowest page loads" note="Longest startup task per page · top 5" key="timings"><Bars unit="seconds" rows={slowestPages} /></Card>,
       <Card title="Feed freshness" note="Current-session observed feeds" key="feeds"><Donut unit="feeds" rows={health.length ? feedStates.map(state => ({ label: state[0].toUpperCase() + state.slice(1), value: health.filter(record => record.freshness === state).length })) : []} /></Card>,
     ] },
     { title: 'Providers & requests', cards: [

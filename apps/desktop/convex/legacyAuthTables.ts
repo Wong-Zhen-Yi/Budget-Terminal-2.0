@@ -4,6 +4,8 @@ import { v } from 'convex/values'
 
 export const legacyAuthTables = {
   users: defineTable({
+    // Active v2 sign-ins retain only the public login needed by account settings.
+    githubLogin: v.optional(v.string()),
     name: v.optional(v.string()),
     image: v.optional(v.string()),
     email: v.optional(v.string()),

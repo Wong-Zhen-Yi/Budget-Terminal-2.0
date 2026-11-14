@@ -10,6 +10,11 @@ export interface CloudSyncStatus {
   pending: boolean
   message?: string
   signInPending?: boolean
+  authState?: 'restoring' | 'signedOut' | 'signingIn' | 'authenticated' | 'offline' | 'reauthRequired' | 'keyringUnavailable' | 'storageError'
+  credentialCleanupRequired?: boolean
+  githubLogin?: string
+  workspaceApprovalRequired?: boolean
+  revocation?: 'complete' | 'unconfirmed'
 }
 
 export type CloudSyncCommand =
@@ -18,6 +23,10 @@ export type CloudSyncCommand =
   | { type: 'sync' }
   | { type: 'resolve'; use: 'local' | 'cloud' }
   | { type: 'disconnect' }
+  | { type: 'confirmWorkspace'; use: 'local' | 'cloud' }
+  | { type: 'revokeOtherSessions' }
+  | { type: 'retrySession' }
+  | { type: 'retryCredentialCleanup' }
 
 export interface CloudSnapshot { revision: number; payload: string; updatedAt: number }
 export interface LocalSyncSnapshot { payload: string; updatedAt: number; pristine: boolean }

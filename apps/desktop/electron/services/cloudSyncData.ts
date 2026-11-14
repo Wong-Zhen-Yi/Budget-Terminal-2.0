@@ -9,6 +9,7 @@ import { readArticles, replaceArticles, validateArticlesImport } from './article
 import { publishSavedDataChanged } from './savedDataEvents.js'
 import { defaultCardsPayload, normalizeCardsPayload } from '../shared/cards.js'
 import type { LocalSyncSnapshot } from '../shared/cloudSync.js'
+import { parseCloudSnapshot } from '../shared/cloudSnapshot.js'
 
 export const cloudDataPath = (name: string) => join(process.env.APPDATA!, 'BudgetTerminalElectron', name)
 
@@ -78,12 +79,8 @@ export async function readLocalSyncData(captured?: Awaited<ReturnType<typeof cap
 }
 
 function snapshot(payload: string) {
-  const value = z.object({ version: z.literal(1), userData: z.record(z.string(), z.unknown()),
-    settings: z.object({ version: z.number(), tabOrder: z.array(z.string()), hiddenTabs: z.array(z.string()),
-      favoriteTabs: z.array(z.string()), clockCountry: z.string(), time12h: z.boolean() }).passthrough(),
-    cards: z.object({ version: z.number(), customCards: z.array(z.unknown()), cardOrder: z.array(z.string()) }).passthrough(),
-    articles: z.record(z.string(), z.unknown()),
-  }).parse(JSON.parse(payload))
+  // Local backup import and crash recovery must continue to support libraries over the cloud byte cap.
+  const value = parseCloudSnapshot(payload, false)
   validateUserDataImport(value.userData)
   validateArticlesImport(value.articles)
   settingsSchema.parse(value.settings)

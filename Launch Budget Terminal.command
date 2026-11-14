@@ -1,4 +1,8 @@
 #!/bin/sh
+# Settings dashboard keeps the five slowest pages stable during startup updates; rebuilt through the shared launcher.
+# Shared snapshot validation, account quotas and typed cloud contracts rebuild through the shared launcher; deploy backend policies separately.
+# Live two-device sign-in, rotation and isolated revocation verified; the shared launcher builds current auth source.
+# Auth workspace ownership, async credential storage and session controls rebuild through the shared launcher.
 # Auth restores saved sign-in and remembers Don't show again; rebuilt through the shared launcher.
 # GitHub sign-in requires the exact v2 callback registered in its OAuth App; see docs/convex-sync.md.
 # Convex Auth v2 and MCP rebuild through the shared launcher; reconnect cloud sync in Settings after upgrading.

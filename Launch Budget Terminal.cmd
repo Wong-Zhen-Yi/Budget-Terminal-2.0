@@ -1,4 +1,8 @@
 @echo off
+rem Settings dashboard keeps the five slowest pages stable during startup updates; rebuilt through the shared launcher.
+rem Shared snapshot validation, account quotas and typed cloud contracts rebuild through the shared launcher; deploy backend policies separately.
+rem Live two-device sign-in, rotation and isolated revocation verified; the shared launcher builds current auth source.
+rem Auth workspace ownership, async credential storage and session controls rebuild through the shared launcher.
 rem Auth restores saved sign-in and remembers Don't show again; rebuilt through the shared launcher.
 rem GitHub sign-in requires the exact v2 callback registered in its OAuth App; see docs/convex-sync.md.
 rem Convex Auth v2 and MCP rebuild through the shared launcher; reconnect cloud sync in Settings after upgrading.

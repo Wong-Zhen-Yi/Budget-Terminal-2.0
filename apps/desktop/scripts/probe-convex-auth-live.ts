@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { ConvexHttpClient } from 'convex/browser'
 import { api } from '../convex/_generated/api.js'
+import { makeFunctionReference } from 'convex/server'
 import { DESKTOP_AUTH_ORIGINS, convexDeploymentUrl, githubSignInUrl } from '../electron/shared/cloudOAuth.js'
 
 // Read only the ignored local configuration. Never print provider URLs, profiles or tokens.
@@ -12,8 +13,11 @@ const client = new ConvexHttpClient(url, { logger: false,
   fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(15_000) }) })
 const config = await client.query(api.sync.authConfiguration, {})
 assert.equal(config.authVersion, 2)
+assert.equal(config.accountControlsVersion, 2)
 assert.equal(config.githubConfigured, true)
 await assert.rejects(client.query(api.sync.identity, {}))
+await assert.rejects(client.query(api.sync.account, {}))
+await assert.rejects(client.mutation(api.auth.revokeOtherSessions, { authorization: 'a'.repeat(64) }))
 await assert.rejects(client.query(api.sync.read, {}))
 await assert.rejects(client.mutation(api.sync.write, { expectedRevision: 0, payload: '{}' }))
 await assert.rejects(client.mutation(api.auth.startSignInWithGithub, { redirectTo: 'https://example.invalid/callback' }))
@@ -24,6 +28,8 @@ assert.deepEqual(await client.mutation(api.auth.refreshSession, { refreshToken: 
 await client.mutation(api.auth.signOut, { refreshToken: 'invalid-probe-token' })
 assert.equal(await client.query(api.auth.isAuthenticated, {}), false)
 const redirectTo = `${DESKTOP_AUTH_ORIGINS[0]}/convex-sync-callback/${randomBytes(32).toString('hex')}`
+await assert.rejects(client.mutation(api.auth.startSignInWithGithub, { redirectTo, purpose: 'revokeOthers' }))
+await assert.rejects(client.mutation(makeFunctionReference<'mutation'>('githubAdapter:start'), { redirectTo }), 'The raw SDK adapter must not be accessible to public clients')
 const started = await client.mutation(api.auth.startSignInWithGithub, { redirectTo })
 githubSignInUrl(url, started.redirect, started.state)
 const authorization = await fetch(started.redirect, { redirect: 'manual', signal: AbortSignal.timeout(15_000) })

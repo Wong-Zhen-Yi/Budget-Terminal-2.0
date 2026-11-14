@@ -1,3 +1,7 @@
+export interface OAuthTokens { accessToken: string; refreshToken: string; refreshTokenExpiresAt: number; userId: string }
+export type OAuthCompletion = { status: 'complete'; tokens: OAuthTokens; authorization?: string }
+  | { status: 'error'; userError: { error: 'INVALID_CODE' | 'ACCOUNT_MISMATCH' } }
+
 /** Only the temporary desktop listener is an allowed OAuth return destination. */
 export function desktopOAuthRedirect(value: string): string {
   const url = new URL(value)

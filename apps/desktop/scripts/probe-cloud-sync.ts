@@ -122,6 +122,39 @@ try {
   assert(incompatible.message?.includes('snapshot-sync backend'), 'A record-only backend must report the configuration mismatch')
   assert(!incompatible.message?.includes('private'), 'Provider details must not reach the UI')
 
+  const realNow = Date.now
+  let clock = realNow(), quotaCalls = 0, allowWrites = false
+  let quotaRemote: CloudSnapshot | null = null
+  const throttled = new CloudSyncEngine({ account: 'quota-fixture', revision: 0 }, {
+    readLocal: async () => ({ payload: 'pending edit', pristine: false, updatedAt: 1 }),
+    readRemote: async () => quotaRemote,
+    writeRemote: async () => {
+      quotaCalls++
+      if (!allowWrites) throw new ConvexError({ code: 'SYNC_RATE_LIMITED', retryAfterMs: 60_000, message: 'private detail' })
+      return { accepted: true, revision: 1, updatedAt: clock }
+    },
+    applyIfUnchanged: async () => { throw Error('Quota cannot replace local work') },
+    saveCheckpoint: async () => {},
+  })
+  try {
+    Date.now = () => clock
+    await throttled.sync()
+    assert.equal(throttled.pending, true)
+    assert.equal(throttled.state, 'error')
+    assert(throttled.message?.includes('allowance') && !throttled.message.includes('private'))
+    await throttled.sync()
+    assert.equal(quotaCalls, 1, 'Automatic retries respect the server cooldown without another upload')
+    quotaRemote = { payload: 'competing edit', revision: 1, updatedAt: clock }
+    await throttled.sync()
+    assert.equal(throttled.state, 'conflict', 'Write cooldown does not suppress remote changes or conflict inspection')
+    quotaRemote = null
+    clock += 60_001
+    allowWrites = true
+    await throttled.sync()
+    assert.equal(quotaCalls, 2)
+    assert.equal(throttled.state, 'synced', 'Pending edits resume after the quota resets')
+  } finally { Date.now = realNow }
+
   const data = await import('../electron/services/cloudSyncData.js')
   const { withSavedDataLock, withAutomaticBackup } = await import('../electron/services/automaticBackup.js')
   const { mutateSettings } = await import('../electron/services/settingsStore.js')
@@ -166,8 +199,67 @@ try {
 
   // Exercise the actual Convex handlers with an isolated in-memory database.
   const backend = await import('../convex/sync.js')
+  const { parseCloudSnapshot, CloudSnapshotError } = await import('../electron/shared/cloudSnapshot.js')
+  assert.deepEqual(parseCloudSnapshot(baseline), JSON.parse(baseline), 'Generated defaults must pass the shared wire schema without changes')
+  assert.deepEqual(parseCloudSnapshot(modified), JSON.parse(modified), 'Populated articles and watchlists must round-trip')
+  const legacySnapshot = JSON.parse(baseline)
+  legacySnapshot.userData.version = 1
+  delete legacySnapshot.userData.personalFinance
+  delete legacySnapshot.userData.chartsWatchlists
+  assert.doesNotThrow(() => parseCloudSnapshot(JSON.stringify(legacySnapshot)), 'Older supported snapshots remain readable')
+  const malformedSnapshots: unknown[] = [null, [], true, { version: 1, userData: true, settings: true, cards: true, articles: true }]
+  const malformed = (path: string, replacement: unknown) => {
+    const value: Record<string, unknown> = JSON.parse(baseline)
+    const parts = path.split('.')
+    let target = value
+    for (const part of parts.slice(0, -1)) target = target[part] as Record<string, unknown>
+    target[parts.at(-1)!] = replacement
+    malformedSnapshots.push(value)
+  }
+  malformed('userData.portfolios.portfolio_1.holdings', { SPY: { ticker: 'SPY', shares: '10', avgPrice: 1, includeInWeight: true } })
+  malformed('userData.portfolios.portfolio_1.options', [{ rowId: 'broken' }])
+  malformed('userData.personalFinance.cash', [{ id: 'cash', desc: '', amount: 'secret-value' }])
+  malformed('userData.personalFinance.cash', [{ id: 'cash', desc: '', amount: -1 }])
+  malformed('userData.personalFinance.cash', Array.from({ length: 41 }, (_, index) => ({ id: `cash-${index}`, desc: '', amount: 1 })))
+  malformed('userData.activeId', 'missing')
+  malformed('userData.portfolios.portfolio_1.id', 'different')
+  malformed('userData.portfolios', Object.fromEntries(Array.from({ length: 6 }, (_, index) => [`portfolio_${index}`, { ...JSON.parse(baseline).userData.portfolios.portfolio_1, id: `portfolio_${index}` }])))
+  malformed('settings.time12h', 'yes')
+  malformed('settings.backtestPage.rows', [{ symbol: 'SPY', weight: '100' }])
+  malformed('settings.apiKey', 'secret-value')
+  malformed('cards.customCards.0.weighting', 'invalid')
+  const starter = JSON.parse(baseline).cards.customCards[0]
+  malformed('cards.customCards', [starter, starter])
+  malformed('cards.intervals', { 'builtin:index': 'bad' })
+  malformed('articles.articles', [{ id: 'broken' }])
+  malformed('articles.articles', Array.from({ length: 10_001 }, () => ({})))
+  malformed('version', 2)
+  for (const value of malformedSnapshots) assert.throws(() => parseCloudSnapshot(JSON.stringify(value)), error =>
+    error instanceof CloudSnapshotError && error.code === 'SNAPSHOT_INVALID' && !error.message.includes('secret-value'))
+  assert.throws(() => parseCloudSnapshot('not json'), CloudSnapshotError)
+  const populated = JSON.parse(modified)
+  populated.userData.portfolios.portfolio_1.holdings = { SPY: { ticker: 'SPY', shares: 10, avgPrice: 100, includeInWeight: true } }
+  populated.userData.portfolios.portfolio_1.options = [{ rowId: 'option-1', ticker: 'SPY', strategy: 'Calls', expiry: '',
+    strike: 100, contracts: 1, premium: 2, status: 'Open', openDate: '' }]
+  populated.userData.personalFinance.cash = [{ id: 'cash-1', desc: 'Cash', amount: 100 }]
+  assert.deepEqual(parseCloudSnapshot(JSON.stringify(populated)), populated, 'Populated holdings, options and finance must round-trip')
+  populated.userData.activeId = 'combined'
+  assert.deepEqual(parseCloudSnapshot(JSON.stringify(populated)), populated, 'The virtual combined portfolio is a valid active view')
+  const duplicateFinance = structuredClone(populated)
+  duplicateFinance.userData.personalFinance.debt = [...duplicateFinance.userData.personalFinance.cash]
+  assert.throws(() => parseCloudSnapshot(JSON.stringify(duplicateFinance)), CloudSnapshotError)
+  const oversizedLocal = JSON.parse(modified)
+  oversizedLocal.articles.articles[0].content = 'x'.repeat(750_001)
+  const oversizedPayload = JSON.stringify(oversizedLocal)
+  assert.throws(() => parseCloudSnapshot(oversizedPayload), error => error instanceof CloudSnapshotError && error.code === 'SNAPSHOT_TOO_LARGE')
+  await withSavedDataLock(() => data.importBackupData(oversizedLocal))
+  assert.equal(JSON.parse(await data.readSyncData()).articles.articles[0].content.length, 750_001, 'Large local backup imports remain available without cloud sync')
+  await withSavedDataLock(() => data.applySyncData(modified))
+  assert.throws(() => parseCloudSnapshot('é'.repeat(375_001)), error => error instanceof CloudSnapshotError && error.code === 'SNAPSHOT_TOO_LARGE', 'The cap counts UTF-8 bytes')
   type Row = { _id: string; userId: string; revision: number; payload: string; updatedAt: number }
   const rows = new Map<string, Row>()
+  type LimitRow = { _id: string; userId: string; windowStart: number; writes: number; dayStart: number; dailyBytes: number }
+  const limits = new Map<string, LimitRow>()
   let owner: string | null = 'owner-a'
   let revoked = false
   const ctx = { auth: { getUserIdentity: async () => owner ? { subject: 'v2-session' } : null },
@@ -175,13 +267,20 @@ try {
       assert.equal(args.sessionId, 'v2-session', 'V2 must resolve the session through the auth component')
       return owner && !revoked ? { userId: owner } : null
     }, db: {
-    query: () => ({ withIndex: (_index: string, select: (q: { eq: (key: string, value: string) => void }) => void) => {
+    query: (table: string) => ({ withIndex: (_index: string, select: (q: { eq: (key: string, value: string) => void }) => void) => {
       let selected = ''
       select({ eq: (_key, value) => { selected = value } })
-      return { unique: async () => [...rows.values()].find(row => row.userId === selected) ?? null }
+      return { unique: async () => table === 'syncSnapshots' ? rows.get(selected) ?? null : limits.get(selected) ?? null }
     } }),
-    insert: async (_table: string, value: Omit<Row, '_id'>) => { rows.set(value.userId, { ...value, _id: value.userId }); return value.userId },
-    replace: async (id: string, value: Omit<Row, '_id'>) => { rows.set(id, { ...value, _id: id }) },
+    insert: async (table: string, value: Omit<Row, '_id'> | Omit<LimitRow, '_id'>) => {
+      if (table === 'syncSnapshots') rows.set(value.userId, { ...value, _id: value.userId } as Row)
+      else limits.set(value.userId, { ...value, _id: `limit:${value.userId}` } as LimitRow)
+      return value.userId
+    },
+    replace: async (id: string, value: Omit<Row, '_id'> | Omit<LimitRow, '_id'>) => {
+      if (id.startsWith('limit:')) limits.set(value.userId, { ...value, _id: id } as LimitRow)
+      else rows.set(id, { ...value, _id: id } as Row)
+    },
   } }
   const read = (backend.read as unknown as { _handler: (ctx: unknown, args: unknown) => Promise<CloudSnapshot | null> })._handler
   const write = (backend.write as unknown as { _handler: (ctx: unknown, args: unknown) => Promise<{ accepted: boolean; revision: number; updatedAt: number }> })._handler
@@ -193,13 +292,38 @@ try {
   assert.deepEqual(await write(ctx, { expectedRevision: 0, payload: modified }), { accepted: false, revision: 1, updatedAt: initialWrite.updatedAt })
   assert.equal((await read(ctx, {}))?.updatedAt, initialWrite.updatedAt)
   owner = 'owner-b'
-  assert.equal(await read(ctx, {}), null, 'Accounts must never see each other’s snapshots')
+  assert.equal(await read(ctx, {}), null, 'Accounts must never see each otherâ€™s snapshots')
   await write(ctx, { expectedRevision: 0, payload: modified })
   owner = 'owner-a'
   assert.equal((await read(ctx, {}))?.payload, baseline)
   const laterWrite = await write(ctx, { expectedRevision: 1, payload: modified })
   assert.equal(laterWrite.revision, 2)
   assert(laterWrite.updatedAt > initialWrite.updatedAt, 'Accepted updates must have a strictly increasing server timestamp')
+  assert.equal(limits.get('owner-a')!.writes, 2, 'No-op retries and stale revisions do not consume writes')
+  const protectedRow = structuredClone(rows.get('owner-a'))
+  const protectedLimit = structuredClone(limits.get('owner-a'))
+  for (const value of malformedSnapshots) await assert.rejects(write(ctx, { expectedRevision: 2, payload: JSON.stringify(value) }))
+  assert.deepEqual(rows.get('owner-a'), protectedRow, 'Malformed writes cannot replace a valid cloud copy')
+  assert.deepEqual(limits.get('owner-a'), protectedLimit, 'Invalid data cannot consume the account allowance')
+  const allowance = limits.get('owner-a')!
+  allowance.writes = 60
+  assert.equal((await write(ctx, { expectedRevision: 0, payload: modified })).accepted, true, 'An acknowledged payload remains retryable at the quota')
+  assert.equal((await write(ctx, { expectedRevision: 0, payload: baseline })).accepted, false, 'Conflicts remain distinguishable at the quota')
+  const isRateLimited = (error: unknown) => error instanceof ConvexError && error.data && typeof error.data === 'object'
+    && !Array.isArray(error.data) && error.data.code === 'SYNC_RATE_LIMITED' && Number(error.data.retryAfterMs) > 0
+  await assert.rejects(write(ctx, { expectedRevision: 2, payload: baseline }), isRateLimited)
+  assert.deepEqual(rows.get('owner-a'), protectedRow)
+  owner = 'owner-b'
+  assert.equal((await write(ctx, { expectedRevision: 1, payload: baseline })).accepted, true, 'One account cannot consume another account allowance')
+  owner = 'owner-a'
+  allowance.windowStart = Date.now() - 60_001
+  assert.equal((await write(ctx, { expectedRevision: 2, payload: baseline })).revision, 3)
+  assert.equal(limits.get('owner-a')!.writes, 1, 'The minute allowance resets')
+  limits.get('owner-a')!.dailyBytes = 100_000_000
+  await assert.rejects(write(ctx, { expectedRevision: 3, payload: modified }), isRateLimited)
+  limits.get('owner-a')!.dayStart = Date.now() - 24 * 60 * 60_000 - 1
+  assert.equal((await write(ctx, { expectedRevision: 3, payload: modified })).revision, 4)
+  assert.equal(limits.get('owner-a')!.dailyBytes, new TextEncoder().encode(modified).length, 'The daily byte allowance resets')
   await assert.rejects(write(ctx, { expectedRevision: 1, payload: 'x'.repeat(750_001) }))
   revoked = true
   await assert.rejects(read(ctx, {}), 'A signed JWT must not authorize a revoked session')
@@ -235,7 +359,17 @@ try {
   legacy = null
   assert.equal(await createUser(migrationCtx, verified), 'new-owner', 'A new GitHub account must never link by matching email or login')
   assert.equal(inserts, 1)
-  console.log('PASS: v2 legacy GitHub ownership migration, revoked-session isolation, fresh-device restore, persisted offline timestamps, monotonic server timestamps, stale-revision protection, two-device sync, conflicts, retries, backups and interrupted-download recovery')
+  owner = 'owner-a'; revoked = false
+  const account = (backend.account as unknown as { _handler: (ctx: unknown, args: unknown) => Promise<unknown> })._handler
+  assert.deepEqual(await account({ ...ctx, db: { get: async () => ({ githubLogin: 'fixture', email: 'private@example.invalid' }) } }, {}),
+    { userId: 'owner-a', githubLogin: 'fixture' }, 'Account settings expose only the authenticated user ID and public login')
+  const updateProfile = (users.updateGithubProfile as unknown as { _handler: (ctx: unknown, args: unknown) => Promise<null> })._handler
+  await updateProfile({ db: { patch: async (id: string, fields: unknown) => {
+    assert.equal(id, 'new-owner')
+    assert.deepEqual(fields, { githubLogin: 'fixture' }, 'Only the public GitHub login is persisted by the sign-in hook')
+  } } }, { ...verified, userId: 'new-owner' })
+
+  console.log('PASS: shared strict snapshot validation, UTF-8 limits, large local backups, account write quotas/cooldown/reset/isolation, ownership migration, revoked sessions, offline timestamps, conflicts, retries and recovery')
 } finally {
   for (const key of ['APPDATA', 'LOCALAPPDATA'] as const) {
     if (previous[key] === undefined) delete process.env[key]

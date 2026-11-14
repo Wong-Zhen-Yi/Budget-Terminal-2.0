@@ -1,9 +1,9 @@
 import { randomBytes } from 'node:crypto'
 import { createServer } from 'node:http'
 import { DESKTOP_AUTH_PORTS, desktopOAuthRedirect, githubSignInUrl } from '../shared/cloudOAuth.js'
+import type { OAuthTokens, OAuthCompletion } from '../shared/cloudOAuth.js'
+export type { OAuthTokens, OAuthCompletion } from '../shared/cloudOAuth.js'
 
-export interface OAuthTokens { accessToken: string; refreshToken: string; refreshTokenExpiresAt: number; userId: string }
-export type OAuthCompletion = { status: 'complete'; tokens: OAuthTokens } | { status: 'error'; userError: { error: 'INVALID_CODE' } }
 export class GitHubSetupError extends Error {
   constructor(message = 'GitHub sign-in is not configured on this Convex deployment. Add AUTH_GITHUB_ID and AUTH_GITHUB_SECRET in the Convex dashboard, then retry. Local data is still available.') {
     super(message)
@@ -72,7 +72,7 @@ export async function createOAuthCallback(timeoutMs = 5 * 60_000) {
 }
 
 export interface GitHubSignIn {
-  result: Promise<{ tokens: OAuthTokens } | { reason: 'cancelled' | 'expired' | 'failed' }>
+  result: Promise<{ tokens: OAuthTokens; authorization?: string } | { reason: 'cancelled' | 'expired' | 'failed' | 'accountMismatch' }>
   cancel: () => void
 }
 
@@ -93,8 +93,9 @@ export async function beginGitHubSignIn(deploymentUrl: string, dependencies: {
       try {
         // State, the one-time code and session tokens never cross into the renderer.
         const completed = await dependencies.completeSignIn({ code: response.code, state: started.state })
-        if (completed.status !== 'complete' || !completed.tokens.accessToken || !completed.tokens.refreshToken) return { reason: 'failed' as const }
-        return { tokens: completed.tokens }
+        if (completed.status !== 'complete') return { reason: completed.userError.error === 'ACCOUNT_MISMATCH' ? 'accountMismatch' as const : 'failed' as const }
+        if (!completed.tokens.accessToken || !completed.tokens.refreshToken) return { reason: 'failed' as const }
+        return { tokens: completed.tokens, ...(completed.authorization ? { authorization: completed.authorization } : {}) }
       } catch { return { reason: 'failed' as const } }
     })
     return { result, cancel: callback.cancel }
