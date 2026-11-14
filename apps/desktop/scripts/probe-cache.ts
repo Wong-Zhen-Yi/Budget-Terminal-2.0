@@ -323,6 +323,7 @@ async function rendererPolicyChecks(): Promise<void> {
   })
   client.setQueryData(['portfolio'], { data: { private: true } })
   client.setQueryData(['agents'], { data: { messages: ['Private chat'] } })
+  client.setQueryData(['cloudSyncStatus'], { data: { signedIn: true, url: 'https://fixture.convex.cloud' } })
   client.setQueryData(['stocks', 'FAIL'], {
     data: {},
     meta: { freshness: 'failed', fetchedAt: Date.now() },

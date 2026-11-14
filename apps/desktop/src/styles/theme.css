@@ -2,6 +2,95 @@
 @import './crypto.css';
 @import './finance.css';
 
+.auth-popup {
+  position: fixed;
+  inset: 0;
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 32px;
+  overflow: auto;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 16px;
+  box-shadow: 0 24px 80px color-mix(in srgb, var(--color-bg) 85%, transparent);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.auth-popup::backdrop {
+  background: color-mix(in srgb, var(--color-bg) 78%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+.auth-popup-close { position: absolute; top: 14px; right: 14px; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 6px; color: var(--color-text-muted); }
+.auth-popup-close:hover { background: var(--color-surface-hover); color: var(--color-text); }
+.auth-popup-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+
+.auth-popup-brand span:first-child {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--color-accent);
+  border-radius: 12px;
+  background: var(--color-accent-dim);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 16px;
+}
+
+.auth-popup h1 { margin: 24px 0 8px; text-align: center; font-size: 23px; font-weight: 600; letter-spacing: -.025em; }
+.auth-popup #auth-description { margin-bottom: 24px; text-align: center; color: var(--color-text-muted); font-size: 14px; }
+.auth-popup-actions { display: flex; flex-direction: column; gap: 12px; }
+.auth-popup-actions label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.auth-popup-actions input {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 7px;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+.auth-popup-primary { gap: 10px; height: 44px; border-radius: 8px; border-color: var(--color-accent); background: var(--color-accent); font-size: 14px; font-weight: 600; }
+.auth-popup-primary:hover { background: var(--color-accent-hover); }
+.auth-popup-hint, .auth-popup-footer p { font-size: 12px; color: var(--color-text-muted); }
+.auth-popup-session { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--color-text-muted); font-size: 12px; }
+.auth-popup-switch { margin-top: 20px; text-align: center; font-size: 13px; color: var(--color-text-muted); }
+.auth-popup-switch button { color: var(--color-accent-hover); font-weight: 600; }
+.auth-popup-switch button:hover, .auth-popup-dismiss:hover { text-decoration: underline; text-underline-offset: 3px; }
+.auth-popup button:disabled { cursor: not-allowed; opacity: .4; }
+.auth-popup-error { margin-top: 14px; padding: 10px 12px; border: 1px solid var(--color-down); border-radius: 7px; background: var(--color-down-bg); color: var(--color-down); font-size: 13px; overflow-wrap: anywhere; }
+.auth-popup-footer { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--color-border); text-align: center; }
+.auth-popup-footer > .no-drag { width: 100%; height: 40px; border-radius: 8px; font-size: 14px; }
+.auth-popup-dismiss { display: block; margin: 12px auto 10px; padding: 2px 8px; color: var(--color-text-muted); font-size: 13px; }
+.auth-popup-pending { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px 12px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface-raised); text-align: center; }
+.auth-popup-pending p { font-size: 13px; color: var(--color-text-muted); }
+.auth-popup-spinner { width: 18px; height: 18px; border: 2px solid var(--color-border-strong); border-top-color: var(--color-text); border-radius: 50%; animation: auth-spin .8s linear infinite; }
+@keyframes auth-spin { to { transform: rotate(360deg); } }
+.auth-popup :focus-visible { outline: 2px solid var(--color-accent-hover); outline-offset: 3px; }
+
+@media (max-height: 740px), (max-width: 480px) {
+  .auth-popup { padding: 24px; }
+  .auth-popup-brand { gap: 8px; }
+  .auth-popup h1 { margin-top: 16px; }
+  .auth-popup #auth-description { margin-bottom: 18px; }
+  .auth-popup-switch { margin-top: 14px; }
+  .auth-popup-footer { margin-top: 18px; padding-top: 16px; }
+}
+@media (prefers-reduced-motion: reduce) { .auth-popup-spinner { animation: none; } }
+
 /*
  * Terminal palette. Dark only, deliberately: this is a trading workstation that runs
  * for hours and the reference app has no light mode.

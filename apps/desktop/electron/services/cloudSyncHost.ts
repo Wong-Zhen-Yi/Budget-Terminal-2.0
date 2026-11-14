@@ -179,7 +179,9 @@ export async function startCloudSync(): Promise<void> {
   timer = setInterval(schedule, 15_000)
   timer.unref()
   stopEvents = subscribeSavedDataChanged(() => { if (engine) engine.pending = true; schedule() })
-  void enqueue(async () => {
+  // Restore encrypted local credentials before the renderer can request account status.
+  // attach schedules network sync separately, so offline startup stays independent.
+  await enqueue(async () => {
     try {
       const bytes = await readFile(sessionPath())
       if (!encryptionAvailable()) throw new Error('Encryption unavailable')

@@ -1,4 +1,5 @@
 param([Parameter(Position = 0)][ValidateSet('start', 'restart')][string]$Command = 'start', [switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Setup, [switch]$Attached)
+# Auth restores saved sign-in and remembers Don't show again; rebuilt through the shared launcher.
 # GitHub sign-in requires the exact v2 callback registered in its OAuth App; see docs/convex-sync.md.
 # Convex Auth v2 and MCP rebuild through the shared launcher; reconnect cloud sync in Settings after upgrading.
 # MCP tools and schemas rebuild from current source on every launch; see docs/local-mcp.md.

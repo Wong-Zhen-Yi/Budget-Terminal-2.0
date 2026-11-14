@@ -14,6 +14,8 @@ import { useWarmPages } from '@/api/prefetch'
 import { useEquityMarketStream } from '@/api/equityStream'
 import { useMcpScreenshot, useScreenshotReady } from '@/api/mcpScreenshot'
 import { useSettings, useSettingsMutation } from '@/api/settingsQueries'
+import { useCloudSyncStatus } from '@/api/cloudSyncQueries'
+import { AuthPopup } from '@/components/auth/AuthPopup'
 import { PageCache } from '@/components/chrome/PageCache'
 import { NumberPrivacy } from '@/components/ui/NumberPrivacy'
 import { StatusBar, type PanelStatus } from '@/components/chrome/StatusBar'
@@ -84,6 +86,7 @@ import { useStocksPage } from '@/stores/stocks'
 import { useValuationPage } from '@/stores/valuation'
 import { useSettingsNavigation } from '@/stores/settingsNavigation'
 import { useNavigation } from '@/stores/navigation'
+import { useAuthPrompt } from '@/stores/authPrompt'
 
 const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
 
@@ -104,6 +107,14 @@ export function App() {
   const { command: screenshot, complete: completeScreenshot } = useMcpScreenshot()
   const screenshotPage = screenshot?.page ?? null
   const activeTab = screenshotPage ?? selectedTab
+  const auth = useCloudSyncStatus()
+  const [authDismissed, setAuthDismissed] = useState(false)
+  const hideAuthPrompt = useAuthPrompt((state) => state.hidden)
+  const authStatus = auth.data?.data
+  const authOpen = !screenshotPage && !hideAuthPrompt && !authDismissed && auth.isFetchedAfterMount && !authStatus?.signedIn
+  useEffect(() => {
+    if (authStatus?.signedIn) setAuthDismissed(false)
+  }, [authStatus?.signedIn])
   const recent = useNavigation((state) => state.recent)
   const visit = useNavigation((state) => state.visit)
   useEffect(() => visit(selectedTab), [selectedTab, visit])
@@ -286,7 +297,7 @@ export function App() {
   )
 
   useControllerNavigation({
-    enabled: !screenshotPage,
+    enabled: !screenshotPage && !authOpen,
     stepPage: stepTab,
     togglePicker: () => setPickerOpen(open => !open),
   })
@@ -304,7 +315,7 @@ export function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return
+      if (event.defaultPrevented || authOpen) return
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault()
         setPickerOpen((open) => !open)
@@ -364,7 +375,7 @@ export function App() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [isMac, pickerOpen, reload, stepTab, toggleObscure, workspaceTabs])
+  }, [isMac, pickerOpen, reload, stepTab, toggleObscure, workspaceTabs, authOpen])
 
   const visibleIds = useMemo(() => visibleTabs.map((tab) => tab.id), [visibleTabs])
   const renderCachedPage = useCallback((tabId: string) => renderPage({
@@ -462,6 +473,10 @@ export function App() {
           onClose={() => setPickerOpen(false)}
         />
       ) : null}
+      {authOpen && <AuthPopup status={authStatus}
+        statusError={auth.error ? 'Could not check your account. Please try again.' : auth.data?.meta.failureReason}
+        onRetry={() => { void auth.refetch() }} onContinue={() => setAuthDismissed(true)}
+        onDontShowAgain={() => useAuthPrompt.getState().setHidden(true)} />}
     </div>
   )
 }

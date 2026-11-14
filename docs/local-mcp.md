@@ -9,6 +9,10 @@ MCP writes still save through local stores; optional sync observes those saved-d
 changes. No tools or permissions are added for authentication. See
 [Convex setup and account reconnection](convex-sync.md).
 
+The desktop account popup restores saved sign-in before opening. Its **Don’t show
+again** preference stays on the device and can be reset in Settings. This changes
+no MCP tools, authentication access or permission checks.
+
 Budget Terminal exposes MCP tools for service operations, page screenshots,
 and connection status. Research tools use the same caches and provider rate gate as the app.
 When Finnhub is configured, saved portfolio stock tickers take priority for REST

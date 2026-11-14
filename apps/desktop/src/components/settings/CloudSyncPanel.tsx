@@ -1,18 +1,20 @@
 import { useEffect, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
-import type { Envelope } from '@shared/contract'
-import type { CloudSyncCommand, CloudSyncStatus } from '@shared/cloudSync'
+import type { CloudSyncCommand } from '@shared/cloudSync'
+import { useCloudSyncCommand, useCloudSyncStatus } from '@/api/cloudSyncQueries'
 import { Button } from '@/components/ui/Button'
 import { Panel } from '@/components/ui/Panel'
+import { useAuthPrompt } from '@/stores/authPrompt'
 
 export function CloudSyncPanel() {
-  const client = useQueryClient()
-  const prepared = client.getQueryData<Envelope<CloudSyncStatus>>(['cloudSyncStatus'])
-  const [status, setStatus] = useState<CloudSyncStatus | null>(() => prepared?.data ?? null)
-  const [url, setUrl] = useState(() => prepared?.data.url ?? '')
+  const query = useCloudSyncStatus()
+  const runCommand = useCloudSyncCommand()
+  const status = query.data?.data
+  const [url, setUrl] = useState(() => status?.url ?? '')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(() => prepared?.meta.failureReason ?? '')
+  const [error, setError] = useState('')
+  const failure = error || query.data?.meta.failureReason || (query.error ? 'Sync settings are unavailable. Local saves continue as usual.' : '')
   const [choice, setChoice] = useState<'local' | 'cloud' | null>(null)
+  const hideAuthPrompt = useAuthPrompt((state) => state.hidden)
 
   useEffect(() => {
     if (status?.signedIn) { setUrl(''); setError('') }
@@ -22,30 +24,11 @@ export function CloudSyncPanel() {
     if (!status?.signedIn && status?.url) setUrl(current => current || status.url)
   }, [status?.signedIn, status?.url])
 
-  useEffect(() => {
-    let mounted = true
-    const load = async () => {
-      try {
-        const result = await window.api.cloudSyncStatus()
-        if (mounted) {
-          client.setQueryData(['cloudSyncStatus'], result)
-          setStatus(result.data)
-          if (result.meta.failureReason) setError(result.meta.failureReason)
-        }
-      } catch { if (mounted) setError('Sync settings are unavailable. Local saves continue as usual.') }
-    }
-    if (!client.getQueryData(['cloudSyncStatus'])) void load()
-    const timer = setInterval(() => void load(), 2000)
-    return () => { mounted = false; clearInterval(timer) }
-  }, [client])
-
   const run = async (command: CloudSyncCommand) => {
     setBusy(true)
     setError('')
     try {
-      const result = await window.api.cloudSyncCommand(command)
-      client.setQueryData(['cloudSyncStatus'], result)
-      setStatus(result.data)
+      const result = await runCommand(command)
       if (result.meta.failureReason) setError(result.meta.failureReason)
       else {
         setChoice(null)
@@ -95,7 +78,12 @@ export function CloudSyncPanel() {
         <p className="text-2xs text-text-dim">Deploy this repository’s Convex backend first; setup instructions are in docs/convex-sync.md. No deployment key is needed in the app.</p>
       </form>}
       <p className="text-2xs text-text-dim">Browser sessions, provider API keys, agents and market caches stay on this device. Disconnect keeps your local data and your cloud copy.</p>
-      {error || status?.state === 'error' ? <p role="alert" className="text-2xs text-down">{error || status?.message}</p> : null}
+      <p className="text-2xs text-text-muted">You stay signed in on this device until you disconnect or your session expires.</p>
+      <label className="flex items-center gap-2 text-2xs text-text-muted">
+        <input type="checkbox" checked={!hideAuthPrompt} onChange={event => useAuthPrompt.getState().setHidden(!event.target.checked)} />
+        Show sign-in popup at startup
+      </label>
+      {failure || status?.state === 'error' ? <p role="alert" className="text-2xs text-down">{failure || status?.message}</p> : null}
     </div>
   </Panel>
 }

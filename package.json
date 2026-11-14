@@ -20,6 +20,7 @@
     "probe:controller": "npm run --workspace budget-terminal-desktop probe:controller",
     "setup:linux": "node scripts/install-linux-launcher.cjs",
     "probe:cloud-oauth": "npm run --workspace budget-terminal-desktop probe:cloud-oauth",
+    "probe:auth-ui": "npm run --workspace budget-terminal-desktop probe:auth-ui",
     "probe:cloud-sync": "npm run --workspace budget-terminal-desktop probe:cloud-sync",
     "probe:public-providers": "npm run --workspace budget-terminal-desktop probe:public-providers --",
     "setup": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/launch-windows.ps1 -Setup",

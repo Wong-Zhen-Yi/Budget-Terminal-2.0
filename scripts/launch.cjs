@@ -1,4 +1,5 @@
 const { spawnSync } = require('node:child_process')
+// Auth restores saved sign-in before opening and remembers the device's Don't show again preference.
 // GitHub sign-in requires the exact v2 callback registered in its OAuth App; see docs/convex-sync.md.
 // Convex Auth v2 runs in the main process; launch always builds current desktop and MCP sources.
 // Windows terminal command: btd restart saves, rebuilds and reopens the app.

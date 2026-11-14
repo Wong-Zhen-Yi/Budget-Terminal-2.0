@@ -65,6 +65,8 @@ The Convex developer CLI login is separate from Budget Terminal user sign-in. Ot
 
 ## Desktop authentication and privacy
 
+Signed-out users see an account popup on the front screen at launch. **Sign in** and **Sign up** both use the existing GitHub flow; the first successful sign-in creates the account. Sign-in persists by default: encrypted credentials are restored before the first renderer account check, so a signed-in user skips the popup. Browser approval closes it automatically. **Continue locally**, the close button or Escape dismisses it for this app session. **Don’t show again** saves a device-only preference across restarts; **Settings → Cloud sync → Show sign-in popup at startup** restores it. Sign-in remains available in Settings even with the popup disabled. Without a saved deployment URL, the popup asks for the URL of the user's cloud setup. All implemented pages continue preloading behind the popup. Account status is checked live and excluded from the persisted renderer market cache.
+
 Authentication runs in Electron's main process behind `window.api`. OAuth state, one-time codes, access tokens and refresh tokens never enter the renderer, local MCP tools or browser response text. Sessions are encrypted with Electron safeStorage in `sync-session.bin`; a working OS keyring is required and plaintext storage is refused.
 
 V2 requires an explicit redirect-origin allowlist. The desktop binds only `127.0.0.1`, trying ports 43871 through 43875, and uses a fresh random 256-bit callback path for each attempt. Only those five loopback origins are allowed by the backend. If all ports are occupied, sign-in fails safely. The listener validates the Host, path, method, parameter names and duplicate parameters, and closes after success, cancellation or five minutes. Provider cancellation and expiry return to Settings immediately.
@@ -86,6 +88,7 @@ Downloads validate all stores, save a recovery backup, check for intervening loc
 ```sh
 npm run typecheck
 npm run probe:cloud-oauth
+npm run probe:auth-ui
 npm run probe:cloud-sync
 npm run probe:convex-auth-live
 npm run probe:settings-ui --workspace budget-terminal-desktop

@@ -96,6 +96,11 @@ try {
       check(!document.querySelector('[role=dialog]') && window.maintenanceCalls.length === 0, 'Cancel performed an action')
       const sync = card('cloud-sync')
       check(visible(sync) && sync.textContent.includes('works normally without a cloud connection'), 'Local-first sync controls missing')
+      const showAuth = [...sync.querySelectorAll('label')].find(label => label.textContent.includes('Show sign-in popup at startup')).querySelector('input')
+      check(showAuth.checked, 'Sign-in popup must be enabled by default')
+      showAuth.click(); await wait(40)
+      check(!showAuth.checked && JSON.parse(localStorage.getItem('budget-terminal:auth-prompt')).state.hidden, 'Popup preference must persist')
+      showAuth.click(); await wait(40)
       const setInput = async (label, value) => {
         const input = sync.querySelector('[aria-label="' + label + '"]')
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value)
@@ -107,13 +112,13 @@ try {
       check(sync.textContent.includes('AUTH_GITHUB_ID') && !sync.textContent.includes('Cancel sign-in'), 'Missing GitHub credentials must show setup guidance before opening a browser')
       window.githubNotConfigured = false
       clickText(sync, 'Sign in with GitHub'); await wait(80)
-      check(sync.textContent.includes('Complete GitHub sign-in') && !sync.querySelector('input'), 'Browser approval status missing')
+      check(sync.textContent.includes('Complete GitHub sign-in') && !sync.querySelector('input[type=url]'), 'Browser approval status missing')
       clickText(sync, 'Cancel sign-in'); await wait(80)
       check(sync.querySelector('[aria-label="Convex deployment URL"]'), 'Cancelled sign-in must restore the form')
       clickText(sync, 'Sign in with GitHub'); await wait(80)
       window.fixtureSync = { ...window.fixtureSync, state: 'synced', signedIn: true, signInPending: false, cloudUpdatedAt: Date.now(), localUpdatedAt: Date.now(), revision: 3 }
       await wait(2100)
-      check(!sync.querySelector('input'), 'Browser sign-in must update Settings without reloading')
+      check(!sync.querySelector('input[type=url]'), 'Browser sign-in must update Settings without reloading')
       check(sync.textContent.includes('Cloud data updated') && sync.textContent.includes('Revision 3') && sync.textContent.includes('Local data updated'), 'Data timestamps and server revision must be visible in Settings')
       clickText(sync, 'Sync now'); await wait(80)
       check(sync.textContent.includes('Choose a copy'), 'Sync conflict hidden')

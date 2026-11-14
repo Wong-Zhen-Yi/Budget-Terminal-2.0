@@ -61,6 +61,7 @@ try {
     import { applyEquityMarketUpdate } from './src/api/equityStream'
     import { backtestQuotesKey } from './src/api/backtestQueries'
     import { useDataHealth } from './src/stores/dataHealth'
+    import { useAuthPrompt } from './src/stores/authPrompt'
     import { useStocksPage } from './src/stores/stocks'
     import { useFundamentalsStore } from './src/stores/fundamentals'
     import { useCalendarPage } from './src/stores/calendar'
@@ -117,8 +118,18 @@ try {
     const ok = data => ({ data, errors: [], meta: { freshness: 'fresh', source: 'Synthetic readiness fixture', fetchedAt: Date.now() } })
     const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg=='
     let populated = false, calls = [], fixtureSettings = settings, restoredCurrency = false
+    let fixtureAuth = { url: '', signedIn: false, encryptionAvailable: true, state: 'disconnected', pending: false }, authUnavailable = false, authRejected = false
     const fixture = (method, request = {}) => {
       request ??= {} // Native player teardown accepts null instead of a request object.
+      if (method === 'cloudSyncStatus') {
+        if (authUnavailable) throw Error('Synthetic account status outage')
+        return ok(fixtureAuth)
+      }
+      if (method === 'cloudSyncCommand') {
+        if (authRejected) return { ...ok(fixtureAuth), meta: { freshness: 'failed', failureReason: 'Synthetic sign-in failure. Try again.' } }
+        fixtureAuth = { ...fixtureAuth, url: request.url ?? fixtureAuth.url, signInPending: request.type === 'signInGitHub', message: request.type === 'signInGitHub' ? 'Complete GitHub sign-in in your browser.' : undefined }
+        return ok(fixtureAuth)
+      }
       if (method === 'cacheStatus') {
         const part = { bytes: 0, entries: 0, expiredEntries: 0, evictions: 0 }
         return ok({ settings: DEFAULT_CACHE_SETTINGS, service: { market: part, assets: part,
@@ -195,14 +206,15 @@ try {
       if (method === 'forexHistory' || method === 'forexNews') data.pair = request.pair
       return result
     }
-    window.fixtureHandler = (method, request) => { calls.push({ method, request }); return Promise.resolve(fixture(method, request)) }
+    window.fixtureHandler = async (method, request) => { calls.push({ method, request }); return fixture(method, request) }
     window.runReadinessProbe = async () => {
       const element = document.getElementById('root')
       const reloadOnly = ${JSON.stringify(process.argv.includes('--reload'))}
       const agentsOnly = ${JSON.stringify(process.argv.includes('--agents'))}
       const refreshOnly = ${JSON.stringify(process.argv.includes('--refresh'))}
       const startupOnly = ${JSON.stringify(process.argv.includes('--startup-only'))}
-      for (const scenario of reloadOnly ? ['populated'] : refreshOnly ? ['persisted'] : agentsOnly ? ['empty'] : ['empty', 'populated', 'persisted']) {
+      const authOnly = ${JSON.stringify(process.argv.includes('--auth-only'))}
+      for (const scenario of authOnly ? ['empty'] : reloadOnly ? ['populated'] : refreshOnly ? ['persisted'] : agentsOnly ? ['empty'] : ['empty', 'populated', 'persisted']) {
         console.log('Completed-startup scenario: ' + scenario)
         populated = scenario !== 'empty'
         const restored = scenario === 'persisted'
@@ -230,6 +242,89 @@ try {
         const startup = useDataHealth.getState().startup
         check(startup && startup.timings.length === startup.planned, 'Startup failed to complete: ' + scenario)
         check(Object.keys(startup.pages).length === TABS.filter(tab => tab.implemented).length, 'Startup omitted a page state')
+        if (authOnly) {
+          const popup = () => document.querySelector('dialog.auth-popup[open]')
+          const click = text => { const button = [...popup().querySelectorAll('button')].find(button => button.textContent.trim() === text); check(button && !button.disabled, 'Missing enabled auth button: ' + text); button.click() }
+          const refreshAuth = async () => { await client.refetchQueries({ queryKey: ['cloudSyncStatus'] }); await wait() }
+          check(popup() && popup().contains(document.activeElement), 'Signed-out startup must open and focus the popup')
+          check(popup().textContent.includes('You’ll stay signed in on this device'), 'Persistent sign-in must be the default')
+          check(!document.querySelector('input[type=password]'), 'GitHub auth must not collect passwords')
+          check(popup().querySelector('button[type=submit]').disabled, 'Missing deployment must disable sign-in')
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true })); await wait()
+          check(!document.querySelector('[aria-label="Page search"]'), 'Workspace shortcuts escaped the auth popup')
+          click('Sign up'); await wait()
+          check(popup().textContent.includes('Create your account'), 'Sign-up mode missing')
+          for (const [width, height] of [[1400, 950], [1366, 768], [1024, 768], [480, 700]]) {
+            await window.resizeFixture(width, height); await paint()
+            const element = popup(), bounds = element.getBoundingClientRect()
+            check(bounds.left >= 0 && bounds.top >= 0 && bounds.right <= innerWidth && bounds.bottom <= innerHeight, 'Auth popup leaves the viewport at ' + width + 'x' + height)
+            check(element.scrollWidth <= element.clientWidth && element.scrollHeight <= element.clientHeight + 1, 'Auth popup must fit without scrollbars at ' + width + 'x' + height)
+          }
+          await window.resizeFixture(1400, 950); await paint()
+          await window.captureFixture('auth-sign-up')
+          const input = popup().querySelector('input')
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'https://fixture.convex.cloud')
+          input.dispatchEvent(new Event('input', { bubbles: true })); await wait()
+          authRejected = true; click('Continue with GitHub'); await wait()
+          check(popup().textContent.includes('Synthetic sign-in failure'), 'Failed sign-in must offer recovery')
+          authRejected = false; click('Continue with GitHub'); await wait()
+          check(popup().textContent.includes('Complete GitHub sign-in') && !popup().querySelector('input'), 'Browser approval state missing')
+          check(calls.some(call => call.method === 'cloudSyncCommand' && call.request.type === 'signInGitHub' && call.request.url === 'https://fixture.convex.cloud'), 'Sign-up did not use the main-process auth command')
+          click('Cancel sign-in'); await wait(); click('Sign in'); await wait()
+          click('Continue with GitHub'); await wait()
+          fixtureAuth = { ...fixtureAuth, signedIn: true, signInPending: false, state: 'synced' }
+          await new Promise(resolve => setTimeout(resolve, 2200))
+          check(!popup(), 'Successful browser approval must close the popup automatically')
+          fixtureAuth = { ...fixtureAuth, signedIn: false, state: 'disconnected' }; await refreshAuth()
+          check(popup(), 'Signing out must reveal account access')
+          await paint()
+          await window.captureFixture('auth-front-screen')
+          click('Continue locally'); await wait(); await refreshAuth()
+          check(!popup(), 'Continue locally must stay dismissed during this session')
+          memory.stop(); rendered.unmount(); client.clear(); useDataHealth.setState({ startup: null }); await wait()
+          const mountAuth = async () => {
+            const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } })
+            const nextRoot = createRoot(element)
+            nextRoot.render(<QueryClientProvider client={nextClient}><App /></QueryClientProvider>)
+            await wait(); await wait()
+            return () => { nextRoot.unmount(); nextClient.clear(); useDataHealth.setState({ startup: null }) }
+          }
+          fixtureAuth = { ...fixtureAuth, signedIn: true, state: 'synced' }
+          let unmount = await mountAuth()
+          check(!popup(), 'Returning signed-in user must skip the popup'); unmount(); await wait()
+          fixtureAuth = { ...fixtureAuth, signedIn: false, state: 'disconnected', encryptionAvailable: false }
+          unmount = await mountAuth()
+          check(popup().querySelector('button[type=submit]').disabled && popup().textContent.includes('credential keyring'), 'Missing encryption must explain disabled sign-in')
+          popup().dispatchEvent(new Event('cancel', { cancelable: true })); await wait()
+          check(!popup(), 'Escape must permit local use'); unmount(); await wait()
+          authUnavailable = true
+          unmount = await mountAuth()
+          check(popup()?.textContent.includes('Account status is unavailable'), 'Unavailable status must offer retry and local use')
+          authUnavailable = false; fixtureAuth = { ...fixtureAuth, encryptionAvailable: true }
+          click('Try again'); await wait(); await wait()
+          check(popup().querySelector('button[type=submit]') && !popup().querySelector('button[type=submit]').disabled, 'Retry did not recover account access')
+          click('Don’t show again'); await wait()
+          check(!popup(), 'Don’t show again must dismiss the popup')
+          const savedPreference = localStorage.getItem('budget-terminal:auth-prompt')
+          check(JSON.parse(savedPreference).state.hidden === true && Object.keys(JSON.parse(savedPreference).state).join() === 'hidden', 'Only the device dismissal preference may be persisted')
+          unmount(); await wait()
+          useAuthPrompt.setState({ hidden: false })
+          localStorage.setItem('budget-terminal:auth-prompt', savedPreference)
+          await useAuthPrompt.persist.rehydrate()
+          unmount = await mountAuth()
+          check(!popup(), 'Don’t show again must survive a fresh app mount and storage rehydration')
+          await selectPage(TABS.find(tab => tab.id === 'settings'))
+          const preference = [...visiblePage('settings').querySelectorAll('label')].find(label => label.textContent.includes('Show sign-in popup at startup')).querySelector('input')
+          check(!preference.checked, 'Settings must reflect the saved popup preference')
+          preference.click(); await wait()
+          check(popup() && !useAuthPrompt.getState().hidden, 'Settings must be able to restore the auth popup')
+          unmount()
+          return 'PASS: polished responsive auth, default persistent sign-in, signed-in session suppression, permanent dismissal and Settings recovery, browser approval/cancellation, error recovery and all-page preloading'
+        }
+        if (document.querySelector('dialog.auth-popup[open]')) {
+          ;[...document.querySelector('dialog.auth-popup').querySelectorAll('button')].find(button => button.textContent === 'Continue locally').click()
+          await wait()
+        }
         if (scenario === 'empty') {
           for (const id of ['fundamentals', 'options']) {
             check(startup.pages[id].state === 'ready', id + ' selection screen must be prepared at startup')
@@ -485,11 +580,12 @@ try {
     window.fixtureTemplates = ${JSON.stringify(templates)};
     window.api = new Proxy({platform:'win32', onLiveStatusChanged:undefined}, {get: (target, key) => key in target ? target[key] : String(key).startsWith('on') ? () => () => {} : request => window.fixtureHandler(key, request)});
     </script><script src="renderer.js"></script></body></html>`)
-  await writeFile(join(directory, 'preload.cjs'), `const {contextBridge,ipcRenderer}=require('electron');contextBridge.exposeInMainWorld('captureFixture',name=>ipcRenderer.invoke('capture-fixture',name));contextBridge.exposeInMainWorld('reportFixture',data=>ipcRenderer.invoke('report-fixture',data));`)
+  await writeFile(join(directory, 'preload.cjs'), `const {contextBridge,ipcRenderer}=require('electron');contextBridge.exposeInMainWorld('captureFixture',name=>ipcRenderer.invoke('capture-fixture',name));contextBridge.exposeInMainWorld('resizeFixture',(width,height)=>ipcRenderer.invoke('resize-fixture',width,height));contextBridge.exposeInMainWorld('reportFixture',data=>ipcRenderer.invoke('report-fixture',data));`)
   await writeFile(join(directory, 'main.cjs'), `const {app,BrowserWindow,ipcMain}=require('electron');const fs=require('fs');const path=require('path');
     app.setPath('userData',${JSON.stringify(join(directory, 'userData'))});
     app.whenReady().then(async()=>{const window=new BrowserWindow({show:false,width:1400,height:950,webPreferences:{backgroundThrottling:false,preload:${JSON.stringify(join(directory, 'preload.cjs'))}}});
       ipcMain.handle('capture-fixture',async(_event,name)=>{if(!/^[a-z-]+$/.test(name))throw Error('Invalid capture name');fs.writeFileSync(path.join(${JSON.stringify(screenshots)},name+'.png'),(await window.webContents.capturePage(undefined,{stayHidden:true,stayAwake:true})).toPNG());});
+      ipcMain.handle('resize-fixture',(_event,width,height)=>window.setContentSize(width,height));
       ipcMain.handle('report-fixture',async(_event,data)=>fs.writeFileSync(path.join(${JSON.stringify(screenshots)},'readiness-interactions.json'),JSON.stringify(data,null,2)));
       window.webContents.on('console-message',event=>console.log(event.message));
       try{await window.loadFile(${JSON.stringify(join(directory, 'index.html'))}); console.log(await window.webContents.executeJavaScript('window.runReadinessProbe()'));app.exit(0)}catch(error){console.error(error);app.exit(1)}});`)
