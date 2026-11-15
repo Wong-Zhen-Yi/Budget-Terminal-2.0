@@ -1,5 +1,6 @@
 @echo off
-rem HOOD Focus investor-deck visuals, reviewed data and MCP schemas rebuild through the shared launcher.
+rem Anthropic funding, customer depth, compute ratios and capital visualisations rebuild through the shared launcher.
+rem HOOD Focus quarterly earnings charts, headline metrics and MCP schemas rebuild through the shared launcher.
 rem Anthropic Focus research, source update checks and MCP tools rebuild through the shared launcher.
 rem GOOGL Focus, quarterly SEC drivers and MCP schemas rebuild through the shared launch path.
 rem News reader and scoped clipboard exports rebuild through the shared launcher.

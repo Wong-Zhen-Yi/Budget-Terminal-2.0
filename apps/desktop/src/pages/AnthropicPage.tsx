@@ -1,32 +1,20 @@
 import { useEffect, useState } from 'react'
 import { anthropicResearch } from '@shared/anthropic'
-import type { AnthropicFact, AnthropicPayload } from '@shared/anthropic'
+import type { AnthropicFact } from '@shared/anthropic'
 import { useAnthropic, useRefreshAnthropic } from '@/api/anthropicQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { Button } from '@/components/ui/Button'
+import { AdoptionChart, CapitalChart, ComputeChart, FundingCharts, ProductMap, RevenueChart } from '@/components/anthropic/AnthropicVisuals'
 import '@/styles/anthropic.css'
 
 const date = (value: number | null) => value === null ? 'No successful check' : new Date(value).toLocaleString()
-
-function DemandChart({ data }: { data: AnthropicPayload }) {
-  return <section className="ant-demand" aria-label="Quarterly revenue and compute costs">
-    <div className="ant-chart-title"><div><span className="ant-eyebrow">The scaling question</span><h2>Revenue is outrunning compute spend</h2></div><span>USD billions · rounded</span></div>
-    <div className="ant-chart-legend"><span>● Revenue</span><span>● Compute & infrastructure costs</span></div>
-    <div className="ant-bars" role="img" aria-label={data.quarters.map(row => `${row.period}: revenue ${row.revenue} billion, compute ${row.compute} billion`).join('; ')}>
-      {data.quarters.map(row => <div className="ant-quarter" key={row.period}>
-        <div className="ant-bar-pair"><div style={{ height: `${row.revenue / 18 * 100}%` }}><span>{row.revenue.toFixed(1)}</span></div><div style={{ height: `${row.compute / 18 * 100}%` }}><span>{row.compute.toFixed(1)}</span></div></div>
-        <span>{row.period}</span>
-      </div>)}
-    </div>
-    <p>Quarterly flows, not run rates. Compute excludes other expenses; the gap is not gross profit. Source: November IPO fact sheet.</p>
-  </section>
-}
 
 export function AnthropicPage({ onStatusChange }: { onStatusChange: (panels: PanelStatus[], sourcePath: string) => void }) {
   const query = useAnthropic()
   const refresh = useRefreshAnthropic()
   const data = query.data?.data ?? anthropicResearch()
   const [section, setSection] = useState('business')
+  const [selectedQuarter, setSelectedQuarter] = useState(data.quarters.length - 1)
   const [evidence, setEvidence] = useState('factsheet')
   const [selectedFact, setSelectedFact] = useState<AnthropicFact | null>(null)
   const [checking, setChecking] = useState(false)
@@ -49,6 +37,11 @@ export function AnthropicPage({ onStatusChange }: { onStatusChange: (panels: Pan
     } catch { setMessage('Update check could not complete. Saved research remains available; see Settings for details.') }
     finally { setChecking(false) }
   }
+  const inspect = (source: string, title: string, detail: string) => {
+    setEvidence(source)
+    setSelectedFact({ source, title, detail, value: '' })
+    setLinkError('')
+  }
   const fact = (item: AnthropicFact) => <button key={item.title} className={`ant-fact ${evidence === item.source ? 'ant-evidence-selected' : ''}`}
     onClick={() => { setEvidence(item.source); setSelectedFact(item); setLinkError('') }} aria-label={`Inspect source for ${item.title}`}>
     <span className="ant-eyebrow">{item.title}</span><strong>{item.value}</strong><p>{item.detail}</p><span className="ant-fact-link">Inspect evidence ↗</span>
@@ -69,11 +62,10 @@ export function AnthropicPage({ onStatusChange }: { onStatusChange: (panels: Pan
         <div className="ant-review-note"><span className="ant-eyebrow">Living dossier</span><p>Next research review<br /><strong>{data.nextReviewAt}</strong></p><p>Official sources checked every 6 hours while the app is open.</p></div>
       </nav>
       <main className="ant-research">
-        <div className="ant-section-heading"><span className="ant-eyebrow">{topic?.title ?? 'Evidence watch'}</span><h2>{topic?.question ?? 'What changed since the last review?'}</h2></div>
+        <div className="ant-section-heading"><span className="ant-eyebrow">{topic?.title ?? 'Evidence watch'}</span><h2>{topic?.question ?? 'What changed since the last review?'}</h2>{section === 'business' && <button className="ant-chart-source" onClick={() => inspect('company', 'Leadership & governance', 'Dario Amodei is CEO and Daniela Amodei is President. Anthropic is a public benefit corporation with a Long-Term Benefit Trust.')}>Open company evidence</button>}</div>
         {section === 'business' ? <div className="ant-business">
-          <DemandChart data={data} />
-          <div className="ant-adoption">{[topic!.facts[2], topic!.facts[3], topic!.facts[4]].map(fact)}</div>
-          <div className="ant-company-brief"><strong>Research-led AI company</strong><p>Dario Amodei, CEO · Daniela Amodei, President. Claude reaches customers through direct products, developer usage and cloud partners. Public benefit corporation with a Long-Term Benefit Trust.</p><button onClick={() => setEvidence('company')}>Company & governance ↗</button></div>
+          <RevenueChart data={data} selected={selectedQuarter} onSelect={setSelectedQuarter} onEvidence={inspect} />
+          <div className="ant-business-depth"><AdoptionChart data={data} onEvidence={inspect} />{fact(topic!.facts[4])}</div>
         </div> : section === 'updates' ? <div className="ant-updates">
           <div className="ant-update-controls"><div><strong>{data.reviewReasons.length ? 'Research review needed' : 'Research review schedule'}</strong><p>Facts reviewed {data.reviewedAt}; next review {data.nextReviewAt}. A source check does not revalidate financial figures.</p></div><Button onClick={() => void check()} disabled={checking}>{checking ? 'Checking sources…' : 'Check for updates'}</Button></div>
           {message && <p role="status" className="ant-inline-message">{message}</p>}
@@ -81,10 +73,13 @@ export function AnthropicPage({ onStatusChange }: { onStatusChange: (panels: Pan
           <div className="ant-checks">{data.checks.length ? data.checks.map(check => <div key={check.id}><strong>{check.id}</strong><span>{check.error ? 'Check unavailable' : check.changed ? 'Content changed' : 'Checked'}</span><small>{date(check.checkedAt)}</small>{check.error && <p>{check.error}</p>}</div>) : <p>{query.isPending ? 'Checking public sources…' : 'Source checks are unavailable. Reviewed research remains available.'}</p>}</div>
           <div className="ant-feeds"><section><h3>Official announcements <span>{data.announcements.length}</span></h3><div className="ant-feed-scroll">{data.announcements.map(row => <button key={row.url} onClick={() => void open(row.url)}><time>{row.date}</time><span>{row.title}</span><span>↗</span></button>)}{!data.announcements.length && <p>No live announcements available.</p>}</div></section>
             <section><h3>SEC filing watch <span>{data.filings.length}</span></h3><div className="ant-feed-scroll">{data.filings.map(row => <button key={row.accessionNumber} onClick={() => void open(row.documentUrl)}><time>{row.filedDate}</time><span>{row.form}<small>{row.description || row.accessionNumber}</small></span><span>↗</span></button>)}{!data.filings.length && <p>No live filings available. Use the reviewed S-1 source.</p>}</div></section></div>
-        </div> : <>
-          {section === 'capital' && <div className="ant-funding-history" aria-label="Private funding history">{data.fundingRounds.map(row => <button key={row.round} onClick={() => { setEvidence(row.source); setSelectedFact(null) }} aria-label={`Inspect ${row.round} funding source`}><small>{row.date}</small><span>{row.round}</span><strong>${row.valuation}B</strong><small>Post-money · ${row.raised}B raised</small></button>)}</div>}
-          <div className="ant-topic-facts">{topic?.facts.map(fact)}</div>
-        </>}
+        </div> : <div className={`ant-visual-topic ant-visual-topic-${section}`}>
+          {section === 'capital' && <><FundingCharts data={data} onEvidence={inspect} /><div className="ant-capital-bottom"><CapitalChart data={data} onEvidence={inspect} /><div className="ant-source-chips">{topic?.facts.map(fact)}</div></div></>}
+          {section === 'economics' && <><ComputeChart data={data} selected={selectedQuarter} onSelect={setSelectedQuarter} onEvidence={inspect} /><div className="ant-source-chips">{topic?.facts.map(fact)}</div></>}
+          {section === 'products' && <><ProductMap onEvidence={inspect} /><div className="ant-source-chips">{topic?.facts.map(fact)}</div></>}
+          {section === 'risks' && <><CapitalChart data={data} onEvidence={inspect} commitments /><div className="ant-source-chips">{topic?.facts.map(fact)}</div></>}
+        </div>}
+
       </main>
       <aside className="ant-evidence" aria-label="Research evidence">
         <span className="ant-eyebrow">Evidence desk</span><h2>Follow the disclosure</h2>

@@ -4,6 +4,12 @@ This private-company page is a reviewed research dossier with a live evidence wa
 
 The page has its own question index, demand-versus-compute chart, funding history, topic evidence cards, source-selection desk and update watch. All reviewed figures link to first-party disclosures. Quarter values are rounded USD billions from the November fact sheet. Compute is an expense subset; revenue less compute is not gross profit. Interim results are unaudited and adjusted margin is non-GAAP.
 
+## Visual research views
+
+Business pairs a selectable revenue/compute chart with customer-threshold bars and reported NRR. Customer counts are lower bounds for nested groups, not additive categories or exact customer shares. Capital shows financing valuations on an elapsed-time axis, separate fundraising bars and a liquid-resource breakdown. Economics switches between compute per revenue dollar and its reciprocal; both derive from rounded quarterly flows and exclude other expenses. The $1 reference is not operating break-even. Risks partitions compute obligations into non-overlapping horizons, subtracting the next-12-month amount from the through-2030 subtotal. Products maps direct work surfaces and developer/cloud access without inventing revenue mix.
+
+All marks, figures and diagrams retain source access through the evidence desk. The structured `operatingMetrics` and `capitalSnapshot` fields carry source IDs and as-of dates for chart maintenance and MCP use. Cash, available credit and multi-year obligations remain distinct. The renderer query revision is incremented so older saved payloads reload before displaying the new visuals. Ratios and horizon partitions live in the React/Electron-free `electron/shared/anthropicCharts.ts`.
+
 ## Automatic checks
 
 Every implemented page still starts loading on application startup. Anthropic uses a six-hour query/service TTL and shares the normal background preparation, F5 reload, persisted query snapshot and Settings diagnostics paths. Updates & sources provides a forced check. No key, paid feed, account or private data is needed.

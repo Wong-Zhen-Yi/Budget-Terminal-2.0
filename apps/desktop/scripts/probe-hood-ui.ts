@@ -74,22 +74,24 @@ try {
         check(text().includes('Loading Robinhood'), 'Missing initial loading state')
         window.ready = true
         await settle()
-        check(text().includes('28.6M') && text().includes('$383.7B') && text().includes('$5.08B'), 'Live and reviewed metrics missing')
-        check(document.querySelectorAll('.hood-column').length === 6, 'Presentation chart missing')
+        check(text().includes('28.6M') && text().includes('$383.7B') && text().includes('$1.42B') && text().includes('$808M') && text().includes('$15.7B'), 'Live and quarterly reviewed metrics missing')
+        check(document.querySelectorAll('.hood-column').length === 5, 'Quarterly presentation chart missing')
+        check(!text().includes('LTM') && !text().includes('full years') && text().includes('annualized ARPU'), 'Annual/LTM presentation leaked into the quarterly page')
         const initialCalls = window.calls
         click('Assets & deposits'); await settle()
         check(text().includes('Compounding the asset base'), 'Asset chart control failed')
         click('Profitability'); await settle()
-        document.querySelectorAll('.hood-column')[1].click(); await settle()
-        check(document.querySelector('.hood-chart-readout').textContent.includes('-$94M'), 'Negative EBITDA was lost')
-        click('Revenue mix'); document.querySelectorAll('.hood-column')[5].click(); await settle()
+        document.querySelectorAll('.hood-column')[2].click(); await settle()
+        check(document.querySelector('.hood-chart-readout').textContent.includes('$534M') && text().includes('$0.38'), 'Selected quarterly EBITDA and EPS do not match Q1 2026')
+        click('Revenue mix'); document.querySelectorAll('.hood-column')[4].click(); await settle()
+        click('Earnings slide 13'); check(window.opened.includes('fd90f575') && window.opened.endsWith('#page=13'), 'Quarterly chart source link failed')
         click('Next-generation wallet share'); await settle()
         check(text().includes('Family investing') && text().includes('Private markets'), 'Wallet priorities failed')
         click('Global financial ecosystem'); await settle()
         check(text().includes('Tokenization') && text().includes('New markets'), 'Global priorities failed')
         click('Active traders'); await settle()
         click('Definitions & source notes'); await settle()
-        check(text().includes('escheatment') && text().includes('non-GAAP'), 'Source definitions missing')
+        check(text().includes('ARPU is annualized') && text().includes('non-GAAP') && text().includes('2026-10-27'), 'Quarterly source definitions missing')
         click('Close'); await settle()
         click('Investor deck'); check(window.opened.includes('72febcf6'), 'Investor deck link failed')
         check(window.calls === initialCalls, 'Presentation interactions repeated provider loads')
@@ -150,6 +152,13 @@ try {
         check(priceBox.querySelector('canvas').getBoundingClientRect().width <= priceBox.getBoundingClientRect().width, 'Price chart width exceeds its panel: ' + JSON.stringify({ box: priceBox.getBoundingClientRect().toJSON(), svg: priceBox.querySelector('canvas').getBoundingClientRect().toJSON() }))
         check(![...document.querySelectorAll('svg path')].some(path => /NaN|Infinity/.test(path.getAttribute('d') || '')), 'Chart produced invalid paths')
         click('Business model'); await settle()
+        // Annual snapshots persisted by the previous build cannot restore annual charts.
+        const hoodQuery = client.getQueryCache().getAll()[0]
+        const current = client.getQueryData(hoodQuery.queryKey)
+        client.setQueryData(hoodQuery.queryKey, { ...current, data: { ...current.data, presentation: { ...current.data.presentation, history: [{ ...current.data.presentation.history[0], period: '2025', basis: 'FY' }] } } })
+        await settle()
+        check(document.querySelectorAll('.hood-column').length === 5 && text().includes('$1.42B'), 'Old annual cache restored yearly charts')
+        client.setQueryData(hoodQuery.queryKey, current); await settle()
         return 'PASS: presentation charts, priorities, definitions, layout, loading, warmed mount, metrics, ranges, sources, ticker shortcuts, refresh/F5, partial/offline/failed states and recovery'
       }
     ` }, bundle: true, jsx: 'automatic', write: false, format: 'iife',

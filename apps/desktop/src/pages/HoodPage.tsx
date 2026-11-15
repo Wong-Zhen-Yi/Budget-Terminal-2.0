@@ -37,7 +37,7 @@ function PresentationChart({ presentation, mode, selected, onSelect }: { present
   const row = presentation.history[selected]
   return <>
     <div className="hood-chart-legend">{series.map(item => <span key={item.key}><i style={{ background: item.color }} />{item.label}</span>)}<span className="hood-unit">USD {mode === 'assets' ? 'billions' : 'millions'}</span></div>
-    <div className="hood-column-chart" aria-label={`${mode} history. Select a period to inspect its values.`}>
+    <div className="hood-column-chart" style={{ gridTemplateColumns: `repeat(${presentation.history.length}, minmax(0, 1fr))` }} aria-label={`Quarterly ${mode} history. Select a quarter to inspect its values.`}>
       {presentation.history.map((point, index) => <button key={point.period} className={`hood-column ${mode === 'revenue' ? 'hood-stacked' : ''}`} aria-pressed={index === selected} aria-label={`${point.period}: ${series.map(item => `${item.label} ${amount(seriesValue(point, item.key), true)}`).join(', ')}`} onClick={() => onSelect(index)}>
         <span className="hood-bar-space">
           {mode === 'revenue' ? <span className="hood-stack" style={{ height: `${revenue(point) / ceiling * 100}%` }}><b>{amount(revenue(point), true)}</b>{[...series].reverse().map(item => <span key={item.key} style={{ height: `${seriesValue(point, item.key) / revenue(point) * 100}%`, background: item.color }} />)}</span>
@@ -52,7 +52,8 @@ function PresentationChart({ presentation, mode, selected, onSelect }: { present
 export function HoodPage({ onStatusChange, onNavigate }: { onStatusChange: (panels: PanelStatus[], sourcePath: string) => void; onNavigate: (tabId: string, symbol?: string) => void }) {
   const query = useHood()
   const data = query.data?.data
-  const presentation = data?.presentation ?? HOOD_PRESENTATION
+  // Persisted snapshots from the annual view must not restore yearly charts.
+  const presentation = data?.presentation?.history.at(-1)?.basis === 'quarter' ? data.presentation : HOOD_PRESENTATION
   const latest = presentation.history[presentation.history.length - 1]
   const [view, setView] = useState<'business' | 'market'>('business')
   const [mode, setMode] = useState<ChartMode>('revenue')
@@ -72,6 +73,8 @@ export function HoodPage({ onStatusChange, onNavigate }: { onStatusChange: (pane
   }, [data?.market?.chart.candles, range])
   useEffect(() => onStatusChange([{ label: 'HOOD', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching }], ''), [query.data, query.error, query.isFetching, query.isEnabled, onStatusChange])
   const source = (page: number) => open(`${presentation.sourceUrl}#page=${page}`)
+  const quarterlySource = (page: number) => open(`${presentation.quarterlySource.sourceUrl}#page=${page}`)
+  const chartSourcePage = presentation.quarterlySource.sourcePages[mode === 'revenue' ? 'revenue' : mode === 'assets' ? 'customers' : 'profitability']
   const activePriority = presentation.priorities.find(item => item.id === priority) ?? presentation.priorities[0]
   const monthlyIds = ['customers', 'assets', 'deposits', 'equities', 'options', 'crypto', 'events', 'margin']
   const selectedRow = presentation.history[Math.min(selected, presentation.history.length - 1)]
@@ -85,23 +88,23 @@ export function HoodPage({ onStatusChange, onNavigate }: { onStatusChange: (pane
     <section className="hood-engine" aria-label="Robinhood operating model, presentation snapshot">
       {[
         ['01 / CUSTOMER RELATIONSHIP', amount(presentation.fundedCustomers), 'Funded customers', `${amount(presentation.goldSubscribers)} Gold subscribers · +${presentation.goldYearGrowth}% Y/Y`],
-        ['02 / ASSET GATHERING', amount(latest.assets, true), 'Platform assets · period end', `${amount(latest.deposits, true)} LTM net deposits · ${presentation.depositGrowth}% growth`],
-        ['03 / MONETIZATION', amount(revenue(latest), true), 'LTM net revenue', `$${latest.arpu} LTM ARPU · 14 scaled businesses`],
-        ['04 / OPERATING LEVERAGE', amount(latest.adjustedEbitda, true), 'LTM adjusted EBITDA', `${presentation.adjustedEbitdaMargin}% margin · non-GAAP`],
+        ['02 / ASSET GATHERING', amount(latest.assets, true), 'Platform assets · quarter end', `${amount(latest.deposits, true)} quarterly deposits · ${presentation.depositGrowth}% annualized growth`],
+        ['03 / MONETIZATION', amount(revenue(latest), true), `${latest.period} net revenue`, `$${latest.arpu} annualized ARPU · 14 scaled businesses`],
+        ['04 / OPERATING LEVERAGE', amount(latest.adjustedEbitda, true), `${latest.period} adjusted EBITDA`, `${presentation.adjustedEbitdaMargin}% quarterly margin · non-GAAP`],
       ].map(([label, value, title, detail]) => <div key={label}><small>{label}</small><strong className="num">{value}</strong><h2>{title}</h2><p>{detail}</p></div>)}
     </section>
     {view === 'business' ? <div className="hood-business">
       <section className="hood-growth hood-card">
-        <div className="hood-section-heading"><div><small>ASSETS → REVENUE → EARNINGS</small><h2>{mode === 'revenue' ? 'A broader revenue engine' : mode === 'assets' ? 'Compounding the asset base' : 'Scaling profitable growth'}</h2></div><button className="hood-source" onClick={() => source(mode === 'revenue' ? 14 : mode === 'assets' ? 12 : 17)}>Slide {mode === 'revenue' ? 14 : mode === 'assets' ? 12 : 17} ↗</button></div>
+        <div className="hood-section-heading"><div><small>QUARTERLY · ASSETS → REVENUE → EARNINGS</small><h2>{mode === 'revenue' ? 'A broader revenue engine' : mode === 'assets' ? 'Compounding the asset base' : 'Scaling profitable growth'}</h2></div><button className="hood-source" onClick={() => quarterlySource(chartSourcePage)}>Earnings slide {chartSourcePage} ↗</button></div>
         <div className="hood-tabs hood-chart-tabs">{([['revenue', 'Revenue mix'], ['assets', 'Assets & deposits'], ['profit', 'Profitability']] as const).map(([id, label]) => <button key={id} aria-pressed={mode === id} onClick={() => setMode(id)}>{label}</button>)}</div>
         <PresentationChart presentation={presentation} mode={mode} selected={Math.min(selected, presentation.history.length - 1)} onSelect={setSelected} />
-        <p className="hood-chart-note">2021–2025: full years. Last column: LTM to Sep 2026; assets are period end.{mode === 'profit' ? ' Adjusted expenses and EBITDA are separate non-GAAP measures.' : ' Select a column for exact reported values.'}</p>
+        <p className="hood-chart-note">Q3 2025–Q3 2026: individual quarters; assets are quarter end.{mode === 'profit' ? ' Adjusted expenses and EBITDA are separate non-GAAP measures.' : ' Select a quarter to inspect its reported values.'}</p>
       </section>
-      <section className="hood-relationship hood-card"><div className="hood-section-heading"><div><small>DEPTH OF RELATIONSHIP</small><h2>Gold & customer economics</h2></div><button className="hood-source" onClick={() => source(12)}>Slides 3, 12 ↗</button></div>
+      <section className="hood-relationship hood-card"><div className="hood-section-heading"><div><small>QUARTER-END RELATIONSHIP</small><h2>Gold & customer economics</h2></div><button className="hood-source" onClick={() => quarterlySource(3)}>Earnings slide 3 ↗</button></div>
         <div className="hood-gold"><strong className="num">{amount(presentation.goldSubscribers)}</strong><div><b>Gold subscribers</b><span className="text-up">+{presentation.goldYearGrowth}% Y/Y</span></div><div className="hood-gold-share"><b>{pct(presentation.goldSubscribers, presentation.fundedCustomers)}</b><small>of funded customers*</small></div></div>
         <div className="hood-adoption"><span style={{ width: pct(presentation.goldSubscribers, presentation.fundedCustomers) }} /></div>
-        <div className="hood-customer-stats"><div><b className="num">${selectedRow.arpu}</b><span>ARPU · {selectedRow.period}</span></div><div><b className="num">{selectedRow.retention}%</b><span>Retention · {selectedRow.period}</span></div><div><b className="num">{amount(latest.assets / presentation.fundedCustomers, true)}</b><span>Assets / customer*</span></div></div>
-        <p className="hood-chart-note">*Calculated from rounded deck figures. Retention includes low-balance account escheatment; see definitions.</p>
+        <div className="hood-customer-stats"><div><b className="num">${selectedRow.arpu}</b><span>Annualized ARPU · {selectedRow.period}</span></div><div><b className="num">{amount(selectedRow.dilutedEps, true)}</b><span>Diluted EPS · {selectedRow.period}</span></div><div><b className="num">{amount(latest.assets / presentation.fundedCustomers, true)}</b><span>Assets / customer* · {latest.period}</span></div></div>
+        <p className="hood-chart-note">*Calculated from rounded quarter-end figures. ARPU is annualized; EPS covers only the selected quarter.</p>
       </section>
       <section className="hood-diversification hood-card"><div className="hood-section-heading"><div><small>REVENUE DIVERSIFICATION</small><h2>14 businesses above $100M annualized</h2></div><button className="hood-source" onClick={() => source(14)}>Slide 14 ↗</button></div>
         <div className="hood-business-lines">{presentation.businessLines.map((line, index) => <span key={line}><small>{String(index + 1).padStart(2, '0')}</small>{line}</span>)}</div>
@@ -118,7 +121,7 @@ export function HoodPage({ onStatusChange, onNavigate }: { onStatusChange: (pane
       </Panel>
       <Panel title="HOOD news"><div className="overflow-auto">{data?.market?.news.length ? data.market.news.map(row => <button key={row.id || row.url} className="hood-news" onClick={() => open(row.url)}>{row.title} ↗<small>{row.source}</small></button>) : <PanelMessage>No headlines available.</PanelMessage>}</div></Panel>
     </div>}
-    <footer className="hood-footer"><span>Dated company disclosures · USD · financials through Sep 30, 2026</span><button onClick={() => setShowNotes(!showNotes)} aria-expanded={showNotes}>Definitions & source notes {showNotes ? '−' : '+'}</button><button onClick={() => source(20)}>Non-GAAP reconciliation ↗</button></footer>
-    {showNotes && <div className="hood-notes" role="dialog" aria-label="Presentation definitions and sources"><div className="hood-section-heading"><h2>Presentation definitions & sources</h2><Button onClick={() => setShowNotes(false)}>Close</Button></div><p>{presentation.title} · published {presentation.publishedAt} · reviewed {presentation.reviewedAt}</p>{presentation.notes.map(note => <p key={note}>{note}</p>)}<button className="hood-source" onClick={() => source(1)}>Open original presentation ↗</button></div>}
+    <footer className="hood-footer"><span>Quarterly company disclosures · USD · Q3 2025–Q3 2026</span><button onClick={() => setShowNotes(!showNotes)} aria-expanded={showNotes}>Definitions & source notes {showNotes ? '−' : '+'}</button><button onClick={() => quarterlySource(44)}>Non-GAAP reconciliation ↗</button></footer>
+    {showNotes && <div className="hood-notes" role="dialog" aria-label="Presentation definitions and sources"><div className="hood-section-heading"><h2>Presentation definitions & sources</h2><Button onClick={() => setShowNotes(false)}>Close</Button></div><p>{presentation.title} · published {presentation.publishedAt} · reviewed {presentation.reviewedAt}</p><p>{presentation.quarterlySource.title} · published {presentation.quarterlySource.publishedAt}</p>{presentation.notes.map(note => <p key={note}>{note}</p>)}<div className="flex gap-4"><button className="hood-source" onClick={() => source(1)}>Open investor presentation ↗</button><button className="hood-source" onClick={() => quarterlySource(1)}>Open quarterly earnings presentation ↗</button></div></div>}
   </div>
 }

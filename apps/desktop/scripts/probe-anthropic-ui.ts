@@ -44,7 +44,8 @@ try {
         if (innerWidth > 900) {
           const page = document.querySelector('[data-anthropic-page]')
           check(page.scrollHeight <= page.clientHeight + 1, 'Page requires vertical scroll: ' + label)
-          for (const el of document.querySelectorAll('.ant-research, .ant-evidence, .ant-demand, .ant-adoption, .ant-topic-facts, .ant-feeds')) check(el.getBoundingClientRect().bottom <= innerHeight + 1, 'Panel below viewport: ' + label)
+          for (const el of document.querySelectorAll('.ant-research, .ant-evidence, .ant-figure, .ant-source-chips, .ant-feeds')) check(el.getBoundingClientRect().bottom <= innerHeight + 1, 'Panel below viewport: ' + label)
+          for (const el of document.querySelectorAll('.ant-figure')) check(el.scrollHeight <= el.clientHeight + 1, 'Chart content overflows its panel: ' + label + ' / ' + el.getAttribute('data-ant-visual'))
         }
         check(!document.body.innerText.includes('NaN'), 'Invalid number rendered')
       }
@@ -58,19 +59,39 @@ try {
       check(document.querySelectorAll('.ant-quarter').length === 7, 'Quarterly chart incomplete')
       document.querySelector('[aria-label="Inspect source for Enterprise adoption"]').click(); await settle()
       check(document.querySelector('.ant-selected-fact').innerText.includes('September 30, 2026'), 'Full evidence detail missing')
+      check(document.querySelector('[data-ant-visual="adoption"]').innerText.includes('Nested groups'), 'Customer lower-bound qualification missing')
       section('Capital').click(); await settle()
-      check(document.querySelectorAll('.ant-funding-history button').length === 4, 'Funding history incomplete')
-      document.querySelector('[aria-label="Inspect Series G funding source"]').click(); await settle()
+      check(document.querySelectorAll('.ant-round-bars button').length === 4, 'Funding history incomplete')
+      document.querySelector('[aria-label="Inspect Series G funding source"]').dispatchEvent(new MouseEvent('click', { bubbles: true })); await settle()
       check(document.querySelector('.ant-source-detail').innerText.includes('Series G'), 'Evidence selection failed')
       document.querySelector('.ant-source-detail button').click(); await settle()
       check(opened.includes('380-billion'), 'Source link incorrect')
+      section('Economics').click(); await settle()
+      check(document.querySelector('[data-ant-compute-readout]').textContent.includes('$0.58'), 'Spend ratio incorrect')
+      const control = text => [...document.querySelectorAll('.ant-chart-toggle button')].find(el => el.textContent === text)
+      control('Revenue / spend').click(); await settle()
+      check(document.querySelector('[data-ant-compute-readout]').textContent.includes('$1.72'), 'Inverse ratio incorrect')
+      document.querySelector('[aria-label="Inspect compute ratio for Q1 25"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await settle()
+      check(document.querySelector('[data-ant-compute-readout]').textContent.includes('$0.44'), 'Keyboard point selection failed')
+      control('Spend / revenue').click(); await settle()
+      check(document.querySelector('[data-ant-compute-readout]').textContent.includes('$2.25'), 'Ratio mode did not retain selection')
+      section('Business').click(); await settle()
+      check(document.querySelector('.ant-quarter[aria-pressed="true"]').textContent === 'Q1 25', 'Quarter selection did not persist between views')
+      document.querySelectorAll('.ant-quarter')[6].click(); await settle()
+      section('Risks').click(); await settle()
+      check(document.querySelectorAll('.ant-stacked-bar > span').length === 3, 'Commitment horizons missing')
+      check(document.querySelector('[data-ant-visual="commitments"]').innerText.includes('$380.9B'), 'Commitment subtotal was counted twice')
+      section('Products').click(); await settle()
+      const product = [...document.querySelectorAll('.ant-product-nodes button')].find(el => el.textContent === 'AWS')
+      product.click(); await settle()
+      check(document.querySelector('.ant-selected-fact').innerText.includes('primary cloud'), 'Distribution diagram evidence missing')
       section('Updates').click(); await settle()
       check(document.querySelectorAll('.ant-feed-scroll button').length === 2, 'Live evidence feeds missing')
       const refresh = () => [...document.querySelectorAll('button')].find(el => el.textContent === 'Check for updates')
       refresh().click(); await settle(); check(request.force && calls === 2, 'Manual update check did not force refresh')
       fail = true; refresh().click(); await settle()
       check(document.body.innerText.includes('Saved research remains available'), 'Failed check feedback missing')
-      check(client.getQueryData(['anthropic', 1]).meta.freshness === 'fresh', 'Incomplete refresh replaced reviewed snapshot')
+      check(client.getQueryData(['anthropic', 2]).meta.freshness === 'fresh', 'Incomplete refresh replaced reviewed snapshot')
       fail = false; refresh().click(); await settle()
       check(document.body.innerText.includes('Public sources checked'), 'Refresh recovery failed')
       check(!document.body.innerText.includes('Page needs attention'), 'Global diagnostics banner restored')
@@ -78,7 +99,7 @@ try {
       const before = calls
       host.render(<QueryClientProvider client={client}><div>Another page</div></QueryClientProvider>); await settle(); render(); await settle()
       check(calls === before, 'Warm revisit refetched')
-      return 'PASS: startup warming, research views, chart, funding, source selection, links, update checks, failure recovery and warm revisit'
+      return 'PASS: startup warming, eight sourced visuals, ratio controls, keyboard selection, funding and product evidence, updates, recovery and warm revisit'
     }
   ` }, bundle: true, jsx: 'automatic', write: false, format: 'iife', loader: { '.css': 'empty' },
     alias: { '@': join(root, 'src'), '@shared': join(root, 'electron/shared') }, define: { 'process.env.NODE_ENV': '"production"' } })
@@ -96,9 +117,14 @@ try {
           window.setSize(width,height); await new Promise(resolve=>setTimeout(resolve,200))
           await window.webContents.executeJavaScript('window.checkLayout()')
           fs.writeFileSync(path.join(${JSON.stringify(join(root, 'out'))}, 'anthropic-'+width+'.png'), (await window.webContents.capturePage()).toPNG())
+          if (width === 1366 || width === 1024) for (const label of ['Capital', 'Economics', 'Risks', 'Products']) {
+            await window.webContents.executeJavaScript("[...document.querySelectorAll('.ant-index button')].find(el => el.textContent.includes('" + label + "')).click()")
+            await new Promise(resolve=>setTimeout(resolve,150))
+            fs.writeFileSync(path.join(${JSON.stringify(join(root, 'out'))}, 'anthropic-'+label.toLowerCase()+'-'+width+'.png'), (await window.webContents.capturePage()).toPNG())
+          }
         }
         console.log('PASS: 1920, 1366, 1024 and narrow viewport layouts'); app.exit(0)
-      } catch(error) { console.error(error); app.exit(1) }
+      } catch(error) { console.error(error); fs.writeFileSync(path.join(${JSON.stringify(join(root, 'out'))}, 'anthropic-layout-failure.png'), (await window.webContents.capturePage()).toPNG()); console.log(await window.webContents.executeJavaScript("JSON.stringify([...document.querySelectorAll('.ant-figure')].map(el => [el.getAttribute('data-ant-visual'), el.clientHeight, el.scrollHeight, innerWidth]))")); app.exit(1) }
     })
   `)
   const env: NodeJS.ProcessEnv = { ...process.env, APPDATA: scratch, LOCALAPPDATA: scratch }

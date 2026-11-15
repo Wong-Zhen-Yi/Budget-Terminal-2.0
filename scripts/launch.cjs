@@ -1,4 +1,5 @@
 const { spawnSync } = require('node:child_process')
+// Anthropic funding, customer depth, compute ratios and capital visualisations rebuild through the shared launcher.
 // Anthropic Focus research, source update checks and MCP tools rebuild through the shared launcher.
 // Finnhub streaming-first refresh, visible-stock priorities and idle/session savings rebuild through the shared launcher.
 // Shared snapshot validation, account quotas and typed cloud contracts rebuild here; backend policies deploy separately.

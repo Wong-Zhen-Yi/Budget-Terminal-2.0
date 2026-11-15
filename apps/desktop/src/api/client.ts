@@ -90,7 +90,7 @@ export const queryKeys = {
   sofi: ['sofi'] as const,
   mu: ['mu'] as const,
   googl: ['googl'] as const,
-  anthropic: ['anthropic', 1] as const,
+  anthropic: ['anthropic', 2] as const,
   amzn: ['amzn'] as const,
   avgo: ['avgo'] as const,
   homebuilders: ['homebuilders', 1] as const,

@@ -6,8 +6,11 @@ description: Capture app pages, research markets and read or edit saved portfoli
 Use Budget Terminal tools for data owned by the local app. Open Budget Terminal before service calls; connection status can diagnose availability. Arguments use a `request` object; pass `{ "request": {} }` for operations without parameters.
 
 `budget_terminal_hood` includes Robinhood's reviewed November 2026 investor
-presentation alongside market, financial and operating reports. Preserve its
-`asOf`, `publishedAt`, `reviewedAt`, FY/LTM labels, source pages and non-GAAP notes.
+presentation and Q3 2026 earnings deck alongside market, financial and operating
+reports. History covers five individual quarters from Q3 2025 through Q3 2026.
+Preserve `asOf`, `publishedAt`, `reviewedAt`, `quarterlySource`, source pages and
+non-GAAP notes. Revenue, deposits, expenses, EBITDA and diluted EPS are quarterly;
+assets are quarter-end and ARPU is annualized.
 Provider refresh freshness does not revalidate the dated presentation. The 14
 revenue businesses overlap; quarterly annualized revenue is not realized annual
 revenue. Screenshot page: `hood`. Reconnect clients after rebuilding its schema.
@@ -45,6 +48,6 @@ Read a saved record before editing it and verify the returned record afterward. 
 
 Bulk import/export, clearing all user data, and cache reset stay in the desktop app. The server has no arbitrary filesystem or shell tools. Local client execution is required; a local stdio package alone does not make this app available to cloud or web tasks.
 
-Use `budget_terminal_anthropic` with `{ "request": {} }` for the Anthropic Focus dossier and public-source update checks. It has reviewed financial periods, private funding history, proposed IPO terms, products, governance and risks, plus official announcements and SEC filings. `reviewedAt` dates the research; envelope freshness dates source checks, not revalidation of financial figures. Inspect `reviewReasons` and check errors. There is no live equity quote; ANT is a proposed listing symbol in the reviewed material. Screenshot page: `anthropic`. Reconnect clients after rebuilding.
+Use `budget_terminal_anthropic` with `{ "request": {} }` for the Anthropic Focus dossier and public-source update checks. It has reviewed financial periods, private funding history, proposed IPO terms, products, governance and risks, plus official announcements and SEC filings. `reviewedAt` dates the research; envelope freshness dates source checks, not revalidation of financial figures. Inspect `reviewReasons` and check errors. `operatingMetrics` and `capitalSnapshot` provide dated chart inputs: customer thresholds are nested lower bounds, undrawn credit is separate from liquidity, and next-12-month commitments are included in the through-2030 subtotal. There is no live equity quote; ANT is a proposed listing symbol in the reviewed material. Screenshot page: `anthropic`. Reconnect clients after rebuilding.
 
 Use `budget_terminal_homebuilders` with `{ "request": {} }` for the Homebuilders Focus universe, adjusted histories, corporate valuations, earnings estimates and news. ITB/XHB are broader housing ETF benchmarks; their corporate profiles are omitted. Inspect per-lane timestamps and errors before treating data as current. Screenshots use page `homebuilders`. Reconnect clients after rebuilding the tool catalog.

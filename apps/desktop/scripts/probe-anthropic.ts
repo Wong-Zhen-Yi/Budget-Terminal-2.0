@@ -6,6 +6,7 @@ import { anthropicResearch, anthropicReviewReasons, parseAnthropicNews } from '.
 import { TABS } from '../electron/shared/contract.js'
 import { startupPages, workspaceFor } from '../electron/shared/navigation.js'
 import { requiredPermissions } from '../mcp/permissions.js'
+import { anthropicCommitmentBuckets, anthropicComputeSeries } from '../electron/shared/anthropicCharts.js'
 
 const scratch = await mkdtemp(join(tmpdir(), 'budget-anthropic-'))
 process.env.APPDATA = join(scratch, 'roaming')
@@ -25,6 +26,19 @@ try {
   assert.equal(research.quarters.length, 7)
   assert(research.quarters.every(row => row.revenue > 0 && row.compute > 0))
   assert.equal(research.quarters.at(-1)?.revenue, 17)
+  const ratios = anthropicComputeSeries(research.quarters)
+  assert.equal(ratios[0].spendPerRevenue, 2.25)
+  assert(Math.abs(ratios.at(-1)!.revenuePerSpend! - 17 / 9.9) < 1e-10)
+  assert.deepEqual(anthropicComputeSeries([{ period: 'missing', revenue: 0, compute: 0 }])[0], { period: 'missing', spendPerRevenue: null, revenuePerSpend: null })
+  assert.equal(anthropicComputeSeries([{ period: 'bad', revenue: NaN, compute: 1 }])[0].spendPerRevenue, null)
+  const buckets = anthropicCommitmentBuckets(research.capitalSnapshot)
+  assert.deepEqual(buckets.map(row => Number(row.value.toFixed(1))), [70.7, 380.9, 448.4])
+  assert.equal(buckets.reduce((total, row) => total + row.value, 0), 900)
+  assert.deepEqual(anthropicCommitmentBuckets({ ...research.capitalSnapshot, commitmentsThrough2030: 1000 }), [])
+  assert.deepEqual(anthropicCommitmentBuckets({ ...research.capitalSnapshot, commitmentsNext12Months: -1 }), [])
+  assert.equal(research.capitalSnapshot.cash + research.capitalSnapshot.shortTermInvestments, 132)
+  assert(research.sources.some(source => source.id === research.capitalSnapshot.source))
+  assert(research.sources.some(source => source.id === research.operatingMetrics.source))
   assert.deepEqual(anthropicReviewReasons(research, Date.parse('2026-11-16')), [])
   assert(anthropicReviewReasons(research, Date.parse('2026-11-22')).includes('Scheduled weekly research review is due.'))
   const newsRows = [{ title: 'Claude &amp; research', slug: { current: 'release' }, articleType: 'news', publishedOn: '2026-11-16' }, { title: 'Bad URL', slug: { current: 'javascript:alert(1)' }, articleType: 'news', publishedOn: '2026-11-17' }]

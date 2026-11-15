@@ -13,6 +13,8 @@ export interface AnthropicPayload {
   topics: AnthropicTopic[]
   quarters: Array<{ period: string; revenue: number; compute: number }>
   fundingRounds: Array<{ round: string; date: string; raised: number; valuation: number; source: string }>
+  operatingMetrics: { asOf: string; source: string; customers100kLowerBound: number; customers1mLowerBound: number; netRevenueRetentionApprox: number }
+  capitalSnapshot: { asOf: string; source: string; cash: number; shortTermInvestments: number; availableCredit: number; computeCommitments: number; commitmentsThrough2030: number; commitmentsNext12Months: number }
   announcements: AnthropicAnnouncement[]
   filings: SecFiling[]
   checks: AnthropicCheck[]
@@ -38,6 +40,9 @@ export const ANTHROPIC_SOURCES: AnthropicSource[] = [
 export function anthropicResearch(): AnthropicPayload {
   return {
     reviewedAt: ANTHROPIC_REVIEWED_AT, nextReviewAt: ANTHROPIC_NEXT_REVIEW, sources: ANTHROPIC_SOURCES,
+    operatingMetrics: { asOf: '2026-09-30', source: 'factsheet', customers100kLowerBound: 11900, customers1mLowerBound: 1900, netRevenueRetentionApprox: 900 },
+    // USD billions, approximate. Commitments are as of and subsequent to the balance-sheet date.
+    capitalSnapshot: { asOf: '2026-09-30', source: 'factsheet', cash: 96, shortTermInvestments: 36, availableCredit: 15, computeCommitments: 900, commitmentsThrough2030: 451.6, commitmentsNext12Months: 70.7 },
     fundingRounds: [
       { round: 'Series E', date: '2025-03-03', raised: 3.5, valuation: 61.5, source: 'series-e' },
       { round: 'Series F', date: '2025-09-02', raised: 13, valuation: 183, source: 'series-f' },

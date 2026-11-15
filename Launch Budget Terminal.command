@@ -1,5 +1,6 @@
 #!/bin/sh
-# HOOD Focus investor-deck visuals, reviewed data and MCP schemas rebuild through the shared launcher.
+# Anthropic funding, customer depth, compute ratios and capital visualisations rebuild through the shared launcher.
+# HOOD Focus quarterly earnings charts, headline metrics and MCP schemas rebuild through the shared launcher.
 # Anthropic Focus research, source update checks and MCP tools rebuild through the shared launcher.
 # GOOGL Focus, quarterly SEC drivers and MCP schemas rebuild through the shared launch path.
 # News reader and scoped clipboard exports rebuild through the shared launcher.

@@ -15496,6 +15496,74 @@
               "additionalProperties": false
             }
           },
+          "operatingMetrics": {
+            "type": "object",
+            "properties": {
+              "asOf": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              },
+              "customers100kLowerBound": {
+                "type": "number"
+              },
+              "customers1mLowerBound": {
+                "type": "number"
+              },
+              "netRevenueRetentionApprox": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "asOf",
+              "source",
+              "customers100kLowerBound",
+              "customers1mLowerBound",
+              "netRevenueRetentionApprox"
+            ],
+            "additionalProperties": false
+          },
+          "capitalSnapshot": {
+            "type": "object",
+            "properties": {
+              "asOf": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              },
+              "cash": {
+                "type": "number"
+              },
+              "shortTermInvestments": {
+                "type": "number"
+              },
+              "availableCredit": {
+                "type": "number"
+              },
+              "computeCommitments": {
+                "type": "number"
+              },
+              "commitmentsThrough2030": {
+                "type": "number"
+              },
+              "commitmentsNext12Months": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "asOf",
+              "source",
+              "cash",
+              "shortTermInvestments",
+              "availableCredit",
+              "computeCommitments",
+              "commitmentsThrough2030",
+              "commitmentsNext12Months"
+            ],
+            "additionalProperties": false
+          },
           "announcements": {
             "type": "array",
             "items": {
@@ -15528,6 +15596,8 @@
           "topics",
           "quarters",
           "fundingRounds",
+          "operatingMetrics",
+          "capitalSnapshot",
           "announcements",
           "filings",
           "checks",
@@ -22388,6 +22458,51 @@
           "sourceUrl": {
             "type": "string"
           },
+          "quarterlySource": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "publishedAt": {
+                "type": "string"
+              },
+              "sourceUrl": {
+                "type": "string"
+              },
+              "sourcePages": {
+                "type": "object",
+                "properties": {
+                  "customers": {
+                    "type": "number"
+                  },
+                  "revenue": {
+                    "type": "number"
+                  },
+                  "profitability": {
+                    "type": "number"
+                  },
+                  "reconciliation": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "customers",
+                  "revenue",
+                  "profitability",
+                  "reconciliation"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "title",
+              "publishedAt",
+              "sourceUrl",
+              "sourcePages"
+            ],
+            "additionalProperties": false
+          },
           "sourcePages": {
             "type": "object",
             "properties": {
@@ -22489,6 +22604,7 @@
           "reviewedAt",
           "asOf",
           "sourceUrl",
+          "quarterlySource",
           "sourcePages",
           "fundedCustomers",
           "goldSubscribers",
@@ -22511,10 +22627,7 @@
           },
           "basis": {
             "type": "string",
-            "enum": [
-              "FY",
-              "LTM"
-            ]
+            "const": "quarter"
           },
           "transaction": {
             "type": "number"
@@ -22534,7 +22647,7 @@
           "arpu": {
             "type": "number"
           },
-          "retention": {
+          "dilutedEps": {
             "type": "number"
           },
           "adjustedOpexAndSbc": {
@@ -22553,7 +22666,7 @@
           "assets",
           "deposits",
           "arpu",
-          "retention",
+          "dilutedEps",
           "adjustedOpexAndSbc",
           "adjustedEbitda"
         ],

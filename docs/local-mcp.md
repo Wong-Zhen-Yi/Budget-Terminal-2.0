@@ -3,8 +3,11 @@
 [Back to the README](../README.md)
 
 `budget_terminal_hood` now includes `presentation`: the reviewed November 11,
-2026 Robinhood investor deck, source slides, FY/LTM revenue mix, assets, deposits,
-customer economics, non-GAAP profitability, business lines and management priorities.
+2026 Robinhood investor deck and the October 27 Q3 2026 earnings deck. History
+contains five discrete quarters, Q3 2025 through Q3 2026, with quarterly revenue
+mix, deposits, expenses, EBITDA and diluted EPS, plus quarter-end assets and
+annualized ARPU. `quarterlySource` identifies the earnings deck and its source
+slides; the November deck supplies business lines and management priorities.
 Its `asOf`, `publishedAt` and `reviewedAt` remain separate from provider-fetch
 freshness. Refreshing providers does not restate the reviewed deck. Business lines
 overlap; quarterly revenue annualized is not realized annual revenue. Requests and
@@ -17,6 +20,11 @@ Anthropic is available in Focus and preloads at startup. The read-only
 It returns reviewed disclosures, seven quarters of revenue and compute costs,
 Series E?H funding history, proposed IPO terms, products, governance, risks,
 source links, official announcements, SEC filings and research review reasons.
+Structured `operatingMetrics` and `capitalSnapshot` include dated customer-count
+lower bounds, approximate NRR, cash, short-term investments, separate undrawn
+credit and compute commitment horizons for the page visualisations. Customer
+thresholds overlap; the through-2030 commitment includes the next-12-month amount.
+The ratio charts use rounded quarterly revenue/compute flows, not gross margins.
 `reviewedAt` and `nextReviewAt` date the curated research; envelope freshness
 and individual `checks[].checkedAt` date the live checks. These dates are not
 interchangeable. The proposed ANT symbol has no live equity quote on this page.

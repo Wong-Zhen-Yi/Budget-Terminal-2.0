@@ -8,13 +8,21 @@ statements, SEC filings and news. Desktop panels fit the viewport; narrow window
 stack or scroll to preserve readability. Diagnostics remain in Settings.
 
 `electron/shared/hoodPresentation.ts` owns reviewed data, source dates, slide
-references and definitions. Slides 3, 6, 12, 14 and 17 supply the figures; slides
-20–21 reconcile non-GAAP measures. History uses USD, counts and 0–100 percentages.
-The final column is LTM through September 2026, while assets are period-end
-balances. It is not a full-year forecast. Gold adoption and assets per customer
-are calculated from the rounded deck inputs. Retention preserves the deck's
-escheatment caveat. The 14 businesses overlap, and the $100M threshold annualizes
-a single quarter; their figures must not be summed.
+references and definitions. The [Q3 2026 earnings presentation](https://investors.robinhood.com/static-files/fd90f575-5b4c-4cde-a16d-d114c920fb6a), published October 27, 2026, supplies five discrete quarters
+from Q3 2025 through Q3 2026. Earnings slides 3, 4 and 13 supply customers, assets,
+deposits, quarterly revenue mix, expenses, EBITDA, diluted EPS and ARPU; slides
+43–44 reconcile non-GAAP measures. Revenue, net deposits, expenses, EBITDA and EPS
+cover each individual quarter. Assets are quarter-end balances. ARPU and the
+quarterly net deposit growth rate are annualized as reported, not forecasts.
+The latest headlines use Q3 2026 revenue of $1.424B, adjusted EBITDA of $808M,
+57% adjusted EBITDA margin and $15.7B of quarterly net deposits. Customer economics
+shows the selected quarter's annualized ARPU and diluted EPS. Gold adoption and
+assets per customer are calculated from rounded quarter-end inputs.
+
+The November investor presentation still owns management priorities and the 14
+businesses. Their $100M threshold annualizes a single quarter and their activities
+overlap; their figures must not be summed. Annual/LTM snapshots persisted by the
+previous build fall back to the current bundled quarterly data on opening.
 
 The reviewed snapshot is bundled and available offline. Refresh/F5 updates the
 existing market, financial, monthly and quarterly providers; it does **not**
@@ -24,8 +32,9 @@ The monthly pulse separately labels its report period and source link.
 All existing startup preloading and failure reporting remain intact.
 
 The existing read-only `budget_terminal_hood` response adds `presentation` with
-these same fields. Requests and permissions are unchanged. Old renderer snapshots
-fall back to the reviewed bundle until the next provider load. The envelope
+these same fields, including `quarterlySource` and history `basis: "quarter"`.
+Requests and permissions are unchanged. Old renderer snapshots
+fall back to the quarterly reviewed bundle until the next provider load. The envelope
 freshness describes provider lanes, not the age of the presentation.
 
 Validation:
