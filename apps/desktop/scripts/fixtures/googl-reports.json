@@ -1,0 +1,482 @@
+[
+  {
+    "period": "2026 Q3",
+    "sourceUrl": "https://www.sec.gov/Archives/edgar/data/1652044/000165204426000080/googexhibit991q32026.htm",
+    "publishedAt": "2026-10-28",
+    "revenue": 127577000000,
+    "revenueGrowth": 24.652648857796102,
+    "operatingIncome": 40576000000,
+    "operatingMargin": 31.805105936022947,
+    "dilutedEps": 2.12,
+    "businesses": [
+      {
+        "name": "Search & other",
+        "revenue": 63350000000,
+        "yearAgoRevenue": 56567000000,
+        "growth": 11.99109021160747
+      },
+      {
+        "name": "YouTube ads",
+        "revenue": 11207000000,
+        "yearAgoRevenue": 10261000000,
+        "growth": 9.219374329987339
+      },
+      {
+        "name": "Google Network",
+        "revenue": 7455000000,
+        "yearAgoRevenue": 7354000000,
+        "growth": 1.3734022300788684
+      },
+      {
+        "name": "Subscriptions, platforms & devices",
+        "revenue": 14290000000,
+        "yearAgoRevenue": 12870000000,
+        "growth": 11.033411033411022
+      },
+      {
+        "name": "Google Cloud",
+        "revenue": 30709000000,
+        "yearAgoRevenue": 15157000000,
+        "growth": 102.60605660750808
+      },
+      {
+        "name": "Other Bets",
+        "revenue": 372000000,
+        "yearAgoRevenue": 344000000,
+        "growth": 8.139534883720923
+      }
+    ],
+    "servicesOperatingIncome": 39157000000,
+    "cloudOperatingIncome": 11121000000,
+    "otherBetsOperatingIncome": -2047000000,
+    "alphabetLevelIncome": -7655000000,
+    "tac": 16366000000,
+    "tacRate": 19.9556162512803,
+    "operatingCashFlow": 42290000000,
+    "capex": 51355000000,
+    "freeCashFlow": -9065000000,
+    "buybacks": 0,
+    "dividends": 2936000000,
+    "warnings": []
+  },
+  {
+    "period": "2026 Q2",
+    "sourceUrl": "https://www.sec.gov/Archives/edgar/data/1652044/000165204426000066/googexhibit991q22026.htm",
+    "publishedAt": "2026-07-22",
+    "revenue": 119796000000,
+    "revenueGrowth": 24.23362508814868,
+    "operatingIncome": 40770000000,
+    "operatingMargin": 34.03285585495342,
+    "dilutedEps": 9.11,
+    "businesses": [
+      {
+        "name": "Search & other",
+        "revenue": 63271000000,
+        "yearAgoRevenue": 54190000000,
+        "growth": 16.757704373500637
+      },
+      {
+        "name": "YouTube ads",
+        "revenue": 11055000000,
+        "yearAgoRevenue": 9796000000,
+        "growth": 12.85218456512862
+      },
+      {
+        "name": "Google Network",
+        "revenue": 7303000000,
+        "yearAgoRevenue": 7354000000,
+        "growth": -0.6935001359804183
+      },
+      {
+        "name": "Subscriptions, platforms & devices",
+        "revenue": 12911000000,
+        "yearAgoRevenue": 11203000000,
+        "growth": 15.245916272427017
+      },
+      {
+        "name": "Google Cloud",
+        "revenue": 24768000000,
+        "yearAgoRevenue": 13624000000,
+        "growth": 81.7968291250734
+      },
+      {
+        "name": "Other Bets",
+        "revenue": 382000000,
+        "yearAgoRevenue": 373000000,
+        "growth": 2.4128686327077764
+      }
+    ],
+    "servicesOperatingIncome": 39544000000,
+    "cloudOperatingIncome": 8814000000,
+    "otherBetsOperatingIncome": -1799000000,
+    "alphabetLevelIncome": -5789000000,
+    "tac": 16179000000,
+    "tacRate": 19.820161952247364,
+    "operatingCashFlow": 39069000000,
+    "capex": 44924000000,
+    "freeCashFlow": -5855000000,
+    "buybacks": 0,
+    "dividends": 2689000000,
+    "warnings": []
+  },
+  {
+    "period": "2026 Q1",
+    "sourceUrl": "https://www.sec.gov/Archives/edgar/data/1652044/000165204426000043/googexhibit991q12026.htm",
+    "publishedAt": "2026-04-29",
+    "revenue": 109896000000,
+    "revenueGrowth": 21.790012633818744,
+    "operatingIncome": 39696000000,
+    "operatingMargin": 36.121423891679406,
+    "dilutedEps": 5.11,
+    "businesses": [
+      {
+        "name": "Search & other",
+        "revenue": 60399000000,
+        "yearAgoRevenue": 50702000000,
+        "growth": 19.12547828488027
+      },
+      {
+        "name": "YouTube ads",
+        "revenue": 9883000000,
+        "yearAgoRevenue": 8927000000,
+        "growth": 10.709084798924607
+      },
+      {
+        "name": "Google Network",
+        "revenue": 6971000000,
+        "yearAgoRevenue": 7256000000,
+        "growth": -3.9277839029768447
+      },
+      {
+        "name": "Subscriptions, platforms & devices",
+        "revenue": 12384000000,
+        "yearAgoRevenue": 10379000000,
+        "growth": 19.317853357741587
+      },
+      {
+        "name": "Google Cloud",
+        "revenue": 20028000000,
+        "yearAgoRevenue": 12260000000,
+        "growth": 63.36052202283851
+      },
+      {
+        "name": "Other Bets",
+        "revenue": 411000000,
+        "yearAgoRevenue": 450000000,
+        "growth": -8.666666666666668
+      }
+    ],
+    "servicesOperatingIncome": 40589000000,
+    "cloudOperatingIncome": 6598000000,
+    "otherBetsOperatingIncome": -2100000000,
+    "alphabetLevelIncome": -5391000000,
+    "tac": 15228000000,
+    "tacRate": 19.711855850258242,
+    "operatingCashFlow": 45790000000,
+    "capex": 35674000000,
+    "freeCashFlow": 10116000000,
+    "buybacks": 0,
+    "dividends": 2542000000,
+    "warnings": []
+  },
+  {
+    "period": "2025 Q4",
+    "sourceUrl": "https://www.sec.gov/Archives/edgar/data/1652044/000165204426000012/googexhibit991q42025.htm",
+    "publishedAt": "2026-02-04",
+    "revenue": 113828000000,
+    "revenueGrowth": 17.994381614819275,
+    "operatingIncome": 35934000000,
+    "operatingMargin": 31.5686825737077,
+    "dilutedEps": 2.82,
+    "businesses": [
+      {
+        "name": "Search & other",
+        "revenue": 63073000000,
+        "yearAgoRevenue": 54034000000,
+        "growth": 16.72835622015767
+      },
+      {
+        "name": "YouTube ads",
+        "revenue": 11383000000,
+        "yearAgoRevenue": 10473000000,
+        "growth": 8.689009834813334
+      },
+      {
+        "name": "Google Network",
+        "revenue": 7828000000,
+        "yearAgoRevenue": 7954000000,
+        "growth": -1.584108624591396
+      },
+      {
+        "name": "Subscriptions, platforms & devices",
+        "revenue": 13578000000,
+        "yearAgoRevenue": 11633000000,
+        "growth": 16.71967678156967
+      },
+      {
+        "name": "Google Cloud",
+        "revenue": 17664000000,
+        "yearAgoRevenue": 11955000000,
+        "growth": 47.75407779171894
+      },
+      {
+        "name": "Other Bets",
+        "revenue": 370000000,
+        "yearAgoRevenue": 400000000,
+        "growth": -7.499999999999996
+      }
+    ],
+    "servicesOperatingIncome": 40132000000,
+    "cloudOperatingIncome": 5313000000,
+    "otherBetsOperatingIncome": -3617000000,
+    "alphabetLevelIncome": -5894000000,
+    "tac": 16597000000,
+    "tacRate": 20.17038549414224,
+    "operatingCashFlow": 52402000000,
+    "capex": 27851000000,
+    "freeCashFlow": 24551000000,
+    "buybacks": 5499000000,
+    "dividends": 2536000000,
+    "warnings": []
+  },
+  {
+    "period": "2025 Q3",
+    "sourceUrl": "https://www.sec.gov/Archives/edgar/data/1652044/000165204425000087/googexhibit991q32025.htm",
+    "publishedAt": "2025-10-29",
+    "revenue": 102346000000,
+    "revenueGrowth": 15.94915484660353,
+    "operatingIncome": 31228000000,
+    "operatingMargin": 30.512184159615423,
+    "dilutedEps": 2.87,
+    "businesses": [
+      {
+        "name": "Search & other",
+        "revenue": 56567000000,
+        "yearAgoRevenue": 49385000000,
+        "growth": 14.542877391920616
+      },
+      {
+        "name": "YouTube ads",
+        "revenue": 10261000000,
+        "yearAgoRevenue": 8921000000,
+        "growth": 15.020737585472489
+      },
+      {
+        "name": "Google Network",
+        "revenue": 7354000000,
+        "yearAgoRevenue": 7548000000,
+        "growth": -2.570217276099629
+      },
+      {
+        "name": "Subscriptions, platforms & devices",
+        "revenue": 12870000000,
+        "yearAgoRevenue": 10656000000,
+        "growth": 20.777027027027017
+      },
+      {
+        "name": "Google Cloud",
+        "revenue": 15157000000,
+        "yearAgoRevenue": 11353000000,
+        "growth": 33.50656214216507
+      },
+      {
+        "name": "Other Bets",
+        "revenue": 344000000,
+        "yearAgoRevenue": 388000000,
+        "growth": -11.340206185567014
+      }
+    ],
+    "servicesOperatingIncome": 33527000000,
+    "cloudOperatingIncome": 3594000000,
+    "otherBetsOperatingIncome": -1426000000,
+    "alphabetLevelIncome": -4467000000,
+    "tac": 14876000000,
+    "tacRate": 20.053382222102396,
+    "operatingCashFlow": 48414000000,
+    "capex": 23953000000,
+    "freeCashFlow": 24461000000,
+    "buybacks": 11504000000,
+    "dividends": 2537000000,
+    "warnings": []
+  },
+  {
+    "period": "2025 Q2",
+    "sourceUrl": "https://www.sec.gov/Archives/edgar/data/1652044/000165204425000056/googexhibit991q22025.htm",
+    "publishedAt": "2025-07-23",
+    "revenue": 96428000000,
+    "revenueGrowth": 13.790092280097245,
+    "operatingIncome": 31271000000,
+    "operatingMargin": 32.42937735927324,
+    "dilutedEps": 2.31,
+    "businesses": [
+      {
+        "name": "Search & other",
+        "revenue": 54190000000,
+        "yearAgoRevenue": 48509000000,
+        "growth": 11.711228844132027
+      },
+      {
+        "name": "YouTube ads",
+        "revenue": 9796000000,
+        "yearAgoRevenue": 8663000000,
+        "growth": 13.07861018123051
+      },
+      {
+        "name": "Google Network",
+        "revenue": 7354000000,
+        "yearAgoRevenue": 7444000000,
+        "growth": -1.2090274046211769
+      },
+      {
+        "name": "Subscriptions, platforms & devices",
+        "revenue": 11203000000,
+        "yearAgoRevenue": 9312000000,
+        "growth": 20.307130584192446
+      },
+      {
+        "name": "Google Cloud",
+        "revenue": 13624000000,
+        "yearAgoRevenue": 10347000000,
+        "growth": 31.671015753358468
+      },
+      {
+        "name": "Other Bets",
+        "revenue": 373000000,
+        "yearAgoRevenue": 365000000,
+        "growth": 2.191780821917799
+      }
+    ],
+    "servicesOperatingIncome": 33063000000,
+    "cloudOperatingIncome": 2826000000,
+    "otherBetsOperatingIncome": -1246000000,
+    "alphabetLevelIncome": -3372000000,
+    "tac": 14705000000,
+    "tacRate": 20.6125595738716,
+    "operatingCashFlow": 27747000000,
+    "capex": 22446000000,
+    "freeCashFlow": 5301000000,
+    "buybacks": 13638000000,
+    "dividends": 2543000000,
+    "warnings": []
+  },
+  {
+    "period": "2025 Q1",
+    "sourceUrl": "https://www.sec.gov/Archives/edgar/data/1652044/000165204425000040/googexhibit991q12025.htm",
+    "publishedAt": "2025-04-24",
+    "revenue": 90234000000,
+    "revenueGrowth": 12.03764635766522,
+    "operatingIncome": 30606000000,
+    "operatingMargin": 33.91847862224882,
+    "dilutedEps": 2.81,
+    "businesses": [
+      {
+        "name": "Search & other",
+        "revenue": 50702000000,
+        "yearAgoRevenue": 46156000000,
+        "growth": 9.849207037004938
+      },
+      {
+        "name": "YouTube ads",
+        "revenue": 8927000000,
+        "yearAgoRevenue": 8090000000,
+        "growth": 10.346106304079106
+      },
+      {
+        "name": "Google Network",
+        "revenue": 7256000000,
+        "yearAgoRevenue": 7413000000,
+        "growth": -2.1179009847565045
+      },
+      {
+        "name": "Subscriptions, platforms & devices",
+        "revenue": 10379000000,
+        "yearAgoRevenue": 8739000000,
+        "growth": 18.766449250486318
+      },
+      {
+        "name": "Google Cloud",
+        "revenue": 12260000000,
+        "yearAgoRevenue": 9574000000,
+        "growth": 28.055149362857733
+      },
+      {
+        "name": "Other Bets",
+        "revenue": 450000000,
+        "yearAgoRevenue": 495000000,
+        "growth": -9.090909090909093
+      }
+    ],
+    "servicesOperatingIncome": 32682000000,
+    "cloudOperatingIncome": 2177000000,
+    "otherBetsOperatingIncome": -1226000000,
+    "alphabetLevelIncome": -3027000000,
+    "tac": 13748000000,
+    "tacRate": 20.554683411826268,
+    "operatingCashFlow": 36150000000,
+    "capex": 17197000000,
+    "freeCashFlow": 18953000000,
+    "buybacks": 15068000000,
+    "dividends": 2434000000,
+    "warnings": []
+  },
+  {
+    "period": "2024 Q4",
+    "sourceUrl": "https://www.sec.gov/Archives/edgar/data/1652044/000165204425000010/googexhibit991q42024.htm",
+    "publishedAt": "2025-02-04",
+    "revenue": 96469000000,
+    "revenueGrowth": 11.770362646275046,
+    "operatingIncome": 30972000000,
+    "operatingMargin": 32.10565051985612,
+    "dilutedEps": 2.15,
+    "businesses": [
+      {
+        "name": "Search & other",
+        "revenue": 54034000000,
+        "yearAgoRevenue": 48020000000,
+        "growth": 12.523948354852156
+      },
+      {
+        "name": "YouTube ads",
+        "revenue": 10473000000,
+        "yearAgoRevenue": 9200000000,
+        "growth": 13.836956521739129
+      },
+      {
+        "name": "Google Network",
+        "revenue": 7954000000,
+        "yearAgoRevenue": 8297000000,
+        "growth": -4.1340243461492125
+      },
+      {
+        "name": "Subscriptions, platforms & devices",
+        "revenue": 11633000000,
+        "yearAgoRevenue": 10794000000,
+        "growth": 7.772836761163604
+      },
+      {
+        "name": "Google Cloud",
+        "revenue": 11955000000,
+        "yearAgoRevenue": 9192000000,
+        "growth": 30.05874673629243
+      },
+      {
+        "name": "Other Bets",
+        "revenue": 400000000,
+        "yearAgoRevenue": 657000000,
+        "growth": -39.117199391171994
+      }
+    ],
+    "servicesOperatingIncome": 32836000000,
+    "cloudOperatingIncome": 2093000000,
+    "otherBetsOperatingIncome": -1174000000,
+    "alphabetLevelIncome": -2783000000,
+    "tac": 14848000000,
+    "tacRate": 20.49102275706932,
+    "operatingCashFlow": 39113000000,
+    "capex": 14276000000,
+    "freeCashFlow": 24837000000,
+    "buybacks": 15551000000,
+    "dividends": 2442000000,
+    "warnings": []
+  }
+]

@@ -160,6 +160,12 @@ try {
   assert(tools.some(tool => tool.name === toolName('amzn')), 'AMZN must expose a company research read tool')
   validateCall(toolName('amzn'), { request: { force: true } })
   assert.throws(() => validateCall(toolName('amzn'), { request: { symbol: 'AAPL' } }), /Invalid/)
+  assert(tools.some(tool => tool.name === toolName('googl')), 'GOOGL must expose a company research read tool')
+  assert(tools.some(tool => tool.name === toolName('anthropic')), 'Anthropic must expose reviewed private-company research')
+  validateCall(toolName('anthropic'), { request: { force: true } })
+  assert.throws(() => validateCall(toolName('anthropic'), { request: { symbol: 'ANT' } }), /Invalid/)
+  validateCall(toolName('googl'), { request: { force: true } })
+  assert.throws(() => validateCall(toolName('googl'), { request: { symbol: 'GOOG' } }), /Invalid/)
   assert.equal(screenshotTool.annotations?.readOnlyHint, true)
   assert.equal(screenshotTool.annotations?.openWorldHint, false)
   for (const page of ['current', 'all', ...TABS.filter((tab) => tab.implemented).map((tab) => tab.id)]) {

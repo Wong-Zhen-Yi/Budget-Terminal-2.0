@@ -2,6 +2,33 @@
 
 [Back to the README](../README.md)
 
+`budget_terminal_hood` now includes `presentation`: the reviewed November 11,
+2026 Robinhood investor deck, source slides, FY/LTM revenue mix, assets, deposits,
+customer economics, non-GAAP profitability, business lines and management priorities.
+Its `asOf`, `publishedAt` and `reviewedAt` remain separate from provider-fetch
+freshness. Refreshing providers does not restate the reviewed deck. Business lines
+overlap; quarterly revenue annualized is not realized annual revenue. Requests and
+permissions are unchanged. Rebuild MCP and reconnect clients to discover the
+updated output schema. See [HOOD Focus sources and maintenance](hood-focus.md).
+
+Anthropic is available in Focus and preloads at startup. The read-only
+`budget_terminal_anthropic` tool accepts `{ "request": {} }` or
+`{ "request": { "force": true } }` with the existing market-research permission.
+It returns reviewed disclosures, seven quarters of revenue and compute costs,
+Series E?H funding history, proposed IPO terms, products, governance, risks,
+source links, official announcements, SEC filings and research review reasons.
+`reviewedAt` and `nextReviewAt` date the curated research; envelope freshness
+and individual `checks[].checkedAt` date the live checks. These dates are not
+interchangeable. The proposed ANT symbol has no live equity quote on this page.
+Sources are checked every six hours while open, including during startup and
+background page preparation. Updates & sources also supports an explicit check.
+New announcements, later SEC filings, changed reviewed documents or an overdue
+weekly review flag research for review; financial figures never silently restate.
+Failed source checks retain available snapshots and appear in Settings diagnostics.
+See [Anthropic research maintenance](anthropic-focus.md). Rebuild with
+`npm run build:mcp` and reconnect MCP clients to discover the new tool.
+
+
 Cloud sync now uses Convex Auth v2. Sign-in, sign-out, session rotation, provider
 credentials and sync conflict choices remain desktop-only. MCP cannot access auth
 tokens, change the cloud account or bypass local read/write permissions. Existing
@@ -375,3 +402,9 @@ Errors return `structuredContent.error` with `code`, `message`, `retryable` and 
 `npm run probe:mcp` includes deterministic workflow scenarios covering selective calls, retained news dates and source warnings, snapshot reuse, category enforcement for both callers, journal recovery and stale UI revisions. These verify the tool workflows; they do not benchmark a language model's tool-selection accuracy or live provider latency.
 
 Finnhub quotes share the desktop streaming-first cache: REST reference maintenance is slower while trades are healthy, for background stocks, outside extended trading hours, and while all app windows are hidden/minimized. Initial page preloading is unchanged. Visible-stock hints are desktop-only and do not add an MCP tool or permission. Explicit force requests remain subject to provider budgets and cooldowns. See [Finnhub streaming](finnhub-streaming.md).
+
+## Alphabet Focus
+
+`budget_terminal_googl` reads the GOOGL Focus data: Class A market research and the eight latest quarterly earnings releases from Alphabet's SEC filings (CIK 1652044). It exposes Search, YouTube ads, Network, subscriptions/platforms/devices, Cloud and Other Bets revenue, segment operating income, traffic acquisition costs, quarterly cash flow, capex, buybacks and dividends. USD values are absolute dollars, growth and margins are percentages, and missing metrics remain null. Free cash flow is operating cash flow less purchases of property and equipment; capex is company-wide, with no inferred AI-only allocation. Quote marks and historical candles retain their independent provider labels. This read uses market-research permission and preserves lane timestamps and partial/stale errors. GOOGL is preloaded at startup, including when hidden; failures appear in Settings.
+
+Run `npm run probe:googl -- --live`, `npm run probe:googl-ui`, `npm run build:mcp` and `npm run probe:mcp` after changes. All double-click launchers use the shared build path. Reconnect MCP clients after rebuilding to discover the new tool and screenshot page ID.

@@ -509,7 +509,7 @@ function normalizeStatements(companyFacts: Record<string, unknown>): {
   return { annual: build(annualRaw), quarterly: build(quarterlyRaw) }
 }
 
-function normalizeFilings(submissions: Record<string, unknown>, cik: string, limit = 50): SecFiling[] {
+function normalizeFilings(submissions: Record<string, unknown>, cik: string, limit = 50, includeRegistration = false): SecFiling[] {
   const recent = record(record(submissions.filings).recent)
   const forms = Array.isArray(recent.form) ? recent.form : []
   const field = (name: string, index: number): string => {
@@ -519,7 +519,8 @@ function normalizeFilings(submissions: Record<string, unknown>, cik: string, lim
   const filings: SecFiling[] = []
   for (let index = 0; index < forms.length && filings.length < limit; index += 1) {
     const form = String(forms[index] ?? '')
-    if (!['10-K', '10-Q', '8-K', '20-F', '40-F', '6-K'].some((prefix) => form.startsWith(prefix))) continue
+    const supported = ['10-K', '10-Q', '8-K', '20-F', '40-F', '6-K', ...(includeRegistration ? ['S-1', 'S-3', '424B', 'FWP', 'EFFECT', 'RW', 'DRS'] : [])]
+    if (!supported.some((prefix) => form.startsWith(prefix))) continue
     const accessionNumber = field('accessionNumber', index)
     const document = field('primaryDocument', index)
     const accession = accessionNumber.replaceAll('-', '')
@@ -543,11 +544,11 @@ function normalizeFilings(submissions: Record<string, unknown>, cik: string, lim
 }
 
 /** Fixed-company dashboards can discover earnings filings without downloading companyfacts. */
-export async function fetchSecFilingSnapshot(cikInput: string, force = false) {
+export async function fetchSecFilingSnapshot(cikInput: string, force = false, includeRegistration = false) {
   if (!/^\d{1,10}$/.test(cikInput) || Number(cikInput) <= 0) throw new Error('Invalid SEC CIK.')
   const cik = String(Number(cikInput)).padStart(10, '0')
   const result = await cachedJson('submissions', cik, SEC_SUBMISSIONS_URL.replace('{cik}', cik), SUBMISSIONS_TTL, force)
-  return { filings: normalizeFilings(result.payload, cik, 500), freshness: result.metadata.freshness,
+  return { filings: normalizeFilings(result.payload, cik, 500, includeRegistration), freshness: result.metadata.freshness,
     warnings: [
       ...(result.metadata.warning ? [`SEC submissions refresh failed; using cached data: ${result.metadata.warning}`] : []),
       ...(result.metadata.cacheWarning ? [result.metadata.cacheWarning] : []),

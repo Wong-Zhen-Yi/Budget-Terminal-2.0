@@ -1,7 +1,7 @@
 import type { Query, QueryClient, QueryKey } from '@tanstack/react-query'
 import type { EquityMarketUpdate } from '@shared/contract'
 
-const companyRoots = new Set(['amzn', 'avgo', 'mu', 'sofi', 'vst', 'hood', 'hims', 'pltr'])
+const companyRoots = new Set(['googl', 'amzn', 'avgo', 'mu', 'sofi', 'vst', 'hood', 'hims', 'pltr'])
 const symbolRoots = new Set(['chart', 'chartsHistory', 'stocks', 'fundamentalsPage'])
 
 /** Maintain membership on cache changes; market ticks never enumerate unrelated queries. */

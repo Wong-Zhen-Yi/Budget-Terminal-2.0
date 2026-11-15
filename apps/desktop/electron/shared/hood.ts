@@ -1,4 +1,6 @@
 import type { BackgroundRequest, FundamentalsPagePayload, StocksPayload } from './contract.js'
+import { HOOD_PRESENTATION } from './hoodPresentation.js'
+import type { HoodPresentation } from './hoodPresentation.js'
 
 export const HOOD_BLOCKS = ['market', 'financials', 'monthly', 'quarterly'] as const
 export type HoodBlock = (typeof HOOD_BLOCKS)[number]
@@ -30,6 +32,7 @@ export interface HoodReport {
 
 export interface HoodPayload {
   symbol: 'HOOD'
+  presentation: HoodPresentation
   market: StocksPayload | null
   financials: FundamentalsPagePayload | null
   monthly: HoodReport | null
@@ -39,7 +42,7 @@ export interface HoodPayload {
 }
 
 export function emptyHoodPayload(): HoodPayload {
-  return { symbol: 'HOOD', market: null, financials: null, monthly: null, quarterly: null,
+  return { symbol: 'HOOD', presentation: HOOD_PRESENTATION, market: null, financials: null, monthly: null, quarterly: null,
     progress: { market: 'unavailable', financials: 'unavailable', monthly: 'unavailable', quarterly: 'unavailable' }, fetchedAt: 0 }
 }
 

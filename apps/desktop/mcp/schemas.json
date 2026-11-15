@@ -333,6 +333,8 @@
               "bmnr",
               "sofi",
               "mu",
+              "googl",
+              "anthropic",
               "amzn",
               "avgo",
               "homebuilders",
@@ -2551,6 +2553,40 @@
         "$ref": "#/definitions/MuRequest"
       },
       "MuRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "googl": {
+    "$ref": "#/definitions/Input_googl",
+    "definitions": {
+      "Input_googl": {
+        "$ref": "#/definitions/GooglRequest"
+      },
+      "GooglRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "anthropic": {
+    "$ref": "#/definitions/Input_anthropic",
+    "definitions": {
+      "Input_anthropic": {
+        "$ref": "#/definitions/AnthropicRequest"
+      },
+      "AnthropicRequest": {
         "type": "object",
         "properties": {
           "force": {

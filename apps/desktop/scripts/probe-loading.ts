@@ -392,7 +392,7 @@ const basePlan = buildTasks(portfolio, undefined, planSymbols, planCalendar)
 const { DEFAULT_BACKTEST_PAGE_SETTINGS } = await import('../electron/shared/backtest.js')
 const refreshPlan = buildTasks(portfolio, { backtestPage: { ...DEFAULT_BACKTEST_PAGE_SETTINGS,
   rows: [{ symbol: 'AAPL', weight: 100 }] } } as import('../electron/shared/contract.js').AppSettings, planSymbols, planCalendar)
-const hourlyPages = ['amzn', 'mu', 'avgo', 'vst', 'sofi', 'hims', 'hood', 'bmnr', 'semiconductors', 'homebuilders']
+const hourlyPages = ['googl', 'amzn', 'mu', 'avgo', 'vst', 'sofi', 'hims', 'hood', 'bmnr', 'semiconductors', 'homebuilders']
 for (const page of hourlyPages) {
   const tasks = refreshPlan.filter(task => task.tab === page)
   assert(tasks.length > 0, `${page} must still prepare at startup`)
@@ -427,7 +427,8 @@ policyScheduler.reconcile(policyTasks.map(task => ({ ...task, run: async observe
 } })))
 await settleScheduler()
 assert.equal(policyTimers.size, policyTasks.length - backtestTasks.length)
-assert([...policyTimers.values()].every(timer => timer.delay === 300_000 || timer.delay === 1_800_000 || timer.delay === 3_600_000), 'Source expiry must not shorten explicit TV, Heatmap or company refresh windows')
+const declaredIntervals = new Set(policyTasks.map(task => task.refreshIntervalMs).filter(interval => interval !== undefined))
+assert([...policyTimers.values()].every(timer => declaredIntervals.has(timer.delay)), 'Source expiry must preserve each declared page refresh window')
 for (const [id, timer] of [...policyTimers]) {
   policyTimers.delete(id)
   timer.run()

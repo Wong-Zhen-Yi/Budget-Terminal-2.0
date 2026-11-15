@@ -23,7 +23,11 @@ import type { SemiconductorsPayload, SemiconductorsRequest } from './semiconduct
 export type { SemiconductorsPayload, SemiconductorsRequest } from './semiconductors.js'
 import type { AvgoPayload, AvgoRequest } from './avgo.js'
 export type { AvgoPayload, AvgoRequest } from './avgo.js'
+import type { GooglPayload, GooglRequest } from './googl.js'
+import type { AnthropicPayload, AnthropicRequest } from './anthropic.js'
+export type { AnthropicPayload, AnthropicRequest } from './anthropic.js'
 import type { AmznPayload, AmznRequest } from './amzn.js'
+export type { GooglPayload, GooglRequest } from './googl.js'
 export type { AmznPayload, AmznRequest } from './amzn.js'
 import type { MuPayload, MuRequest } from './mu.js'
 export type { MuPayload, MuRequest } from './mu.js'
@@ -1367,6 +1371,8 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'bmnr', label: 'BMNR', implemented: true },
   { id: 'sofi', label: 'SOFI', implemented: true },
   { id: 'mu', label: 'MU', implemented: true },
+  { id: 'googl', label: 'GOOGL', implemented: true },
+  { id: 'anthropic', label: 'Anthropic', implemented: true },
   { id: 'amzn', label: 'AMZN', implemented: true },
   { id: 'avgo', label: 'AVGO', implemented: true },
   { id: 'homebuilders', label: 'Homebuilders', implemented: true },
@@ -3582,6 +3588,8 @@ export const CHANNELS = {
   bmnr: 'bmnr:read',
   sofi: 'sofi:read',
   mu: 'mu:read',
+  googl: 'googl:read',
+  anthropic: 'anthropic:read',
   amzn: 'amzn:read',
   avgo: 'avgo:read',
   homebuilders: 'homebuilders:read',
@@ -3826,6 +3834,8 @@ export interface DesktopApi {
   bmnr(request: BmnrRequest): Promise<Envelope<BmnrPayload>>
   sofi(request: SofiRequest): Promise<Envelope<SofiPayload>>
   mu(request: MuRequest): Promise<Envelope<MuPayload>>
+  googl(request: GooglRequest): Promise<Envelope<GooglPayload>>
+  anthropic(request: AnthropicRequest): Promise<Envelope<AnthropicPayload>>
   amzn(request: AmznRequest): Promise<Envelope<AmznPayload>>
   avgo(request: AvgoRequest): Promise<Envelope<AvgoPayload>>
   homebuilders(request: HomebuildersRequest): Promise<Envelope<HomebuildersPayload>>

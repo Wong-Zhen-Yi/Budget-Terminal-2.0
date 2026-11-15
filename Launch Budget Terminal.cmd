@@ -1,4 +1,7 @@
 @echo off
+rem HOOD Focus investor-deck visuals, reviewed data and MCP schemas rebuild through the shared launcher.
+rem Anthropic Focus research, source update checks and MCP tools rebuild through the shared launcher.
+rem GOOGL Focus, quarterly SEC drivers and MCP schemas rebuild through the shared launch path.
 rem News reader and scoped clipboard exports rebuild through the shared launcher.
 rem Finnhub streaming-first refresh, visible-stock priorities and idle/session savings rebuild through the shared launcher.
 rem Settings dashboard keeps the five slowest pages stable during startup updates; rebuilt through the shared launcher.

@@ -1,16 +1,14 @@
-import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
-import { FRESHNESS } from '@shared/freshness'
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { STOCKS_RANGE_PRESETS } from '@shared/contract'
 import type { StocksRangePreset } from '@shared/contract'
-import { hoodHistory, hoodRevenueMix } from '@shared/hood'
-import type { HoodBlock, HoodMetric, HoodReport } from '@shared/hood'
+import { hoodHistory } from '@shared/hood'
+import type { HoodMetric, HoodReport } from '@shared/hood'
+import { HOOD_PRESENTATION } from '@shared/hoodPresentation'
+import type { HoodPresentation, HoodPresentationPeriod } from '@shared/hoodPresentation'
 import { useHood } from '@/api/hoodQueries'
 import { api } from '@/api/client'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
-import { LineChart } from '@/components/charts/LineChart'
 import { CandlestickChart } from '@/components/charts/CandlestickChart'
-import { Donut, colorForIndex } from '@/components/charts/Donut'
 import { FilingsTable } from '@/components/fundamentals/FilingsTable'
 import { Button } from '@/components/ui/Button'
 import { Panel, PanelMessage } from '@/components/ui/Panel'
@@ -19,49 +17,51 @@ const amount = (value: number | null | undefined, money = false) => {
   if (value == null || !Number.isFinite(value)) return '—'
   const magnitude = Math.abs(value)
   const scale = magnitude >= 1e9 ? 1e9 : magnitude >= 1e6 ? 1e6 : magnitude >= 1e3 ? 1e3 : 1
-  const suffix = scale === 1e9 ? 'B' : scale === 1e6 ? 'M' : scale === 1e3 ? 'K' : ''
-  return `${value < 0 ? '-' : ''}${money ? '$' : ''}${(magnitude / scale).toLocaleString('en-US', { maximumFractionDigits: 2 })}${suffix}`
+  return `${value < 0 ? '-' : ''}${money ? '$' : ''}${(magnitude / scale).toLocaleString('en-US', { maximumFractionDigits: 2 })}${scale === 1e9 ? 'B' : scale === 1e6 ? 'M' : scale === 1e3 ? 'K' : ''}`
 }
-const metricValue = (metric: HoodMetric | undefined, value = metric?.value) => amount(value, metric?.unit !== 'count')
-const reportPeriod = (report: HoodReport | null | undefined, quarterly = false) => report
-  ? quarterly ? `${report.period.slice(0, 4)} Q${Number(report.period.slice(5)) / 3}` : new Date(`${report.period}-01T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' })
-  : 'Unavailable'
+const revenue = (row: HoodPresentationPeriod) => row.transaction + row.interest + row.other
 const findMetric = (report: HoodReport | null | undefined, id: string) => report?.metrics.find(metric => metric.id === id)
+const metricValue = (metric: HoodMetric | undefined) => amount(metric?.value, metric?.unit !== 'count')
+const open = (url: string) => { void api.openExternal(url) }
+const pct = (part: number, total: number) => `${(part / total * 100).toFixed(1)}%`
+type ChartMode = 'revenue' | 'assets' | 'profit'
+const seriesFor = (mode: ChartMode) => mode === 'revenue'
+  ? [{ key: 'transaction', label: 'Transactions', color: 'var(--color-accent)' }, { key: 'interest', label: 'Net interest', color: 'var(--color-text-muted)' }, { key: 'other', label: 'Other', color: 'var(--color-warn)' }]
+  : mode === 'assets' ? [{ key: 'assets', label: 'Platform assets', color: 'var(--color-accent)' }, { key: 'deposits', label: 'Net deposits', color: 'var(--color-up)' }]
+    : [{ key: 'revenue', label: 'Revenue', color: 'var(--color-accent)' }, { key: 'adjustedOpexAndSbc', label: 'Adj. opex + SBC', color: 'var(--color-text-muted)' }, { key: 'adjustedEbitda', label: 'Adj. EBITDA', color: 'var(--color-up)' }]
+const seriesValue = (row: HoodPresentationPeriod, key: string) => key === 'revenue' ? revenue(row) : row[key as Exclude<keyof HoodPresentationPeriod, 'period' | 'basis'>]
 
-function Source({ report }: { report: HoodReport | null | undefined }) {
-  return <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-border p-2 text-2xs text-text-muted">
-    {report ? <><button className="text-accent hover:underline" onClick={() => { void api.openExternal(report.sourceUrl) }}>Robinhood report ↗</button><span>Published {report.publishedAt || 'date unavailable'}</span><span>Period {report.period}</span></> : <span>Robinhood report unavailable · use Reload (F5) to retry.</span>}
-  </div>
+function PresentationChart({ presentation, mode, selected, onSelect }: { presentation: HoodPresentation; mode: ChartMode; selected: number; onSelect: (index: number) => void }) {
+  const series = seriesFor(mode)
+  const ceiling = Math.max(...presentation.history.map(row => mode === 'revenue' ? revenue(row) : Math.max(...series.map(item => Math.abs(seriesValue(row, item.key)))))) * 1.15
+  const row = presentation.history[selected]
+  return <>
+    <div className="hood-chart-legend">{series.map(item => <span key={item.key}><i style={{ background: item.color }} />{item.label}</span>)}<span className="hood-unit">USD {mode === 'assets' ? 'billions' : 'millions'}</span></div>
+    <div className="hood-column-chart" aria-label={`${mode} history. Select a period to inspect its values.`}>
+      {presentation.history.map((point, index) => <button key={point.period} className={`hood-column ${mode === 'revenue' ? 'hood-stacked' : ''}`} aria-pressed={index === selected} aria-label={`${point.period}: ${series.map(item => `${item.label} ${amount(seriesValue(point, item.key), true)}`).join(', ')}`} onClick={() => onSelect(index)}>
+        <span className="hood-bar-space">
+          {mode === 'revenue' ? <span className="hood-stack" style={{ height: `${revenue(point) / ceiling * 100}%` }}><b>{amount(revenue(point), true)}</b>{[...series].reverse().map(item => <span key={item.key} style={{ height: `${seriesValue(point, item.key) / revenue(point) * 100}%`, background: item.color }} />)}</span>
+            : series.map(item => { const value = seriesValue(point, item.key); return <span key={item.key} className={`hood-bar ${value < 0 ? 'hood-bar-negative' : ''}`} style={{ height: `${Math.abs(value) / ceiling * 100}%`, background: value < 0 ? 'var(--color-down)' : item.color }} title={`${item.label}: ${amount(value, true)}`} /> })}
+        </span><span className="hood-period">{point.period}</span>
+      </button>)}
+    </div>
+    <div className="hood-chart-readout" aria-live="polite"><strong>{row.period}</strong>{series.map(item => <span key={item.key}>{item.label} <b className="num">{amount(seriesValue(row, item.key), true)}</b></span>)}</div>
+  </>
 }
 
-function MetricsTable({ report, quarterly = false }: { report: HoodReport | null | undefined; quarterly?: boolean }) {
-  return <div className="overflow-auto"><table className="w-full text-2xs"><thead className="bg-surface-raised text-text-muted"><tr>
-    <th className="p-2 text-left font-normal">Metric</th><th className="p-2 text-right font-normal">{reportPeriod(report, quarterly)}</th>
-    <th className="p-2 text-right font-normal">{report?.previousPeriod ?? 'Previous'}</th><th className="p-2 text-right font-normal">{quarterly ? 'Q/Q' : 'M/M'}</th>
-    <th className="p-2 text-right font-normal">{report?.yearAgoPeriod ?? 'Year ago'}</th><th className="p-2 text-right font-normal">Y/Y</th>
-  </tr></thead><tbody>{report?.metrics.map(metric => <tr key={metric.id} className="border-t border-border/50 hover:bg-surface-raised">
-    <td className="p-2 text-text-muted">{metric.label}{metric.unit === 'USD/share' ? ' ($/share)' : metric.unit === 'USD/user' ? ' ($/user)' : ''}</td>
-    <td className="num p-2 text-right font-semibold" title={metric.value === null ? 'Unavailable' : `${metric.value.toLocaleString('en-US')} ${metric.unit}`}>{metricValue(metric)}</td><td className="num p-2 text-right">{metricValue(metric, metric.previous)}</td><td className="num p-2 text-right">{metric.change || '—'}</td>
-    <td className="num p-2 text-right">{metricValue(metric, metric.yearAgo)}</td><td className="num p-2 text-right">{metric.yearChange || '—'}</td>
-  </tr>)}</tbody></table>{!report ? <PanelMessage>Report metrics unavailable.</PanelMessage> : null}</div>
-}
-
-export function HoodPage({ onStatusChange, onNavigate }: {
-  onStatusChange: (panels: PanelStatus[], sourcePath: string) => void
-  onNavigate: (tabId: string, symbol?: string) => void
-}) {
+export function HoodPage({ onStatusChange, onNavigate }: { onStatusChange: (panels: PanelStatus[], sourcePath: string) => void; onNavigate: (tabId: string, symbol?: string) => void }) {
   const query = useHood()
-  const now = useSnapshotClock()
-  const freshness = query.data ? effectiveFreshness(query.data, now, FRESHNESS.hood) : 'unavailable'
-  const notice = ''
-  const refreshing = false
-  const [range, setRange] = useState<StocksRangePreset>('1Y')
   const data = query.data?.data
-  const busy = refreshing || query.isFetching
-  const warning = (block: HoodBlock) => query.data?.errors.filter(error => error.symbol === block).map(error => error.reason).join(' · ') || undefined
+  const presentation = data?.presentation ?? HOOD_PRESENTATION
+  const latest = presentation.history[presentation.history.length - 1]
+  const [view, setView] = useState<'business' | 'market'>('business')
+  const [mode, setMode] = useState<ChartMode>('revenue')
+  const [selected, setSelected] = useState(presentation.history.length - 1)
+  const [priority, setPriority] = useState('traders')
+  const [range, setRange] = useState<StocksRangePreset>('1Y')
+  const [showNotes, setShowNotes] = useState(false)
   const stats = data?.market?.chart.stats
   const history = useMemo(() => hoodHistory(data?.financials ?? null), [data?.financials])
-  const mix = useMemo(() => hoodRevenueMix(data?.quarterly ?? null), [data?.quarterly])
   const candles = useMemo(() => {
     const all = data?.market?.chart.candles ?? []
     const end = all.at(-1)
@@ -70,60 +70,55 @@ export function HoodPage({ onStatusChange, onNavigate }: {
     start.setUTCMonth(start.getUTCMonth() - ({ '1M': 1, '3M': 3, '6M': 6, '1Y': 12 }[range || '1Y']))
     return all.filter(candle => candle.time * 1000 >= start.getTime())
   }, [data?.market?.chart.candles, range])
-  const dates = useMemo(() => candles.map(candle => new Date(candle.time * 1000).toISOString().slice(0, 10)), [candles])
-  useEffect(() => onStatusChange([{ label: 'HOOD', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: busy }], ''), [query.data, busy, onStatusChange])
-  const tiles = [
-    ['Funded customers', metricValue(findMetric(data?.monthly, 'customers')), reportPeriod(data?.monthly)],
-    ['Total platform assets', metricValue(findMetric(data?.monthly, 'assets')), reportPeriod(data?.monthly)],
-    ['Net deposits · monthly', metricValue(findMetric(data?.monthly, 'deposits')), reportPeriod(data?.monthly)],
-    ['Revenue · quarterly', metricValue(findMetric(data?.quarterly, 'revenue')), reportPeriod(data?.quarterly, true)],
-    ['Gold subscribers', metricValue(findMetric(data?.quarterly, 'gold')), reportPeriod(data?.quarterly, true)],
-    ['Diluted EPS', metricValue(findMetric(data?.quarterly, 'eps')), reportPeriod(data?.quarterly, true)],
-  ]
-  return <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto p-2" data-hood-page>
-    <div className="flex shrink-0 flex-wrap items-center gap-2">
-      <h1 className="text-sm font-semibold">HOOD · Robinhood Markets</h1>
-      <span className="num text-sm font-bold">{amount(stats?.price, true)}</span>
-      {stats?.priceSource ? <span className="text-2xs text-text-muted">{stats.priceSource} · {stats.changeBasis === '24h' ? '24h' : 'daily'}</span> : null}
-      <span className={`num text-xs ${stats && stats.change >= 0 ? 'text-up' : 'text-down'}`}>{stats ? `${stats.change >= 0 ? '+' : ''}${stats.change.toFixed(2)}%` : '—'}</span>
-      <span className="text-2xs text-text-muted">Market cap {amount(data?.financials?.facts.marketCap, true)}</span>
-
-      {['charts', 'fundamentals', 'options', 'valuation'].map(id => <Button key={id} className="capitalize" onClick={() => onNavigate(id, 'HOOD')}>{id}</Button>)}
-    </div>
-    <div className="shrink-0 text-2xs text-text-muted">{busy ? 'Loading Robinhood dashboard…' : `${freshness} · fetched ${data?.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : 'unavailable'}`} · USD · market price from daily bars{stats && data?.market?.chart.candles.at(-1) ? ` as of ${new Date(data.market.chart.candles.at(-1)!.time * 1000).toISOString().slice(0, 10)}` : ''}</div>
-    {notice ? <p role="status" className="shrink-0 px-2 py-1 text-2xs text-text-muted">{notice}</p> : null}
-    {(!query.data || query.data.meta.freshness === 'failed') && (query.error || query.data?.errors.length) ? <p role="alert" className="shrink-0 px-2 py-1 text-2xs text-down">{query.error?.message || query.data?.meta.failureReason}</p> : null}
-    <div className="grid shrink-0 grid-cols-2 gap-2 lg:grid-cols-3 2xl:grid-cols-6">{tiles.map(([label, value, period]) => <div key={label} className="border border-border bg-surface p-3 text-center"><div className="text-2xs text-text-muted">{label}</div><div className="num my-1 text-lg font-bold">{value}</div><div className="text-2xs text-text-muted">{period}</div></div>)}</div>
-    <div className="grid shrink-0 gap-2 xl:grid-cols-[2fr_1fr]">
-      <Panel title="Stock performance · HOOD" warning={warning('market')} className="h-[430px]" actions={STOCKS_RANGE_PRESETS.map(preset => <Button key={preset} variant="toggle" active={range === preset} onClick={() => setRange(preset)}>{preset}</Button>)}>
-        <div className="flex min-h-0 flex-[3] flex-col overflow-hidden p-2" data-hood-price-range={range} data-hood-candle-count={candles.length}>
-          {data?.market?.chart.candles.length ? <CandlestickChart candles={candles} /> : <PanelMessage>{busy ? 'Loading price history…' : 'Price history unavailable.'}</PanelMessage>}
-        </div>
-        <div className="border-t border-border px-2 pt-1 text-2xs text-text-muted">Daily trading volume · shares</div>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-2 pb-2"><LineChart labels={dates} series={[{ label: 'Volume', values: candles.map(candle => candle.volume), color: colorForIndex(1) }]} format={value => amount(value)} ticks={4} empty="Volume unavailable." /></div>
+  useEffect(() => onStatusChange([{ label: 'HOOD', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching }], ''), [query.data, query.error, query.isFetching, query.isEnabled, onStatusChange])
+  const source = (page: number) => open(`${presentation.sourceUrl}#page=${page}`)
+  const activePriority = presentation.priorities.find(item => item.id === priority) ?? presentation.priorities[0]
+  const monthlyIds = ['customers', 'assets', 'deposits', 'equities', 'options', 'crypto', 'events', 'margin']
+  const selectedRow = presentation.history[Math.min(selected, presentation.history.length - 1)]
+  return <div className="hood-focus" data-hood-page>
+    <header className="hood-header">
+      <div className="hood-identity"><span className="hood-symbol">HOOD</span><div><h1>Robinhood Markets</h1><p>The financial SuperApp · Investor presentation</p></div></div>
+      <div className="hood-quote"><strong className="num">{amount(stats?.price, true)}</strong><span className={stats && stats.change < 0 ? 'text-down' : 'text-up'}>{stats ? `${stats.change >= 0 ? '+' : ''}${stats.change.toFixed(2)}%` : '—'}</span><small>{stats?.priceSource ?? (stats ? 'Daily stock bars' : 'Market price unavailable')}{stats ? ` · ${stats.changeBasis === '24h' ? '24h' : 'daily'}` : ''}</small></div>
+      <div className="hood-shortcuts">{['charts', 'fundamentals', 'options', 'valuation'].map(id => <Button key={id} className="capitalize" onClick={() => onNavigate(id, 'HOOD')}>{id}</Button>)}</div>
+    </header>
+    <div className="hood-toolbar"><div className="hood-tabs" aria-label="HOOD views">{(['business', 'market'] as const).map(id => <button key={id} aria-pressed={view === id} onClick={() => setView(id)}>{id === 'business' ? 'Business model' : 'Market & filings'}</button>)}</div><button className="hood-source" onClick={() => source(1)}>Investor deck · {presentation.publishedAt} ↗</button><span className="hood-asof">Snapshot: {presentation.asOf}</span></div>
+    <section className="hood-engine" aria-label="Robinhood operating model, presentation snapshot">
+      {[
+        ['01 / CUSTOMER RELATIONSHIP', amount(presentation.fundedCustomers), 'Funded customers', `${amount(presentation.goldSubscribers)} Gold subscribers · +${presentation.goldYearGrowth}% Y/Y`],
+        ['02 / ASSET GATHERING', amount(latest.assets, true), 'Platform assets · period end', `${amount(latest.deposits, true)} LTM net deposits · ${presentation.depositGrowth}% growth`],
+        ['03 / MONETIZATION', amount(revenue(latest), true), 'LTM net revenue', `$${latest.arpu} LTM ARPU · 14 scaled businesses`],
+        ['04 / OPERATING LEVERAGE', amount(latest.adjustedEbitda, true), 'LTM adjusted EBITDA', `${presentation.adjustedEbitdaMargin}% margin · non-GAAP`],
+      ].map(([label, value, title, detail]) => <div key={label}><small>{label}</small><strong className="num">{value}</strong><h2>{title}</h2><p>{detail}</p></div>)}
+    </section>
+    {view === 'business' ? <div className="hood-business">
+      <section className="hood-growth hood-card">
+        <div className="hood-section-heading"><div><small>ASSETS → REVENUE → EARNINGS</small><h2>{mode === 'revenue' ? 'A broader revenue engine' : mode === 'assets' ? 'Compounding the asset base' : 'Scaling profitable growth'}</h2></div><button className="hood-source" onClick={() => source(mode === 'revenue' ? 14 : mode === 'assets' ? 12 : 17)}>Slide {mode === 'revenue' ? 14 : mode === 'assets' ? 12 : 17} ↗</button></div>
+        <div className="hood-tabs hood-chart-tabs">{([['revenue', 'Revenue mix'], ['assets', 'Assets & deposits'], ['profit', 'Profitability']] as const).map(([id, label]) => <button key={id} aria-pressed={mode === id} onClick={() => setMode(id)}>{label}</button>)}</div>
+        <PresentationChart presentation={presentation} mode={mode} selected={Math.min(selected, presentation.history.length - 1)} onSelect={setSelected} />
+        <p className="hood-chart-note">2021–2025: full years. Last column: LTM to Sep 2026; assets are period end.{mode === 'profit' ? ' Adjusted expenses and EBITDA are separate non-GAAP measures.' : ' Select a column for exact reported values.'}</p>
+      </section>
+      <section className="hood-relationship hood-card"><div className="hood-section-heading"><div><small>DEPTH OF RELATIONSHIP</small><h2>Gold & customer economics</h2></div><button className="hood-source" onClick={() => source(12)}>Slides 3, 12 ↗</button></div>
+        <div className="hood-gold"><strong className="num">{amount(presentation.goldSubscribers)}</strong><div><b>Gold subscribers</b><span className="text-up">+{presentation.goldYearGrowth}% Y/Y</span></div><div className="hood-gold-share"><b>{pct(presentation.goldSubscribers, presentation.fundedCustomers)}</b><small>of funded customers*</small></div></div>
+        <div className="hood-adoption"><span style={{ width: pct(presentation.goldSubscribers, presentation.fundedCustomers) }} /></div>
+        <div className="hood-customer-stats"><div><b className="num">${selectedRow.arpu}</b><span>ARPU · {selectedRow.period}</span></div><div><b className="num">{selectedRow.retention}%</b><span>Retention · {selectedRow.period}</span></div><div><b className="num">{amount(latest.assets / presentation.fundedCustomers, true)}</b><span>Assets / customer*</span></div></div>
+        <p className="hood-chart-note">*Calculated from rounded deck figures. Retention includes low-balance account escheatment; see definitions.</p>
+      </section>
+      <section className="hood-diversification hood-card"><div className="hood-section-heading"><div><small>REVENUE DIVERSIFICATION</small><h2>14 businesses above $100M annualized</h2></div><button className="hood-source" onClick={() => source(14)}>Slide 14 ↗</button></div>
+        <div className="hood-business-lines">{presentation.businessLines.map((line, index) => <span key={line}><small>{String(index + 1).padStart(2, '0')}</small>{line}</span>)}</div>
+        <p className="hood-chart-note">Q3 2026 revenue × 4, per management. These businesses overlap; the list is not an additive revenue breakdown.</p>
+      </section>
+      <section className="hood-roadmap hood-card"><div className="hood-section-heading"><div><small>MANAGEMENT'S 2026+ PRIORITIES</small><h2>Three paths to the SuperApp</h2></div><button className="hood-source" onClick={() => source(6)}>Slide 6 ↗</button></div><div className="hood-priorities">{presentation.priorities.map((item, index) => <button key={item.id} aria-pressed={priority === item.id} onClick={() => setPriority(item.id)}><span>0{index + 1}</span>{item.title}<b>→</b></button>)}</div><div className="hood-products" aria-live="polite">{activePriority.products.map(product => <span key={product}>{product}</span>)}</div><p className="hood-chart-note">Management priorities as of the deck date; execution remains forward-looking.</p></section>
+      <section className="hood-monthly hood-card"><div className="hood-section-heading"><div><small>AFTER THE PRESENTATION SNAPSHOT</small><h2>Monthly operating pulse</h2></div>{data?.monthly ? <button className="hood-source" onClick={() => open(data.monthly!.sourceUrl)}>{data.monthly.period} report ↗</button> : <span className="hood-chart-note">{query.isFetching ? 'Loading Robinhood reports…' : 'Monthly report unavailable'}</span>}</div><div className="hood-pulse">{monthlyIds.map(id => { const metric = findMetric(data?.monthly, id); return <div key={id}><span>{metric?.label ?? ({ customers: 'Funded customers', assets: 'Platform assets', deposits: 'Net deposits', equities: 'Equity volume', options: 'Options contracts', crypto: 'Crypto volume', events: 'Event contracts', margin: 'Margin book' }[id])}</span><b className="num">{metricValue(metric)}</b><small>{metric?.change ? `${metric.change} M/M` : 'M/M —'}</small></div> })}</div></section>
+    </div> : <div className="hood-market">
+      <Panel title="Stock performance · HOOD" actions={STOCKS_RANGE_PRESETS.map(preset => <Button key={preset} onClick={() => setRange(preset)} variant="toggle" active={preset === range}>{preset}</Button>)}><div className="flex min-h-0 flex-1 flex-col" data-hood-price-range={range} data-hood-candle-count={candles.length}><CandlestickChart candles={candles} /></div></Panel>
+      <Panel title="SEC filings · HOOD"><FilingsTable filings={data?.financials?.sec.filings ?? []} compact /></Panel>
+      <Panel title="Financial history · quarterly" actions={data?.quarterly ? <button className="hood-source" onClick={() => open(data.quarterly!.sourceUrl)}>{data.quarterly.period} report ↗</button> : undefined}>
+        <div className="hood-quarter-summary">{['revenue', 'eps', 'ebitda'].map(id => <span key={id}>{findMetric(data?.quarterly, id)?.label ?? id} <b>{metricValue(findMetric(data?.quarterly, id))}</b></span>)}</div>
+        <div className="overflow-auto"><table className="hood-history"><thead><tr>{['Quarter ended', 'Revenue', 'Net income', 'Operating cash flow', 'Shares'].map(label => <th key={label}>{label}</th>)}</tr></thead><tbody>{history.map(row => <tr key={row.endDate}><td>{row.endDate}</td><td>{amount(row.revenue, true)}</td><td>{amount(row.netIncome, true)}</td><td>{amount(row.operatingCashFlow, true)}</td><td>{amount(row.sharesOutstanding)}</td></tr>)}</tbody></table>{!history.length && <PanelMessage>Financial history unavailable.</PanelMessage>}</div><p className="hood-chart-note">SEC statements / Yahoo fallback · USD · gaps indicate unavailable data.</p>
       </Panel>
-      <Panel title={`Revenue composition · ${reportPeriod(data?.quarterly, true)}`} warning={warning('quarterly')} className="h-[430px]">
-        <div className="flex min-h-0 flex-1 p-2"><Donut slices={mix} compact centerText={metricValue(findMetric(data?.quarterly, 'revenue'))} centerSubtext="Total net revenue" empty="Complete revenue composition unavailable." /></div>
-        <p className="px-2 pb-2 text-2xs text-text-muted">Transaction breakdown appears in Quarterly results below. Categories are shown once in this allocation.</p>
-        <Source report={data?.quarterly} />
-      </Panel>
-    </div>
-    <div className="grid shrink-0 gap-2 xl:grid-cols-2">
-      <Panel title={`Operating metrics · ${reportPeriod(data?.monthly)}`} warning={warning('monthly')}><MetricsTable report={data?.monthly} /><Source report={data?.monthly} /></Panel>
-      <Panel title={`Quarterly results · ${reportPeriod(data?.quarterly, true)}`} warning={warning('quarterly')}><MetricsTable report={data?.quarterly} quarterly /><Source report={data?.quarterly} /></Panel>
-    </div>
-    {data?.monthly?.notes.length ? <p className="shrink-0 p-1 text-2xs text-text-muted">{data.monthly.notes.join(' ')}</p> : null}
-    <Panel title="Financial history · latest eight available quarters" warning={warning('financials')} className="shrink-0">
-      <div className="flex h-[240px] flex-col p-2"><LineChart labels={history.map(row => row.endDate)} series={[
-        { label: 'Revenue', values: history.map(row => row.revenue), color: colorForIndex(0) },
-        { label: 'Net income', values: history.map(row => row.netIncome), color: colorForIndex(1) },
-      ]} format={value => amount(value, true)} empty={busy ? 'Loading financial history…' : 'Financial history unavailable.'} /></div>
-      <div className="overflow-auto"><table className="w-full text-2xs"><thead className="bg-surface-raised text-text-muted"><tr>{['Quarter ended', 'Revenue · USD', 'Net income · USD', 'Operating cash flow · USD', 'Shares outstanding'].map(label => <th key={label} className="p-2 text-right font-normal">{label}</th>)}</tr></thead><tbody>{history.map(row => <tr key={row.endDate} className="num border-t border-border/50 text-right"><td className="p-2">{row.endDate}</td><td className="p-2">{amount(row.revenue, true)}</td><td className="p-2">{amount(row.netIncome, true)}</td><td className="p-2">{amount(row.operatingCashFlow, true)}</td><td className="p-2">{amount(row.sharesOutstanding)}</td></tr>)}</tbody></table></div>
-      <p className="p-2 text-2xs text-text-muted">SEC EDGAR statements with Yahoo fallback · gaps mean unavailable data, not zero. Period-end shares only.</p>
-    </Panel>
-    <div className="grid shrink-0 gap-2 xl:grid-cols-2">
-      <Panel title="HOOD news" warning={warning('market')} className="h-[340px]"><div className="overflow-auto">{data?.market?.news.length ? data.market.news.slice(0, 15).map(row => <button key={row.id || row.url} className="block w-full border-b border-border/50 p-3 text-left text-2xs hover:bg-surface-raised" onClick={() => { void api.openExternal(row.url) }}><div className="text-text">{row.title} ↗</div><div className="mt-1 text-text-muted">{row.source} · {row.publishedAt ? new Date(row.publishedAt).toLocaleString() : 'Date unavailable'}</div></button>) : <PanelMessage>{busy ? 'Loading headlines…' : 'No headlines available.'}</PanelMessage>}</div></Panel>
-      <Panel title="SEC filings · HOOD" warning={warning('financials')} className="h-[340px]"><FilingsTable filings={data?.financials?.sec.filings ?? []} compact /></Panel>
-    </div>
+      <Panel title="HOOD news"><div className="overflow-auto">{data?.market?.news.length ? data.market.news.map(row => <button key={row.id || row.url} className="hood-news" onClick={() => open(row.url)}>{row.title} ↗<small>{row.source}</small></button>) : <PanelMessage>No headlines available.</PanelMessage>}</div></Panel>
+    </div>}
+    <footer className="hood-footer"><span>Dated company disclosures · USD · financials through Sep 30, 2026</span><button onClick={() => setShowNotes(!showNotes)} aria-expanded={showNotes}>Definitions & source notes {showNotes ? '−' : '+'}</button><button onClick={() => source(20)}>Non-GAAP reconciliation ↗</button></footer>
+    {showNotes && <div className="hood-notes" role="dialog" aria-label="Presentation definitions and sources"><div className="hood-section-heading"><h2>Presentation definitions & sources</h2><Button onClick={() => setShowNotes(false)}>Close</Button></div><p>{presentation.title} · published {presentation.publishedAt} · reviewed {presentation.reviewedAt}</p>{presentation.notes.map(note => <p key={note}>{note}</p>)}<button className="hood-source" onClick={() => source(1)}>Open original presentation ↗</button></div>}
   </div>
 }

@@ -1,3 +1,5 @@
+# GOOGL Focus, quarterly SEC drivers and MCP schemas rebuild through the shared launch path.
+# Anthropic Focus research, source update checks and MCP tools rebuild through the shared launcher.
 param([Parameter(Position = 0)][ValidateSet('start', 'restart')][string]$Command = 'start', [switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Setup, [switch]$Attached)
 # Shared snapshot validation, account quotas and typed cloud contracts rebuild through the shared launcher; backend policies deploy separately.
 # Auth lifecycle passed live two-device acceptance; the shared launcher rebuilds current source.

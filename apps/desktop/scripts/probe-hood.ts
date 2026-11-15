@@ -5,11 +5,26 @@ import { join, relative } from 'node:path'
 import { discoverHoodDocument, hoodNumber, hoodRevenueMix, parseHoodReport } from '../electron/shared/hood.js'
 import { startupPages, workspaceFor } from '../electron/shared/navigation.js'
 import { TABS } from '../electron/shared/contract.js'
+import { HOOD_PRESENTATION } from '../electron/shared/hoodPresentation.js'
 
 const directory = await mkdtemp(join(tmpdir(), 'budget-hood-'))
 process.env.APPDATA = directory
 process.env.LOCALAPPDATA = directory
 try {
+  const presentation = HOOD_PRESENTATION
+  const latest = presentation.history.at(-1)!
+  assert.equal(presentation.asOf, '2026-09-30')
+  assert.equal(presentation.publishedAt, '2026-11-11')
+  assert.equal(new URL(presentation.sourceUrl).hostname, 'investors.robinhood.com')
+  assert.equal(latest.basis, 'LTM')
+  assert.equal(latest.transaction + latest.interest + latest.other, 5082e6, 'Slide 14 revenue components must tie to slide 17 total')
+  assert.equal(latest.adjustedEbitda, 2844e6)
+  assert.equal(latest.adjustedOpexAndSbc, 2509e6)
+  assert.equal(Math.round(latest.adjustedEbitda / (latest.transaction + latest.interest + latest.other) * 100), presentation.adjustedEbitdaMargin)
+  assert.equal(new Set(presentation.businessLines).size, 14)
+  assert.equal(presentation.history[1].adjustedEbitda, -94e6, 'Preserve the loss instead of truncating the profit chart at zero')
+  assert(presentation.notes.some(note => note.includes('escheatment')))
+  assert.equal(presentation.priorities.length, 3)
   assert.equal(workspaceFor('hood')?.id, 'focus')
   assert(TABS.some(tab => tab.id === 'hood' && tab.label === 'HOOD' && tab.implemented))
   assert(startupPages('dashboard', [], []).includes('hood'))
@@ -116,6 +131,7 @@ Highlights`, { period: '2026-06', url: quarterly.sourceUrl }, 'quarterly')
     assert.equal(first.meta.freshness, 'partial')
     assert.equal(first.data.progress.market, 'unavailable')
     assert.equal(first.data.progress.monthly, 'loaded')
+    assert.deepEqual(first.data.presentation, HOOD_PRESENTATION, 'MCP and renderer share the dated presentation independently of provider failures')
     const stale = await getHood({ force: true }, { market: fail, financials: fail, report: fail })
     assert.equal(stale.meta.freshness, 'stale')
     assert.equal(stale.data.progress.monthly, 'stale')

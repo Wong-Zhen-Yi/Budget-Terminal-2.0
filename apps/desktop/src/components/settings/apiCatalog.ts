@@ -15,7 +15,7 @@ const use = (pages: string, purpose: string): ApiUse => ({ pages: pages.split('|
 /** Public service inventory. Dependencies include fallback and shared data consumers, not request attribution. */
 export const API_CATALOG: ApiDefinition[] = [
   ...MARKET_API_PROVIDERS.filter(provider => provider.id !== 'finnhub').map(provider => ({ id: provider.id, label: provider.label, inactive: true, uses: [] })),
-  { id: 'finnhub', label: 'Finnhub', uses: [use('dashboard|dashboard-2|portfolio|stocks|charts|price|market-cap|heatmap|cards|up-down|fundamentals|valuation|homebuilders|semiconductors|amzn|avgo|mu|sofi|vst|hood|hims|pltr|bmnr', 'Preferred supported US stock quotes when a key is saved. Large batches queue within a 60 requests/minute budget. Failed refreshes retain a stale Finnhub quote or use Yahoo stock quotes; perpetual marks cannot replace them. Other providers retain history and other data.')] },
+  { id: 'finnhub', label: 'Finnhub', uses: [use('dashboard|dashboard-2|portfolio|stocks|charts|price|market-cap|heatmap|cards|up-down|fundamentals|valuation|homebuilders|semiconductors|googl|amzn|avgo|mu|sofi|vst|hood|hims|pltr|bmnr', 'Preferred supported US stock quotes when a key is saved. Large batches queue within a 60 requests/minute budget. Failed refreshes retain a stale Finnhub quote or use Yahoo stock quotes; perpetual marks cannot replace them. Other providers retain history and other data.')] },
   { id: 'coinbase', label: 'Coinbase', inactive: true, uses: [] },
   { id: 'binance', label: 'Binance', inactive: true, uses: [] },
   { id: 'world-bank', label: 'World Bank', uses: [use('economic', 'Annual US CPI inflation, distinct from monthly releases.')] },
@@ -24,7 +24,7 @@ export const API_CATALOG: ApiDefinition[] = [
     use('dashboard|dashboard-2|portfolio|global|pre-market|trading-volumes|heatmap|cards|up-down|stocks|stock-discovery|price|market-cap', 'Quotes, market snapshots, screeners and price/history fallbacks.'),
     use('charts|technical-screen|quant|backtest|beta|projections', 'Historical bars, technical indicators, correlations, simulations and projections.'),
     use('fundamentals|scorecard|valuation|options|etf|sp500', 'Financial statements, valuation inputs, option chains, fund data and index prices.'),
-    use('forex|crypto|bitcoin|bmnr|sofi|mu|amzn|avgo|homebuilders|semiconductors|vst|hood|pltr|hims|gold|oil|bonds', 'Currency, commodity, benchmark and company market data.'),
+    use('forex|crypto|bitcoin|bmnr|sofi|mu|googl|amzn|avgo|homebuilders|semiconductors|vst|hood|pltr|hims|gold|oil|bonds', 'Currency, commodity, benchmark and company market data.'),
     use('news|calendar|ipo', 'Headlines, earnings events and IPO calendar fallback.'),
   ] },
   { id: 'hyperliquid', label: 'Hyperliquid', uses: [
@@ -38,8 +38,9 @@ export const API_CATALOG: ApiDefinition[] = [
   { id: 'treasury', label: 'U.S. Treasury', uses: [use('economic|bonds|valuation', 'Yield curves and shared risk-free rate inputs.')] },
   { id: 'economic-releases', label: 'BLS / BEA / Census / Federal Reserve', uses: [use('calendar', 'Official economic release schedules and FOMC meeting dates.'), use('economic', 'Labor statistics and New York Fed rate data.')] },
   { id: 'umich', label: 'University of Michigan', uses: [use('economic', 'Consumer sentiment time series.')] },
-  { id: 'sec', label: 'SEC EDGAR', uses: [use('fundamentals|scorecard|bmnr|sofi|mu|amzn|avgo|vst|hims', 'Company facts, filing submissions and published financial reports.')] },
-  { id: 'ir', label: 'Company investor relations', uses: [use('sofi|mu|amzn|avgo|hood|hims', 'Quarterly reports, operating metrics and company disclosures.')] },
+  { id: 'anthropic', label: 'Anthropic public disclosures', uses: [use('anthropic', 'Official announcements and content-change checks for reviewed funding, models and safety policy. No API key or private-company price feed.')] },
+  { id: 'sec', label: 'SEC EDGAR', uses: [use('anthropic', 'Registration statements, IPO amendments, free-writing prospectuses and effectiveness filings.'), use('fundamentals|scorecard|bmnr|sofi|mu|googl|amzn|avgo|vst|hims', 'Company facts, filing submissions and published financial reports.')] },
+  { id: 'ir', label: 'Company investor relations', uses: [use('sofi|mu|googl|amzn|avgo|hood|hims', 'Quarterly reports, operating metrics and company disclosures.')] },
   { id: 'bitcoin-network', label: 'Blockchain.info / mempool.space', uses: [use('bitcoin', 'Network statistics, recent blocks, fees and mempool activity.')] },
   { id: 'cnn', label: 'CNN', uses: [use('pre-market', 'Market Fear & Greed sentiment.')] },
   { id: 'nasdaq', label: 'Nasdaq', uses: [use('ipo', 'Public IPO calendar.'), use('calendar', 'Listed-symbol directory for earnings coverage.')] },

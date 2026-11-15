@@ -73,6 +73,8 @@ export function queryFreshness(queryKey: QueryKey): number {
   if (root === 'bmnr') return FRESHNESS.bmnr
   if (root === 'sofi') return FRESHNESS.sofi
   if (root === 'mu') return FRESHNESS.mu
+  if (root === 'googl') return FRESHNESS.googl
+  if (root === 'anthropic') return FRESHNESS.anthropic
   if (root === 'amzn') return FRESHNESS.amzn
   if (root === 'avgo') return FRESHNESS.avgo
   if (root === 'homebuilders') return FRESHNESS.homebuilders

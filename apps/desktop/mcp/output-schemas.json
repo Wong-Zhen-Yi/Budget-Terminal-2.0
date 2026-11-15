@@ -1727,7 +1727,7 @@
             "$ref": "#/definitions/McpOutputChartsCompareRange"
           },
           "series": {
-            "$ref": "#/definitions/Record%3Cstring%2Cdef-interface-523195628-29989-30074-523195628-0-147026%5B%5D%3E"
+            "$ref": "#/definitions/Record%3Cstring%2Cdef-interface-523195628-30339-30424-523195628-0-147833%5B%5D%3E"
           },
           "sources": {
             "$ref": "#/definitions/Record%3Cstring%2Cstring%3E"
@@ -1766,7 +1766,7 @@
           "1M"
         ]
       },
-      "Record<string,def-interface-523195628-29989-30074-523195628-0-147026[]>": {
+      "Record<string,def-interface-523195628-30339-30424-523195628-0-147833[]>": {
         "type": "object",
         "additionalProperties": {
           "type": "array",
@@ -3896,9 +3896,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "McpOutputFundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CMcpOutputFundamentalSeriesKey%2Cdef-interface-523195628-25044-25298-523195628-0-147026%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CMcpOutputFundamentalSeriesKey%2Cdef-interface-523195628-25394-25648-523195628-0-147833%5B%5D%3E"
       },
-      "Record<McpOutputFundamentalSeriesKey,def-interface-523195628-25044-25298-523195628-0-147026[]>": {
+      "Record<McpOutputFundamentalSeriesKey,def-interface-523195628-25394-25648-523195628-0-147833[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -13919,9 +13919,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22585-22821-150963582-0-128883%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22855-23091-150963582-0-129466%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-22585-22821-150963582-0-128883[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-22855-23091-150963582-0-129466[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -14412,6 +14412,1283 @@
           "financials",
           "earnings",
           "memory"
+        ],
+        "additionalProperties": false
+      },
+      "McpOutputEnvelopeMeta": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "string",
+            "description": "MCP saved-domain revision for compare-and-swap edits; omitted on ordinary research."
+          },
+          "source": {
+            "type": "string"
+          },
+          "freshness": {
+            "$ref": "#/definitions/McpOutputFreshness"
+          },
+          "fetchedAt": {
+            "type": "number"
+          },
+          "asOf": {
+            "type": "number",
+            "description": "Provider observation timestamp, distinct from successful retrieval time."
+          },
+          "expiresAt": {
+            "type": "number",
+            "description": "Earliest source cache expiry, including dependencies of a derived payload."
+          },
+          "cacheAgeSeconds": {
+            "type": "number"
+          },
+          "failureReason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "freshness",
+          "fetchedAt"
+        ],
+        "additionalProperties": false
+      },
+      "McpOutputFreshness": {
+        "type": "string",
+        "enum": [
+          "fresh",
+          "cached",
+          "stale",
+          "partial",
+          "failed"
+        ]
+      },
+      "McpOutputEnvelopeError": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "symbol": {
+            "type": "string",
+            "description": "The symbol the failure belongs to — or, on the pages whose panels share one envelope, the block label that panel looks itself up by (`warningOf` on Pre-Market and News)."
+          }
+        },
+        "required": [
+          "source",
+          "reason",
+          "operation"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "googl": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$ref": "#/definitions/Output_googl",
+    "definitions": {
+      "Output_googl": {
+        "$ref": "#/definitions/McpOutputEnvelope%3CGooglPayload%3E"
+      },
+      "McpOutputEnvelope<GooglPayload>": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/definitions/GooglPayload"
+          },
+          "meta": {
+            "$ref": "#/definitions/McpOutputEnvelopeMeta"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/McpOutputEnvelopeError"
+            }
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "errors"
+        ],
+        "additionalProperties": false
+      },
+      "GooglPayload": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "const": "GOOGL"
+          },
+          "market": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/StocksPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "earnings": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/GooglEarnings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "progress": {
+            "$ref": "#/definitions/Record%3CGooglBlock%2C(%22loaded%22%7C%22partial%22%7C%22stale%22%7C%22unavailable%22)%3E"
+          },
+          "laneFetchedAt": {
+            "$ref": "#/definitions/Record%3CGooglBlock%2C(number%7Cnull)%3E"
+          },
+          "fetchedAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "symbol",
+          "market",
+          "earnings",
+          "progress",
+          "laneFetchedAt",
+          "fetchedAt"
+        ],
+        "additionalProperties": false
+      },
+      "StocksPayload": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "currentQuote": {
+            "$ref": "#/definitions/Quote"
+          },
+          "company": {
+            "$ref": "#/definitions/StocksCompany"
+          },
+          "metrics": {
+            "$ref": "#/definitions/StocksMetrics"
+          },
+          "targets": {
+            "$ref": "#/definitions/StocksTargets"
+          },
+          "chart": {
+            "$ref": "#/definitions/StocksChartPayload"
+          },
+          "news": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/StocksNewsRow"
+            }
+          },
+          "institutional": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/StocksInstitutionalRow"
+            }
+          },
+          "insiders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/StocksInsiderRow"
+            }
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional blocks whose live request failed. Empty data is not itself a failure."
+          },
+          "generatedAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "symbol",
+          "company",
+          "metrics",
+          "targets",
+          "chart",
+          "news",
+          "institutional",
+          "insiders",
+          "missing",
+          "generatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "Quote": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "sector": {
+            "type": "string",
+            "description": "Optional holding classification, loaded with startup quotes for portfolio heatmaps."
+          },
+          "price": {
+            "type": "number"
+          },
+          "change": {
+            "type": "number",
+            "description": "Percent change against the previous close."
+          },
+          "absChange": {
+            "type": "number",
+            "description": "Absolute change against the previous close."
+          },
+          "asOf": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "priceBasis": {
+            "type": "string",
+            "enum": [
+              "published-close",
+              "equity-perp-mark"
+            ],
+            "description": "Published session closes are not live market quotes."
+          },
+          "source": {
+            "type": "string"
+          },
+          "market": {
+            "type": "string"
+          },
+          "changeBasis": {
+            "type": "string",
+            "enum": [
+              "24h",
+              "previous-close"
+            ]
+          },
+          "fallbackReason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "price",
+          "change",
+          "absChange"
+        ],
+        "additionalProperties": false,
+        "description": "One quote derived from the last two daily closes, like `price_payload` in the PySide6 app."
+      },
+      "StocksCompany": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "exchange": {
+            "type": "string"
+          },
+          "sector": {
+            "type": "string"
+          },
+          "industry": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "exchange",
+          "sector",
+          "industry",
+          "description"
+        ],
+        "additionalProperties": false
+      },
+      "StocksMetrics": {
+        "type": "object",
+        "properties": {
+          "marketCap": {
+            "type": "string"
+          },
+          "revenue": {
+            "type": "string"
+          },
+          "netIncome": {
+            "type": "string"
+          },
+          "eps": {
+            "type": "string"
+          },
+          "grossMargin": {
+            "type": "string"
+          },
+          "operatingMargin": {
+            "type": "string"
+          },
+          "netMargin": {
+            "type": "string"
+          },
+          "sharesOutstanding": {
+            "type": "string"
+          },
+          "pe": {
+            "type": "string"
+          },
+          "forwardPe": {
+            "type": "string"
+          },
+          "dividend": {
+            "type": "string"
+          },
+          "exDividendDate": {
+            "type": "string"
+          },
+          "volume": {
+            "type": "string"
+          },
+          "beta": {
+            "type": "string"
+          },
+          "earningsDate": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "marketCap",
+          "revenue",
+          "netIncome",
+          "eps",
+          "grossMargin",
+          "operatingMargin",
+          "netMargin",
+          "sharesOutstanding",
+          "pe",
+          "forwardPe",
+          "dividend",
+          "exDividendDate",
+          "volume",
+          "beta",
+          "earningsDate"
+        ],
+        "additionalProperties": false
+      },
+      "StocksTargets": {
+        "type": "object",
+        "properties": {
+          "meanPrice": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "low": {
+            "type": "string"
+          },
+          "mean": {
+            "type": "string"
+          },
+          "high": {
+            "type": "string"
+          },
+          "upsideToMean": {
+            "type": "string"
+          },
+          "upsidePct": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "analysts": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "low",
+          "mean",
+          "high",
+          "upsideToMean",
+          "upsidePct",
+          "analysts"
+        ],
+        "additionalProperties": false
+      },
+      "StocksChartPayload": {
+        "type": "object",
+        "properties": {
+          "candles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/Candle"
+            }
+          },
+          "stats": {
+            "$ref": "#/definitions/ChartStats"
+          },
+          "mfi": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/IndicatorPoint"
+            }
+          }
+        },
+        "required": [
+          "candles",
+          "stats",
+          "mfi"
+        ],
+        "additionalProperties": false
+      },
+      "Candle": {
+        "type": "object",
+        "properties": {
+          "time": {
+            "type": "number",
+            "description": "Seconds since the epoch. lightweight-charts wants seconds, not milliseconds."
+          },
+          "open": {
+            "type": "number"
+          },
+          "high": {
+            "type": "number"
+          },
+          "low": {
+            "type": "number"
+          },
+          "close": {
+            "type": "number"
+          },
+          "volume": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "time",
+          "open",
+          "high",
+          "low",
+          "close",
+          "volume"
+        ],
+        "additionalProperties": false
+      },
+      "ChartStats": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number"
+          },
+          "change": {
+            "type": "number"
+          },
+          "absChange": {
+            "type": "number"
+          },
+          "open": {
+            "type": "number"
+          },
+          "high": {
+            "type": "number"
+          },
+          "low": {
+            "type": "number"
+          },
+          "close": {
+            "type": "number"
+          },
+          "volume": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "longName": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "market": {
+            "type": "string"
+          },
+          "priceSource": {
+            "type": "string"
+          },
+          "priceBasis": {
+            "type": "string",
+            "enum": [
+              "published-close",
+              "equity-perp-mark"
+            ],
+            "description": "Published session closes are not live market quotes."
+          },
+          "changeBasis": {
+            "type": "string",
+            "enum": [
+              "24h",
+              "previous-close"
+            ]
+          }
+        },
+        "required": [
+          "symbol",
+          "price",
+          "change",
+          "absChange",
+          "open",
+          "high",
+          "low",
+          "close",
+          "volume",
+          "currency",
+          "longName"
+        ],
+        "additionalProperties": false
+      },
+      "IndicatorPoint": {
+        "type": "object",
+        "properties": {
+          "time": {
+            "type": "number"
+          },
+          "value": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "time",
+          "value"
+        ],
+        "additionalProperties": false
+      },
+      "StocksNewsRow": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "ticker": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "publishedAt": {
+            "type": "number"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "publishedAt",
+          "source",
+          "ticker",
+          "title",
+          "url"
+        ]
+      },
+      "StocksInstitutionalRow": {
+        "type": "object",
+        "properties": {
+          "holder": {
+            "type": "string"
+          },
+          "pctHeld": {
+            "type": "string"
+          },
+          "shares": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "pctChange": {
+            "type": "string"
+          },
+          "reported": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "holder",
+          "pctHeld",
+          "shares",
+          "value",
+          "pctChange",
+          "reported"
+        ],
+        "additionalProperties": false
+      },
+      "StocksInsiderRow": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "insider": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "transaction": {
+            "type": "string"
+          },
+          "shares": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "insider",
+          "title",
+          "transaction",
+          "shares",
+          "value"
+        ],
+        "additionalProperties": false
+      },
+      "GooglEarnings": {
+        "type": "object",
+        "properties": {
+          "reports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/GooglReport"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "reports",
+          "warnings"
+        ],
+        "additionalProperties": false
+      },
+      "GooglReport": {
+        "type": "object",
+        "properties": {
+          "period": {
+            "type": "string"
+          },
+          "publishedAt": {
+            "type": "string"
+          },
+          "sourceUrl": {
+            "type": "string"
+          },
+          "revenue": {
+            "type": "number"
+          },
+          "revenueGrowth": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "operatingIncome": {
+            "type": "number"
+          },
+          "operatingMargin": {
+            "type": "number"
+          },
+          "dilutedEps": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "businesses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/GooglBusiness"
+            }
+          },
+          "servicesOperatingIncome": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "cloudOperatingIncome": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "otherBetsOperatingIncome": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "alphabetLevelIncome": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "tac": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "tacRate": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "operatingCashFlow": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "capex": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "freeCashFlow": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "buybacks": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "dividends": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "period",
+          "publishedAt",
+          "sourceUrl",
+          "revenue",
+          "revenueGrowth",
+          "operatingIncome",
+          "operatingMargin",
+          "dilutedEps",
+          "businesses",
+          "servicesOperatingIncome",
+          "cloudOperatingIncome",
+          "otherBetsOperatingIncome",
+          "alphabetLevelIncome",
+          "tac",
+          "tacRate",
+          "operatingCashFlow",
+          "capex",
+          "freeCashFlow",
+          "buybacks",
+          "dividends",
+          "warnings"
+        ],
+        "additionalProperties": false
+      },
+      "GooglBusiness": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "revenue": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "yearAgoRevenue": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "growth": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "revenue",
+          "yearAgoRevenue",
+          "growth"
+        ],
+        "additionalProperties": false
+      },
+      "Record<GooglBlock,(\"loaded\"|\"partial\"|\"stale\"|\"unavailable\")>": {
+        "type": "object",
+        "properties": {
+          "market": {
+            "type": "string",
+            "enum": [
+              "loaded",
+              "partial",
+              "stale",
+              "unavailable"
+            ]
+          },
+          "earnings": {
+            "type": "string",
+            "enum": [
+              "loaded",
+              "partial",
+              "stale",
+              "unavailable"
+            ]
+          }
+        },
+        "required": [
+          "market",
+          "earnings"
+        ],
+        "additionalProperties": false
+      },
+      "Record<GooglBlock,(number|null)>": {
+        "type": "object",
+        "properties": {
+          "market": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "earnings": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "market",
+          "earnings"
+        ],
+        "additionalProperties": false
+      },
+      "McpOutputEnvelopeMeta": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "string",
+            "description": "MCP saved-domain revision for compare-and-swap edits; omitted on ordinary research."
+          },
+          "source": {
+            "type": "string"
+          },
+          "freshness": {
+            "$ref": "#/definitions/McpOutputFreshness"
+          },
+          "fetchedAt": {
+            "type": "number"
+          },
+          "asOf": {
+            "type": "number",
+            "description": "Provider observation timestamp, distinct from successful retrieval time."
+          },
+          "expiresAt": {
+            "type": "number",
+            "description": "Earliest source cache expiry, including dependencies of a derived payload."
+          },
+          "cacheAgeSeconds": {
+            "type": "number"
+          },
+          "failureReason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "freshness",
+          "fetchedAt"
+        ],
+        "additionalProperties": false
+      },
+      "McpOutputFreshness": {
+        "type": "string",
+        "enum": [
+          "fresh",
+          "cached",
+          "stale",
+          "partial",
+          "failed"
+        ]
+      },
+      "McpOutputEnvelopeError": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "symbol": {
+            "type": "string",
+            "description": "The symbol the failure belongs to — or, on the pages whose panels share one envelope, the block label that panel looks itself up by (`warningOf` on Pre-Market and News)."
+          }
+        },
+        "required": [
+          "source",
+          "reason",
+          "operation"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "anthropic": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$ref": "#/definitions/Output_anthropic",
+    "definitions": {
+      "Output_anthropic": {
+        "$ref": "#/definitions/McpOutputEnvelope%3CAnthropicPayload%3E"
+      },
+      "McpOutputEnvelope<AnthropicPayload>": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/definitions/AnthropicPayload"
+          },
+          "meta": {
+            "$ref": "#/definitions/McpOutputEnvelopeMeta"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/McpOutputEnvelopeError"
+            }
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "errors"
+        ],
+        "additionalProperties": false
+      },
+      "AnthropicPayload": {
+        "type": "object",
+        "properties": {
+          "reviewedAt": {
+            "type": "string"
+          },
+          "nextReviewAt": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/AnthropicSource"
+            }
+          },
+          "topics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/AnthropicTopic"
+            }
+          },
+          "quarters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "period": {
+                  "type": "string"
+                },
+                "revenue": {
+                  "type": "number"
+                },
+                "compute": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "period",
+                "revenue",
+                "compute"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "fundingRounds": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "round": {
+                  "type": "string"
+                },
+                "date": {
+                  "type": "string"
+                },
+                "raised": {
+                  "type": "number"
+                },
+                "valuation": {
+                  "type": "number"
+                },
+                "source": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "round",
+                "date",
+                "raised",
+                "valuation",
+                "source"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "announcements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/AnthropicAnnouncement"
+            }
+          },
+          "filings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/SecFiling"
+            }
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/AnthropicCheck"
+            }
+          },
+          "reviewReasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "reviewedAt",
+          "nextReviewAt",
+          "sources",
+          "topics",
+          "quarters",
+          "fundingRounds",
+          "announcements",
+          "filings",
+          "checks",
+          "reviewReasons"
+        ],
+        "additionalProperties": false
+      },
+      "AnthropicSource": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "publishedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "url",
+          "publishedAt"
+        ],
+        "additionalProperties": false
+      },
+      "AnthropicTopic": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "facts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/AnthropicFact"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "question",
+          "facts"
+        ],
+        "additionalProperties": false
+      },
+      "AnthropicFact": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "value",
+          "detail",
+          "source"
+        ],
+        "additionalProperties": false
+      },
+      "AnthropicAnnouncement": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "url",
+          "date"
+        ],
+        "additionalProperties": false
+      },
+      "SecFiling": {
+        "type": "object",
+        "properties": {
+          "form": {
+            "type": "string"
+          },
+          "filedDate": {
+            "type": "string"
+          },
+          "reportPeriod": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "items": {
+            "type": "string"
+          },
+          "accessionNumber": {
+            "type": "string"
+          },
+          "documentUrl": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "form",
+          "filedDate",
+          "reportPeriod",
+          "description",
+          "items",
+          "accessionNumber",
+          "documentUrl"
+        ],
+        "additionalProperties": false
+      },
+      "AnthropicCheck": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "checkedAt": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "changed": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "checkedAt",
+          "changed"
         ],
         "additionalProperties": false
       },
@@ -15299,9 +16576,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22585-22821-150963582-0-128883%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22855-23091-150963582-0-129466%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-22585-22821-150963582-0-128883[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-22855-23091-150963582-0-129466[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -16729,9 +18006,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22585-22821-150963582-0-128883%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22855-23091-150963582-0-129466%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-22585-22821-150963582-0-128883[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-22855-23091-150963582-0-129466[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -18169,9 +19446,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22585-22821-150963582-0-128883%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22855-23091-150963582-0-129466%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-22585-22821-150963582-0-128883[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-22855-23091-150963582-0-129466[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -20456,9 +21733,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22585-22821-150963582-0-128883%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22855-23091-150963582-0-129466%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-22585-22821-150963582-0-128883[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-22855-23091-150963582-0-129466[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -21031,6 +22308,9 @@
             "type": "string",
             "const": "HOOD"
           },
+          "presentation": {
+            "$ref": "#/definitions/HoodPresentation"
+          },
           "market": {
             "anyOf": [
               {
@@ -21080,6 +22360,7 @@
         },
         "required": [
           "symbol",
+          "presentation",
           "market",
           "financials",
           "monthly",
@@ -21088,6 +22369,196 @@
           "fetchedAt"
         ],
         "additionalProperties": false
+      },
+      "HoodPresentation": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "publishedAt": {
+            "type": "string"
+          },
+          "reviewedAt": {
+            "type": "string"
+          },
+          "asOf": {
+            "type": "string"
+          },
+          "sourceUrl": {
+            "type": "string"
+          },
+          "sourcePages": {
+            "type": "object",
+            "properties": {
+              "overview": {
+                "type": "number"
+              },
+              "priorities": {
+                "type": "number"
+              },
+              "customers": {
+                "type": "number"
+              },
+              "revenue": {
+                "type": "number"
+              },
+              "profitability": {
+                "type": "number"
+              },
+              "reconciliation": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "overview",
+              "priorities",
+              "customers",
+              "revenue",
+              "profitability",
+              "reconciliation"
+            ],
+            "additionalProperties": false
+          },
+          "fundedCustomers": {
+            "type": "number"
+          },
+          "goldSubscribers": {
+            "type": "number"
+          },
+          "goldYearGrowth": {
+            "type": "number"
+          },
+          "depositGrowth": {
+            "type": "number"
+          },
+          "adjustedEbitdaMargin": {
+            "type": "number"
+          },
+          "dilutedEps": {
+            "type": "number"
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/HoodPresentationPeriod"
+            }
+          },
+          "businessLines": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "priorities": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "products": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "products"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "title",
+          "publishedAt",
+          "reviewedAt",
+          "asOf",
+          "sourceUrl",
+          "sourcePages",
+          "fundedCustomers",
+          "goldSubscribers",
+          "goldYearGrowth",
+          "depositGrowth",
+          "adjustedEbitdaMargin",
+          "dilutedEps",
+          "history",
+          "businessLines",
+          "priorities",
+          "notes"
+        ],
+        "additionalProperties": false
+      },
+      "HoodPresentationPeriod": {
+        "type": "object",
+        "properties": {
+          "period": {
+            "type": "string"
+          },
+          "basis": {
+            "type": "string",
+            "enum": [
+              "FY",
+              "LTM"
+            ]
+          },
+          "transaction": {
+            "type": "number"
+          },
+          "interest": {
+            "type": "number"
+          },
+          "other": {
+            "type": "number"
+          },
+          "assets": {
+            "type": "number"
+          },
+          "deposits": {
+            "type": "number"
+          },
+          "arpu": {
+            "type": "number"
+          },
+          "retention": {
+            "type": "number"
+          },
+          "adjustedOpexAndSbc": {
+            "type": "number"
+          },
+          "adjustedEbitda": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "period",
+          "basis",
+          "transaction",
+          "interest",
+          "other",
+          "assets",
+          "deposits",
+          "arpu",
+          "retention",
+          "adjustedOpexAndSbc",
+          "adjustedEbitda"
+        ],
+        "additionalProperties": false,
+        "description": "Reviewed company presentation. These dated disclosures are not live estimates."
       },
       "StocksPayload": {
         "type": "object",
@@ -21811,9 +23282,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22585-22821-150963582-0-128883%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22855-23091-150963582-0-129466%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-22585-22821-150963582-0-128883[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-22855-23091-150963582-0-129466[]>": {
         "type": "object",
         "properties": {
           "revenue": {

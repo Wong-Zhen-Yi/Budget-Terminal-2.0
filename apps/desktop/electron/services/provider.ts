@@ -11,7 +11,11 @@ import { getHood } from './hood.js'
 import { getSofi } from './sofi.js'
 import type { SofiPayload, SofiRequest } from '../shared/sofi.js'
 import { sofiBookRatios } from '../shared/sofi.js'
+import { getGoogl } from './googl.js'
+import { getAnthropic } from './anthropic.js'
+import type { AnthropicPayload, AnthropicRequest } from '../shared/anthropic.js'
 import { getAmzn } from './amzn.js'
+import type { GooglPayload, GooglRequest } from '../shared/googl.js'
 import type { AmznPayload, AmznRequest } from '../shared/amzn.js'
 import { getMu } from './mu.js'
 import { getVst } from './vst.js'
@@ -393,6 +397,8 @@ export interface MarketDataProvider {
   hims(request: HimsRequest): Promise<Envelope<HimsPayload>>
   sofi(request: SofiRequest): Promise<Envelope<SofiPayload>>
   mu(request: MuRequest): Promise<Envelope<MuPayload>>
+  googl(request: GooglRequest): Promise<Envelope<GooglPayload>>
+  anthropic(request: AnthropicRequest): Promise<Envelope<AnthropicPayload>>
   amzn(request: AmznRequest): Promise<Envelope<AmznPayload>>
   avgo(request: AvgoRequest): Promise<Envelope<AvgoPayload>>
   homebuilders(request: HomebuildersRequest): Promise<Envelope<HomebuildersPayload>>
@@ -1410,6 +1416,8 @@ const providerImplementation: MarketDataProvider = {
   hims: getHims,
   sofi: getSofi,
   mu: getMu,
+  googl: getGoogl,
+  anthropic: getAnthropic,
   amzn: getAmzn,
   avgo: getAvgo,
   homebuilders: getHomebuilders,
@@ -2086,7 +2094,7 @@ export const yahooProvider: MarketDataProvider = new Proxy(providerImplementatio
           result.meta = { ...result.meta, freshness: 'partial', failureReason: marked.errors.map(error => error.reason).join(' · ') }
         }
       }
-      if (['amzn', 'avgo', 'mu', 'sofi', 'vst', 'hood', 'hims'].includes(String(property)) && result.data?.market) {
+      if (['googl', 'amzn', 'avgo', 'mu', 'sofi', 'vst', 'hood', 'hims'].includes(String(property)) && result.data?.market) {
         try {
           result.data = { ...result.data, market: await refreshStocksQuote(result.data.market, Boolean((args[0] as { force?: boolean } | undefined)?.force)) }
           if (property === 'sofi' && result.data.market.currentQuote) {

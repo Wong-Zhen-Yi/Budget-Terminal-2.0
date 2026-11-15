@@ -1,0 +1,132 @@
+.hood-focus { container: hood / size; position: relative; display: flex; flex: 1; min-height: 0; min-width: 0; flex-direction: column; gap: 10px; overflow: hidden; padding: 12px; color: var(--color-text); }
+.hood-header { display: flex; align-items: center; gap: 24px; flex-shrink: 0; }
+.hood-identity { display: flex; align-items: center; gap: 12px; }
+.hood-symbol { display: grid; place-items: center; width: 58px; height: 48px; border: 1px solid var(--color-border-strong); background: var(--color-surface-raised); color: var(--color-text); font-size: 15px; font-weight: 700; letter-spacing: -.04em; }
+.hood-identity h1 { font-size: 19px; font-weight: 600; letter-spacing: -.025em; }
+.hood-identity p, .hood-quote small { color: var(--color-text-muted); font-size: 11px; }
+.hood-quote { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; max-width: 280px; font-size: 12px; }
+.hood-quote strong { font-size: 23px; }
+.hood-quote small { flex-basis: 100%; }
+.hood-shortcuts { display: flex; gap: 4px; margin-left: auto; }
+.hood-toolbar { display: flex; flex-shrink: 0; align-items: center; gap: 14px; border-bottom: 1px solid var(--color-border); padding-bottom: 8px; }
+.hood-tabs { display: flex; gap: 4px; }
+.hood-tabs button { padding: 6px 12px; border: 1px solid transparent; color: var(--color-text-muted); font-size: 11px; white-space: nowrap; }
+.hood-tabs button[aria-pressed=true] { color: var(--color-text); border-color: var(--color-border-strong); background: var(--color-surface-raised); }
+.hood-focus button:hover { color: var(--color-text); }
+.hood-focus button:focus-visible { outline: 2px solid var(--color-accent-hover); outline-offset: 2px; }
+.hood-source { color: var(--color-accent-hover); font-size: 10px; white-space: nowrap; }
+.hood-toolbar > .hood-source { margin-left: auto; }
+.hood-asof { color: var(--color-text-muted); font-size: 10px; }
+.hood-engine { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); flex-shrink: 0; border: 1px solid var(--color-border); background: var(--color-surface); }
+.hood-engine > div { position: relative; padding: 12px 18px; }
+.hood-engine > div + div { border-left: 1px solid var(--color-border); }
+.hood-engine > div + div::before { content: '→'; position: absolute; left: -9px; top: 40%; color: var(--color-text-dim); background: var(--color-surface); font-size: 16px; }
+.hood-engine small, .hood-section-heading small { color: var(--color-text-muted); font-size: 9px; letter-spacing: .1em; }
+.hood-engine strong { display: block; margin-top: 4px; font-size: clamp(22px,2.4vw,34px); line-height: 1.15; font-weight: 600; letter-spacing: -.04em; }
+.hood-engine h2 { margin-top: 4px; font-size: 11px; }
+.hood-engine p { margin-top: 3px; font-size: 10px; color: var(--color-text-muted); }
+.hood-business { display: grid; grid-template-columns: minmax(0,1.5fr) minmax(0,1fr); grid-template-rows: minmax(0,1.35fr) minmax(0,1fr) auto; gap: 10px; flex: 1; min-height: 0; }
+.hood-card { display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; padding: 12px 14px; border: 1px solid var(--color-border); background: var(--color-surface); }
+.hood-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-shrink: 0; }
+.hood-section-heading h2 { font-size: 14px; font-weight: 600; letter-spacing: -.02em; }
+.hood-growth { grid-row: span 2; }
+.hood-relationship { grid-column: 2; grid-row: 1; }
+.hood-roadmap { grid-column: 2; grid-row: 2; }
+.hood-chart-tabs { margin: 10px 0 4px; }
+.hood-chart-tabs button { padding: 4px 10px; font-size: 10px; }
+.hood-chart-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 10px; color: var(--color-text-muted); }
+.hood-chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.hood-chart-legend i { width: 7px; height: 7px; }
+.hood-chart-legend .hood-unit { margin-left: auto; font-size: 9px; }
+.hood-column-chart { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 10px; flex: 1; min-height: 80px; margin: 18px 0 28px; padding: 0 10px; }
+.hood-column { display: flex; flex-direction: column; position: relative; min-width: 0; height: 100%; border-bottom: 1px solid var(--color-border-strong); }
+.hood-column[aria-pressed=true] { border-bottom-color: var(--color-accent-hover); }
+.hood-bar-space { display: flex; justify-content: center; align-items: flex-end; gap: 3px; width: 100%; height: 100%; }
+.hood-stack { display: flex; position: relative; flex-direction: column; width: 72%; min-width: 16px; opacity: .65; }
+.hood-column[aria-pressed=true] .hood-stack, .hood-column:hover .hood-stack, .hood-column[aria-pressed=true] .hood-bar, .hood-column:hover .hood-bar { opacity: 1; }
+.hood-stack > b { position: absolute; bottom: 100%; width: 100%; padding-bottom: 5px; color: var(--color-text); font-size: 11px; font-weight: 500; }
+.hood-stack > span { display: block; min-height: 1px; }
+.hood-bar { position: relative; width: 23%; opacity: .65; }
+.hood-bar-negative { align-self: flex-end; transform: translateY(100%); }
+.hood-period { position: absolute; top: calc(100% + 9px); width: 100%; color: var(--color-text-muted); font-size: 10px; white-space: nowrap; }
+.hood-chart-readout { display: flex; flex-wrap: wrap; gap: 6px 14px; flex-shrink: 0; padding: 8px 10px; background: var(--color-surface-raised); font-size: 10px; color: var(--color-text-muted); }
+.hood-chart-readout strong, .hood-chart-readout b { color: var(--color-text); font-weight: 500; }
+.hood-chart-note { flex-shrink: 0; margin-top: 7px; color: var(--color-text-muted); font-size: 9px; line-height: 1.5; }
+.hood-gold { display: flex; align-items: center; gap: 12px; margin: 12px 0 8px; }
+.hood-gold > strong { font-size: 29px; font-weight: 600; color: var(--color-warn); line-height: 1; }
+.hood-gold > div { display: flex; flex-direction: column; gap: 2px; font-size: 11px; }
+.hood-gold-share { margin-left: auto; text-align: right; }
+.hood-gold-share b { font-size: 18px; font-weight: 500; }
+.hood-gold-share small { font-size: 9px; color: var(--color-text-muted); }
+.hood-adoption { height: 5px; flex-shrink: 0; background: var(--color-surface-hover); }
+.hood-adoption span { display: block; height: 100%; background: var(--color-warn); }
+.hood-customer-stats { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); margin-top: auto; padding-top: 14px; }
+.hood-customer-stats > div { display: flex; flex-direction: column; gap: 3px; }
+.hood-customer-stats b { font-size: 19px; font-weight: 500; }
+.hood-customer-stats span { color: var(--color-text-muted); font-size: 9px; }
+.hood-priorities { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 4px; margin-top: 10px; }
+.hood-priorities button { display: flex; gap: 6px; align-items: center; padding: 5px 8px; text-align: left; font-size: 10px; color: var(--color-text-muted); border-left: 2px solid var(--color-border); line-height: 1.3; }
+.hood-priorities button[aria-pressed=true] { color: var(--color-text); border-left-color: var(--color-accent); background: var(--color-surface-raised); }
+.hood-priorities button span { color: var(--color-text-dim); font-size: 10px; }
+.hood-priorities button b { margin-left: auto; color: var(--color-accent-hover); }
+.hood-products { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.hood-products span { border: 1px solid var(--color-border); padding: 3px 7px; color: var(--color-text-muted); font-size: 10px; }
+.hood-diversification { grid-column: 1; grid-row: 3; }
+.hood-business-lines { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 7px 10px; margin-top: 10px; }
+.hood-business-lines > span { display: flex; align-items: baseline; gap: 6px; font-size: 10px; }
+.hood-business-lines small { color: var(--color-text-dim); font-size: 9px; }
+.hood-monthly { grid-column: 2; grid-row: 3; }
+.hood-pulse { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; margin-top: 10px; }
+.hood-pulse > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hood-pulse span { color: var(--color-text-muted); font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hood-pulse b { font-size: 15px; font-weight: 500; }
+.hood-pulse small { color: var(--color-text-dim); font-size: 9px; }
+.hood-market { display: grid; flex: 1; min-height: 0; gap: 10px; grid-template-columns: minmax(0,1.55fr) minmax(0,1fr); grid-template-rows: minmax(0,1.3fr) minmax(0,1fr); }
+.hood-history { width: 100%; font-size: 10px; text-align: right; font-variant-numeric: tabular-nums; }
+.hood-quarter-summary { display: flex; flex-shrink: 0; flex-wrap: wrap; gap: 8px 16px; padding: 8px; border-bottom: 1px solid var(--color-border); color: var(--color-text-muted); font-size: 10px; }
+.hood-quarter-summary b { color: var(--color-text); font-weight: 500; }
+.hood-history th { color: var(--color-text-muted); font-weight: 400; background: var(--color-surface-raised); }
+.hood-history td, .hood-history th { padding: 6px 8px; border-bottom: 1px solid var(--color-border); }
+.hood-news { display: block; width: 100%; padding: 10px; text-align: left; font-size: 11px; border-bottom: 1px solid var(--color-border); }
+.hood-news small { display: block; margin-top: 4px; color: var(--color-text-muted); font-size: 9px; }
+.hood-footer { display: flex; flex-shrink: 0; gap: 16px; align-items: center; color: var(--color-text-dim); font-size: 9px; }
+.hood-footer button { color: var(--color-text-muted); }
+.hood-footer button:first-of-type { margin-left: auto; }
+.hood-notes { position: absolute; z-index: 10; right: 12px; bottom: 36px; width: min(590px,calc(100% - 24px)); max-height: 70%; overflow: auto; padding: 20px; background: var(--color-surface-raised); border: 1px solid var(--color-border-strong); box-shadow: 0 10px 40px var(--color-bg); font-size: 12px; }
+.hood-notes p { margin: 12px 0; color: var(--color-text-muted); line-height: 1.5; }
+@media (max-height: 850px) and (min-width: 1051px) { .hood-focus { gap: 7px; padding: 8px; } .hood-engine > div { padding: 8px 16px; } .hood-engine strong { font-size: 27px; } .hood-card { padding: 8px 12px; } .hood-business { gap: 7px; } .hood-gold { margin: 8px 0; } .hood-customer-stats { padding-top: 8px; } .hood-business-lines { gap: 5px 8px; } .hood-section-heading h2 { font-size: 12px; } .hood-priorities { margin-top: 6px; } .hood-priorities button { padding: 3px 6px; } .hood-chart-note { font-size: 8px; } }
+@media (max-width: 1050px) { .hood-focus { overflow-y: auto; } .hood-shortcuts { display: none; } .hood-header { justify-content: space-between; } .hood-engine > div { padding: 10px; } .hood-engine small { font-size: 8px; } .hood-engine p { font-size: 9px; } .hood-business { flex: none; grid-template-rows: 240px 190px auto; } .hood-business-lines { grid-template-columns: repeat(2,minmax(0,1fr)); } .hood-pulse { grid-template-columns: repeat(2,minmax(0,1fr)); } .hood-market { flex: none; height: 650px; } .hood-footer { flex-wrap: wrap; gap: 8px; } .hood-asof { display: none; } }
+@media (max-width: 650px) { .hood-engine { grid-template-columns: repeat(2,minmax(0,1fr)); } .hood-engine > div:nth-child(3) { border-left: 0; } .hood-business { display: flex; flex-direction: column; } .hood-growth { min-height: 320px; } .hood-relationship, .hood-roadmap { min-height: 210px; } .hood-market { display: flex; flex-direction: column; height: auto; } .hood-market > section { height: 320px; flex-shrink: 0; } .hood-quote { max-width: 130px; } .hood-identity h1 { font-size: 15px; } .hood-identity p { font-size: 9px; } .hood-toolbar { gap: 5px; } .hood-toolbar > .hood-source { font-size: 8px; } .hood-tabs button { padding: 5px 7px; font-size: 10px; } }
+@container hood (max-height: 850px) and (min-width: 1050px) {
+  .hood-header { gap: 20px; }
+  .hood-symbol { width: 48px; height: 38px; font-size: 13px; }
+  .hood-identity h1 { font-size: 17px; }
+  .hood-identity p, .hood-quote small { font-size: 9px; }
+  .hood-quote strong { font-size: 20px; }
+  .hood-engine > div { padding: 7px 14px; }
+  .hood-engine strong { font-size: 25px; }
+  .hood-engine small { font-size: 8px; }
+  .hood-engine p { font-size: 9px; }
+  .hood-card { padding: 6px 10px; }
+  .hood-section-heading small { display: none; }
+  .hood-section-heading h2 { font-size: 12px; }
+  .hood-gold { margin: 6px 0; gap: 8px; }
+  .hood-gold > strong { font-size: 24px; }
+  .hood-gold > div { font-size: 10px; }
+  .hood-customer-stats { padding-top: 6px; }
+  .hood-customer-stats b { font-size: 16px; }
+  .hood-customer-stats span { font-size: 8px; }
+  .hood-chart-note { font-size: 8px; margin-top: 4px; line-height: 1.4; }
+  .hood-priorities { margin-top: 6px; }
+  .hood-priorities button { padding: 4px; font-size: 9px; }
+  .hood-priorities button > span, .hood-priorities button > b { display: none; }
+  .hood-products { gap: 4px; margin-top: 6px; }
+  .hood-products span { padding: 2px 5px; font-size: 9px; }
+  .hood-business-lines { margin-top: 7px; gap: 5px 8px; }
+  .hood-business-lines > span { font-size: 9px; gap: 4px; }
+  .hood-pulse { gap: 6px; margin-top: 7px; }
+  .hood-pulse b { font-size: 13px; }
+  .hood-pulse span, .hood-pulse small { font-size: 8px; }
+  .hood-chart-tabs { margin-top: 7px; }
+  .hood-column-chart { margin-top: 12px; }
+}

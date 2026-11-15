@@ -727,6 +727,28 @@ export function buildTasks(
   }
 
   tasks.push({
+    tab: 'googl', label: 'GOOGL company dashboard',
+    run: async (client, backgroundOrder, onSnapshot) => {
+      const result = await warmStartupQuery(client, {
+        queryKey: queryKeys.googl,
+        queryFn: () => api.googl({ background: true, backgroundOrder }),
+        staleTime: queryFreshness(queryKeys.googl),
+      }, onSnapshot)
+      if (result.meta.freshness === 'partial' || result.meta.freshness === 'stale') {
+        throw new Error(result.meta.failureReason || 'GOOGL startup data is incomplete')
+      }
+      return result
+    },
+  })
+  tasks.push({
+    tab: 'anthropic', label: 'Anthropic public research & update checks',
+    run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
+      queryKey: queryKeys.anthropic,
+      queryFn: () => api.anthropic({ background: true, backgroundOrder }),
+      staleTime: queryFreshness(queryKeys.anthropic),
+    }, onSnapshot),
+  })
+  tasks.push({
     tab: 'amzn', label: 'AMZN company dashboard',
     run: async (client, backgroundOrder, onSnapshot) => {
       const result = await warmStartupQuery(client, {

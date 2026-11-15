@@ -37,6 +37,8 @@ import { HoodPage } from '@/pages/HoodPage'
 import { PltrPage } from '@/pages/PltrPage'
 import { HimsPage } from '@/pages/HimsPage'
 import { MuPage } from '@/pages/MuPage'
+import { GooglPage } from '@/pages/GooglPage'
+import { AnthropicPage } from '@/pages/AnthropicPage'
 import { AmznPage } from '@/pages/AmznPage'
 import { AvgoPage } from '@/pages/AvgoPage'
 import { HomebuildersPage } from '@/pages/HomebuildersPage'
@@ -579,6 +581,10 @@ function renderPage({
       <SemiconductorsPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'mu' ? (
       <MuPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
+    ) : tabId === 'googl' ? (
+      <GooglPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
+    ) : tabId === 'anthropic' ? (
+      <AnthropicPage onStatusChange={onStatusChange} />
     ) : tabId === 'amzn' ? (
       <AmznPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'hims' ? (

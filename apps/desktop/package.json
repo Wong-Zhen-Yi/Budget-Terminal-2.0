@@ -9,6 +9,8 @@
     "npm": ">=10.9.8"
   },
   "scripts": {
+    "probe:anthropic": "tsx scripts/probe-anthropic.ts",
+    "probe:anthropic-ui": "tsx scripts/probe-anthropic-ui.ts",
     "probe:finnhub": "tsx scripts/probe-finnhub.ts",
     "probe:controller": "tsx scripts/probe-controller.ts",
     "probe:cloud-oauth": "tsx scripts/probe-cloud-oauth.ts",
@@ -165,7 +167,9 @@
     "probe:diagnostics-ui": "tsx scripts/probe-diagnostics-ui.ts",
     "probe:polymarket": "tsx scripts/probe-polymarket.ts",
     "probe:polymarket-ui": "tsx scripts/probe-polymarket-ui.ts",
-    "probe:efficiency": "tsx scripts/probe-efficiency.ts && tsx scripts/probe-efficiency-renderer.ts && tsx scripts/probe-live-status.ts && tsx scripts/probe-efficiency-ui.ts"
+    "probe:efficiency": "tsx scripts/probe-efficiency.ts && tsx scripts/probe-efficiency-renderer.ts && tsx scripts/probe-live-status.ts && tsx scripts/probe-efficiency-ui.ts",
+    "probe:googl": "tsx scripts/probe-googl.ts",
+    "probe:googl-ui": "tsx scripts/probe-googl-ui.ts"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.5",

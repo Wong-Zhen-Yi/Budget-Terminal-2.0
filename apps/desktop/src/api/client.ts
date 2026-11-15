@@ -11,7 +11,7 @@ declare global {
 
 /** Bootstrap installs either the Electron preload or the authenticated browser bridge. */
 if (!window.api) throw new Error('Budget Terminal service API is unavailable.')
-const progressiveMethods = new Set(['sofi', 'hood', 'hims', 'mu', 'amzn', 'avgo', 'vst', 'semiconductors', 'homebuilders', 'bitcoin', 'bmnr', 'projections', 'preMarket', 'gold', 'oil', 'crypto', 'globalMarkets', 'money', 'forexQuotes', 'targets', 'quotes', 'fundamentals', 'priceScreen', 'marketCap', 'tradingVolumes', 'stocks'])
+const progressiveMethods = new Set(['sofi', 'hood', 'hims', 'mu', 'googl', 'amzn', 'avgo', 'vst', 'semiconductors', 'homebuilders', 'bitcoin', 'bmnr', 'projections', 'preMarket', 'gold', 'oil', 'crypto', 'globalMarkets', 'money', 'forexQuotes', 'targets', 'quotes', 'fundamentals', 'priceScreen', 'marketCap', 'tradingVolumes', 'stocks'])
 
 const reloadReadMethods = new Set([
   'defeatbetaTerminal', 'chart', 'options', 'quotes', 'targets', 'news',
@@ -19,7 +19,7 @@ const reloadReadMethods = new Set([
   'polymarket', 'preMarket', 'upDown', 'calendarMonth', 'politicsPage', 'earningsCalendar', 'money',
   'economic', 'ipoUpcoming', 'ipoCompleted', 'institutionActivity', 'stocks', 'fundamentalsPage',
   'oil', 'newsPage', 'forexQuotes', 'forexHistory', 'forexNews', 'crypto',
-  'etfAum', 'etfHoldings', 'amzn', 'mu', 'avgo', 'semiconductors', 'homebuilders',
+  'etfAum', 'etfHoldings', 'anthropic', 'googl', 'amzn', 'mu', 'avgo', 'semiconductors', 'homebuilders',
   'vst', 'sofi', 'hims', 'hood', 'bmnr', 'gold',
   'youtube', 'heatmap', 'tradingVolumes', 'chartsHistory', 'valuation',
   'projections', 'optionsExpirations', 'optionsChain', 'bitcoin', 'sp500', 'sp500Breadth',
@@ -89,6 +89,8 @@ export const queryKeys = {
   bmnr: ['bmnr'] as const,
   sofi: ['sofi'] as const,
   mu: ['mu'] as const,
+  googl: ['googl'] as const,
+  anthropic: ['anthropic', 1] as const,
   amzn: ['amzn'] as const,
   avgo: ['avgo'] as const,
   homebuilders: ['homebuilders', 1] as const,

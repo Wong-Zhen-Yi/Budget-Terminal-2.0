@@ -93,6 +93,8 @@ export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS
     bmnr: (request) => invoke(CHANNELS.bmnr, request),
     sofi: (request) => invoke(CHANNELS.sofi, request),
     mu: (request) => invoke(CHANNELS.mu, request),
+    googl: (request) => invoke(CHANNELS.googl, request),
+    anthropic: request => invoke(CHANNELS.anthropic, request),
     amzn: (request) => invoke(CHANNELS.amzn, request),
     avgo: (request) => invoke(CHANNELS.avgo, request),
     homebuilders: (request) => invoke(CHANNELS.homebuilders, request),

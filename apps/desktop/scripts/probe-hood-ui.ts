@@ -59,7 +59,7 @@ try {
       const diagnostics = () => client.getQueryCache().getAll().map(query => String(query.state.error ?? '')).join(' ')
       const text = () => document.body.innerText
       const click = label => {
-        const button = [...document.querySelectorAll('button')].find(button => button.textContent.toLowerCase().startsWith(label.toLowerCase()))
+        const button = [...document.querySelectorAll('button')].find(button => button.textContent.toLowerCase().includes(label.toLowerCase()))
         check(button, 'Missing button: ' + label); button.click()
       }
       function Page() {
@@ -74,7 +74,34 @@ try {
         check(text().includes('Loading Robinhood'), 'Missing initial loading state')
         window.ready = true
         await settle()
-        check(text().includes('28.6M') && text().includes('$383.7B') && text().includes('$0.62'), 'KPI metrics missing')
+        check(text().includes('28.6M') && text().includes('$383.7B') && text().includes('$5.08B'), 'Live and reviewed metrics missing')
+        check(document.querySelectorAll('.hood-column').length === 6, 'Presentation chart missing')
+        const initialCalls = window.calls
+        click('Assets & deposits'); await settle()
+        check(text().includes('Compounding the asset base'), 'Asset chart control failed')
+        click('Profitability'); await settle()
+        document.querySelectorAll('.hood-column')[1].click(); await settle()
+        check(document.querySelector('.hood-chart-readout').textContent.includes('-$94M'), 'Negative EBITDA was lost')
+        click('Revenue mix'); document.querySelectorAll('.hood-column')[5].click(); await settle()
+        click('Next-generation wallet share'); await settle()
+        check(text().includes('Family investing') && text().includes('Private markets'), 'Wallet priorities failed')
+        click('Global financial ecosystem'); await settle()
+        check(text().includes('Tokenization') && text().includes('New markets'), 'Global priorities failed')
+        click('Active traders'); await settle()
+        click('Definitions & source notes'); await settle()
+        check(text().includes('escheatment') && text().includes('non-GAAP'), 'Source definitions missing')
+        click('Close'); await settle()
+        click('Investor deck'); check(window.opened.includes('72febcf6'), 'Investor deck link failed')
+        check(window.calls === initialCalls, 'Presentation interactions repeated provider loads')
+        window.assertOverviewFit = () => {
+          const page = document.querySelector('[data-hood-page]')
+          check(page.scrollHeight <= page.clientHeight + 1, 'Desktop page scrolls')
+          const clipped = [...document.querySelectorAll('.hood-card')].filter(el => el.scrollHeight > el.clientHeight + 2)
+          check(!clipped.length, 'Clipped cards: ' + clipped.map(el => el.className + ':' + el.scrollHeight + '/' + el.clientHeight).join(', '))
+        }
+        window.assertOverviewFit()
+        click('Market & filings'); await settle()
+        check(text().includes('$0.62'), 'Quarterly EPS missing')
         check(document.querySelector('[data-hood-price-range]').dataset.hoodPriceRange === '1Y', 'Default range is not 1Y')
         const priceCanvas = () => document.querySelector('[data-hood-price-range] canvas')
         priceCanvas().scrollIntoView({ block: 'center' }); await settle()
@@ -93,7 +120,7 @@ try {
         for (const id of ['charts', 'fundamentals', 'options', 'valuation']) {
           click(id); check(JSON.stringify(window.navigation) === JSON.stringify([id, 'HOOD']), 'Ticker shortcut failed')
         }
-        click('Robinhood report ↗'); check(window.opened.includes('investors.robinhood.com'), 'Report link failed')
+        click('2026-06 report'); check(window.opened.includes('investors.robinhood.com'), 'Report link failed')
         click('Robinhood quarterly earnings release ↗'); check(window.opened.includes('news-releases'), 'News link failed')
         const filing = [...document.querySelectorAll('tbody tr')].find(row => row.textContent.includes('Quarterly report'))
         filing.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
@@ -116,18 +143,20 @@ try {
         const warmCalls = window.calls
         root.render(<QueryClientProvider client={client}><Page /></QueryClientProvider>); await settle()
         check(window.calls === warmCalls && text().includes('28.6M'), 'Warmed page repeated its first load')
+        click('Market & filings'); await settle()
         click('1Y'); await settle()
         const priceBox = document.querySelector('[data-hood-price-range]')
         check(priceBox.querySelector('canvas').getBoundingClientRect().bottom <= priceBox.getBoundingClientRect().bottom + 1, 'Price chart overlaps volume')
         check(priceBox.querySelector('canvas').getBoundingClientRect().width <= priceBox.getBoundingClientRect().width, 'Price chart width exceeds its panel: ' + JSON.stringify({ box: priceBox.getBoundingClientRect().toJSON(), svg: priceBox.querySelector('canvas').getBoundingClientRect().toJSON() }))
         check(![...document.querySelectorAll('svg path')].some(path => /NaN|Infinity/.test(path.getAttribute('d') || '')), 'Chart produced invalid paths')
-        return 'PASS: loading, warmed mount, metrics, ranges, sources, ticker shortcuts, refresh/F5, partial/offline/failed states and recovery'
+        click('Business model'); await settle()
+        return 'PASS: presentation charts, priorities, definitions, layout, loading, warmed mount, metrics, ranges, sources, ticker shortcuts, refresh/F5, partial/offline/failed states and recovery'
       }
     ` }, bundle: true, jsx: 'automatic', write: false, format: 'iife',
     alias: { '@': join(root, 'src'), '@shared': join(root, 'electron/shared') }, define: { 'process.env.NODE_ENV': '"production"' },
   })
   await writeFile(join(directory, 'renderer.js'), bundle.outputFiles[0].text)
-  await writeFile(join(directory, 'index.html'), `<html><head><link rel="stylesheet" href="theme.css"></head><body><div id="root" style="height:100vh;display:flex"></div>
+  await writeFile(join(directory, 'index.html'), `<html><head><link rel="stylesheet" href="theme.css"></head><body><div id="root" style="height:calc(100vh - 100px);width:calc(100vw - 200px);display:flex"></div>
     <script>
       window.mode = 'good'; window.ready = false; window.calls = 0;
       const good = ${JSON.stringify(good)};
@@ -147,16 +176,20 @@ try {
     app.disableHardwareAcceleration();
     app.setPath('userData', ${JSON.stringify(join(directory, 'userData'))});
     app.whenReady().then(async () => {
-      const window = new BrowserWindow({ show: false, width: 1500, height: 1100, webPreferences: { backgroundThrottling: false, offscreen: true } });
+      const window = new BrowserWindow({ show: false, width: 1500, height: 900, webPreferences: { backgroundThrottling: false, offscreen: true } });
       try {
         await window.loadFile(${JSON.stringify(join(directory, 'index.html'))});
         console.log(await window.webContents.executeJavaScript('window.runProbe()'));
         window.webContents.invalidate(); await new Promise(resolve => setTimeout(resolve, 350));
         fs.writeFileSync(${JSON.stringify(screenshot)}, (await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG());
+        window.setSize(1366, 768); await new Promise(resolve => setTimeout(resolve, 250));
+        const fitError = await window.webContents.executeJavaScript('(() => { try { window.assertOverviewFit(); return "" } catch (error) { return error.message } })()');
+        if (fitError) throw Error(fitError);
+        fs.writeFileSync(${JSON.stringify(join(root, 'out', 'hood-compact-smoke.png'))}, (await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG());
         window.setSize(800, 800); await new Promise(resolve => setTimeout(resolve, 200));
         if (await window.webContents.executeJavaScript('document.documentElement.scrollWidth > window.innerWidth')) throw Error('Narrow layout overflows');
         console.log('PASS: responsive layout and screenshot'); app.exit(0);
-      } catch (error) { console.error(error); app.exit(1); }
+      } catch (error) { fs.writeFileSync(${JSON.stringify(screenshot)}, (await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG()); console.error(error); app.exit(1); }
     });
   `)
   const env: NodeJS.ProcessEnv = { ...process.env, APPDATA: directory, LOCALAPPDATA: directory }

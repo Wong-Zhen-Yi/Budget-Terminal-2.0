@@ -17,6 +17,8 @@ import type { SofiRequest } from '../shared/sofi.js'
 import type { HimsRequest } from '../shared/hims.js'
 import type { HoodRequest } from '../shared/hood.js'
 import type { MuRequest } from '../shared/mu.js'
+import type { GooglRequest } from '../shared/googl.js'
+import type { AnthropicRequest } from '../shared/anthropic.js'
 import type { AmznRequest } from '../shared/amzn.js'
 import type { VstRequest } from '../shared/vst.js'
 import type { AvgoRequest } from '../shared/avgo.js'
@@ -265,7 +267,9 @@ export function registerServiceHandlers(registerRoute: RegisterService): void {
   handle(CHANNELS.hood, (request: HoodRequest) => provider.hood(request))
   handle(CHANNELS.hims, (request: HimsRequest) => provider.hims(request))
   handle(CHANNELS.mu, (request: MuRequest) => provider.mu(request))
+  handle(CHANNELS.anthropic, (request: AnthropicRequest) => provider.anthropic(request))
   handle(CHANNELS.amzn, (request: AmznRequest) => provider.amzn(request))
+  handle(CHANNELS.googl, (request: GooglRequest) => provider.googl(request))
   handle(CHANNELS.avgo, (request: AvgoRequest) => provider.avgo(request))
   handle(CHANNELS.homebuilders, (request: HomebuildersRequest) => provider.homebuilders(request))
   handle(CHANNELS.semiconductors, (request: SemiconductorsRequest) => provider.semiconductors(request))

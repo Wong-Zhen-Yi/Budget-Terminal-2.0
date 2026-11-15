@@ -35,6 +35,8 @@ export const pageIconPaths: Record<string, string> = {
   bmnr: 'M4 20l3-7h10l3 7z M9 13V9h6v4 M5 4l14 5 M16 3l3 6-6 2',
   sofi: 'M4 6h.01 M12 4h.01 M20 6h.01 M4 12h.01 M12 12h.01 M20 12h.01 M4 18h.01 M12 20h.01 M20 18h.01 M8 8l8 8 M16 8l-8 8',
   mu: 'M5 8c2-5 12-5 14 0 M5 16c2 5 12 5 14 0 M6 15V9l6 5 6-5v6',
+  googl: 'M19 7a8 8 0 1 0 1 8v-4h-8 M12 15h8',
+  anthropic: 'M3 20 10 4h3l7 16 M6 14h11 M19 4l3 16',
   amzn: 'M5 4h14l-1 10H6z M9 4V3h6v1 M4 18c5 4 11 4 16-1 M16 17h4v4',
   avgo: 'M3 15c3-8 5-8 9 0s6 8 9 0 M3 9c3-8 5-8 9 0s6 8 9 0',
   homebuilders: 'M3 11 12 3l9 8 M5 10v11h14V10 M9 21v-7h6v7',

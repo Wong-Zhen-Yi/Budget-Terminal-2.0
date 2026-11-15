@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import './crypto.css';
 @import './finance.css';
+@import '../pages/HoodPage.css';
 
 .auth-popup {
   position: fixed;

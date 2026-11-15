@@ -5,6 +5,13 @@ description: Capture app pages, research markets and read or edit saved portfoli
 
 Use Budget Terminal tools for data owned by the local app. Open Budget Terminal before service calls; connection status can diagnose availability. Arguments use a `request` object; pass `{ "request": {} }` for operations without parameters.
 
+`budget_terminal_hood` includes Robinhood's reviewed November 2026 investor
+presentation alongside market, financial and operating reports. Preserve its
+`asOf`, `publishedAt`, `reviewedAt`, FY/LTM labels, source pages and non-GAAP notes.
+Provider refresh freshness does not revalidate the dated presentation. The 14
+revenue businesses overlap; quarterly annualized revenue is not realized annual
+revenue. Screenshot page: `hood`. Reconnect clients after rebuilding its schema.
+
 Use `budget_terminal_screenshot` with `{ "request": {} }` for the current page, `{ "request": { "page": "charts" } }` for a named tab, or `{ "request": { "page": "all" } }` for every implemented page, including tabs hidden from navigation. It returns PNG image blocks and page/status metadata. The app can be covered, hidden or minimized; capture does not focus or restore its window and restores the selected tab afterward. Screenshots show the current viewport and any loading/failure state; inspect metadata before assuming data is ready. Privacy blur is preserved. Prefer a single page when inspecting a specific issue.
 
 Preserve source, snapshot time, freshness, partial coverage and errors when interpreting results. Prefer existing cached results; request `force` only when a fresh provider fetch is necessary. Calls share the app's provider rate gate.
@@ -37,5 +44,7 @@ its omission warnings and disclose stale data, outages and fallbacks.
 Read a saved record before editing it and verify the returned record afterward. Portfolio and options edits record holdings and contracts; they never place broker orders. Deletion tools can remove records. If a connection is interrupted during a write, read the record before trying again; the write may have completed.
 
 Bulk import/export, clearing all user data, and cache reset stay in the desktop app. The server has no arbitrary filesystem or shell tools. Local client execution is required; a local stdio package alone does not make this app available to cloud or web tasks.
+
+Use `budget_terminal_anthropic` with `{ "request": {} }` for the Anthropic Focus dossier and public-source update checks. It has reviewed financial periods, private funding history, proposed IPO terms, products, governance and risks, plus official announcements and SEC filings. `reviewedAt` dates the research; envelope freshness dates source checks, not revalidation of financial figures. Inspect `reviewReasons` and check errors. There is no live equity quote; ANT is a proposed listing symbol in the reviewed material. Screenshot page: `anthropic`. Reconnect clients after rebuilding.
 
 Use `budget_terminal_homebuilders` with `{ "request": {} }` for the Homebuilders Focus universe, adjusted histories, corporate valuations, earnings estimates and news. ITB/XHB are broader housing ETF benchmarks; their corporate profiles are omitted. Inspect per-lane timestamps and errors before treating data as current. Screenshots use page `homebuilders`. Reconnect clients after rebuilding the tool catalog.

@@ -125,7 +125,7 @@ export function applyEquityMarketUpdate(client: QueryClient, update: EquityMarke
       const stock = data as StocksPayload
       const quote = quotes.get(stock.symbol)
       if (quote) data = stockMark(stock, quote)
-    } else if (['amzn', 'avgo', 'mu', 'sofi', 'vst', 'hood', 'hims', 'pltr'].includes(root)) {
+    } else if (['googl', 'amzn', 'avgo', 'mu', 'sofi', 'vst', 'hood', 'hims', 'pltr'].includes(root)) {
       const payload = data as { market?: StocksPayload | null }
       const quote = payload.market && quotes.get(payload.market.symbol)
       if (payload.market && quote) {
