@@ -1392,6 +1392,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'dictionary', label: 'Dictionary', implemented: true },
   { id: 'bonds', label: 'Bonds', implemented: true },
   { id: 'money', label: 'Money', implemented: true },
+  { id: 'macro', label: 'Macro', implemented: true },
   { id: 'economic', label: 'Economic', implemented: true },
   { id: 'price', label: 'Price', implemented: true },
   { id: 'market-cap', label: 'Market Cap', implemented: true },
@@ -2771,6 +2772,8 @@ export type HeatmapEtfKey = 'SPY' | 'NDX' | 'DJI'
 
 /** `EtfHeatmapHolding`. `weight` is a fraction: 0.0873 prints as 8.73%. */
 export interface HeatmapHolding {
+  /** Ascending daily closes for historical replay; older saved snapshots may omit this. */
+  history?: { dates: string[]; closes: number[] }
   priceSource?: string
   priceBasis?: Quote['priceBasis']
   symbol: string

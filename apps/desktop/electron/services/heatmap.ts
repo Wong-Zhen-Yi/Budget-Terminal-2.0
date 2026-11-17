@@ -114,12 +114,13 @@ export async function fetchHeatmap(etf: HeatmapEtfKey, force: boolean,
     return { payload, errors }
   }
 
-  const quotes = new Map<string, { price: number; changes: HeatmapHolding['changes'] }>()
+  const quotes = new Map<string, { price: number; changes: HeatmapHolding['changes']; history: SparkSeries }>()
   const priceDates = new Map<string, string>()
   const snapshot = (): HeatmapPayload => {
     const holdings: HeatmapHolding[] = seeds.map(seed => ({
       ...seed, price: quotes.get(seed.symbol)?.price ?? null,
       changes: quotes.get(seed.symbol)?.changes ?? {},
+      history: quotes.get(seed.symbol)?.history,
     }))
     const intervalSummaries = buildIntervalSummaries(holdings)
     const live = intervalSummaries.live
@@ -152,7 +153,7 @@ export async function fetchHeatmap(etf: HeatmapEtfKey, force: boolean,
       const changes = changesFromCloses(entry.dates, entry.closes)
       const latestDate = entry.dates.at(-1)
       if (latestDate) priceDates.set(key, latestDate)
-      for (const symbol of byPriceSymbol.get(key) ?? []) quotes.set(symbol, { price, changes })
+      for (const symbol of byPriceSymbol.get(key) ?? []) quotes.set(symbol, { price, changes, history: { dates: entry.dates, closes: entry.closes } })
     }
     onProgress?.(snapshot())
   }
@@ -208,7 +209,7 @@ export function getHeatmapProgress(etf: HeatmapEtfKey): HeatmapPayload | null {
 /** One cached load per index, with local previews while its provider work is pending. */
 export function getHeatmap(etf: HeatmapEtfKey, force = false): Promise<HeatmapFetchResult> {
   return cache
-    .resolveWithStaleFallback(`heatmap:yahoo-v2:${etf}`, HEATMAP_TTL_MS, async () => {
+    .resolveWithStaleFallback(`heatmap:yahoo-v3:${etf}`, HEATMAP_TTL_MS, async () => {
       try {
         return await fetchHeatmap(etf, force, dependencies, payload => progress.set(etf, payload))
       } finally {

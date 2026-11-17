@@ -1,4 +1,7 @@
 # GOOGL Focus, quarterly SEC drivers and MCP schemas rebuild through the shared launch path.
+# Agents includes the Summarize macro quick prompt; rebuild current source through the shared launcher.
+# Macro Focus, shared economic startup data and MCP screenshot schemas rebuild through the shared launcher.
+# Heatmap historical replay advances one trading day every 500 ms; rebuild desktop and MCP through the shared launcher.
 # Anthropic funding, customer depth, compute ratios and capital visualisations rebuild through the shared launcher.
 # Anthropic Focus research, source update checks and MCP tools rebuild through the shared launcher.
 param([Parameter(Position = 0)][ValidateSet('start', 'restart')][string]$Command = 'start', [switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Setup, [switch]$Attached)

@@ -74,6 +74,7 @@ import { BetaPage } from '@/pages/BetaPage'
 import { TradingVolumesPage } from '@/pages/TradingVolumesPage'
 import { UpDownPage } from '@/pages/UpDownPage'
 import { ValuationPage } from '@/pages/ValuationPage'
+import { MacroPage } from '@/pages/MacroPage'
 import { EconomicPage } from '@/pages/EconomicPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { StocksPage } from '@/pages/StocksPage'
@@ -619,6 +620,8 @@ function renderPage({
       <DefeatBetaPage active={active} onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'valuation' ? (
       <ValuationPage onStatusChange={onStatusChange} />
+    ) : tabId === 'macro' ? (
+      <MacroPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'economic' ? (
       <EconomicPage onStatusChange={onStatusChange} />
     ) : tabId === 'options' ? (

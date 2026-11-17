@@ -61,7 +61,7 @@ capacity. MCP edits still save locally even when an upload is invalid or throttl
 cloud retry messages stay in Settings. This adds no MCP tools, schemas, account
 access or permissions. The shared launcher still regenerates the MCP bundle.
 
-The desktop account popup restores saved sign-in before opening. Its **Don’t show
+The desktop account popup restores saved sign-in before opening. Its **Donâ€™t show
 again** preference stays on the device and can be reset in Settings. This changes
 no MCP tools, authentication access or permission checks.
 
@@ -110,7 +110,7 @@ and permissions are unchanged by this layout.
 Use `request.page: "homebuilders"` for screenshots. Run `npm run build:mcp`
 and reconnect MCP clients after this catalog change.
 
-Scorecard compares 3–6 companies in a company-column matrix with selectable
+Scorecard compares 3â€“6 companies in a company-column matrix with selectable
 metrics and Chart, Method and Sources views. It continues to use the shared
 `fundamentalsPage` service and caches; MCP research clients can use
 `budget_terminal_fundamentals_page` for each company. Named Scorecard views and
@@ -416,3 +416,12 @@ Finnhub quotes share the desktop streaming-first cache: REST reference maintenan
 `budget_terminal_googl` reads the GOOGL Focus data: Class A market research and the eight latest quarterly earnings releases from Alphabet's SEC filings (CIK 1652044). It exposes Search, YouTube ads, Network, subscriptions/platforms/devices, Cloud and Other Bets revenue, segment operating income, traffic acquisition costs, quarterly cash flow, capex, buybacks and dividends. USD values are absolute dollars, growth and margins are percentages, and missing metrics remain null. Free cash flow is operating cash flow less purchases of property and equipment; capex is company-wide, with no inferred AI-only allocation. Quote marks and historical candles retain their independent provider labels. This read uses market-research permission and preserves lane timestamps and partial/stale errors. GOOGL is preloaded at startup, including when hidden; failures appear in Settings.
 
 Run `npm run probe:googl -- --live`, `npm run probe:googl-ui`, `npm run build:mcp` and `npm run probe:mcp` after changes. All double-click launchers use the shared build path. Reconnect MCP clients after rebuilding to discover the new tool and screenshot page ID.
+
+The equity `heatmap` response includes optional per-holding `history` arrays (`dates` and `closes`, ascending daily Yahoo closes) for up to one year of historical replay. Older saved snapshots may omit history. Replay uses current issuer holdings, sectors and weights, not historical index membership. Desktop playback advances one trading day every 500 ms; playback controls remain desktop-only.
+
+
+### Macro Focus
+
+The Focus workspace includes `macro`, a US cycle desk with a GDP/CPI release-direction compass, selectable activity/inflation/employment histories, and a policy/rates watchlist. It shares the Economic query and government-provider cache; it adds no credentials or provider calls. Both pages warm at startup, even when hidden, and retain independent Settings readiness records. GDP is quarterly annualized growth; CPI is monthly year-over-year inflation. The compass compares each series with its own prior observation, without aligning release dates or estimating recession probabilities. Missing or unchanged readings produce no directional signal.
+
+Use `budget_terminal_economic` with `{ "request": {} }` for the underlying rows, histories, source labels, dates, units and missing coverage. Existing market-research permission and stale/partial envelope metadata apply. Use screenshot `request.page: "macro"` for the page. No extra read alias or permission is needed. Run `npm run build:mcp` and `npm run probe:mcp`, then reconnect MCP clients to discover the updated screenshot page enum and economic description. All double-click launchers rebuild through the shared path.

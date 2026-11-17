@@ -437,3 +437,40 @@ export function mixHex(left: string, right: string, amount: number): string {
   const blend = (a: number, b: number) => Math.trunc(a + (b - a) * mix)
   return `rgb(${blend(lr, rr)}, ${blend(lg, rg)}, ${blend(lb, rb)})`
 }
+
+
+/** Replay skips weekends and dates with no usable daily return in the basket. */
+export const HEATMAP_REPLAY_STEP_MS = 500
+
+export function heatmapReplayDates(payload: HeatmapPayload | null | undefined): string[] {
+  const dates = new Set<string>()
+  for (const holding of payload?.holdings ?? []) {
+    const history = holding.history
+    if (!history || history.dates.length !== history.closes.length) continue
+    for (let i = 1; i < history.dates.length; i += 1) {
+      if (Number.isFinite(history.closes[i]) && history.closes[i] > 0 &&
+          Number.isFinite(history.closes[i - 1]) && history.closes[i - 1] > 0) dates.add(history.dates[i])
+    }
+  }
+  return [...dates].sort()
+}
+
+/** Only consume closes through the selected date; never substitute a future/live price. */
+export function heatmapAtDate(payload: HeatmapPayload, date: string): HeatmapPayload {
+  const holdings = payload.holdings.map(holding => {
+    const history = holding.history
+    const index = history?.dates.indexOf(date) ?? -1
+    if (!history || index < 1 || history.dates.length !== history.closes.length ||
+        !Number.isFinite(history.closes[index]) || history.closes[index] <= 0 ||
+        !Number.isFinite(history.closes[index - 1]) || history.closes[index - 1] <= 0) {
+      return { ...holding, price: null, changes: {} }
+    }
+    return { ...holding, price: history.closes[index],
+      changes: changesFromCloses(history.dates.slice(0, index + 1), history.closes.slice(0, index + 1)) }
+  })
+  const intervalSummaries = buildIntervalSummaries(holdings)
+  const live = intervalSummaries.live
+  return { ...payload, holdings, priceAsOfDate: date, intervalSummaries,
+    quoteCoverage: live.quoteCoverage, weightedDayMove: live.weightedMove,
+    strongest: live.strongest, weakest: live.weakest }
+}

@@ -7,6 +7,9 @@ import type { HeatmapHolding, HeatmapInterval, HeatmapPayload } from '../electro
 import type { SparkSeries } from '../electron/services/yahoo/spark.js'
 import {
   HEATMAP_ETFS,
+  HEATMAP_REPLAY_STEP_MS,
+  heatmapReplayDates,
+  heatmapAtDate,
   buildHeatmapDetail,
   buildHeatmapRows,
   buildHeatmapSummary,
@@ -215,6 +218,27 @@ function runOffline(): void {
     fetchedAt: Date.now(),
   }
 
+  assert.equal(HEATMAP_REPLAY_STEP_MS, 500)
+  assert.deepEqual(heatmapReplayDates(payload), [], 'Older saved snapshots cannot invent history')
+  const historical: HeatmapPayload = { ...payload, holdings: holdings.map((holding, index) => ({
+    ...holding, history: index === 0
+      ? { dates: ['2026-01-02', '2026-01-05', '2026-01-06'], closes: [100, 110, 55] }
+      : index === 1 ? { dates: ['2026-01-05', '2026-01-06'], closes: [200, 220] } : undefined,
+  })) }
+  assert.deepEqual(heatmapReplayDates(historical), ['2026-01-05', '2026-01-06'])
+  const frame = heatmapAtDate(historical, '2026-01-05')
+  assert.equal(frame.priceAsOfDate, '2026-01-05')
+  assert.equal(frame.holdings[0].price, 110)
+  assert.equal(frame.holdings[0].changes['1d'], 10, 'Return must exclude future drop')
+  assert.equal(frame.holdings[1].price, null, 'A first close has no daily return')
+  assert.equal(frame.holdings[2].price, null, 'Missing history must never show current prices')
+  assert.equal(frame.quoteCoverage, 1)
+  assert.equal(frame.weightedDayMove, 10)
+  assert.equal(frame.holdings[0].weight, holdings[0].weight)
+  assert.equal(heatmapAtDate(historical, '2026-01-06').holdings[0].changes['1d'], -50)
+  assert.equal(heatmapAtDate(historical, '2026-01-04').quoteCoverage, 0, 'No forward-fill across absent sessions')
+  assert.equal(historical.holdings[0].price, 10, 'Replay must preserve latest snapshot')
+
   // `build_spy_heatmap_rows`: an unquoted interval leaves `changePct` null, not zero —
   // collapsing it to zero would paint a missing quote as a genuine flat move.
   const rows = buildHeatmapRows(payload, 'SPY', 'live')
@@ -407,6 +431,7 @@ async function runProviderChecks(): Promise<void> {
   assert.equal((await progressive).payload.quoteCoverage, 2)
   assert.equal(previews[0].holdings[0].price, null, 'Earlier snapshots remain immutable')
   assert(observedForce, 'Refresh must force Yahoo history reads')
+  assert.deepEqual(result.payload.holdings[1].history, { dates: [day(2), day(1)], closes: [200, 180] })
   assert.equal(result.payload.holdingsLoaded, 4)
   assert.equal(result.payload.quoteCoverage, 2)
   assert.equal(result.payload.priceAsOfDate, day(1))

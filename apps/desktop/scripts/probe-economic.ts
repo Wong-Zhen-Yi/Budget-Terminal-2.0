@@ -1,3 +1,4 @@
+import { macroCompass, macroDirection } from '../electron/shared/macro.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -259,6 +260,14 @@ async function main(): Promise<void> {
   curveChecks()
   statusChecks(rows)
   await parserChecks()
+  const growth = { ...buildRow(SERIES_BY_ID.get('GDPC1')!, []), available: true, latest: 2.5, change: 0.5 }
+  const prices = { ...buildRow(SERIES_BY_ID.get('CPIAUCSL')!, []), available: true, latest: 2.8, change: -0.2 }
+  assert(macroCompass([growth, prices]) === 'firmer-easing', 'compass should compare release changes')
+  assert(macroCompass([{ ...growth, change: -0.1 }, { ...prices, change: 0.1 }]) === 'softer-rising', 'opposite compass quadrant')
+  assert(macroCompass([growth]) === null, 'missing CPI must not imply easing')
+  assert(macroCompass([growth, { ...prices, change: 0 }]) === null, 'unchanged readings must not imply direction')
+  assert(macroDirection({ ...prices, available: false }) === null, 'unavailable reading must not imply direction')
+  assert(macroDirection({ ...prices, change: NaN }) === null, 'nonfinite reading must not imply direction')
   console.log('Economic offline checks passed.')
   if (process.argv.includes('--offline')) return
 

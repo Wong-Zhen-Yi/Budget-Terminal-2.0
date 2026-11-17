@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 
-import type { HeatmapEtfKey, HeatmapInterval } from '@shared/contract'
+import type { HeatmapEtfKey, HeatmapInterval, HeatmapPayload } from '@shared/contract'
 import { HEATMAP_INTERVALS } from '@shared/contract'
 import {
   HEATMAP_ETFS,
+  HEATMAP_REPLAY_STEP_MS,
+  heatmapAtDate,
+  heatmapReplayDates,
   UNCLASSIFIED,
   buildHeatmapDetail,
   buildHeatmapRows,
@@ -52,6 +55,20 @@ export function HeatmapPage({
   const [interval, setIntervalKey] = useState<HeatmapInterval>('live')
   const [selected, setSelected] = useState<HeatmapRow | null>(null)
 
+  const [replay, setReplay] = useState<{
+    payload: HeatmapPayload; dates: string[]; index: number; playing: boolean
+  } | null>(null)
+
+  useEffect(() => {
+    if (!replay?.playing) return
+    const timer = window.setInterval(() => setReplay(current => {
+      if (!current?.playing) return current
+      const index = Math.min(current.index + 1, current.dates.length - 1)
+      return { ...current, index, playing: index < current.dates.length - 1 }
+    }), HEATMAP_REPLAY_STEP_MS)
+    return () => window.clearInterval(timer)
+  }, [replay?.playing])
+
   const query = useHeatmap(etf)
   const refreshing = false
 
@@ -59,7 +76,12 @@ export function HeatmapPage({
   const preview = useHeatmapProgress(etf, loading)
   const completed = query.data?.data.etf === etf ? query.data.data : undefined
   // Keep the previous map during refresh until new prices begin arriving.
-  const payload = preview && (preview.quoteCoverage > 0 || !completed?.holdings.length) ? preview : completed
+  const latestPayload = preview && (preview.quoteCoverage > 0 || !completed?.holdings.length) ? preview : completed
+
+  const replayDates = useMemo(() => heatmapReplayDates(latestPayload), [latestPayload])
+  const payload = useMemo(() => replay
+    ? heatmapAtDate(replay.payload, replay.dates[replay.index])
+    : latestPayload, [replay, latestPayload])
 
   useEffect(() => {
     // No file behind this page, so the status bar's path slot stays empty.
@@ -81,6 +103,7 @@ export function HeatmapPage({
 
   /** `_p17_render_interval_result`'s status line, including its loaded-count rescue. */
   const status = useMemo(() => {
+    if (replay) return `Historical replay · ${payload?.priceAsOfDate} · ${intervalLabel(interval)} returns · current holdings and weights (as of ${replay.payload.asOfDate || 'latest issuer snapshot'}).`
     if (loading) {
       return payload?.holdings.length
         ? `Loading ${etfLabel(etf)} heatmap - ${summary.quoteCoverage}/${summary.holdingsLoaded} quotes available - ${intervalLabel(interval)}...`
@@ -98,7 +121,7 @@ export function HeatmapPage({
     // hiding how much of the map did work.
     if ((meta?.freshness === 'partial' || meta?.freshness === 'stale') && meta.failureReason) return `${loaded} ${meta.failureReason}`
     return loaded
-  }, [loading, query.data, query.error, payload, rows.length, etf, interval, summary])
+  }, [loading, query.data, query.error, payload, rows.length, etf, interval, summary, replay])
 
   const missing = Math.max(0, summary.holdingsLoaded - summary.quoteCoverage)
   const unclassified = rows.filter(row => row.sector === UNCLASSIFIED)
@@ -167,6 +190,7 @@ export function HeatmapPage({
             active={entry.key === etf}
             title={`${entry.label} holdings, via ${entry.ticker}`}
             onClick={() => {
+              setReplay(null)
               setEtf(entry.key)
               setSelected(null)
             }}
@@ -187,6 +211,34 @@ export function HeatmapPage({
           ))}
 
         </div>
+      </div>
+
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border border-border bg-surface px-2 py-1 text-2xs">
+        <span className="font-semibold text-text">Historical replay</span>
+        <span className="text-text-muted">1 trading day = 0.5 seconds</span>
+        {replay ? <>
+          <Button onClick={() => setReplay(current => current ? { ...current,
+            index: current.index === current.dates.length - 1 ? 0 : current.index,
+            playing: !current.playing } : null)}>{replay.playing ? 'Pause' : 'Play'}</Button>
+          <Button onClick={() => setReplay(current => current ? { ...current, index: 0, playing: false } : null)}>Restart</Button>
+          <span className="num text-text" aria-live="off">{replay.dates[replay.index]}</span>
+          <input type="range" aria-label="Replay date" min={0} max={replay.dates.length - 1}
+            value={replay.index} aria-valuetext={replay.dates[replay.index]}
+            className="min-w-24 flex-1 accent-accent"
+            onChange={event => { const index = Number(event.target.value)
+              setReplay(current => current ? { ...current, index, playing: false } : null) }} />
+          <span className="num text-text-muted">{replay.index + 1}/{replay.dates.length}</span>
+          <Button onClick={() => setReplay(null)}>Back to latest</Button>
+        </> : <>
+          <Button disabled={replayDates.length < 2} onClick={() => {
+            if (!latestPayload || replayDates.length < 2) return
+            setIntervalKey('1d')
+            setReplay({ payload: latestPayload, dates: replayDates, index: 0, playing: true })
+          }}>Play history</Button>
+          <span className="text-text-muted">{replayDates.length >= 2
+            ? `${replayDates[0]} to ${replayDates.at(-1)} · current holdings and weights`
+            : loading ? 'Loading daily history…' : 'History unavailable. Reload (F5) to fetch daily closes.'}</span>
+        </>}
       </div>
 
       <div className="grid shrink-0 grid-cols-6 divide-x divide-border border border-border bg-surface">

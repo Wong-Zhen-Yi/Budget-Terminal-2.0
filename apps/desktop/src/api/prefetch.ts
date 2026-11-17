@@ -546,6 +546,18 @@ export function buildTasks(
       }, onSnapshot),
   })
 
+  // Share the economic query while tracking Macro readiness independently, even when hidden.
+  tasks.push({
+    tab: 'macro',
+    label: 'Macro',
+    run: (client, backgroundOrder, onSnapshot) =>
+      warmStartupQuery(client, {
+        queryKey: queryKeys.economic,
+        queryFn: () => api.economic({ background: true, backgroundOrder }),
+        staleTime: queryFreshness(queryKeys.economic),
+      }, onSnapshot),
+  })
+
   // Two feeds, two keys, exactly as the page asks for them: a failed upcoming scrape must
   // not evict the completed rows.
   tasks.push({

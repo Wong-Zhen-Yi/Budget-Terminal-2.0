@@ -1,4 +1,7 @@
 @echo off
+rem Agents includes the Summarize macro quick prompt; rebuild current source through the shared launcher.
+rem Macro Focus, shared economic startup data and MCP screenshot schemas rebuild through the shared launcher.
+rem Heatmap historical replay advances one trading day every 500 ms; rebuild desktop and MCP through the shared launcher.
 rem Anthropic funding, customer depth, compute ratios and capital visualisations rebuild through the shared launcher.
 rem HOOD Focus quarterly earnings charts, headline metrics and MCP schemas rebuild through the shared launcher.
 rem Anthropic Focus research, source update checks and MCP tools rebuild through the shared launcher.

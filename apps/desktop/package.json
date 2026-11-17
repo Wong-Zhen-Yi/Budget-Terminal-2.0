@@ -128,7 +128,7 @@
     "probe:cards": "tsx scripts/probe-cards.ts",
     "probe:options": "tsx scripts/probe-options.ts",
     "probe:heatmap": "tsx scripts/probe-heatmap.ts",
-    "probe:heatmap-ui": "tsx scripts/probe-heatmap-ui.ts",
+    "probe:heatmap-ui": "tsx scripts/probe-heatmap-ui.ts && tsx scripts/probe-heatmap-replay-ui.ts",
     "probe:etf": "tsx scripts/probe-etf.ts",
     "probe:etf-ui": "tsx scripts/probe-etf-ui.ts",
     "probe:projections": "tsx scripts/probe-projections.ts",
@@ -169,7 +169,8 @@
     "probe:polymarket-ui": "tsx scripts/probe-polymarket-ui.ts",
     "probe:efficiency": "tsx scripts/probe-efficiency.ts && tsx scripts/probe-efficiency-renderer.ts && tsx scripts/probe-live-status.ts && tsx scripts/probe-efficiency-ui.ts",
     "probe:googl": "tsx scripts/probe-googl.ts",
-    "probe:googl-ui": "tsx scripts/probe-googl-ui.ts"
+    "probe:googl-ui": "tsx scripts/probe-googl-ui.ts",
+    "probe:macro-ui": "tsx scripts/probe-macro-ui.ts"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.5",
