@@ -218,7 +218,7 @@ function runOffline(): void {
     fetchedAt: Date.now(),
   }
 
-  assert.equal(HEATMAP_REPLAY_STEP_MS, 500)
+  assert.equal(HEATMAP_REPLAY_STEP_MS['1d'], 500)
   assert.deepEqual(heatmapReplayDates(payload), [], 'Older saved snapshots cannot invent history')
   const historical: HeatmapPayload = { ...payload, holdings: holdings.map((holding, index) => ({
     ...holding, history: index === 0

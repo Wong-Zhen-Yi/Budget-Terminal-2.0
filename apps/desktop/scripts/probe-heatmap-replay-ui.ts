@@ -57,7 +57,31 @@ try {
       check(slider().value === '0', 'Play at end must start over')
       button('Back to latest').click(); await settle(600)
       check(!slider() && document.body.innerText.includes('Price: $60.00'), 'Latest prices did not restore')
-      check(calls === 1, 'Replay must not fetch per frame')
+
+      // Watch the timer registrations so the speed switch can be verified without a tight wall-clock assertion.
+      const setInterval = window.setInterval
+      const clearInterval = window.clearInterval
+      const timers = new Map()
+      window.setInterval = (callback, delay, ...args) => {
+        const timer = setInterval(callback, delay, ...args)
+        timers.set(timer, delay)
+        return timer
+      }
+      window.clearInterval = timer => { timers.delete(timer); clearInterval(timer) }
+      button('1W').click(); await settle()
+      button('Play history').click(); await settle()
+      check(button('1W').getAttribute('aria-pressed') === 'true', 'Starting replay must keep the selected timeframe')
+      check(timers.size === 1 && [...timers.values()][0] === 400, '1W must schedule a 400 ms frame')
+      check(document.body.innerText.includes('0.4s per trading day'), '1W replay speed label missing')
+      button('1Y').click(); await settle()
+      check(slider().value === '0', 'Changing timeframe must keep the current replay date')
+      check(timers.size === 1 && [...timers.values()][0] === 200, '1Y must replace the running timer with a 200 ms frame')
+      check(document.body.innerText.includes('0.2s per trading day'), '1Y replay speed label missing')
+      button('Back to latest').click(); await settle()
+      check(timers.size === 0, 'Leaving replay must clear its timer')
+      window.setInterval = setInterval
+      window.clearInterval = clearInterval
+      check(calls === 1, 'Replay and timeframe changes must not fetch history again')
       button('Play history').click(); await settle(); button('Dow 30').click(); await settle(600)
       check(!slider(), 'Index change must stop replay')
       button('Play history').click(); await settle(); button('Pause').click(); await settle()
@@ -65,7 +89,7 @@ try {
         check(document.documentElement.scrollWidth <= innerWidth, 'Horizontal overflow')
         if (fit) check(document.documentElement.scrollHeight <= innerHeight, 'Vertical overflow')
       }
-      return 'PASS: historical prices/returns, 500ms steps, pause, restart, scrub, end, latest, index reset and no replay network calls'
+      return 'PASS: historical prices/returns, timeframe-based playback speed, pause, restart, scrub, end, latest, index reset and no replay network calls'
     }
   ` }, bundle: true, jsx: 'automatic', write: false, format: 'iife', loader: { '.css': 'empty' },
     alias: { '@': join(root, 'src'), '@shared': join(root, 'electron/shared') }, define: { 'process.env.NODE_ENV': '"production"' } })

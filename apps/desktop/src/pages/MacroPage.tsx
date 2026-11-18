@@ -1,21 +1,68 @@
 import { useEffect, useState } from 'react'
 import type { EconomicRow } from '@shared/contract'
 import { formatEconomicValue, SERIES_BY_ID } from '@shared/economic'
-import { MACRO_DRIVERS, MACRO_RATES, macroCompass } from '@shared/macro'
+import { COMPASS_STEADY_THRESHOLD_PP, MACRO_DRIVERS, MACRO_RATES, macroCompass } from '@shared/macro'
 import { useEconomic } from '@/api/economicQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { SeriesChart } from '@/components/economic/SeriesChart'
 import './MacroPage.css'
 
-const quadrants = [
-  ['softer-rising', 'Softer growth', 'Rising inflation'],
-  ['firmer-rising', 'Firmer growth', 'Rising inflation'],
-  ['softer-easing', 'Softer growth', 'Easing inflation'],
-  ['firmer-easing', 'Firmer growth', 'Easing inflation'],
+const growthStates = [
+  { direction: -1, label: 'Slower' },
+  { direction: 0, label: 'Steady' },
+  { direction: 1, label: 'Faster' },
+] as const
+
+const inflationStates = [
+  { direction: 1, label: 'Rising' },
+  { direction: 0, label: 'Steady' },
+  { direction: -1, label: 'Easing' },
 ] as const
 
 function value(row: EconomicRow | undefined) {
   return row?.available ? formatEconomicValue(row.latest, row.units, row.decimals) : '—'
+}
+
+function releaseChange(change: number | null) {
+  if (change === null) return '—'
+  const sign = change < 0 ? '−' : change > 0 ? '+' : ''
+  return `${sign}${Math.abs(change).toFixed(2)} pp`
+}
+
+function CycleCompass({ growth, inflation }: { growth?: EconomicRow; inflation?: EconomicRow }) {
+  const compass = macroCompass(growth, inflation)
+  const growthState = growthStates.find(state => state.direction === compass.growthDirection)
+  const inflationState = inflationStates.find(state => state.direction === compass.inflationDirection)
+
+  return <section className="macro-compass" aria-labelledby="macro-compass-title">
+    <h2 id="macro-compass-title">Cycle compass</h2>
+    <p className="macro-compass-caption">Change from prior observation</p>
+    <table className="macro-compass-grid" aria-label="Growth momentum by inflation momentum">
+      <thead><tr>
+        <td>Inflation ↓<br />Growth →</td>
+        {growthStates.map(state => <th key={state.direction} scope="col">{state.label}</th>)}
+      </tr></thead>
+      <tbody>{inflationStates.map(price => <tr key={price.direction}>
+        <th scope="row">{price.label}</th>
+        {growthStates.map(activity => {
+          const active = price === inflationState && activity === growthState
+          return <td key={activity.direction} data-active={active}>
+            {active && <span className="macro-compass-marker" aria-label="Latest release pair" role="img" />}
+          </td>
+        })}
+      </tr>)}</tbody>
+    </table>
+    <p className="macro-compass-reading">{growthState && inflationState
+      ? `${growthState.label} growth · ${inflationState.label} inflation`
+      : 'No directional signal: release comparison unavailable.'}</p>
+    <dl>
+      <dt>Real GDP · QoQ annualized<small>{growth?.latestDate ?? 'Unavailable'}</small></dt>
+      <dd>{value(growth)} <small>{releaseChange(compass.growthChange)}</small></dd>
+      <dt>CPI · year over year<small>{inflation?.latestDate ?? 'Unavailable'}</small></dt>
+      <dd>{value(inflation)} <small>{releaseChange(compass.inflationChange)}</small></dd>
+    </dl>
+    <p>Steady means a move under {COMPASS_STEADY_THRESHOLD_PP.toFixed(2)} percentage points. GDP is quarterly and CPI is monthly.</p>
+  </section>
 }
 
 export function MacroPage({ onStatusChange, onNavigate }: {
@@ -27,7 +74,6 @@ export function MacroPage({ onStatusChange, onNavigate }: {
   const [selected, setSelected] = useState('CPIAUCSL')
   const [years, setYears] = useState(5)
   const selectedRow = rows.find(row => row.seriesId === selected) ?? null
-  const compass = macroCompass(rows)
   const find = (id: string) => rows.find(row => row.seriesId === id)
   useEffect(() => {
     onStatusChange([{ label: 'Macro', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching }], '')
@@ -47,14 +93,7 @@ export function MacroPage({ onStatusChange, onNavigate }: {
       <nav aria-label="Macro research"><button onClick={() => onNavigate('economic')}>All indicators ↗</button><button onClick={() => onNavigate('calendar')}>Release calendar ↗</button><button onClick={() => onNavigate('bonds')}>Bonds ↗</button></nav>
     </header>
     <div className="macro-workspace">
-      <section className="macro-compass"><h2>Cycle compass</h2><p>Growth momentum →</p>
-        <div className="macro-quadrants" aria-label="Latest release direction">
-          {quadrants.map(([id, growth, prices]) => <div key={id} data-active={compass === id}><span>{growth}</span><strong>{prices}</strong>{compass === id && <small>● Latest direction</small>}</div>)}
-        </div>
-        <p>{compass ? 'Based on the change from each prior release.' : 'No directional signal: a required release is missing or unchanged.'}</p>
-        <dl><dt>Real GDP · QoQ annualized</dt><dd>{value(find('GDPC1'))} <small>{find('GDPC1')?.latestDate ?? 'Unavailable'}</small></dd><dt>CPI · year over year</dt><dd>{value(find('CPIAUCSL'))} <small>{find('CPIAUCSL')?.latestDate ?? 'Unavailable'}</small></dd></dl>
-        <p>Quarterly GDP and monthly CPI have different observation periods. This compass describes release momentum, not recession probabilities.</p>
-      </section>
+      <CycleCompass growth={find('GDPC1')} inflation={find('CPIAUCSL')} />
       <section className="macro-history"><div className="macro-chart-heading"><div><h2>Driver history</h2><p>{selectedRow?.note || 'Select a reading below to explore its history.'}</p></div><div className="macro-ranges" aria-label="History range">{[1, 5, 10].map(span => <button key={span} aria-pressed={years === span} onClick={() => setYears(span)}>{span}Y</button>)}</div></div>
         <div className="macro-chart"><SeriesChart row={selectedRow} years={years} /></div>
         <p className="macro-source">{selectedRow?.source ?? 'Source unavailable'} · Observation {selectedRow?.latestDate ?? 'unavailable'} · {selectedRow?.frequency ?? '—'}</p>

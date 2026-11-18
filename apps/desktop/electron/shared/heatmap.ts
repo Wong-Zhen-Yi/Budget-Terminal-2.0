@@ -439,9 +439,18 @@ export function mixHex(left: string, right: string, amount: number): string {
 }
 
 
-/** Replay skips weekends and dates with no usable daily return in the basket. */
-export const HEATMAP_REPLAY_STEP_MS = 500
+/** Milliseconds per trading session. Longer return windows play back faster. */
+export const HEATMAP_REPLAY_STEP_MS: Readonly<Record<HeatmapInterval, number>> = {
+  live: 500,
+  '1d': 500,
+  '1w': 400,
+  '1m': 350,
+  '3m': 300,
+  ytd: 250,
+  '1y': 200,
+}
 
+/** Replay skips weekends and dates with no usable daily return in the basket. */
 export function heatmapReplayDates(payload: HeatmapPayload | null | undefined): string[] {
   const dates = new Set<string>()
   for (const holding of payload?.holdings ?? []) {

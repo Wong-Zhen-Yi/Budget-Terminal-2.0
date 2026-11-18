@@ -58,6 +58,7 @@ export function HeatmapPage({
   const [replay, setReplay] = useState<{
     payload: HeatmapPayload; dates: string[]; index: number; playing: boolean
   } | null>(null)
+  const replayStepMs = HEATMAP_REPLAY_STEP_MS[interval]
 
   useEffect(() => {
     if (!replay?.playing) return
@@ -65,9 +66,9 @@ export function HeatmapPage({
       if (!current?.playing) return current
       const index = Math.min(current.index + 1, current.dates.length - 1)
       return { ...current, index, playing: index < current.dates.length - 1 }
-    }), HEATMAP_REPLAY_STEP_MS)
+    }), replayStepMs)
     return () => window.clearInterval(timer)
-  }, [replay?.playing])
+  }, [replay?.playing, replayStepMs])
 
   const query = useHeatmap(etf)
   const refreshing = false
@@ -103,7 +104,7 @@ export function HeatmapPage({
 
   /** `_p17_render_interval_result`'s status line, including its loaded-count rescue. */
   const status = useMemo(() => {
-    if (replay) return `Historical replay · ${payload?.priceAsOfDate} · ${intervalLabel(interval)} returns · current holdings and weights (as of ${replay.payload.asOfDate || 'latest issuer snapshot'}).`
+    if (replay) return `Historical replay Â· ${payload?.priceAsOfDate} Â· ${intervalLabel(interval)} returns Â· current holdings and weights (as of ${replay.payload.asOfDate || 'latest issuer snapshot'}).`
     if (loading) {
       return payload?.holdings.length
         ? `Loading ${etfLabel(etf)} heatmap - ${summary.quoteCoverage}/${summary.holdingsLoaded} quotes available - ${intervalLabel(interval)}...`
@@ -215,7 +216,7 @@ export function HeatmapPage({
 
       <div className="flex shrink-0 flex-wrap items-center gap-2 border border-border bg-surface px-2 py-1 text-2xs">
         <span className="font-semibold text-text">Historical replay</span>
-        <span className="text-text-muted">1 trading day = 0.5 seconds</span>
+        <span className="text-text-muted">{replayStepMs / 1000}s per trading day</span>
         {replay ? <>
           <Button onClick={() => setReplay(current => current ? { ...current,
             index: current.index === current.dates.length - 1 ? 0 : current.index,
@@ -232,12 +233,12 @@ export function HeatmapPage({
         </> : <>
           <Button disabled={replayDates.length < 2} onClick={() => {
             if (!latestPayload || replayDates.length < 2) return
-            setIntervalKey('1d')
+            if (interval === 'live') setIntervalKey('1d')
             setReplay({ payload: latestPayload, dates: replayDates, index: 0, playing: true })
           }}>Play history</Button>
           <span className="text-text-muted">{replayDates.length >= 2
-            ? `${replayDates[0]} to ${replayDates.at(-1)} · current holdings and weights`
-            : loading ? 'Loading daily history…' : 'History unavailable. Reload (F5) to fetch daily closes.'}</span>
+            ? `${replayDates[0]} to ${replayDates.at(-1)} Â· current holdings and weights`
+            : loading ? 'Loading daily historyâ€¦' : 'History unavailable. Reload (F5) to fetch daily closes.'}</span>
         </>}
       </div>
 

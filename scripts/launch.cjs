@@ -1,7 +1,8 @@
 const { spawnSync } = require('node:child_process')
+// Macro cycle compass shows nine states and release changes through the shared build path.
 // Agents includes the Summarize macro quick prompt; rebuild current source through the shared launcher.
 // Macro Focus, shared economic startup data and MCP screenshot schemas rebuild through the shared launcher.
-// Heatmap historical replay advances one trading day every 500 ms; rebuild desktop and MCP through the shared launcher.
+// Heatmap historical replay speed follows the selected timeframe; rebuild desktop and MCP through the shared launcher.
 // Anthropic funding, customer depth, compute ratios and capital visualisations rebuild through the shared launcher.
 // Anthropic Focus research, source update checks and MCP tools rebuild through the shared launcher.
 // Finnhub streaming-first refresh, visible-stock priorities and idle/session savings rebuild through the shared launcher.

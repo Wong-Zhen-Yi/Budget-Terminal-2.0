@@ -76,7 +76,7 @@ export const operations = {
   upDownTargets: 'Get targets for advancing and declining securities.',
   valuation: 'Calculate a company valuation and peer comparison.',
   money: 'Get money and liquidity research.',
-  economic: 'Get the indicators and histories powering Economic, Macro Focus and bond research. Macro Focus uses GDP growth, CPI, activity, labor and policy/rate series; dates and frequencies differ. Inspect missing series and envelope freshness. Use screenshot page macro for its cycle compass and driver history.',
+  economic: 'Get the indicators and histories powering Economic, Macro Focus and bond research. The Macro cycle compass uses changes from the prior observation for real GDP growth and CPI inflation, in percentage points. Displayed moves under 0.10 pp in magnitude are steady. Inspect observation dates, missing series and envelope freshness. Use screenshot page macro for the nine-state compass and driver history.',
   institutionActivity: 'Get institutional investment activity.',
   institutionTickerActivity: 'Get institutional activity for a ticker.',
   ipoUpcoming: 'Get upcoming IPOs.',
