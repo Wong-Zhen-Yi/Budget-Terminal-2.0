@@ -81,6 +81,8 @@ try {
     import { DEFAULT_QUANT_PAGE_SETTINGS } from './electron/shared/quant'
     import { DEFAULT_YOUTUBE_PAGE_SETTINGS } from './electron/shared/youtube'
     import { DEFAULT_CACHE_SETTINGS } from './electron/shared/cachePolicy'
+    import { anthropicResearch } from './electron/shared/anthropic'
+    import { computeExposure, emptyRiskMetrics } from './electron/shared/analytics'
     const check = (condition, message) => { if (!condition) throw Error(message) }
     const wait = () => new Promise(resolve => setTimeout(resolve, 110))
     const visiblePage = id => [...document.querySelectorAll('[data-page-id]')].find(page => page.dataset.pageId === id && page.getBoundingClientRect().height > 0)
@@ -128,7 +130,7 @@ try {
       }
       if (method === 'cloudSyncCommand') {
         if (authRejected) return { ...ok(fixtureAuth), meta: { freshness: 'failed', failureReason: 'Synthetic sign-in failure. Try again.' } }
-        fixtureAuth = { ...fixtureAuth, url: request.url ?? fixtureAuth.url, signInPending: ['signInGitHub', 'revokeOtherSessions'].includes(request.type),
+        fixtureAuth = { ...fixtureAuth, signInPending: ['signInGitHub', 'revokeOtherSessions'].includes(request.type),
           credentialCleanupRequired: request.type === 'retryCredentialCleanup' ? false : fixtureAuth.credentialCleanupRequired,
           workspaceApprovalRequired: request.type === 'confirmWorkspace' ? false : fixtureAuth.workspaceApprovalRequired,
           message: request.type === 'signInGitHub' ? 'Complete GitHub sign-in in your browser.' : undefined }
@@ -140,6 +142,7 @@ try {
           hits: 0, misses: 0, expired: 0, loads: 0, forced: 0, errors: 0 } })
       }
       if (method === 'mutateSettings') {
+        if (request.type === 'setMainPage') fixtureSettings = { ...fixtureSettings, mainPage: request.id ?? undefined }
         if (request.type === 'setBacktestPage') fixtureSettings = { ...fixtureSettings, backtestPage: request.value }
         if (request.type === 'setClockCountry') fixtureSettings = { ...fixtureSettings, clockCountry: request.code }
         if (request.type === 'setTime12h') fixtureSettings = { ...fixtureSettings, time12h: request.value }
@@ -156,12 +159,18 @@ try {
       if (method === 'portfolio' || method === 'mutatePortfolio') return ok({ portfolios: populated ? [book] : [], activeId: populated ? 'main' : null, mainId: populated ? 'main' : null, sourcePath: '' })
       if (method === 'quotes') return ok({ macro: Object.fromEntries(MACRO_SYMBOLS.map(row => [row.label, quote(row.symbol)])), holdings: Object.fromEntries((request.holdings ?? []).map(symbol => [symbol, quote(symbol)])), missing: [] })
       if (method === 'returns') return ok({ returns: Object.fromEntries((request.tickers ?? []).map(symbol => [symbol, -5])) })
+      if (method === 'momentum') return ok({ dates: [], candles: [], values: [], returns: [], emaPeriod: 10, ema: [],
+        startDate: null, includedTickers: [], excludedTickers: [], reason: 'No common historical window' })
+      if (method === 'analytics') return ok({ metrics: emptyRiskMetrics(), exposure: computeExposure(0, {}),
+        benchmarkSymbol: request.benchmarkSymbol, lookback: request.lookback, startDate: null, endDate: null,
+        historyPoints: 0, includedTickers: [], excludedTickers: [], note: '', reason: 'No common historical window' })
       if (method === 'optionQuotes') return ok({ quotes: Object.fromEntries((request.positions ?? []).map(position => [position.rowId,
         { currentPrice: 6, volume: 100, openInterest: 200, impliedVolatility: 0.3 }])), expiries: { AAPL: ['2026-12-18'] } })
       if (method === 'signals' || method === 'quantScan' || method === 'technicalScan') return ok(null)
       if (method === 'mcpStatus') return { available: true, tools: 1 }
       if (method === 'apiUsage') return { providers: [], sampledAt: Date.now() }
       if (method === 'appMetrics') return ok({ memory: [{ at: Date.now(), mainMiB: 100, rendererMiB: 200, otherMiB: 50 }], backup: { state: 'not-created' } })
+      if (method === 'anthropic') return ok(anthropicResearch())
       let result = structuredClone(window.fixtureTemplates[method])
       if (!result || !('data' in result)) return result
       if (!result.data) result.data = {}
@@ -204,7 +213,11 @@ try {
       }
       if (method === 'discoveryUniverse') data.symbols = ['AAPL']
       if (method === 'discovery') { data.symbol = 'AAPL'; data.price = 100; data.previousClose = 99 }
-      if (method === 'heatmap') data.etf = request.etf
+      if (method === 'heatmap') {
+        data.etf = request.etf
+        data.holdings = [{ symbol: 'AAPL', name: 'Fixture security', sector: 'Technology', weight: 1, price: 102, changes: {},
+          history: { dates: ['2026-10-06', '2026-10-07', '2026-10-08'], closes: [100, 101, 102] } }]
+      }
       if (method === 'fx') data.usdSgd = 1.3
       if (method === 'calendarMonth') { data.year = request.year; data.month = request.month }
       if (method === 'forexHistory' || method === 'forexNews') data.pair = request.pair
@@ -217,13 +230,17 @@ try {
       const agentsOnly = ${JSON.stringify(process.argv.includes('--agents'))}
       const refreshOnly = ${JSON.stringify(process.argv.includes('--refresh'))}
       const startupOnly = ${JSON.stringify(process.argv.includes('--startup-only'))}
+      const mainPageOnly = ${JSON.stringify(process.argv.includes('--main-page'))}
       const authOnly = ${JSON.stringify(process.argv.includes('--auth-only'))}
-      for (const scenario of authOnly ? ['empty'] : reloadOnly ? ['populated'] : refreshOnly ? ['persisted'] : agentsOnly ? ['empty'] : ['empty', 'populated', 'persisted']) {
+      const scenarios = mainPageOnly ? ['empty', 'persisted'] : authOnly ? ['empty'] : reloadOnly ? ['populated'] : refreshOnly ? ['persisted'] : agentsOnly ? ['empty'] : ['empty', 'populated', 'persisted']
+      for (const scenario of scenarios) {
         console.log('Completed-startup scenario: ' + scenario)
         populated = scenario !== 'empty'
         const restored = scenario === 'persisted'
         restoredCurrency = restored
-        fixtureSettings = { ...settings, youtubePage: { sortColumn: restored ? 3 : -1, sortDescending: restored },
+        fixtureSettings = { ...settings, mainPage: restored ? 'calendar' : undefined,
+          obscuredTabs: mainPageOnly && restored ? ['calendar'] : [],
+          youtubePage: { sortColumn: restored ? 3 : -1, sortDescending: restored },
           backtestPage: restored ? { ...DEFAULT_BACKTEST_PAGE_SETTINGS, rows: [{ symbol: 'MSFT', weight: 100 }] } : DEFAULT_BACKTEST_PAGE_SETTINGS }
         useStocksPage.getState().setSymbol(restored ? 'MSFT' : 'AAPL')
         useFundamentalsStore.getState().setSymbol(scenario === 'empty' ? '' : restored ? 'MSFT' : 'AAPL')
@@ -246,6 +263,7 @@ try {
         const startup = useDataHealth.getState().startup
         check(startup && startup.timings.length === startup.planned, 'Startup failed to complete: ' + scenario)
         check(Object.keys(startup.pages).length === TABS.filter(tab => tab.implemented).length, 'Startup omitted a page state')
+        check(visiblePage(restored ? 'calendar' : 'dashboard-2'), 'Startup must open the saved main page or the default')
         if (authOnly) {
           const popup = () => document.querySelector('dialog.auth-popup[open]')
           const click = text => { const button = [...popup().querySelectorAll('button')].find(button => button.textContent.trim() === text); check(button && !button.disabled, 'Missing enabled auth button: ' + text); button.click() }
@@ -253,7 +271,7 @@ try {
           check(popup() && popup().contains(document.activeElement), 'Signed-out startup must open and focus the popup')
           check(popup().textContent.includes('You’ll stay signed in on this device'), 'Persistent sign-in must be the default')
           check(!document.querySelector('input[type=password]'), 'GitHub auth must not collect passwords')
-          check(popup().querySelector('button[type=submit]').disabled, 'Missing deployment must disable sign-in')
+          check(!popup().querySelector('input[type=url]') && !popup().querySelector('button[type=submit]').disabled, 'A fresh install must offer sign-in without a URL field')
           window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true })); await wait()
           check(!document.querySelector('[aria-label="Page search"]'), 'Workspace shortcuts escaped the auth popup')
           click('Sign up'); await wait()
@@ -266,14 +284,11 @@ try {
           }
           await window.resizeFixture(1400, 950); await paint()
           await window.captureFixture('auth-sign-up')
-          const input = popup().querySelector('input')
-          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'https://fixture.convex.cloud')
-          input.dispatchEvent(new Event('input', { bubbles: true })); await wait()
           authRejected = true; click('Continue with GitHub'); await wait()
           check(popup().textContent.includes('Synthetic sign-in failure'), 'Failed sign-in must offer recovery')
           authRejected = false; click('Continue with GitHub'); await wait()
           check(popup().textContent.includes('Complete GitHub sign-in') && !popup().querySelector('input'), 'Browser approval state missing')
-          check(calls.some(call => call.method === 'cloudSyncCommand' && call.request.type === 'signInGitHub' && call.request.url === 'https://fixture.convex.cloud'), 'Sign-up did not use the main-process auth command')
+          check(calls.some(call => call.method === 'cloudSyncCommand' && call.request.type === 'signInGitHub' && !('url' in call.request)), 'Sign-up must leave endpoint selection to the main process')
           click('Cancel sign-in'); await wait(); click('Sign in'); await wait()
           click('Continue with GitHub'); await wait()
           fixtureAuth = { ...fixtureAuth, signedIn: true, signInPending: false, state: 'synced' }
@@ -331,7 +346,7 @@ try {
           await wait(); await wait()
           const panel = () => document.querySelector('[data-cloud-sync]')
           const accountClick = text => { const button = [...panel().querySelectorAll('button')].find(button => button.textContent.trim() === text); check(button && !button.disabled, 'Missing account control: ' + text); button.click() }
-          check(panel().textContent.includes('@fixture-user') && panel().textContent.includes('https://fixture.convex.cloud'), 'Connected account and deployment must be visible')
+          check(panel().textContent.includes('@fixture-user'), 'Connected account must be visible')
           check([...panel().querySelectorAll('button')].find(button => button.textContent === 'Sync now').disabled, 'Sync must stay paused until ownership is approved')
           accountClick('Import this device’s data'); await wait()
           check(panel().textContent.includes('Allow this account to receive'), 'Import requires a reviewable confirmation')
@@ -365,6 +380,29 @@ try {
         if (document.querySelector('dialog.auth-popup[open]')) {
           ;[...document.querySelector('dialog.auth-popup').querySelectorAll('button')].find(button => button.textContent === 'Continue locally').click()
           await wait()
+        }
+        if (mainPageOnly) {
+          if (restored) {
+            const calendar = visiblePage('calendar')
+            const obscure = document.querySelector('.terminal-topbar button[aria-label="Obscure mode"]')
+            check(calendar.closest('[inert]') && obscure.getAttribute('aria-pressed') === 'true', 'The configured startup page must open protected')
+            obscure.click(); await wait()
+            check(!calendar.closest('[inert]') && obscure.getAttribute('aria-pressed') === 'false', 'The toolbar control must reveal the page')
+            await selectPage(TABS.find(tab => tab.id === 'settings'))
+            document.querySelector('[data-settings-category="privacy"]').click(); await wait()
+            const privacySwitch = document.querySelector('[data-settings-card="privacy"] [role="switch"]')
+            check(privacySwitch.getAttribute('aria-checked') === 'false', 'Privacy switch must reflect the toolbar state')
+            privacySwitch.click(); await wait()
+            check(obscure.getAttribute('aria-pressed') === 'true', 'Privacy switch must update the toolbar')
+            document.querySelector('[data-settings-category="workspace"]').click(); await wait()
+            const mainPage = document.querySelector('#settings-main-page')
+            mainPage.value = 'charts'
+            mainPage.dispatchEvent(new Event('change', { bubbles: true })); await wait()
+            check(fixtureSettings.mainPage === 'charts' && visiblePage('settings'), 'Saving the next launch page must keep Settings open')
+          }
+          memory.stop(); rendered.unmount(); client.clear(); useDataHealth.setState({ startup: null }); calls = []
+          await wait()
+          continue
         }
         if (scenario === 'empty') {
           for (const id of ['fundamentals', 'options']) {
@@ -443,7 +481,10 @@ try {
           const before = calls.length
           await selectPage(tab)
           check(!document.body.innerText.includes('This page could not render'), 'Completed page crashed: ' + tab.id)
-          check(![...visiblePage(tab.id).querySelectorAll('button')].some(button => /^(Force )?Refresh(?:$| list$| holdings$| dataset$)/i.test(button.textContent.trim())), 'Page still has a Refresh button: ' + tab.id)
+          const refreshButtons = [...visiblePage(tab.id).querySelectorAll('button')].filter(button => /^(Force )?Refresh(?:$| list$| holdings$| dataset$)/i.test(button.textContent.trim()))
+          check(refreshButtons.length <= (tab.id === 'scorecard' ? 1 : 0), 'Page has an unexpected Refresh button: ' + tab.id)
+          if (tab.id !== 'settings') check(!visiblePage(tab.id).querySelector('[aria-label="Data freshness"]') &&
+            !/Snapshot age:|Cache age at retrieval:/.test(visiblePage(tab.id).innerText), 'Inline data diagnostics on ' + tab.id)
           if (restored && ['stocks', 'dashboard'].includes(tab.id)) {
             const text = visiblePage(tab.id).innerText
             check(text.includes('123.45 EUR') && text.includes('-2.50 EUR') && !text.includes('$123.45'), 'Foreign quote header mislabeled: ' + tab.id)
@@ -549,6 +590,7 @@ try {
                 record.subtabs.push(label); page = visiblePage(tab.id)
               }
               check(!document.body.innerText.includes('This page could not render'), 'Subtab crashed: ' + tab.id + '/' + label)
+              if (tab.id !== 'settings') check(!page.querySelector('[aria-label="Data freshness"]'), 'Inline data diagnostics on ' + tab.id + '/' + label)
               for (const button of [...page.querySelectorAll('button[aria-pressed]')].filter(button => button.getBoundingClientRect().height > 0 && !button.disabled)) {
                 const wasPressed = button.getAttribute('aria-pressed') === 'true'
                 button.click(); await new Promise(resolve => setTimeout(resolve, 20))
@@ -612,6 +654,7 @@ try {
         await wait()
       }
       if (reloadOnly) return 'PASS: F5 reloads the focused page once, checks other pages without force, and preserves all-page startup'
+      if (mainPageOnly) return 'PASS: default and saved launch pages, all-page startup, protected startup content, shared Obscure controls and save without navigation'
       if (startupOnly) return 'PASS: every route is prepared for empty, populated and restored sessions; empty selection screens, thumbnail cooldowns, first visits and F5 reload verified'
       return 'PASS: all ' + TABS.filter(tab => tab.implemented).length + ' routes after completed startup, empty and populated portfolios, persisted Options/ETF/video selections, initial News/video media and no first-visit loads; visible subtab/select/filter/sort sweep recorded separately'
     }

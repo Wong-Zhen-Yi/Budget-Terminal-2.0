@@ -347,6 +347,7 @@ export function OptionsPage({
         <Button variant="accent" onClick={() => void exportTopVolume()}>
           Export Options by Top Volume
         </Button>
+        <span className={`min-w-0 flex-1 truncate text-right text-2xs ${notice ? toneClass[notice.tone] : ''}`} role="status" title={notice?.text}>{notice?.text}</span>
         <div className="ml-auto flex items-center gap-1">
           {TABS.map((entry) => (
             <Button
@@ -360,10 +361,6 @@ export function OptionsPage({
           ))}
         </div>
       </div>
-
-      {notice ? (
-        <p className={`shrink-0 px-1 text-2xs ${toneClass[notice.tone]}`}>{notice.text}</p>
-      ) : null}
 
       {tab === 'chain' ? (
         <ChainTab
@@ -559,7 +556,7 @@ function ChainTab({
         </section>
       </div>
 
-      <p className={`shrink-0 px-1 text-2xs ${toneClass[status.tone]}`}>{status.text}</p>
+      <p className={`shrink-0 truncate px-1 text-2xs ${toneClass[status.tone]}`} title={status.text}>{status.text}</p>
     </div>
   )
 }
@@ -654,7 +651,7 @@ function SummaryGrid({
         </div>
       </div>
 
-      <p className={`shrink-0 px-1 text-2xs ${toneClass[status.tone]}`}>{status.text}</p>
+      <p className={`shrink-0 truncate px-1 text-2xs ${toneClass[status.tone]}`} title={status.text}>{status.text}</p>
     </div>
   )
 }

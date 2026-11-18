@@ -3,7 +3,7 @@ import { ConvexError, v } from 'convex/values'
 import { components, internal } from './_generated/api'
 import { mutation } from './_generated/server'
 import { authCore } from './authCore'
-import { completion } from './githubAdapter'
+import { completion, githubOAuthConfigured } from './githubAdapter'
 import { DESKTOP_AUTH_ORIGINS, desktopOAuthRedirect, type OAuthCompletion } from '../electron/shared/cloudOAuth'
 
 export const { signOut, refreshSession, isAuthenticated } = authCore
@@ -18,6 +18,7 @@ export const startSignInWithGithub = mutation({
   args: { redirectTo: v.string(), purpose: v.optional(v.union(v.literal('signIn'), v.literal('revokeOthers'))) },
   returns: v.object({ redirect: v.string(), state: v.string() }),
   handler: async (ctx, args): Promise<{ redirect: string; state: string }> => {
+    if (!githubOAuthConfigured()) throw new ConvexError({ code: 'AUTH_UNAVAILABLE', message: 'GitHub sign-in is unavailable.' })
     const redirectTo = desktopOAuthRedirect(args.redirectTo)
     if (!DESKTOP_AUTH_ORIGINS.includes(new URL(redirectTo).origin)) throw new Error('Invalid desktop return origin.')
     const purpose = args.purpose ?? 'signIn'

@@ -81,3 +81,5 @@ Run `npm run build:mcp` to regenerate schemas and refresh both the standalone ad
 
 ## No Global Diagnostics Banners
 The **Page Loading Status banner** (also called the **startup diagnostics banner**, formerly the `LoadingStatus` component) is the full-width strip above page content showing "Pages X/Y ready", "Page needs attention", "Showing saved content", retrieval timestamps, raw errors, and retry buttons. The user has repeatedly requested its removal. Do not restore it or add an equivalent global diagnostics strip. Keep detailed startup progress, failures, and diagnostics in Settings. Preserve startup preloading for every implemented page. Keep page labels free of readiness status notes such as Ready, Refreshing, Incomplete or Failed; detailed diagnostics belong in Settings. The bottom status strip must also remain hidden.
+
+This applies inside pages and panels too. Changing a timeframe, refreshing, or serving cached data must not insert a status block or move the surrounding controls, charts, or tables. Keep provider diagnostics in Settings and show any necessary empty state within the existing content area.

@@ -13,6 +13,8 @@ interface ProviderDefinition {
 const PROVIDERS: Record<string, ProviderDefinition> = {
   nvidia: { label: 'NVIDIA investor relations', softLimit: 10, windowMs: 60_000, fallbackCooldownMs: 60_000 },
   growthepie: { label: 'growthepie', softLimit: 10, windowMs: 60_000, fallbackCooldownMs: 60_000 },
+  'coin-metrics': { label: 'Coin Metrics', softLimit: 6, windowMs: 60_000, fallbackCooldownMs: 60_000 },
+  ultrasound: { label: 'ultrasound.money', softLimit: 10, windowMs: 60_000, fallbackCooldownMs: 60_000 },
   tickertick: { label: 'TickerTick', softLimit: 10, windowMs: 60_000, fallbackCooldownMs: 30_000 },
   finnhub: { label: 'Finnhub', softLimit: 60, windowMs: 60_000, fallbackCooldownMs: 60_000 },
   coinbase: { label: 'Coinbase', softLimit: 90, windowMs: 60_000, fallbackCooldownMs: 60_000 },

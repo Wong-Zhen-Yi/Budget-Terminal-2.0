@@ -74,7 +74,6 @@ export function HomebuildersPage({ onStatusChange, onNavigate }: {
     { key: 'pe', header: 'P/E TTM', cell: row => ratio(row.profile?.trailingPe), sortValue: row => row.profile?.trailingPe ?? null, numeric: true },
     { key: 'pb', header: 'P/B', cell: row => ratio(row.profile?.priceToBook), sortValue: row => row.profile?.priceToBook ?? null, numeric: true },
   ]
-  const selectedErrors = errors.filter(error => error.symbol === symbol)
   const dossier = selected ? <aside className="hb-dossier" aria-label="Selected builder research">
     <header><span className="hb-kicker">03 / Company file</span><div className="hb-company-name"><strong>{symbol}</strong><span>{selected.company.name}</span></div></header>
     <div className="hb-quote"><strong>{currency(selected.market?.price)}</strong>{signed(selected.market?.dailyChange)}</div>
@@ -90,7 +89,6 @@ export function HomebuildersPage({ onStatusChange, onNavigate }: {
     <div className="hb-next-report"><span>Next earnings · provider estimate</span><strong>{dateText(selected.profile?.earningsDate)}</strong></div>
     <SourceLink url={selected.company.sourceUrl}>{selected.company.kind === 'builder' ? 'Company investor relations ↗' : 'ETF issuer & holdings ↗'}</SourceLink>
     <p className="hb-method">Whole-company metrics. Gross margin is consolidated TTM, not the separately reported homebuilding margin.</p>
-    {selectedErrors.length || query.error ? <p className="text-warn text-2xs">Some company data is unavailable.</p> : null}
   </aside> : <PanelMessage>Company unavailable</PanelMessage>
 
   return <div className="homebuilders-page" data-homebuilders-page>

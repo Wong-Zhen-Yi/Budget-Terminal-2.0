@@ -1,15 +1,15 @@
 import { PolymarketPage } from '@/pages/PolymarketPage'
 import { ArticlesPage } from '@/pages/ArticlesPage'
 import { NotificationsPage } from '@/pages/NotificationsPage'
-import { useNotifications, useNotificationCommand } from '@/api/notificationsQueries'
+import { useNotifications } from '@/api/notificationsQueries'
 import { BrowserPage } from '@/pages/BrowserPage'
 import { AgentsPage } from '@/pages/AgentsPage'
 import { useAgents, useAgentCommand } from '@/api/agentsQueries'
 import { Sp500Page } from '@/pages/Sp500Page'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { SETTINGS_TAB_ID, TABS } from '@shared/contract'
-import { adjacentPage, DEFAULT_TAB_ID, pagesInVisualOrder } from '@shared/navigation'
+import { SETTINGS_TAB_ID, TABS, VALUE_MASKED_TABS } from '@shared/contract'
+import { adjacentPage, pagesInVisualOrder, resolveMainPage } from '@shared/navigation'
 import { useWarmPages } from '@/api/prefetch'
 import { useEquityMarketStream } from '@/api/equityStream'
 import { useMcpScreenshot, useScreenshotReady } from '@/api/mcpScreenshot'
@@ -92,12 +92,21 @@ import { useValuationPage } from '@/stores/valuation'
 import { useSettingsNavigation } from '@/stores/settingsNavigation'
 import { useNavigation } from '@/stores/navigation'
 import { useAuthPrompt } from '@/stores/authPrompt'
+import { useObscureMode } from '@/stores/obscureMode'
 
 const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
+const DEFAULT_TAB_ORDER = TABS.map((tab) => tab.id)
 
 export function App() {
   const isMac = window.api.platform === 'darwin'
-  const [selectedTab, setActiveTab] = useState(DEFAULT_TAB_ID)
+  const settingsQuery = useSettings()
+  const settings = settingsQuery.data?.data
+  const [pageOverride, setActiveTab] = useState<string | null>(null)
+  const startupTab = resolveMainPage(settings?.mainPage, settings?.tabOrder ?? DEFAULT_TAB_ORDER, settings?.hiddenTabs ?? [])
+  const selectedTab = pageOverride ?? startupTab
+  useEffect(() => {
+    if (!settingsQuery.isPending) setActiveTab(current => current ?? startupTab)
+  }, [settingsQuery.isPending, startupTab])
   useEffect(() => {
     let disposed = false
     const open = () => {
@@ -122,18 +131,18 @@ export function App() {
   }, [authStatus?.signedIn])
   const recent = useNavigation((state) => state.recent)
   const visit = useNavigation((state) => state.visit)
-  useEffect(() => visit(selectedTab), [selectedTab, visit])
+  useEffect(() => {
+    if (!settingsQuery.isPending) visit(selectedTab)
+  }, [selectedTab, settingsQuery.isPending, visit])
   const [panels, setPanels] = useState<PanelStatus[]>([])
   const [sourcePath, setSourcePath] = useState('')
   const [reloading, setReloading] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
-  /** Obscure is a session state, like the reference's `_privacy_obscured`, but it starts on. */
-  const [obscured, setObscured] = useState(true)
+  const obscured = useObscureMode(state => state.enabled)
+  const toggleObscure = useObscureMode(state => state.toggle)
   const [notice, setNotice] = useState('')
   const reloadInFlight = useRef(false)
 
-  const settingsQuery = useSettings()
-  const settings = settingsQuery.data?.data
   const mutateSettings = useSettingsMutation()
   const [savingFavorite, setSavingFavorite] = useState(false)
   const [savingSidebar, setSavingSidebar] = useState(false)
@@ -167,14 +176,14 @@ export function App() {
   const warm = useWarmPages(settings, !settingsQuery.isPending, selectedTab, recent,
     settingsQuery.error ?? (settingsQuery.data?.meta.freshness === 'failed' ? settingsQuery.data.meta.failureReason || 'Settings could not load' : undefined))
   const hideCurrent = obscured && (settings?.obscuredTabs ?? []).includes(activeTab)
-  const blurCurrent = hideCurrent && activeTab !== 'portfolio' && activeTab !== 'personal-finance'
+  const blurCurrent = hideCurrent && !VALUE_MASKED_TABS.includes(activeTab)
   useScreenshotReady(screenshot, activeTab, hideCurrent, warm.active, completeScreenshot)
   const setFundamentalsSymbol = useFundamentalsStore((state) => state.setSymbol)
   const setOptionsSymbol = useOptionsPage((state) => state.setSymbol)
 
   /** The tab strip: Settings' order, minus what Settings hides. */
   const visibleTabs = useMemo(() => {
-    const order = settings?.tabOrder ?? TABS.map((tab) => tab.id)
+    const order = settings?.tabOrder ?? DEFAULT_TAB_ORDER
     const hidden = new Set(settings?.hiddenTabs ?? [])
     return order.flatMap((id) => {
       const tab = TAB_BY_ID.get(id)
@@ -262,7 +271,7 @@ export function App() {
   // Keep agent navigation active even when its page is not mounted.
   const agents = useAgents(true)
   const notifications = useNotifications()
-  const notificationCommand = useNotificationCommand()
+  const unreadNotifications = notifications.data?.data.notifications.filter(notification => !notification.read).length ?? 0
   useEffect(() => window.api.onNotificationClicked(() => handleStocksNavigate('notifications')), [handleStocksNavigate])
   const agentCommand = useAgentCommand()
   const handledNavigation = useRef('')
@@ -306,17 +315,6 @@ export function App() {
     stepPage: stepTab,
     togglePicker: () => setPickerOpen(open => !open),
   })
-
-  const toggleObscure = useCallback(() => {
-    const targets = settings?.obscuredTabs ?? []
-    setObscured((was) => {
-      const now = !was
-      if (!now) setNotice('Configured pages are visible.')
-      else if (!targets.length) setNotice('Obscure is active, but no pages are selected in Settings.')
-      else setNotice(`${targets.length} configured page(s) are obscured.`)
-      return now
-    })
-  }, [settings])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -404,25 +402,21 @@ export function App() {
         clockCountry={settings?.clockCountry ?? 'US'}
         time12h={settings?.time12h ?? true}
         obscured={obscured}
+        obscurePageCount={settings?.obscuredTabs.length}
         onToggleObscure={toggleObscure}
         agentChatAvailable={!screenshotPage && !pickerOpen && !(obscured && (settings?.obscuredTabs ?? []).includes('agents'))}
       />
 
-      {!screenshotPage && notifications.data?.data.notifications.some(notification => !notification.read) && (
-        <div role="status" className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-surface px-4 py-1 text-2xs text-text-muted">
-          <button onClick={() => handleStocksNavigate('notifications')}>Notifications · {notifications.data.data.notifications.filter(notification => !notification.read).length} unread</button>
-          <button onClick={() => void notificationCommand({ type: 'read' }).catch(error => setNotice(String(error)))}>Mark all read</button>
-        </div>
-      )}
       <div className="terminal-workspace flex min-h-0 flex-1">
         <WorkspaceSidebar
           tabs={visibleTabs} activeTab={activeTab} onSelectTab={setActiveTab} favorites={favorites} recent={recent}
           collapsed={settings?.sidebarCollapsed ?? false} onToggleCollapsed={() => void toggleSidebar()}
           isMac={isMac}
           saving={savingSidebar || !settings}
+          unreadNotifications={screenshotPage ? 0 : unreadNotifications}
         />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {activeTab !== 'agents' && <WorkspaceHeader tabs={visibleTabs} activeTab={activeTab} onSelectTab={setActiveTab}
+          {!settingsQuery.isPending && activeTab !== 'agents' && <WorkspaceHeader tabs={visibleTabs} activeTab={activeTab} onSelectTab={setActiveTab}
             isMac={isMac}
             favorite={favorites.includes(activeTab)} onToggleFavorite={() => void toggleFavorite()}
             saving={savingFavorite || !settings} />}
@@ -430,11 +424,12 @@ export function App() {
             {/* Finance pages keep their controls usable and mask numbers in their own subtrees. */}
             <div
               aria-hidden={blurCurrent}
+              inert={blurCurrent}
               className={`flex min-h-0 flex-1 flex-col ${
                 blurCurrent ? 'pointer-events-none blur-md select-none' : ''
               }`}
             >
-              <PageCache activeTab={activeTab} retainedTab={screenshotPage ? selectedTab : undefined} visibleIds={visibleIds} renderPage={renderCachedPage} />
+              {!settingsQuery.isPending && <PageCache activeTab={activeTab} retainedTab={screenshotPage ? selectedTab : undefined} visibleIds={visibleIds} renderPage={renderCachedPage} />}
             </div>
 
             {blurCurrent ? (

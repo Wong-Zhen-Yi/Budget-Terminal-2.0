@@ -1,20 +1,19 @@
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
-import { fileURLToPath } from 'node:url'
 import { ConvexHttpClient } from 'convex/browser'
 import { api } from '../convex/_generated/api.js'
 import { makeFunctionReference } from 'convex/server'
 import { DESKTOP_AUTH_ORIGINS, convexDeploymentUrl, githubSignInUrl } from '../electron/shared/cloudOAuth.js'
+import { CLOUD_DEPLOYMENT_URL } from '../electron/shared/cloudDeployment.js'
 
-// Read only the ignored local configuration. Never print provider URLs, profiles or tokens.
-process.loadEnvFile(fileURLToPath(new URL('../.env.local', import.meta.url)))
-const url = convexDeploymentUrl(process.env.VITE_CONVEX_URL ?? '')
+// Default to the desktop endpoint. Operators may explicitly check another deployment.
+const url = convexDeploymentUrl(process.argv[2] ?? CLOUD_DEPLOYMENT_URL)
 const client = new ConvexHttpClient(url, { logger: false,
   fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(15_000) }) })
 const config = await client.query(api.sync.authConfiguration, {})
 assert.equal(config.authVersion, 2)
 assert.equal(config.accountControlsVersion, 2)
-assert.equal(config.githubConfigured, true)
+assert.equal(config.githubConfigured, true, 'GitHub OAuth credentials are missing or invalid on the selected deployment.')
 await assert.rejects(client.query(api.sync.identity, {}))
 await assert.rejects(client.query(api.sync.account, {}))
 await assert.rejects(client.mutation(api.auth.revokeOtherSessions, { authorization: 'a'.repeat(64) }))

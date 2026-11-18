@@ -38,7 +38,6 @@ export function SemiconductorsPage({ onStatusChange, onNavigate }: {
   const [symbol, setSymbol] = useState('NVDA')
   const [compare, setCompare] = useState(['NVDA', 'AMD', 'AVGO', 'MU'])
   const [range, setRange] = useState<'1M' | '3M' | 'YTD' | '1Y'>('1Y')
-  const notice = ''
   const [view, setView] = useState<'supply' | 'companies' | 'compare' | 'news'>('supply')
   const [feed, setFeed] = useState<'news' | 'earnings'>('news')
   const [detailed, setDetailed] = useState(false)
@@ -104,7 +103,7 @@ export function SemiconductorsPage({ onStatusChange, onNavigate }: {
   ]
   const companyPanel = (
     <Panel title={`${group === 'all' ? 'Company universe' : groupName(group) + ' · companies'} · ${filtered.length}/${rows.length}`} actions={<Button variant="toggle" active={detailed} onClick={() => setDetailed(!detailed)}>Detailed columns</Button>}>
-      <div className="shrink-0 border-b border-border px-2 py-1 text-2xs text-text-dim">Yahoo Finance supplies market data and company profiles. The status bar shows source freshness and failures.</div>
+      <div className="shrink-0 border-b border-border px-2 py-1 text-2xs text-text-dim">Yahoo Finance supplies market data and company profiles. Data health is available in Settings.</div>
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border p-2">
         <input type="search" aria-label="Search semiconductor companies" placeholder="Search ticker, company or business" value={search} onChange={event => setSearch(event.target.value)}
           className="min-w-0 flex-1 border border-border-strong bg-bg px-2 py-1 text-2xs text-text outline-none focus:border-accent" />
@@ -193,9 +192,8 @@ export function SemiconductorsPage({ onStatusChange, onNavigate }: {
         <div title={`${overview.unchanged} unchanged · ${overview.quoteCount}/${overview.count} daily quotes`}><strong className="num">{overview.quoteCount ? <><span className="text-up">{overview.advancing} ↑</span> / <span className="text-down">{overview.declining} ↓</span></> : '--'}</strong><span>Daily breadth</span></div>
         <div title={`${overview.quoteCount}/${overview.count} observations · equal weight`}><strong className="num">{signed(overview.daily)}</strong><span>Equal-weight daily return</span></div>
       </div>
-      <div className="semi-load-status"><span role="status">{notice || (busy ? 'Loading company data…' : query.error || freshness === 'failed' ? 'Company data unavailable. See Settings for details.' : `${freshness} · ${rows.filter(row => row.market).length}/${rows.length} market snapshots`)}</span></div>
+      <div className="semi-load-status"><span role="status">{busy ? 'Loading company data…' : query.error || freshness === 'failed' ? 'Company data unavailable. See Settings for details.' : `${freshness} · ${rows.filter(row => row.market).length}/${rows.length} market snapshots`}</span></div>
     </div>
-    {notice ? <p role="status" className="shrink-0 px-2 py-1 text-2xs text-text-muted">{notice}</p> : null}
     <nav className="semi-nav" aria-label="Semiconductor views">{([
       ['supply', 'Supply chain'], ['companies', 'Companies'], ['compare', 'Compare'], ['news', 'News & earnings'],
     ] as const).map(([id, label]) => <button key={id} aria-pressed={view === id} onClick={() => setView(id)}>{label}</button>)}</nav>

@@ -90,7 +90,7 @@ try {
           useCalendarPage.setState({ initialized: true, year: 2026, month: 8, detailsCollapsed: false })
           createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><CalendarPage onStatusChange={() => {}} /></QueryClientProvider>)
           await settle()
-          check(text().includes('Loading calendar'), 'Missing loading status')
+          check(document.querySelector('.calendar-grid-container[aria-busy="true"]'), 'Missing loading state in the grid')
           window.ready = true
           await settle()
           check(document.querySelectorAll('button.calendar-day').length === 31, 'Wrong number of month days')
@@ -133,7 +133,7 @@ try {
           window.mode = 'partial'
           await client.refetchQueries()
           await settle()
-          check(text().includes('Some calendar data is unavailable.') && !text().includes('Some FRED readings unavailable'), 'Partial failure should show a concise notice without provider details')
+          check(!/Some calendar data is unavailable|Some FRED readings unavailable/.test(text()), 'Partial failure must not add a row above the calendar')
           day('2026-08-31').click()
           await settle()
           check(document.querySelector('.calendar-day-preview')?.innerText.includes('0.3%'), 'Partial failure removed healthy readings')

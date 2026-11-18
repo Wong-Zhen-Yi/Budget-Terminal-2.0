@@ -53,7 +53,7 @@ import { errorMessage } from './snapshotHealth'
 import { createProgressReporter } from './progressReporter'
 import { pageQueryKeys } from './pageQueryScope'
 import { markReloadQuery } from './pageProgress'
-import { createStartupScheduler } from './startupScheduler'
+import { createStartupScheduler, type StartupTask } from './startupScheduler'
 import { subscribeRequestInputs } from './requestInputs'
 import { portfolioMarketInputs } from '@shared/portfolioDependencies'
 
@@ -76,7 +76,7 @@ interface WarmTask {
   tab: string
   label: string
   run: (client: QueryClient, backgroundOrder?: number, onSnapshot?: StartupSnapshotObserver) => Promise<unknown>
-  refresh?: boolean
+  refresh?: StartupTask['refresh']
   refreshIntervalMs?: number
 }
 
@@ -1000,7 +1000,7 @@ export function buildTasks(
     timeframe: dashboard.timeframe, interval: charts.interval, range: charts.range, multiInterval: charts.multiInterval,
   })) tasks.push({
     tab: target.tab, label: target.label,
-    refresh: false, // PortfolioChartsStatus owns these continuously observed views.
+    refresh: 'until-ready', // PortfolioChartsStatus owns healthy chart refreshes.
     run: async (client, backgroundOrder, onSnapshot) => {
       // The always-mounted holding observers own retention, so removing a
       // holding or changing views can release these queries normally.
@@ -1078,7 +1078,7 @@ export function buildTasks(
     }, onSnapshot),
   })
   tasks.push({
-    tab: 'eth', label: 'Ethereum network activity',
+    tab: 'eth', label: 'Ethereum market and network',
     run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
       queryKey: queryKeys.eth,
       queryFn: () => api.eth({ background: true, backgroundOrder }),

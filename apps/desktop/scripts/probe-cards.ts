@@ -57,7 +57,9 @@ function pureChecks(): void {
     includeCashInWeight: true,
     readOnly: false,
   }
-  const models = buildCardModels(state, [portfolio])
+  const empty = { ...portfolio, id: 'empty', tickers: [], holdings: {} }
+  const excluded = { ...portfolio, id: 'excluded', tickers: ['BBB'] }
+  const models = buildCardModels(state, [portfolio, empty, excluded])
   assert(
     JSON.stringify(models.slice(0, 4).map((model) => model.id))
       === JSON.stringify([BUILTIN_INDEX_CARD_ID, ...STARTER_CUSTOM_CARDS.map((card) => card.id)]),
@@ -65,6 +67,9 @@ function pureChecks(): void {
   )
   const portfolioModel = models.find((model) => model.id === 'portfolio:portfolio_1')
   assert(portfolioModel?.symbols.length === 1 && portfolioModel.symbols[0] === 'AAA', 'unchecked holdings should stay out')
+  assert(models.filter(model => model.type === 'portfolio').length === 1, 'empty and fully excluded portfolios should have no Cards entry')
+  assert(buildCardModels(state, [{ ...empty, tickers: ['AAA'], holdings: portfolio.holdings }])
+    .some(model => model.id === 'portfolio:empty'), 'a card should appear when its portfolio gains an eligible holding')
 
   const timestamps = [1, 2, 3]
   const series = {

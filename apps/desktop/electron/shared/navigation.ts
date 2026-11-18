@@ -2,10 +2,20 @@ import { TABS } from './contract.js'
 
 export const DEFAULT_TAB_ID = 'dashboard-2'
 
+export function isMainPageAvailable(id: string, hidden: readonly string[]): boolean {
+  return TABS.some(tab => tab.id === id && tab.implemented) && !hidden.includes(id)
+}
+
+export function resolveMainPage(mainPage: string | undefined, order: readonly string[], hidden: readonly string[]): string {
+  if (mainPage && isMainPageAvailable(mainPage, hidden)) return mainPage
+  if (isMainPageAvailable(DEFAULT_TAB_ID, hidden)) return DEFAULT_TAB_ID
+  return order.find(id => isMainPageAvailable(id, hidden)) ?? 'settings'
+}
+
 /** Stable workspace membership; user ordering still applies within each workspace. */
 export const WORKSPACES = [
-  { id: 'overview', label: 'Overview', pages: ['dashboard', 'dashboard-2', 'news', 'calendar', 'youtube', 'dictionary'] },
-  { id: 'markets', label: 'Markets', pages: ['pre-market', 'heatmap', 'up-down', 'trading-volumes', 'beta', 'market-cap', 'price', 'etf', 'sp500', 'forex', 'crypto', 'polymarket'] },
+  { id: 'overview', label: 'Overview', pages: ['dashboard', 'dashboard-2', 'pre-market', 'news', 'calendar', 'youtube', 'dictionary'] },
+  { id: 'markets', label: 'Markets', pages: ['heatmap', 'up-down', 'trading-volumes', 'beta', 'market-cap', 'price', 'etf', 'sp500', 'forex', 'crypto', 'polymarket'] },
   { id: 'research', label: 'Research', pages: ['browser', 'stocks', 'stock-discovery', 'fundamentals', 'scorecard', 'defeatbeta', 'valuation', 'institutions'] },
   { id: 'focus', label: 'Focus', pages: ['macro', 'bmnr', 'bitcoin', 'eth', 'pltr', 'hood', 'hims', 'sofi', 'mu', 'googl', 'anthropic', 'amzn', 'avgo', 'nvda', 'semiconductors', 'homebuilders', 'vst', 'gold', 'oil'] },
   { id: 'trading', label: 'Trading', pages: ['charts', 'options', 'technical-screen', 'quant', 'backtest'] },

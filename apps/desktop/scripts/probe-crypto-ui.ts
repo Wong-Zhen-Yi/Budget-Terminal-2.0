@@ -58,7 +58,7 @@ try {
         let mode = 'success'
         let ready = false
         let forced = false
-        let chartCalls = 0, chartRequest, opened = ''
+        let chartCalls = 0, chartRequest, finishTimeframe, status, opened = ''
         const good = {
           fetchedAt: new Date().toISOString(),
           heatmap: { tiles: Array.from({ length: 30 }, (_, i) => ({ rank: i+1, symbol: 'C'+i, name: 'Coin '+i, price: 100, changePct: 1, marketCap: 1e9, volume: 1e6, source: 'Yahoo Finance' })), coverage: { loaded: 30, total: 30 }, updatedAt: '2026-09-29T10:00:00' },
@@ -77,6 +77,7 @@ try {
           openExternal: async url => { opened = url },
           chartsHistory: async request => {
             chartCalls++; chartRequest = request
+            if (request.interval === '4 Hours') await new Promise(resolve => { finishTimeframe = resolve })
             const base = request.symbol.startsWith('ETH') ? 20 : 110
             const candles = Array.from({length: 60}, (_, index) => ({time: Math.floor(Date.now()/3600000)*3600 - (60-index)*3600,
               open: base+index, close: base+index+1, high: base+index+2, low: base+index-1, volume: 42+index}))
@@ -98,9 +99,9 @@ try {
           check(chartTask, 'Crypto startup chart task is missing')
           await chartTask.run(client, 9)
           check(chartRequest.background && chartRequest.backgroundOrder === 9, 'Startup chart lost background priority')
-          createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><CryptoPage onStatusChange={() => {}} /></QueryClientProvider>)
+          createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><CryptoPage onStatusChange={panels => { status = panels }} /></QueryClientProvider>)
           await settle()
-          check(text().includes('Fetching crypto market data'), 'Missing loading state')
+          check(document.querySelector('.crypto-workspace[aria-busy="true"]'), 'Missing loading state')
           ready = true
           await settle()
           check(text().includes('Snapshot coverage 30/30'), 'Missing complete heatmap')
@@ -144,8 +145,15 @@ try {
           check(client.getQueryState(queryKeys.crypto).dataUpdatedAt === beforeStream, 'Live table must preserve other sources freshness')
           document.querySelector('[aria-label="Chart ETH perpetual"]').click(); await settle()
           check(chartRequest.symbol === 'ETH-PERP' && text().includes('ETH-PERP / USD'), 'Watchlist failed to change the chart market')
+          const canvas = document.querySelector('.crypto-chart-canvas')
+          const frame = canvas.getBoundingClientRect()
+          const sameChartFrame = () => Math.abs(canvas.getBoundingClientRect().top - frame.top) < 1
+            && Math.abs(canvas.getBoundingClientRect().height - frame.height) < 1
           ;[...document.querySelectorAll('button')].find(button => button.textContent === '4h').click(); await settle()
           check(chartRequest.interval === '4 Hours' && chartRequest.range === '3M', 'Timeframe lost its native interval/range')
+          check(sameChartFrame() && text().includes('Loading perpetual candles'), 'Timeframe loading moved the chart')
+          finishTimeframe(); await settle()
+          check(sameChartFrame() && canvas.dataset.candleCount === '60', 'Timeframe completion moved the chart or failed to load')
           const countBeforeSearch = chartCalls
           const input = document.querySelector('#crypto-market-search')
           Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'ETH')
@@ -166,17 +174,20 @@ try {
           await settle()
           check(forced, 'Refresh must force request')
           check(!text().includes('stages ready'), 'Partial load restored the snapshot summary banner')
-          check(text().includes('Some crypto data is unavailable.') && !text().includes('Only 5/30 cryptocurrencies available'), 'Partial load must show a concise warning')
+          check(!text().includes('Some crypto data is unavailable') && !text().includes('Only 5/30 cryptocurrencies available') &&
+            status[0].error?.message.includes('Only 5/30 cryptocurrencies available'), 'Partial load belongs in diagnostics')
           mode = 'hyperliquid-failed'
           await refresh()
           await settle()
-          check(text().includes('Some crypto data is unavailable.') && !text().includes('Hyperliquid HTTP 429'), 'Venue outage must show a concise warning')
+          check(!/Some crypto data is unavailable|Hyperliquid HTTP 429/.test(text()) &&
+            status[0].error?.message.includes('Hyperliquid HTTP 429'), 'Venue outage belongs in diagnostics')
           check(!text().includes('stages ready'), 'Hyperliquid outage restored the snapshot summary banner')
           check(perps.textContent.includes('BTC-PERP') && text().includes('Snapshot coverage 30/30'), 'Hyperliquid outage must preserve other data')
           mode = 'reject'
           await refresh()
           await settle()
-          check(text().includes('Crypto data refresh failed.') && !text().includes('IPC disconnected'), 'Rejected refresh must show a concise warning')
+          check(!/Crypto data refresh failed|IPC disconnected/.test(text()) &&
+            status[0].error?.message.includes('IPC disconnected'), 'Rejected refresh belongs in diagnostics')
           mode = 'success'
           await refresh()
           await settle()
@@ -185,7 +196,7 @@ try {
           client.setQueryData(['apiUsage'], {sampledAt:Date.now(), providers:[{id:'coingecko',throttled:true,cooldownMs:42000}]})
           await settle()
           const cooldownButton = [...document.querySelectorAll('button')].find(button => button.textContent.startsWith('Retry in'))
-          check(!cooldownButton && text().includes('CoinGecko rate limited'), 'Cooldown must remain visible without restoring a refresh button')
+          check(!cooldownButton && text().includes('Spot: rate limited') && document.querySelector('[title^="CoinGecko rate limited"]'), 'Cooldown stays in the existing spot badge')
           check(document.querySelector('.crypto-chart-canvas').dataset.candleCount === '60' && text().includes('Crypto market fixture headline'), 'Cooldown erased healthy data')
           client.setQueryData(['apiUsage'], {sampledAt:Date.now(),providers:[]}); await settle()
           const snapshot = client.getQueryData(queryKeys.crypto)

@@ -253,8 +253,8 @@ const scheduler = createStartupScheduler({
 })
 const fastTask = fixtureTask('fast', 'forex')
 const slowTask = fixtureTask('slow', 'forex', slowWait)
-const failedTask = fixtureTask('failed', 'stocks', undefined, 'failed')
-const degradedTask = fixtureTask('degraded', 'fundamentals', undefined, 'degraded')
+const failedTask = { ...fixtureTask('failed', 'stocks', undefined, 'failed'), refresh: 'until-ready' as const }
+const degradedTask = { ...fixtureTask('degraded', 'fundamentals', undefined, 'degraded'), refreshIntervalMs: 3_600_000 }
 const obsoleteTask = fixtureTask('obsolete', 'options', obsoleteWait)
 const settleScheduler = () => new Promise<void>(resolve => setImmediate(resolve))
 const fireSchedulerTimers = async (delay: number) => {
@@ -281,6 +281,9 @@ await fireSchedulerTimers(60_000)
 assert.equal(scheduler.snapshot().failed, 0, 'Successful recovery must clear the current failure count')
 assert.equal(scheduler.snapshot().degraded, 0, 'Successful recovery must clear the current incomplete count')
 assert.equal(scheduler.snapshot().pages.stocks.state, 'ready')
+assert.equal(scheduler.snapshot().pages.fundamentals.state, 'ready', 'Incomplete pages must recover before their regular refresh interval')
+assert.equal([...schedulerTimers.values()].filter(timer => timer.delay === 10_000).length, 1, 'Recovered observer-owned tasks must not schedule ongoing maintenance')
+assert.equal([...schedulerTimers.values()].filter(timer => timer.delay === 3_600_000).length, 1, 'A recovered task must resume its regular refresh interval')
 assert.equal(scheduler.snapshot().timings.find(task => task.label === 'failed')?.state, 'failed', 'Diagnostics must retain the initial failure')
 assert.equal(scheduler.snapshot().timings.find(task => task.label === 'degraded')?.state, 'degraded')
 const replacementTask = fixtureTask('replacement', 'forex')
@@ -710,12 +713,14 @@ const cardIntervals: string[] = []
 Object.assign(window.api, {
   cards: async () => ok(defaultCardsPayload(), 'fixture'),
   cardsPerformance: async (request: import('../electron/shared/contract.js').CardsPerformanceRequest) => {
+    assert(request.cards.every(card => card.symbols.length > 0), 'An empty portfolio card must not request market history')
     cardIntervals.push(request.interval)
     const result = ok({ interval: request.interval, results: {} }, 'fixture')
     return request.interval === '1d' ? { ...result, meta: { ...result.meta, freshness: 'partial', failureReason: 'Fixture intraday history unavailable' } } : result
   },
 })
-const dependencyTasks = buildTasks(portfolio, undefined, { stocks: 'AAPL', fundamentals: 'AAPL' },
+const emptyCardPortfolio = { ...portfolio.portfolios[0], id: 'empty-card-book', tickers: [], holdings: {} }
+const dependencyTasks = buildTasks({ ...portfolio, portfolios: [...portfolio.portfolios, emptyCardPortfolio] }, undefined, { stocks: 'AAPL', fundamentals: 'AAPL' },
   { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 })
 const cardClient = new QueryClient()
 await assert.rejects(dependencyTasks.find(task => task.label === 'Card performance')!.run(cardClient), /Fixture intraday/)
@@ -1104,9 +1109,9 @@ try {
   cryptoClient.setQueryData(['mu'], cacheFailure)
   const muMarkup = renderToStaticMarkup(createElement(QueryClientProvider, { client: cryptoClient },
     createElement(MuPage, { onStatusChange: () => {}, onNavigate: () => {} })))
-  assert.match(muMarkup, /cache: Micron document request failed: HTTP 403/)
-  assert.doesNotMatch(muMarkup, /undefined:|null:/)
-  console.log('Focus warning renderer checks passed: generic cache failures keep their source without an undefined lane prefix.')
+  assert.match(muMarkup, /market data unavailable/)
+  assert.doesNotMatch(muMarkup, /Micron document request failed|undefined:|null:/)
+  console.log('Focus renderer checks passed: provider failures use existing empty panels without adding diagnostics rows.')
   const { useSignalsLatest } = await import('../src/api/signalsQueries.js')
   const { markReloadQuery } = await import('../src/api/pageProgress.js')
   const { signalsHealth } = await import('../src/api/signalsHealth.js')

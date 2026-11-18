@@ -1,14 +1,20 @@
 import { z } from 'zod'
 import type { Envelope } from '../shared/contract.js'
 import { describeError, err } from '../shared/envelope.js'
-import { ETH_DAY_MS, ETH_LIVE_MAX_AGE_MS, ETH_SOURCE, type EthActivityDay, type EthPayload, type EthRequest } from '../shared/eth.js'
+import {
+  ETH_DAY_MS, ETH_LIVE_MAX_AGE_MS, ETH_MARKET_MAX_AGE_MS, ETH_PROTOCOL_MAX_AGE_MS, ETH_SOURCE,
+  type EthActivityDay, type EthMarketDay, type EthPayload, type EthRequest,
+} from '../shared/eth.js'
 import { cache, TTL } from './cache.js'
-import { diversifiedHttp } from './diversifiedHttp.js'
+import { diversifiedHttp, type DiversifiedProvider } from './diversifiedHttp.js'
 
 export const ethEndpoints = {
   ecosystem: 'https://sse.growthepie.com/api/history',
   mainnet: 'https://sse.growthepie.com/api/chain/ethereum',
   daily: 'https://api.growthepie.com/v1/landing_page.json',
+  market: 'https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=eth&frequency=1d&page_size=98&paging_from=end&metrics=PriceUSD,CapMrktCurUSD,SplyCur,IssTotNtv,AdrActCnt',
+  staking: 'https://ultrasound.money/api/v2/fees/supply-parts',
+  burn: 'https://ultrasound.money/api/v2/fees/burn-sums',
 }
 const nonnegative = z.number().nonnegative()
 const timestamp = z.number().int().min(Date.UTC(2015, 6, 30))
@@ -27,9 +33,58 @@ const activityEntry = z.object({
     throughput: metricSeries.optional().catch(undefined),
     fees: metricSeries.optional().catch(undefined),
     stables_mcap: metricSeries.optional().catch(undefined),
+    rent_paid: metricSeries.optional().catch(undefined),
   }),
 })
 const activity = z.object({ data: z.object({ ethereum: activityEntry, all_l2s: activityEntry }) })
+
+const decimal = z.string().regex(/^\d+(?:\.\d+)?$/).transform(Number).pipe(nonnegative)
+const marketRow = z.object({
+  asset: z.literal('eth'),
+  time: z.iso.datetime(),
+  PriceUSD: decimal.pipe(z.number().positive()),
+  CapMrktCurUSD: decimal.pipe(z.number().positive()),
+  SplyCur: decimal.pipe(z.number().positive()),
+  IssTotNtv: decimal.optional().catch(undefined),
+  AdrActCnt: decimal.pipe(z.number().int()).optional().catch(undefined),
+})
+const nativeBalance = z.string().regex(/^\d{1,32}$/).transform(BigInt)
+const stakingParts = z.object({
+  slot: z.number().int().nonnegative(),
+  executionBalancesSum: nativeBalance,
+  beaconBalancesSum: nativeBalance,
+  beaconDepositsSum: nativeBalance,
+})
+const burnSums = z.object({ d7: z.object({ timestamp: z.iso.datetime(), sum: z.object({ eth: nonnegative }) }) })
+
+function dailyMarket(value: unknown, now: number): EthMarketDay[] {
+  const { data } = z.object({ data: z.array(z.unknown()) }).parse(value)
+  const today = Math.floor(now / ETH_DAY_MS) * ETH_DAY_MS
+  const days = new Map<number, EthMarketDay>()
+  for (const row of data) {
+    const parsed = marketRow.safeParse(row)
+    if (!parsed.success) continue
+    const point = parsed.data
+    const day = Date.parse(point.time)
+    if (day >= today || day < today - 98 * ETH_DAY_MS || day % ETH_DAY_MS !== 0) continue
+    days.set(day, {
+      day, priceUsd: point.PriceUSD, marketCapUsd: point.CapMrktCurUSD, supplyEth: point.SplyCur,
+      issuanceEth: point.IssTotNtv, activeAddresses: point.AdrActCnt,
+    })
+  }
+  return [...days.values()].sort((a, b) => a.day - b.day)
+}
+
+function stakingSnapshot(value: unknown) {
+  const { slot, executionBalancesSum, beaconBalancesSum, beaconDepositsSum } = stakingParts.parse(value)
+  // Execution is in wei. Beacon balances and deposits are in gwei. Deposits are already counted on execution.
+  const supplyWei = executionBalancesSum + (beaconBalancesSum - beaconDepositsSum) * 1_000_000_000n
+  const validatorBalanceEth = Number(beaconBalancesSum) / 1e9
+  const supplyEth = Number(supplyWei) / 1e18
+  if (validatorBalanceEth <= 0 || supplyEth < validatorBalanceEth) throw new Error('Invalid Beacon Chain balances')
+  // Mainnet slots are 12 seconds from Beacon Chain genesis.
+  return { asOf: (1_606_824_023 + slot * 12) * 1000, validatorBalanceEth, supplyEth }
+}
 
 function dailySeries(metric: z.infer<typeof metricSeries> | undefined, now: number, column: 'value' | 'usd'): Map<number, number> {
   const series = new Map<number, number>()
@@ -67,12 +122,14 @@ function dailyActivity(value: unknown, now: number): EthActivityDay[] {
   const gas = pair('throughput', 'value')
   const fees = pair('fees', 'usd')
   const stables = pair('stables_mcap', 'usd')
+  const settlement = dailySeries(all_l2s.metrics.rent_paid, now, 'usd')
   const secondsInDay = ETH_DAY_MS / 1000
   const matched = [...transactions.dates].sort((a, b) => a - b).flatMap(day => {
     const counts = transactions.at(day)
     return counts ? [{
       day, mainnetTps: counts.mainnet / secondsInDay, layer2Tps: counts.layer2 / secondsInDay,
       gasThroughputMgasPerSecond: gas.at(day), feesPaidUsdPerDay: fees.at(day), stablecoinSupplyUsd: stables.at(day),
+      layer2SettlementUsdPerDay: settlement.get(day),
     }] : []
   })
   const newest = matched.at(-1)?.day ?? 0
@@ -82,15 +139,15 @@ function dailyActivity(value: unknown, now: number): EthActivityDay[] {
 export async function getEth({ force = false }: EthRequest = {}): Promise<Envelope<EthPayload>> {
   const now = Date.now()
   async function read<K extends keyof EthPayload>(
-    key: K, parse: (value: unknown) => EthPayload[K], ttl: number, timeLimit: number,
-    observedAt: (value: EthPayload[K]) => number,
+    key: K, parse: (value: unknown) => NonNullable<EthPayload[K]>, ttl: number, timeLimit: number,
+    observedAt: (value: NonNullable<EthPayload[K]>) => number, provider: DiversifiedProvider = 'growthepie',
   ) {
     const source = ethEndpoints[key]
     const previousKey = `eth:${key}`
-    const cacheKey = key === 'ecosystem' ? previousKey : `${previousKey}:2`
+    const cacheKey = key === 'daily' ? `${previousKey}:3` : key === 'mainnet' ? `${previousKey}:2` : previousKey
     try {
       const result = await cache.resolveWithStaleFallback(cacheKey, ttl, async () => {
-        const value = parse(await diversifiedHttp.get('growthepie', new URL(source), JSON.parse))
+        const value = parse(await diversifiedHttp.get(provider, new URL(source), JSON.parse))
         const stamp = observedAt(value)
         if (!stamp || stamp > now + 30_000) throw new Error('No valid source observation')
         if (now - stamp > timeLimit) throw new Error('Source observation is delayed')
@@ -102,12 +159,14 @@ export async function getEth({ force = false }: EthRequest = {}): Promise<Envelo
         cached: result.fromCache, issue: issue ? err(source, issue, key) : undefined }
     } catch (error) {
       // Older caches still provide TPS if the first expanded fetch fails.
-      const previous = cacheKey === previousKey ? null : await cache.get<EthPayload[K]>(previousKey, { allowStale: true })
+      const previous = (key === 'daily' ? await cache.get<NonNullable<EthPayload[K]>>(`${previousKey}:2`, { allowStale: true }) : null)
+        ?? (cacheKey === previousKey ? null : await cache.get<NonNullable<EthPayload[K]>>(previousKey, { allowStale: true }))
       return { value: previous?.value, stamp: previous?.snapshot?.fetchedAt, cached: Boolean(previous), issue: err(source, describeError(error), key) }
     }
   }
 
-  const [ecosystem, mainnet, daily] = await Promise.all([
+  const protocolTtl = 5 * 60_000
+  const [ecosystem, mainnet, daily, market, staking, burn] = await Promise.all([
     read('ecosystem', value => {
       const samples = history.parse(value).history.filter(sample => sample.timestamp_ms <= now + 30_000)
       const unique = new Map(samples.map(({ tps, timestamp_ms }) => [timestamp_ms, { asOf: timestamp_ms, tps }]))
@@ -118,12 +177,21 @@ export async function getEth({ force = false }: EthRequest = {}): Promise<Envelo
       return { asOf: timestamp, tps, blockTimeSeconds: block_time, medianTransactionFeeUsd: tx_cost_median_usd }
     }, TTL.eth, ETH_LIVE_MAX_AGE_MS, value => value?.asOf ?? 0),
     read('daily', value => dailyActivity(value, now), TTL.ethDaily, 3 * ETH_DAY_MS, value => value.at(-1)?.day ?? 0),
+    read('market', value => dailyMarket(value, now), TTL.ethDaily, ETH_MARKET_MAX_AGE_MS, value => value.at(-1)?.day ?? 0, 'coin-metrics'),
+    read('staking', stakingSnapshot, protocolTtl, ETH_PROTOCOL_MAX_AGE_MS, value => value.asOf, 'ultrasound'),
+    read('burn', value => {
+      const { d7 } = burnSums.parse(value)
+      return { asOf: Date.parse(d7.timestamp), sevenDayEth: d7.sum.eth }
+    }, protocolTtl, ETH_PROTOCOL_MAX_AGE_MS, value => value.asOf, 'ultrasound'),
   ])
-  const results = [ecosystem, mainnet, daily]
+  const results = [ecosystem, mainnet, daily, market, staking, burn]
   const errors = results.flatMap(result => result.issue ? [result.issue] : [])
   const stamps = results.flatMap(result => result.stamp === undefined ? [] : [result.stamp])
   return {
-    data: { ecosystem: ecosystem.value ?? [], mainnet: mainnet.value ?? null, daily: daily.value ?? [] },
+    data: {
+      ecosystem: ecosystem.value ?? [], mainnet: mainnet.value ?? null, daily: daily.value ?? [],
+      market: market.value, staking: staking.value, burn: burn.value,
+    },
     meta: {
       source: ETH_SOURCE,
       fetchedAt: stamps.length ? Math.min(...stamps) : now,

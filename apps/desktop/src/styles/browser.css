@@ -19,12 +19,10 @@
 .browser-toolbar { display: flex; align-items: center; gap: 6px; padding: 9px 12px; border-bottom: 1px solid #233044; background: #0d1623; }
 .browser-address { display: flex; align-items: center; gap: 9px; min-width: 100px; flex: 1; padding: 0 10px; color: #67b7ca; border: 1px solid #2a3b50; border-radius: 5px; background: #070f1a; }
 .browser-address input { min-width: 0; width: 100%; background: transparent; color: #e0eaf7; font-size: 13px; border: 0; padding: 7px 0; }
-.browser-activity { display: flex; gap: 8px; align-items: center; min-height: 30px; padding: 5px 15px; font-size: 11px; color: #92a6bd; border-bottom: 1px solid #1c293b; }
+.browser-activity { display: flex; flex: 0 0 30px; gap: 8px; align-items: center; padding: 0 15px; font-size: 11px; color: #92a6bd; border-bottom: 1px solid #1c293b; }
 .browser-activity > span:first-child { color: #5e9b91; font-size: 9px; }
 .browser-activity > span.is-working { color: #e8bd71; }
 .browser-activity-note { margin-left: auto; color: #647a94; }
-.browser-error { background: #321b25; color: #ffb6b9; padding: 8px 14px; overflow-wrap: anywhere; }
-.browser-error button { margin-left: 10px; }
 .browser-content { display: flex; flex: 1; min-height: 0; }
 .browser-viewport { position: relative; min-width: 0; flex: 1; overflow: auto; }
 .browser-placeholder { color: #647a94; padding: 30px; font-size: 12px; }

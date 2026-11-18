@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import type { MetricsLookback, PositionInput, RiskMetricsPayload } from '@shared/contract'
 import { METRICS_LOOKBACKS } from '@shared/contract'
-import { useAnalytics } from '@/api/portfolioQueries'
-import { Button } from '@/components/ui/Button'
-import { DataFreshness } from '@/components/ui/DataFreshness'
 import { FRESHNESS } from '@shared/freshness'
+import { useAnalytics } from '@/api/portfolioQueries'
+import type { PanelStatus } from '@/components/chrome/StatusBar'
+import { Button } from '@/components/ui/Button'
 import { PrivateNumber, useNumberPrivacy } from '@/components/ui/NumberPrivacy'
 import { currency, decimals, integer, percent, plainPercent } from '@/lib/format'
 
@@ -15,6 +15,7 @@ interface MetricsTabProps {
   currentValues: Record<string, number>
   visible: boolean
   valuationComplete: boolean
+  onStatusChange?: (panels: PanelStatus[]) => void
 }
 
 /** Card copy, ported verbatim from `_P4_METRICS_CARD_SPECS`. */
@@ -83,13 +84,17 @@ const CARDS: Array<{
   },
 ]
 
-export function MetricsTab({ positions, cashAmount, currentValues, visible, valuationComplete }: MetricsTabProps) {
+export function MetricsTab({ positions, cashAmount, currentValues, visible, valuationComplete, onStatusChange }: MetricsTabProps) {
   const maskNumbers = useNumberPrivacy()
   const [benchmark, setBenchmark] = useState('SPY')
   const [benchmarkDraft, setBenchmarkDraft] = useState('SPY')
   const [lookback, setLookback] = useState<MetricsLookback>('1y')
 
   const query = useAnalytics(positions, cashAmount, currentValues, benchmark, lookback, visible)
+  useEffect(() => {
+    onStatusChange?.([{ label: 'Portfolio metrics', envelope: query.data, error: query.error,
+      loading: query.isFetching, enabled: query.isEnabled, freshnessMs: FRESHNESS.chartDaily }])
+  }, [onStatusChange, query.data, query.error, query.isFetching, query.isEnabled])
   const data = query.data?.data
   const includedHoldings = data?.includedTickers.filter(ticker => ticker !== 'CASH').length ?? 0
   const countsCash = cashAmount > 0
@@ -98,10 +103,16 @@ export function MetricsTab({ positions, cashAmount, currentValues, visible, valu
   const exposure = valuationComplete ? data?.exposure : data?.exposure ? { ...data.exposure,
     largestPositionTicker: null, largestPositionValue: null, topPositionWeight: null, top3Weight: null,
     top5Weight: null, concentrationScore: null, effectiveHoldings: null, topPositions: [] } : undefined
+  const unavailable = !valuationComplete ? 'Portfolio metrics unavailable: market marks are incomplete.'
+    : data?.excludedTickers.length ? `Portfolio metrics unavailable: history missing for ${data.excludedTickers.join(', ')}.` : ''
+  const summary = unavailable || data?.reason || data?.note || (data
+    ? `${maskNumbers ? '****' : includedHoldings} included holdings${countsCash ? ' · cash included' : ''} | ${integer(data.historyPoints)} daily points | ` +
+      `${data.startDate} to ${data.endDate} | Benchmark ${data.benchmarkSymbol} | ${lookback.toUpperCase()}`
+    : query.isFetching ? 'Loading portfolio metrics...' : 'No metrics yet')
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto">
-      <section className="shrink-0 border border-border bg-surface p-2">
+      <section className="shrink-0 border border-border bg-surface p-2" aria-busy={query.isFetching}>
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-xs font-semibold text-text">Risk &amp; Return Analytics</h3>
           <div className="ml-auto flex items-center gap-2">
@@ -131,25 +142,10 @@ export function MetricsTab({ positions, cashAmount, currentValues, visible, valu
           </div>
         </div>
 
-        <p className="pt-1 text-2xs text-text-muted">
-          {query.isFetching
-            ? 'Loading portfolio metrics...'
-            : data?.reason
-              ? data.reason
-              : data
-                ? `${maskNumbers ? '****' : includedHoldings} included holdings${countsCash ? ' · cash included' : ''} | ${integer(data.historyPoints)} daily points | ` +
-                  `${data.startDate} to ${data.endDate} | Benchmark ${data.benchmarkSymbol} | ${lookback.toUpperCase()}`
-                : 'No metrics yet'}
-        </p>
-        {data?.note ? <p className="text-2xs text-down">{data.note}</p> : null}
+        <p className={`truncate pt-1 text-2xs ${unavailable || data?.note ? 'text-warn' : 'text-text-muted'}`} title={summary}>{summary}</p>
         {countsCash ? <p className="text-2xs text-text-muted">Cash is a constant balance with 0% modeled return; it is included in portfolio returns and allocation weights.</p> : null}
       </section>
 
-      <DataFreshness envelope={query.data} loading={query.isFetching} error={query.error} freshnessMs={FRESHNESS.chartDaily}
-        coverage={data ? `${maskNumbers ? '****' : `${includedHoldings}/${positions.length}`} holdings in history` : undefined} />
-      {(!valuationComplete || data?.excludedTickers.length) ? <p className="text-2xs text-warn">
-        Portfolio metrics unavailable: {!valuationComplete ? 'market marks are incomplete.' : `history missing for ${data?.excludedTickers.join(', ')}.`}
-      </p> : null}
       <div className="grid shrink-0 gap-2 [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))]">
         {CARDS.map((card) => {
           const value = metrics?.[card.key] ?? null

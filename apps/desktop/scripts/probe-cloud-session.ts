@@ -5,6 +5,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { build } from 'esbuild'
+import { CLOUD_DEPLOYMENT_URL } from '../electron/shared/cloudDeployment.js'
 
 const directory = await mkdtemp(join(tmpdir(), 'budget-cloud-session-'))
 try {
@@ -56,8 +57,16 @@ try {
         const target = join(folder, 'sync-session.bin')
         await mkdir(folder, { recursive: true })
         const accessToken = 'fixture.' + Buffer.from(JSON.stringify({ exp: Math.floor(Date.now()/1000) + 3600 })).toString('base64url') + '.fixture'
-        const session = { authVersion: 2, url: 'https://fixture.convex.cloud', userId: 'fixture-user',
+        const session = { authVersion: 2, url: ${JSON.stringify(CLOUD_DEPLOYMENT_URL)}, userId: 'fixture-user',
           tokens: { accessToken, refreshToken: 'fixture-refresh', refreshTokenExpiresAt: Date.now()+86400000, userId: 'fixture-user' } }
+        const foreignSession = await safeStorage.encryptStringAsync(JSON.stringify({ ...session, url: 'https://other.convex.cloud' }))
+        await writeFile(target, foreignSession)
+        host = freshHost(); await host.startCloudSync()
+        assert.equal(host.cloudSyncStatus().signedIn, false, 'A session from a different deployment must not be restored')
+        assert.equal(host.cloudSyncStatus().authState, 'reauthRequired')
+        assert.equal(host.cloudSyncStatus().url, session.url)
+        await host.closeCloudSync()
+        assert.deepEqual(await readFile(target), foreignSession, 'A foreign saved session must be preserved until reauthentication or disconnect')
         // Retain one deliberate legacy fixture to verify migration from sync encryption.
         if (typeof safeStorage.encryptString === 'function') {
           await writeFile(target, safeStorage.encryptString(JSON.stringify(session)))

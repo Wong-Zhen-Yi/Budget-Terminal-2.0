@@ -551,6 +551,7 @@ export const SETTINGS_TAB_ID = 'settings'
 
 /** `DEFAULT_PRIVACY_SETTINGS` is `{'obscured_pages': [2]}`, and page 2 is Personal Finance. */
 export const DEFAULT_OBSCURED_TABS: ReadonlyArray<string> = ['personal-finance']
+export const VALUE_MASKED_TABS: ReadonlyArray<string> = ['portfolio', 'personal-finance']
 
 /**
  * Everything the Settings page owns. Kept in its own file rather than the holdings
@@ -570,6 +571,8 @@ export interface AppSettings {
   /** Market country whose zone the top-bar clock prints. */
   clockCountry: string
   time12h: boolean
+  /** Preferred startup page. Omitted when using the default. */
+  mainPage?: string
   /** Every tab id, in navigation order. */
   tabOrder: string[]
   /** Tab ids kept out of the strip. Never contains `SETTINGS_TAB_ID`. */
@@ -595,6 +598,7 @@ export interface AppSettings {
 export type AppSettingsMutation =
   | { type: 'setClockCountry'; code: string }
   | { type: 'setTime12h'; value: boolean }
+  | { type: 'setMainPage'; id: string | null }
   | { type: 'setTabHidden'; id: string; hidden: boolean }
   | { type: 'setTabFavorite'; id: string; favorite: boolean }
   | { type: 'setSidebarCollapsed'; value: boolean }

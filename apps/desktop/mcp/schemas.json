@@ -3696,6 +3696,26 @@
             "properties": {
               "type": {
                 "type": "string",
+                "const": "setMainPage"
+              },
+              "id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "type",
+              "id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
                 "const": "setTabHidden"
               },
               "id": {

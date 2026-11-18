@@ -9,7 +9,6 @@ export function CloudSyncPanel() {
   const query = useCloudSyncStatus()
   const runCommand = useCloudSyncCommand()
   const status = query.data?.data
-  const [url, setUrl] = useState(() => status?.url ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const failure = error || query.data?.meta.failureReason || (query.error ? 'Sync settings are unavailable. Local saves continue as usual.' : '')
@@ -19,12 +18,8 @@ export function CloudSyncPanel() {
   const hideAuthPrompt = useAuthPrompt((state) => state.hidden)
 
   useEffect(() => {
-    if (status?.signedIn) { setUrl(''); setError('') }
+    if (status?.signedIn) setError('')
   }, [status?.signedIn])
-
-  useEffect(() => {
-    if (!status?.signedIn && status?.url) setUrl(current => current || status.url)
-  }, [status?.signedIn, status?.url])
 
   const run = async (command: CloudSyncCommand) => {
     setBusy(true)
@@ -40,21 +35,20 @@ export function CloudSyncPanel() {
     } catch { setError('Unable to complete sync. Local saves continue as usual.') }
     finally { setBusy(false) }
   }
-  const inputClass = 'h-8 min-w-0 w-full border border-border bg-bg px-2 text-xs text-text'
   const stateLabels = { disconnected: 'Not connected', idle: 'Changes pending', syncing: 'Syncing', synced: 'Up to date', conflict: 'Choose a copy', error: 'Needs attention' }
   const authLabels = { restoring: 'Restoring saved sign-in', signedOut: 'Signed out', signingIn: 'Waiting for GitHub approval',
     authenticated: 'Signed in', offline: 'Saved sign-in · Connection unavailable', reauthRequired: 'Sign in again', keyringUnavailable: 'Credential keyring unavailable', storageError: 'Credential storage needs attention' }
 
-  return <Panel title="Cloud sync · Convex">
+  return <Panel title="Cloud sync">
     <div className="flex flex-col gap-2 p-2" data-cloud-sync>
-      <p className="text-2xs text-text-muted">Your data always saves on this device. Optional Convex sync shares portfolios, finance, cards, articles and preferences across your devices. The app works normally without a cloud connection.</p>
+      <p className="text-2xs text-text-muted">Your data always saves on this device. Cloud sync shares portfolios, finance, cards, articles and preferences across devices signed in to the same account. The app works normally without a cloud connection.</p>
       <p className="text-xs" role="status">{status ? status.workspaceApprovalRequired ? 'Sync paused · Choose a workspace' : stateLabels[status.state] : 'Checking sync settings…'}
         {status?.lastSyncedAt ? ` · Last synced ${new Date(status.lastSyncedAt).toLocaleString()}` : ''}
         {status?.pending ? ' · Local changes pending' : ''}</p>
       {status?.authState && <p className="text-2xs text-text-muted">{authLabels[status.authState]}</p>}
       {status?.credentialCleanupRequired ? <Button disabled={busy} onClick={() => void run({ type: 'retryCredentialCleanup' })}>Retry credential cleanup</Button> :
         ['keyringUnavailable', 'storageError'].includes(status?.authState ?? '') && !status?.signedIn && <Button disabled={busy} onClick={() => void run({ type: 'retrySession' })}>Retry saved sign-in</Button>}
-      {status?.signedIn && <p className="text-2xs break-all">{status.githubLogin ? `GitHub · @${status.githubLogin}` : 'GitHub account connected'}<br /><span className="text-text-muted">{status.url}</span></p>}
+      {status?.signedIn && <p className="text-2xs break-all">{status.githubLogin ? `GitHub · @${status.githubLogin}` : 'GitHub account connected'}</p>}
       {status?.signedIn && ['keyringUnavailable', 'storageError'].includes(status.authState ?? '') && <Button disabled={busy} onClick={() => void run({ type: 'retrySession' })}>Retry saving sign-in</Button>}
       {status?.signedIn && (status.localUpdatedAt || status.cloudUpdatedAt) ? <p className="text-2xs text-text-muted">
         {status.cloudUpdatedAt ? `Cloud data updated ${new Date(status.cloudUpdatedAt).toLocaleString()} · Revision ${status.revision ?? 0}` : ''}
@@ -98,14 +92,11 @@ export function CloudSyncPanel() {
       </> : status?.signInPending ? <div className="flex flex-col gap-2">
         <p className="text-2xs" role="status">{status.message ?? 'Waiting for GitHub approval in your browser…'}</p>
         <Button disabled={busy} onClick={() => void run({ type: 'cancelSignIn' })}>Cancel sign-in</Button>
-      </div> : <form className="flex flex-col gap-2" onSubmit={event => { event.preventDefault(); void run({ type: 'signInGitHub', url }) }}>
-        <label className="text-2xs">Convex deployment URL<input className={inputClass} type="url" required aria-label="Convex deployment URL" placeholder="https://your-deployment.convex.cloud" value={url} disabled={busy} onChange={event => setUrl(event.target.value)} /></label>
-        <Button type="submit" variant="accent" disabled={busy || status?.credentialCleanupRequired || !status?.encryptionAvailable || !url.trim()}>Sign in with GitHub</Button>
-        <p className="text-2xs text-text-muted">Approve sign-in in your system browser, then return here. No Convex developer login or deployment key is needed in the app.</p>
-        <p className="text-2xs text-text-muted">Secured by Convex Auth v2. Reconnect with your existing GitHub account after upgrading. Email-code sign-in is unavailable in v2.</p>
+      </div> : <form className="flex flex-col gap-2" onSubmit={event => { event.preventDefault(); void run({ type: 'signInGitHub' }) }}>
+        <Button type="submit" variant="accent" disabled={busy || status?.credentialCleanupRequired || !status?.encryptionAvailable}>Sign in with GitHub</Button>
+        <p className="text-2xs text-text-muted">Approve sign-in in your system browser, then return here.</p>
         {status?.message && status.state !== 'error' ? <p role="status" className="text-2xs">{status.message}</p> : null}
         {status && !status.encryptionAvailable ? <p className="text-2xs text-warn">Enable your OS credential keyring to connect sync. Local saves remain available.</p> : null}
-        <p className="text-2xs text-text-dim">Deploy this repository’s Convex backend first; setup instructions are in docs/convex-sync.md. No deployment key is needed in the app.</p>
       </form>}
       {status?.revocation === 'unconfirmed' && <p className="text-2xs text-warn" role="status">Local sign-out is complete. Server revocation is unconfirmed; a previously copied credential could remain usable until it expires or is revoked.</p>}
       <p className="text-2xs text-text-dim">Browser sessions, provider API keys, agents and market caches stay on this device. Disconnect keeps your local data and your cloud copy.</p>

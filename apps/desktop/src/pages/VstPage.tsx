@@ -87,9 +87,6 @@ export function VstPage({ onStatusChange, onNavigate }: {
     }
     catch (error) { setNotice(`Export failed: ${error instanceof Error ? error.message : String(error)}`) }
   }
-  const laneStatus = (block: VstBlock) => <div className="shrink-0 border-t border-border px-2 py-1 text-2xs text-text-muted">
-    {block} · {payload?.progress[block] ?? (busy ? 'loading' : 'unavailable')}{payload?.laneFetchedAt[block] ? ` · fetched ${new Date(payload.laneFetchedAt[block]).toLocaleString()}` : ''}
-  </div>
   const source = earnings ? <div className="flex shrink-0 flex-wrap gap-x-3 gap-y-1 border-t border-border px-2 py-1 text-2xs text-text-muted">
     <button className="text-accent hover:underline" onClick={() => void api.openExternal(earnings.sourceUrl)}>Earnings release</button>
     <span>{earnings.period} · ended {earnings.periodEnd} · published {earnings.publishedAt || '--'}</span>
@@ -103,13 +100,12 @@ export function VstPage({ onStatusChange, onNavigate }: {
   return <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-auto p-2" data-vst-page>
     <div className="flex shrink-0 flex-wrap items-center gap-1">
       <h1 className="pr-2 text-sm font-semibold text-text">VST — Vistra Energy</h1>
-      <span className="ml-auto text-2xs text-text-muted" role="status">{status}</span>
+      <span className="ml-auto min-w-0 flex-1 truncate text-right text-2xs text-text-muted" role="status">{status}</span>
 
       <Button disabled={!payload || VST_BLOCKS.every(block => payload.progress[block] === 'unavailable')} onClick={() => void onExport()}>Export snapshot</Button>
       <Button onClick={() => onNavigate('charts', 'VST')}>Charts</Button><Button onClick={() => onNavigate('fundamentals', 'VST')}>Fundamentals</Button>
       <Button onClick={() => void api.openExternal('https://investor.vistracorp.com/')}>Investor relations</Button>
     </div>
-    {query.data?.meta.freshness === 'failed' && query.data.errors.length ? <p role="alert" className="shrink-0 px-2 py-1 text-2xs text-down">Vistra data unavailable. See Settings for details.</p> : null}
     <div className="grid shrink-0 grid-cols-2 gap-2 md:grid-cols-3 2xl:grid-cols-6">
       <Tile label={market?.chart.stats.priceBasis === 'equity-perp-mark' ? 'Equity-perp mark' : 'Share price'} value={currency(market?.chart.stats.price)} sub={`${market?.chart.stats.priceSource ?? 'USD'} · ${percent(market?.chart.stats.change)} ${market?.chart.stats.changeBasis === '24h' ? '24h' : 'daily'}`} />
       <Tile label="Market cap" value={market?.metrics.marketCap ?? '--'} sub="Yahoo Finance · market" />
@@ -120,13 +116,13 @@ export function VstPage({ onStatusChange, onNavigate }: {
     </div>
     <div className="grid shrink-0 grid-cols-1 gap-2 xl:grid-cols-3">
       <Panel title="VST stock performance" className="h-[340px] min-w-0 xl:col-span-2" warning={warning('market')} actions={<div className="flex gap-1">{STOCKS_RANGE_PRESETS.map(preset => <Button key={preset} variant="toggle" active={range === preset} onClick={() => { setLogicalRange(null); setRange(preset) }}>{preset}</Button>)}</div>}>
-        {market ? <StocksChart payload={market.chart} mfiEnabled={false} autoFollow={false} rangePreset={range} logicalRange={logicalRange} onLogicalRangeChange={setLogicalRange} onManualRange={() => setRange('')} onHoverCandle={() => {}} /> : <PanelMessage>{empty('market')}</PanelMessage>}{laneStatus('market')}
+        {market ? <StocksChart payload={market.chart} mfiEnabled={false} autoFollow={false} rangePreset={range} logicalRange={logicalRange} onLogicalRangeChange={setLogicalRange} onManualRange={() => setRange('')} onHoverCandle={() => {}} /> : <PanelMessage>{empty('market')}</PanelMessage>}
       </Panel>
       <Panel title="Market & balance sheet" className="h-[340px] min-w-0" warning={warning('financials') || warning('market')}>
         <div className="min-h-0 flex-1 overflow-auto p-2 text-2xs">{[
           ['Next earnings · Yahoo estimate', market?.metrics.earningsDate], ['Target low', market?.targets.low], ['Target mean', market?.targets.mean], ['Target high', market?.targets.high], ['Upside to mean', market?.targets.upsideToMean], ['Analysts', market?.targets.analysts],
           ['Cash · latest Yahoo snapshot', compactCurrency(payload?.financials?.facts.totalCash)], ['Debt · latest Yahoo snapshot', compactCurrency(payload?.financials?.facts.totalDebt)],
-        ].map(([label, value]) => <div key={label} className="flex gap-2 border-b border-border/60 py-1"><span className="flex-1 text-text-muted">{label}</span><span className="num text-text">{value || '--'}</span></div>)}</div>{laneStatus('financials')}
+        ].map(([label, value]) => <div key={label} className="flex gap-2 border-b border-border/60 py-1"><span className="flex-1 text-text-muted">{label}</span><span className="num text-text">{value || '--'}</span></div>)}</div>
       </Panel>
     </div>
     <div className="grid shrink-0 grid-cols-1 gap-2 xl:grid-cols-2">
@@ -175,7 +171,7 @@ export function VstPage({ onStatusChange, onNavigate }: {
       <Panel title="Quarterly financial trends · USD" className="h-[320px] min-w-0" warning={warning('financials')}>
         {financialChart ? <div className="shrink-0" data-vst-financial-legend><FundamentalsChartLegend model={financialChart} /></div> : null}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2" data-vst-financial-chart>{financialChart ? <FundamentalsBarChart model={financialChart} /> : <PanelMessage>{empty('financials')}</PanelMessage>}</div>
-        <div className="shrink-0 px-2 py-1 text-2xs text-text-muted">SEC/Yahoo statements · fiscal quarters · free cash flow = operating cash flow − capex</div>{laneStatus('financials')}
+        <div className="shrink-0 px-2 py-1 text-2xs text-text-muted">SEC/Yahoo statements · fiscal quarters · free cash flow = operating cash flow − capex</div>
       </Panel>
       <Panel title="Expected generation hedged" className="h-[320px] min-w-0" warning={warning('earnings')}>
         <div className="min-h-0 flex-1 overflow-auto p-3">{earnings?.hedges.length ? earnings.hedges.map(hedge => <div key={hedge.year} className="mb-4">
@@ -189,7 +185,7 @@ export function VstPage({ onStatusChange, onNavigate }: {
       <DataTable columns={[
         { key: 'title', header: 'Headline', cell: row => <button className="text-left text-accent hover:underline" onClick={() => void api.openExternal(row.url)}>{row.title}</button>, wrap: true, width: '70%' },
         { key: 'source', header: 'Source / date', cell: row => `${row.source} · ${new Date(row.publishedAt).toLocaleDateString()}`, wrap: true },
-      ]} rows={market?.news ?? []} rowKey={row => row.id} layout="fixed" empty={market ? 'No recent VST headlines.' : empty('market')} />{laneStatus('market')}
+      ]} rows={market?.news ?? []} rowKey={row => row.id} layout="fixed" empty={market ? 'No recent VST headlines.' : empty('market')} />
     </Panel>
     <Panel title="Vistra SEC filings" className="h-[310px] shrink-0" warning={warning('financials')}>{payload?.financials ? <FilingsTable filings={payload.financials.sec.filings} compact /> : <PanelMessage>{empty('financials')}</PanelMessage>}</Panel>
   </div>

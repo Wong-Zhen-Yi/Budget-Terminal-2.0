@@ -49,8 +49,7 @@
 .etf-metrics span { display: block; font-size: 10px; color: var(--color-text-muted); }
 .etf-metrics strong { display: block; margin: 7px 0 5px; font-size: 21px; font-weight: 550; font-variant-numeric: tabular-nums; }
 .etf-metrics small { display: block; color: var(--color-text-muted); font-size: 9px; }
-.etf-warning, .etf-notice { margin: 0; padding: 8px 10px; border-left: 2px solid var(--color-warn); background: var(--color-surface-raised); color: var(--color-warn); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; flex: none; }
-.etf-notice { border-color: var(--color-accent); color: var(--color-text); }
+.etf-warning { margin: 0; padding: 8px 10px; border-left: 2px solid var(--color-warn); background: var(--color-surface-raised); color: var(--color-warn); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; flex: none; }
 .etf-content-tabs { display: flex; align-items: center; gap: 15px; border-bottom: 1px solid var(--color-border); flex: none; }
 .etf-content-tabs > button[role=tab] { padding: 9px 0 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--color-text-muted); cursor: pointer; font-size: 12px; }
 .etf-content-tabs > button[aria-selected=true] { color: var(--color-text); border-bottom-color: var(--color-accent); }

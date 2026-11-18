@@ -56,14 +56,11 @@ export function HimsPage({ onStatusChange, onNavigate }: {
   const query = useHims()
   const now = useSnapshotClock()
   const freshness = query.data ? effectiveFreshness(query.data, now, FRESHNESS.hims) : 'unavailable'
-  const notice = ''
   const refreshing = false
   const [range, setRange] = useState<StocksRangePreset>('1Y')
   const [selectedPeriod, setSelectedPeriod] = useState('')
   const data = query.data?.data
   const busy = refreshing || query.isFetching
-  const hasContent = Boolean(data?.market || data?.financials || data?.earnings)
-  const loading = busy && !hasContent
   const reports = data?.earnings?.reports ?? []
   const report = reports.find(entry => entry.period === selectedPeriod) ?? reports[0]
   const warning = (block: HimsBlock) => query.data?.errors.filter(error => error.symbol === block).map(error => error.reason).join(' · ') || undefined
@@ -93,7 +90,7 @@ export function HimsPage({ onStatusChange, onNavigate }: {
     ['Analyst target · low', market?.targets.low || '—'], ['Analyst target · mean', market?.targets.mean || '—'], ['Analyst target · high', market?.targets.high || '—'],
     ['Upside to mean', market?.targets.upsideToMean || '—'], ['Analysts', market?.targets.analysts || '—'], ['Next earnings · estimated', market?.metrics.earningsDate || '—'],
   ]
-  return <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto p-2" data-hims-page>
+  return <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto p-2" data-hims-page aria-busy={busy}>
     <div className="flex shrink-0 flex-wrap items-center gap-2">
       <h1 className="text-sm font-semibold">HIMS · Hims & Hers Health</h1>
       <span className="num text-sm font-bold">{amount(stats?.price, true)}</span>
@@ -104,13 +101,11 @@ export function HimsPage({ onStatusChange, onNavigate }: {
       {['charts', 'fundamentals', 'options', 'valuation'].map(id => <Button key={id} className="capitalize" onClick={() => onNavigate(id, 'HIMS')}>{id}</Button>)}
     </div>
     <div className="flex shrink-0 flex-wrap items-center gap-2 text-2xs text-text-muted">
-      <span>{loading ? 'Loading Hims & Hers dashboard…' : `${busy ? 'Updating cached dashboard · ' : ''}${freshness} · fetched ${data?.fetchedAt ? new Date(data.fetchedAt).toLocaleString() : 'unavailable'}`} · price from daily bars{data?.market?.chart.candles.at(-1) ? ` as of ${new Date(data.market.chart.candles.at(-1)!.time * 1000).toISOString().slice(0, 10)}` : ''}</span>
+      <span className="min-w-0 flex-1 truncate">Price from daily bars{data?.market?.chart.candles.at(-1) ? ` as of ${new Date(data.market.chart.candles.at(-1)!.time * 1000).toISOString().slice(0, 10)}` : ''}</span>
       <label className="ml-auto flex items-center gap-2">Reporting quarter<select aria-label="Reporting quarter" className="no-drag border border-border-strong bg-surface-raised p-1 text-text" value={report?.period ?? ''} onChange={event => setSelectedPeriod(event.target.value)} disabled={!reports.length}>
         {!reports.length ? <option value="">Unavailable</option> : reports.map(entry => <option key={entry.period}>{entry.period}</option>)}
       </select></label>
     </div>
-    {notice ? <p role="status" className="shrink-0 px-2 py-1 text-2xs text-text-muted">{notice}</p> : null}
-    {(!query.data || query.data.meta.freshness === 'failed') && (query.error || query.data?.errors.length) ? <p role="alert" className="shrink-0 px-2 py-1 text-2xs text-down">Hims & Hers data unavailable. See Settings for details.</p> : null}
     <div className="grid shrink-0 grid-cols-2 gap-2 lg:grid-cols-3 2xl:grid-cols-6">{tileIds.map(id => {
       const spec = HIMS_METRICS.find(entry => entry.id === id)!
       const metric = report?.metrics[id]

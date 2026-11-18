@@ -140,7 +140,7 @@ export function SettingsPage({
   )
 
   const privacyTabs = useMemo(
-    () => orderedTabs.filter((tab) => tab.id !== SETTINGS_TAB_ID),
+    () => orderedTabs.filter((tab) => tab.implemented && tab.id !== SETTINGS_TAB_ID),
     [orderedTabs],
   )
 
@@ -167,8 +167,10 @@ export function SettingsPage({
     {
       id: 'workspace', title: 'Workspace', hint: 'A familiar workspace, arranged around the way you research.',
       cards: [
-        { id: 'navigation', category: 'workspace', terms: 'pages navigation visible hidden order move favorites reset', content:
-          <NavigationPanel tabs={orderedTabs} hidden={settings.hiddenTabs}
+        { id: 'navigation', category: 'workspace', terms: 'choose main page startup homepage launch pages navigation visible hidden order move favorites reset', content:
+          <NavigationPanel tabs={orderedTabs} hidden={settings.hiddenTabs} mainPage={settings.mainPage}
+            canSaveMainPage={Boolean(settingsQuery.data && settingsQuery.data.meta.freshness !== 'failed')}
+            onSetMainPage={(id) => write({ type: 'setMainPage', id }, 'Main page updated for the next launch.')}
             onSetHidden={(id, hidden) => void write({ type: 'setTabHidden', id, hidden }, 'Page navigation updated.')}
             onMove={(id, direction) => void write({ type: 'moveTab', id, direction }, 'Page navigation order updated.')}
             onReset={() => void write({ type: 'resetNavigation' }, 'Page navigation reset.')} /> },

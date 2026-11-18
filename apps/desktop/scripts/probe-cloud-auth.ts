@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { build } from 'esbuild'
 import type { CloudSnapshot } from '../electron/shared/cloudSync.js'
+import { CLOUD_DEPLOYMENT_URL } from '../electron/shared/cloudDeployment.js'
 
 // Run the real host and loopback OAuth exchange against an isolated provider fixture.
 // No live deployment, browser profile, tokens or application data are accessed.
@@ -12,7 +13,8 @@ const directory = await mkdtemp(join(tmpdir(), 'budget-cloud-auth-'))
 const previous = { APPDATA: process.env.APPDATA, LOCALAPPDATA: process.env.LOCALAPPDATA }
 process.env.APPDATA = directory
 process.env.LOCALAPPDATA = directory
-const url = 'https://fixture.convex.cloud'
+const url = CLOUD_DEPLOYMENT_URL
+const callback = new URL('/api/auth/callback/github/callback', url.replace('.convex.cloud', '.convex.site')).href
 let nextUser = 'account-a', serial = 0, refreshCalls = 0, writes = 0, reads = 0, backups = 0
 let offline = false, revoked = false, loseResponse = false, failEncryption = false, rotateKey = false, keyring = true, unavailableDecrypt = false
 let callbackUrl = '', oauthState = '', autoApprove = true
@@ -60,7 +62,7 @@ const fixture = {
       initiatingUser = purpose === 'revokeOthers' ? owner(token).user : undefined
       callbackUrl = args.redirectTo
       oauthState = `state-${++serial}`
-      return { state: oauthState, redirect: `https://github.com/login/oauth/authorize?client_id=fixture&state=${oauthState}&redirect_uri=${encodeURIComponent('https://fixture.convex.site/api/auth/callback/github/callback')}&code_challenge=fixture&code_challenge_method=S256` }
+      return { state: oauthState, redirect: `https://github.com/login/oauth/authorize?client_id=fixture&state=${oauthState}&redirect_uri=${encodeURIComponent(callback)}&code_challenge=fixture&code_challenge_method=S256` }
     }
     if (name === 'auth:completeSignInWithGithub') {
       assert.equal(args.state, oauthState)
@@ -170,13 +172,17 @@ try {
       ` : args.path === 'convex/browser' ? `
         import { getFunctionName } from 'convex/server'
         export class ConvexHttpClient {
+          constructor(url) { if (url !== ${JSON.stringify(url)}) throw Error('Unexpected cloud endpoint') }
           token = ''
           setAuth(token) { this.token = token } clearAuth() { this.token = '' }
           query(ref, args) { return globalThis.__cloudAuthFixture.query(getFunctionName(ref), args, this.token) }
           mutation(ref, args) { return globalThis.__cloudAuthFixture.mutation(getFunctionName(ref), args, this.token) }
         }
         export class ConvexClient {
-          constructor() { globalThis.__cloudAuthFixture.subscriptions.push(this) }
+          constructor(url) {
+            if (url !== ${JSON.stringify(url)}) throw Error('Unexpected subscription endpoint')
+            globalThis.__cloudAuthFixture.subscriptions.push(this)
+          }
           setAuth(fn) { this.fetchToken = fn }
           onUpdate(ref, args, fn) { if (getFunctionName(ref) === 'auth:isAuthenticated') this.onAuth = fn }
           async close() { this.closed = true }
@@ -197,16 +203,19 @@ try {
   const fresh = () => { delete require.cache[target]; host = require(target); return host! }
   const signIn = async (user: string) => {
     nextUser = user
-    const result = await host!.cloudSyncCommand({ type: 'signInGitHub', url })
+    const result = await host!.cloudSyncCommand({ type: 'signInGitHub' })
     assert(!result.meta.failureReason, result.meta.failureReason ?? 'Sign-in command failed')
     await waitFor(() => !host!.cloudSyncStatus().signInPending, 'OAuth completion timed out')
     assert.equal(host!.cloudSyncStatus().signedIn, true)
     assert.equal(host!.cloudSyncStatus().githubLogin, user)
   }
   fresh(); await host!.startCloudSync()
+  assert.equal(host!.cloudSyncStatus().url, url)
+  const callerSelectedDeployment = { type: 'signInGitHub' as const, url: 'https://other.convex.cloud' }
+  assert((await host!.cloudSyncCommand(callerSelectedDeployment)).meta.failureReason, 'Renderer must not be able to select a deployment')
   accountControlsVersion = 0
-  const needsUpgrade = await host!.cloudSyncCommand({ type: 'signInGitHub', url })
-  assert(needsUpgrade.meta.failureReason?.includes('account security update'))
+  const needsUpgrade = await host!.cloudSyncCommand({ type: 'signInGitHub' })
+  assert(needsUpgrade.meta.failureReason?.includes('cloud sign-in is unavailable'))
   assert.equal(callbackUrl, '', 'An outdated backend must be rejected before opening OAuth')
   accountControlsVersion = 2
   await signIn('account-a')
@@ -313,14 +322,14 @@ try {
   await host!.cloudSyncCommand({ type: 'cancelSignIn' })
   await assert.rejects(readFile(sessionPath))
   revoked = false; autoApprove = false
-  await host!.cloudSyncCommand({ type: 'signInGitHub', url })
+  await host!.cloudSyncCommand({ type: 'signInGitHub' })
   await host!.cloudSyncCommand({ type: 'cancelSignIn' })
   assert.equal(host!.cloudSyncStatus().signedIn, false)
   assert.equal(host!.cloudSyncStatus().signInPending, false)
   autoApprove = true
   holdCompletion = true
   const beforeCancelledCleanup = cleanups
-  await host!.cloudSyncCommand({ type: 'signInGitHub', url })
+  await host!.cloudSyncCommand({ type: 'signInGitHub' })
   await waitFor(() => Boolean(releaseCompletion), 'Redemption did not start')
   const abandonedFamily = lastIssuedFamily
   await host!.cloudSyncCommand({ type: 'cancelSignIn' })
@@ -330,7 +339,7 @@ try {
   assert.equal(host!.cloudSyncStatus().signedIn, false)
   failEncryption = true
   const beforeFailedCleanup = cleanups
-  await host!.cloudSyncCommand({ type: 'signInGitHub', url })
+  await host!.cloudSyncCommand({ type: 'signInGitHub' })
   await waitFor(() => !host!.cloudSyncStatus().signInPending, 'Failed persistence did not settle')
   assert.equal(host!.cloudSyncStatus().signedIn, false)
   assert.equal(host!.cloudSyncStatus().authState, 'keyringUnavailable')
@@ -366,7 +375,7 @@ try {
   await signIn('account-a')
   await host!.cloudSyncCommand({ type: 'disconnect' })
   holdCompletion = true
-  await host!.cloudSyncCommand({ type: 'signInGitHub', url })
+  await host!.cloudSyncCommand({ type: 'signInGitHub' })
   await waitFor(() => Boolean(releaseCompletion), 'Shutdown redemption did not start')
   const shutdownFamily = lastIssuedFamily
   const closing = host!.closeCloudSync()

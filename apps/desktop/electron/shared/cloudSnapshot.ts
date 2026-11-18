@@ -44,6 +44,7 @@ const settings = z.object({
   version: z.literal(1), clockCountry: text, time12h: z.boolean(),
   tabOrder: strings, hiddenTabs: strings, favoriteTabs: strings,
   sidebarCollapsed: z.boolean().optional(), obscuredTabs: strings.optional(), lastBackupAt: number.nonnegative().optional(),
+  mainPage: z.string().optional(),
   backtestPage: z.object({ rows: z.array(z.object({ symbol: text, weight: number }).strict()).max(10_000),
     compareSymbol: text, interval: z.enum(['1D', '1W']), range: z.enum(['Max', '5Y', '3Y', '1Y', 'YTD']),
     splitterSizes: z.array(number.positive()).length(2) }).strict().optional(),

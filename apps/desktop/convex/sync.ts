@@ -3,16 +3,13 @@ import { getAuthUserId } from '@convex-dev/auth/server'
 import { ConvexError, v } from 'convex/values'
 import { CloudSnapshotError, parseCloudSnapshot } from '../electron/shared/cloudSnapshot'
 import { consumeSyncWrite } from './syncLimits'
+import { githubOAuthConfigured } from './githubAdapter'
 
 // Public setup metadata contains only capability versions and a boolean.
 export const authConfiguration = query({
   args: {},
   returns: v.object({ authVersion: v.literal(2), accountControlsVersion: v.literal(2), githubConfigured: v.boolean() }),
-  handler: async () => {
-    const configured = (value: string | undefined) => Boolean(value?.trim() && !['undefined', 'null'].includes(value.trim()))
-    return { authVersion: 2 as const, accountControlsVersion: 2 as const,
-      githubConfigured: configured(process.env.AUTH_GITHUB_ID) && configured(process.env.AUTH_GITHUB_SECRET) }
-  },
+  handler: async () => ({ authVersion: 2 as const, accountControlsVersion: 2 as const, githubConfigured: githubOAuthConfigured() }),
 })
 
 export const identity = query({

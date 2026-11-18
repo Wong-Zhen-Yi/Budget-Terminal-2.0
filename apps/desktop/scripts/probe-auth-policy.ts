@@ -67,6 +67,14 @@ const redirectTo = `http://127.0.0.1:43871/convex-sync-callback/${'a'.repeat(64)
 for (const fn of [adapter.start, adapter.complete]) {
   assert.equal((fn as unknown as { isInternal: boolean }).isInternal, true, 'Raw SDK handlers must not be publicly callable')
 }
+process.env.AUTH_GITHUB_ID = 'a'.repeat(40)
+process.env.AUTH_GITHUB_SECRET = 'b'.repeat(40)
+assert.equal(adapter.githubOAuthConfigured(), false)
+await assert.rejects(start(ctx, { redirectTo }), /AUTH_UNAVAILABLE/)
+assert.equal(starts, 0, 'A secret-shaped client ID must never reach the OAuth adapter')
+assert.equal(table('oauthLimits').size, 0, 'Unavailable sign-in does not allocate quota')
+process.env.AUTH_GITHUB_ID = 'fixture-client-id'
+assert.equal(adapter.githubOAuthConfigured(), true)
 await assert.rejects(start(ctx, { redirectTo: 'https://example.invalid' }))
 subject = null
 await assert.rejects(start(ctx, { redirectTo, purpose: 'revokeOthers' }))

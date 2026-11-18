@@ -104,14 +104,16 @@ const bundle = await build({
         client.removeQueries({queryKey: ['chart']})
         const chartCallsBefore = calls.length
         const newsCalls = [], intervals = [], returnCalls = []
-        let reported
+        let reported, finishHistory
         window.api.onPortfolioChanged = () => () => {}
         window.api.news = async request => { newsCalls.push(request); return envelope({items: []}) }
         window.api.returns = async request => {
           returnCalls.push(request)
+          if (request.window === '1d') await new Promise(resolve => { finishHistory = resolve })
           return request.window === '1w'
             ? {data: {returns: {}}, meta: {freshness: 'failed', fetchedAt: Date.now(), failureReason: 'Test heatmap history unavailable'}, errors: []}
-            : envelope({returns: Object.fromEntries(request.tickers.map(ticker => [ticker, 5]))})
+            : { ...envelope({returns: Object.fromEntries(request.tickers.map(ticker => [ticker, 5]))}),
+                meta: {source: 'yahoo history', freshness: 'cached', fetchedAt: Date.now(), asOf: Date.now() - 3600000, cacheAgeSeconds: 3600} }
         }
         const originalInterval = window.setInterval
         window.setInterval = (callback, delay, ...args) => {
@@ -146,11 +148,25 @@ const bundle = await build({
         check(!document.getElementById('dashboard-agent-controls').hidden && getComputedStyle(agentPanel.querySelector('.agents-chat')).display === 'none', 'Controls fit inside the narrow Agents pane')
         agentButton('Controls').click(); await settle()
         const heatmapButton = label => [...heatmap.querySelectorAll('button')].find(button => button.textContent === label)
+        const map = heatmap.querySelector('.portfolio-heatmap-map')
+        const {top: mapTop, height: mapHeight} = map.getBoundingClientRect()
+        const checkHeatmapFrame = stage => {
+          const {top, height} = map.getBoundingClientRect()
+          check(Math.abs(top - mapTop) < 1 && Math.abs(height - mapHeight) < 1, 'Heatmap shifted on ' + stage)
+          check(!heatmap.querySelector('[aria-label="Data freshness"]') &&
+            !/Snapshot:|Observed:|Snapshot age:|Cache age at retrieval:|Source: yahoo history|Loading .* returns|Data unavailable/i.test(heatmap.textContent),
+            'Timeline diagnostics rendered on ' + stage)
+        }
         heatmapButton('1D').click(); await settle()
+        check(reported.some(panel => panel.label === 'Heatmap returns' && panel.loading), 'Report pending history to diagnostics')
+        checkHeatmapFrame('interval loading')
+        finishHistory(); await settle()
         check(returnCalls.length === 1 && returnCalls[0].window === '1d' && heatmap.querySelector('[title="AAPL  +5.00%"]'), 'Explicit historical interval updates tile returns')
-        check(reported.some(panel => panel.label === 'Heatmap returns' && panel.enabled && panel.envelope), 'Historical heatmap health must reach the dashboard footer')
+        checkHeatmapFrame('cached interval result')
+        check(reported.some(panel => panel.label === 'Heatmap returns' && panel.enabled && panel.envelope?.meta.freshness === 'cached'), 'Cached history health must reach diagnostics')
         heatmapButton('1W').click(); await settle()
-        check(heatmap.textContent.includes('Data unavailable.') && !heatmap.textContent.includes('Test heatmap history unavailable'), 'Show a short historical failure notice')
+        checkHeatmapFrame('failed interval')
+        check(!heatmap.textContent.includes('Test heatmap history unavailable'), 'Provider failure must stay in diagnostics')
         check(reported.some(panel => panel.label === 'Heatmap returns' && panel.error?.message.includes('Test heatmap history unavailable')), 'Report historical heatmap failure details to diagnostics')
         heatmapButton('Live').click(); await settle()
         check(heatmap.querySelector('[title="AAPL  +1.00%"]'), 'Live restores quote changes without another history fetch')

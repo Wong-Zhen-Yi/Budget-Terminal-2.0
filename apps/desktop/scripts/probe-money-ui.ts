@@ -66,9 +66,9 @@ try {
           check(calls.at(-1).force === false, 'Initial load does not force a refresh')
           await reload(); check(calls.at(-1).force === true, 'F5 reload hook forces Money')
           mode = 'stale'; await reload()
-          check(document.body.innerText.includes('Showing saved FRED observations.') && document.querySelectorAll('svg').length === 7, 'Stale charts retained')
+          check(!document.body.innerText.includes('Showing saved FRED observations.') && document.querySelectorAll('svg').length === 7, 'Stale charts retained without a status row')
           mode = 'unavailable'; await reload()
-          check(document.body.innerText.includes('Showing saved FRED observations.') && !document.body.innerText.includes('Fixture outage') && client.getQueryState(queryKeys.money).error.message.includes('Fixture outage'), 'Failed refresh retains saved charts and diagnostics without raw provider details in the page')
+          check(document.querySelectorAll('svg').length === 7 && !document.body.innerText.includes('Fixture outage') && client.getQueryState(queryKeys.money).error.message.includes('Fixture outage'), 'Failed refresh retains saved charts and diagnostics without raw provider details in the page')
           mode = 'fresh'; await reload()
           check(document.querySelectorAll('svg').length === 7, 'Refresh recovery')
           return 'PASS: Money rendering, defaults, selectors, refresh, F5 hook, stale and unavailable recovery'

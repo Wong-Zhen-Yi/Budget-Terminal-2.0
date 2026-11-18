@@ -153,7 +153,12 @@ try {
       }
     }
   }
-  assert.equal(mutationVariants, 46) // Includes the saved Charts-watchlist mutation.
+  assert.equal(mutationVariants, 47) // Includes the startup page preference.
+  for (const id of ['charts', null]) {
+    validateCall(toolName('mutateSettings'), {
+      request: { type: 'setMainPage', id }, requestId: randomUUID(), expectedRevision: 'a'.repeat(64),
+    })
+  }
   assert.equal(events.length, 5)
   assert(events.some(domains => domains.includes('articles')), 'Article edits must notify the renderer')
   const screenshotTool = tools.find((tool) => tool.name === toolName('screenshot'))!

@@ -1,6 +1,5 @@
 .crypto-workspace { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; gap: 8px; padding: 10px; overflow: hidden; container: crypto / inline-size; }
-.crypto-notice, .crypto-ribbon, .crypto-footer { flex-shrink: 0; }
-.crypto-notice { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; border: 1px solid #66532d; border-radius: 5px; padding: 8px 12px; background: #272215; color: #d6b25e; font-size: 14px; }
+.crypto-ribbon, .crypto-footer { flex-shrink: 0; }
 .crypto-ribbon { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); border: 1px solid #1e2b3f; border-radius: 5px; background: #0d1420; }
 .crypto-ribbon-item { display: flex; flex: 1 1 auto; align-items: center; gap: 8px; padding: 7px 10px; border-right: 1px solid #1e2b3f; font-size: 13px; }
 .crypto-ribbon-item strong { color: #d5dee9; white-space: nowrap; }

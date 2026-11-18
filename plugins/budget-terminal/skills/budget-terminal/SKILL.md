@@ -5,11 +5,17 @@ description: Capture app pages, research markets and read or edit saved portfoli
 
 Use Budget Terminal tools for data owned by the local app. Open Budget Terminal before service calls; connection status can diagnose availability. Arguments use a `request` object; pass `{ "request": {} }` for operations without parameters.
 
+Read `data.mainPage` from `budget_terminal_settings` for a saved startup choice. Use the settings mutation `setMainPage` with a visible page ID or `null` to restore automatic selection. The preference applies on the next launch.
+
 Use `budget_terminal_eth` for the Ethereum Focus page. Preserve the separate
 `asOf` times for ecosystem TPS and mainnet TPS, block interval and median
-transaction fees. Historical TPS, gas throughput, fees paid and stablecoin supply
-are trailing seven-day averages on matching UTC dates. Report stablecoins by
-layer. Credit growthepie and retain partial coverage and stale-data warnings.
+transaction fees. growthepie history uses trailing seven-day averages for TPS,
+gas throughput, user fees, stablecoin supply by layer and L2 settlement fees.
+Credit Coin Metrics for completed UTC price, market cap, supply, issuance and
+Mainnet active addresses. Credit ultrasound.money for Beacon validator balances
+and matched ETH supply, and rolling seven-day ETH fee burn. Preserve the
+separate snapshot times and distinguish rolling burn from completed UTC
+issuance. Keep partial coverage and stale-data warnings.
 Screenshot page `eth`.
 
 `budget_terminal_hood` includes Robinhood's reviewed November 2026 investor

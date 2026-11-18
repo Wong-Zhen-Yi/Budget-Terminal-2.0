@@ -21,12 +21,13 @@ const pageButton = 'rounded px-3 py-2 text-left text-2xs transition-colors disab
 const selectedStyle = 'bg-accent-dim text-text'
 const idleStyle = 'text-text-muted hover:bg-surface-hover hover:text-text'
 
-export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, recent, collapsed, onToggleCollapsed, saving, isMac }: NavigationProps & {
+export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, recent, collapsed, onToggleCollapsed, saving, isMac, unreadNotifications = 0 }: NavigationProps & {
   favorites: string[]
   recent: string[]
   collapsed: boolean
   onToggleCollapsed: () => void
   saving: boolean
+  unreadNotifications?: number
 }) {
   const remembered = useRef(new Map<string, string>())
   const navigationButton = (collapsed ? pageButton.replace('px-3', 'px-1') + 'text-center ' : pageButton) + (isMac ? 'rounded-lg ' : '')
@@ -54,13 +55,17 @@ export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, rece
             const rememberedId = remembered.current.get(workspace.id)
             const target = pages.find((tab) => tab.id === rememberedId) ?? pages[0]
             const active = workspace.id === activeWorkspace?.id
+            const unread = target.id === 'notifications' && unreadNotifications > 0
             return (
               <button key={workspace.id} type="button" aria-current={active ? 'page' : undefined}
-                aria-label={workspace.label} title={collapsed ? workspace.label : undefined}
+                aria-label={workspace.label}
+                aria-description={unread ? `${unreadNotifications} unread` : undefined}
+                title={unread ? `Notifications · ${unreadNotifications} unread` : collapsed ? workspace.label : undefined}
                 onClick={() => onSelectTab(target.id)}
-                className={`${navigationButton}flex items-center ${collapsed ? 'justify-center' : 'justify-between'} gap-2 ${active ? selectedStyle : idleStyle}`}>
+                className={`${navigationButton}relative flex items-center ${collapsed ? 'justify-center' : 'justify-between'} gap-2 ${active ? selectedStyle : idleStyle}`}>
                 {collapsed ? <NavigationIcon id={workspace.id} workspace /> : <span>{workspace.label}</span>}
-                {!collapsed ? <span className="num text-text-dim">{pages.length}</span> : null}
+                {!collapsed ? <span className={`num ${unread ? 'text-accent-hover' : 'text-text-dim'}`}>{unread ? (unreadNotifications > 99 ? '99+' : unreadNotifications) : pages.length}</span> : null}
+                {collapsed && unread ? <span className="absolute right-2 top-1.5 size-1.5 rounded-full bg-accent-hover" aria-hidden="true" /> : null}
               </button>
             )
           })}

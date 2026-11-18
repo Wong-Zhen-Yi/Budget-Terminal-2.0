@@ -208,7 +208,7 @@ export function HeatmapPage({
             if (interval === 'live') setIntervalKey('1d')
             setReplay({ payload: completed, dates: replayDates, index: 0, playing: true })
           }}>Play history</Button>
-          <span role="status" className="text-text-muted">{replayDates.length >= 2
+          <span role="status" className="min-w-0 flex-1 truncate text-text-muted">{replayDates.length >= 2
             ? `${replayDates[0]} to ${replayDates.at(-1)} · current holdings and weights`
             : loading || query.isPending ? 'Replay building…' : 'Replay unavailable. Retrying automatically…'}</span>
         </>}

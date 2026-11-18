@@ -72,7 +72,7 @@ try {
           document.querySelector('tbody tr').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))
           check(navigated === 'stocks:CCC', 'Row navigation')
           mode = 'failed'; await clickScan()
-          check(body().includes('Scan failed: Offline') && document.querySelectorAll('tbody tr').length === 1, 'Failed refresh must retain result')
+          check(body().includes('Scan failed. See Settings for details.') && !body().includes('Offline') && document.querySelectorAll('tbody tr').length === 1, 'Failed refresh must retain results and keep provider details in Settings')
           mode = 'empty'; await clickScan()
           check(body().includes('No stocks matched') && document.querySelectorAll('tbody tr').length === 0, 'Empty result state')
           const cached = { data: { ...payload, completedAt: new Date().toISOString() }, meta: { source: 'fixture', freshness: 'cached', fetchedAt: Date.now() }, errors: [] }

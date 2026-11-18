@@ -1,123 +1,292 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import { api, queryKeys } from '@/api/client'
 import { useQuery } from '@/api/progressiveQuery'
 import { forcing } from '@/api/queries'
 import { queryFreshness } from '@/api/queryPersistence'
-import { useSnapshotClock } from '@/api/snapshotHealth'
+import { EthTrendChart } from '@/charts/EthTrendChart'
+import type { EthChartDay, EthChartKind } from '@/charts/EthTrendChart'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
-import { ETH_DAY_MS, ETH_LIVE_MAX_AGE_MS, ETH_SOURCE_URL, type EthActivityDay, type EthLayerValues, type EthTpsSample } from '@shared/eth'
+import { ETH_DAY_MS, ETH_MARKET_SOURCE_URL, ETH_PROTOCOL_SOURCE_URL, ETH_SOURCE_URL } from '@shared/eth'
+import type { EthActivityDay, EthBurnSnapshot, EthMarketDay, EthPayload, EthStakingSnapshot, EthTpsSample } from '@shared/eth'
 import '@/styles/eth.css'
 
-const tps = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 })
-const gasRate = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 })
-const compactUsd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 })
+const number = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 })
+const whole = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
+const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
 const feeUsd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 4 })
+const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 })
+const compactUsd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 })
+const supplyAxis = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 4 })
+const signed = new Intl.NumberFormat('en-US', { signDisplay: 'exceptZero', maximumFractionDigits: 2 })
+const signedWhole = new Intl.NumberFormat('en-US', { signDisplay: 'exceptZero', maximumFractionDigits: 0 })
 const dayLabel = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
-const shortDay = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 const timeLabel = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'UTC' })
 
-const metrics = [
-  { label: 'TPS', unit: 'TPS', heading: 'Transactions per second', format: tps.format,
-    values: (point: EthActivityDay) => ({ mainnet: point.mainnetTps, layer2: point.layer2Tps }), stacked: true },
-  { label: 'Gas throughput', unit: 'Mgas/s', heading: 'Millions of gas units processed per second', format: gasRate.format,
-    values: (point: EthActivityDay) => point.gasThroughputMgasPerSecond, stacked: true },
-  { label: 'Fees paid', unit: 'USD/day', heading: 'Network fees paid by users per day', format: compactUsd.format,
-    values: (point: EthActivityDay) => point.feesPaidUsdPerDay, stacked: true },
-  { label: 'Stablecoin supply', unit: 'USD', heading: 'Value of tracked stablecoins by layer', format: compactUsd.format,
-    values: (point: EthActivityDay) => point.stablecoinSupplyUsd, stacked: false },
+const compactEth = (value: number) => compact.format(value) + ' ETH'
+const usdPerDay = (value: number) => compactUsd.format(value) + '/day'
+const tps = (value: number) => number.format(value) + ' TPS'
+const gas = (value: number) => number.format(value) + ' Mgas/s'
+const eth = (value: number) => number.format(value) + ' ETH'
+const format = (value: number | undefined, display: (value: number) => string) => value === undefined ? '—' : display(value)
+const noMarket: EthMarketDay[] = []
+const noActivity: EthActivityDay[] = []
+const noTps: EthTpsSample[] = []
+
+interface ChartData {
+  market: Map<number, EthMarketDay>
+  network: Map<number, EthActivityDay>
+}
+
+interface Metric {
+  label: string
+  caption: string
+  labels: [string, string?]
+  kind: EthChartKind
+  format: (value: number) => string
+  axis: (value: number) => string
+  sample: (data: ChartData, day: number) => Omit<EthChartDay, 'day'>
+}
+
+const marketMetrics: Metric[] = [
+  { label: 'Price', caption: 'Daily USD reference rate', labels: ['ETH/USD'], kind: 'area', format: usd.format, axis: usd.format,
+    sample: ({ market }, day) => ({ primary: market.get(day)?.priceUsd }) },
+  { label: 'Supply', caption: 'Daily ETH supply', labels: ['ETH supply'], kind: 'line', format: eth, axis: supplyAxis.format,
+    sample: ({ market }, day) => ({ primary: market.get(day)?.supplyEth }) },
+  { label: 'Market cap', caption: 'Daily market capitalization in USD', labels: ['Market cap'], kind: 'line',
+    format: compactUsd.format, axis: compactUsd.format, sample: ({ market }, day) => ({ primary: market.get(day)?.marketCapUsd }) },
+  { label: 'Issuance', caption: 'ETH issued per completed UTC day', labels: ['Issued'], kind: 'histogram', format: eth, axis: compact.format,
+    sample: ({ market }, day) => ({ primary: market.get(day)?.issuanceEth }) },
 ]
 
-function Rate({ sample, now }: { sample?: EthTpsSample | null; now: number }) {
-  const saved = sample && now - sample.asOf > ETH_LIVE_MAX_AGE_MS
-  return <>
-    <div className="eth-rate"><strong className="num">{sample ? tps.format(sample.tps) : '—'}</strong><span>TPS</span></div>
-    <p className={saved ? 'eth-saved' : undefined}>
-      {sample ? <><time dateTime={new Date(sample.asOf).toISOString()} title={dayLabel.format(sample.asOf)}>{timeLabel.format(sample.asOf)} UTC</time>{saved && ' · Last observed'}</> : 'No recent reading'}
-    </p>
-  </>
+const layerMetrics = [
+  { label: 'TPS', caption: 'Transactions per second', format: tps, axis: number.format,
+    values: (point: EthActivityDay) => ({ mainnet: point.mainnetTps, layer2: point.layer2Tps }) },
+  { label: 'User fees', caption: 'User fees paid per day', format: usdPerDay, axis: compactUsd.format,
+    values: (point: EthActivityDay) => point.feesPaidUsdPerDay },
+  { label: 'Stablecoins', caption: 'Tracked stablecoin supply', format: compactUsd.format, axis: compactUsd.format,
+    values: (point: EthActivityDay) => point.stablecoinSupplyUsd },
+  { label: 'Gas used', caption: 'Gas units processed per second', format: gas, axis: number.format,
+    values: (point: EthActivityDay) => point.gasThroughputMgasPerSecond },
+]
+const networkMetrics: Metric[] = [
+  ...layerMetrics.map((metric): Metric => ({
+    ...metric, caption: metric.caption + ' · 7-day average', labels: ['Mainnet', 'Tracked L2s'], kind: 'line',
+    sample: ({ network }, day) => {
+      const point = network.get(day)
+      const pair = point && metric.values(point)
+      return { primary: pair?.mainnet, secondary: pair?.layer2 }
+    },
+  })),
+  { label: 'L2 settlement', caption: 'Fees paid to Mainnet for settlement and data · 7-day average',
+    labels: ['Paid to Mainnet'], kind: 'line', format: usdPerDay, axis: compactUsd.format,
+    sample: ({ network }, day) => ({ primary: network.get(day)?.layer2SettlementUsdPerDay }) },
+  { label: 'Active addresses', caption: 'Active Mainnet addresses per completed UTC day', labels: ['Mainnet'],
+    kind: 'histogram', format: whole.format, axis: compact.format,
+    sample: ({ market }, day) => ({ primary: market.get(day)?.activeAddresses }) },
+]
+
+const sources = [
+  { label: 'growthepie', url: ETH_SOURCE_URL },
+  { label: 'Coin Metrics', url: ETH_MARKET_SOURCE_URL },
+  { label: 'ultrasound.money', url: ETH_PROTOCOL_SOURCE_URL },
+  { label: 'TradingView charts', url: 'https://www.tradingview.com/lightweight-charts/' },
+]
+
+function Observation({ stamp, daily = false, now }: { stamp: number; daily?: boolean; now: number }) {
+  return <time dateTime={new Date(stamp).toISOString()} title={dayLabel.format(stamp) + ' · ' + timeLabel.format(stamp) + ' UTC'}>
+    {daily || now - stamp >= ETH_DAY_MS ? dayLabel.format(stamp) : timeLabel.format(stamp)} UTC
+  </time>
 }
 
-function RecentSamples({ samples }: { samples: EthTpsSample[] }) {
-  const top = Math.max(1, ...samples.map(sample => sample.tps))
-  return <figure className="eth-pulse" aria-label="Recent Ethereum ecosystem TPS samples">
-    <figcaption>Recent ecosystem samples</figcaption>
-    {samples.length ? <>
-      <div className="eth-pulse-bars" aria-hidden="true">
-        {samples.map(sample => <span key={sample.asOf} style={{ height: `${100 * sample.tps / top}%` }}
-          title={`${timeLabel.format(sample.asOf)} UTC · ${tps.format(sample.tps)} TPS`} />)}
-      </div>
-      <div className="eth-axis"><span>{timeLabel.format(samples[0].asOf)}</span><span>{timeLabel.format(samples.at(-1)!.asOf)} UTC</span></div>
-    </> : <p className="eth-empty">Recent samples unavailable</p>}
-  </figure>
+function Stat({ label, value, children }: { label: string; value: string; children?: ReactNode }) {
+  return <div className="eth-stat"><dt>{label}{children && <small>{children}</small>}</dt><dd className="num">{value}</dd></div>
 }
 
-function ActivityHistory({ history, loading }: { history: EthActivityDay[]; loading: boolean }) {
-  const [range, setRange] = useState(30)
-  const [chosenDay, setChosenDay] = useState<number>()
-  const [metric, setMetric] = useState(metrics[0])
-  const days = new Map<number, EthLayerValues>()
-  for (const point of history) {
-    const values = metric.values(point)
-    if (values) days.set(point.day, values)
+function MarketHeader({ market, range, onRange, now }: {
+  market: EthMarketDay[]; range: number; onRange: (range: number) => void; now: number
+}) {
+  const latest = market.at(-1)
+  function change(days: number) {
+    if (!latest) return
+    const baseline = market.find(point => point.day === latest.day - days * ETH_DAY_MS)
+    if (baseline) return (latest.priceUsd / baseline.priceUsd - 1) * 100
   }
-  const newest = [...days.keys()].at(-1)
-  const dates = newest === undefined ? [] : Array.from({ length: range }, (_, i) => newest - (range - i - 1) * ETH_DAY_MS)
-  const selected = chosenDay !== undefined && dates.includes(chosenDay) ? chosenDay : newest
-  const point = selected === undefined ? undefined : days.get(selected)
-  const peak = Math.max(1, ...dates.map(day => {
-    const value = days.get(day)
-    return value ? metric.stacked ? value.mainnet + value.layer2 : Math.max(value.mainnet, value.layer2) : 0
-  }))
-  const step = 10 ** Math.floor(Math.log10(peak)) / 2
-  const top = Math.ceil(peak / (2 * step)) * 2 * step
-  const total = point ? point.mainnet + point.layer2 : 0
-  const share = point && total > 0 && metric.stacked ? 100 * point.layer2 / total : null
+  return <header className="eth-market">
+    <div className="eth-market-title">
+      <h1>Ethereum <span>ETH</span></h1>
+      {latest && <Observation stamp={latest.day} now={now} daily />}
+    </div>
+    <dl className="eth-market-stats">
+      <Stat label="Reference price" value={format(latest?.priceUsd, usd.format)} />
+      <Stat label="Market cap" value={format(latest?.marketCapUsd, compactUsd.format)} />
+      {[1, 7, 30, 90].map(days => {
+        const value = change(days)
+        const tone = !value ? undefined : value > 0 ? 'eth-positive' : 'eth-negative'
+        return <div className="eth-stat" key={days}>
+          <dt>{days}D return</dt><dd className={tone ? 'num ' + tone : 'num'}>{format(value, n => signed.format(n) + '%')}</dd>
+        </div>
+      })}
+    </dl>
+    <div className="eth-choice" role="group" aria-label="Range for both charts">
+      {[7, 30, 90].map(days => <button key={days} type="button" aria-pressed={range === days} onClick={() => onRange(days)}>{days}D</button>)}
+    </div>
+  </header>
+}
 
-  return <section className="eth-history" aria-labelledby="eth-history-heading">
+function TrendPanel({ id, title, metrics, data, dates, loading }: {
+  id: string; title: string; metrics: Metric[]; data: ChartData; dates: number[]; loading: boolean
+}) {
+  const [metric, setMetric] = useState(metrics[0])
+  const [inspectedDay, setInspectedDay] = useState<number>()
+  const days = useMemo(() => dates.map(day => ({ day, ...metric.sample(data, day) })), [dates, data, metric])
+  const latest = days.findLastIndex(day => day.primary !== undefined || day.secondary !== undefined)
+  const inspected = inspectedDay === undefined ? -1 : dates.indexOf(inspectedDay)
+  const selected = inspected >= 0 ? inspected : latest
+  const point = days[selected]
+  const readings = metric.labels.flatMap((label, index) => label
+    ? [{ label, value: format(index === 0 ? point?.primary : point?.secondary, metric.format), secondary: index === 1 }] : [])
+
+  return <section className="eth-history" aria-labelledby={id}>
     <div className="eth-history-heading">
-      <div><h2 id="eth-history-heading">Mainnet vs. Layer 2</h2><p>{metric.heading} · trailing 7-day average</p></div>
-      <div className="eth-ranges eth-metrics" role="group" aria-label="Historical metric">
-        {metrics.map(option => <button key={option.label} type="button" aria-pressed={metric === option} onClick={() => setMetric(option)}>{option.label}</button>)}
-      </div>
-      <div className="eth-ranges" role="group" aria-label="Activity history range">
-        {[30, 90].map(days => <button key={days} type="button" aria-pressed={range === days} onClick={() => setRange(days)}>{days}D</button>)}
+      <h2 id={id}>{title}</h2>
+      <div className="eth-choice eth-metrics" role="group" aria-label={title + ' metric'}>
+        {metrics.map(option => <button key={option.label} type="button" aria-pressed={metric === option}
+          onClick={() => { setMetric(option); setInspectedDay(undefined) }}>{option.label}</button>)}
       </div>
     </div>
-    {selected === undefined ? <p className="eth-empty">{loading ? 'Loading activity history…' : 'Activity history unavailable'}</p> : <div className="eth-history-body">
-      <div className="eth-trend">
-        <div className="eth-plot">
-          <div className="eth-y-axis num" aria-hidden="true"><span>{metric.format(top)}</span><span>{metric.format(top / 2)}</span><span>0</span></div>
-          <div className="eth-columns">
-            {dates.map(day => {
-              const value = days.get(day)
-              const title = value ? `${shortDay.format(day)} · Mainnet ${metric.format(value.mainnet)} · L2s ${metric.format(value.layer2)} ${metric.unit}` : `${shortDay.format(day)} · No data`
-              return <button key={day} type="button" tabIndex={-1} aria-hidden="true" title={title}
-                className={`eth-column${day === selected ? ' eth-selected' : ''}${metric.stacked ? '' : ' eth-grouped'}`} onClick={() => setChosenDay(day)}>
-                {value && <><span className="eth-l1" style={{ height: `${100 * value.mainnet / top}%` }} /><span className="eth-l2" style={{ height: `${100 * value.layer2 / top}%` }} /></>}
-              </button>
-            })}
-          </div>
-        </div>
-        <div className="eth-axis eth-history-axis"><span>{shortDay.format(dates[0])}</span><span>{shortDay.format(newest!)}</span></div>
-        <input className="eth-date-slider" type="range" aria-label="Inspect activity by date" aria-valuetext={dayLabel.format(selected)}
-          min={0} max={dates.length - 1} value={dates.indexOf(selected)} onChange={event => setChosenDay(dates[Number(event.target.value)])} />
-      </div>
-      <aside className="eth-breakdown" aria-label="Selected day activity" aria-live="polite">
-        <time dateTime={new Date(selected).toISOString().slice(0, 10)}>{dayLabel.format(selected)} UTC</time>
-        {point ? <>
-          {metric.stacked && <div className="eth-rate"><strong className="num">{metric.format(total)}</strong><span>{metric.unit} combined</span></div>}
-          {share !== null && <div className="eth-share" aria-hidden="true">
-            <span className="eth-l1" style={{ width: `${100 - share}%` }} /><span className="eth-l2" style={{ width: `${share}%` }} />
-          </div>}
-          <dl>
-            <div><dt><i className="eth-l1" />Mainnet</dt><dd className="num">{metric.format(point.mainnet)} {metric.unit}</dd></div>
-            <div><dt><i className="eth-l2" />Tracked L2s</dt><dd className="num">{metric.format(point.layer2)} {metric.unit}</dd></div>
-          </dl>
-          {share !== null && <p>{tps.format(share)}% of the total on tracked L2s</p>}
-        </> : <p>No activity data for this date</p>}
-      </aside>
-    </div>}
+    <div className="eth-chart-readout">
+      <span className="eth-chart-caption">{metric.caption}</span>
+      {readings.map(({ label, value, secondary }) => <div key={label}>
+        <i className={secondary ? 'eth-secondary' : undefined} aria-hidden="true" />
+        <span>{label}</span><strong className="num">{value}</strong>
+      </div>)}
+      {point && <time dateTime={new Date(point.day).toISOString().slice(0, 10)}>{dayLabel.format(point.day)} UTC</time>}
+    </div>
+    <div className="eth-plot">
+      {latest >= 0 ? <EthTrendChart title={title + ' ' + metric.label} kind={metric.kind} days={days}
+        paired={Boolean(metric.labels[1])} axis={metric.axis} selected={selected}
+        valueText={[dayLabel.format(point.day) + ' UTC', ...readings.map(({ label, value }) => label + ' ' + (value === '—' ? 'unavailable' : value))].join(', ')}
+        onInspect={setInspectedDay} />
+        : <p className="eth-empty">{loading ? 'Loading history…' : 'History unavailable'}</p>}
+    </div>
   </section>
+}
+
+function SupplyLedger({ market, staking, burn, now }: {
+  market: EthMarketDay[]; staking?: EthStakingSnapshot; burn?: EthBurnSnapshot; now: number
+}) {
+  const latest = market.at(-1)
+  const baseline = latest && market.find(day => day.day === latest.day - 30 * ETH_DAY_MS)
+  const net = latest && baseline ? latest.supplyEth - baseline.supplyEth : undefined
+  const week = latest ? Array.from({ length: 7 }, (_, i) => market.find(day => day.day === latest.day - i * ETH_DAY_MS)?.issuanceEth) : []
+  const issuance = week.length === 7 && week.every(value => value !== undefined) ? week.reduce((sum, value) => sum + value, 0) : undefined
+  const share = staking ? 100 * staking.validatorBalanceEth / staking.supplyEth : undefined
+  return <section className="eth-ledger" aria-labelledby="eth-supply-heading">
+    <div className="eth-ledger-heading"><h2 id="eth-supply-heading">Supply &amp; staking</h2>
+      {latest && <Observation stamp={latest.day} now={now} daily />}</div>
+    <dl>
+      <Stat label={latest || !staking ? 'ETH supply' : 'ETH supply at Beacon snapshot'} value={format(latest?.supplyEth ?? staking?.supplyEth, compactEth)} />
+      <Stat label="Net supply change · 30D" value={format(net, value => signedWhole.format(value) + ' ETH')}>
+        {net !== undefined && baseline && signed.format(100 * net / baseline.supplyEth) + '%'}
+      </Stat>
+      <Stat label="Issuance · 7 UTC days" value={format(issuance, value => whole.format(value) + ' ETH')} />
+      <Stat label="Fee burn · rolling 7D" value={format(burn?.sevenDayEth, eth)}>
+        {burn && <Observation stamp={burn.asOf} now={now} />}
+      </Stat>
+      <Stat label="Beacon validator balances" value={format(staking?.validatorBalanceEth, compactEth)}>
+        {staking && <Observation stamp={staking.asOf} now={now} />}
+      </Stat>
+      <div className="eth-stat eth-share">
+        <dt>Share of ETH in validator balances</dt><dd className="num">{format(share, value => number.format(value) + '%')}</dd>
+        {share !== undefined && <dd className="eth-meter" aria-hidden="true"><span style={{ width: share + '%' }} /></dd>}
+      </div>
+    </dl>
+  </section>
+}
+
+function LayerComparison({ daily, now }: { daily: EthActivityDay[]; now: number }) {
+  const latest = daily.at(-1)
+  const settlement = daily.findLast(day => day.layer2SettlementUsdPerDay !== undefined)
+  const total = latest ? latest.mainnetTps + latest.layer2Tps : 0
+  return <section className="eth-ledger" aria-labelledby="eth-layers-heading">
+    <div className="eth-ledger-heading"><h2 id="eth-layers-heading">Mainnet vs. L2s</h2><span>7-day average</span></div>
+    <table className="eth-layers">
+      <thead><tr>
+        <th scope="col">{latest && <Observation stamp={latest.day} now={now} daily />}</th>
+        <th scope="col">Mainnet</th><th scope="col">Tracked L2s</th>
+      </tr></thead>
+      <tbody>
+        {layerMetrics.map(metric => {
+          const values = latest && metric.values(latest)
+          return <tr key={metric.label}>
+            <th scope="row">{metric.label}</th>
+            <td className="num">{format(values?.mainnet, metric.format)}</td>
+            <td className="num">{format(values?.layer2, metric.format)}</td>
+          </tr>
+        })}
+      </tbody>
+    </table>
+    <dl>
+      <Stat label="L2 share of tracked TPS" value={format(latest && total > 0 ? 100 * latest.layer2Tps / total : undefined, value => number.format(value) + '%')} />
+      <Stat label="L2 settlement to Mainnet" value={format(settlement?.layer2SettlementUsdPerDay, usdPerDay)}>
+        {settlement && settlement.day !== latest?.day && <Observation stamp={settlement.day} now={now} daily />}
+      </Stat>
+    </dl>
+  </section>
+}
+
+function NetworkSnapshot({ payload, market, now }: { payload?: EthPayload; market: EthMarketDay[]; now: number }) {
+  const mainnet = payload?.mainnet
+  const ecosystem = payload?.ecosystem.at(-1)
+  const active = market.findLast(day => day.activeAddresses !== undefined)
+  return <section className="eth-ledger" aria-labelledby="eth-network-heading">
+    <div className="eth-ledger-heading"><h2 id="eth-network-heading">Network snapshot</h2></div>
+    <dl>
+      <Stat label="Ecosystem TPS" value={format(ecosystem?.tps, tps)}>
+        {ecosystem && <Observation stamp={ecosystem.asOf} now={now} />}
+      </Stat>
+      <Stat label="Mainnet TPS" value={format(mainnet?.tps, tps)}>
+        {mainnet && <Observation stamp={mainnet.asOf} now={now} />}
+      </Stat>
+      <Stat label="Mainnet median tx fee" value={format(mainnet?.medianTransactionFeeUsd, feeUsd.format)} />
+      <Stat label="Mainnet block interval" value={format(mainnet?.blockTimeSeconds, value => number.format(value) + ' s')} />
+      <Stat label="Active Mainnet addresses" value={format(active?.activeAddresses, whole.format)}>
+        {active && <Observation stamp={active.day} now={now} daily />}
+      </Stat>
+    </dl>
+  </section>
+}
+
+function EcosystemPulse({ samples, now }: { samples: EthTpsSample[]; now: number }) {
+  const [inspected, setInspected] = useState<number>()
+  const days = useMemo(() => samples.map(({ asOf, tps }) => ({ day: asOf, primary: tps })), [samples])
+  const index = days.findIndex(point => point.day === inspected)
+  const selected = index >= 0 ? index : days.length - 1
+  const point = days[selected]
+  return <section className="eth-ledger eth-pulse" aria-labelledby="eth-pulse-heading">
+    <div className="eth-ledger-heading">
+      <h2 id="eth-pulse-heading">Recent ecosystem TPS</h2>
+      {point && <div className="eth-pulse-readout"><strong className="num">{tps(point.primary)}</strong>
+        <Observation stamp={point.day} now={now} /></div>}
+    </div>
+    <div className="eth-plot">
+      {point ? <EthTrendChart title="Recent ecosystem TPS" kind="line" days={days} paired={false}
+        axis={number.format} selected={selected} valueText={timeLabel.format(point.day) + ' UTC, ' + tps(point.primary)}
+        intraday onInspect={setInspected} /> : <p className="eth-empty">Recent samples unavailable</p>}
+    </div>
+  </section>
+}
+
+function SourceLinks() {
+  const [linkError, setLinkError] = useState('')
+  return <div className="eth-sources" aria-label="Ethereum data and chart sources">
+    {sources.map(({ label, url }) => <button key={url} type="button" onClick={async () => {
+      setLinkError('')
+      try { await api.openExternal(url) } catch { setLinkError('Could not open ' + label + '.') }
+    }}>{label} ↗</button>)}
+    {linkError && <span role="status">{linkError}</span>}
+  </div>
 }
 
 export function EthPage({ onStatusChange }: { onStatusChange: (panels: PanelStatus[], sourcePath: string) => void }) {
@@ -127,39 +296,33 @@ export function EthPage({ onStatusChange }: { onStatusChange: (panels: PanelStat
     staleTime: queryFreshness(queryKeys.eth),
     refetchOnMount: false,
   })
-  const now = useSnapshotClock()
-  const [linkError, setLinkError] = useState(false)
+  const [range, setRange] = useState(90)
   useEffect(() => onStatusChange([{ label: 'Ethereum', envelope: data, error, loading: isFetching }], ''),
     [data, error, isFetching, onStatusChange])
-  const ecosystem = data?.data.ecosystem ?? []
-  const mainnet = data?.data.mainnet
+  const market = data?.data.market ?? noMarket
+  const daily = data?.data.daily ?? noActivity
+  const chartData = useMemo(() => ({
+    market: new Map(market.map(point => [point.day, point])),
+    network: new Map(daily.map(point => [point.day, point])),
+  }), [market, daily])
+  const latest = Math.max(market.at(-1)?.day ?? 0, daily.at(-1)?.day ?? 0)
+  const dates = useMemo(() => latest ? Array.from({ length: range }, (_, i) => latest - (range - 1 - i) * ETH_DAY_MS) : [], [latest, range])
+  const now = Date.now()
   const loading = isPending && !error
   return <div className="eth-page">
-    <header className="eth-header">
-      <h1>Ethereum network activity</h1>
-      <button type="button" onClick={async () => {
-        setLinkError(false)
-        try { await api.openExternal(ETH_SOURCE_URL) } catch { setLinkError(true) }
-      }}>Data by growthepie ↗</button>
-      {linkError && <span role="status">Could not open growthepie.</span>}
-    </header>
-    <section className="eth-live" aria-label="Latest transactions per second">
-      <div className="eth-live-primary">
-        <h2>Ecosystem TPS</h2>
-        <p>Mainnet + tracked Layer 2s</p>
-        <Rate sample={ecosystem.at(-1)} now={now} />
+    <MarketHeader market={market} range={range} onRange={setRange} now={now} />
+    <div className="eth-board">
+      <div className="eth-charts">
+        <TrendPanel id="eth-market-heading" title="ETH market" metrics={marketMetrics} data={chartData} dates={dates} loading={loading} />
+        <TrendPanel id="eth-network-history-heading" title="Network activity" metrics={networkMetrics} data={chartData} dates={dates} loading={loading} />
       </div>
-      <RecentSamples samples={ecosystem} />
-      <div className="eth-live-mainnet">
-        <h2>Mainnet TPS</h2>
-        <p>Ethereum Layer 1</p>
-        <Rate sample={mainnet} now={now} />
-        <dl className="eth-mainnet-metrics">
-          <div><dt>Block interval</dt><dd className="num">{mainnet?.blockTimeSeconds == null ? '—' : `${tps.format(mainnet.blockTimeSeconds)} s`}</dd></div>
-          <div><dt>Median tx fee</dt><dd className="num">{mainnet?.medianTransactionFeeUsd == null ? '—' : feeUsd.format(mainnet.medianTransactionFeeUsd)}</dd></div>
-        </dl>
-      </div>
-    </section>
-    <ActivityHistory history={data?.data.daily ?? []} loading={loading} />
+      <aside className="eth-rail" aria-label="Ethereum metrics">
+        <SupplyLedger market={market} staking={data?.data.staking} burn={data?.data.burn} now={now} />
+        <LayerComparison daily={daily} now={now} />
+        <NetworkSnapshot payload={data?.data} market={market} now={now} />
+        <EcosystemPulse samples={data?.data.ecosystem ?? noTps} now={now} />
+      </aside>
+    </div>
+    <SourceLinks />
   </div>
 }
