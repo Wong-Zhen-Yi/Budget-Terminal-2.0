@@ -28,7 +28,11 @@ try {
     const check = (value, message) => { if (!value) throw Error(message) }
     const settle = () => new Promise(resolve => setTimeout(resolve, 180))
     let calls = 0, scheduleCalls = 0, navigation, lastRequest, lastScheduleRequest, statuses, failed = false
-    const rows = ECONOMIC_SERIES.map(series => buildRow(series, Array.from({length: 36}, (_, i) => [new Date(Date.UTC(2024, i, 1)).toISOString().slice(0,10), 100 + i + i*i/100])))
+    const benchmarkYields = { DGS3MO: 4.50, DGS2: 4.20, DGS5: 3.90, DGS10: 4.30, DGS30: 4.70 }
+    const rows = ECONOMIC_SERIES.map(series => buildRow(series, Array.from({length: 36}, (_, i) => [
+      new Date(Date.UTC(2024, i, 1)).toISOString().slice(0,10),
+      benchmarkYields[series.seriesId] ?? (100 + i + i*i/100),
+    ])))
     const payload = { rows, source: 'fixture', generatedAt: new Date().toISOString(), groups: ['Growth', 'Inflation', 'Labor', 'Rates'], missing: [], unreachable: [], yieldCurve: buildYieldCurve(rows) }
     window.api.economic = async request => { calls++; lastRequest = request; return { data: failed ? { ...payload, rows: [] } : payload, errors: failed ? [{ source: 'fixture', reason: 'HTTP 503' }] : [], meta: { source: 'fixture', freshness: failed ? 'failed' : 'fresh', failureReason: failed ? 'HTTP 503' : undefined, fetchedAt: Date.now() } } }
     const today = calendarToday('est')
@@ -59,9 +63,23 @@ try {
       check(releases.map(row => row.querySelector('strong').textContent).join(', ') === 'CPI Release, FOMC Decision, Jobs Report, PCE Inflation, GDP Report', 'Watch must show only the next key release of each type in date order')
       check(releases[0].querySelector('time').dateTime === today && releases[0].textContent.includes('Today') && releases[1].textContent.includes('Tomorrow'), 'US release dates and relative days must agree')
       check(releases[4].querySelector('time').dateTime === addDays(today, 60), 'Watch must include the 60-day boundary')
+      const markerPositions = releases.map(row => parseFloat(row.querySelector('.macro-release-track i').style.left))
+      check(markerPositions[0] === 0 && markerPositions[4] === 100 && Math.abs(markerPositions[1] - 100 / 60) < .01, 'Release markers must use a shared 60-day scale')
+      const trends = [...document.querySelectorAll('.macro-sparkline')]
+      check(trends.length === 9 && trends.every(trend => trend.querySelector('polyline').getAttribute('points').split(' ').length === 12), 'Driver trends must draw the last 12 observations')
+      check(trends.every(trend => trend.getAttribute('aria-label').includes('2026-01-01 to 2026-12-01')), 'Trend summaries must give the plotted dates')
+      const curve = document.querySelector('.macro-curve')
+      check(curve.querySelector('time').dateTime === '2026-12-01' && curve.querySelectorAll('.macro-curve-plot span').length === 5, 'Treasury curve must plot five dated benchmarks')
+      check([...curve.querySelectorAll('dd')].map(node => node.textContent).join(', ') === '4.50%, 4.20%, 3.90%, 4.30%, 4.70%', 'Curve values must follow maturity order')
       const compassGrid = document.querySelector('.macro-compass-grid')
       check(compassGrid.querySelectorAll('tbody td').length === 9, 'Compass must show all nine states')
       const original = client.getQueryData(['economic'])
+      const partialCurve = { ...payload.yieldCurve, tenors: payload.yieldCurve.tenors.map(tenor => tenor.seriesId === 'DGS5' ? { ...tenor, date: '2026-11-01' } : tenor) }
+      const sparseRows = rows.map(row => row.seriesId === 'UNRATE' ? { ...row, history: row.history.slice(-1) } : row)
+      client.setQueryData(['economic'], { ...original, data: { ...payload, rows: sparseRows, yieldCurve: partialCurve } }); await settle()
+      check(curve.querySelectorAll('.macro-curve-plot span').length === 4 && curve.querySelectorAll('dd')[2].textContent === '—', 'Curve must omit yields observed on a different date')
+      check(curve.querySelector('.macro-curve-line').getAttribute('d').match(/M/g).length === 2, 'Missing benchmarks must leave a gap in the curve')
+      check(document.querySelectorAll('.macro-sparkline').length === 8 && document.querySelector('.macro-trend-empty'), 'A single observation must show no trend')
       const steadyRows = rows.map(row => row.seriesId === 'GDPC1' ? { ...row, change: 0 }
         : row.seriesId === 'CPIAUCSL' ? { ...row, change: -0.08 }
         : row)
@@ -79,8 +97,9 @@ try {
       client.setQueryData(releaseKey, { ...schedule, data: { ...schedule.data, economicEvents: [] }, meta: { ...schedule.meta, freshness: 'failed' } }); await settle()
       check(document.querySelector('.macro-release-empty').textContent === 'Release schedule unavailable.' && statuses[1].envelope.meta.freshness === 'failed', 'Schedule outage should be visible in Settings with no dates fabricated')
       client.setQueryData(releaseKey, schedule); await settle()
-      client.setQueryData(['economic'], { data: { ...payload, rows: [] }, meta: { source: 'fixture', freshness: 'failed', fetchedAt: Date.now() } }); await settle()
+      client.setQueryData(['economic'], { data: { ...payload, rows: [], yieldCurve: buildYieldCurve([]) }, meta: { source: 'fixture', freshness: 'failed', fetchedAt: Date.now() } }); await settle()
       check(document.body.innerText.includes('No directional signal'), 'Missing data fabricated a signal')
+      check(!curve.querySelector('svg') && !document.querySelector('.macro-sparkline'), 'Missing indicators must leave both charts empty')
       check(!compassGrid.querySelector('[data-active="true"]'), 'Missing releases must leave the matrix unmarked')
       await window.refreshMacro(true); await settle(); check(lastRequest.force, 'Force refresh not propagated')
       failed = true; await window.refreshMacro(true).catch(() => {}); await settle(); check(!document.querySelector('.macro-driver').disabled, 'Indicator outage erased historical data'); check(document.querySelectorAll('.macro-release-list li').length === 5, 'Indicator outage erased release schedule'); check(String(client.getQueryState(['economic']).error).includes('HTTP 503'), 'Settings lost refresh failure')
@@ -99,11 +118,13 @@ try {
           check(releases.right <= drivers.left && releases.top > compass.bottom, 'Releases must sit below the cycle compass')
           check(page.scrollHeight <= page.clientHeight + 1, 'Page vertical overflow')
           for (const section of page.querySelectorAll('section')) check(section.scrollHeight <= section.clientHeight + 1, 'Section clipped: ' + section.className)
+          const rateList = page.querySelector('.macro-rate-list')
+          check(rateList.scrollHeight <= rateList.clientHeight + 1, 'Rate readings clipped')
         } else {
           check(compass.bottom < drivers.top && drivers.bottom < releases.top, 'Narrow layout must put drivers between the compass and releases')
         }
       }
-      return 'PASS: Macro hidden startup, shared cache, release watch, driver drilldowns, missing coverage, refresh and revisit'
+      return 'PASS: Macro startup, shared cache, release countdowns, trends, Treasury curve, drilldowns, missing coverage, refresh and revisit'
     }
 ` }, bundle: true, jsx: 'automatic', write: false, format: 'iife', loader: { '.css': 'empty' }, alias: { '@': join(root, 'src'), '@shared': join(root, 'electron/shared') }, define: { 'process.env.NODE_ENV': '"production"' } })
   await writeFile(join(scratch, 'renderer.js'), bundle.outputFiles.find(file => file.path.endsWith('.js'))?.text ?? bundle.outputFiles[0].text)

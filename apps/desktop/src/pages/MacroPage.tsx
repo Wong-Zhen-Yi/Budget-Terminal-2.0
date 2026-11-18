@@ -7,6 +7,7 @@ import { macroCalendarRequest, useCalendarMonth } from '@/api/calendarQueries'
 import { useEconomic } from '@/api/economicQueries'
 import { useSnapshotClock } from '@/api/snapshotHealth'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
+import { MACRO_TREND_OBSERVATIONS, MacroSparkline, MacroTreasuryCurve } from '@/components/macro/MacroVisuals'
 import { useEconomicPage, type EconomicTab } from '@/stores/economic'
 import './MacroPage.css'
 
@@ -88,7 +89,7 @@ function ReleaseWatch({ events, today, emptyMessage }: {
   return <section className="macro-release-watch" aria-labelledby="macro-release-title">
     <header>
       <h2 id="macro-release-title">Upcoming US releases</h2>
-      <p>Next scheduled date per release · {MACRO_RELEASE_WINDOW_DAYS}-day outlook · Eastern Time</p>
+      <p>{MACRO_RELEASE_WINDOW_DAYS}-day countdown · Eastern Time</p>
     </header>
     {upcoming.length ? <ol className="macro-release-list">
       {upcoming.map(event => {
@@ -96,7 +97,12 @@ function ReleaseWatch({ events, today, emptyMessage }: {
         return <li key={event.name}>
           <time dateTime={event.date}>{releaseDate.format(new Date(event.date))}</time>
           <strong>{event.name}</strong>
-          <span>{days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : `In ${days} days`}</span>
+          <div className="macro-release-countdown">
+            <span>{days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : `In ${days} days`}</span>
+            <span className="macro-release-track" aria-hidden="true">
+              <i style={{ left: `${days / MACRO_RELEASE_WINDOW_DAYS * 100}%` }} />
+            </span>
+          </div>
         </li>
       })}
     </ol> : <p className="macro-release-empty">{emptyMessage}</p>}
@@ -125,7 +131,7 @@ export function MacroPage({ onStatusChange, onNavigate }: {
     ], '')
   }, [onStatusChange, query.data, query.error, query.isEnabled, query.isFetching, schedule.data, schedule.error, schedule.isEnabled, schedule.isFetching])
 
-  function driver(id: string) {
+  function driver(id: string, showTrend = false) {
     const row = find(id)
     const label = row?.label ?? SERIES_BY_ID.get(id)?.label ?? id
     const openHistory = () => {
@@ -135,10 +141,11 @@ export function MacroPage({ onStatusChange, onNavigate }: {
       economic.setActiveTab(driverTabs[row.group])
       onNavigate('economic')
     }
-    return <button key={id} className="macro-driver" disabled={!row?.history.length}
+    return <button key={id} className={showTrend ? 'macro-driver macro-driver-with-trend' : 'macro-driver'} disabled={!row?.history.length}
       title={row?.history.length ? 'View history in Economic' : undefined} onClick={openHistory}>
-      <span>{label}</span><strong>{value(row)}</strong>
+      <span className="macro-driver-label">{label}</span><strong>{value(row)}</strong>
       <small>{row?.latestDate ?? 'No observation'} · {row?.frequency ?? '—'}</small>
+      {showTrend && <MacroSparkline row={row} />}
     </button>
   }
 
@@ -150,13 +157,19 @@ export function MacroPage({ onStatusChange, onNavigate }: {
     <div className="macro-workspace">
       <CycleCompass growth={find('GDPC1')} inflation={find('CPIAUCSL')} />
       <section className="macro-drivers" aria-label="Macro drivers">
+        <p className="macro-trend-caption">Last {MACRO_TREND_OBSERVATIONS} observations per series · Independent scales</p>
         {MACRO_DRIVERS.map(group => <div className="macro-driver-group" key={group.title}>
           <h2>{group.title}</h2>
-          {group.ids.map(driver)}
+          {group.ids.map(id => driver(id, true))}
         </div>)}
       </section>
       <ReleaseWatch events={releaseEvents} today={today} emptyMessage={releaseEmptyMessage} />
-      <section className="macro-rates"><h2>Policy & transmission</h2><p>Rates, real yields and inflation compensation</p><div className="macro-rate-list">{MACRO_RATES.map(driver)}</div><small>Breakevens are nominal less TIPS yields; they also reflect risk and liquidity premia.</small></section>
+      <section className="macro-rates">
+        <div><h2>Policy & transmission</h2><p>Rates, real yields and inflation compensation</p></div>
+        <MacroTreasuryCurve curve={query.data?.data.yieldCurve} />
+        <div className="macro-rate-list">{MACRO_RATES.map(id => driver(id))}</div>
+        <small>Breakevens are nominal less TIPS yields. They also reflect risk and liquidity premia.</small>
+      </section>
     </div>
   </div>
 }

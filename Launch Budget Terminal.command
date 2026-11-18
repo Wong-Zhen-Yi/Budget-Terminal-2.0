@@ -1,4 +1,5 @@
 #!/bin/sh
+# The shared build includes Macro indicator trends, the Treasury yield curve and release countdowns.
 # Adaptive cache budgets and idle Quant worker cleanup rebuild through the shared launcher.
 # Agents retains Desktop and Telegram history for up to 30 days within storage limits.
 # Agents History rebuilds with Desktop and Telegram filters and a dedicated transcript reader.

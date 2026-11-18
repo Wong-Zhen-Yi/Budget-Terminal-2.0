@@ -1,4 +1,5 @@
 @echo off
+rem The shared build includes Macro indicator trends, the Treasury yield curve and release countdowns.
 rem Adaptive cache budgets and idle Quant worker cleanup rebuild through the shared launcher.
 rem Agents retains Desktop and Telegram history for up to 30 days within storage limits.
 rem Agents History rebuilds with Desktop and Telegram filters and a dedicated transcript reader.
