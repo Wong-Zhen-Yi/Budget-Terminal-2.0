@@ -100,7 +100,7 @@ const tasks: Task[] = [
   { name: 'etfHoldings', pages: ['etf'], run: () => provider.etfHoldings({ ticker: 'SPY' }) },
   { name: 'etfArbitrage', pages: ['etf'], run: () => provider.etfArbitrage({ ticker: 'SPY' }) },
   { name: 'etfAum', pages: ['etf'], run: () => provider.etfAum({}) },
-  ...(['anthropic', 'bmnr', 'sofi', 'mu', 'googl', 'amzn', 'avgo', 'vst', 'hood', 'hims', 'gold', 'oil', 'money', 'economic'] as const)
+  ...(['anthropic', 'bmnr', 'sofi', 'mu', 'googl', 'nvda', 'amzn', 'avgo', 'vst', 'hood', 'hims', 'gold', 'oil', 'money', 'economic'] as const)
     .map(name => ({ name, pages: name === 'economic' ? ['economic', 'bonds'] : [name], run: () => provider[name]({}) })),
   { name: 'discovery', pages: ['stock-discovery'], run: () => provider.discovery({ symbol: 'AAPL' }) },
   { name: 'signals', pages: ['signals'], run: () => provider.signals({}) },

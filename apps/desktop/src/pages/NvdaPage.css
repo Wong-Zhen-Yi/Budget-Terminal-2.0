@@ -1,0 +1,128 @@
+.nvda-page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px 16px;
+  overflow: auto;
+  font-variant-numeric: tabular-nums;
+}
+.nvda-heading, .nvda-section-heading, .nvda-market-chart > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.nvda-heading h1 { margin: 0; font-size: 28px; font-weight: 650; line-height: 1.1; }
+.nvda-heading p { color: var(--color-text-muted); font-size: 10px; letter-spacing: .14em; margin-bottom: 4px; }
+.nvda-heading p span { color: var(--color-accent-hover); }
+.nvda-controls { display: flex; flex-wrap: wrap; gap: 5px; }
+.nvda-controls button, .nvda-source {
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 5px 9px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.nvda-controls button:hover, .nvda-source:hover { color: var(--color-text); background: var(--color-surface-hover); }
+.nvda-controls button[aria-pressed=true] { color: var(--color-text); border-color: var(--color-accent-dim); background: var(--color-accent-dim); }
+.nvda-page button:focus-visible { outline: 2px solid var(--color-accent-hover); outline-offset: 2px; }
+.nvda-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(250px, 26%, 345px);
+  gap: 12px;
+  flex: 2;
+  min-height: 370px;
+}
+.nvda-demand, .nvda-economics, .nvda-market {
+  min-width: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+.nvda-demand, .nvda-economics { display: flex; flex-direction: column; padding: 12px 16px; }
+.nvda-page h2 { font-size: 14px; font-weight: 600; }
+.nvda-section-heading p, .nvda-market p { margin-top: 2px; font-size: 11px; color: var(--color-text-muted); }
+.nvda-headline { display: grid; justify-items: end; flex-shrink: 0; }
+.nvda-headline strong { font-size: 27px; line-height: 1.1; font-weight: 600; }
+.nvda-headline span { font-size: 11px; }
+.nvda-revenue-chart {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  flex: 1;
+  min-height: 155px;
+  margin: 23px 0 8px;
+  padding-left: 42px;
+}
+.nvda-axis { position: absolute; inset: 0 0 31px; pointer-events: none; }
+.nvda-axis div { position: absolute; width: 100%; display: flex; align-items: center; gap: 8px; transform: translateY(-50%); }
+.nvda-axis span { flex: 0 0 34px; text-align: right; font-size: 10px; color: var(--color-text-muted); }
+.nvda-axis i { flex: 1; border-top: 1px solid var(--color-border); }
+.nvda-quarter { position: relative; display: flex; min-width: 0; flex-direction: column; align-items: stretch; border-radius: 4px; }
+.nvda-quarter:hover, .nvda-quarter[aria-pressed=true] { background: color-mix(in srgb, var(--color-accent-dim) 20%, transparent); }
+.nvda-bar-area { display: flex; flex: 1; align-items: end; justify-content: center; }
+.nvda-stack {
+  position: relative;
+  display: flex;
+  flex-direction: column-reverse;
+  width: min(51%, 130px);
+}
+.nvda-stack i { flex-basis: 0; }
+.nvda-stack i:last-child { border-radius: 3px 3px 0 0; }
+.nvda-bar-total { position: absolute; bottom: calc(100% + 3px); width: 100%; font-size: 11px; white-space: nowrap; }
+.nvda-platform-0 { background: var(--color-accent); }
+.nvda-platform-1 { background: var(--color-text-muted); }
+.nvda-platform-2 { background: var(--color-warn); }
+.nvda-quarter-label { display: grid; place-items: center; height: 31px; font-size: 11px; color: var(--color-text-muted); }
+.nvda-quarter[aria-pressed=true] .nvda-quarter-label { color: var(--color-text); font-weight: 600; }
+.nvda-mix { display: grid; grid-template-columns: 1fr 1.5fr 1fr; border-top: 1px solid var(--color-border); }
+.nvda-mix-cell { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px 0; min-width: 0; }
+.nvda-mix-cell:first-child { padding-left: 0; }
+.nvda-mix-cell + .nvda-mix-cell { border-left: 1px solid var(--color-border); }
+.nvda-mix-cell > span { display: flex; align-items: center; gap: 6px; color: var(--color-text-muted); font-size: 11px; }
+.nvda-mix-cell i { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 2px; }
+.nvda-mix-cell strong { font-size: 19px; font-weight: 550; line-height: 1.15; }
+.nvda-mix-cell small { font-size: 10px; }
+.nvda-mix-cell small:not(.text-up, .text-down) { color: var(--color-text-muted); }
+.nvda-economics { gap: 10px; background: var(--color-surface-raised); }
+.nvda-concentration > span, .nvda-outlook > span { display: block; color: var(--color-text-muted); font-size: 11px; }
+.nvda-concentration > strong { display: block; font-size: 28px; font-weight: 600; line-height: 1.25; }
+.nvda-concentration-track { height: 4px; background: var(--color-border-strong); margin-top: 4px; }
+.nvda-concentration-track i { display: block; height: 100%; background: var(--color-accent); }
+.nvda-operating { display: grid; gap: 4px; font-size: 12px; }
+.nvda-operating > div { display: flex; justify-content: space-between; gap: 10px; }
+.nvda-operating dt { color: var(--color-text-muted); }
+.nvda-operating dd { margin: 0; }
+.nvda-outlook { margin-top: auto; padding: 6px 9px; background: var(--color-surface); border-left: 2px solid var(--color-accent); }
+.nvda-outlook strong { font-size: 21px; font-weight: 600; }
+.nvda-outlook small { color: var(--color-text-muted); }
+.nvda-source { align-self: start; }
+.nvda-market { min-height: 162px; flex: 1; display: grid; grid-template-columns: minmax(195px, 24%) minmax(0, 1fr); }
+.nvda-market-detail { padding: 10px 16px; border-right: 1px solid var(--color-border); }
+.nvda-mark { margin: 3px 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; }
+.nvda-mark strong { font-size: 25px; font-weight: 600; }
+.nvda-mark span { font-size: 11px; }
+.nvda-market-detail .nvda-controls { margin-top: 6px; }
+.nvda-market-chart { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.nvda-market-chart > header { min-height: 31px; padding: 4px 8px 2px 12px; color: var(--color-text-muted); font-size: 10px; }
+.nvda-market-chart > header button { padding: 2px 7px; }
+.nvda-market-chart > :last-child { flex: 1; min-height: 0; }
+@media (max-width: 760px) {
+  .nvda-page { padding: 10px; }
+  .nvda-workspace { grid-template-columns: minmax(0, 1fr); flex: none; }
+  .nvda-demand { min-height: 310px; }
+  .nvda-market { min-height: 180px; }
+}
+@media (max-width: 500px) {
+  .nvda-heading { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .nvda-market { grid-template-columns: minmax(0, 1fr); flex: none; }
+  .nvda-market-detail { border-right: 0; border-bottom: 1px solid var(--color-border); }
+  .nvda-market-chart { height: 170px; }
+  .nvda-demand, .nvda-economics { padding: 10px; }
+  .nvda-mix-cell > span { align-items: start; }
+  .nvda-mix-cell i { margin-top: 4px; }
+}

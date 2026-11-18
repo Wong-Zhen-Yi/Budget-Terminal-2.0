@@ -462,7 +462,7 @@ async function runProviderChecks(): Promise<void> {
     'BRK-B': { symbol: 'BRK-B', timestamp: [Date.parse(day(2)) / 1000, Date.parse(day(1)) / 1000], close: [200, 180] },
   }) })
   try {
-    const { fetchSparkCloses } = await import('../electron/services/yahoo/spark.js')
+    const { fetchSparkCloses, HEATMAP_SPARK_BATCH_GAP_MS } = await import('../electron/services/yahoo/spark.js')
     const batches: Array<Record<string, SparkSeries>> = []
     await fetchSparkCloses(['AAA', 'BRK-B'], '1y', true, rows => batches.push(rows))
     assert.equal(batches.length, 1, 'Spark publishes each completed batch')
@@ -482,6 +482,15 @@ async function runProviderChecks(): Promise<void> {
     assert.equal(allBatchesFinished, false, 'Spark publishes available quotes before a slower batch completes')
     releaseBatch()
     await pendingBatches
+    const pacedStarts: number[] = []
+    Object.assign(yahoo, { _fetch: async () => { pacedStarts.push(Date.now()); return {} } })
+    await Promise.all([
+      fetchSparkCloses(['REPLAYA'], '1y', true, undefined, { paceBatches: true }),
+      fetchSparkCloses(['REPLAYB'], '1y', true, undefined, { paceBatches: true }),
+    ])
+    assert.equal(pacedStarts.length, 2)
+    assert(pacedStarts[1] - pacedStarts[0] >= HEATMAP_SPARK_BATCH_GAP_MS - 10,
+      'Concurrent Heatmaps must share the batch pacing gap')
     Object.assign(yahoo, { _fetch: async () => ({
       AAA: { symbol: 'AAA', timestamp: [Date.parse(day(2)) / 1000, Date.parse(day(1)) / 1000], close: [100, 110] },
       'BRK-B': { symbol: 'BRK-B', timestamp: [Date.parse(day(2)) / 1000, Date.parse(day(1)) / 1000], close: [200, 180] },
@@ -570,7 +579,7 @@ async function runProviderChecks(): Promise<void> {
   globalThis.fetch = async () => { throw new Error('Issuer offline') }
   try { await assert.rejects(() => getIssuerEtfHoldings('HEATMAPTEST', true), /Issuer not yet supported/) }
   finally { globalThis.fetch = originalFetch }
-  console.log('Yahoo heatmap checks passed: dates, share classes, partial coverage and no DefeatBeta requests during outages')
+  console.log('Yahoo heatmap checks passed: dates, share classes, partial coverage, replay pacing and no DefeatBeta requests during outages')
 }
 
 const scratch = await mkdtemp(join(tmpdir(), 'bt-heatmap-'))

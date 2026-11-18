@@ -70,10 +70,12 @@ export function queryFreshness(queryKey: QueryKey): number {
   if (root === 'tradingVolumes') return FRESHNESS.tradingVolumes
   if (root === 'crypto') return FRESHNESS.crypto
   if (root === 'bitcoin') return FRESHNESS.bitcoin
+  if (root === 'eth') return FRESHNESS.eth
   if (root === 'bmnr') return FRESHNESS.bmnr
   if (root === 'sofi') return FRESHNESS.sofi
   if (root === 'mu') return FRESHNESS.mu
   if (root === 'googl') return FRESHNESS.googl
+  if (root === 'nvda') return FRESHNESS.nvda
   if (root === 'anthropic') return FRESHNESS.anthropic
   if (root === 'amzn') return FRESHNESS.amzn
   if (root === 'avgo') return FRESHNESS.avgo

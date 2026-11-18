@@ -177,7 +177,7 @@ export function AppDashboard({ settings }: { settings: AppSettings }) {
   const runStates = ['completed', 'running', 'partial', 'failed', 'stopped'] as const
   const queryGroups = [
     { label: 'Stocks', roots: ['stocks', 'fundamentalsPage'] }, { label: 'ETFs', roots: ['etfAum', 'etfHoldings'] },
-    { label: 'Crypto', roots: ['crypto', 'bitcoin'] }, { label: 'FX', roots: ['forexQuotes', 'forexHistory'] },
+    { label: 'Crypto', roots: ['crypto', 'bitcoin', 'eth'] }, { label: 'FX', roots: ['forexQuotes', 'forexHistory'] },
     { label: 'Charts', roots: ['chart', 'chartsHistory'] },
   ]
   const saved: Datum[] = []

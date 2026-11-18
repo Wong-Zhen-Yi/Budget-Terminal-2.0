@@ -330,10 +330,12 @@
               "forex",
               "crypto",
               "bitcoin",
+              "eth",
               "bmnr",
               "sofi",
               "mu",
               "googl",
+              "nvda",
               "anthropic",
               "amzn",
               "avgo",
@@ -2513,6 +2515,23 @@
       }
     }
   },
+  "eth": {
+    "$ref": "#/definitions/Input_eth",
+    "definitions": {
+      "Input_eth": {
+        "$ref": "#/definitions/EthRequest"
+      },
+      "EthRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
   "bmnr": {
     "$ref": "#/definitions/Input_bmnr",
     "definitions": {
@@ -2571,6 +2590,23 @@
         "$ref": "#/definitions/GooglRequest"
       },
       "GooglRequest": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "nvda": {
+    "$ref": "#/definitions/Input_nvda",
+    "definitions": {
+      "Input_nvda": {
+        "$ref": "#/definitions/NvdaRequest"
+      },
+      "NvdaRequest": {
         "type": "object",
         "properties": {
           "force": {

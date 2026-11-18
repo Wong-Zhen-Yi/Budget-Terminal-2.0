@@ -31,6 +31,7 @@ import { CardsPage } from '@/pages/CardsPage'
 import { CalendarPage } from '@/pages/CalendarPage'
 import { ChartsPage } from '@/pages/ChartsPage'
 import { BitcoinPage } from '@/pages/BitcoinPage'
+import { EthPage } from '@/pages/EthPage'
 import { BmnrPage } from '@/pages/BmnrPage'
 import { SofiPage } from '@/pages/SofiPage'
 import { HoodPage } from '@/pages/HoodPage'
@@ -38,6 +39,7 @@ import { PltrPage } from '@/pages/PltrPage'
 import { HimsPage } from '@/pages/HimsPage'
 import { MuPage } from '@/pages/MuPage'
 import { GooglPage } from '@/pages/GooglPage'
+import { NvdaPage } from '@/pages/NvdaPage'
 import { AnthropicPage } from '@/pages/AnthropicPage'
 import { AmznPage } from '@/pages/AmznPage'
 import { AvgoPage } from '@/pages/AvgoPage'
@@ -568,6 +570,8 @@ function renderPage({
       <CryptoPage onStatusChange={onStatusChange} />
     ) : tabId === 'bitcoin' ? (
       <BitcoinPage onStatusChange={onStatusChange} />
+    ) : tabId === 'eth' ? (
+      <EthPage onStatusChange={onStatusChange} />
     ) : tabId === 'bmnr' ? (
       <BmnrPage onStatusChange={onStatusChange} />
     ) : tabId === 'sofi' ? (
@@ -584,6 +588,8 @@ function renderPage({
       <MuPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'googl' ? (
       <GooglPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
+    ) : tabId === 'nvda' ? (
+      <NvdaPage onStatusChange={onStatusChange} onNavigate={onNavigate} />
     ) : tabId === 'anthropic' ? (
       <AnthropicPage onStatusChange={onStatusChange} />
     ) : tabId === 'amzn' ? (

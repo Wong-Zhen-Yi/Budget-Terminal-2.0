@@ -1,9 +1,10 @@
-import { fetchRetainedQuery } from './snapshotResult'
+import { fetchRetainedQuery, snapshotNeedsHeatmapReplay } from './snapshotResult'
 import { useCallback, useEffect, useState } from 'react'
 import { useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { useQuery } from '@/api/progressiveQuery'
 
 import type { Envelope, HeatmapEtfKey, HeatmapPayload } from '@shared/contract'
+import { HEATMAP_REPLAY_RETRY_MS } from '@shared/heatmap'
 import { api, queryKeys } from './client'
 import { queryFreshness } from './queryPersistence'
 import { forcing } from './queries'
@@ -12,19 +13,22 @@ import { forcing } from './queries'
  * One query per index, so the three buttons hold three independent payloads the way
  * `_p17_results` does and switching back to one already loaded is instant.
  *
- * `refetchInterval: false` on purpose: `init_page17` creates no timer, and one load is an
- * issuer file plus batched Yahoo daily-history reads. Refresh and F5 are the only ways it
- * refetches — the same rule as Trading Volumes, News and Crypto.
- *
  * Startup warms the default SPY map. Other index buttons load their own query on first
- * selection and reuse it on subsequent visits.
+ * selection. Replay recovery uses the background lane and stops once history is playable.
  */
 export function useHeatmap(etf: HeatmapEtfKey): UseQueryResult<Envelope<HeatmapPayload>> {
   return useQuery({
     queryKey: queryKeys.heatmap(etf),
-    queryFn: () => api.heatmap({ etf, force: forcing() }),
+    queryFn: () => {
+      const force = forcing()
+      return api.heatmap({ etf, force, background: !force })
+    },
     staleTime: queryFreshness(queryKeys.heatmap(etf)),
-    refetchInterval: false,
+    refetchOnMount: query => snapshotNeedsHeatmapReplay(query.queryKey, query.state.data)
+      && !query.state.errorUpdatedAt ? 'always' : false,
+    refetchInterval: query => query.state.fetchStatus === 'idle'
+      && (!query.state.data || snapshotNeedsHeatmapReplay(query.queryKey, query.state.data))
+      ? HEATMAP_REPLAY_RETRY_MS : false,
     placeholderData: (previous) => previous,
   })
 }

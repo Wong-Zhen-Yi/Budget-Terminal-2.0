@@ -18,7 +18,9 @@ try {
     import { createRoot } from 'react-dom/client'
     import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
     import { HeatmapPage } from './src/pages/HeatmapPage'
-    import { buildIntervalSummaries } from './electron/shared/heatmap'
+    import { buildIntervalSummaries, HEATMAP_REPLAY_RETRY_MS } from './electron/shared/heatmap'
+    import { queryKeys } from './src/api/client'
+    import { warmStartupQuery } from './src/api/warmQueue'
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnMount: false, refetchOnWindowFocus: false } } })
     const check = (value, message) => { if (!value) throw Error(message) }
     const settle = (ms = 100) => new Promise(resolve => setTimeout(resolve, ms))
@@ -29,13 +31,56 @@ try {
       holdings, holdingsLoaded: 1, quoteCoverage: 1, weightedDayMove: 9.09, strongest: null, weakest: null,
       intervalSummaries: buildIntervalSummaries(holdings), fetchedAt: Date.now(), priceAsOfDate: '2026-01-07' }
     let calls = 0
-    window.api.heatmap = async request => { calls++; return { data: { ...data, etf: request.etf }, errors: [], meta: { source: 'fixture', fetchedAt: Date.now(), freshness: 'fresh' } } }
+    let finishFirstLoad
+    const firstLoad = new Promise(resolve => { finishFirstLoad = resolve })
+    let finishRetry
+    const retryLoad = new Promise(resolve => { finishRetry = resolve })
+    const envelope = (data, freshness = 'fresh') => ({ data, errors: [], meta: { source: 'fixture', fetchedAt: Date.now(), freshness } })
+    const legacy = envelope({ ...data, holdings: holdings.map(({ history, ...holding }) => holding) })
+    const key = queryKeys.heatmap('SPY')
+    client.setQueryData(key, legacy)
+    window.api.heatmapProgress = async () => data
+    window.api.heatmap = async request => {
+      check(request.background && !request.force, 'Automatic history loads must use the background lane and reuse caches')
+      calls++
+      if (calls === 1) {
+        await firstLoad
+        return envelope(legacy.data, 'failed')
+      }
+      if (calls === 2) {
+        await retryLoad
+        return envelope(data, 'partial')
+      }
+      return envelope({ ...data, etf: request.etf })
+    }
+    const nativeSetInterval = window.setInterval
+    window.setInterval = (callback, ms, ...args) =>
+      nativeSetInterval(callback, ms === HEATMAP_REPLAY_RETRY_MS ? 650 : ms, ...args)
     const host = createRoot(document.getElementById('root'))
     const render = () => host.render(<QueryClientProvider client={client}><HeatmapPage onStatusChange={() => {}} /></QueryClientProvider>)
     render()
     window.runProbe = async () => {
       await settle(250)
-      check(!button('Play history').disabled, 'History should be playable')
+      check(calls === 1 && button('Play history').disabled, 'Saved history must start building without a reload')
+      check(document.body.innerText.includes('Replay building') && document.body.innerText.includes('Price: $60.00'),
+        'Replay progress must leave the current map visible')
+      finishFirstLoad()
+      await settle()
+      check(document.body.innerText.includes('Retrying automatically') && calls === 1,
+        'Replay failure must keep the current map and wait for the retry interval')
+      await settle(650)
+      check(calls === 2 && document.body.innerText.includes('Replay building'), 'History must retry automatically')
+      finishRetry()
+      await settle(750)
+      window.setInterval = nativeSetInterval
+      check(calls === 2 && !button('Play history').disabled, 'Usable replay from a partial response must stop retrying and be playable')
+
+      const startup = new QueryClient()
+      startup.setQueryData(key, legacy)
+      let startupCalls = 0
+      await warmStartupQuery(startup, { queryKey: key, staleTime: 1_800_000,
+        queryFn: async () => { startupCalls++; return envelope(data) } })
+      check(startupCalls === 1, 'Startup must rebuild even a fresh saved heatmap that lacks replay history')
       button('Play history').click(); await settle()
       const slider = () => document.querySelector('input[aria-label="Replay date"]')
       check(slider().value === '0' && document.body.innerText.includes('2026-01-05'), 'Replay must start at earliest return')
@@ -81,7 +126,7 @@ try {
       check(timers.size === 0, 'Leaving replay must clear its timer')
       window.setInterval = setInterval
       window.clearInterval = clearInterval
-      check(calls === 1, 'Replay and timeframe changes must not fetch history again')
+      check(calls === 2, 'Replay and timeframe changes must not fetch history again')
       button('Play history').click(); await settle(); button('Dow 30').click(); await settle(600)
       check(!slider(), 'Index change must stop replay')
       button('Play history').click(); await settle(); button('Pause').click(); await settle()
@@ -89,7 +134,7 @@ try {
         check(document.documentElement.scrollWidth <= innerWidth, 'Horizontal overflow')
         if (fit) check(document.documentElement.scrollHeight <= innerHeight, 'Vertical overflow')
       }
-      return 'PASS: historical prices/returns, timeframe-based playback speed, pause, restart, scrub, end, latest, index reset and no replay network calls'
+      return 'PASS: automatic startup and replay recovery, historical prices/returns, playback speed, pause, restart, scrub, end, latest, index reset and no playback network calls'
     }
   ` }, bundle: true, jsx: 'automatic', write: false, format: 'iife', loader: { '.css': 'empty' },
     alias: { '@': join(root, 'src'), '@shared': join(root, 'electron/shared') }, define: { 'process.env.NODE_ENV': '"production"' } })

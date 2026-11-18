@@ -450,6 +450,8 @@ export const HEATMAP_REPLAY_STEP_MS: Readonly<Record<HeatmapInterval, number>> =
   '1y': 200,
 }
 
+export const HEATMAP_REPLAY_RETRY_MS = 2 * 60_000
+
 /** Replay skips weekends and dates with no usable daily return in the basket. */
 export function heatmapReplayDates(payload: HeatmapPayload | null | undefined): string[] {
   const dates = new Set<string>()

@@ -68,15 +68,13 @@ export function HeatmapPage({
   }, [replay?.playing, replayStepMs])
 
   const query = useHeatmap(etf)
-  const refreshing = false
-
-  const loading = query.isFetching || refreshing
+  const loading = query.isFetching
   const preview = useHeatmapProgress(etf, loading)
   const completed = query.data?.data.etf === etf ? query.data.data : undefined
   // Keep the previous map during refresh until new prices begin arriving.
   const latestPayload = preview && (preview.quoteCoverage > 0 || !completed?.holdings.length) ? preview : completed
 
-  const replayDates = useMemo(() => heatmapReplayDates(latestPayload), [latestPayload])
+  const replayDates = useMemo(() => heatmapReplayDates(completed), [completed])
   const payload = useMemo(() => replay
     ? heatmapAtDate(replay.payload, replay.dates[replay.index])
     : latestPayload, [replay, latestPayload])
@@ -206,13 +204,13 @@ export function HeatmapPage({
           <Button onClick={() => setReplay(null)}>Back to latest</Button>
         </> : <>
           <Button disabled={replayDates.length < 2} onClick={() => {
-            if (!latestPayload || replayDates.length < 2) return
+            if (!completed || replayDates.length < 2) return
             if (interval === 'live') setIntervalKey('1d')
-            setReplay({ payload: latestPayload, dates: replayDates, index: 0, playing: true })
+            setReplay({ payload: completed, dates: replayDates, index: 0, playing: true })
           }}>Play history</Button>
-          <span className="text-text-muted">{replayDates.length >= 2
+          <span role="status" className="text-text-muted">{replayDates.length >= 2
             ? `${replayDates[0]} to ${replayDates.at(-1)} · current holdings and weights`
-            : loading ? 'Loading daily history…' : 'History unavailable. Reload (F5) to fetch daily closes.'}</span>
+            : loading || query.isPending ? 'Replay building…' : 'Replay unavailable. Retrying automatically…'}</span>
         </>}
       </div>
 
@@ -234,8 +232,8 @@ export function HeatmapPage({
           loading
             ? 'Loading index holdings...'
             : query.error || query.data?.meta.freshness === 'failed'
-              ? 'Heatmap unavailable. Press Reload (F5) to retry.'
-              : 'No index holdings available. Press Reload (F5) to retry.'
+              ? 'Heatmap unavailable.'
+              : 'No index holdings available.'
         }
       />
 

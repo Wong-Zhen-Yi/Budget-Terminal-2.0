@@ -50,6 +50,7 @@ interface StocksChartProps {
   /** Shares traded, on an independent scale beneath the candles. */
   volumeEnabled?: boolean
   autoFollow: boolean
+  latestCandleAnchor?: number
   rangePreset: StocksRangePreset
   logicalRange: LogicalRange | null
   onLogicalRangeChange: (range: LogicalRange | null) => void
@@ -62,6 +63,7 @@ export function StocksChart({
   mfiEnabled,
   volumeEnabled = false,
   autoFollow,
+  latestCandleAnchor = STOCKS_AUTO_ANCHOR,
   rangePreset,
   logicalRange,
   onLogicalRangeChange,
@@ -99,8 +101,8 @@ export function StocksChart({
     const latest = Math.max(0, count - 1)
     const safeSpan = Math.max(10, Math.min(span, count))
     return {
-      from: (latest - safeSpan * STOCKS_AUTO_ANCHOR) as Logical,
-      to: (latest + safeSpan * (1 - STOCKS_AUTO_ANCHOR)) as Logical,
+      from: (latest - safeSpan * latestCandleAnchor) as Logical,
+      to: (latest + safeSpan * (1 - latestCandleAnchor)) as Logical,
     }
   }
 

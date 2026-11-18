@@ -15,7 +15,7 @@ export const useQuery: typeof useBaseQuery = ((options: UseQueryOptions, client?
   const queryFn = options.queryFn
   const result = useBaseQuery({ ...options,
     ...(typeof queryFn === 'function' ? { queryFn: async context => retainUsableSnapshot(
-      queryClient.getQueryData(options.queryKey), await trackPageQuery(options.queryKey, () => queryFn(context)),
+      queryClient.getQueryData(options.queryKey), await trackPageQuery(options.queryKey, () => queryFn(context)), options.queryKey,
     ) } : {}),
   }, client)
   if (!result.isFetching || !preview) return result

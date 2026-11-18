@@ -2,6 +2,21 @@
 
 [Back to the README](../README.md)
 
+Ethereum is available in Focus and preloads at startup. The read-only
+`budget_terminal_eth` tool uses the existing market-research permission and accepts
+`{ "request": {} }` or `{ "request": { "force": true } }`. It returns growthepie's
+recent ecosystem TPS samples (mainnet plus tracked Layer 2s) and a separately timed
+mainnet snapshot with TPS, block interval in seconds and median transaction fee in USD.
+Up to 90 UTC dates show mainnet and Layer 2 trailing seven-day averages for TPS,
+gas throughput (Mgas/s), user fees (USD/day), and tracked stablecoin supply (USD).
+Keep each live reading's `asOf` and use the historical date for the corresponding
+rolling average. Stablecoin values are reported by layer. Missing fields or dates
+indicate unavailable observations.
+The shared cache refreshes recent readings about every 30 seconds and historical
+data hourly. growthepie's public endpoints require no payment or API key.
+Data source and terms are described by [growthepie](https://www.growthepie.com/answers/ethereum-ecosystem-tps).
+Screenshot page `eth`. Rebuild with `npm run build:mcp` and reconnect local clients.
+
 `budget_terminal_hood` now includes `presentation`: the reviewed November 11,
 2026 Robinhood investor deck and the October 27 Q3 2026 earnings deck. History
 contains five discrete quarters, Q3 2025 through Q3 2026, with quarterly revenue
@@ -418,7 +433,9 @@ Finnhub quotes share the desktop streaming-first cache: REST reference maintenan
 
 Run `npm run probe:googl -- --live`, `npm run probe:googl-ui`, `npm run build:mcp` and `npm run probe:mcp` after changes. All double-click launchers use the shared build path. Reconnect MCP clients after rebuilding to discover the new tool and screenshot page ID.
 
-The equity `heatmap` response includes optional per-holding `history` arrays (`dates` and `closes`, ascending daily Yahoo closes) for up to one year of historical replay. Older saved snapshots may omit history. Replay uses current issuer holdings, sectors and weights, not historical index membership. Desktop playback advances one trading day per frame at the speed of the selected Heatmap timeframe. Playback controls are desktop-only.
+`budget_terminal_nvda` returns the NVDA Focus page's stock research and the latest NVIDIA CFO commentary. The read requires market-research permission and accepts an optional `force` in `request`. The first three `quarters` entries are the reported, previous and year-ago fiscal quarters. Each quarter's platform amounts follow `platformLabels` in order. Company-reported growth rates refer to the latest quarter. Monetary amounts are in USD at the precision published by NVIDIA. Guidance is a forward-looking midpoint and percentage range. Quote and chart sources can differ. Use lane timestamps and envelope errors to check for stale or incomplete data. The screenshot page ID is `nvda`. Reconnect MCP clients after rebuilding to load the updated catalog.
+
+The equity `heatmap` response includes optional per-holding `history` arrays (`dates` and `closes`, ascending daily Yahoo closes) for up to one year of historical replay. Uncached Yahoo history batches run one at a time, with at least one second between batches. The desktop automatically builds missing replay history and retries about every two minutes while the Heatmap is open and replay is unavailable. Replay uses current issuer holdings, sectors and weights. Desktop playback advances one trading day per frame at the speed of the selected Heatmap timeframe. Playback controls are desktop-only.
 
 
 ### Macro Focus

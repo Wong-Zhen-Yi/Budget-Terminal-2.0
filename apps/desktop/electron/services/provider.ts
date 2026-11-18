@@ -12,10 +12,12 @@ import { getSofi } from './sofi.js'
 import type { SofiPayload, SofiRequest } from '../shared/sofi.js'
 import { sofiBookRatios } from '../shared/sofi.js'
 import { getGoogl } from './googl.js'
+import { getNvda } from './nvda.js'
 import { getAnthropic } from './anthropic.js'
 import type { AnthropicPayload, AnthropicRequest } from '../shared/anthropic.js'
 import { getAmzn } from './amzn.js'
 import type { GooglPayload, GooglRequest } from '../shared/googl.js'
+import type { NvdaPayload, NvdaRequest } from '../shared/nvda.js'
 import type { AmznPayload, AmznRequest } from '../shared/amzn.js'
 import { getMu } from './mu.js'
 import { getVst } from './vst.js'
@@ -398,6 +400,7 @@ export interface MarketDataProvider {
   sofi(request: SofiRequest): Promise<Envelope<SofiPayload>>
   mu(request: MuRequest): Promise<Envelope<MuPayload>>
   googl(request: GooglRequest): Promise<Envelope<GooglPayload>>
+  nvda(request: NvdaRequest): Promise<Envelope<NvdaPayload>>
   anthropic(request: AnthropicRequest): Promise<Envelope<AnthropicPayload>>
   amzn(request: AmznRequest): Promise<Envelope<AmznPayload>>
   avgo(request: AvgoRequest): Promise<Envelope<AvgoPayload>>
@@ -1417,6 +1420,7 @@ const providerImplementation: MarketDataProvider = {
   sofi: getSofi,
   mu: getMu,
   googl: getGoogl,
+  nvda: getNvda,
   anthropic: getAnthropic,
   amzn: getAmzn,
   avgo: getAvgo,
@@ -2094,7 +2098,7 @@ export const yahooProvider: MarketDataProvider = new Proxy(providerImplementatio
           result.meta = { ...result.meta, freshness: 'partial', failureReason: marked.errors.map(error => error.reason).join(' · ') }
         }
       }
-      if (['googl', 'amzn', 'avgo', 'mu', 'sofi', 'vst', 'hood', 'hims'].includes(String(property)) && result.data?.market) {
+      if (['googl', 'nvda', 'amzn', 'avgo', 'mu', 'sofi', 'vst', 'hood', 'hims'].includes(String(property)) && result.data?.market) {
         try {
           result.data = { ...result.data, market: await refreshStocksQuote(result.data.market, Boolean((args[0] as { force?: boolean } | undefined)?.force)) }
           if (property === 'sofi' && result.data.market.currentQuote) {

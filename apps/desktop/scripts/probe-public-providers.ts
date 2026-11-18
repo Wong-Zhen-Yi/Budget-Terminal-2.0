@@ -11,6 +11,8 @@ const { DiversifiedHttp } = await import('../electron/services/diversifiedHttp.j
 const { DiversifiedData } = await import('../electron/services/diversifiedData.js')
 const { PublicMacroClient, parseWorldBankInflation, parseImfGrowth } = await import('../electron/services/publicMacro.js')
 const { TtlCache, cache } = await import('../electron/services/cache.js')
+const { getEth, ethEndpoints } = await import('../electron/services/eth.js')
+const { ETH_DAY_MS } = await import('../electron/shared/eth.js')
 const { closeYahooWorker } = await import('../electron/services/yahoo/client.js')
 try {
   const now = Date.now()
@@ -87,6 +89,67 @@ try {
   assert.deepEqual(parseImfGrowth(csv, 2026), [['2023-01-01', 2.9], ['2024-01-01', 2.8]])
   assert.throws(() => parseImfGrowth(csv.replaceAll('USA', 'GBR'), 2026))
   console.log('PASS: public-only endpoints, coalescing/cache, USD conversion, market validation, fallback, rate budgets, Retry-After, sanitized failures and annual actual-data cutoffs')
+
+  if (process.argv.includes('--eth-live')) {
+    const eth = await getEth()
+    assert.equal(eth.meta.freshness, 'fresh', JSON.stringify(eth.errors))
+    assert(eth.data.ecosystem.length > 1 && eth.data.mainnet?.blockTimeSeconds && eth.data.daily.length > 30)
+    assert(eth.data.mainnet.medianTransactionFeeUsd !== undefined)
+    const latest = eth.data.daily.at(-1)
+    assert(latest?.gasThroughputMgasPerSecond && latest.feesPaidUsdPerDay && latest.stablecoinSupplyUsd)
+    console.log('PASS live growthepie: keyless TPS, mainnet block interval and median fee, gas throughput, user fees, stablecoins')
+  } else {
+    const fetchOriginal = globalThis.fetch
+    const day = Math.floor(now / ETH_DAY_MS) * ETH_DAY_MS
+    const seen: string[] = []
+    let unavailable = false
+    const utcDate = day - ETH_DAY_MS
+    const daily = (data: unknown[][], gas: number, fees: number, stables: number | null) => ({ metrics: {
+      txcount: { daily: { types: ['value', 'unix'], data } },
+      throughput: { daily: { types: ['unix', 'value'], data: [[utcDate, gas]] } },
+      fees: { daily: { types: ['eth', 'unix', 'usd'], data: [[123, utcDate, fees]] } },
+      stables_mcap: { daily: { types: ['unix', 'usd'], data: [[utcDate, stables]] } },
+    } })
+    globalThis.fetch = async (input, options) => {
+      const url = String(input)
+      seen.push(url)
+      assert.deepEqual([...new Headers(options?.headers).keys()], ['accept'])
+      if (url === ethEndpoints.ecosystem) return Response.json({ history: [
+        { tps: 200, timestamp_ms: now }, { tps: 180, timestamp_ms: now - 1000 },
+      ] })
+      if (url === ethEndpoints.mainnet) return unavailable ? new Response(null, { status: 503 })
+        : Response.json({ data: { chain_name: 'ethereum', tps: 20, timestamp: now - 2000, block_time: 12.1, tx_cost_median_usd: 0 } })
+      assert.equal(url, ethEndpoints.daily)
+      return Response.json({ data: {
+        ethereum: daily([[1_728_000, utcDate], [1_728_000, day - 2 * ETH_DAY_MS], [1, day]], 2.5, 310_000, 100_000_000),
+        all_l2s: daily([[17_280_000, utcDate], [null, day - 2 * ETH_DAY_MS], [1, day]], 75, 200_000, null),
+      } })
+    }
+    try {
+      const eth = await getEth()
+      assert.equal(eth.meta.freshness, 'fresh')
+      assert.deepEqual(eth.data.ecosystem.map(point => point.tps), [180, 200])
+      assert.deepEqual(eth.data.mainnet, { asOf: now - 2000, tps: 20, blockTimeSeconds: 12.1, medianTransactionFeeUsd: 0 })
+      assert.deepEqual(eth.data.daily, [{
+        day: utcDate, mainnetTps: 20, layer2Tps: 200, gasThroughputMgasPerSecond: { mainnet: 2.5, layer2: 75 },
+        feesPaidUsdPerDay: { mainnet: 310_000, layer2: 200_000 }, stablecoinSupplyUsd: undefined,
+      }])
+      assert.equal((await getEth()).meta.freshness, 'cached')
+      assert.equal(seen.length, 3)
+      unavailable = true
+      const degraded = await getEth({ force: true })
+      assert.equal(degraded.meta.freshness, 'partial')
+      assert.equal(degraded.errors[0]?.operation, 'mainnet')
+      assert.deepEqual(degraded.data.mainnet, eth.data.mainnet)
+      const legacy = { asOf: now - 3000, tps: 19 }
+      await cache.set('eth:mainnet', legacy, 30_000)
+      await cache.delete('eth:mainnet:2')
+      const upgraded = await getEth()
+      assert.equal(upgraded.meta.freshness, 'partial')
+      assert.deepEqual(upgraded.data.mainnet, legacy)
+      console.log('PASS: growthepie metric units, UTC alignment, cache reuse and fallback to saved and pre-upgrade snapshots')
+    } finally { globalThis.fetch = fetchOriginal }
+  }
 
   if (process.argv.includes('--live')) {
     const live = new DiversifiedData(new DiversifiedHttp(), new TtlCache())

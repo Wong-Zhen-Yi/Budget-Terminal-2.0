@@ -4,7 +4,7 @@ import { pinStartupQuery, QUERY_IDLE_MS } from './queryMemory'
 import { queryFreshness, recordCacheDecision } from './queryPersistence'
 import type { Envelope } from '@shared/contract'
 import { effectiveFreshness, registerSnapshot } from './snapshotHealth'
-import { retainUsableSnapshot, StartupLoadError } from './snapshotResult'
+import { retainUsableSnapshot, snapshotNeedsHeatmapReplay, StartupLoadError } from './snapshotResult'
 export { StartupLoadError } from './snapshotResult'
 
 const REQUEST_TIMEOUT_MS = 90_000
@@ -47,7 +47,7 @@ export async function warmStartupSnapshot<T>(client: QueryClient, options: Param
   const lifetime = cacheLifetime(cached, state?.dataUpdatedAt, Math.min(options.staleTime, queryFreshness(options.queryKey)))
   const freshness = cached?.meta && effectiveFreshness(cached, Date.now(), queryFreshness(options.queryKey))
   const refreshing = state?.isInvalidated || state?.status === 'error' || Date.now() - (state?.dataUpdatedAt ?? 0) >= lifetime
-    || freshness === 'stale' || freshness === 'partial'
+    || freshness === 'stale' || freshness === 'partial' || snapshotNeedsHeatmapReplay(options.queryKey, cached)
   if (cached !== undefined && cached?.meta?.freshness !== 'failed' && refreshing) observe?.(options.queryKey, cached, undefined, true)
   try {
     const hash = hashKey(options.queryKey)
@@ -120,7 +120,8 @@ export async function warmQuery<T>(client: QueryClient, options: {
   // tile prepared without issuing another IPC/network read on every maintenance pass.
   const imageCooldown = options.queryKey[0] === 'newsThumbnail' && freshness === 'partial'
     && (cached?.meta?.expiresAt ?? 0) > Date.now()
-  const needsRecovery = !imageCooldown && (state?.status === 'error' || freshness === 'stale' || freshness === 'partial' || freshness === 'failed')
+  const needsRecovery = !imageCooldown && (state?.status === 'error' || freshness === 'stale' || freshness === 'partial'
+    || freshness === 'failed' || snapshotNeedsHeatmapReplay(options.queryKey, cached))
   const staleTime = cacheLifetime(cached, state?.dataUpdatedAt, Math.min(options.staleTime, lifetime))
   const expired = needsRecovery || !state?.dataUpdatedAt || Date.now() - state.dataUpdatedAt >= staleTime
   recordCacheDecision(String(options.queryKey[0]), cached === undefined ? 'missing'
@@ -136,7 +137,7 @@ export async function warmQuery<T>(client: QueryClient, options: {
     networkMode: 'always',
     queryFn: () => withDeadline(async () => {
       const incoming = await trackPageQuery(options.queryKey, options.queryFn, options.force)
-      const result = options.snapshotPolicy === 'replace' ? incoming : retainUsableSnapshot(client.getQueryData(options.queryKey), incoming)
+      const result = options.snapshotPolicy === 'replace' ? incoming : retainUsableSnapshot(client.getQueryData(options.queryKey), incoming, options.queryKey)
       const meta = (result as { meta?: { freshness?: string; failureReason?: string } } | null)?.meta
       // A failed envelope is otherwise cached as success forever by Infinity queries.
       // Keep partial/stale payloads, but let a wholly failed page retry on mount.

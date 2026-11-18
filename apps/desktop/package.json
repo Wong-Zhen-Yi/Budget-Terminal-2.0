@@ -170,6 +170,8 @@
     "probe:efficiency": "tsx scripts/probe-efficiency.ts && tsx scripts/probe-efficiency-renderer.ts && tsx scripts/probe-live-status.ts && tsx scripts/probe-efficiency-ui.ts",
     "probe:googl": "tsx scripts/probe-googl.ts",
     "probe:googl-ui": "tsx scripts/probe-googl-ui.ts",
+    "probe:nvda": "tsx scripts/probe-nvda.ts",
+    "probe:nvda-ui": "tsx scripts/probe-nvda-ui.ts",
     "probe:macro-ui": "tsx scripts/probe-macro-ui.ts"
   },
   "devDependencies": {

@@ -1,4 +1,6 @@
 #!/bin/sh
+# Ethereum Focus metrics and growthepie MCP schemas rebuild through the shared launcher.
+# The shared build includes NVDA Focus and its MCP tool.
 # The shared build includes Macro indicator trends, the Treasury yield curve and release countdowns.
 # Adaptive cache budgets and idle Quant worker cleanup rebuild through the shared launcher.
 # Agents retains Desktop and Telegram history for up to 30 days within storage limits.
@@ -8,7 +10,7 @@
 # Macro cycle compass shows nine states and release changes through the shared build path.
 # Agents includes the Summarize macro quick prompt; rebuild current source through the shared launcher.
 # Macro Focus, shared economic startup data and MCP screenshot schemas rebuild through the shared launcher.
-# Heatmap historical replay speed follows the selected timeframe; rebuild desktop and MCP through the shared launcher.
+# Heatmap historical replay builds automatically with paced Yahoo batches.
 # The shared build includes the UTF-8 fix for Heatmap historical replay.
 # Anthropic funding, customer depth, compute ratios and capital visualisations rebuild through the shared launcher.
 # HOOD Focus quarterly earnings charts, headline metrics and MCP schemas rebuild through the shared launcher.

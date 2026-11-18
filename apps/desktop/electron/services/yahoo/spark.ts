@@ -17,6 +17,7 @@
  * unadjusted, which matches the reference's `auto_adjust=False`.
  */
 
+import { setTimeout as delay } from 'node:timers/promises'
 import { paced, yahoo } from './client.js'
 import { cache } from '../cache.js'
 import { observeSource, type SourceSnapshot } from '../sourceHealth.js'
@@ -25,6 +26,25 @@ const SPARK_URL = 'https://query1.finance.yahoo.com/v8/finance/spark'
 
 /** Yahoo answers a longer list with `Number of symbols needs to be less than or equal to 20`. */
 export const SPARK_BATCH_SIZE = 20
+export const HEATMAP_SPARK_BATCH_GAP_MS = 1_000
+
+let heatmapBatchQueue = Promise.resolve()
+let nextHeatmapBatchAt = 0
+
+/** Share one request lane across Heatmap indexes while still honoring Yahoo's global gate. */
+function paceHeatmapBatch<T>(fetch: () => Promise<T>): Promise<T> {
+  const pending = heatmapBatchQueue.then(async () => {
+    const wait = nextHeatmapBatchAt - Date.now()
+    if (wait > 0) await delay(wait)
+    try {
+      return await fetch()
+    } finally {
+      nextHeatmapBatchAt = Date.now() + HEATMAP_SPARK_BATCH_GAP_MS
+    }
+  })
+  heatmapBatchQueue = pending.then(() => {}, () => {})
+  return pending
+}
 
 export interface SparkSeries {
   /** `YYYY-MM-DD`, ascending. */
@@ -111,7 +131,8 @@ export interface SparkBatch {
  * render as no-data tiles — the same degradation the reference reports as a partial load.
  */
 export async function fetchSparkCloses(symbols: string[], range = '1y', force = false,
-  onProgress?: (series: Record<string, SparkSeries>) => void): Promise<SparkBatch> {
+  onProgress?: (series: Record<string, SparkSeries>) => void,
+  { paceBatches = false } = {}): Promise<SparkBatch> {
   const unique = [...new Set(symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean))].sort()
   const series: Record<string, SparkSeries> = {}
   const needed: string[] = []
@@ -131,7 +152,7 @@ export async function fetchSparkCloses(symbols: string[], range = '1y', force = 
   // concurrent chunks share a request; failed chunks keep the existing missing state.
   await Promise.allSettled(chunks.map(async (chunk) => {
     const result = await cache.resolve(`spark-batch:${range}:${chunk.join(',')}`, 0, async () => {
-      const rows = await fetchChunk(chunk, range)
+      const rows = await (paceBatches ? paceHeatmapBatch(() => fetchChunk(chunk, range)) : fetchChunk(chunk, range))
       await Promise.all(Object.entries(rows).map(async ([symbol, value]) => {
         const fetchedAt = Date.now()
         const snapshot: SourceSnapshot = { fetchedAt, asOf: value.asOf, expiresAt: fetchedAt + 120_000,

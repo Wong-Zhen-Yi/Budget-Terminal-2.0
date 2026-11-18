@@ -5,8 +5,16 @@ export const DIVERSIFIED_BUDGETS = {
   binance: { label: 'Binance', minute: 60, day: 30_000 },
   'world-bank': { label: 'World Bank', minute: 20, day: 1_000 },
   imf: { label: 'IMF', minute: 20, day: 1_000 },
+  growthepie: { label: 'growthepie', minute: 10, day: 10 * 60 * 24 },
 } as const
 export type DiversifiedProvider = keyof typeof DIVERSIFIED_BUDGETS
+const publicHosts: Record<DiversifiedProvider, string[]> = {
+  coinbase: ['api.exchange.coinbase.com'],
+  binance: ['data-api.binance.vision'],
+  'world-bank': ['api.worldbank.org'],
+  imf: ['api.imf.org'],
+  growthepie: ['api.growthepie.com', 'sse.growthepie.com'],
+}
 
 /** Fail over immediately under pressure, without queueing the whole startup behind one provider. */
 export class DiversifiedHttp {
@@ -15,8 +23,7 @@ export class DiversifiedHttp {
   constructor(private request: typeof fetch = (...args) => fetch(...args), private now = Date.now) {}
 
   async get<T>(provider: DiversifiedProvider, url: URL, parse: (body: string) => T, headers: Record<string, string> = {}): Promise<T> {
-    const hosts = { coinbase: 'api.exchange.coinbase.com', binance: 'data-api.binance.vision', 'world-bank': 'api.worldbank.org', imf: 'api.imf.org' }
-    if (url.protocol !== 'https:' || url.host !== hosts[provider] || url.username || url.password
+    if (url.protocol !== 'https:' || !publicHosts[provider].includes(url.host) || url.username || url.password
       || Object.keys(headers).some(name => name.toLowerCase() !== 'accept')
       || [...url.searchParams.keys()].some(name => /key|token|secret/i.test(name))) throw new Error('Only public provider endpoints are allowed.')
     const policy = DIVERSIFIED_BUDGETS[provider]

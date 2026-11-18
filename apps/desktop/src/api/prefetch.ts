@@ -768,6 +768,20 @@ export function buildTasks(
     },
   })
   tasks.push({
+    tab: 'nvda', label: 'NVDA demand and earnings',
+    run: async (client, backgroundOrder, onSnapshot) => {
+      const result = await warmStartupQuery(client, {
+        queryKey: queryKeys.nvda,
+        queryFn: () => api.nvda({ background: true, backgroundOrder }),
+        staleTime: queryFreshness(queryKeys.nvda),
+      }, onSnapshot)
+      if (result.meta.freshness === 'partial' || result.meta.freshness === 'stale') {
+        throw new Error(result.meta.failureReason || 'NVDA startup data is incomplete')
+      }
+      return result
+    },
+  })
+  tasks.push({
     tab: 'anthropic', label: 'Anthropic public research & update checks',
     run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
       queryKey: queryKeys.anthropic,
@@ -1064,6 +1078,14 @@ export function buildTasks(
     }, onSnapshot),
   })
   tasks.push({
+    tab: 'eth', label: 'Ethereum network activity',
+    run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
+      queryKey: queryKeys.eth,
+      queryFn: () => api.eth({ background: true, backgroundOrder }),
+      staleTime: queryFreshness(queryKeys.eth),
+    }, onSnapshot),
+  })
+  tasks.push({
     tab: 'quant', label: 'Quant',
     run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, {
       queryKey: queryKeys.quant,
@@ -1168,9 +1190,7 @@ export function buildTasks(
     })
   }
 
-  // Dashboard 2's pie and Live heatmap use the same warmed holdings/quotes;
-  // historical heatmap intervals are explicit user actions. Track Agents too,
-  // without depending on the original Dashboard's news, targets or charts.
+  // Dashboard 2 uses the warmed portfolio holdings and quotes, plus the shared Agents task.
   const dashboard2Labels = new Set(['Quotes', 'Dashboard holdings'])
   tasks.push(...tasks.filter((task) => task.tab === 'agents' ||
     (task.tab === 'dashboard' && dashboard2Labels.has(task.label)))

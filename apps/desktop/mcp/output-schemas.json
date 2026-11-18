@@ -1727,7 +1727,7 @@
             "$ref": "#/definitions/McpOutputChartsCompareRange"
           },
           "series": {
-            "$ref": "#/definitions/Record%3Cstring%2Cdef-interface-523195628-30341-30426-523195628-0-148170%5B%5D%3E"
+            "$ref": "#/definitions/Record%3Cstring%2Cdef-interface-523195628-30639-30724-523195628-0-148870%5B%5D%3E"
           },
           "sources": {
             "$ref": "#/definitions/Record%3Cstring%2Cstring%3E"
@@ -1766,7 +1766,7 @@
           "1M"
         ]
       },
-      "Record<string,def-interface-523195628-30341-30426-523195628-0-148170[]>": {
+      "Record<string,def-interface-523195628-30639-30724-523195628-0-148870[]>": {
         "type": "object",
         "additionalProperties": {
           "type": "array",
@@ -3896,9 +3896,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "McpOutputFundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CMcpOutputFundamentalSeriesKey%2Cdef-interface-523195628-25396-25650-523195628-0-148170%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CMcpOutputFundamentalSeriesKey%2Cdef-interface-523195628-25694-25948-523195628-0-148870%5B%5D%3E"
       },
-      "Record<McpOutputFundamentalSeriesKey,def-interface-523195628-25396-25650-523195628-0-148170[]>": {
+      "Record<McpOutputFundamentalSeriesKey,def-interface-523195628-25694-25948-523195628-0-148870[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -11047,6 +11047,228 @@
       }
     }
   },
+  "eth": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$ref": "#/definitions/Output_eth",
+    "definitions": {
+      "Output_eth": {
+        "$ref": "#/definitions/McpOutputEnvelope%3CEthPayload%3E"
+      },
+      "McpOutputEnvelope<EthPayload>": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/definitions/EthPayload"
+          },
+          "meta": {
+            "$ref": "#/definitions/McpOutputEnvelopeMeta"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/McpOutputEnvelopeError"
+            }
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "errors"
+        ],
+        "additionalProperties": false
+      },
+      "EthPayload": {
+        "type": "object",
+        "properties": {
+          "ecosystem": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/EthTpsSample"
+            },
+            "description": "growthepie's recent ecosystem samples, oldest first."
+          },
+          "mainnet": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/EthMainnetSample"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "daily": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/EthActivityDay"
+            },
+            "description": "Trailing seven-day averages on matching UTC dates, oldest first."
+          }
+        },
+        "required": [
+          "ecosystem",
+          "mainnet",
+          "daily"
+        ],
+        "additionalProperties": false
+      },
+      "EthTpsSample": {
+        "type": "object",
+        "properties": {
+          "asOf": {
+            "type": "number"
+          },
+          "tps": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "asOf",
+          "tps"
+        ],
+        "additionalProperties": false
+      },
+      "EthMainnetSample": {
+        "type": "object",
+        "properties": {
+          "asOf": {
+            "type": "number"
+          },
+          "tps": {
+            "type": "number"
+          },
+          "blockTimeSeconds": {
+            "type": "number"
+          },
+          "medianTransactionFeeUsd": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "asOf",
+          "tps"
+        ]
+      },
+      "EthActivityDay": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "number"
+          },
+          "mainnetTps": {
+            "type": "number"
+          },
+          "layer2Tps": {
+            "type": "number"
+          },
+          "gasThroughputMgasPerSecond": {
+            "$ref": "#/definitions/EthLayerValues"
+          },
+          "feesPaidUsdPerDay": {
+            "$ref": "#/definitions/EthLayerValues"
+          },
+          "stablecoinSupplyUsd": {
+            "$ref": "#/definitions/EthLayerValues"
+          }
+        },
+        "required": [
+          "day",
+          "mainnetTps",
+          "layer2Tps"
+        ],
+        "additionalProperties": false
+      },
+      "EthLayerValues": {
+        "type": "object",
+        "properties": {
+          "mainnet": {
+            "type": "number"
+          },
+          "layer2": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "mainnet",
+          "layer2"
+        ],
+        "additionalProperties": false
+      },
+      "McpOutputEnvelopeMeta": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "string",
+            "description": "MCP saved-domain revision for compare-and-swap edits; omitted on ordinary research."
+          },
+          "source": {
+            "type": "string"
+          },
+          "freshness": {
+            "$ref": "#/definitions/McpOutputFreshness"
+          },
+          "fetchedAt": {
+            "type": "number"
+          },
+          "asOf": {
+            "type": "number",
+            "description": "Provider observation timestamp, distinct from successful retrieval time."
+          },
+          "expiresAt": {
+            "type": "number",
+            "description": "Earliest source cache expiry, including dependencies of a derived payload."
+          },
+          "cacheAgeSeconds": {
+            "type": "number"
+          },
+          "failureReason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "freshness",
+          "fetchedAt"
+        ],
+        "additionalProperties": false
+      },
+      "McpOutputFreshness": {
+        "type": "string",
+        "enum": [
+          "fresh",
+          "cached",
+          "stale",
+          "partial",
+          "failed"
+        ]
+      },
+      "McpOutputEnvelopeError": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "symbol": {
+            "type": "string",
+            "description": "The symbol the failure belongs to — or, on the pages whose panels share one envelope, the block label that panel looks itself up by (`warningOf` on Pre-Market and News)."
+          }
+        },
+        "required": [
+          "source",
+          "reason",
+          "operation"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
   "bmnr": {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "$ref": "#/definitions/Output_bmnr",
@@ -13919,9 +14141,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22857-23093-150963582-0-129803%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23075-23311-150963582-0-130293%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-22857-23093-150963582-0-129803[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-23075-23311-150963582-0-130293[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -15391,6 +15613,821 @@
       }
     }
   },
+  "nvda": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$ref": "#/definitions/Output_nvda",
+    "definitions": {
+      "Output_nvda": {
+        "$ref": "#/definitions/McpOutputEnvelope%3CNvdaPayload%3E"
+      },
+      "McpOutputEnvelope<NvdaPayload>": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/definitions/NvdaPayload"
+          },
+          "meta": {
+            "$ref": "#/definitions/McpOutputEnvelopeMeta"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/McpOutputEnvelopeError"
+            }
+          }
+        },
+        "required": [
+          "data",
+          "meta",
+          "errors"
+        ],
+        "additionalProperties": false
+      },
+      "NvdaPayload": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "const": "NVDA"
+          },
+          "earnings": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/NvdaEarnings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "market": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/StocksPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "progress": {
+            "$ref": "#/definitions/Record%3C(%22earnings%22%7C%22market%22)%2C(%22loaded%22%7C%22partial%22%7C%22stale%22%7C%22unavailable%22)%3E"
+          },
+          "laneFetchedAt": {
+            "$ref": "#/definitions/Record%3C(%22earnings%22%7C%22market%22)%2C(number%7Cnull)%3E"
+          }
+        },
+        "required": [
+          "symbol",
+          "earnings",
+          "market",
+          "progress",
+          "laneFetchedAt"
+        ],
+        "additionalProperties": false
+      },
+      "NvdaEarnings": {
+        "type": "object",
+        "properties": {
+          "sourceUrl": {
+            "type": "string"
+          },
+          "releaseUrl": {
+            "type": "string"
+          },
+          "platformLabels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "quarters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/NvdaQuarter"
+            },
+            "description": "Latest reported quarter first, followed by the previous and year-ago quarters."
+          },
+          "revenueGrowthYoY": {
+            "type": "number"
+          },
+          "platformGrowthYoY": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "guidance": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "period": {
+                    "type": "string"
+                  },
+                  "revenueMidpoint": {
+                    "type": "number"
+                  },
+                  "rangePct": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "period",
+                  "revenueMidpoint",
+                  "rangePct"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "sourceUrl",
+          "releaseUrl",
+          "platformLabels",
+          "quarters",
+          "revenueGrowthYoY",
+          "platformGrowthYoY",
+          "guidance"
+        ],
+        "additionalProperties": false
+      },
+      "NvdaQuarter": {
+        "type": "object",
+        "properties": {
+          "period": {
+            "type": "string"
+          },
+          "revenue": {
+            "type": "number"
+          },
+          "dataCenter": {
+            "type": "number"
+          },
+          "platforms": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "grossMargin": {
+            "type": "number"
+          },
+          "operatingIncome": {
+            "type": "number"
+          },
+          "dilutedEps": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "period",
+          "revenue",
+          "dataCenter",
+          "platforms",
+          "grossMargin",
+          "operatingIncome",
+          "dilutedEps"
+        ],
+        "additionalProperties": false
+      },
+      "StocksPayload": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "currentQuote": {
+            "$ref": "#/definitions/Quote"
+          },
+          "company": {
+            "$ref": "#/definitions/StocksCompany"
+          },
+          "metrics": {
+            "$ref": "#/definitions/StocksMetrics"
+          },
+          "targets": {
+            "$ref": "#/definitions/StocksTargets"
+          },
+          "chart": {
+            "$ref": "#/definitions/StocksChartPayload"
+          },
+          "news": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/StocksNewsRow"
+            }
+          },
+          "institutional": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/StocksInstitutionalRow"
+            }
+          },
+          "insiders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/StocksInsiderRow"
+            }
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional blocks whose live request failed. Empty data is not itself a failure."
+          },
+          "generatedAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "symbol",
+          "company",
+          "metrics",
+          "targets",
+          "chart",
+          "news",
+          "institutional",
+          "insiders",
+          "missing",
+          "generatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "Quote": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "sector": {
+            "type": "string",
+            "description": "Optional holding classification, loaded with startup quotes for portfolio heatmaps."
+          },
+          "price": {
+            "type": "number"
+          },
+          "change": {
+            "type": "number",
+            "description": "Percent change against the previous close."
+          },
+          "absChange": {
+            "type": "number",
+            "description": "Absolute change against the previous close."
+          },
+          "asOf": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "priceBasis": {
+            "type": "string",
+            "enum": [
+              "published-close",
+              "equity-perp-mark"
+            ],
+            "description": "Published session closes are not live market quotes."
+          },
+          "source": {
+            "type": "string"
+          },
+          "market": {
+            "type": "string"
+          },
+          "changeBasis": {
+            "type": "string",
+            "enum": [
+              "24h",
+              "previous-close"
+            ]
+          },
+          "fallbackReason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "price",
+          "change",
+          "absChange"
+        ],
+        "additionalProperties": false,
+        "description": "One quote derived from the last two daily closes, like `price_payload` in the PySide6 app."
+      },
+      "StocksCompany": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "exchange": {
+            "type": "string"
+          },
+          "sector": {
+            "type": "string"
+          },
+          "industry": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "exchange",
+          "sector",
+          "industry",
+          "description"
+        ],
+        "additionalProperties": false
+      },
+      "StocksMetrics": {
+        "type": "object",
+        "properties": {
+          "marketCap": {
+            "type": "string"
+          },
+          "revenue": {
+            "type": "string"
+          },
+          "netIncome": {
+            "type": "string"
+          },
+          "eps": {
+            "type": "string"
+          },
+          "grossMargin": {
+            "type": "string"
+          },
+          "operatingMargin": {
+            "type": "string"
+          },
+          "netMargin": {
+            "type": "string"
+          },
+          "sharesOutstanding": {
+            "type": "string"
+          },
+          "pe": {
+            "type": "string"
+          },
+          "forwardPe": {
+            "type": "string"
+          },
+          "dividend": {
+            "type": "string"
+          },
+          "exDividendDate": {
+            "type": "string"
+          },
+          "volume": {
+            "type": "string"
+          },
+          "beta": {
+            "type": "string"
+          },
+          "earningsDate": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "marketCap",
+          "revenue",
+          "netIncome",
+          "eps",
+          "grossMargin",
+          "operatingMargin",
+          "netMargin",
+          "sharesOutstanding",
+          "pe",
+          "forwardPe",
+          "dividend",
+          "exDividendDate",
+          "volume",
+          "beta",
+          "earningsDate"
+        ],
+        "additionalProperties": false
+      },
+      "StocksTargets": {
+        "type": "object",
+        "properties": {
+          "meanPrice": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "low": {
+            "type": "string"
+          },
+          "mean": {
+            "type": "string"
+          },
+          "high": {
+            "type": "string"
+          },
+          "upsideToMean": {
+            "type": "string"
+          },
+          "upsidePct": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "analysts": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "low",
+          "mean",
+          "high",
+          "upsideToMean",
+          "upsidePct",
+          "analysts"
+        ],
+        "additionalProperties": false
+      },
+      "StocksChartPayload": {
+        "type": "object",
+        "properties": {
+          "candles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/Candle"
+            }
+          },
+          "stats": {
+            "$ref": "#/definitions/ChartStats"
+          },
+          "mfi": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/IndicatorPoint"
+            }
+          }
+        },
+        "required": [
+          "candles",
+          "stats",
+          "mfi"
+        ],
+        "additionalProperties": false
+      },
+      "Candle": {
+        "type": "object",
+        "properties": {
+          "time": {
+            "type": "number",
+            "description": "Seconds since the epoch. lightweight-charts wants seconds, not milliseconds."
+          },
+          "open": {
+            "type": "number"
+          },
+          "high": {
+            "type": "number"
+          },
+          "low": {
+            "type": "number"
+          },
+          "close": {
+            "type": "number"
+          },
+          "volume": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "time",
+          "open",
+          "high",
+          "low",
+          "close",
+          "volume"
+        ],
+        "additionalProperties": false
+      },
+      "ChartStats": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number"
+          },
+          "change": {
+            "type": "number"
+          },
+          "absChange": {
+            "type": "number"
+          },
+          "open": {
+            "type": "number"
+          },
+          "high": {
+            "type": "number"
+          },
+          "low": {
+            "type": "number"
+          },
+          "close": {
+            "type": "number"
+          },
+          "volume": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "longName": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "market": {
+            "type": "string"
+          },
+          "priceSource": {
+            "type": "string"
+          },
+          "priceBasis": {
+            "type": "string",
+            "enum": [
+              "published-close",
+              "equity-perp-mark"
+            ],
+            "description": "Published session closes are not live market quotes."
+          },
+          "changeBasis": {
+            "type": "string",
+            "enum": [
+              "24h",
+              "previous-close"
+            ]
+          }
+        },
+        "required": [
+          "symbol",
+          "price",
+          "change",
+          "absChange",
+          "open",
+          "high",
+          "low",
+          "close",
+          "volume",
+          "currency",
+          "longName"
+        ],
+        "additionalProperties": false
+      },
+      "IndicatorPoint": {
+        "type": "object",
+        "properties": {
+          "time": {
+            "type": "number"
+          },
+          "value": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "time",
+          "value"
+        ],
+        "additionalProperties": false
+      },
+      "StocksNewsRow": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "ticker": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "publishedAt": {
+            "type": "number"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "publishedAt",
+          "source",
+          "ticker",
+          "title",
+          "url"
+        ]
+      },
+      "StocksInstitutionalRow": {
+        "type": "object",
+        "properties": {
+          "holder": {
+            "type": "string"
+          },
+          "pctHeld": {
+            "type": "string"
+          },
+          "shares": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          },
+          "pctChange": {
+            "type": "string"
+          },
+          "reported": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "holder",
+          "pctHeld",
+          "shares",
+          "value",
+          "pctChange",
+          "reported"
+        ],
+        "additionalProperties": false
+      },
+      "StocksInsiderRow": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "insider": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "transaction": {
+            "type": "string"
+          },
+          "shares": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "insider",
+          "title",
+          "transaction",
+          "shares",
+          "value"
+        ],
+        "additionalProperties": false
+      },
+      "Record<(\"earnings\"|\"market\"),(\"loaded\"|\"partial\"|\"stale\"|\"unavailable\")>": {
+        "type": "object",
+        "properties": {
+          "earnings": {
+            "type": "string",
+            "enum": [
+              "loaded",
+              "partial",
+              "stale",
+              "unavailable"
+            ]
+          },
+          "market": {
+            "type": "string",
+            "enum": [
+              "loaded",
+              "partial",
+              "stale",
+              "unavailable"
+            ]
+          }
+        },
+        "required": [
+          "earnings",
+          "market"
+        ],
+        "additionalProperties": false
+      },
+      "Record<(\"earnings\"|\"market\"),(number|null)>": {
+        "type": "object",
+        "properties": {
+          "earnings": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "market": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "earnings",
+          "market"
+        ],
+        "additionalProperties": false
+      },
+      "McpOutputEnvelopeMeta": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "string",
+            "description": "MCP saved-domain revision for compare-and-swap edits; omitted on ordinary research."
+          },
+          "source": {
+            "type": "string"
+          },
+          "freshness": {
+            "$ref": "#/definitions/McpOutputFreshness"
+          },
+          "fetchedAt": {
+            "type": "number"
+          },
+          "asOf": {
+            "type": "number",
+            "description": "Provider observation timestamp, distinct from successful retrieval time."
+          },
+          "expiresAt": {
+            "type": "number",
+            "description": "Earliest source cache expiry, including dependencies of a derived payload."
+          },
+          "cacheAgeSeconds": {
+            "type": "number"
+          },
+          "failureReason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "freshness",
+          "fetchedAt"
+        ],
+        "additionalProperties": false
+      },
+      "McpOutputFreshness": {
+        "type": "string",
+        "enum": [
+          "fresh",
+          "cached",
+          "stale",
+          "partial",
+          "failed"
+        ]
+      },
+      "McpOutputEnvelopeError": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "symbol": {
+            "type": "string",
+            "description": "The symbol the failure belongs to — or, on the pages whose panels share one envelope, the block label that panel looks itself up by (`warningOf` on Pre-Market and News)."
+          }
+        },
+        "required": [
+          "source",
+          "reason",
+          "operation"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
   "anthropic": {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "$ref": "#/definitions/Output_anthropic",
@@ -16646,9 +17683,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22857-23093-150963582-0-129803%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23075-23311-150963582-0-130293%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-22857-23093-150963582-0-129803[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-23075-23311-150963582-0-130293[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -18076,9 +19113,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22857-23093-150963582-0-129803%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23075-23311-150963582-0-130293%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-22857-23093-150963582-0-129803[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-23075-23311-150963582-0-130293[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -19516,9 +20553,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22857-23093-150963582-0-129803%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23075-23311-150963582-0-130293%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-22857-23093-150963582-0-129803[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-23075-23311-150963582-0-130293[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -21803,9 +22840,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22857-23093-150963582-0-129803%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23075-23311-150963582-0-130293%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-22857-23093-150963582-0-129803[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-23075-23311-150963582-0-130293[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -23395,9 +24432,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-22857-23093-150963582-0-129803%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23075-23311-150963582-0-130293%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-22857-23093-150963582-0-129803[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-23075-23311-150963582-0-130293[]>": {
         "type": "object",
         "properties": {
           "revenue": {

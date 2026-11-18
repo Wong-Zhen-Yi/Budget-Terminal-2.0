@@ -21,6 +21,8 @@ import {
   buildIntervalSummaries,
   changesFromCloses,
   etfTicker,
+  HEATMAP_REPLAY_RETRY_MS,
+  heatmapReplayDates,
   isUsableHoldingSymbol,
   normalizeSector,
   positiveWeight,
@@ -159,7 +161,7 @@ export async function fetchHeatmap(etf: HeatmapEtfKey, force: boolean,
   }
   const unresolved = seeds.filter(seed => seed.sector === 'Unclassified').map(seed => seed.symbol)
   const [{ series }, classifications] = await Promise.all([
-    deps.prices([...byPriceSymbol.keys()], '1y', force, applySeries),
+    deps.prices([...byPriceSymbol.keys()], '1y', force, applySeries, { paceBatches: true }),
     deps.classifications && unresolved.length ? deps.classifications(unresolved) : Promise.resolve({} as Record<string, string>),
   ])
   for (const seed of seeds) if (classifications[seed.symbol]) seed.sector = classifications[seed.symbol]
@@ -177,6 +179,9 @@ export async function fetchHeatmap(etf: HeatmapEtfKey, force: boolean,
         ticker,
       ),
     )
+  }
+  if (payload.quoteCoverage > 0 && heatmapReplayDates(payload).length < 2) {
+    errors.push(err(PRICE_SOURCE, 'Too few daily closes are available for historical replay.', 'etf_heatmap_quotes', ticker))
   }
   const unclassified = holdings.filter(holding => holding.sector === 'Unclassified')
   if (unclassified.length) {
@@ -208,13 +213,16 @@ export function getHeatmapProgress(etf: HeatmapEtfKey): HeatmapPayload | null {
 
 /** One cached load per index, with local previews while its provider work is pending. */
 export function getHeatmap(etf: HeatmapEtfKey, force = false): Promise<HeatmapFetchResult> {
-  return cache
-    .resolveWithStaleFallback(`heatmap:yahoo-v3:${etf}`, HEATMAP_TTL_MS, async () => {
+  return cache.resolveWithStaleFallback(
+    `heatmap:yahoo-v3:${etf}`,
+    ({ payload }: HeatmapFetchResult) => heatmapReplayDates(payload).length >= 2 ? HEATMAP_TTL_MS : HEATMAP_REPLAY_RETRY_MS,
+    async () => {
       try {
         return await fetchHeatmap(etf, force, dependencies, payload => progress.set(etf, payload))
       } finally {
         progress.delete(etf)
       }
-    }, { force })
-    .then((result) => result.value)
+    },
+    { force },
+  ).then(result => result.value)
 }

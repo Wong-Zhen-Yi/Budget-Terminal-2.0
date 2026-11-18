@@ -13,6 +13,8 @@ export type { DefeatBetaTerminalRequest, DefeatBetaTerminalPayload } from './def
 import type { ArticlePdfRequest, ArticlePdfResult } from './articles.js'
 export type { Article, ArticlesPayload, ArticlesMutation } from './articles.js'
 import type { BitcoinPayload, BitcoinRequest } from './bitcoin.js'
+import type { EthPayload, EthRequest } from './eth.js'
+export type { EthRequest } from './eth.js'
 import type { SofiPayload, SofiRequest } from './sofi.js'
 export type { SofiPayload, SofiRequest } from './sofi.js'
 import type { VstPayload, VstRequest } from './vst.js'
@@ -24,6 +26,8 @@ export type { SemiconductorsPayload, SemiconductorsRequest } from './semiconduct
 import type { AvgoPayload, AvgoRequest } from './avgo.js'
 export type { AvgoPayload, AvgoRequest } from './avgo.js'
 import type { GooglPayload, GooglRequest } from './googl.js'
+import type { NvdaPayload, NvdaRequest } from './nvda.js'
+export type { NvdaPayload, NvdaRequest } from './nvda.js'
 import type { AnthropicPayload, AnthropicRequest } from './anthropic.js'
 export type { AnthropicPayload, AnthropicRequest } from './anthropic.js'
 import type { AmznPayload, AmznRequest } from './amzn.js'
@@ -1368,10 +1372,12 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'forex', label: 'Forex', implemented: true },
   { id: 'crypto', label: 'Crypto', implemented: true },
   { id: 'bitcoin', label: 'Bitcoin', implemented: true },
+  { id: 'eth', label: 'Ethereum', implemented: true },
   { id: 'bmnr', label: 'BMNR', implemented: true },
   { id: 'sofi', label: 'SOFI', implemented: true },
   { id: 'mu', label: 'MU', implemented: true },
   { id: 'googl', label: 'GOOGL', implemented: true },
+  { id: 'nvda', label: 'NVDA', implemented: true },
   { id: 'anthropic', label: 'Anthropic', implemented: true },
   { id: 'amzn', label: 'AMZN', implemented: true },
   { id: 'avgo', label: 'AVGO', implemented: true },
@@ -3588,10 +3594,12 @@ export const CHANNELS = {
   forexNews: 'forex:news',
   crypto: 'crypto:read',
   bitcoin: 'bitcoin:read',
+  eth: 'eth:read',
   bmnr: 'bmnr:read',
   sofi: 'sofi:read',
   mu: 'mu:read',
   googl: 'googl:read',
+  nvda: 'nvda:read',
   anthropic: 'anthropic:read',
   amzn: 'amzn:read',
   avgo: 'avgo:read',
@@ -3836,10 +3844,12 @@ export interface DesktopApi {
   forexNews(request: ForexPairRequest): Promise<Envelope<ForexNewsPayload>>
   crypto(request: CryptoRequest): Promise<Envelope<CryptoPayload>>
   bitcoin(request: BitcoinRequest): Promise<Envelope<BitcoinPayload>>
+  eth(request: EthRequest): Promise<Envelope<EthPayload>>
   bmnr(request: BmnrRequest): Promise<Envelope<BmnrPayload>>
   sofi(request: SofiRequest): Promise<Envelope<SofiPayload>>
   mu(request: MuRequest): Promise<Envelope<MuPayload>>
   googl(request: GooglRequest): Promise<Envelope<GooglPayload>>
+  nvda(request: NvdaRequest): Promise<Envelope<NvdaPayload>>
   anthropic(request: AnthropicRequest): Promise<Envelope<AnthropicPayload>>
   amzn(request: AmznRequest): Promise<Envelope<AmznPayload>>
   avgo(request: AvgoRequest): Promise<Envelope<AvgoPayload>>

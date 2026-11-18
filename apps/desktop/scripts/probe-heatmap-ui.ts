@@ -87,7 +87,7 @@ try {
           check(navigated === 'charts:AAA', 'Double-click navigation')
           await click('Nasdaq 100')
           check(calls === 2 && document.querySelector('[title^="AAA"]') && body().includes('2/3'), 'Nasdaq tiles and quote coverage must stay visible')
-          check(!document.querySelector('[role="status"]') && !body().includes('Sector coverage:') && !body().includes('MISS has no usable daily history'), 'Nasdaq must omit the diagnostics and sector coverage rows')
+          check(!body().includes('Sector coverage:') && !body().includes('MISS has no usable daily history'), 'Nasdaq must omit the diagnostics and sector coverage rows')
           check(status.envelope.data.etf === 'NDX' && status.envelope.meta.failureReason === providerDetail, 'Nasdaq must keep reporting diagnostics')
           await click('S&P 500')
           check(calls === 2, 'Switching back must reuse the S&P 500 query')

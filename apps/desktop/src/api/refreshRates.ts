@@ -25,6 +25,7 @@ export const PRE_MARKET_REFRESH_MS = 15 * 60_000
 export const PAGE_REFRESH_INTERVAL_MS: Readonly<Record<string, number>> = {
   heatmap: FRESHNESS.heatmap,
   googl: FRESHNESS.googl,
+  nvda: FRESHNESS.nvda,
   anthropic: FRESHNESS.anthropic,
   amzn: FRESHNESS.amzn,
   mu: FRESHNESS.mu,

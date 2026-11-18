@@ -5,6 +5,13 @@ description: Capture app pages, research markets and read or edit saved portfoli
 
 Use Budget Terminal tools for data owned by the local app. Open Budget Terminal before service calls; connection status can diagnose availability. Arguments use a `request` object; pass `{ "request": {} }` for operations without parameters.
 
+Use `budget_terminal_eth` for the Ethereum Focus page. Preserve the separate
+`asOf` times for ecosystem TPS and mainnet TPS, block interval and median
+transaction fees. Historical TPS, gas throughput, fees paid and stablecoin supply
+are trailing seven-day averages on matching UTC dates. Report stablecoins by
+layer. Credit growthepie and retain partial coverage and stale-data warnings.
+Screenshot page `eth`.
+
 `budget_terminal_hood` includes Robinhood's reviewed November 2026 investor
 presentation and Q3 2026 earnings deck alongside market, financial and operating
 reports. History covers five individual quarters from Q3 2025 through Q3 2026.
@@ -53,3 +60,5 @@ Bulk import/export, clearing all user data, and cache reset stay in the desktop 
 Use `budget_terminal_anthropic` with `{ "request": {} }` for the Anthropic Focus dossier and public-source update checks. It has reviewed financial periods, private funding history, proposed IPO terms, products, governance and risks, plus official announcements and SEC filings. `reviewedAt` dates the research; envelope freshness dates source checks, not revalidation of financial figures. Inspect `reviewReasons` and check errors. `operatingMetrics` and `capitalSnapshot` provide dated chart inputs: customer thresholds are nested lower bounds, undrawn credit is separate from liquidity, and next-12-month commitments are included in the through-2030 subtotal. There is no live equity quote; ANT is a proposed listing symbol in the reviewed material. Screenshot page: `anthropic`. Reconnect clients after rebuilding.
 
 Use `budget_terminal_homebuilders` with `{ "request": {} }` for the Homebuilders Focus universe, adjusted histories, corporate valuations, earnings estimates and news. ITB/XHB are broader housing ETF benchmarks; their corporate profiles are omitted. Inspect per-lane timestamps and errors before treating data as current. Screenshots use page `homebuilders`. Reconnect clients after rebuilding the tool catalog.
+
+Use `budget_terminal_nvda` with `{ "request": {} }` for NVIDIA market data, quarterly market-platform revenue, Data Center concentration, GAAP margins and company revenue guidance. Match each quarter's platform amounts to `platformLabels`. The three periods are the latest, previous and year-ago fiscal quarters. Inspect the source links, lane times and freshness before presenting figures. Screenshots use page `nvda`.

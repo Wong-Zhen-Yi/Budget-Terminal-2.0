@@ -110,6 +110,8 @@
     "probe:efficiency": "npm run --workspace budget-terminal-desktop probe:efficiency",
     "probe:googl": "npm run --workspace budget-terminal-desktop probe:googl --",
     "probe:googl-ui": "npm run --workspace budget-terminal-desktop probe:googl-ui --",
+    "probe:nvda": "npm run --workspace budget-terminal-desktop probe:nvda --",
+    "probe:nvda-ui": "npm run --workspace budget-terminal-desktop probe:nvda-ui --",
     "probe:macro-ui": "npm run --workspace budget-terminal-desktop probe:macro-ui"
   },
   "overrides": {

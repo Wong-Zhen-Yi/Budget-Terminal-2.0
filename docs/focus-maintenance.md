@@ -1,5 +1,7 @@
 # Focus page maintenance
 
+NVDA compares the latest, previous and year-ago quarters from NVIDIA's CFO commentary. Figures retain the publication's rounding and the latest commentary's platform classifications. The Newsroom archive is checked for new releases. Run `npm run probe:nvda` for parser and cache checks, `npm run probe:nvda -- --live` for the official disclosures, and `npm run probe:nvda-ui` after building for startup and viewport checks. The full market-provider check runs with `npm run probe:maintenance-live -- --only=nvda`.
+
 Anthropic: `npm run probe:anthropic` runs deterministic source-parser, review-trigger, startup registration, permission and cache-fallback checks. Add `-- --live` to check official announcements, document fingerprints and SEC registration filings with an isolated data profile. After building, run `npm run probe:anthropic-ui --workspace budget-terminal-desktop` for research navigation, source links, update failures/recovery, warm startup/revisits and viewport checks. See [research maintenance](anthropic-focus.md) for the weekly review process.
 
 
