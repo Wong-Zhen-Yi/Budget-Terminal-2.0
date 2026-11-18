@@ -7,12 +7,9 @@ import {
   HEATMAP_REPLAY_STEP_MS,
   heatmapAtDate,
   heatmapReplayDates,
-  UNCLASSIFIED,
   buildHeatmapDetail,
   buildHeatmapRows,
   buildHeatmapSummary,
-  etfLabel,
-  etfTicker,
   formatHeatmapPct,
   formatHoldingSummary,
   intervalLabel,
@@ -102,30 +99,7 @@ export function HeatmapPage({
   const detail = useMemo(() => buildHeatmapDetail(active, interval), [active, interval])
 
 
-  /** `_p17_render_interval_result`'s status line, including its loaded-count rescue. */
-  const status = useMemo(() => {
-    if (replay) return `Historical replay · ${payload?.priceAsOfDate} · ${intervalLabel(interval)} returns · current holdings and weights (as of ${replay.payload.asOfDate || 'latest issuer snapshot'}).`
-    if (loading) {
-      return payload?.holdings.length
-        ? `Loading ${etfLabel(etf)} heatmap - ${summary.quoteCoverage}/${summary.holdingsLoaded} quotes available - ${intervalLabel(interval)}...`
-        : `Loading ${etfLabel(etf)} holdings heatmap - ${intervalLabel(interval)}...`
-    }
-    const meta = query.data?.meta
-    if (!payload || meta?.freshness === 'failed') {
-      return `${etfLabel(etf)} heatmap refresh failed: ${meta?.failureReason ?? query.error?.message ?? 'unknown error'}`
-    }
-    const loaded = `Loaded ${rows.length} ${etfLabel(etf)} holdings (${etfTicker(etf)}) from ${
-      payload.issuer || 'ETF holdings source'
-    }${payload.asOfDate ? `, holdings as of ${payload.asOfDate}` : ''}. ${payload.priceSource || 'Yahoo Finance'} · prices as of ${payload.priceAsOfDate || '--'} · ${intervalLabel(interval)}.`
-    // `describe_market_data_status` returns only the failure reason for a degraded
-    // payload; keeping the loaded count too is what stops "356 quotes unavailable" from
-    // hiding how much of the map did work.
-    if ((meta?.freshness === 'partial' || meta?.freshness === 'stale') && meta.failureReason) return `${loaded} ${meta.failureReason}`
-    return loaded
-  }, [loading, query.data, query.error, payload, rows.length, etf, interval, summary, replay])
-
   const missing = Math.max(0, summary.holdingsLoaded - summary.quoteCoverage)
-  const unclassified = rows.filter(row => row.sector === UNCLASSIFIED)
 
   const cells: Array<{ key: string; label: string; value: string; className: string; title?: string }> = [
     {
@@ -250,17 +224,6 @@ export function HeatmapPage({
           </div>
         ))}
       </div>
-
-      <p className="shrink-0 text-right text-2xs text-text-muted" title={status} role="status">
-        {status}
-      </p>
-
-      {rows.length > 0 ? (
-        <p className={`shrink-0 text-2xs ${unclassified.length ? 'text-warn' : 'text-text-muted'}`}>
-          Sector coverage: {rows.length - unclassified.length}/{rows.length}
-          {unclassified.length ? ` — Unclassified: ${unclassified.map(row => row.symbol).join(', ')}` : ''}
-        </p>
-      ) : null}
 
       <IndexHeatmap
         rows={rows}

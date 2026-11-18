@@ -52,7 +52,7 @@ export function ScorecardAnalysis({ rows, queries, metric, onMetricChange, view,
           const failure = errorMessage(query.error)
           return <section key={row.symbol} className="scorecard-source"><h3>{row.symbol}<span>{Object.values(row.values).filter(value => value !== null).length}/{SCORECARD_METRICS.length} metrics</span></h3>
             <DataFreshness envelope={query.data} error={query.error} loading={query.isFetching} freshnessMs={queryFreshness(queryKeys.fundamentalsPage(row.symbol))} />
-            {failure && query.data && <p role="status">Latest request could not refresh: {failure}. Previous financials remain displayed.</p>}
+            {failure && query.data && <p role="status">Showing saved financials.</p>}
             <p className="scorecard-source-origin">{row.statementSources.length ? `Annual statements: ${row.statementSources.join(', ')}` : 'Annual statement sources unavailable'}</p>
             {row.currencyNote && <p>{row.currencyNote}</p>}
             {row.issues.length > 0 && <ul>{row.issues.map((issue, i) => <li key={i}>{issue}</li>)}</ul>}

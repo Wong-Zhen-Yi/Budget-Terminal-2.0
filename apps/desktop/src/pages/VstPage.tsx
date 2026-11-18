@@ -1,4 +1,4 @@
-import { effectiveFreshness, feedErrorText, useSnapshotClock } from '@/api/snapshotHealth'
+import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
 import { FRESHNESS } from '@shared/freshness'
 import { useEffect, useMemo, useState } from 'react'
 import type { LogicalRange } from 'lightweight-charts'
@@ -77,7 +77,7 @@ export function VstPage({ onStatusChange, onNavigate }: {
   }, [payload?.financials])
   useEffect(() => onStatusChange([{ label: 'VST', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: busy }], ''), [onStatusChange, query.data, busy])
   const warning = (block: VstBlock) => query.data?.errors.filter(error => error.symbol === block).map(error => error.reason).join(' · ') || undefined
-  const empty = (block: VstBlock) => busy ? 'Loading Vistra data...' : warning(block) || query.error?.message || `${block} data unavailable`
+  const empty = (block: VstBlock) => busy ? 'Loading Vistra data...' : `${block} data unavailable`
   const metric = (id: string) => earnings?.metrics.find(row => row.id === id)?.value
   const onExport = async () => {
     if (!payload) return
@@ -98,7 +98,7 @@ export function VstPage({ onStatusChange, onNavigate }: {
     <button className="text-accent hover:underline" onClick={() => void api.openExternal(operations.sourceUrl)}>Quarterly filing</button>
     <span>{operations.period} · ended {operations.periodEnd} · filed {operations.publishedAt}</span>
   </div> : null
-  const status = notice || (busy ? 'Loading VST...' : query.error ? `VST load failed: ${query.error.message}` : query.data ? `${freshness} · ${earnings?.period ?? 'earnings unavailable'}` : 'VST data unavailable')
+  const status = notice || (busy ? 'Loading VST...' : query.error ? 'VST load failed' : query.data ? `${freshness} · ${earnings?.period ?? 'earnings unavailable'}` : 'VST data unavailable')
 
   return <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-auto p-2" data-vst-page>
     <div className="flex shrink-0 flex-wrap items-center gap-1">
@@ -109,7 +109,7 @@ export function VstPage({ onStatusChange, onNavigate }: {
       <Button onClick={() => onNavigate('charts', 'VST')}>Charts</Button><Button onClick={() => onNavigate('fundamentals', 'VST')}>Fundamentals</Button>
       <Button onClick={() => void api.openExternal('https://investor.vistracorp.com/')}>Investor relations</Button>
     </div>
-    {query.data?.meta.freshness === 'failed' && query.data.errors.length ? <p role="alert" className="shrink-0 px-2 py-1 text-2xs text-down">{query.data.errors.map(feedErrorText).join(' · ')}</p> : null}
+    {query.data?.meta.freshness === 'failed' && query.data.errors.length ? <p role="alert" className="shrink-0 px-2 py-1 text-2xs text-down">Vistra data unavailable. See Settings for details.</p> : null}
     <div className="grid shrink-0 grid-cols-2 gap-2 md:grid-cols-3 2xl:grid-cols-6">
       <Tile label={market?.chart.stats.priceBasis === 'equity-perp-mark' ? 'Equity-perp mark' : 'Share price'} value={currency(market?.chart.stats.price)} sub={`${market?.chart.stats.priceSource ?? 'USD'} · ${percent(market?.chart.stats.change)} ${market?.chart.stats.changeBasis === '24h' ? '24h' : 'daily'}`} />
       <Tile label="Market cap" value={market?.metrics.marketCap ?? '--'} sub="Yahoo Finance · market" />

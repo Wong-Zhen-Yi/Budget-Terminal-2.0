@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { dehydrate, useQueryClient } from '@tanstack/react-query'
 import { useQuery } from '@/api/progressiveQuery'
 import { CACHE_SETTING_BOUNDS, DEFAULT_CACHE_SETTINGS, MIB, validCacheSettings, type CacheSettings } from '@shared/cachePolicy'
+import { QUERY_MEMORY_BUDGET } from '@shared/memoryPolicy'
 import { api } from '@/api/client'
 import { configureRendererCache, rendererCacheSettings, rendererQueryPersister, RENDERER_CACHE_BUSTER, shouldPersistRemoteQuery } from '@/api/queryPersistence'
 import { Button } from '@/components/ui/Button'
@@ -29,7 +30,7 @@ export function CachePanel() {
   const service = status.data?.data.service
   const [draft, setDraft] = useState<CacheSettings>(rendererCacheSettings)
   const [renderer, setRenderer] = useState(() => rendererQueryPersister.stats())
-  const [memory, setMemory] = useState<QueryMemoryStats>()
+  const [memory, setMemory] = useState<QueryMemoryStats & { budgetBytes: number }>()
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [failure, setFailure] = useState(false)
@@ -46,7 +47,7 @@ export function CachePanel() {
       busy = true
       try {
         const next = await readQueryMemoryStats(client)
-        if (active) setMemory(next)
+        if (active) setMemory({ ...next, budgetBytes: QUERY_MEMORY_BUDGET.bytes * (api.queryCacheMemoryScale?.() ?? 1) })
       } finally { busy = false }
     }
     void sample()
@@ -88,7 +89,7 @@ export function CachePanel() {
       In-memory payload estimates: prepared pages {size(memory.pinnedBytes)} ({memory.pinnedQueries} queries),
       additional data {size(memory.additionalBytes)} ({memory.additionalQueries} queries),
       local records and sessions {size(memory.localBytes)} ({memory.localQueries} queries).
-      {' '}Prepared pages remain available for instant switching. The 64 MiB cleanup budget covers additional data; these estimates are separate from disk limits and process RAM.
+      {' '}Inactive additional queries are trimmed against a {size(memory.budgetBytes)} budget that adjusts to available system memory.
       {memory.unmeasuredQueries > 0 && ` ${memory.unmeasuredQueries} queries could not be measured.`}
     </p>}
     <form className="mt-3 flex flex-wrap items-end gap-3" onSubmit={event => void apply(event)}>

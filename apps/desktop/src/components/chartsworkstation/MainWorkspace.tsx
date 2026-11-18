@@ -49,7 +49,7 @@ export function MainWorkspace({ onStatus }: { onStatus: (meta: EnvelopeMeta | un
   const loadStatus = query.isFetching
     ? `Loading ${store.symbol}…`
     : failureReason
-      ? `${store.symbol}: ${failureReason} · Press Load or Reload (F5) to retry.`
+      ? `${store.symbol} history could not fully load. Press Load or Reload (F5) to retry.`
       : `${freshness} · ${query.data?.meta.source ?? 'Yahoo Finance'}`
   const effectiveSymbol = payload?.symbol ?? store.symbol
   const effectiveInterval = payload?.intervalLabel ?? store.interval

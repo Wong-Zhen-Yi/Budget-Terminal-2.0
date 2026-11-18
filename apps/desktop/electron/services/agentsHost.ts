@@ -14,6 +14,7 @@ import type { ScreenshotPayload } from '../shared/screenshot.js'
 import { failed, ok } from '../shared/envelope.js'
 import { AgentsService } from './agents.js'
 import { AgentWorkspace } from './agentWorkspace.js'
+import { AgentImageStore } from './agentImageStore.js'
 import type { AgentTracker } from '../shared/agentWorkspace.js'
 import { applyAgentPortfolioUpdate, readPortfolios } from './portfolioStore.js'
 import { publishSavedDataChanged } from './savedDataEvents.js'
@@ -24,6 +25,7 @@ import { agentsChanged } from './liveStatusEvents.js'
 let service: AgentsService | null = null
 let startup: Promise<unknown> | null = null
 let workspace: AgentWorkspace | null = null
+const images = new AgentImageStore()
 let lifecycle = 0
 let telegram: TelegramService | null = null
 let telegramStartup: Promise<void> | null = null
@@ -124,8 +126,8 @@ function agent() {
   if (!service) {
     const cwd = join(app.getPath('userData'), 'agents')
     mkdirSync(cwd, { recursive: true })
-    workspace ??= new AgentWorkspace({ notifications: notificationCenter, check: checkTracker })
-    service = new AgentsService({ workspace, telegramSend: (text, signal) => telegramAgent().send(text, signal), telegramScreenshot: (page, signal) => telegramAgent().sendScreenshot(page, signal), executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, connectionStatus: getMcpStatus, portfolio: {
+    workspace ??= new AgentWorkspace({ notifications: notificationCenter, check: checkTracker, removeImage: id => images.remove(id) })
+    service = new AgentsService({ workspace, images, telegramSend: (text, signal) => telegramAgent().send(text, signal), telegramScreenshot: (page, signal) => telegramAgent().sendScreenshot(page, signal), executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, connectionStatus: getMcpStatus, portfolio: {
       read: readPortfolios,
       apply: async (before, after) => {
         const result = await withAutomaticBackup(async () => ok(await applyAgentPortfolioUpdate(before, after), 'portfolio store'))
@@ -161,7 +163,8 @@ async function executeAgentsCommand(command: AgentsCommand) {
   await startTelegram()
   if (command?.type === 'telegramViewChat' || command?.type === 'telegramDeleteChat') {
     try {
-      viewedTelegramChat = await telegramHistoryAction(telegramWorkspace(), command, !!remote?.snapshot().busy)
+      const selected = await telegramHistoryAction(telegramWorkspace(), command, !!remote?.snapshot().busy)
+      if (command.type === 'telegramViewChat' || viewedTelegramChat === command.id) viewedTelegramChat = selected
       return ok(snapshot(), 'Telegram history')
     } catch (error) { return failed(snapshot(), error instanceof Error ? error.message : 'Telegram history could not be opened.', 'Telegram history') }
   }

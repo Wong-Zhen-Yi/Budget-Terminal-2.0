@@ -1,4 +1,4 @@
-import { effectiveFreshness, feedErrorText, useSnapshotClock } from '@/api/snapshotHealth'
+import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
 import { FRESHNESS } from '@shared/freshness'
 import { useEffect, useMemo, useState } from 'react'
 import type { LogicalRange } from 'lightweight-charts'
@@ -42,7 +42,7 @@ export function AmznPage({ onStatusChange, onNavigate }: {
   const reports = useMemo(() => [...(payload?.earnings?.reports ?? [])].sort((a, b) => a.period.localeCompare(b.period)), [payload?.earnings])
   const busy = query.isFetching || refreshing
   const warning = (block: AmznBlock) => query.data?.errors.filter(error => error.symbol === block).map(error => error.reason).join(' · ') || undefined
-  const empty = (block: AmznBlock) => busy ? 'Loading Amazon data...' : warning(block) || query.error?.message || `${block} data unavailable`
+  const empty = (block: AmznBlock) => busy ? 'Loading Amazon data...' : `${block} data unavailable`
   const reportSource = latest ? <button className="text-2xs text-accent hover:underline" onClick={() => void api.openExternal(latest.sourceUrl)}>Earnings release ↗</button> : null
   const mix = latest?.revenueCategories.every(category => category.revenue !== null)
     ? latest.revenueCategories.map(category => ({ label: category.name, value: category.revenue! })) : []
@@ -63,13 +63,13 @@ export function AmznPage({ onStatusChange, onNavigate }: {
   return <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-auto p-2" data-amzn-page>
     <div className="flex shrink-0 flex-wrap items-center gap-1">
       <h1 className="pr-2 text-sm font-semibold text-text">AMZN · Amazon.com</h1>
-      <span className="ml-auto text-2xs text-text-muted" role="status">{busy ? 'Loading AMZN...' : query.error ? `AMZN load failed: ${query.error.message}` : `${freshness} · ${latest?.period ?? 'earnings unavailable'}`}</span>
+      <span className="ml-auto text-2xs text-text-muted" role="status">{busy ? 'Loading AMZN...' : query.error ? 'AMZN load failed' : `${freshness} · ${latest?.period ?? 'earnings unavailable'}`}</span>
 
       {['charts', 'fundamentals', 'options', 'valuation'].map(id => <Button key={id} className="capitalize" onClick={() => onNavigate(id, 'AMZN')}>{id}</Button>)}
       <Button onClick={() => void api.openExternal('https://ir.aboutamazon.com/overview/default.aspx')}>Investor relations</Button>
     </div>
     {notice ? <p role="status" className="shrink-0 px-2 py-1 text-2xs text-text-muted">{notice}</p> : null}
-    {(!query.data || query.data.meta.freshness === 'failed') && (query.error || query.data?.errors.length) ? <p role="alert" className="shrink-0 px-2 py-1 text-2xs text-down">{query.error?.message || query.data?.errors.map(feedErrorText).join(' · ')}</p> : null}
+    {(!query.data || query.data.meta.freshness === 'failed') && (query.error || query.data?.errors.length) ? <p role="alert" className="shrink-0 px-2 py-1 text-2xs text-down">Amazon data unavailable. See Settings for details.</p> : null}
     <div className="grid shrink-0 grid-cols-2 gap-2 lg:grid-cols-3 2xl:grid-cols-6">
       <Tile label={market?.chart.stats.priceBasis === 'equity-perp-mark' ? 'Equity-perp mark' : 'Share price'} value={currency(market?.chart.stats.price)} sub={`${market?.chart.stats.priceSource ?? 'USD'} · ${percent(market?.chart.stats.change)} ${market?.chart.stats.changeBasis === '24h' ? '24h' : 'daily'}`} />
       <Tile label="Market cap" value={market?.metrics.marketCap ?? '--'} sub="Yahoo Finance · market snapshot" />

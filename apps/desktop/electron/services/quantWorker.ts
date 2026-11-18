@@ -2,7 +2,7 @@ import type { QuantPairDetail, QuantPairRow } from '../shared/contract.js'
 import type { QuantWork } from '../workers/quantWorker.js'
 import { createWorkerRpc, serviceWorker } from './workerRpc.js'
 
-const rpc = createWorkerRpc(() => serviceWorker('quantWorker'))
+const rpc = createWorkerRpc(() => serviceWorker('quantWorker'), { idleMs: 60_000 })
 let tail = Promise.resolve()
 
 /** Timeout starts on admission, rather than while waiting behind another scan. */

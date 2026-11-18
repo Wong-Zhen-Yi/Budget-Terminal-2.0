@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { createApi } from './shared/createApi.js'
+import { createMemoryScaleReader } from './shared/memoryPolicy.js'
 
 const api = createApi(
   (channel, ...args) => ipcRenderer.invoke(channel, ...args),
@@ -11,4 +12,7 @@ const api = createApi(
   process.platform,
 )
 
-contextBridge.exposeInMainWorld('api', api)
+contextBridge.exposeInMainWorld('api', {
+  ...api,
+  queryCacheMemoryScale: createMemoryScaleReader(() => process.getSystemMemoryInfo(), process.platform),
+})

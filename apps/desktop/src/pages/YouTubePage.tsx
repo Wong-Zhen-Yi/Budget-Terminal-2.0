@@ -236,7 +236,7 @@ export function YouTubePage({ onStatusChange }: { onStatusChange: (panels: Panel
     if (!payload) return { text: 'Waiting for portfolio videos…', tone: 'muted' }
     const freshness = query.data?.meta.freshness
     if (freshness === 'stale' || freshness === 'partial') {
-      return { text: (freshness === 'stale' ? 'Showing stale results' : 'Some results are unavailable') + (query.data?.meta.failureReason ? ' · ' + query.data.meta.failureReason : ''), tone: 'warning' }
+      return { text: freshness === 'stale' ? 'Showing saved results' : 'Some results are unavailable', tone: 'warning' }
     }
     return { text: payload.warnings.length ? '' : 'Videos up to date', tone: 'positive' }
   }, [busy, payload, portfolioQuery.error, portfolioQuery.isPending, query.data, query.error, refreshError, tickers.length])

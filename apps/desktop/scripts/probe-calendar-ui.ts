@@ -133,7 +133,7 @@ try {
           window.mode = 'partial'
           await client.refetchQueries()
           await settle()
-          check(text().includes('Some FRED readings unavailable'), 'Partial failure not visible')
+          check(text().includes('Some calendar data is unavailable.') && !text().includes('Some FRED readings unavailable'), 'Partial failure should show a concise notice without provider details')
           day('2026-08-31').click()
           await settle()
           check(document.querySelector('.calendar-day-preview')?.innerText.includes('0.3%'), 'Partial failure removed healthy readings')

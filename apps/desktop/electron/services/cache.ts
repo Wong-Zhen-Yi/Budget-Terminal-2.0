@@ -15,6 +15,7 @@ import {
 } from '../shared/freshness.js'
 import type { ServiceCacheStats } from '../shared/cachePolicy.js'
 import { MIB } from '../shared/cachePolicy.js'
+import { SERVICE_MEMORY_BUDGET } from '../shared/memoryPolicy.js'
 import { readCacheSettings } from './cacheSettings.js'
 
 export const TTL = FRESHNESS
@@ -100,8 +101,8 @@ export class TtlCache {
   private readonly inFlight = new Map<string, Promise<CachedResult<unknown>>>()
   private readonly failures = new Map<string, { error: unknown; retryAt: number }>()
   private readonly disk
-  private readonly memoryMaxBytes: number
-  private readonly memoryMaxEntries: number
+  private memoryMaxBytes: number
+  private memoryMaxEntries: number
   private maxBytes: number
   private assetMaxBytes: number
   private memoryBytes = 0
@@ -118,8 +119,8 @@ export class TtlCache {
   private lastError?: string
 
   constructor(options: CacheOptions = {}) {
-    this.memoryMaxBytes = options.memoryMaxBytes ?? 128 * 1024 * 1024
-    this.memoryMaxEntries = options.memoryMaxEntries ?? 5_000
+    this.memoryMaxBytes = options.memoryMaxBytes ?? SERVICE_MEMORY_BUDGET.bytes
+    this.memoryMaxEntries = options.memoryMaxEntries ?? SERVICE_MEMORY_BUDGET.entries
     this.maxBytes = options.maxBytes ?? SERVICE_CACHE_MAX_BYTES
     this.assetMaxBytes = options.assetMaxBytes ?? ASSET_CACHE_MAX_BYTES
     this.disk = options.path ? createWorkerRpc(() => serviceWorker('cacheWorker', {
@@ -129,6 +130,13 @@ export class TtlCache {
 
   get memoryUsage(): { bytes: number; entries: number; pendingBytes: number } {
     return { bytes: this.memoryBytes, entries: this.entries.size, pendingBytes: this.pendingBytes }
+  }
+
+  configureMemoryLimits(maxBytes: number, maxEntries: number): void {
+    if (![maxBytes, maxEntries].every(value => Number.isSafeInteger(value) && value >= 0)) throw new Error('Invalid memory budget')
+    this.memoryMaxBytes = maxBytes
+    this.memoryMaxEntries = maxEntries
+    this.trimMemory()
   }
 
   async configureLimits(maxBytes: number, assetMaxBytes: number): Promise<void> {
@@ -149,6 +157,10 @@ export class TtlCache {
     if (entry.sizeBytes > this.memoryMaxBytes || this.memoryMaxEntries <= 0) return
     this.entries.set(key, entry)
     this.memoryBytes += entry.sizeBytes
+    this.trimMemory()
+  }
+
+  private trimMemory(): void {
     while (this.memoryBytes > this.memoryMaxBytes || this.entries.size > this.memoryMaxEntries) {
       this.forget(this.entries.keys().next().value!)
     }

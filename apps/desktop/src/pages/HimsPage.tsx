@@ -1,4 +1,4 @@
-import { effectiveFreshness, feedErrorText, useSnapshotClock } from '@/api/snapshotHealth'
+import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
 import { FRESHNESS } from '@shared/freshness'
 import { useEffect, useMemo, useState } from 'react'
 import { STOCKS_RANGE_PRESETS } from '@shared/contract'
@@ -110,7 +110,7 @@ export function HimsPage({ onStatusChange, onNavigate }: {
       </select></label>
     </div>
     {notice ? <p role="status" className="shrink-0 px-2 py-1 text-2xs text-text-muted">{notice}</p> : null}
-    {(!query.data || query.data.meta.freshness === 'failed') && (query.error || query.data?.errors.length) ? <p role="alert" className="shrink-0 px-2 py-1 text-2xs text-down">{query.error?.message || query.data?.meta.failureReason || query.data?.errors.map(feedErrorText).join(' · ')}</p> : null}
+    {(!query.data || query.data.meta.freshness === 'failed') && (query.error || query.data?.errors.length) ? <p role="alert" className="shrink-0 px-2 py-1 text-2xs text-down">Hims & Hers data unavailable. See Settings for details.</p> : null}
     <div className="grid shrink-0 grid-cols-2 gap-2 lg:grid-cols-3 2xl:grid-cols-6">{tileIds.map(id => {
       const spec = HIMS_METRICS.find(entry => entry.id === id)!
       const metric = report?.metrics[id]

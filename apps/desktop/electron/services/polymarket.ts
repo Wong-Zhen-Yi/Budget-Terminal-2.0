@@ -1,8 +1,11 @@
 import type { Envelope } from '../shared/contract.js'
+import { MIB } from '../shared/cachePolicy.js'
 import { POLYMARKET_ENDPOINTS, POLYMARKET_TTL, type PolymarketRequest, type PolymarketResult } from '../shared/polymarket.js'
 
 const origins = { gamma: 'https://gamma-api.polymarket.com', clob: 'https://clob.polymarket.com', data: 'https://data-api.polymarket.com' }
-const cache = new Map<string, Envelope<PolymarketResult>>()
+const cache = new Map<string, { result: Envelope<PolymarketResult>; bytes: number }>()
+const CACHE_BYTES = 16 * MIB
+let cacheBytes = 0
 const pending = new Map<string, Promise<Envelope<PolymarketResult>>>()
 let cooldownUntil = 0
 
@@ -36,7 +39,12 @@ export async function getPolymarket(request: PolymarketRequest): Promise<Envelop
     return failure('', error)
   }
   const key = url.href
-  const saved = cache.get(key)
+  const entry = cache.get(key)
+  const saved = entry?.result
+  if (entry) {
+    cache.delete(key)
+    cache.set(key, entry)
+  }
   if (!request.force && saved && Date.now() < (saved.meta.expiresAt ?? 0)) return saved
   if (pending.has(key)) return pending.get(key)!
   const work = (async (): Promise<Envelope<PolymarketResult>> => {
@@ -53,10 +61,17 @@ export async function getPolymarket(request: PolymarketRequest): Promise<Envelop
       const value = JSON.parse(body) as PolymarketResult['value']
       const fetchedAt = Date.now()
       const result: Envelope<PolymarketResult> = { data: { value, url: key }, meta: { source: 'Polymarket', freshness: 'fresh', fetchedAt, expiresAt: fetchedAt + POLYMARKET_TTL }, errors: [] }
-      // Session cache only, bounded so wallet queries never write personal context to disk.
+      // Approximate the payload from the existing JSON text and keep it session-only.
+      const bytes = (body.length + key.length) * 2
+      cacheBytes -= cache.get(key)?.bytes ?? 0
       cache.delete(key)
-      cache.set(key, result)
-      if (cache.size > 160) cache.delete(cache.keys().next().value!)
+      cache.set(key, { result, bytes })
+      cacheBytes += bytes
+      while (cacheBytes > CACHE_BYTES || cache.size > 160) {
+        const oldest = cache.keys().next().value!
+        cacheBytes -= cache.get(oldest)!.bytes
+        cache.delete(oldest)
+      }
       return result
     } catch (error) { return failure(key, error, saved) }
   })()

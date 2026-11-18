@@ -19,17 +19,22 @@ try {
         import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
         import { MoneyPage } from './src/pages/MoneyPage'
         import { MONEY_SERIES } from './electron/shared/money'
-        import { useReloadAll } from './src/api/queries'
+        import { queryKeys } from './src/api/client'
+        import { markReloadQuery } from './src/api/pageProgress'
         const check = (value, message) => { if (!value) throw Error(message) }
         const settle = () => new Promise(resolve => setTimeout(resolve, 120))
         let mode = 'fresh'
         const calls = []
-        let reload
         const history = Array.from({length: 133}, (_, i) => [new Date(Date.UTC(2015, i, 1)).toISOString().slice(0, 10), 1000 + i * 10])
-        const payload = () => ({ data: { generatedAt: new Date().toISOString(), rows: MONEY_SERIES.map(d => ({...d, history: mode === 'unavailable' ? [] : history, fetchedAt: Date.now(), status: mode, error: mode === 'fresh' ? null : 'Fixture outage'})) }, meta: {source: 'FRED', fetchedAt: Date.now(), freshness: mode === 'unavailable' ? 'failed' : mode === 'stale' ? 'partial' : 'fresh'}, errors: [] })
+        const payload = () => ({ data: { generatedAt: new Date().toISOString(), rows: MONEY_SERIES.map(d => ({...d, history: mode === 'unavailable' ? [] : history, fetchedAt: Date.now(), status: mode, error: mode === 'fresh' ? null : 'Fixture outage'})) }, meta: {source: 'FRED', fetchedAt: Date.now(), freshness: mode === 'unavailable' ? 'failed' : mode === 'stale' ? 'partial' : 'fresh', failureReason: mode === 'fresh' ? undefined : 'Fixture outage'}, errors: [] })
         window.api.money = async request => { calls.push(request); return payload() }
-        function Shell() { reload = useReloadAll(); return <MoneyPage onStatusChange={() => {}} /> }
         const client = new QueryClient({defaultOptions: {queries: {retry: false}}})
+        const reload = async () => {
+          markReloadQuery(queryKeys.money, true)
+          try { await client.refetchQueries({ queryKey: queryKeys.money }) }
+          finally { markReloadQuery(queryKeys.money, false) }
+          await settle()
+        }
         const choose = async (label, value) => {
           const select = document.querySelector('select[aria-label="' + label + '"]')
           select.value = value
@@ -42,7 +47,7 @@ try {
           button.click(); await settle()
         }
         window.runProbe = async () => {
-          createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><Shell /></QueryClientProvider>)
+          createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><MoneyPage onStatusChange={() => {}} /></QueryClientProvider>)
           await settle()
           check(document.querySelector('h1').textContent === 'Money', 'Page title')
           check(document.querySelectorAll('tbody tr').length === 7, 'All indicators')
@@ -58,14 +63,13 @@ try {
           check(document.body.textContent.includes('MoM growth'), 'MoM selection')
           await click('Treasury General Account')
           check(document.querySelector('[aria-pressed="true"]').textContent === 'Treasury General Account', 'Explorer selection')
-          await click('Refresh'); check(calls.at(-1).force === false, 'Normal refresh')
-          await click('Force refresh'); check(calls.at(-1).force === true, 'Force refresh')
+          check(calls.at(-1).force === false, 'Initial load does not force a refresh')
           await reload(); check(calls.at(-1).force === true, 'F5 reload hook forces Money')
-          mode = 'stale'; await click('Force refresh')
-          check(document.body.textContent.includes('stale') && document.querySelectorAll('svg').length === 7, 'Stale charts retained')
-          mode = 'unavailable'; await click('Force refresh')
-          check(document.body.textContent.includes('Observations unavailable'), 'Unavailable state')
-          mode = 'fresh'; await click('Force refresh')
+          mode = 'stale'; await reload()
+          check(document.body.innerText.includes('Showing saved FRED observations.') && document.querySelectorAll('svg').length === 7, 'Stale charts retained')
+          mode = 'unavailable'; await reload()
+          check(document.body.innerText.includes('Showing saved FRED observations.') && !document.body.innerText.includes('Fixture outage') && client.getQueryState(queryKeys.money).error.message.includes('Fixture outage'), 'Failed refresh retains saved charts and diagnostics without raw provider details in the page')
+          mode = 'fresh'; await reload()
           check(document.querySelectorAll('svg').length === 7, 'Refresh recovery')
           return 'PASS: Money rendering, defaults, selectors, refresh, F5 hook, stale and unavailable recovery'
         }

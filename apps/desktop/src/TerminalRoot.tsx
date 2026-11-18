@@ -33,7 +33,7 @@ const queryClient = new QueryClient({
   },
 })
 
-const memory = manageQueryMemory(queryClient, { deferUntilStartup: true })
+const memory = manageQueryMemory(queryClient, { deferUntilStartup: true, readScale: api.queryCacheMemoryScale })
 if (import.meta.hot) import.meta.hot.dispose(memory.stop)
 
 queryClient.getQueryCache().subscribe(({ query }) => {

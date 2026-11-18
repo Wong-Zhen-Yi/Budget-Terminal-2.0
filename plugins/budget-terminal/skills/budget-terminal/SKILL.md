@@ -19,6 +19,8 @@ Use `budget_terminal_screenshot` with `{ "request": {} }` for the current page, 
 
 Preserve source, snapshot time, freshness, partial coverage and errors when interpreting results. Prefer existing cached results; request `force` only when a fresh provider fetch is necessary. Calls share the app's provider rate gate.
 
+For Macro Focus, use `budget_terminal_economic` for GDP/CPI momentum and other driver readings. Use `budget_terminal_calendar_month` with an empty `request.tickers` array and the current US Eastern Time year and month for the release watch. Select the next scheduled occurrence of each FOMC, CPI, PCE, jobs and GDP release from today through 60 days ahead. Screenshot page: `macro`.
+
 News tools refresh sources on every call. Portfolio and ticker headlines use keyless
 TickerTick with Yahoo fallback; the full news page adds TickerTick market news,
 Yahoo macro headlines and RSS. TickerTick batches share a five-per-30-second,

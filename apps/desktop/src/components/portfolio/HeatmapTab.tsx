@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { HeatmapInterval, Portfolio } from '@shared/contract'
 import { HEATMAP_INTERVALS } from '@shared/contract'
 import { weightedMove } from '@shared/analytics'
-import { sectorFor, UNCLASSIFIED_SECTOR } from '@shared/sectors'
+import { sectorFor } from '@shared/sectors'
 import type { PositionRow } from '@shared/portfolioMath'
 import { useReturns } from '@/api/portfolioQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
@@ -71,7 +71,6 @@ export function HeatmapTab({ portfolio, rows, visible, compact = false, onStatus
     [rows, included, historical, returnsQuery.data, totalValue, interval],
   )
 
-  const unclassified = holdings.filter(row => sectorFor(row.ticker, row.sector) === UNCLASSIFIED_SECTOR)
   const move = weightedMove(tiles)
   const ranked = [...tiles]
     .filter((tile) => tile.changePct !== null)
@@ -115,13 +114,6 @@ export function HeatmapTab({ portfolio, rows, visible, compact = false, onStatus
           </>
         ) : null}
       </div>
-
-      {holdings.length > 0 ? (
-        <p className={`px-2 text-2xs ${unclassified.length ? 'text-warn' : 'text-text-muted'}`}>
-          Sector coverage: <PrivateNumber>{holdings.length - unclassified.length}/{holdings.length}</PrivateNumber>
-          {unclassified.length ? ` — Unclassified: ${unclassified.map(row => row.ticker).join(', ')}` : ''}
-        </p>
-      ) : null}
 
       <div className={`flex shrink-0 items-center gap-1${compact ? ' flex-wrap' : ''}`}>
         <span className="pr-1 text-2xs text-text-muted">Interval</span>

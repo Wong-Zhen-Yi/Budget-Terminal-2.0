@@ -256,7 +256,7 @@ export function MarketCapPage({ onStatusChange, onNavigate }: {
       <p className={`shrink-0 truncate text-right text-2xs ${toneClass[status.tone]}`} title={status.text}>
         {status.text}
       </p>
-      {warning ? (
+      {warning && mismatched ? (
         <p role="alert" className="shrink-0 truncate text-right text-2xs text-warn" title={warning}>
           {warning}
         </p>

@@ -3,6 +3,7 @@ import { useCallback } from 'react'
 import { useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { useQuery } from '@/api/progressiveQuery'
 
+import { calendarToday } from '@shared/calendar'
 import type {
   CalendarMonthPayload,
   CalendarMonthRequest,
@@ -13,6 +14,12 @@ import type {
 import { api, queryKeys } from './client'
 import { forcing } from './queries'
 import { queryFreshness } from './queryPersistence'
+
+/** Use the current US month and skip portfolio company lookups for Macro. */
+export function macroCalendarRequest(today = calendarToday('est')): CalendarMonthRequest {
+  const [year, month] = today.split('-').map(Number)
+  return { tickers: [], year, month }
+}
 
 export function useCalendarMonth(
   request: Omit<CalendarMonthRequest, 'force'>,

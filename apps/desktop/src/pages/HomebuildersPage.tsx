@@ -90,8 +90,7 @@ export function HomebuildersPage({ onStatusChange, onNavigate }: {
     <div className="hb-next-report"><span>Next earnings · provider estimate</span><strong>{dateText(selected.profile?.earningsDate)}</strong></div>
     <SourceLink url={selected.company.sourceUrl}>{selected.company.kind === 'builder' ? 'Company investor relations ↗' : 'ETF issuer & holdings ↗'}</SourceLink>
     <p className="hb-method">Whole-company metrics. Gross margin is consolidated TTM, not the separately reported homebuilding margin.</p>
-    {selectedErrors.length ? <p className="text-warn text-2xs">{selectedErrors.map(error => error.reason).join(' · ')}</p> : null}
-    {query.error ? <p className="text-warn text-2xs">{String(query.error)}</p> : null}
+    {selectedErrors.length || query.error ? <p className="text-warn text-2xs">Some company data is unavailable.</p> : null}
   </aside> : <PanelMessage>Company unavailable</PanelMessage>
 
   return <div className="homebuilders-page" data-homebuilders-page>

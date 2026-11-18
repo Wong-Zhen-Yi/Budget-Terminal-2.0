@@ -4,7 +4,8 @@ Quant pair discovery cleans histories once, prescreens aligned return correlatio
 and calculates full spread statistics only for shortlisted pairs. Discovery and
 custom pair details execute in a dedicated worker. Market requests retain the
 existing provider rate gate. Worker failures reject current work; subsequent work
-starts a new worker. Each admitted calculation has a 90-second timeout.
+starts a new worker. Each admitted calculation has a 90-second timeout. The
+worker shuts down after one minute of inactivity and restarts on demand.
 
 The SQLite market cache has a separate worker. It batches mutations for up to
 25 milliseconds, coalesces access timestamps every 30 seconds, and maintains
@@ -14,17 +15,26 @@ orderly application shutdown drains accepted writes before closing SQLite.
 The existing database schema and V8 blob format remain compatible. Cache reads,
 writes, deletion, clearing, and closing are asynchronous internal interfaces.
 
-Automatic payload budgets are:
+Automatic payload budgets on computers with more than 8 GiB of RAM and
+sufficient available memory are:
 
 | Owner | Budget | Retention |
 | --- | --- | --- |
 | Service memory | 128 MiB, 5,000 entries | Least recently used values leave memory; disk snapshots remain reusable |
 | Pending disk writes | 8 MiB | Backpressure allows one oversized operation when the queue is otherwise empty |
 | Additional renderer queries | 64 MiB, 1,000 queries | Inactive queries expire after 15 minutes or leave sooner under pressure |
+| Polymarket session results | 16 MiB, 160 entries | Least recently used responses leave memory when either budget is exceeded |
 | Service disk snapshots | 512 MiB | Existing retention priorities; prune to 90% after crossing the budget |
 | Renderer disk snapshots | 64 MiB, seven days | Memory eviction does not delete saved snapshots |
 
-These are serialized-payload estimates, not process-RAM ceilings. Every page's
+The service memory and additional renderer query budgets scale to half on
+machines with up to 8 GiB of RAM and one quarter on machines with up to 4 GiB.
+The desktop checks available system memory every 15 seconds and halves these
+budgets again when memory is scarce. Budgets recover as memory becomes available
+and refill as needed. A response can exceed the reusable cache budget and still
+be returned in full.
+
+These budgets track estimated payload sizes. Every page's
 startup queries, including dependent histories and partial results, stay pinned
 for the renderer session. Observed and fetching queries are protected from memory
 eviction. Local records and live sessions retain their separate owners. Startup
@@ -54,7 +64,8 @@ pending live values; abrupt termination can lose the latest uncheckpointed ticks
 Original source timestamps, stale/partial warnings, privacy exclusions and disk
 retention remain unchanged. Settings > Cache and startup reports prepared-page,
 additional-data and local-session payload estimates separately. Prepared data is
-protected from eviction; the 64 MiB additional-query budget is not a total RAM cap.
+protected from eviction. Total process RAM also includes prepared and active data,
+Electron processes, and chart and Browser resources.
 
 MCP status uses the shared dirty-event IPC path. Bridge activity and heartbeat
 expiry publish changes, including the 1.5-second activity and 15-second connection

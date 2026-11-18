@@ -17,6 +17,7 @@ import { warmStartupQuery } from '../src/api/warmQueue.js'
 import { startupRefreshDelay } from '../src/api/startupHealth.js'
 import { readCacheSettings, saveCacheSettings } from '../electron/services/cacheSettings.js'
 import { DEFAULT_CACHE_SETTINGS } from '../electron/shared/cachePolicy.js'
+import { createMemoryScaleReader, MEMORY_SAMPLE_MS } from '../electron/shared/memoryPolicy.js'
 import {
   getYahooSeries,
   type YahooSeriesInterval,
@@ -171,12 +172,37 @@ async function batchingChecks(): Promise<void> {
 }
 
 async function memoryAndOrderingChecks(): Promise<void> {
+  let now = 0
+  const system = { total: 16 * 1024 * 1024, free: 10 * 1024, available: 4 * 1024 * 1024 }
+  const linuxScale = createMemoryScaleReader(() => system, 'linux', () => now)
+  assert.equal(linuxScale(), 1, 'Linux must use available RAM, including reclaimable memory')
+  system.available = 512 * 1024
+  assert.equal(linuxScale(), 1, 'Do not resample during a burst of requests')
+  now += MEMORY_SAMPLE_MS
+  assert.equal(linuxScale(), 0.5, 'Low available RAM must reduce the cache budget')
+  system.available = 1536 * 1024
+  now += MEMORY_SAMPLE_MS
+  assert.equal(linuxScale(), 0.5, 'Small recoveries must not repeatedly switch budgets')
+  system.available = 4 * 1024 * 1024
+  now += MEMORY_SAMPLE_MS
+  assert.equal(linuxScale(), 1, 'The budget must recover when memory is available')
+  assert.equal(createMemoryScaleReader(() => ({ total: 4 * 1024 * 1024, free: 1024 * 1024 }), 'win32')(), 0.25)
+  assert.equal(createMemoryScaleReader(() => ({ total: 8 * 1024 * 1024, free: 1024 * 1024 }), 'win32')(), 0.5)
+  assert.equal(createMemoryScaleReader(() => ({ total: 8 * 1024 * 1024, free: 256 * 1024, fileBacked: 1024 * 1024 }), 'darwin')(), 0.5)
+  assert.equal(createMemoryScaleReader(() => { throw Error('Unavailable') }, 'win32')(), 1)
+
   const path = join(scratch, 'bounded.sqlite')
   const store = new TtlCache({ path, maxBytes: 64 * 1024 * 1024, memoryMaxBytes: 512, memoryMaxEntries: 2 })
   try {
     for (const key of ['a', 'b', 'c']) await store.set(key, 'x'.repeat(150), 60_000)
     assert.ok(store.memoryUsage.bytes <= 512 && store.memoryUsage.entries <= 2)
+    store.configureMemoryLimits(256, 1)
+    assert.equal(store.memoryUsage.entries, 1, 'Shrink the live cache immediately')
+    assert.ok(store.memoryUsage.bytes <= 256)
     assert.equal((await store.get<string>('a'))?.value, 'x'.repeat(150), 'Memory eviction must retain disk snapshots')
+    store.configureMemoryLimits(512, 2)
+    await store.get('b')
+    assert.equal(store.memoryUsage.entries, 2, 'Allow memory reuse once the budget recovers')
     const writes = Array.from({ length: 100 }, (_, i) => store.set(`batch:${i}`, i, 60_000))
     await Promise.all(writes)
     await store.flush()

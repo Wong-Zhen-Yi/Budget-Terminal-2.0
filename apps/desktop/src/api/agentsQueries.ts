@@ -51,7 +51,8 @@ export function useAgentCommand() {
     await client.cancelQueries({ queryKey: queryKeys.agents })
     client.setQueryData(queryKeys.agents, result)
     if (result.errors.length) throw new Error(result.errors.map(error => error.reason).join(' · '))
-    if (result.data.error) throw new Error(result.data.error)
+    // Telegram history commands report their own failures in the envelope.
+    if (result.data.error && command.type !== 'telegramViewChat' && command.type !== 'telegramDeleteChat') throw new Error(result.data.error)
     if (command.type === 'deleteChat') client.removeQueries({ queryKey: ['agentImages'], type: 'inactive' })
     return result
   }

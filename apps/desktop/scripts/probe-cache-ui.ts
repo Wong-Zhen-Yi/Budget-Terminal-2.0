@@ -19,12 +19,13 @@ try {
   await build({ stdin: { resolveDir: root, loader: 'ts', contents: `
     import { contextBridge, ipcRenderer } from 'electron'
     import { createApi } from './electron/shared/createApi'
-    contextBridge.exposeInMainWorld('api', createApi((channel, ...args) => ipcRenderer.invoke(channel, ...args),
+    const api = createApi((channel, ...args) => ipcRenderer.invoke(channel, ...args),
       (channel, listener) => {
         const handler = (_event, payload) => listener(payload)
         ipcRenderer.on(channel, handler)
         return () => ipcRenderer.removeListener(channel, handler)
-      }, process.platform))
+      }, process.platform)
+    contextBridge.exposeInMainWorld('api', { ...api, queryCacheMemoryScale: () => 0.5 })
   ` }, bundle: true, platform: 'node', format: 'cjs', external: ['electron'], outfile: join(directory, 'preload.cjs') })
   await build({ stdin: { resolveDir: root, loader: 'tsx', contents: `
     import { QueryClient, QueryClientProvider, dehydrate, hydrate } from '@tanstack/react-query'
@@ -222,6 +223,7 @@ try {
       check(document.querySelector('main').textContent.includes('101 (cached)'), 'Restored UI did not paint its ready content')
       check(document.querySelectorAll('meter').length === 3, 'Cache Settings must show three independent budgets')
       check(document.querySelector('[data-query-memory]')?.textContent.includes('prepared pages'), 'Settings must expose protected startup memory separately from disk limits')
+      check(document.querySelector('[data-query-memory]')?.textContent.includes('32.0 MiB budget'), 'Settings must show the scaled memory budget')
       check(document.body.textContent.includes('due for a check'), 'Cache Settings must describe revalidation without declaring market history invalid')
       check(document.body.textContent.includes('next regular session'), 'Cache Settings must explain session-aware reuse')
       const button = [...document.querySelectorAll('button')].find(button => button.textContent === 'Use defaults')

@@ -56,7 +56,7 @@ try {
           Array.from(document.querySelectorAll('th')).find(header => header.textContent.includes('Ticker')).click(); await settle()
           check(document.querySelector('tbody tr').textContent.includes('EEE'), 'Ticker sort')
           check(body().includes('1 failed'), 'Partial failure count')
-          check(body().includes('1 recent listings excluded') && body().includes('SPCX: Listed recently; 87 of 201'), 'Recent listing coverage must remain visible separately from failed requests')
+          check(body().includes('1 recent listings excluded') && !body().includes('SPCX: Listed recently'), 'Recent listing coverage must remain visible without the inline exclusion list')
           await choose('goldenCross')
           check(document.querySelectorAll('tbody tr').length === 1 && body().includes('AAA'), 'Golden cross screen')
           await choose('rsiBreakout')

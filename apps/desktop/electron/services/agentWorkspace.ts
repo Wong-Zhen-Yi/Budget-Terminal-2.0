@@ -2,13 +2,15 @@ import { agentsChanged } from './liveStatusEvents.js'
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { agentWorkspaceSchema, notificationInputSchema, trackerDefinitionSchema, trackerReportSchema } from '../shared/agentWorkspace.js'
+import { AGENT_HISTORY_CHATS, AGENT_HISTORY_DAYS, AGENT_HISTORY_MESSAGES, AGENT_HISTORY_MIB, agentWorkspaceSchema, notificationInputSchema, trackerDefinitionSchema, trackerReportSchema } from '../shared/agentWorkspace.js'
 import type { AgentConversation, AgentNotification, AgentNotificationInput, AgentTracker, AgentTrackerDefinition, AgentTrackerReport, AgentWorkspaceData, AgentWorkspaceState } from '../shared/agentWorkspace.js'
 import type { AgentMessage } from '../shared/agents.js'
 import type { AgentCheckpoint } from '../shared/agentRuns.js'
 import type { NotificationCenter } from './notifications.js'
 
-const MAX_BYTES = 50 * 1024 * 1024
+const MAX_BYTES = AGENT_HISTORY_MIB * 1024 * 1024
+const HOUR_MS = 60 * 60_000
+const RETENTION_MS = AGENT_HISTORY_DAYS * 24 * HOUR_MS
 export function agentWorkspacePath() {
   return join(process.env.APPDATA ?? join(process.env.USERPROFILE ?? '', 'AppData', 'Roaming'), 'BudgetTerminalElectron', 'agents.json')
 }
@@ -17,6 +19,15 @@ interface Options {
   path?: string
   deliver?: (notification: AgentNotification) => Promise<void> | void
   check?: (tracker: AgentTracker, signal: AbortSignal) => Promise<AgentTrackerReport>
+  removeImage?: (id: string) => Promise<void>
+}
+
+type LiveConversation = { busy: () => boolean; expired: () => void; trimmed: (messages: AgentMessage[]) => void }
+
+function lastConversationActivity(chat: AgentConversation) {
+  return chat.messages.reduce((latest, message) => message.role === 'activity' && !message.run
+    ? latest
+    : Math.max(latest, message.at, message.run?.endedAt ?? 0), chat.createdAt)
 }
 
 /** One atomic, serialized local store. No credentials, image bytes, thread IDs or executable code. */
@@ -27,6 +38,9 @@ export class AgentWorkspace {
   private dirty = false
   private queue: Promise<void> = Promise.resolve()
   private saveTimer: NodeJS.Timeout | null = null
+  private retentionTimer: NodeJS.Timeout | null = null
+  private liveConversation?: LiveConversation
+  private removedImages = new Set<string>()
   private timer: NodeJS.Timeout | null = null
   private active: { id: string; controller: AbortController; done: Promise<void> } | null = null
   private closed = false
@@ -37,10 +51,14 @@ export class AgentWorkspace {
     this.initialized ??= this.load()
     return this.initialized
   }
+  bindLiveConversation(conversation: LiveConversation) {
+    this.liveConversation = conversation
+  }
+
   private async load() {
     try {
       const raw = await readFile(this.options.path ?? agentWorkspacePath())
-      if (raw.length > MAX_BYTES) throw new Error('Agents history exceeds the 50 MB limit.')
+      if (raw.length > MAX_BYTES) throw new Error(`Agents history exceeds the ${AGENT_HISTORY_MIB} MiB limit.`)
       this.data = agentWorkspaceSchema.parse(JSON.parse(raw.toString('utf8')))
       if (new Set(this.data.conversations.map(chat => chat.id)).size !== this.data.conversations.length
         || new Set(this.data.trackers.map(tracker => tracker.id)).size !== this.data.trackers.length) throw new Error('Duplicate IDs in Agents data.')
@@ -62,6 +80,10 @@ export class AgentWorkspace {
         }
         message.text = 'Research was interrupted when the app closed.'
       }
+      for (const chat of this.data.conversations) {
+        const activityAt = lastConversationActivity(chat)
+        if (chat.updatedAt !== activityAt) { chat.updatedAt = activityAt; this.dirty = true }
+      }
       if (!this.data.conversations.some(chat => chat.id === this.data.currentChatId)) this.data.currentChatId = null
       this.writable = true
       if (this.dirty) this.changed()
@@ -71,6 +93,11 @@ export class AgentWorkspace {
         this.storageError = `Agents data could not be loaded; the original file was left untouched. ${String(error)}`
         throw new Error(this.storageError)
       }
+    }
+    if (!this.closed) {
+      if (this.pruneHistory()) await this.flush().catch(() => {})
+      this.retentionTimer = setInterval(() => this.pruneHistory(), HOUR_MS)
+      this.retentionTimer.unref()
     }
     if (this.options.notifications) {
       await this.options.notifications.initialize()
@@ -91,7 +118,66 @@ export class AgentWorkspace {
         : [...this.data.notifications].reverse(), trackers: this.data.trackers, storageError: this.storageError,
     })
   }
+  get currentChatId() { return this.data.currentChatId }
+
   conversation(id = this.data.currentChatId) { return structuredClone(this.data.conversations.find(chat => chat.id === id) ?? null) }
+  pruneHistory(now = Date.now()) {
+    if (!this.writable || this.liveConversation?.busy()) return false
+    const expired = this.data.conversations.filter(chat => chat.updatedAt <= now - RETENTION_MS)
+    if (!expired.length) return false
+    this.removeConversations(expired)
+    this.changed()
+    return true
+  }
+
+  private rememberRemovedImages(messages: AgentMessage[]) {
+    if (!this.options.removeImage) return
+    for (const message of messages) for (const image of message.imageArtifacts ?? []) this.removedImages.add(image.id)
+  }
+
+  private removeConversations(removed: AgentConversation[]) {
+    const ids = new Set(removed.map(chat => chat.id))
+    for (const chat of removed) this.rememberRemovedImages(chat.messages)
+    this.data.conversations = this.data.conversations.filter(chat => !ids.has(chat.id))
+    if (this.data.currentChatId && ids.has(this.data.currentChatId)) {
+      this.data.currentChatId = null
+      this.liveConversation?.expired()
+    }
+  }
+
+  private oldestInactive() {
+    return this.data.conversations.filter(chat => chat.id !== this.data.currentChatId).sort((a, b) => a.updatedAt - b.updatedAt)
+  }
+
+  private boundedPayload() {
+    const payload = JSON.stringify(agentWorkspaceSchema.parse(this.data))
+    let bytes = Buffer.byteLength(payload)
+    if (bytes <= MAX_BYTES) return payload
+    const evicted: AgentConversation[] = []
+    for (const chat of this.oldestInactive()) {
+      bytes -= Buffer.byteLength(JSON.stringify(chat)) + (this.data.conversations.length - evicted.length > 1 ? 1 : 0)
+      evicted.push(chat)
+      if (bytes <= MAX_BYTES) break
+    }
+    const current = this.data.conversations.find(chat => chat.id === this.data.currentChatId)
+    let trim = 0
+    if (current) {
+      for (const message of current.messages) {
+        if (bytes <= MAX_BYTES) break
+        bytes -= Buffer.byteLength(JSON.stringify(message)) + (current.messages.length - trim > 1 ? 1 : 0)
+        trim++
+      }
+    }
+    if (bytes > MAX_BYTES) throw new Error(`Agents data exceeds ${AGENT_HISTORY_MIB} MiB after history cleanup.`)
+    this.removeConversations(evicted)
+    if (current && trim) {
+      this.rememberRemovedImages(current.messages.splice(0, trim))
+      this.liveConversation?.trimmed(current.messages)
+    }
+    agentsChanged()
+    return JSON.stringify(agentWorkspaceSchema.parse(this.data))
+  }
+
   private changed() {
     agentsChanged()
     if (!this.writable) throw new Error(this.storageError || 'Agents storage is not initialized.')
@@ -99,11 +185,13 @@ export class AgentWorkspace {
     if (!this.saveTimer) this.saveTimer = setTimeout(() => { this.saveTimer = null; void this.flush().catch(() => {}) }, 250)
   }
   createConversation() {
-    if (this.data.conversations.length >= 100) throw new Error('History is full (100 chats). Delete an old chat before creating another.')
     const now = Date.now()
     const chat: AgentConversation = { id: randomUUID(), title: 'New chat', createdAt: now, updatedAt: now, messages: [], model: null, thinking: null }
     this.data.conversations.push(chat)
     this.data.currentChatId = chat.id
+    this.pruneHistory(now)
+    const overflow = this.data.conversations.length - AGENT_HISTORY_CHATS
+    if (overflow > 0) this.removeConversations(this.oldestInactive().slice(0, overflow))
     this.changed()
     return structuredClone(chat)
   }
@@ -118,9 +206,15 @@ export class AgentWorkspace {
     if (this.closed) return
     let chat = this.data.conversations.find(chat => chat.id === this.data.currentChatId)
     if (!chat) { this.createConversation(); chat = this.data.conversations.at(-1)! }
-    chat.messages = structuredClone(messages.slice(-300))
+    const retained = messages.slice(-AGENT_HISTORY_MESSAGES)
+    if (this.options.removeImage && chat.messages.length && chat.messages[0]?.id !== retained[0]?.id) {
+      const retainedIds = new Set(retained.map(message => message.id))
+      this.rememberRemovedImages(chat.messages.filter(message => !retainedIds.has(message.id)))
+    }
+    chat.messages = structuredClone(retained)
     chat.title = messages.find(message => message.role === 'user')?.text.replace(/\s+/g, ' ').slice(0, 100) || 'New chat'
-    chat.updatedAt = Date.now(); chat.model = model; chat.thinking = thinking
+    chat.updatedAt = lastConversationActivity(chat)
+    chat.model = model; chat.thinking = thinking
     chat.runLimitMinutes = runLimitMinutes
     this.changed()
   }
@@ -141,8 +235,11 @@ export class AgentWorkspace {
     const run = this.queue.catch(() => {}).then(async () => {
       if (!this.dirty) return
       if (!this.writable) throw new Error(this.storageError)
-      const payload = JSON.stringify(agentWorkspaceSchema.parse(this.data))
-      if (Buffer.byteLength(payload) > MAX_BYTES) throw new Error('Agents data exceeds 50 MB. Delete older chats or notifications.')
+      const payload = this.boundedPayload()
+      const imagesToRemove = [...this.removedImages]
+      const referenced = imagesToRemove.length
+        ? new Set(this.data.conversations.flatMap(chat => chat.messages.flatMap(message => message.imageArtifacts?.map(image => image.id) ?? [])))
+        : null
       this.dirty = false
       const target = this.options.path ?? agentWorkspacePath()
       const temporary = `${target}.${process.pid}.${randomUUID()}.tmp`
@@ -151,6 +248,12 @@ export class AgentWorkspace {
         await writeFile(temporary, payload, { encoding: 'utf8', mode: 0o600 })
         await rename(temporary, target)
         this.storageError = ''
+        if (referenced && this.options.removeImage) {
+          for (const id of imagesToRemove) {
+            if (!referenced.has(id)) await this.options.removeImage(id).catch(() => {})
+            this.removedImages.delete(id)
+          }
+        }
       } catch (error) {
         this.dirty = true
         throw error
@@ -264,6 +367,7 @@ export class AgentWorkspace {
   }
   async close() {
     if (!this.closed) {
+      if (this.retentionTimer) clearInterval(this.retentionTimer)
       this.pauseAll()
       this.closed = true
     }

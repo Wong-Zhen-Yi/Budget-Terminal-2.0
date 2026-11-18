@@ -52,6 +52,7 @@ try {
     }
     createRoot(document.getElementById('root')).render(<App />)
     window.runChecks = async () => {
+      check([0.125, 0.25, 0.5, 1].includes(window.api.queryCacheMemoryScale()), 'Sandboxed preload must expose a valid cache scale')
       await wait(500)
       const table = () => document.querySelector('table')
       const rows = () => [...document.querySelectorAll('tr[data-row-key]')]
@@ -117,6 +118,21 @@ try {
       check(!client.getQueryData(['chart', 'IDLE']), 'Idle queries were retained past their lifetime')
       idle.stop(); client.clear()
 
+      let scale = 1
+      const adaptive = manageQueryMemory(client, { maxBytes: 4096, maxQueries: 12, readScale: () => scale })
+      client.setQueryData(startupKey, { rows: [1] })
+      client.setQueryData(['chart', 'RECENT'], { text: 'x'.repeat(2000) })
+      await adaptive.sweep()
+      check(client.getQueryData(['chart', 'RECENT']), 'Normal memory budget should retain recent data')
+      scale = 0.25
+      await adaptive.sweep()
+      check(!client.getQueryData(['chart', 'RECENT']) && client.getQueryData(startupKey), 'Memory pressure must only release eligible data')
+      scale = 1
+      client.setQueryData(['chart', 'RECENT'], { text: 'x'.repeat(2000) })
+      await adaptive.sweep()
+      check(client.getQueryData(['chart', 'RECENT']), 'Recovered memory budget should retain new data')
+      adaptive.stop(); client.clear()
+
       const diskClient = new QueryClient()
       const persister = createRendererQueryPersister({ database: 'performance-eviction', throttleMs: 0 })
       diskClient.setQueryData(['chart', 'EVICTED'], { value: 42 })
@@ -137,7 +153,9 @@ try {
     const { writeFile } = require('node:fs/promises')
     app.setPath('userData', join(__dirname, 'profile'))
     app.whenReady().then(async () => {
-      const window = new BrowserWindow({ show: false, width: 1100, height: 800, webPreferences: { backgroundThrottling: false } })
+      const window = new BrowserWindow({ show: false, width: 1100, height: 800, webPreferences: {
+        backgroundThrottling: false, sandbox: true, preload: ${JSON.stringify(join(root, 'out/preload/preload.cjs'))},
+      } })
       try {
         await window.loadFile(join(__dirname, 'index.html'))
         console.log(await window.webContents.executeJavaScript('window.runChecks()'))

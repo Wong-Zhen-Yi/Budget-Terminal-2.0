@@ -17,10 +17,18 @@ try {
       import { EtfPage } from './src/pages/EtfPage'
       import { useEtfPage } from './src/stores/etf'
       import { buildTasks } from './src/api/prefetch'
+      import { queryKeys } from './src/api/client'
+      import { markReloadQuery } from './src/api/pageProgress'
       const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
       const check = (value, message) => { if (!value) throw Error(message) }
       const settle = () => new Promise(resolve => setTimeout(resolve, 200))
       const body = () => document.body.innerText
+      const reload = async queryKey => {
+        markReloadQuery(queryKey, true)
+        try { await client.refetchQueries({ queryKey, exact: true }) }
+        finally { markReloadQuery(queryKey, false) }
+        await settle()
+      }
       const click = async text => {
         const button = [...document.querySelectorAll('button')].find(button => button.textContent.trim() === text)
         check(button, 'Missing button: ' + text); button.click(); await settle()
@@ -83,17 +91,17 @@ try {
         check(clipboard.includes('AAA') && !clipboard.includes('BBB'), 'Export only visible holdings')
         document.querySelector('.etf-holdings-table tbody tr').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); await settle()
         check(navigated === 'charts:AAA', 'Holding double-click navigation')
-        mode = 'failed'; await click('Refresh holdings')
+        mode = 'failed'; await reload(queryKeys.etfHoldings('SPY'))
         check(!body().includes('Saved holdings remain visible') && body().includes('Alpha Holdings') && panels[0].error?.message.includes('Issuer unavailable'), 'Failed refresh preserves last-good data and diagnostics without a saved-data banner')
-        mode = 'stale'; await click('Refresh holdings')
-        check(body().includes('STALE') && !body().includes('saved data') && !document.querySelector('.etf-warning[role=status]'), 'Retained holdings keep neutral provenance without a saved-data banner')
-        mode = 'fresh'; await click('Refresh holdings')
+        mode = 'stale'; await reload(queryKeys.etfHoldings('SPY'))
+        check(body().includes('Alpha Holdings') && !body().includes('Issuer refresh failed') && panels[0].error?.message.includes('Issuer refresh failed'), 'Stale refresh keeps holdings and reports details without a provider banner')
+        mode = 'fresh'; await reload(queryKeys.etfHoldings('SPY'))
         check(!body().includes('Saved holdings remain visible') && panels[0].envelope.meta.freshness === 'fresh', 'Recovery and status propagation')
-        directoryOffline = true; await click('Refresh list')
+        directoryOffline = true; await reload(queryKeys.etfAum)
         check(!document.querySelector('.etf-browser [role=alert]') && document.querySelectorAll('.etf-fund-row').length > 0 && body().includes('SPY Research Fund') && panels[1].error?.message.includes('Directory offline'), 'Directory failure preserves the browser and diagnostics without a saved-directory banner')
         await type('ETF ticker', '!!'); await click('Open ETF')
         check(body().includes('Enter a valid ETF ticker'), 'Invalid input is actionable and does not call a provider')
-        directoryOffline = false; await click('Refresh list')
+        directoryOffline = false; await reload(queryKeys.etfAum)
         await type('Filter holdings by ticker or name', '')
         await type('ETF ticker', 'SPY'); await click('Open ETF')
         return 'PASS: startup/default fund readiness with no first-visit loads, directory paging and local search, ticker cache, explicit-only quotes, partial coverage, export, navigation, last-good failure recovery, directory isolation and input validation'

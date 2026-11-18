@@ -19,14 +19,28 @@ export interface WorkerReply {
   error?: { name: string; message: string; stack?: string }
 }
 
-export function createWorkerRpc(start: () => Worker, timeoutMs = 90_000) {
+export function createWorkerRpc(start: () => Worker, { timeoutMs = 90_000, idleMs }: { timeoutMs?: number; idleMs?: number } = {}) {
   let worker: Worker | undefined
   let sequence = 0
   let closed = false
+  let idleTimer: ReturnType<typeof setTimeout> | undefined
   const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>()
+  const unrefWhenIdle = (current: Worker) => {
+    if (pending.size) return
+    current.unref()
+    if (idleMs === undefined) return
+    idleTimer = setTimeout(() => {
+      if (worker !== current || pending.size) return
+      worker = undefined
+      idleTimer = undefined
+      void current.terminate()
+    }, idleMs)
+    idleTimer.unref()
+  }
   const fail = (current: Worker, error: Error) => {
     if (worker !== current) return
     worker = undefined
+    clearTimeout(idleTimer)
     for (const request of pending.values()) {
       clearTimeout(request.timer)
       request.reject(error)
@@ -50,12 +64,13 @@ export function createWorkerRpc(start: () => Worker, timeoutMs = 90_000) {
               clearTimeout(job.timer)
               if (reply.error) job.reject(Object.assign(new Error(reply.error.message), reply.error))
               else job.resolve(reply.value)
-              if (!pending.size) current.unref()
+              unrefWhenIdle(current)
             })
             current.on('error', error => fail(current, error instanceof Error ? error : new Error(String(error))))
             current.on('exit', code => fail(current, new Error(`Worker exited (${code})`)))
           }
           const current = worker
+          clearTimeout(idleTimer)
           const id = ++sequence
           const timer = setTimeout(() => fail(current, new Error(`Worker request timed out after ${timeoutMs}ms`)), timeoutMs)
           pending.set(id, { resolve: value => resolve(value as T), reject, timer })
@@ -63,7 +78,7 @@ export function createWorkerRpc(start: () => Worker, timeoutMs = 90_000) {
           try { current.postMessage({ ...request, id }) } catch (error) {
             clearTimeout(timer)
             pending.delete(id)
-            if (!pending.size) current.unref()
+            unrefWhenIdle(current)
             reject(error)
           }
         } catch (error) { reject(error) }

@@ -1,11 +1,25 @@
-import { useEffect, useState } from 'react'
-import type { EconomicRow } from '@shared/contract'
+import { useEffect } from 'react'
+import { calendarToday, daysBetween } from '@shared/calendar'
+import type { EconomicCalendarEvent, EconomicGroup, EconomicRow } from '@shared/contract'
 import { formatEconomicValue, SERIES_BY_ID } from '@shared/economic'
-import { COMPASS_STEADY_THRESHOLD_PP, MACRO_DRIVERS, MACRO_RATES, macroCompass } from '@shared/macro'
+import { COMPASS_STEADY_THRESHOLD_PP, MACRO_DRIVERS, MACRO_RATES, MACRO_RELEASE_WINDOW_DAYS, macroCompass, upcomingMacroReleases } from '@shared/macro'
+import { macroCalendarRequest, useCalendarMonth } from '@/api/calendarQueries'
 import { useEconomic } from '@/api/economicQueries'
+import { useSnapshotClock } from '@/api/snapshotHealth'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
-import { SeriesChart } from '@/components/economic/SeriesChart'
+import { useEconomicPage, type EconomicTab } from '@/stores/economic'
 import './MacroPage.css'
+
+const driverTabs = {
+  Growth: 'growth',
+  Inflation: 'inflation',
+  Labor: 'labor',
+  Rates: 'rates',
+} satisfies Record<EconomicGroup, EconomicTab>
+
+const releaseDate = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric',
+})
 
 const growthStates = [
   { direction: -1, label: 'Slower' },
@@ -65,24 +79,65 @@ function CycleCompass({ growth, inflation }: { growth?: EconomicRow; inflation?:
   </section>
 }
 
+function ReleaseWatch({ events, today, emptyMessage }: {
+  events: EconomicCalendarEvent[]
+  today: string
+  emptyMessage: string
+}) {
+  const upcoming = upcomingMacroReleases(events, today)
+  return <section className="macro-release-watch" aria-labelledby="macro-release-title">
+    <header>
+      <h2 id="macro-release-title">Upcoming US releases</h2>
+      <p>Next scheduled date per release · {MACRO_RELEASE_WINDOW_DAYS}-day outlook · Eastern Time</p>
+    </header>
+    {upcoming.length ? <ol className="macro-release-list">
+      {upcoming.map(event => {
+        const days = daysBetween(today, event.date)
+        return <li key={event.name}>
+          <time dateTime={event.date}>{releaseDate.format(new Date(event.date))}</time>
+          <strong>{event.name}</strong>
+          <span>{days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : `In ${days} days`}</span>
+        </li>
+      })}
+    </ol> : <p className="macro-release-empty">{emptyMessage}</p>}
+    <p className="macro-release-source">Federal Reserve, BLS and BEA schedules · Dates may change</p>
+  </section>
+}
+
 export function MacroPage({ onStatusChange, onNavigate }: {
   onStatusChange: (panels: PanelStatus[], sourcePath: string) => void
   onNavigate: (tab: string) => void
 }) {
   const query = useEconomic(true)
   const rows = query.data?.data.rows ?? []
-  const [selected, setSelected] = useState('CPIAUCSL')
-  const [years, setYears] = useState(5)
-  const selectedRow = rows.find(row => row.seriesId === selected) ?? null
+  const now = useSnapshotClock()
+  const today = calendarToday('est', new Date(now))
+  const schedule = useCalendarMonth(macroCalendarRequest(today))
+  const releaseEvents = schedule.data?.data.economicEvents ?? []
+  const releaseEmptyMessage = schedule.isPending && schedule.isFetching ? 'Loading release schedule…'
+    : schedule.error || schedule.data?.meta.freshness === 'failed' ? 'Release schedule unavailable.'
+      : `No key releases listed in the next ${MACRO_RELEASE_WINDOW_DAYS} days.`
   const find = (id: string) => rows.find(row => row.seriesId === id)
   useEffect(() => {
-    onStatusChange([{ label: 'Macro', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching }], '')
-  }, [onStatusChange, query.data, query.error, query.isEnabled, query.isFetching])
+    onStatusChange([
+      { label: 'Macro', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching },
+      { label: 'US release schedule', envelope: schedule.data, error: schedule.error, enabled: schedule.isEnabled, loading: schedule.isFetching },
+    ], '')
+  }, [onStatusChange, query.data, query.error, query.isEnabled, query.isFetching, schedule.data, schedule.error, schedule.isEnabled, schedule.isFetching])
 
   function driver(id: string) {
     const row = find(id)
-    return <button key={id} className="macro-driver" aria-pressed={selected === id} onClick={() => setSelected(id)}>
-      <span>{row?.label ?? SERIES_BY_ID.get(id)?.label ?? id}</span><strong>{value(row)}</strong>
+    const label = row?.label ?? SERIES_BY_ID.get(id)?.label ?? id
+    const openHistory = () => {
+      if (!row?.history.length) return
+      const economic = useEconomicPage.getState()
+      economic.selectSeries(row.group, id)
+      economic.setActiveTab(driverTabs[row.group])
+      onNavigate('economic')
+    }
+    return <button key={id} className="macro-driver" disabled={!row?.history.length}
+      title={row?.history.length ? 'View history in Economic' : undefined} onClick={openHistory}>
+      <span>{label}</span><strong>{value(row)}</strong>
       <small>{row?.latestDate ?? 'No observation'} · {row?.frequency ?? '—'}</small>
     </button>
   }
@@ -94,12 +149,14 @@ export function MacroPage({ onStatusChange, onNavigate }: {
     </header>
     <div className="macro-workspace">
       <CycleCompass growth={find('GDPC1')} inflation={find('CPIAUCSL')} />
-      <section className="macro-history"><div className="macro-chart-heading"><div><h2>Driver history</h2><p>{selectedRow?.note || 'Select a reading below to explore its history.'}</p></div><div className="macro-ranges" aria-label="History range">{[1, 5, 10].map(span => <button key={span} aria-pressed={years === span} onClick={() => setYears(span)}>{span}Y</button>)}</div></div>
-        <div className="macro-chart"><SeriesChart row={selectedRow} years={years} /></div>
-        <p className="macro-source">{selectedRow?.source ?? 'Source unavailable'} · Observation {selectedRow?.latestDate ?? 'unavailable'} · {selectedRow?.frequency ?? '—'}</p>
+      <section className="macro-drivers" aria-label="Macro drivers">
+        {MACRO_DRIVERS.map(group => <div className="macro-driver-group" key={group.title}>
+          <h2>{group.title}</h2>
+          {group.ids.map(driver)}
+        </div>)}
       </section>
+      <ReleaseWatch events={releaseEvents} today={today} emptyMessage={releaseEmptyMessage} />
       <section className="macro-rates"><h2>Policy & transmission</h2><p>Rates, real yields and inflation compensation</p><div className="macro-rate-list">{MACRO_RATES.map(driver)}</div><small>Breakevens are nominal less TIPS yields; they also reflect risk and liquidity premia.</small></section>
-      <section className="macro-drivers" aria-label="Macro drivers">{MACRO_DRIVERS.map(group => <div key={group.title}><h2>{group.title}</h2>{group.ids.map(driver)}</div>)}</section>
     </div>
   </div>
 }

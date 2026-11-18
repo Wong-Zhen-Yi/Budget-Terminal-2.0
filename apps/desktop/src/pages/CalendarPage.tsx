@@ -208,12 +208,12 @@ function MonthlyCalendar({
       </div>
       <div className="calendar-data-status" role="status">
         {loading || refreshing ? 'Loading calendar and economic readings…' : `${economicRows.length} economic releases · ${economicRows.filter(event => event.importance === 'high').length} high impact · ${monthLabel(state.year, state.month)}`}
-        {envelope?.meta.failureReason ? <span className="text-warn">Partial data: {envelope.meta.failureReason}</span> : null}
+        {envelope?.meta.failureReason && envelope.meta.freshness !== 'failed' ? <span className="text-warn">Some calendar data is unavailable.</span> : null}
       </div>
       {notice ? <div className="shrink-0 border border-border bg-surface-raised px-2 py-1 text-2xs text-text-muted" role="status">{notice}</div> : null}
       {envelope?.meta.freshness === 'failed' && !payload?.generatedAt ? (
         <div className="shrink-0">
-          <PanelMessage>{envelope.meta.failureReason || 'Calendar data unavailable.'}</PanelMessage>
+          <PanelMessage>Calendar data unavailable. See Settings for details.</PanelMessage>
         </div>
       ) : null}
 
@@ -418,7 +418,7 @@ function EarningsCalendar({
         className="min-h-0 flex-1"
       >
         {query.data?.meta.freshness === 'failed' && !query.data.data.rows.length ? (
-          <PanelMessage>{query.data.meta.failureReason || 'Earnings calendar unavailable.'}</PanelMessage>
+          <PanelMessage>Earnings calendar unavailable. See Settings for details.</PanelMessage>
         ) : (
           <div className="min-h-0 flex-1 overflow-x-auto">
             <div className="grid h-full min-w-[72rem] grid-cols-5 gap-2 p-2">

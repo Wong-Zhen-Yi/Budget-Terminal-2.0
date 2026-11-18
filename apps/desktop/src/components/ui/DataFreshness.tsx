@@ -1,6 +1,6 @@
 import type { Envelope } from '@shared/contract'
 import { timestampLabel } from '@/lib/format'
-import { effectiveFreshness, errorMessage, useSnapshotClock } from '@/api/snapshotHealth'
+import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
 
 /** Snapshot time is distinct from the exchange's quote time or a filing's period. */
 export function DataFreshness({ envelope, loading = false, coverage, error, freshnessMs }: {
@@ -11,8 +11,7 @@ export function DataFreshness({ envelope, loading = false, coverage, error, fres
   freshnessMs?: number
 }) {
   const now = useSnapshotClock()
-  const failure = errorMessage(error)
-  if (!envelope) return <p className={`shrink-0 px-2 py-1 text-2xs ${failure ? 'text-down' : 'text-text-muted'}`}>{failure || (loading ? 'Loading data…' : 'No data loaded')}</p>
+  if (!envelope) return <p className={`shrink-0 px-2 py-1 text-2xs ${error ? 'text-down' : 'text-text-muted'}`}>{error ? 'Data unavailable.' : loading ? 'Loading data…' : 'No data loaded'}</p>
   const { meta } = envelope
   const freshness = effectiveFreshness(envelope, now, freshnessMs)
   // Retained snapshots keep their provenance without repeating refresh warnings
@@ -29,7 +28,7 @@ export function DataFreshness({ envelope, loading = false, coverage, error, fres
           ? <span className="text-text-muted">Cache age at retrieval: {Math.ceil(meta.cacheAgeSeconds / 60)} min</span> : null}
         {coverage ? <span className="text-text-muted">Coverage: {coverage}</span> : null}
       </div>
-      {freshness === 'failed' ? <p role="alert" className="text-down">{failure || meta.failureReason || 'Data unavailable'}</p> : null}
+      {freshness === 'failed' ? <p role="alert" className="text-down">Data unavailable. See Settings for details.</p> : null}
     </div>
   )
 }

@@ -1,4 +1,5 @@
-import type { EconomicRow } from './contract.js'
+import { addDays } from './calendar.js'
+import type { EconomicCalendarEvent, EconomicRow } from './contract.js'
 
 export const MACRO_DRIVERS = [
   { title: 'Activity', ids: ['GDPC1', 'INDPRO', 'RSAFS'] },
@@ -7,6 +8,22 @@ export const MACRO_DRIVERS = [
 ] as const
 
 export const MACRO_RATES = ['FEDFUNDS', 'SOFR', 'DGS2', 'DGS10', 'DFII10', 'T10YIE', 'T10Y2Y'] as const
+
+export const MACRO_RELEASE_WINDOW_DAYS = 60
+const macroReleaseNames = new Set(['FOMC Decision', 'CPI Release', 'PCE Inflation', 'Jobs Report', 'GDP Report'])
+
+/** The next scheduled occurrence of each key US release, in date order. */
+export function upcomingMacroReleases(events: readonly EconomicCalendarEvent[], today: string): EconomicCalendarEvent[] {
+  const end = addDays(today, MACRO_RELEASE_WINDOW_DAYS)
+  const upcoming = events
+    .filter(event => macroReleaseNames.has(event.name) && event.date >= today && event.date <= end)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name))
+  const nextByName = new Map<string, EconomicCalendarEvent>()
+  for (const event of upcoming) {
+    if (!nextByName.has(event.name)) nextByName.set(event.name, event)
+  }
+  return [...nextByName.values()]
+}
 
 export const COMPASS_STEADY_THRESHOLD_PP = 0.10
 

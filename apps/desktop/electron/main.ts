@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, Menu, screen, shell } from 'electron'
+import { createMemoryScaleReader, MEMORY_SAMPLE_MS, SERVICE_MEMORY_BUDGET } from './shared/memoryPolicy.js'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -209,7 +210,18 @@ if (ownsInstance) app.whenReady().then(async () => {
     const { cache } = await import('./services/cache.js')
     closeYahooWorker = (await import('./services/yahoo/client.js')).closeYahooWorker
     closeDefeatBetaDecoder = (await import('./services/defeatbeta/decoder.js')).closeDefeatBetaDecoder
-    closeCache = () => cache.close()
+    const readMemoryScale = createMemoryScaleReader(() => process.getSystemMemoryInfo(), process.platform)
+    const updateCacheBudget = () => {
+      const scale = readMemoryScale()
+      cache.configureMemoryLimits(SERVICE_MEMORY_BUDGET.bytes * scale, Math.floor(SERVICE_MEMORY_BUDGET.entries * scale))
+    }
+    updateCacheBudget()
+    const cacheBudgetTimer = setInterval(updateCacheBudget, MEMORY_SAMPLE_MS)
+    cacheBudgetTimer.unref()
+    closeCache = () => {
+      clearInterval(cacheBudgetTimer)
+      return cache.close()
+    }
     closeQuantWorker = (await import('./services/quantWorker.js')).closeQuantWorker
     stage = 'ipc-registration'
     disposeIpc = registerIpcHandlers((event) => {

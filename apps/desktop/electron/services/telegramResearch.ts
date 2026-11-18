@@ -24,6 +24,7 @@ export function telegramHistorySnapshot(workspace: AgentWorkspace, selectedId: s
 export async function telegramHistoryAction(workspace: AgentWorkspace, input: unknown, busy: boolean) {
   const command = historyCommandSchema.parse(input)
   await workspace.initialize()
+  workspace.pruneHistory()
   if (command.type === 'telegramViewChat') {
     if (command.id && !workspace.conversation(command.id)) throw new Error('That Telegram chat no longer exists.')
     return command.id

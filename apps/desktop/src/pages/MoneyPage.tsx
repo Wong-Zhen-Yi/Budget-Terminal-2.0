@@ -37,7 +37,6 @@ export function MoneyPage({ onStatusChange }: { onStatusChange: (panels: PanelSt
   const [years, setYears] = useState(5)
   const [growth, setGrowth] = useState<1 | 12>(12)
   const [selected, setSelected] = useState('M1SL')
-  const refreshError = ''
   const busy = query.isFetching || refreshing
   const rows: MoneySeries[] = MONEY_SERIES.map((definition) => query.data?.data.rows.find((row) => row.seriesId === definition.seriesId) ?? { ...definition, history: [], fetchedAt: null, status: 'unavailable', error: null })
   const byId = (id: string) => rows.find((row) => row.seriesId === id)!
@@ -46,7 +45,7 @@ export function MoneyPage({ onStatusChange }: { onStatusChange: (panels: PanelSt
   const change = (row: MoneySeries) => row.history.length < 2 ? null : row.history.at(-1)![1] - row.history.at(-2)![1]
   useEffect(() => {
     onStatusChange([{ label: 'Money', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching }], '')
-  }, [onStatusChange, query.data, query.isFetching])
+  }, [onStatusChange, query.data, query.error, query.isEnabled, query.isFetching])
 
   return <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto p-2">
     <div className="flex flex-wrap items-center gap-2">
@@ -56,7 +55,11 @@ export function MoneyPage({ onStatusChange }: { onStatusChange: (panels: PanelSt
 
 
     </div>
-    <p role="status" className="text-2xs text-text-muted">{refreshError || query.error?.message || (busy ? 'Loading FRED observations…' : query.data?.meta.failureReason || 'FRED · Federal Reserve · Monetary values in USD billions. Dates refer to observations, not download time.')}</p>
+    <p role="status" className="text-2xs text-text-muted">{busy ? 'Loading FRED observations…'
+      : query.isError && query.data ? 'Showing saved FRED observations.'
+      : query.isError || query.data?.meta.freshness === 'failed' ? 'FRED observations unavailable. See Settings for details.'
+      : query.data?.meta.freshness === 'partial' ? 'Some FRED observations are unavailable.'
+      : 'FRED · Federal Reserve · Monetary values in USD billions.'}</p>
     <div className="grid shrink-0 grid-cols-2 gap-2 md:grid-cols-3 2xl:grid-cols-6">
       {['M2SL', 'M2YoY', 'BOGMBASE', 'WALCL', 'WRESBAL', 'RRPONTSYD'].map((id) => {
         const row = id === 'M2YoY' ? m2 : byId(id)

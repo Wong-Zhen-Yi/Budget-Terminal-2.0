@@ -1,4 +1,9 @@
 @echo off
+rem Adaptive cache budgets and idle Quant worker cleanup rebuild through the shared launcher.
+rem Agents retains Desktop and Telegram history for up to 30 days within storage limits.
+rem Agents History rebuilds with Desktop and Telegram filters and a dedicated transcript reader.
+rem Heatmaps and other data pages keep provider diagnostics out of the content area.
+rem Macro centers Activity, Prices and Employment beside the compass, release schedule and rates.
 rem Macro cycle compass shows nine states and release changes through the shared build path.
 rem Agents includes the Summarize macro quick prompt; rebuild current source through the shared launcher.
 rem Macro Focus, shared economic startup data and MCP screenshot schemas rebuild through the shared launcher.

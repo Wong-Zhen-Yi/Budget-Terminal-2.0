@@ -55,7 +55,7 @@ export function ChartPanel({ payload, indicators, loading, failureReason }: Char
       </header>
 
       {failureReason ? (
-        <PanelMessage>{failureReason}</PanelMessage>
+        <PanelMessage>History unavailable. See Settings for details.</PanelMessage>
       ) : loading && !payload ? (
         <PanelMessage>Loading chart...</PanelMessage>
       ) : (

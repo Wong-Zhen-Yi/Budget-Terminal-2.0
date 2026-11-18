@@ -83,7 +83,7 @@ export function SofiPage({ onStatusChange }: { onStatusChange: (panels: PanelSta
   }
   const bookDate = payload?.valuation.bookAsOf
   const quoteTime = payload?.priceAsOf ? new Date(payload.priceAsOf).toLocaleString('en-US', { hour12: false }) : 'unavailable'
-  const status = loading ? 'Loading SOFI dashboard...' : query.isError ? `SOFI load failed: ${query.error.message}`
+  const status = loading ? 'Loading SOFI dashboard...' : query.isError || query.data?.meta.freshness === 'failed' ? 'SOFI data unavailable. See Settings for details.'
     : !payload ? 'SOFI data unavailable' : `Market ${payload.progress.market} · Reports ${payload.progress.reports} · ${quarters.length}/8 quarters`
 
   return <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto p-2">
@@ -93,7 +93,6 @@ export function SofiPage({ onStatusChange }: { onStatusChange: (panels: PanelSta
 
     </div>
     {notice ? <p role="status" className="shrink-0 px-2 py-1 text-2xs text-text-muted">{notice}</p> : null}
-    {(!query.data || query.data.meta.freshness === 'failed') && (query.isError || query.data?.errors.length) ? <p role="alert" className="shrink-0 px-2 py-1 text-2xs text-down">{query.error?.message || query.data?.meta.failureReason}</p> : null}
     <div className="grid shrink-0 grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
       <Tile label={payload?.market?.chart.stats.priceBasis === 'equity-perp-mark' ? 'Equity-perp mark' : 'Share price'} value={currency(payload?.price)} sub={`${payload?.market?.chart.stats.changeBasis === '24h' ? '24h' : 'Daily'} change ${percent(payload?.changePct)}`} title={`${payload?.market?.chart.stats.priceSource ?? 'Yahoo Finance'} · quote retrieved ${quoteTime}`} />
       <Tile label="Market capitalization" value={payload?.market?.metrics.marketCap && payload.market.metrics.marketCap !== 'N/A' ? `$${payload.market.metrics.marketCap}` : EM_DASH} sub="Yahoo Finance · USD" />

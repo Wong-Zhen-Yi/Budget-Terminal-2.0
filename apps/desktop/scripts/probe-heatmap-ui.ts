@@ -31,6 +31,7 @@ try {
         let lastForce = false
         let navigated = ''
         let status
+        const providerDetail = 'MISS has no usable daily history. '.repeat(40).trim()
         const holdings = [
           { symbol: 'AAA', name: 'Alpha', sector: 'Information Technology', weight: 0.5, price: 110, changes: { live: 10, '1d': 10, '1y': 30 } },
           { symbol: 'BBB', name: 'Beta', sector: 'Financials', weight: 0.3, price: 180, changes: { live: -10, '1d': -10, '1y': -20 } },
@@ -55,7 +56,7 @@ try {
             progress = null
           }
           return { data: payload, meta: { source: payload.priceSource, freshness: mode, fetchedAt: Date.now(),
-            failureReason: mode === 'failed' ? 'Yahoo offline' : mode === 'stale' ? 'Yahoo refresh failed; showing cached prices' : 'MISS has no usable daily history' }, errors: [] }
+            failureReason: mode === 'failed' ? 'Yahoo offline' : mode === 'stale' ? 'Yahoo refresh failed; showing cached prices' : providerDetail }, errors: [] }
         }
         const click = async (text) => { [...document.querySelectorAll('button')].find(button => button.textContent === text).click(); await settle() }
         let refreshHeatmap
@@ -68,16 +69,16 @@ try {
           createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><Probe /></QueryClientProvider>)
           await settle()
           await new Promise(resolve => setTimeout(resolve, 600))
-          check(body().includes('0/3') && body().includes('Loading S&P 500 heatmap') && document.querySelector('[title^="AAA"]'), 'Holdings must render before any price history finishes')
+          check(body().includes('0/3') && document.querySelector('[title^="AAA"]'), 'Holdings must render before any price history finishes')
           progress = preview(progress, [holdings[0], ...holdings.slice(1).map(row => ({ ...row, price: null, changes: {} }))])
           await new Promise(resolve => setTimeout(resolve, 650))
-          check(body().includes('1/3') && body().includes('Loading S&P 500 heatmap') && status.loading, 'Tiles and quote coverage must populate during loading')
+          check(body().includes('1/3') && status.loading, 'Tiles and quote coverage must populate during loading')
           check(client.getQueryState(['heatmap', 'SPY', 'yahoo-v2']).fetchStatus === 'fetching' && !client.getQueryData(['heatmap', 'SPY', 'yahoo-v2']), 'Preview must not mark the completed query ready')
           mode = 'partial'; finishLoad(); await settle()
-          check(calls === 1 && body().includes('Yahoo Finance') && body().includes('2026-10-15'), 'Provider and actual price date')
+          check(calls === 1 && body().includes('2026-10-15'), 'Actual price date must stay visible')
           check(body().includes('Live') && !body().includes('DefeatBeta'), 'Yahoo provider label and Live control')
-          check(body().includes('2/3') && body().includes('MISS has no usable daily history'), 'Partial coverage must stay visible')
-          check(body().includes('Sector coverage: 2/3') && body().includes('Unclassified: MISS'), 'Missing sector classification must stay visible')
+          check(body().includes('2/3') && !body().includes('MISS has no usable daily history') && !body().includes('Sector coverage:'), 'S&P 500 must show quote coverage without diagnostics rows')
+          check(status.envelope.meta.failureReason === providerDetail, 'S&P 500 must keep reporting diagnostics')
           await click('1Y')
           check(calls === 1 && body().includes('1Y Change'), 'Interval changes must reuse loaded history')
           const tile = [...document.querySelectorAll('[title]')].find(element => element.title.startsWith('AAA'))
@@ -85,16 +86,18 @@ try {
           tile.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); await settle()
           check(navigated === 'charts:AAA', 'Double-click navigation')
           await click('Nasdaq 100')
-          check(calls === 2 && body().includes('(QQQ)'), 'Nasdaq button')
+          check(calls === 2 && document.querySelector('[title^="AAA"]') && body().includes('2/3'), 'Nasdaq tiles and quote coverage must stay visible')
+          check(!document.querySelector('[role="status"]') && !body().includes('Sector coverage:') && !body().includes('MISS has no usable daily history'), 'Nasdaq must omit the diagnostics and sector coverage rows')
+          check(status.envelope.data.etf === 'NDX' && status.envelope.meta.failureReason === providerDetail, 'Nasdaq must keep reporting diagnostics')
           await click('S&P 500')
-          check(calls === 2, 'Switching back must reuse its query')
+          check(calls === 2, 'Switching back must reuse the S&P 500 query')
           mode = 'loading'; await refresh()
           await new Promise(resolve => setTimeout(resolve, 600))
           check(body().includes('2/3') && status.loading, 'Refresh retains the existing map while new quotes are pending')
           mode = 'partial'; finishLoad(); await settle()
           check(!status.loading, 'Refresh clears loading only after the final result')
           mode = 'stale'; await refresh()
-          check(lastForce && calls === 4 && body().includes('Yahoo refresh failed') && body().includes('2/3'), 'Stale Yahoo data must retain coverage and show its reason')
+          check(lastForce && calls === 4 && !body().includes('Yahoo refresh failed') && body().includes('2/3') && status.envelope.meta.freshness === 'stale', 'Stale Yahoo data must retain coverage and report freshness to diagnostics')
           mode = 'failed'; await refresh()
           check(status.error?.message.includes('Yahoo offline') && body().includes('2/3') && !status.loading, 'Failed refresh must report diagnostics and retain the previous map')
           mode = 'fresh'; await refresh()
@@ -104,7 +107,9 @@ try {
               check(label.scrollWidth <= label.clientWidth && label.scrollHeight <= label.clientHeight, 'Heatmap labels must fit their tiles')
             }
           }
-          return 'PASS: progressive holdings and quote batches, readiness, Yahoo date, coverage, intervals, index cache, navigation, refresh, stale data and recovery'
+          await click('Dow 30')
+          check(status.envelope.data.etf === 'DJI' && body().includes('2/3') && !body().includes('Sector coverage:') && !body().includes('MISS has no usable daily history'), 'Dow 30 must show coverage without diagnostics rows')
+          return 'PASS: progressive holdings, quote coverage and clean layouts for all three indexes, diagnostics, cache, navigation, refresh and recovery'
         }
       `,
     },

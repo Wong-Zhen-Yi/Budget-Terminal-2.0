@@ -143,7 +143,6 @@ export function SemiconductorsPage({ onStatusChange, onNavigate }: {
           <div className="flex flex-wrap gap-3">{selected.company.sourceUrls.map((url, index) => <SourceLink key={url} url={url} label={index === 0 ? 'Annual report' : index === 1 ? 'SEC filings' : `Company source ${index - 1}`} />)}</div>
           <div className="mt-2 text-text-dim">Reviewed {selected.company.reviewedAt} · financial metrics apply to the whole company.</div>
           {(['market', 'profile', 'news'] as const).map(lane => <div key={lane} className="mt-1 text-text-dim">{lane}: {busy && selected.progress[lane] === 'unavailable' ? 'loading' : semiconductorLaneStatus(selected, lane, now)} · fetched {selected.fetchedAt[lane] ? new Date(selected.fetchedAt[lane]!).toLocaleString() : '--'}</div>)}
-          {selectedErrors.length ? <div className="mt-2 text-warn">{selectedErrors.map(error => `${error.operation.replace('semiconductors-', '')}: ${error.reason}`).join(' · ')}</div> : null}
         </div> : <PanelMessage>Company unavailable</PanelMessage>}
       </Panel>
   )
@@ -194,10 +193,9 @@ export function SemiconductorsPage({ onStatusChange, onNavigate }: {
         <div title={`${overview.unchanged} unchanged · ${overview.quoteCount}/${overview.count} daily quotes`}><strong className="num">{overview.quoteCount ? <><span className="text-up">{overview.advancing} ↑</span> / <span className="text-down">{overview.declining} ↓</span></> : '--'}</strong><span>Daily breadth</span></div>
         <div title={`${overview.quoteCount}/${overview.count} observations · equal weight`}><strong className="num">{signed(overview.daily)}</strong><span>Equal-weight daily return</span></div>
       </div>
-      <div className="semi-load-status"><span role="status">{notice || (busy ? 'Loading company quotes, profiles, adjusted histories and news…' : query.error ? `Load failed: ${query.error.message}` : `${freshness} · ${rows.filter(row => row.market).length}/${rows.length} market snapshots`)}</span></div>
+      <div className="semi-load-status"><span role="status">{notice || (busy ? 'Loading company data…' : query.error || freshness === 'failed' ? 'Company data unavailable. See Settings for details.' : `${freshness} · ${rows.filter(row => row.market).length}/${rows.length} market snapshots`)}</span></div>
     </div>
     {notice ? <p role="status" className="shrink-0 px-2 py-1 text-2xs text-text-muted">{notice}</p> : null}
-    {(!query.data || query.data.meta.freshness === 'failed') && query.error ? <p role="alert" className="shrink-0 px-2 py-1 text-2xs text-down">{query.error.message}</p> : null}
     <nav className="semi-nav" aria-label="Semiconductor views">{([
       ['supply', 'Supply chain'], ['companies', 'Companies'], ['compare', 'Compare'], ['news', 'News & earnings'],
     ] as const).map(([id, label]) => <button key={id} aria-pressed={view === id} onClick={() => setView(id)}>{label}</button>)}</nav>

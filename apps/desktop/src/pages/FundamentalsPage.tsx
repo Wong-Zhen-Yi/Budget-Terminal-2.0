@@ -255,11 +255,6 @@ export function FundamentalsPage({
                 className="min-h-0 flex-1"
                 warning={primaryPayload.sec.warnings.join(' · ') || undefined}
               >
-                {primaryPayload.sec.warnings.length ? (
-                  <p className="shrink-0 border-b border-border px-2 py-1 text-2xs text-warn">
-                    {primaryPayload.sec.warnings.join(' · ')}
-                  </p>
-                ) : null}
                 <FilingsTable filings={primaryPayload.sec.filings} />
               </Panel>
             </div>

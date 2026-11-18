@@ -21,7 +21,6 @@ function Source({ envelope, loading }: { envelope?: Envelope<Sp500Data>; loading
   return <div className="shrink-0 border-b border-border px-2 py-1 text-[10px] text-text-muted">
     {loading ? 'Loading · ' : ''}{data?.asOf || 'Date unavailable'} · {data?.source?.startsWith('https://')
       ? <a className="text-accent underline" href={data.source} target="_blank" rel="noreferrer">Source</a> : data?.source || 'Waiting for source'}
-    {envelope?.errors.map((error, i) => <div key={i} className="text-warn">{error.reason}</div>)}
   </div>
 }
 function Metric({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -116,7 +115,7 @@ export function Sp500Page({ onStatusChange }: { onStatusChange: (panels: PanelSt
 
       <Button onClick={() => void copy()}>Copy Snapshot</Button>
     </div>
-    {queries.some((query) => query.error) && <p className="text-2xs text-warn">{queries.flatMap((query) => query.error ? [query.error.message] : []).join(' · ')}</p>}
+    {queries.some((query) => query.error || query.data?.errors.length) && <p className="text-2xs text-warn">Some index data is unavailable. See Settings for details.</p>}
     <Source envelope={marketQ.data} loading={marketQ.isFetching} />
     <div className="grid shrink-0 grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
       <Metric label="S&P 500" value={number(quote?.price)} sub={`Daily ${pct(quote?.change)}`} />
@@ -180,7 +179,7 @@ export function Sp500Page({ onStatusChange }: { onStatusChange: (panels: PanelSt
       {running && <Button onClick={() => void scanAction('cancel')} disabled={scanBusy}>Cancel</Button>}</>}>
       <p className="px-3 py-2 text-2xs text-text-muted">{scanState?.state ?? 'idle'} · {scanState?.completed ?? 0}/{scanState?.total ?? 0} processed · {scanState?.failed ?? 0} fetch failures · Session {result?.session || '—'} · Completed {scanState?.completedAt || '—'} · Yahoo Finance / Wikipedia</p>
       {running && <progress className="mx-3 mb-2 h-2" max={scanState.total || 1} value={scanState.completed} aria-label="Breadth scan progress" />}
-      {(scanState?.error || breadth.error) && <p className="p-2 text-2xs text-warn">{scanState?.error || breadth.error?.message}</p>}
+      {(scanState?.error || breadth.error) && <p className="p-2 text-2xs text-warn">Breadth data unavailable. Run the scan again to retry.</p>}
       <div className="grid gap-2 p-2 md:grid-cols-5">
         <Metric label="Advancing / declining / unchanged" value={result ? `${result.advancing} / ${result.declining} / ${result.unchanged}` : '—'} sub={`${result?.valid ?? 0}/${result?.total ?? 0} eligible`} />
         <Metric label="Above 50-day SMA" value={pct(result?.eligible50 ? result.above50 / result.eligible50 * 100 : null)} sub={`${result?.eligible50 ?? 0} eligible`} />

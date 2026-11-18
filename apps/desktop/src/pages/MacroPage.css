@@ -2,14 +2,22 @@
 .macro-page h1 { font-size:21px; font-weight:600 }
 .macro-page h2 { font-size:12px; font-weight:600; letter-spacing:.04em }
 .macro-page p, .macro-page small { color:var(--color-text-muted); font-size:11px; line-height:1.5 }
-.macro-header, .macro-chart-heading { display:flex; justify-content:space-between; align-items:center; gap:12px }
-.macro-header nav, .macro-ranges { display:flex; gap:6px; flex-shrink:0 }
-.macro-page button { cursor:pointer }
-.macro-header button, .macro-ranges button { padding:5px 9px; border:1px solid var(--color-border); background:var(--color-surface); font-size:11px }
-.macro-page button:hover { background:var(--color-surface-hover) }
-.macro-workspace { flex:1; min-height:0; display:grid; grid-template-columns:minmax(225px, .95fr) minmax(280px, 1.8fr) minmax(210px, .85fr); grid-template-rows:minmax(220px, 1fr) auto; gap:12px }
+.macro-header { display:flex; justify-content:space-between; align-items:center; gap:12px }
+.macro-header nav { display:flex; gap:6px; flex-shrink:0 }
+.macro-page button:enabled { cursor:pointer }
+.macro-header button { padding:5px 9px; border:1px solid var(--color-border); background:var(--color-surface); font-size:11px }
+.macro-page button:enabled:hover { background:var(--color-surface-hover) }
+.macro-workspace {
+  flex:1;
+  min-height:0;
+  display:grid;
+  grid-template-columns:minmax(250px, 1fr) minmax(260px, 1.4fr) minmax(210px, .85fr);
+  grid-template-rows:minmax(0, 1.22fr) minmax(0, 1fr);
+  grid-template-areas:"compass drivers rates" "releases drivers rates";
+  gap:12px;
+}
 .macro-workspace section { min-width:0; min-height:0; border:1px solid var(--color-border); background:var(--color-surface); padding:12px }
-.macro-compass { display:flex; flex-direction:column; gap:9px; overflow:auto }
+.macro-compass { grid-area:compass; display:flex; flex-direction:column; gap:9px; overflow:auto }
 .macro-compass-grid {
   flex: 1;
   min-height: 112px;
@@ -30,21 +38,32 @@
 .macro-compass dl { display:grid; grid-template-columns:1fr auto; gap:5px 8px; font-size:11px }
 .macro-compass dd { text-align:right; font-variant-numeric:tabular-nums }
 .macro-compass dl small { display:block; font-size:10px }
-.macro-history { display:flex; flex-direction:column; gap:10px }
-.macro-chart-heading { align-items:flex-start }
-.macro-chart-heading p { max-width:370px }
-.macro-chart { flex:1; min-height:100px; display:flex; flex-direction:column }
-.macro-source { border-top:1px solid var(--color-border); padding-top:7px }
-.macro-rates { grid-column:3; grid-row:1 / 3; display:flex; flex-direction:column; gap:8px }
+.macro-release-watch { grid-area:releases; display:flex; flex-direction:column; gap:10px; overflow:auto }
+.macro-release-list { flex:1; display:grid; grid-auto-rows:minmax(25px, 1fr); list-style:none; margin:0; padding:0; border-top:1px solid var(--color-border) }
+.macro-release-list li { display:grid; grid-template-columns:minmax(73px, .85fr) minmax(0, 1.35fr) max-content; align-items:center; gap:8px; padding:4px 6px; border-bottom:1px solid var(--color-border) }
+.macro-release-list li:first-child { background:var(--color-surface-raised); box-shadow:inset 2px 0 var(--color-accent) }
+.macro-release-list time, .macro-release-list span { color:var(--color-text-muted); font-size:11px; font-variant-numeric:tabular-nums }
+.macro-release-list strong { font-weight:600 }
+.macro-release-empty { display:grid; flex:1; place-items:center; text-align:center }
+.macro-rates { grid-area:rates; display:flex; flex-direction:column; gap:8px }
 .macro-rate-list { flex:1; min-height:0; display:flex; flex-direction:column; justify-content:space-evenly; overflow:auto }
 .macro-driver { display:grid; grid-template-columns:1fr auto; gap:3px 8px; padding:9px 8px; width:100%; text-align:left; border-left:2px solid transparent; border-bottom:1px solid var(--color-border) }
 .macro-driver span { font-size:11px }
 .macro-driver strong { font-size:14px; font-variant-numeric:tabular-nums; font-weight:500 }
 .macro-driver small { grid-column:1 / 3; font-size:10px }
-.macro-driver[aria-pressed=true] { border-left-color:var(--color-accent); background:var(--color-surface-raised) }
-.macro-ranges button[aria-pressed=true] { border-color:var(--color-accent); color:var(--color-text) }
-.macro-drivers { grid-column:1 / 3; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px }
+.macro-driver:enabled strong::after { content:'↗'; margin-left:4px; font-size:10px; color:var(--color-text-muted) }
+.macro-drivers { grid-area:drivers; display:flex; flex-direction:column; gap:12px; overflow:auto }
+.macro-driver-group { flex:1; display:flex; flex-direction:column; min-width:0 }
+.macro-driver-group .macro-driver { flex:1; align-content:center }
 .macro-drivers h2 { color:var(--color-text-muted); margin-bottom:5px }
-@media(max-width:1050px) { .macro-page { padding:8px; gap:8px } .macro-workspace { gap:8px; grid-template-columns:minmax(205px,1fr) minmax(230px,1.4fr) minmax(175px,.8fr) } .macro-workspace section { padding:8px } .macro-driver { padding:6px } }
-@media(max-height:720px) and (min-width:761px) { .macro-compass { gap:5px } .macro-compass p { font-size:10px; line-height:1.35 } .macro-compass-grid { min-height:96px } .macro-driver { padding:5px 6px } }
-@media(max-width:760px) { .macro-page { overflow:auto; display:block } .macro-header { align-items:flex-start; flex-direction:column; margin-bottom:8px } .macro-workspace { display:flex; flex-direction:column } .macro-history { height:300px; flex-shrink:0 } .macro-compass { flex-shrink:0 } .macro-rates { flex-shrink:0 } }
+@media(max-width:1050px) { .macro-page { padding:8px; gap:8px } .macro-workspace { gap:8px; grid-template-columns:minmax(235px,1fr) minmax(230px,1.4fr) minmax(175px,.8fr) } .macro-workspace section { padding:8px } .macro-driver { padding:6px } }
+@media(max-height:720px) and (min-width:761px) {
+  .macro-workspace { grid-template-rows:minmax(0, 1.1fr) minmax(0, 1fr) }
+  .macro-compass { gap:5px }
+  .macro-compass p { font-size:10px; line-height:1.35 }
+  .macro-compass-grid { min-height:96px }
+  .macro-drivers, .macro-release-watch { gap:7px }
+  .macro-driver { padding:5px 6px; row-gap:1px }
+}
+@media(max-width:760px) { .macro-page { overflow:auto; display:block } .macro-header { align-items:flex-start; flex-direction:column; margin-bottom:8px } .macro-workspace { display:flex; flex-direction:column } .macro-workspace .macro-release-watch { min-height:260px; flex-shrink:0 } .macro-compass { flex-shrink:0 } .macro-drivers { flex-direction:row; flex-shrink:0 } .macro-rates { flex-shrink:0 } }
+@media(max-width:500px) { .macro-drivers { flex-direction:column } }

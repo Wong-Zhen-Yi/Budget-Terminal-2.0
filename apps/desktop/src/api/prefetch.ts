@@ -33,6 +33,7 @@ import { useEtfPage } from '@/stores/etf'
 import { useUpDownPage } from '@/stores/upDown'
 import { useNewsPageStore } from '@/stores/news'
 import { api, queryKeys } from './client'
+import { macroCalendarRequest } from './calendarQueries'
 import { priceScreenKey } from './priceQueries'
 import { backtestKey, backtestQuotesKey } from './backtestQueries'
 import { FX_REFRESH_MS, PAGE_REFRESH_INTERVAL_MS } from './refreshRates'
@@ -556,6 +557,20 @@ export function buildTasks(
         queryFn: () => api.economic({ background: true, backgroundOrder }),
         staleTime: queryFreshness(queryKeys.economic),
       }, onSnapshot),
+  })
+
+  tasks.push({
+    tab: 'macro',
+    label: 'US release schedule',
+    run: (client, backgroundOrder, onSnapshot) => {
+      const request = macroCalendarRequest()
+      const queryKey = queryKeys.calendarMonth(request.tickers, request.year, request.month)
+      return warmStartupQuery(client, {
+        queryKey,
+        queryFn: () => api.calendarMonth({ ...request, background: true, backgroundOrder }),
+        staleTime: queryFreshness(queryKey),
+      }, onSnapshot)
+    },
   })
 
   // Two feeds, two keys, exactly as the page asks for them: a failed upcoming scrape must

@@ -43,10 +43,23 @@ try {
   const stale = await getPolymarket({ ...request, force: true })
   assert.equal(stale.meta.freshness, 'stale')
   assert.deepEqual(stale.data, fresh.data)
+  let largeCalls = 0
+  const largeValue = 'x'.repeat(3 * 1024 * 1024)
+  globalThis.fetch = async () => { largeCalls++; return new Response(JSON.stringify(largeValue)) }
+  const largeRequest = (limit: string) => ({ endpoint: 'gamma:/markets', params: { limit } })
+  for (const limit of ['2', '3', '4']) {
+    const result = await getPolymarket(largeRequest(limit))
+    assert.equal(result.data.value, largeValue, 'Large responses must stay usable in full')
+  }
+  await getPolymarket(largeRequest('3'))
+  assert.equal(largeCalls, 3, 'Reuse the recent result from memory')
+  await getPolymarket(largeRequest('2'))
+  assert.equal(largeCalls, 4, 'Release the oldest large result when the byte budget is exceeded')
+  globalThis.fetch = async () => new Response('upstream failed', { status: 500 })
   assert.equal((await getPolymarket({ endpoint: 'clob:/time', force: true })).meta.freshness, 'failed')
   globalThis.fetch = async () => new Response('rate limited', { status: 429, headers: { 'retry-after': '2' } })
   assert.equal((await getPolymarket({ endpoint: 'clob:/time', force: true })).meta.freshness, 'failed')
   globalThis.fetch = async () => { throw new Error('Cooldown should prevent this request') }
   assert.match((await getPolymarket({ endpoint: 'clob:/time' })).meta.failureReason!, /cooldown/)
 } finally { globalThis.fetch = original }
-console.log('PASS: public endpoint allowlist, path validation, caching, stale retention, HTTP failures and rate-limit cooldown')
+console.log('PASS: public endpoint allowlist, path validation, byte-bounded caching, stale retention, HTTP failures and rate-limit cooldown')

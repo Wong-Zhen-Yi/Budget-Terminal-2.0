@@ -122,14 +122,14 @@ try {
         let startupError; try { await task.run(client, 10) } catch (error) { startupError = error }
         check(startupError?.state === 'degraded' && client.getQueryData(['semiconductors', 1]).data.rows[0].market, 'Partial startup treated as ready or discarded content')
         await selectCompany('NVDA')
-        check(text().includes('HTTP 503') && text().includes('Company news fixture'), 'Partial outage hid warning or healthy news')
+        check(!text().includes('HTTP 503') && startupError.message.includes('HTTP 503') && text().includes('Company news fixture'), 'Partial outage must keep diagnostics and healthy news without inline provider errors')
         mode = 'failed'; let failure
         try { await window.reloadSemiconductors() } catch (error) { failure = error }
         await settle()
         check(request.force && failure?.state === 'failed' && table().querySelectorAll('tbody tr').length === SEMICONDUCTOR_CATALOG.length, 'Failed refresh must retain catalog and report failure')
         check(client.getQueryData(['semiconductors', 1]).data.rows[0].market, 'Failed refresh discarded the saved market snapshot')
         mode = 'waiting'; const recovery = window.reloadSemiconductors(); await settle()
-        check(text().includes('Loading company quotes'), 'Loading progress missing')
+        check(text().includes('Loading company data'), 'Loading progress missing')
         mode = 'success'; releaseLoading(); await recovery; await settle()
         check(!document.querySelector('[role=alert]'), 'Recovery did not clear warning')
         await window.reloadSemiconductors(); await settle(); check(request.force, 'Explicit reload did not force refresh')

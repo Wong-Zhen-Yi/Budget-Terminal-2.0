@@ -3785,6 +3785,8 @@ export interface DesktopApi {
   marketApiKeys(): Promise<Envelope<import('./marketApiKeys.js').MarketApiKeyStatus>>
   mutateMarketApiKeys(request: import('./marketApiKeys.js').MarketApiKeyMutation): Promise<Envelope<import('./marketApiKeys.js').MarketApiKeyStatus>>
   appMetrics(): Promise<Envelope<AppMetrics>>
+  /** Desktop preload only. Exposes a cache scaling factor rather than raw system metrics. */
+  queryCacheMemoryScale?(): number
   startupPriority(order: number | null): Promise<void>
   cacheStatus(): Promise<Envelope<import('./cachePolicy.js').CacheStatus>>
   configureCache(settings: import('./cachePolicy.js').CacheSettings): Promise<Envelope<import('./cachePolicy.js').CacheStatus>>

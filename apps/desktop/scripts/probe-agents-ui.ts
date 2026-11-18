@@ -303,23 +303,53 @@ try {
         await click('Saved research')
         check(document.querySelector('[role=log]').textContent.includes('Saved answer with source dates') && state.connected, 'Opening history restores transcript without disconnect')
         check(document.getElementById('agent-message').value === '', 'Opening history clears the old draft')
-        const savedArticle = [...document.querySelectorAll('.agents-saved-item')].find(item => item.textContent.includes('Saved research'))
+        const savedArticle = [...document.querySelectorAll('.agents-chat-history-row')].find(item => item.textContent.includes('Saved research'))
         check(savedArticle.querySelectorAll('button')[1].disabled, 'Active chat cannot be deleted')
         const desktopChatId = state.currentChatId
         const desktopTranscript = JSON.stringify(state.messages)
         state.telegramHistory = { history: [{ id: 'telegram-saved', title: 'Telegram research', createdAt: Date.now(), updatedAt: Date.now() + 1000, model: 'fixture-fast', thinking: null, messageCount: 2 }], currentChatId: 'telegram-current', busy: true, selected: null, error: '' }
         client.setQueryData(['agents'], envelope()); await settle()
-        check(document.querySelector('[aria-label="Chat history"] .agents-saved-item small').textContent.startsWith('Telegram'), 'Telegram and desktop history are combined by recency with channel labels')
+        const history = document.querySelector('[aria-label="Chat history"]')
+        const rows = () => [...history.querySelectorAll('.agents-chat-history-row')]
+        check(rows()[0].querySelector('small').textContent.startsWith('Telegram'), 'Telegram and desktop history are combined by recency with channel labels')
+        const channel = history.querySelector('[aria-label="Chat channel"]')
+        const chooseChannel = async value => { channel.value = value; channel.dispatchEvent(new Event('change', { bubbles: true })); await settle() }
+        await chooseChannel('Desktop')
+        check(rows().length === state.history.length && rows().every(row => row.querySelector('small').textContent.startsWith('Desktop')), 'Desktop filter excludes Telegram chats')
+        await chooseChannel('Telegram')
+        check(rows().length === 1 && rows()[0].textContent.includes('Telegram research'), 'Telegram filter excludes desktop chats')
+        await chooseChannel('All')
+        const search = history.querySelector('[aria-label="Search chat titles"]')
+        const searchFor = async value => {
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(search, value)
+          search.dispatchEvent(new Event('input', { bubbles: true })); await settle()
+        }
+        await searchFor('  TELEGRAM  ')
+        check(rows().length === 1, 'Chat title search trims spaces and ignores case')
+        await searchFor('missing chat')
+        check(!rows().length && history.textContent.includes('No chat titles match'), 'Search explains empty results')
+        await searchFor('')
+        state.error = 'Fixture desktop connection unavailable'
+        state.connected = false
+        client.setQueryData(['agents'], envelope()); await settle()
         await click('View Telegram chat: Telegram research')
-        check(document.querySelector('[aria-label="Telegram chat transcript"]').textContent.includes('Telegram saved answer'), 'Telegram history opens its actual transcript even during remote research')
+        const reader = document.querySelector('[aria-label="Telegram chat transcript"]')
+        check(reader.textContent.includes('Telegram saved answer') && !rows()[0].contains(reader), 'Telegram opens a separate reader even during remote research')
+        check(document.activeElement === reader.querySelector('h3'), 'Opening a Telegram transcript focuses its title')
         check(state.currentChatId === desktopChatId && JSON.stringify(state.messages) === desktopTranscript, 'Viewing Telegram history leaves the desktop chat and context unchanged')
-        check(document.querySelector('[aria-label="Chat history"] .agents-saved-item').querySelectorAll('button')[1].disabled, 'Telegram history deletion is disabled during research')
+        check(rows()[0].querySelectorAll('button')[1].disabled, 'Telegram history deletion is disabled during research')
+        history.style.width = '420px'
+        check(getComputedStyle(history.querySelector('.agents-chat-history-browser')).display === 'none' && reader.clientWidth === history.clientWidth, 'Narrow layouts give the reader the full history width')
+        history.style.width = ''
         await click('Close Telegram transcript')
-        check(!document.querySelector('[aria-label="Telegram chat transcript"]'), 'Telegram transcript can be closed')
-        state.telegramHistory.busy = false; client.setQueryData(['agents'], envelope()); await settle()
-        const telegramRow = document.querySelector('[aria-label="Chat history"] .agents-saved-item')
-        telegramRow.querySelectorAll('button')[1].click(); await settle()
+        check(!document.querySelector('[aria-label="Telegram chat transcript"]') && document.activeElement === search, 'Closing the reader returns focus to history search')
+        state.telegramHistory.busy = false; state.error = ''; state.connected = true
+        client.setQueryData(['agents'], envelope()); await settle()
+        await click('Delete chat: Telegram research')
         check(state.telegramHistory.history.length === 1, 'Telegram deletion requires confirmation')
+        await click('Cancel')
+        check(state.telegramHistory.history.length === 1 && !history.querySelector('[aria-label="Confirm delete chat"]'), 'Delete confirmation can be canceled')
+        await click('Delete chat: Telegram research')
         await click('Confirm delete chat')
         check(!state.telegramHistory.history.length && state.history.length > 0, 'Deleting Telegram history preserves desktop chats')
         await click('History')

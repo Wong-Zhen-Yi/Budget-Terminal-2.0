@@ -5,6 +5,11 @@ import { agentCheckpointSchema, agentRunSchema } from './agentRuns.js'
 import { notificationInputSchema } from './notifications.js'
 export { notificationInputSchema } from './notifications.js'
 
+export const AGENT_HISTORY_DAYS = 30
+export const AGENT_HISTORY_CHATS = 100
+export const AGENT_HISTORY_MESSAGES = 300
+export const AGENT_HISTORY_MIB = 50
+
 const id = z.string().min(1).max(100)
 const timestamp = z.number().finite().nonnegative()
 export const trackerDefinitionSchema = z.object({
@@ -36,7 +41,7 @@ export const agentMessageSchema = z.object({
 export const conversationSchema = z.object({
   checkpoint: agentCheckpointSchema.optional(), runLimitMinutes: z.number().int().min(5).max(30).optional(),
   id, title: z.string().max(120), createdAt: timestamp, updatedAt: timestamp,
-  messages: z.array(agentMessageSchema).max(300), model: z.string().nullable(), thinking: z.string().nullable(),
+  messages: z.array(agentMessageSchema).max(AGENT_HISTORY_MESSAGES), model: z.string().nullable(), thinking: z.string().nullable(),
 }).strict()
 export type AgentConversation = z.infer<typeof conversationSchema>
 export type AgentConversationSummary = Omit<AgentConversation, 'messages' | 'checkpoint'> & { messageCount: number }
@@ -56,7 +61,7 @@ export const trackerSchema = trackerDefinitionSchema.omit({ id: true }).extend({
 export type AgentTracker = z.infer<typeof trackerSchema>
 export const agentWorkspaceSchema = z.object({
   version: z.literal(1), currentChatId: id.nullable(),
-  conversations: z.array(conversationSchema).max(100),
+  conversations: z.array(conversationSchema).max(AGENT_HISTORY_CHATS),
   notifications: z.array(notificationSchema).max(500), trackers: z.array(trackerSchema).max(50),
 }).strict()
 export type AgentWorkspaceData = z.infer<typeof agentWorkspaceSchema>

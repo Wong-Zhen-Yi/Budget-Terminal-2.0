@@ -74,6 +74,42 @@
 .agents-saved-text { white-space: pre-wrap; margin: 8px 0; }
 .agents-saved-warning { color: var(--color-warn); }
 .agents-saved-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.agents-chat-history { container: agent-history / inline-size; background: var(--color-surface); font-size: 12px; }
+.agents-chat-history-retention { margin: 0; padding: 4px 12px; color: var(--agents-muted); font-size: 11px; border-bottom: 1px solid var(--agents-border); }
+.agents-chat-history-error { margin: 0; padding: 8px 16px; color: var(--color-warn); overflow-wrap: anywhere; }
+.agents-chat-history-panes { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); max-height: min(38vh, 360px); }
+.agents-chat-history-panes[data-reading=true] { grid-template-columns: minmax(250px, 36%) minmax(0, 1fr); height: min(38vh, 360px); }
+.agents-chat-history-browser, .agents-chat-history-reader { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.agents-chat-history-reader { border-left: 1px solid var(--agents-border); background: var(--color-bg); }
+.agents-chat-history-filters, .agents-chat-history-reader header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--agents-border); }
+.agents-chat-history-filters input { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--agents-border); border-radius: 4px; background: var(--color-surface-raised); color: var(--color-text); font: inherit; }
+.agents-chat-history-filters select { width: auto; max-width: 45%; padding: 6px; }
+.agents-chat-history-list, .agents-chat-history-messages { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
+.agents-chat-history-list { padding: 4px 12px 8px; }
+.agents-chat-history-list h3 { margin: 8px 0 4px; font-size: 11px; font-weight: 600; color: var(--agents-muted); }
+.agents-chat-history-list > p { margin: 8px 0; color: var(--agents-muted); }
+.agents-chat-history-row { display: flex; align-items: center; gap: 6px; padding-right: 4px; border-bottom: 1px solid var(--agents-border); }
+.agents-chat-history-row[data-viewing=true] { border-radius: 4px; background: var(--color-surface-raised); }
+.agents-chat-history-row .agents-chat-history-open { display: grid; flex: 1; gap: 3px; min-width: 0; padding: 6px 8px; border-color: transparent; text-align: left; }
+.agents-chat-history-row .agents-chat-history-open[aria-current=true] { opacity: 1; }
+.agents-chat-history-open[aria-current=true] strong { color: var(--color-accent-hover); }
+.agents-chat-history-open strong, .agents-chat-history-open small, .agents-chat-history-reader h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agents-chat-history-open strong { font-size: 12px; font-weight: 600; }
+.agents-chat-history-open small, .agents-chat-history-reader header p { color: var(--agents-muted); font-size: 11px; }
+.agents-chat-history-actions { display: flex; align-items: center; gap: 4px; }
+.agents-chat-history-actions button, .agents-chat-history-reader header button { padding: 4px 7px; font-size: 11px; }
+.agents-chat-history-reader header { justify-content: space-between; background: var(--color-surface); }
+.agents-chat-history-reader header div { min-width: 0; }
+.agents-chat-history-reader header p, .agents-chat-history-reader h3 { margin: 0; }
+.agents-chat-history-reader h3 { font-size: 13px; font-weight: 600; }
+.agents-chat-history-reader header button { flex-shrink: 0; }
+.agents-chat-history-messages { padding: 12px; user-select: text; }
+.agents-chat-history-filters input:focus-visible, .agents-chat-history-messages:focus-visible { outline: 2px solid var(--color-accent-hover); outline-offset: -2px; }
+@container agent-history (width < 580px) {
+  .agents-chat-history-panes[data-reading=true] { grid-template-columns: minmax(0, 1fr); }
+  .agents-chat-history-panes[data-reading=true] .agents-chat-history-browser { display: none; }
+  .agents-chat-history-reader { border-left: 0; }
+}
 .agents-layout { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1; min-height: 0; }
 .agents-layout.with-controls { grid-template-columns: minmax(0, 1fr) 290px; }
 .agents-chat { display: flex; min-width: 0; min-height: 0; flex-direction: column; }

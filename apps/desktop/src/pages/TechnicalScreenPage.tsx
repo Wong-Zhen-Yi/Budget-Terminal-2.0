@@ -112,10 +112,6 @@ export function TechnicalScreenPage({
       {payload && Object.keys(payload.errors).length ? (
         <p className="shrink-0 text-2xs text-warn">{Object.keys(payload.errors).length} ticker(s) had insufficient or unavailable daily history and were excluded.</p>
       ) : null}
-      {payload && Object.keys(payload.excluded ?? {}).length ? (
-        <p className="shrink-0 text-2xs text-text-muted">{Object.entries(payload.excluded ?? {}).map(([symbol, reason]) => `${symbol}: ${reason}`).join(' · ')}</p>
-      ) : null}
-
       <DataTable columns={columns} rows={rows} rowKey={(row) => row.ticker} layout="fixed" minWidth="900px"
         defaultSort={{ key: 'volume', direction: 'desc' }} onRowDoubleClick={(row) => onNavigate('stocks', row.ticker)}
         empty={payload ? (matches ? 'No matches for this search.' : `No stocks matched ${selected.label} in this scan.`) : 'Run a scan to load technical results.'} />

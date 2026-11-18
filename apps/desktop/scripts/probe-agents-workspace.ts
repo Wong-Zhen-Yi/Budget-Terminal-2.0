@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { mock } from 'node:test'
@@ -8,6 +8,7 @@ import { AgentsService } from '../electron/services/agents.js'
 import { resetTelegramConversation, telegramResearchCommand, telegramHistoryAction, telegramHistorySnapshot, telegramModelChoices } from '../electron/services/telegramResearch.js'
 import type { CodexPacket, CodexTransport } from '../electron/services/codexClient.js'
 import type { AgentTrackerReport } from '../electron/shared/agentWorkspace.js'
+import { AGENT_HISTORY_CHATS, AGENT_HISTORY_DAYS, AGENT_HISTORY_MIB } from '../electron/shared/agentWorkspace.js'
 
 const directory = await mkdtemp(join(tmpdir(), 'budget-agents-workspace-'))
 const previous = { APPDATA: process.env.APPDATA, LOCALAPPDATA: process.env.LOCALAPPDATA }
@@ -120,6 +121,69 @@ try {
   await restarted.command({ type: 'connect' })
   assert.deepEqual(restarted.snapshot().messages, restoredMessages, 'Reconnecting after launch must preserve the transcript without adding a notice')
   assert(requests.at(-1)!.params.baseInstructions.includes('Persist this latest chat'))
+
+  const retentionMs = AGENT_HISTORY_DAYS * 24 * 60 * 60_000
+  const retainedAt = Date.now()
+  const retentionPath = join(directory, 'retention.json')
+  const expiredImage = '11111111-1111-4111-8111-111111111111'
+  const sharedImage = '22222222-2222-4222-8222-222222222222'
+  const removedImages: string[] = []
+  const fixtureChat = (id: string, updatedAt: number, imageIds: string[]) => ({
+    id, title: id, createdAt: updatedAt, updatedAt, model: null, thinking: null,
+    messages: [{ id: id + '-msg', at: updatedAt, role: 'user', text: id, imageArtifacts: imageIds.map(id => ({ id, name: 'Synthetic.png', kind: 'uploaded' })) }],
+  })
+  await writeFile(retentionPath, JSON.stringify({ ...legacy, currentChatId: 'expired', conversations: [
+    fixtureChat('expired', retainedAt - retentionMs, [expiredImage, sharedImage]),
+    fixtureChat('retained', retainedAt - retentionMs + 60_000, [sharedImage]),
+  ] }))
+  const retentionStore = workspace({ path: retentionPath, removeImage: async id => { removedImages.push(id) } })
+  await retentionStore.initialize()
+  assert.equal(retentionStore.currentChatId, null, 'An active chat at the age cutoff expires on startup')
+  assert.deepEqual(retentionStore.snapshot().history.map(chat => chat.id), ['retained'])
+  assert.deepEqual(removedImages, [expiredImage], 'Cleanup removes only artifacts unreferenced by the durable history')
+  const retentionDisk = JSON.parse(await readFile(retentionPath, 'utf8'))
+  assert.deepEqual(retentionDisk.conversations.map((chat: { id: string }) => chat.id), ['retained'])
+  assert.equal(retentionDisk.trackers.length, legacy.trackers.length)
+  assert.equal(retentionDisk.notifications.length, legacy.notifications.length)
+  retentionStore.selectConversation('retained')
+  const retainedChat = retentionStore.conversation()!
+  retentionStore.recordConversation(retainedChat.messages, 'new-model', null)
+  assert.equal(retentionStore.conversation()?.updatedAt, retainedChat.updatedAt, 'Reading history and changing settings do not extend retention')
+  const ids = Array.from({ length: AGENT_HISTORY_CHATS }, () => retentionStore.createConversation().id)
+  assert.equal(retentionStore.snapshot().history.length, AGENT_HISTORY_CHATS)
+  assert.equal(retentionStore.conversation('retained'), null, 'The count cap evicts the oldest chat')
+  assert.equal(retentionStore.currentChatId, ids.at(-1))
+
+  const bytePath = join(directory, 'byte-retention.json')
+  const byteStore = workspace({ path: bytePath })
+  await byteStore.initialize()
+  const largeText = '\0'.repeat(100_000)
+  const largeMessages = (count: number) => Array.from({ length: count }, (_, index) => ({
+    id: 'large-' + index, role: 'assistant' as const, at: Date.now(), text: largeText,
+  }))
+  const oldestLarge = byteStore.createConversation().id
+  byteStore.recordConversation(largeMessages(40), null, null)
+  const middleLarge = byteStore.createConversation().id
+  byteStore.recordConversation(largeMessages(40), null, null)
+  const currentLarge = byteStore.createConversation().id
+  byteStore.recordConversation(largeMessages(40), null, null)
+  await byteStore.flush()
+  assert(!byteStore.snapshot().history.some(chat => chat.id === oldestLarge))
+  assert(byteStore.snapshot().history.some(chat => chat.id === middleLarge))
+  byteStore.recordConversation(largeMessages(90), null, null)
+  await byteStore.flush()
+  assert((await stat(bytePath)).size <= AGENT_HISTORY_MIB * 1024 * 1024)
+  assert.deepEqual(byteStore.snapshot().history.map(chat => chat.id), [currentLarge])
+  assert(byteStore.snapshot().history[0].messageCount < 90)
+  assert.equal(byteStore.conversation()?.messages.at(-1)?.id, 'large-89', 'A single oversized chat retains its newest messages')
+
+  assert(restored.pruneHistory(Date.now() + retentionMs + 60_000), 'An idle live chat can expire while the app is open')
+  assert(!restarted.snapshot().messages.length && !restarted.snapshot().currentChatId)
+  await restarted.command({ type: 'send', text: 'Research after retention cleanup' })
+  const replacementThread = requests.findLast(request => request.method === 'thread/start')!
+  assert(!replacementThread.params.baseInstructions.includes('Persist this latest chat'), 'An expired conversation is never reused as Codex context')
+  await complete()
+  console.log('PASS: age, chat-count and UTF-8 byte retention, safe image cleanup, tracker preservation and fresh context after expiry')
 
   // A fresh lazy Telegram worker must honor /new before its first question after restart.
   restarted.close()

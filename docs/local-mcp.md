@@ -168,6 +168,7 @@ read the saved record to check whether it completed.
 Cache status, cache configuration and heatmap loading progress remain desktop-only
 services. They are explicitly excluded from the MCP route registry so adding these
 local controls does not prevent MCP or the Agents workspace from starting.
+System memory sampling for cache budgets also takes place locally in the desktop app.
 
 ## Permissions, approval and diagnostics
 
@@ -422,6 +423,6 @@ The equity `heatmap` response includes optional per-holding `history` arrays (`d
 
 ### Macro Focus
 
-The Focus workspace includes `macro`, a US cycle desk with a nine-state GDP/CPI compass, selectable activity/inflation/employment histories, and a policy/rates watchlist. It shares the Economic query and government-provider cache. Both pages warm at startup, even when hidden, and retain independent Settings readiness records. The compass compares quarterly annualized real GDP growth and monthly year-over-year CPI inflation with their own prior observations. It rounds each change to 0.01 percentage points and treats displayed moves under 0.10 percentage points in magnitude as steady. The grid highlights a combination when both changes are available. The page shows the separate observation dates and signed changes.
+The Focus workspace includes `macro`, a US cycle desk with a nine-state GDP/CPI compass, the upcoming US release watch and a policy/rates watchlist. Macro warms both economic indicators and the release schedule at startup, even when hidden. Schedule and indicator readiness are visible in Settings. The compass compares quarterly annualized real GDP growth and monthly year-over-year CPI inflation with their own prior observations. It rounds each change to 0.01 percentage points and treats displayed moves under 0.10 percentage points in magnitude as steady. The grid highlights a combination when both changes are available. The page shows the separate observation dates and signed changes. Selecting a driver opens its chart in Economic.
 
-Use `budget_terminal_economic` with `{ "request": {} }` for the underlying rows, histories, source labels, dates, units and missing coverage. Existing market-research permission and stale/partial envelope metadata apply. Use screenshot `request.page: "macro"` for the page. No extra read alias or permission is needed. Run `npm run build:mcp` and `npm run probe:mcp`, then reconnect MCP clients to discover the updated screenshot page enum and economic description. All double-click launchers rebuild through the shared path.
+Use `budget_terminal_economic` with `{ "request": {} }` for the indicator rows, histories, source labels, dates, units and missing coverage. Use `budget_terminal_calendar_month` with the current year and month in US Eastern Time and `request.tickers: []` for the official release dates. The watch lists the next scheduled FOMC decision, CPI release, PCE inflation, jobs report and GDP report available from today through 60 days ahead. Existing market-research permission and stale/partial envelope metadata apply. Use screenshot `request.page: "macro"` for the page. Run `npm run build:mcp` and `npm run probe:mcp`, then reconnect MCP clients to load the updated descriptions. All double-click launchers rebuild through the shared path.

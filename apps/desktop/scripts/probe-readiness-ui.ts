@@ -236,7 +236,7 @@ try {
         useOptionsPage.setState({ symbol: scenario === 'persisted' ? 'AAPL' : '', expiry: '', loaded: scenario === 'persisted' })
         useEtfPage.setState({ ticker: scenario === 'persisted' ? 'SPY' : '' })
         const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnMount: false, refetchOnWindowFocus: false, gcTime: QUERY_IDLE_MS } } })
-        const memory = manageQueryMemory(client, { deferUntilStartup: true, maxBytes: 8192, maxQueries: 20 })
+        const memory = manageQueryMemory(client, { deferUntilStartup: true, maxBytes: 8192, maxQueries: 20, readScale: window.api.queryCacheMemoryScale })
         client.getQueryCache().subscribe(({query}) => registerSnapshot(query.state.data, queryFreshness(query.queryKey)))
         const rendered = createRoot(element)
         rendered.render(<QueryClientProvider client={client}><App /></QueryClientProvider>)
@@ -375,7 +375,7 @@ try {
         }
         for (let extra = 0; extra < 2000; extra++) client.setQueryData(['history', 'memory-stress-' + extra], { values: Array(100).fill(extra) })
         await memory.sweep()
-        check(client.getQueryCache().findAll({ queryKey: ['history'] }).length <= 20, 'Extra memory did not converge before page visits')
+        check(client.getQueryCache().findAll({ queryKey: ['history'] }).length <= 5, 'Extra memory did not converge before page visits')
         check(!startup.timings.some(task => task.state !== 'ready'), 'Fixture startup failed: ' + JSON.stringify(startup.timings.filter(task => task.state !== 'ready')))
         if (!populated) check(client.getQueryData(['quotes', ''])?.data.macro[MACRO_SYMBOLS[0].label]?.price === 100, 'Empty portfolio macro quotes missing')
         if (populated) {
@@ -436,7 +436,7 @@ try {
             await paint(); await window.captureFixture('completed-' + id)
             await paint(); await window.captureFixture('completed-' + id)
           }
-          rendered.unmount(); client.clear()
+          memory.stop(); rendered.unmount(); client.clear()
           return 'PASS: all pages ready at startup, Agents and Notifications ready on first visit, autonomy off and global agent navigation to Charts/MSFT'
         }
         for (const tab of TABS.filter(tab => tab.implemented && (!reloadOnly || tab.id === 'amzn'))) {
@@ -456,7 +456,9 @@ try {
           if (tab.id === 'notifications') check(client.getQueryData(['notifications']), 'Notification data was not warmed')
           // Expiry maintenance runs throughout navigation and uses a rank behind
           // every initial page. It is independent of a first-visit data request.
-          const maintenance = call => call.request?.background && call.request.backgroundOrder >= TABS.filter(tab => tab.implemented).length
+          // Quote visibility updates subscriptions. Auth status polls from the shell.
+          const maintenance = call => ['setEquityQuoteVisibility', 'cloudSyncStatus'].includes(call.method) ||
+            (call.request?.background && call.request.backgroundOrder >= TABS.filter(tab => tab.implemented).length)
           const initial = calls.slice(before).filter(call => !maintenance(call) && !['startupPriority', 'mcpStatus', 'apiUsage', 'appMetrics', 'mutateSettings', 'browserViewport', 'notificationsStatus'].includes(call.method))
           check(initial.length === 0, 'First-visit request on ' + scenario + '/' + tab.id + ': ' + JSON.stringify(initial))
           if (scenario === 'populated' && tab.id === 'portfolio') {
@@ -619,7 +621,7 @@ try {
   await writeFile(join(directory, 'index.html'), `<html><head><link rel="stylesheet" href="theme.css"></head><body><div id="root" style="height:100vh"></div><script>
     window.addEventListener('error', event => console.error(event.error?.stack || event.message));
     window.fixtureTemplates = ${JSON.stringify(templates)};
-    window.api = new Proxy({platform:'win32', onLiveStatusChanged:undefined}, {get: (target, key) => key in target ? target[key] : String(key).startsWith('on') ? () => () => {} : request => window.fixtureHandler(key, request)});
+    window.api = new Proxy({platform:'win32', onLiveStatusChanged:undefined, queryCacheMemoryScale: () => 0.25}, {get: (target, key) => key in target ? target[key] : String(key).startsWith('on') ? () => () => {} : request => window.fixtureHandler(key, request)});
     </script><script src="renderer.js"></script></body></html>`)
   await writeFile(join(directory, 'preload.cjs'), `const {contextBridge,ipcRenderer}=require('electron');contextBridge.exposeInMainWorld('captureFixture',name=>ipcRenderer.invoke('capture-fixture',name));contextBridge.exposeInMainWorld('resizeFixture',(width,height)=>ipcRenderer.invoke('resize-fixture',width,height));contextBridge.exposeInMainWorld('reportFixture',data=>ipcRenderer.invoke('report-fixture',data));`)
   await writeFile(join(directory, 'main.cjs'), `const {app,BrowserWindow,ipcMain}=require('electron');const fs=require('fs');const path=require('path');

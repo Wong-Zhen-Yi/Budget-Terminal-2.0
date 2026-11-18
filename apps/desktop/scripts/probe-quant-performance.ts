@@ -114,7 +114,7 @@ const rpc = createWorkerRpc(() => {
     if (request.kind === 'hang') return
     parentPort.postMessage({ id: request.id, value: 42 })
   })`, { eval: true })
-}, 200)
+}, { timeoutMs: 200 })
 try {
   assert.equal(await rpc.call({ kind: 'ok' }), 42)
   await assert.rejects(rpc.call({ kind: 'exit' }), /exited/)
@@ -124,4 +124,23 @@ try {
   assert.equal(starts, 3)
 } finally { rpc.close() }
 await assert.rejects(rpc.call({ kind: 'ok' }), /closed/)
-console.log('PASS: Quant equivalence, worker responsiveness, details, crash/timeout recovery and shutdown')
+
+let idleStarts = 0
+let workerExit: Promise<number>
+const idleRpc = createWorkerRpc(() => {
+  idleStarts++
+  const worker = new Worker(`const { parentPort } = require('node:worker_threads')
+    parentPort.on('message', ({ id, delay }) => setTimeout(() => parentPort.postMessage({ id, value: 42 }), delay))`, { eval: true })
+  workerExit = new Promise(resolve => worker.once('exit', resolve))
+  return worker
+}, { idleMs: 20, timeoutMs: 1000 })
+try {
+  assert.equal(await idleRpc.call({ delay: 0 }), 42)
+  assert.equal(await idleRpc.call({ delay: 50 }), 42, 'Idle shutdown must spare a worker with pending work')
+  assert.equal(idleStarts, 1)
+  const idleExit = await Promise.race([workerExit!, new Promise(resolve => setTimeout(() => resolve('timeout'), 500))])
+  assert.notEqual(idleExit, 'timeout', 'An idle worker must exit without a shutdown request')
+  assert.equal(await idleRpc.call({ delay: 0 }), 42)
+  assert.equal(idleStarts, 2, 'The next calculation must restart the worker')
+} finally { idleRpc.close() }
+console.log('PASS: Quant equivalence, worker responsiveness, details, idle release, crash/timeout recovery and shutdown')

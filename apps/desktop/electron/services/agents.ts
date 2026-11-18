@@ -10,7 +10,7 @@ import { TABS } from '../shared/contract.js'
 import type { ScreenshotPayload } from '../shared/screenshot.js'
 import type { Envelope, Portfolio, PortfolioPayload } from '../shared/contract.js'
 import type { AgentActivity, AgentImage, AgentMessage, AgentModel, AgentsCommand, AgentsState } from '../shared/agents.js'
-import { agentWorkspaceInstructions, conversationContext, notificationInputSchema, trackerDefinitionSchema, trackerReportSchema } from '../shared/agentWorkspace.js'
+import { AGENT_HISTORY_MESSAGES, agentWorkspaceInstructions, conversationContext, notificationInputSchema, trackerDefinitionSchema, trackerReportSchema } from '../shared/agentWorkspace.js'
 import type { AgentTrackerReport } from '../shared/agentWorkspace.js'
 import type { AgentWorkspace } from './agentWorkspace.js'
 import { agentPortfolioSchema, previewAgentPortfolio } from '../shared/agentPortfolio.js'
@@ -116,7 +116,24 @@ export class AgentsService {
   private phasedAnswers = false
   private navigationWait: { resolve: (value: unknown) => void; timer: NodeJS.Timeout } | null = null
 
-  constructor(private options: Options) { this.images = options.images ?? new AgentImageStore() }
+  constructor(private options: Options) {
+    this.images = options.images ?? new AgentImageStore()
+    if (!options.trackerId) options.workspace?.bindLiveConversation({
+      busy: () => this.state.busy,
+      expired: () => {
+        this.state.messages = []
+        this.checkpoint = null
+        this.state.portfolioProposal = null
+        this.portfolioReview = null
+        this.thread = ''
+        this.threadImagesEnabled = undefined
+      },
+      trimmed: messages => {
+        const retained = new Set(messages.map(message => message.id))
+        this.state.messages = this.state.messages.filter(message => retained.has(message.id))
+      },
+    })
+  }
   async image(id: string) {
     if (!this.state.messages.some(message => message.imageArtifacts?.some(image => image.id === id))) throw new Error('This image is not part of the current chat.')
     return this.images.read(id)
@@ -196,7 +213,7 @@ export class AgentsService {
   }
   private add(role: 'user' | 'assistant' | 'activity', text: string, id: string = randomUUID()) {
     this.state.messages.push({ id, role, text, at: Date.now() })
-    if (this.state.messages.length > 300) this.state.messages.splice(0, this.state.messages.length - 300)
+    if (this.state.messages.length > AGENT_HISTORY_MESSAGES) this.state.messages.splice(0, this.state.messages.length - AGENT_HISTORY_MESSAGES)
     this.saveChat()
   }
   private disableAutonomy() {
@@ -268,6 +285,7 @@ export class AgentsService {
   private async executeCommand(input: AgentsCommand): Promise<AgentsState> {
     const command = commandSchema.parse(input)
     if (this.options.workspace && !this.initialized) await this.initialize()
+    if (!this.options.trackerId) this.options.workspace?.pruneHistory()
     if (command.type === 'readNotifications' || command.type === 'deleteNotification' || command.type === 'trackerEnabled' || command.type === 'deleteTracker') {
       const workspace = this.options.workspace
       if (!workspace) throw new Error('The Agents workspace is unavailable.')
@@ -310,7 +328,6 @@ export class AgentsService {
       if (this.state.autonomy) throw new Error('Turn off autonomous mode before changing chats.')
       const saved = command.type === 'openChat' ? this.options.workspace?.conversation(command.id) : null
       if (command.type === 'openChat' && !saved) throw new Error('That saved chat no longer exists.')
-      if (command.type === 'newChat' && (this.options.workspace?.snapshot().history.length ?? 0) >= 100) throw new Error('History is full (100 chats). Delete an old chat first.')
       const generation = this.generation
       const previousThread = this.thread
       this.state.error = ''
@@ -466,6 +483,11 @@ export class AgentsService {
 
   private async run(text: string, images: AgentImage[] = [], recovery?: AgentCheckpoint) {
     if (!this.state.connected || !this.client) throw new Error('Connect Codex before sending a message.')
+    if (!this.options.trackerId) {
+      this.options.workspace?.pruneHistory()
+      if (recovery && this.checkpoint !== recovery) throw new Error('This research checkpoint expired. Send a new research request.')
+      if (this.options.workspace && !this.options.workspace.currentChatId) this.options.workspace.createConversation()
+    }
     this.researchOnly = !!recovery
     this.toolAbort.abort()
     this.toolAbort = new AbortController()

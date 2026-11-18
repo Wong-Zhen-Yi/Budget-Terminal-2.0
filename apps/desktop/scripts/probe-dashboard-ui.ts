@@ -15,7 +15,7 @@ const bundle = await build({
       import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
       import { MacroBar } from './src/components/dashboard/MacroBar'
       import { useMacroCharts } from './src/api/dashboardQueries'
-      import { useReloadAll } from './src/api/queries'
+      import { markReloadQuery } from './src/api/pageProgress'
       import { queryKeys } from './src/api/client'
       import { MACRO_SYMBOLS } from './electron/shared/contract'
       import { DashboardPage } from './src/pages/DashboardPage'
@@ -31,10 +31,8 @@ const bundle = await build({
       const fixture = symbol => ({data: {symbol, candles: Array.from({length: 40}, (_, i) => ({close: 100 + Math.sin(i) * 5 + i / 3}))}, meta: {freshness: 'fresh'}})
       window.api.chart = async request => { calls.push(request); return fixture(request.symbol) }
       const macro = Object.fromEntries(MACRO_SYMBOLS.map((entry, i) => [entry.label, {price: 100 + i, change: i % 2 ? -0.5 : 0.5}]))
-      let reload
       function Shell() {
         const charts = useMacroCharts()
-        reload = useReloadAll()
         return <MacroBar macro={macro} loading={false} charts={charts} />
       }
       const root = createRoot(document.getElementById('root'))
@@ -127,7 +125,7 @@ const bundle = await build({
         check(returnCalls.length === 0, 'Live heatmap must use startup quotes without fetching history on first visit')
         const heatmap = document.querySelector('.dashboard-portfolio-heatmap')
         check(heatmap.querySelector('[title="AAPL  +1.00%"]'), 'Warm quote changes must render as portfolio heatmap tiles')
-        check(heatmap.textContent.includes('Sector coverage: 1/1'), 'Offline classification coverage must be visible')
+        check(!heatmap.textContent.includes('Sector coverage:'), 'Portfolio heatmap must omit the sector coverage row')
         check(reported.some(panel => panel.label === 'Agents' && panel.envelope), 'Aggregate Agents health with Dashboard 2 holdings')
         check(!reported.some(panel => ['News', 'Options', 'Targets'].includes(panel.label) || panel.label.endsWith('history')), 'Removed panels must not affect Dashboard 2 health')
         check(agentReads === 0 && agentCommands.length === 0, 'Opening embedded Agents must use its startup cache without connecting automatically')
@@ -152,8 +150,8 @@ const bundle = await build({
         check(returnCalls.length === 1 && returnCalls[0].window === '1d' && heatmap.querySelector('[title="AAPL  +5.00%"]'), 'Explicit historical interval updates tile returns')
         check(reported.some(panel => panel.label === 'Heatmap returns' && panel.enabled && panel.envelope), 'Historical heatmap health must reach the dashboard footer')
         heatmapButton('1W').click(); await settle()
-        check(heatmap.textContent.includes('Test heatmap history unavailable'), 'Historical heatmap failures must stay visible')
-        check(reported.some(panel => panel.label === 'Heatmap returns' && panel.envelope?.meta.freshness === 'failed'), 'Report historical heatmap failures')
+        check(heatmap.textContent.includes('Data unavailable.') && !heatmap.textContent.includes('Test heatmap history unavailable'), 'Show a short historical failure notice')
+        check(reported.some(panel => panel.label === 'Heatmap returns' && panel.error?.message.includes('Test heatmap history unavailable')), 'Report historical heatmap failure details to diagnostics')
         heatmapButton('Live').click(); await settle()
         check(heatmap.querySelector('[title="AAPL  +1.00%"]'), 'Live restores quote changes without another history fetch')
         heatmap.querySelector('[title="AAPL  +1.00%"]').dispatchEvent(new MouseEvent('mouseover', {bubbles: true})); await settle()
@@ -171,7 +169,7 @@ const bundle = await build({
         const unknownBook = {...books[1], tickers: ['UNKNOWNTICKER'], holdings: {UNKNOWNTICKER: {ticker: 'UNKNOWNTICKER', shares: 1, avgPrice: 90, includeInWeight: true}}}
         client.setQueryData(queryKeys.quotes(['UNKNOWNTICKER']), envelope({holdings: {UNKNOWNTICKER: {price: 100, change: 1, absChange: 1}}, macro}))
         client.setQueryData(queryKeys.portfolio, envelope({portfolios: [unknownBook], activeId: 'MSFT'})); await settle()
-        check(heatmap.textContent.includes('Sector coverage: 0/1') && heatmap.textContent.includes('Unclassified: UNKNOWNTICKER'), 'Unresolved sectors must stay visible')
+        check(heatmap.textContent.includes('Sector: Unclassified') && !heatmap.textContent.includes('Sector coverage:'), 'Unresolved sectors remain visible in the selected holding detail')
         client.setQueryData(queryKeys.portfolio, envelope({portfolios: books, activeId: 'MSFT'})); await settle()
         client.setQueryData(queryKeys.quotes(['MSFT']), envelope({holdings: {}, macro})); await settle()
         check(!pie.querySelector('svg') && pie.textContent.includes('Allocation unavailable') && pie.textContent.includes('MSFT'), 'Missing prices must not produce a misleading normalized pie')
@@ -193,7 +191,13 @@ const bundle = await build({
           check(svg.getAttribute('aria-label').includes('30 trading sessions'), 'History range label')
           check(svg.querySelector('polyline').getAttribute('points').split(' ').length === 30, 'Last 30 closes')
         }
-        await reload(); await settle()
+        await Promise.all(MACRO_SYMBOLS.map(async ({ symbol }) => {
+          const queryKey = queryKeys.chart(symbol, '1 Day')
+          markReloadQuery(queryKey, true)
+          try { await client.refetchQueries({ queryKey, exact: true }) }
+          finally { markReloadQuery(queryKey, false) }
+        }))
+        await settle()
         check(calls.length === 5 && calls.every(call => call.force), 'F5 refreshes every sparkline')
         root.render(<MacroBar macro={macro} loading={false} charts={MACRO_SYMBOLS.map((entry, i) => ({data: { ...fixture(entry.symbol), meta: {freshness: 'stale'} }, isLoading: false, isError: false}))} />)
         await settle()
@@ -219,7 +223,7 @@ const bundle = await build({
           pegRatio: [2.345, -0.75, null, null, 1, 0.75, 1.01, 0][index]}]))
         const noop = () => {}
         root.render(<PositionsTable portfolio={pegBook} rows={buildPositionRows(pegBook, pegQuotes, pegFacts)} loading={false}
-          onSetShares={noop} onSetAvgPrice={noop} onToggleWeight={noop} onRemove={noop} />)
+          onSetShares={noop} onSetAvgPrice={noop} onToggleWeight={noop} />)
         await settle()
         const pegHeader = [...document.querySelectorAll('th')].find(header => header.textContent.includes('PEG Ratio'))
         check(pegHeader, 'Portfolio stock table must include PEG Ratio')
@@ -246,7 +250,7 @@ const bundle = await build({
         check(['PEGBELOW', 'PEGZERO', 'PEGLOW'].every(ticker => pegValue(ticker).classList.contains('text-green-300')), 'All PEG values below 1.0 must use brighter green')
         check(['PEGMISSING', 'PEGFUND'].every(ticker => pegValue(ticker).classList.contains('text-text-dim')), 'Missing and fund PEG values must remain muted')
         check(getComputedStyle(pegValue('PEGBELOW')).color !== getComputedStyle(pegValue('PEGONE')).color, 'The built stylesheet must render distinct green shades')
-        check(document.querySelector('[aria-label="PEGHIGH shares"]') && document.querySelector('[aria-label="Remove PEGHIGH"]'), 'PEG column must preserve portfolio editing controls')
+        check(document.querySelector('[aria-label="PEGHIGH shares"]') && document.querySelector('[aria-label="PEGHIGH average price"]'), 'PEG column must preserve portfolio editing controls')
         pegHeader.click(); await settle()
         check(document.querySelector('tbody tr').textContent.includes('PEGHIGH'), 'PEG sorts numerically descending')
         check([...document.querySelectorAll('tbody tr')].slice(-2).every(row => /PEGMISSING|PEGFUND/.test(row.textContent)), 'Missing PEG values stay last when sorted descending')
