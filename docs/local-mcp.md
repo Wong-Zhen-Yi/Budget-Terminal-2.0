@@ -15,7 +15,15 @@ indicate unavailable observations.
 The shared cache refreshes recent readings about every 30 seconds and historical
 data hourly. growthepie's public endpoints require no payment or API key.
 Data source and terms are described by [growthepie](https://www.growthepie.com/answers/ethereum-ecosystem-tps).
-Screenshot page `eth`. Rebuild with `npm run build:mcp` and reconnect local clients.
+Screenshot page `eth` shows the Research workbench: recent readings, four linked
+30D/90D metric charts and a shared UTC date inspector. Select a chart heading to
+inspect its layer breakdown; select a chart date, use chart arrow keys or move the
+date slider to update all four charts. Compare shows each layer's absolute change
+from the earliest available earlier observation for that metric in the selected
+range, with the baseline date and units labeled. Missing dates remain gaps and
+are never substituted with zero or another date. Startup preloading, permissions
+and the ETH request/response contract are unchanged.
+Rebuild with `npm run build:mcp` and reconnect local clients after catalog changes.
 
 `budget_terminal_hood` now includes `presentation`: the reviewed November 11,
 2026 Robinhood investor deck and the October 27 Q3 2026 earnings deck. History
@@ -173,6 +181,11 @@ not be used to establish the ranking. Results cover the requested ticker, not a
 market-wide universe. A fresh request does not guarantee live exchange data or
 recent option trades. Ordinary page caching and startup loading are unchanged.
 
+The `projections` tool returns chart history and the options chains used by the
+Projections page. If the chart or the expiration listing fails, the response
+retains the data that loaded and identifies the failed block in `errors`.
+Projection paths require a chart close and usable options rows.
+
 The bridge starts automatically when Budget Terminal opens. Settings > Data >
 Local MCP reports readiness or startup failures. MCP discovery works while the
 app is closed; service calls then say to open Budget Terminal. Restarting the app
@@ -238,6 +251,11 @@ outcome without another edit or approval. Reusing an ID with different arguments
 is refused. Failed or uncertain attempts are not automatically executed again.
 Large results replay a small receipt instructing the client to read saved records.
 The private journal retains up to 500 write receipts across restarts; it refuses new IDs at capacity rather than evicting IDs and risking duplicate edits.
+
+Use a `setMainPage` request with `id` set to a visible, implemented page ID to choose
+which page opens on the next launch. Use `id: null` to restore automatic selection.
+The settings read exposes an explicit choice as `mainPageId`. Hiding the chosen
+page restores automatic selection.
 
 **A private write journal survives app restart.** It records only hashed tool/request IDs, argument fingerprints, outcome states and timestamps in the restricted `.mcp/write-journal.json` file. Arguments, financial records, article content and provider errors are never stored there. Before execution the journal durably records an uncertain outcome; completion updates it atomically. A crash between saving the record and updating the journal remains uncertain, so this is not an exactly-once guarantee.
 

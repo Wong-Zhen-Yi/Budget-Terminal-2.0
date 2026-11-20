@@ -30,12 +30,16 @@ let starts = 0
 let nextThreadId = 'thread-1'
 let threadError = false
 let threadGate: Promise<void> | null = null
+let workspaceMcpServer = 'video-editor-fixture'
 const client: CodexTransport = {
   async start() { starts++ },
   async request(method, params) {
     calls.push({ method, params })
     if (method === 'account/read') return { account: authenticated ? { type: 'chatgpt' } : null }
-    if (method === 'config/read') return { config: { mcp_servers: { unrelated: {} } } }
+    if (method === 'config/read') return { config: { mcp_servers: {
+      unrelated: {},
+      ...((params as { cwd?: string }).cwd === directory ? { [workspaceMcpServer]: { required: true } } : {}),
+    } } }
     if (method === 'model/list') return { data: [
       { model: 'fixture-fast', displayName: 'Fixture Fast', defaultReasoningEffort: 'low', supportedReasoningEfforts: [{ reasoningEffort: 'low', description: 'Quick' }, { reasoningEffort: 'high', description: 'Deeper' }] },
       { model: 'fixture-deep', displayName: 'Fixture Deep', inputModalities: ['text'], defaultReasoningEffort: 'medium', supportedReasoningEfforts: [{ reasoningEffort: 'medium', description: 'Balanced' }] },
@@ -43,6 +47,8 @@ const client: CodexTransport = {
     if (method === 'thread/start') {
       if (threadGate) await threadGate
       if (threadError) throw new Error('Fixture thread creation failed')
+      const config = (params as { config: Record<string, unknown> }).config
+      if (config[`mcp_servers.${workspaceMcpServer}.enabled`] !== false) throw new Error('Required workspace MCP server is offline')
       return { thread: { id: nextThreadId }, model: (params as { model?: string }).model ?? 'fixture-fast', reasoningEffort: null }
     }
     return { turn: { id: 'turn-1' } }
@@ -118,6 +124,7 @@ try {
   assert.equal(start.ephemeral, true)
   assert.deepEqual(start.environments, [])
   assert.equal(start.config['mcp_servers.unrelated.enabled'], false)
+  assert.equal(start.config['mcp_servers.video-editor-fixture.enabled'], false, 'Startup bypasses offline workspace MCP servers')
   assert.equal(start.config['features.shell_tool'], false)
   assert.equal(start.config.web_search, 'live', 'Native live web research is available without opening the shared Browser')
   assert(start.baseInstructions.includes('official investor relations site') && start.baseInstructions.includes('Cite direct source URLs'), 'Web research should verify primary sources and produce usable links')
@@ -275,6 +282,7 @@ try {
   assert.deepEqual(service.snapshot().messages, previousMessages, 'Failed new thread retains the old conversation')
   threadError = false
   nextThreadId = 'thread-new'
+  workspaceMcpServer = 'other-editor-fixture'
   await service.command({ type: 'newChat' })
   assert.equal(service.snapshot().messages.length, 0)
   assert.equal(service.snapshot().connected, true)
@@ -284,6 +292,7 @@ try {
   assert.deepEqual({ starts, closes, accounts: calls.filter(call => call.method === 'account/read').length }, connectionCounts, 'New chat reuses the signed-in Codex transport')
   assert.equal(calls.at(-1)!.method, 'thread/start')
   assert.equal(calls.at(-1)!.params.config.model_reasoning_effort, 'high')
+  assert.equal(calls.at(-1)!.params.config['mcp_servers.other-editor-fixture.enabled'], false, 'New threads pick up workspace MCP changes')
   assert(calls.at(-1)!.params.dynamicTools.some((tool: any) => tool.name === 'terminal_pages'))
   receiver({ method: 'item/agentMessage/delta', params: { threadId: 'thread-1', itemId: 'late', delta: 'Old response' } })
   assert.equal(service.snapshot().messages.length, 0, 'Late output from the old conversation must be ignored')
@@ -293,6 +302,8 @@ try {
   let releaseThread!: () => void
   threadGate = new Promise(resolve => { releaseThread = resolve })
   const resetting = service.command({ type: 'newChat' })
+  await Promise.resolve()
+  assert.equal(calls.at(-1)!.method, 'thread/start')
   assert(service.snapshot().busy)
   await service.command({ type: 'stop' })
   releaseThread()

@@ -167,8 +167,9 @@ export function SettingsPage({
     {
       id: 'workspace', title: 'Workspace', hint: 'A familiar workspace, arranged around the way you research.',
       cards: [
-        { id: 'navigation', category: 'workspace', terms: 'pages navigation visible hidden order move favorites reset', content:
-          <NavigationPanel tabs={orderedTabs} hidden={settings.hiddenTabs}
+        { id: 'navigation', category: 'workspace', terms: 'pages navigation visible hidden order move favorites reset main page choose startup opening default', content:
+          <NavigationPanel tabs={orderedTabs} hidden={settings.hiddenTabs} mainPageId={settings.mainPageId}
+            onSetMainPage={(id) => void write({ type: 'setMainPage', id }, 'Main page updated for the next launch.')}
             onSetHidden={(id, hidden) => void write({ type: 'setTabHidden', id, hidden }, 'Page navigation updated.')}
             onMove={(id, direction) => void write({ type: 'moveTab', id, direction }, 'Page navigation order updated.')}
             onReset={() => void write({ type: 'resetNavigation' }, 'Page navigation reset.')} /> },

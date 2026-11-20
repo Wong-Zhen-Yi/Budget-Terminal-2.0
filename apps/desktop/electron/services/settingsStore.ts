@@ -2,7 +2,7 @@ import { checkRecordRevision } from './mcpContext.js'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
-import { DEFAULT_FAVORITE_TABS } from '../shared/navigation.js'
+import { DEFAULT_FAVORITE_TABS, isVisibleImplementedPage } from '../shared/navigation.js'
 
 import type { AppSettings, AppSettingsMutation } from '../shared/contract.js'
 import {
@@ -45,6 +45,7 @@ export const settingsSchema = z.object({
   time12h: z.boolean().catch(true),
   tabOrder: z.array(z.string()).catch([]),
   hiddenTabs: z.array(z.string()).catch([]),
+  mainPageId: z.string().optional().catch(undefined),
   favoriteTabs: z.array(z.string()).catch([...DEFAULT_FAVORITE_TABS]),
   sidebarCollapsed: z.boolean().catch(false),
   obscuredTabs: z.array(z.string()).optional(),
@@ -118,6 +119,9 @@ function normalize(settings: StoredSettings): StoredSettings {
     ...new Set(ids.filter((id) => KNOWN_TABS.includes(id) && id !== SETTINGS_TAB_ID)),
   ]
   settings.hiddenTabs = keep(settings.hiddenTabs)
+  if (!TABS.some(tab => tab.id === settings.mainPageId && isVisibleImplementedPage(tab, settings.hiddenTabs))) {
+    delete settings.mainPageId
+  }
   settings.favoriteTabs = keep(settings.favoriteTabs)
   settings.obscuredTabs = keep(settings.obscuredTabs ?? [...DEFAULT_OBSCURED_TABS])
   settings.backtestPage = normalizeBacktestPageSettings(settings.backtestPage)
@@ -178,6 +182,7 @@ function toPayload(settings: StoredSettings): AppSettings {
     time12h: settings.time12h,
     tabOrder: [...settings.tabOrder],
     hiddenTabs: [...settings.hiddenTabs],
+    ...(settings.mainPageId === undefined ? {} : { mainPageId: settings.mainPageId }),
     favoriteTabs: [...settings.favoriteTabs],
     sidebarCollapsed: settings.sidebarCollapsed,
     obscuredTabs: [...(settings.obscuredTabs ?? [])],
@@ -216,6 +221,16 @@ function apply(settings: StoredSettings, mutation: AppSettingsMutation): void {
       if (mutation.id === SETTINGS_TAB_ID) throw new Error('Settings must remain visible.')
       if (!KNOWN_TABS.includes(mutation.id)) throw new Error(`Unknown page ${mutation.id}.`)
       settings.hiddenTabs = toggle(settings.hiddenTabs, mutation.id, mutation.hidden)
+      return
+    }
+    case 'setMainPage': {
+      if (mutation.id === null) {
+        delete settings.mainPageId
+      } else if (TABS.some(tab => tab.id === mutation.id && isVisibleImplementedPage(tab, settings.hiddenTabs))) {
+        settings.mainPageId = mutation.id
+      } else {
+        throw new Error('Choose a visible, implemented page as the main page.')
+      }
       return
     }
     case 'moveTab': {
@@ -282,9 +297,11 @@ export async function mutateSettings(mutation: AppSettingsMutation): Promise<App
     try {
       const settings = await loadSettings()
       checkRecordRevision(toPayload(settings))
-      apply(settings, mutation)
-      cached = normalize(settings)
-      await persist(cached)
+      const next = { ...settings, tabOrder: [...settings.tabOrder] }
+      apply(next, mutation)
+      normalize(next)
+      await persist(next)
+      cached = next
     } catch (error) {
       failure = error
     }

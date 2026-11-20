@@ -35,6 +35,8 @@ import {
   PROXY_MIN_PLAUSIBLE_IV,
 } from '../electron/shared/projections.js'
 import { getProjections } from '../electron/services/yahoo/projections.js'
+import { yahoo } from '../electron/services/yahoo/client.js'
+import { yahooProvider } from '../electron/services/provider.js'
 
 /**
  * The Projections page probe, run against `mixins/charts_options_top_volume.py` side by
@@ -43,13 +45,13 @@ import { getProjections } from '../electron/services/yahoo/projections.js'
  * `--offline` covers everything pure: the quality weights, the weighted median, one
  * whole side summary built from a hand-written chain, the confidence-weighted
  * combination, the weekly path interpolation, the coverage aggregate and the Markdown
- * export.
+ * export, plus chart retention during a simulated expiration listing outage.
  *
  * Without it the real load also runs and prints what came back: the chart, every
  * expiration's contract counts, the three headline projections and the coverage tile,
  * so the strip and the panels can be compared against the PySide6 page directly.
  *
- *   npm run probe:projections -- AAPL
+ *   npm run probe:projections -- BMNR --force
  *   npm run probe:projections -- SPY "1 Week"
  *   npm run probe:projections -- --offline
  */
@@ -581,9 +583,35 @@ function runOffline(): void {
   console.log('offline checks passed')
 }
 
-async function runLive(symbol: string, timeframe: ChartsInterval): Promise<void> {
+async function checkSourceFailures(): Promise<void> {
+  const { chart, options } = yahoo
+  const symbol = 'PROJECTIONS-FIXTURE'
+  try {
+    Reflect.set(yahoo, 'chart', async (ticker: string) => {
+      if (ticker !== symbol) throw new Error('Synthetic chart failure')
+      return { quotes: [{ date: new Date(), open: 14, high: 15, low: 13, close: 14, volume: 1000 }] }
+    })
+    Reflect.set(yahoo, 'options', async () => { throw new Error('Synthetic expiration listing failure') })
+    const load = (symbol: string) => yahooProvider.projections({ symbol, timeframe: '1 Day', force: true })
+    const partial = await load(symbol)
+    assert.equal(partial.meta.freshness, 'partial')
+    assert.equal(partial.data.candles.at(-1)?.close, 14)
+    assert.equal(partial.data.chartError, '')
+    assert.deepEqual(partial.data.buckets, [])
+    assert.ok(partial.errors.some(({ symbol, reason }) => symbol === 'Expirations' && reason === 'Synthetic expiration listing failure'))
+
+    const failed = await load('PROJECTIONS-FAILED-FIXTURE')
+    assert.equal(failed.meta.freshness, 'failed')
+    assert.equal(failed.data.chartError, 'Synthetic chart failure')
+    assert.deepEqual(failed.errors.flatMap(error => error.symbol ? [error.symbol] : []).sort(), ['Chart', 'Expirations'])
+  } finally {
+    Object.assign(yahoo, { chart, options })
+  }
+}
+
+async function runLive(symbol: string, timeframe: ChartsInterval, force: boolean): Promise<void> {
   console.log(`\n=== Projections: ${symbol} (${timeframe}) ===`)
-  const { payload, failures } = await getProjections(symbol, timeframe, false)
+  const { payload, failures } = await getProjections(symbol, timeframe, force)
   const currentClose = payload.candles.at(-1)?.close ?? null
   const asOf = payload.candles.at(-1)
     ? new Date(payload.candles[payload.candles.length - 1].time * 1000).toISOString().slice(0, 10)
@@ -673,8 +701,10 @@ async function main(): Promise<void> {
   const timeframe = (positional[1] ?? '1 Day') as ChartsInterval
 
   runOffline()
+  await checkSourceFailures()
+  console.log('source failure checks passed')
   if (offlineOnly) return
-  await runLive(symbol, timeframe)
+  await runLive(symbol, timeframe, args.includes('--force'))
 }
 
 main().catch((error) => {

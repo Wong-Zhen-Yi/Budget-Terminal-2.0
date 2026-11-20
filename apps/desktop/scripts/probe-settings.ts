@@ -18,7 +18,7 @@ const scratch = mkdtempSync(join(tmpdir(), 'bt-settings-'))
 process.env.APPDATA = scratch
 process.env.LOCALAPPDATA = scratch
 
-const { mutateSettings, readSettings, settingsPath, replaceSettings } = await import(
+const { mutateSettings, readSettings, resetSettingsCache, settingsPath, replaceSettings } = await import(
   '../electron/services/settingsStore.js'
 )
 const { TABS } = await import('../electron/shared/contract.js')
@@ -55,6 +55,25 @@ async function main(): Promise<void> {
   console.log(`settings path : ${settingsPath()}`)
 
   const defaults = await readSettings()
+  const { openingPage } = await import('../electron/shared/navigation.js')
+  const { readSyncData } = await import('../electron/services/cloudSyncData.js')
+  const { parseCloudSnapshot } = await import('../electron/shared/cloudSnapshot.js')
+  check('Automatic opens Dashboard 2.0', defaults.mainPageId === undefined && openingPage(defaults) === 'dashboard-2')
+  await mutateSettings({ type: 'setMainPage', id: 'charts' })
+  resetSettingsCache()
+  check('Selected opening page survives a store reload', openingPage(await readSettings()) === 'charts')
+  check('Cloud snapshot carries the opening page', parseCloudSnapshot(await readSyncData()).settings.mainPageId === 'charts')
+  check('Clearing the choice restores Automatic', openingPage(await mutateSettings({ type: 'setMainPage', id: null })) === 'dashboard-2')
+  await mutateSettings({ type: 'setMainPage', id: 'charts' })
+  const hiddenMain = await mutateSettings({ type: 'setTabHidden', id: 'charts', hidden: true })
+  check('Hiding the opening page restores Automatic', hiddenMain.mainPageId === undefined && openingPage(hiddenMain) === 'dashboard-2')
+  await expectRejected('choosing a hidden opening page', () => mutateSettings({ type: 'setMainPage', id: 'charts' }))
+  await expectRejected('choosing a removed opening page', () => mutateSettings({ type: 'setMainPage', id: 'signals' }))
+  const hiddenDefault = await replaceSettings({ ...defaults, hiddenTabs: ['dashboard-2'], mainPageId: 'signals' })
+  const firstVisible = TABS.find(tab => tab.implemented && tab.id !== 'dashboard-2')?.id
+  check('An outdated opening page falls back to the first visible implemented page',
+    hiddenDefault.mainPageId === undefined && openingPage(hiddenDefault) === firstVisible)
+  await replaceSettings(defaults)
   check('AMZN follows MU by default', defaults.tabOrder.indexOf('amzn') === defaults.tabOrder.indexOf('mu') + 1)
   const beforeAmzn = defaults.tabOrder.filter(id => id !== 'amzn').reverse()
   const amznMigration = await replaceSettings({ ...defaults, tabOrder: beforeAmzn, hiddenTabs: ['stocks'], favoriteTabs: ['charts'], obscuredTabs: ['personal-finance'] })
@@ -91,7 +110,6 @@ async function main(): Promise<void> {
   await replaceSettings({ ...defaults, favoriteTabs: ['heatmap', 'heatmap', 'missing', 'settings'] })
   check('import repairs invalid and duplicate favorites', (await readSettings()).favoriteTabs.join(',') === 'heatmap')
   await mutateSettings({ type: 'setTabFavorite', id: 'stocks', favorite: true })
-  const { resetSettingsCache } = await import('../electron/services/settingsStore.js')
   resetSettingsCache()
   check('favorites survive a disk reload', (await readSettings()).favoriteTabs.join(',') === 'heatmap,stocks')
   await mutateSettings({ type: 'setSidebarCollapsed', value: true })

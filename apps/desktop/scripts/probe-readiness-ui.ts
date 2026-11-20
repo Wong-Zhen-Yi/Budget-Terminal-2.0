@@ -217,13 +217,15 @@ try {
       const agentsOnly = ${JSON.stringify(process.argv.includes('--agents'))}
       const refreshOnly = ${JSON.stringify(process.argv.includes('--refresh'))}
       const startupOnly = ${JSON.stringify(process.argv.includes('--startup-only'))}
+      const mainPageOnly = ${JSON.stringify(process.argv.includes('--main-page'))}
       const authOnly = ${JSON.stringify(process.argv.includes('--auth-only'))}
-      for (const scenario of authOnly ? ['empty'] : reloadOnly ? ['populated'] : refreshOnly ? ['persisted'] : agentsOnly ? ['empty'] : ['empty', 'populated', 'persisted']) {
+      for (const scenario of mainPageOnly ? ['empty', 'persisted'] : authOnly ? ['empty'] : reloadOnly ? ['populated'] : refreshOnly ? ['persisted'] : agentsOnly ? ['empty'] : ['empty', 'populated', 'persisted']) {
         console.log('Completed-startup scenario: ' + scenario)
         populated = scenario !== 'empty'
         const restored = scenario === 'persisted'
         restoredCurrency = restored
-        fixtureSettings = { ...settings, youtubePage: { sortColumn: restored ? 3 : -1, sortDescending: restored },
+        fixtureSettings = { ...settings, mainPageId: restored ? 'dictionary' : undefined,
+          youtubePage: { sortColumn: restored ? 3 : -1, sortDescending: restored },
           backtestPage: restored ? { ...DEFAULT_BACKTEST_PAGE_SETTINGS, rows: [{ symbol: 'MSFT', weight: 100 }] } : DEFAULT_BACKTEST_PAGE_SETTINGS }
         useStocksPage.getState().setSymbol(restored ? 'MSFT' : 'AAPL')
         useFundamentalsStore.getState().setSymbol(scenario === 'empty' ? '' : restored ? 'MSFT' : 'AAPL')
@@ -246,6 +248,15 @@ try {
         const startup = useDataHealth.getState().startup
         check(startup && startup.timings.length === startup.planned, 'Startup failed to complete: ' + scenario)
         check(Object.keys(startup.pages).length === TABS.filter(tab => tab.implemented).length, 'Startup omitted a page state')
+        const expectedOpeningPage = restored ? 'dictionary' : 'dashboard-2'
+        check(visiblePage(expectedOpeningPage), 'Wrong opening page: ' + scenario)
+        if (mainPageOnly) {
+          fixtureSettings = { ...fixtureSettings, mainPageId: 'charts' }
+          await client.refetchQueries({ queryKey: ['settings'] }); await wait()
+          check(visiblePage(expectedOpeningPage), 'Saving the opening page changed the current page')
+          memory.stop(); rendered.unmount(); client.clear(); useDataHealth.setState({ startup: null })
+          continue
+        }
         if (authOnly) {
           const popup = () => document.querySelector('dialog.auth-popup[open]')
           const click = text => { const button = [...popup().querySelectorAll('button')].find(button => button.textContent.trim() === text); check(button && !button.disabled, 'Missing enabled auth button: ' + text); button.click() }
@@ -612,6 +623,7 @@ try {
         await wait()
       }
       if (reloadOnly) return 'PASS: F5 reloads the focused page once, checks other pages without force, and preserves all-page startup'
+      if (mainPageOnly) return 'PASS: automatic and saved opening pages, complete startup coverage, and no navigation on settings changes'
       if (startupOnly) return 'PASS: every route is prepared for empty, populated and restored sessions; empty selection screens, thumbnail cooldowns, first visits and F5 reload verified'
       return 'PASS: all ' + TABS.filter(tab => tab.implemented).length + ' routes after completed startup, empty and populated portfolios, persisted Options/ETF/video selections, initial News/video media and no first-visit loads; visible subtab/select/filter/sort sweep recorded separately'
     }

@@ -9,7 +9,7 @@ import { Sp500Page } from '@/pages/Sp500Page'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { SETTINGS_TAB_ID, TABS } from '@shared/contract'
-import { adjacentPage, DEFAULT_TAB_ID, pagesInVisualOrder } from '@shared/navigation'
+import { adjacentPage, openingPage, pagesInVisualOrder } from '@shared/navigation'
 import { useWarmPages } from '@/api/prefetch'
 import { useEquityMarketStream } from '@/api/equityStream'
 import { useMcpScreenshot, useScreenshotReady } from '@/api/mcpScreenshot'
@@ -97,7 +97,14 @@ const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
 
 export function App() {
   const isMac = window.api.platform === 'darwin'
-  const [selectedTab, setActiveTab] = useState(DEFAULT_TAB_ID)
+  const settingsQuery = useSettings()
+  const settings = settingsQuery.data?.data
+  const [tabOverride, setActiveTab] = useState<string>()
+  const initialPage = openingPage(settings)
+  const selectedTab = tabOverride ?? initialPage
+  useEffect(() => {
+    if (!settingsQuery.isPending) setActiveTab(current => current ?? initialPage)
+  }, [initialPage, settingsQuery.isPending])
   useEffect(() => {
     let disposed = false
     const open = () => {
@@ -122,7 +129,9 @@ export function App() {
   }, [authStatus?.signedIn])
   const recent = useNavigation((state) => state.recent)
   const visit = useNavigation((state) => state.visit)
-  useEffect(() => visit(selectedTab), [selectedTab, visit])
+  useEffect(() => {
+    if (!settingsQuery.isPending || tabOverride) visit(selectedTab)
+  }, [selectedTab, settingsQuery.isPending, tabOverride, visit])
   const [panels, setPanels] = useState<PanelStatus[]>([])
   const [sourcePath, setSourcePath] = useState('')
   const [reloading, setReloading] = useState(false)
@@ -132,8 +141,6 @@ export function App() {
   const [notice, setNotice] = useState('')
   const reloadInFlight = useRef(false)
 
-  const settingsQuery = useSettings()
-  const settings = settingsQuery.data?.data
   const mutateSettings = useSettingsMutation()
   const [savingFavorite, setSavingFavorite] = useState(false)
   const [savingSidebar, setSavingSidebar] = useState(false)
@@ -434,7 +441,9 @@ export function App() {
                 blurCurrent ? 'pointer-events-none blur-md select-none' : ''
               }`}
             >
-              <PageCache activeTab={activeTab} retainedTab={screenshotPage ? selectedTab : undefined} visibleIds={visibleIds} renderPage={renderCachedPage} />
+              {(!settingsQuery.isPending || tabOverride || screenshotPage) && (
+                <PageCache activeTab={activeTab} retainedTab={screenshotPage ? selectedTab : undefined} visibleIds={visibleIds} renderPage={renderCachedPage} />
+              )}
             </div>
 
             {blurCurrent ? (

@@ -1,6 +1,18 @@
-import { TABS } from './contract.js'
+import { SETTINGS_TAB_ID, TABS } from './contract.js'
+import type { AppSettings } from './contract.js'
 
 export const DEFAULT_TAB_ID = 'dashboard-2'
+
+export function isVisibleImplementedPage(tab: { id: string; implemented: boolean }, hidden: readonly string[]): boolean {
+  return tab.implemented && !hidden.includes(tab.id)
+}
+
+export function openingPage(settings?: Pick<AppSettings, 'mainPageId' | 'tabOrder' | 'hiddenTabs'>): string {
+  if (!settings) return DEFAULT_TAB_ID
+  const visible = new Set(TABS.filter(tab => isVisibleImplementedPage(tab, settings.hiddenTabs)).map(tab => tab.id))
+  if (settings.mainPageId && visible.has(settings.mainPageId)) return settings.mainPageId
+  return visible.has(DEFAULT_TAB_ID) ? DEFAULT_TAB_ID : settings.tabOrder.find(id => visible.has(id)) ?? SETTINGS_TAB_ID
+}
 
 /** Stable workspace membership; user ordering still applies within each workspace. */
 export const WORKSPACES = [

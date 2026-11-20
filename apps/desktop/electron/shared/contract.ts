@@ -574,6 +574,8 @@ export interface AppSettings {
   tabOrder: string[]
   /** Tab ids kept out of the strip. Never contains `SETTINGS_TAB_ID`. */
   hiddenTabs: string[]
+  /** Explicit opening page. An omitted value uses automatic selection. */
+  mainPageId?: string
   /** Pinned page shortcuts, in pin order. Hidden pages retain their pin. */
   favoriteTabs: string[]
   sidebarCollapsed: boolean
@@ -596,6 +598,7 @@ export type AppSettingsMutation =
   | { type: 'setClockCountry'; code: string }
   | { type: 'setTime12h'; value: boolean }
   | { type: 'setTabHidden'; id: string; hidden: boolean }
+  | { type: 'setMainPage'; id: string | null }
   | { type: 'setTabFavorite'; id: string; favorite: boolean }
   | { type: 'setSidebarCollapsed'; value: boolean }
   | { type: 'moveTab'; id: string; direction: -1 | 1 }

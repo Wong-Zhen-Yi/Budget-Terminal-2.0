@@ -66,6 +66,11 @@ try {
       check(document.querySelector('.settings-scroll').scrollHeight <= document.querySelector('.settings-scroll').clientHeight + 1, 'Compact Workspace must fit the desktop viewport')
       check(visible(card('navigation')) && !visible(card('api')), 'Category filtering failed')
       check(card('api') === original, 'Filtering remounted diagnostics')
+      const mainPage = card('navigation').querySelector('select[aria-label="Main page"]')
+      check(mainPage.value === '' && mainPage.options[0].text === 'Automatic', 'Automatic opening page missing')
+      mainPage.value = 'charts'; mainPage.dispatchEvent(new Event('change', { bubbles: true })); await wait(80)
+      check(window.fixtureSettings.mainPageId === 'charts' && mainPage.value === 'charts', 'Main page choice did not save')
+      check(document.querySelector('.settings-feedback').textContent.includes('next launch'), 'Main page save feedback missing')
       const shortcutDetails = document.querySelector('.settings-shortcut-details')
       check(!shortcutDetails.open && document.querySelectorAll('.settings-shortcuts kbd').length === 7, 'Compact shortcut reference missing')
       shortcutDetails.querySelector('summary').click(); await wait(80)
@@ -325,6 +330,7 @@ try {
       mutateSettings: async mutation => {
         if (window.refuseMutation) throw Error('Fixture save failure')
         if (mutation.type === 'setTime12h') window.fixtureSettings.time12h = mutation.value
+        if (mutation.type === 'setMainPage') window.fixtureSettings.mainPageId = mutation.id ?? undefined
         return envelope({ ...window.fixtureSettings })
       },
       maintenance: async action => { window.maintenanceCalls.push(action); return envelope({ performed: false, message: 'Fixture action completed' }) },

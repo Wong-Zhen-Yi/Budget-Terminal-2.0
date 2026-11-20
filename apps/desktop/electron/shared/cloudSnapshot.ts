@@ -43,6 +43,7 @@ const userData = z.object({
 const settings = z.object({
   version: z.literal(1), clockCountry: text, time12h: z.boolean(),
   tabOrder: strings, hiddenTabs: strings, favoriteTabs: strings,
+  mainPageId: id.optional(),
   sidebarCollapsed: z.boolean().optional(), obscuredTabs: strings.optional(), lastBackupAt: number.nonnegative().optional(),
   backtestPage: z.object({ rows: z.array(z.object({ symbol: text, weight: number }).strict()).max(10_000),
     compareSymbol: text, interval: z.enum(['1D', '1W']), range: z.enum(['Max', '5Y', '3Y', '1Y', 'YTD']),

@@ -102,6 +102,7 @@
     "probe:dictionary-ui": "tsx scripts/probe-dictionary-ui.ts",
     "probe:bitcoin": "tsx scripts/probe-bitcoin.ts",
     "probe:bitcoin-ui": "tsx scripts/probe-bitcoin-ui.ts",
+    "probe:eth-ui": "tsx scripts/probe-eth-ui.ts",
     "probe:bmnr": "tsx scripts/probe-bmnr.ts",
     "probe:avgo": "tsx scripts/probe-avgo.ts",
     "probe:avgo-ui": "tsx scripts/probe-avgo-ui.ts",

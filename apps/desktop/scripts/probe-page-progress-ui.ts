@@ -23,16 +23,28 @@ try {
         import { trackPageQuery } from './src/api/pageProgress'
         import { api } from './src/api/client'
         import { WorkspaceHeader } from './src/components/chrome/WorkspaceNavigation'
+        import { ProjectionsPage } from './src/pages/ProjectionsPage'
         import { useDataHealth } from './src/stores/dataHealth'
+        import { useProjectionsPage } from './src/stores/projections'
         const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
         const check = (ok, message) => { if (!ok) throw Error(message) }
         const wait = ms => new Promise(resolve => setTimeout(resolve, ms))
         let finish
         let preview = null
         let key
+        let projectionsTransportFailure = false
         window.api = Object.freeze({
           bitcoin: () => new Promise(resolve => { finish = resolve }),
           pageProgress: async request => { key = request; return preview },
+          projections: async ({ symbol, timeframe }) => {
+            if (projectionsTransportFailure) throw Error('Network request failed')
+            return {
+              data: { symbol, timeframe, chartError: '', stats: null, spotPrice: 0, marketDate: '', buckets: [],
+                candles: [{ time: 1795190400, open: 14, high: 15, low: 13, close: 14.05, volume: 1000 }] },
+              meta: { freshness: 'partial', fetchedAt: Date.now(), source: 'fixture' },
+              errors: [{ symbol: 'Expirations', operation: 'projections', reason: 'Failed to fetch', source: 'fixture' }],
+            }
+          },
         })
         const queryKey = ['bitcoin']
         function Demo() {
@@ -43,7 +55,8 @@ try {
           // Start in the background, then mount while that same query is pending.
           const pending = client.fetchQuery({ queryKey, queryFn: () => trackPageQuery(queryKey, () => api.bitcoin({ background: true })) })
           await wait(20)
-          createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><Demo /></QueryClientProvider>)
+          const root = createRoot(document.getElementById('root'))
+          root.render(<QueryClientProvider client={client}><Demo /></QueryClientProvider>)
           await wait(300)
           check(key === 'bitcoin:read:{}', 'Preview must share the canonical foreground/background service identity')
           preview = { data: { sections: ['Mining stats'] }, meta: { source: 'fixture', freshness: 'partial', fetchedAt: Date.now() }, errors: [] }
@@ -73,7 +86,18 @@ try {
           await refresh; await wait(150)
           check(client.getQueryData(queryKey) === before && client.getQueryState(queryKey).status === 'error', 'Failed manual refresh must retain content and expose error')
           check(document.querySelector('main').innerText.includes('Fees'), 'Refresh failure erased data')
-          return 'PASS: progressive sections, shared preview identity, clean page labels, retained Settings diagnostics, no global diagnostics banner and retained refresh content'
+          preview = null
+          useProjectionsPage.getState().setSymbol('BMNR')
+          root.render(<QueryClientProvider client={client}><ProjectionsPage onStatusChange={() => {}} /></QueryClientProvider>)
+          await wait(300)
+          check(document.body.innerText.includes('Options unavailable for BMNR: Failed to fetch'), 'BMNR must identify the failed options listing')
+          check(document.body.innerText.includes('$14.05'), 'BMNR must keep the chart close when options fail')
+          projectionsTransportFailure = true
+          document.querySelector('button[type="submit"]').click()
+          await wait(300)
+          check(document.body.innerText.includes('Error loading BMNR: Network request failed'), 'A rejected manual load must show the error')
+          check(document.body.innerText.includes('$14.05') && document.querySelector('button[type="submit"]').textContent === 'Load', 'A failed refresh must retain the chart and allow retry')
+          return 'PASS: progressive sections, shared preview identity, retained Settings diagnostics, no global diagnostics banner, retained refresh content and BMNR chart survival'
         }
 
       `,

@@ -26,9 +26,8 @@ import { getOptionsExpirations } from './optionsPage.js'
  * - `getOptionsExpirations` gives the raw chain for every live expiration — precisely
  *   the `bucket_config` / `bucket_records` loop `_p28_load` writes by hand.
  *
- * A missing chart is not fatal. `_p28_update_view` only fails the page when the chart
- * *and* every expiration came back empty; a chart failure on its own leaves the option
- * tables on screen and drops the projections, which have no close to anchor on.
+ * The chart and options sweep are independent. Keep whichever data loaded if the
+ * other request fails. Projection paths require both a chart close and options rows.
  */
 
 export const PROJECTIONS_SOURCE = 'Yahoo Finance options'
@@ -67,13 +66,16 @@ export async function getProjections(
         failures.push({ block: 'Chart', reason: describeError(error) })
         return null
       }),
-    getOptionsExpirations(symbol, force),
+    getOptionsExpirations(symbol, force).catch((error) => {
+      failures.push({ block: 'Expirations', reason: describeError(error) })
+      return null
+    }),
   ], ([chart, sweep]) => publishPageProgress({
     ...emptyProjections(symbol, timeframe), interval: chart?.interval ?? '', candles: chart?.candles ?? [], stats: chart?.stats ?? null,
     spotPrice: sweep?.payload.spotPrice ?? 0, marketDate: sweep?.payload.marketDate ?? '', buckets: sweep?.payload.buckets ?? [], generatedAt: Date.now(),
   }, PROJECTIONS_SOURCE, [], CHANNELS.projections))
 
-  failures.push(...sweep.failures)
+  if (sweep) failures.push(...sweep.failures)
 
   return {
     payload: {
@@ -83,9 +85,9 @@ export async function getProjections(
       candles: chart?.candles ?? [],
       stats: chart?.stats ?? null,
       chartError: chart ? '' : failures.find((entry) => entry.block === 'Chart')?.reason ?? '',
-      spotPrice: sweep.payload.spotPrice,
-      marketDate: sweep.payload.marketDate,
-      buckets: sweep.payload.buckets,
+      spotPrice: sweep?.payload.spotPrice ?? 0,
+      marketDate: sweep?.payload.marketDate ?? '',
+      buckets: sweep?.payload.buckets ?? [],
       generatedAt: Date.now(),
     },
     failures,

@@ -1,4 +1,5 @@
 const { spawnSync } = require('node:child_process')
+// Ethereum Research workbench and current MCP sources rebuild through this shared path.
 // Macro cycle compass shows nine states and release changes through the shared build path.
 // Agents includes the Summarize macro quick prompt; rebuild current source through the shared launcher.
 // Macro Focus, shared economic startup data and MCP screenshot schemas rebuild through the shared launcher.

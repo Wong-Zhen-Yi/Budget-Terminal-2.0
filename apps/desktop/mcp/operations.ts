@@ -90,14 +90,14 @@ export const operations = {
   discovery: 'Discover securities matching research criteria.',
   optionsChain: 'Get option contracts for a symbol and expiration; use optionsExpirations to choose a date first. Chains may be large; paginate the desired collection.',
   optionsExpirations: 'Fetch every live expiration and its full options chain for one symbol. For top options by volume, use response.fields ["symbol", "marketDate", "topVolume", "generatedAt"] with full response mode: topVolume.rows ranks up to 50 positive-volume contracts across all successfully fetched expirations by volume, then open interest. topVolume includes contract and expiration coverage and failed expirations. This covers the requested symbol, not the whole market. Generic summary mode samples rows and cannot establish volume leaders.',
-  projections: 'Calculate financial projections.',
+  projections: 'Get chart history and options chains for projections. Chart and expiration failures are reported separately with any available data.',
   backtest: 'Run a historical strategy backtest.',
   quantScan: 'Scan a sourced liquid equity universe for quantitative factors and pairs. Long operation; use latestOnly for the saved scan, forceUniverseRefresh only when needed. Progress reports completed histories; cancellation stops new histories and lets in-flight cached reads finish.',
   quantPair: 'Analyze a quantitative trading pair.',
   youtube: 'Get ticker-related YouTube research videos.',
   youtubeThumbnail: 'Get a research-video thumbnail.',
-  settings: 'Read Budget Terminal settings and automatic backup status.',
-  mutateSettings: 'Edit saved navigation, clock, privacy and research settings.',
+  settings: 'Read Budget Terminal settings, including the chosen main page and automatic backup status.',
+  mutateSettings: 'Edit the opening page, navigation, clock, privacy and research settings.',
 } as const
 
 export type Operation = keyof typeof operations

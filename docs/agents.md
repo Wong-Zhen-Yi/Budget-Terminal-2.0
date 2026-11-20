@@ -41,6 +41,8 @@ The **Model** and **Thinking mode** selectors show the connected Codex runtime's
 
 The standard launchers check the detected Codex executable with `--version` and pass its absolute path to Electron. This also handles native Windows executables installed behind npm shims. A missing or broken Codex installation leaves the rest of Budget Terminal usable. Launching the app connects the installed, signed-in Codex runtime but never sends a message, runs inference or enables autonomous mode. A failed connection does not block other pages.
 
+Agents supplies Budget Terminal tools directly to Codex. Each conversation starts with external MCP servers disabled in its effective configuration, including servers configured for the Agents workspace. OpenCut and other external integrations can be offline while Agents connects and opens chats.
+
 ## Chat from the top bar
 
 The **Ask Agent…** box in the top bar is available from every page. Click the field or dropdown arrow to open a full chat below the title bar without navigating away. Type and press **Enter** (or the send arrow) to send directly; the dropdown focuses its full composer for follow-up messages. Typing alone never sends a message or starts inference.

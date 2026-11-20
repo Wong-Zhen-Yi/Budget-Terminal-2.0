@@ -1,10 +1,12 @@
 import { useState } from 'react'
 
 import { SETTINGS_TAB_ID } from '@shared/contract'
+import { isVisibleImplementedPage } from '@shared/navigation'
 import { SectionHeader } from '@/components/settings/SettingsSection'
 import { Button } from '@/components/ui/Button'
 import { Checkbox } from '@/components/ui/Checkbox'
 import { Panel } from '@/components/ui/Panel'
+import { Select } from '@/components/ui/Select'
 
 export interface NavigationTab {
   id: string
@@ -20,6 +22,8 @@ export interface NavigationTab {
 export function NavigationPanel({
   tabs,
   hidden,
+  mainPageId,
+  onSetMainPage,
   onSetHidden,
   onMove,
   onReset,
@@ -27,16 +31,30 @@ export function NavigationPanel({
   /** Every tab, already in the persisted navigation order. */
   tabs: NavigationTab[]
   hidden: string[]
+  mainPageId?: string
+  onSetMainPage: (id: string | null) => void
   onSetHidden: (id: string, value: boolean) => void
   onMove: (id: string, direction: -1 | 1) => void
   onReset: () => void
 }) {
   const [selected, setSelected] = useState<string | null>(tabs[0]?.id ?? null)
   const index = tabs.findIndex((tab) => tab.id === selected)
+  const mainPageOptions = [
+    { value: '', label: 'Automatic' },
+    ...tabs.filter(tab => isVisibleImplementedPage(tab, hidden)).map(tab => ({ value: tab.id, label: tab.label })),
+  ]
 
   return (
     <Panel title="Pages & navigation">
       <div className="flex flex-col gap-2 p-2">
+        <SectionHeader title="Main page" hint="Choose which page opens when you launch Budget Terminal." />
+        <Select
+          aria-label="Main page"
+          value={mainPageId ?? ''}
+          options={mainPageOptions}
+          onChange={(id) => onSetMainPage(id || null)}
+          className="h-8 max-w-72"
+        />
         <SectionHeader
           title="Visible Pages"
           hint="Choose visible pages and their order within each workspace. Favorites are managed from the page header."

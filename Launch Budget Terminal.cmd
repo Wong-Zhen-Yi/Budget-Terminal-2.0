@@ -1,4 +1,8 @@
 @echo off
+rem The shared build includes the Main page setting and its MCP schema.
+rem Ethereum Research workbench includes four linked charts and a shared date inspector.
+rem Agents connects when external MCP servers are offline.
+rem Projections keeps BMNR chart data available when the options listing fails.
 rem Ethereum Focus metrics and growthepie MCP schemas rebuild through the shared launcher.
 rem The shared build includes NVDA Focus and its MCP tool.
 rem The shared build includes Macro indicator trends, the Treasury yield curve and release countdowns.

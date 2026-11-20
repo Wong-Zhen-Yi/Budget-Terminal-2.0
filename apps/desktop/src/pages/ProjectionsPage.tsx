@@ -52,9 +52,7 @@ const toneClass: Record<Tone, string> = {
 }
 
 function failureOf(envelope: Envelope<unknown> | undefined, block: string): string | undefined {
-  const matched = envelope?.errors.find((entry) => entry.symbol === block)
-  if (matched) return matched.reason
-  return envelope?.meta.freshness === 'failed' ? envelope.meta.failureReason : undefined
+  return envelope?.errors.find((entry) => entry.symbol === block)?.reason
 }
 
 export function ProjectionsPage({
@@ -74,16 +72,18 @@ export function ProjectionsPage({
 
   const query = useProjections(symbol, timeframe, armed)
   const refresh = useRefreshProjections()
-  const payload = query.data?.data
+  const envelope = query.data?.data.symbol === symbol ? query.data : undefined
+  const payload = envelope?.data
+  const loadError = query.error?.message || (envelope?.meta.freshness === 'failed' ? envelope.meta.failureReason : undefined)
 
   useEffect(() => setDraft(symbol), [symbol])
 
   useEffect(() => {
     onStatusChange(
-      [{ label: 'Projections', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: query.isFetching }],
+      [{ label: 'Projections', envelope, error: query.error, enabled: query.isEnabled, loading: query.isFetching }],
       '',
     )
-  }, [onStatusChange, query.data, query.isFetching])
+  }, [onStatusChange, envelope, query.error, query.isEnabled, query.isFetching])
 
   /** `_p28_latest_chart_close`, the spot every projection anchors on. */
   const currentClose = payload?.candles.at(-1)?.close ?? null
@@ -143,6 +143,8 @@ export function ProjectionsPage({
       setBusy(true)
       try {
         await refresh(ticker, target)
+      } catch {
+        // React Query exposes the failure in the page status and retains any saved data.
       } finally {
         setBusy(false)
       }
@@ -185,28 +187,26 @@ export function ProjectionsPage({
     })
   }, [buckets, currentClose, model, payload, rowTotal, symbol, timeframe, typeFilter])
 
-  const chartError = payload?.chartError || failureOf(query.data, 'Chart')
+  const chartError = payload?.chartError || failureOf(envelope, 'Chart')
+  const optionsError = failureOf(envelope, 'Expirations')
 
   /** `_p28_apply_completed_view`'s status line, in the same order of precedence. */
   const status = useMemo((): { text: string; tone: Tone } => {
+    if (armed && query.isFetching && !payload?.buckets.length) {
+      return { text: `Loading chart and all expirations for ${symbol}...`, tone: 'warning' }
+    }
+    if (loadError) {
+      return { text: `Error loading ${symbol}: ${loadError}`, tone: 'negative' }
+    }
     if (!armed || !payload) {
       return {
         text: 'Enter a ticker and load all-expiration top-volume options.',
         tone: 'muted',
       }
     }
-    if (query.isFetching && !payload.buckets.length) {
-      return { text: `Loading chart and all expirations for ${symbol}...`, tone: 'warning' }
-    }
-    if (query.data?.meta.freshness === 'failed') {
-      return {
-        text: `Error loading ${symbol}: ${query.data.meta.failureReason}`,
-        tone: 'negative',
-      }
-    }
     if (!buckets.length) {
       return {
-        text: `No listed options expirations were available for ${symbol}.`,
+        text: optionsError ? `Options unavailable for ${symbol}: ${optionsError}` : `No listed options expirations were available for ${symbol}.`,
         tone: 'warning',
       }
     }
@@ -227,9 +227,10 @@ export function ProjectionsPage({
     buckets.length,
     chartError,
     coverageWarning,
+    loadError,
+    optionsError,
     payload,
     populated,
-    query.data,
     query.isFetching,
     rowTotal,
     symbol,
@@ -382,10 +383,10 @@ export function ProjectionsPage({
                     <h3 className="text-2xs font-semibold text-text uppercase">
                       {formatExpiration(bucket.expiry) || bucket.expiry}
                     </h3>
-                    {failureOf(query.data, bucket.expiry) ? (
+                    {failureOf(envelope, bucket.expiry) ? (
                       <span
-                        title={failureOf(query.data, bucket.expiry)}
-                        aria-label={failureOf(query.data, bucket.expiry)}
+                        title={failureOf(envelope, bucket.expiry)}
+                        aria-label={failureOf(envelope, bucket.expiry)}
                         className="size-1.5 shrink-0 rounded-full bg-down"
                       />
                     ) : null}

@@ -1727,7 +1727,7 @@
             "$ref": "#/definitions/McpOutputChartsCompareRange"
           },
           "series": {
-            "$ref": "#/definitions/Record%3Cstring%2Cdef-interface-523195628-30639-30724-523195628-0-148870%5B%5D%3E"
+            "$ref": "#/definitions/Record%3Cstring%2Cdef-interface-523195628-30786-30871-523195628-0-149017%5B%5D%3E"
           },
           "sources": {
             "$ref": "#/definitions/Record%3Cstring%2Cstring%3E"
@@ -1766,7 +1766,7 @@
           "1M"
         ]
       },
-      "Record<string,def-interface-523195628-30639-30724-523195628-0-148870[]>": {
+      "Record<string,def-interface-523195628-30786-30871-523195628-0-149017[]>": {
         "type": "object",
         "additionalProperties": {
           "type": "array",
@@ -3896,9 +3896,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "McpOutputFundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CMcpOutputFundamentalSeriesKey%2Cdef-interface-523195628-25694-25948-523195628-0-148870%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CMcpOutputFundamentalSeriesKey%2Cdef-interface-523195628-25841-26095-523195628-0-149017%5B%5D%3E"
       },
-      "Record<McpOutputFundamentalSeriesKey,def-interface-523195628-25694-25948-523195628-0-148870[]>": {
+      "Record<McpOutputFundamentalSeriesKey,def-interface-523195628-25841-26095-523195628-0-149017[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -14141,9 +14141,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23075-23311-150963582-0-130293%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23222-23458-150963582-0-130440%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-23075-23311-150963582-0-130293[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-23222-23458-150963582-0-130440[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -17683,9 +17683,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23075-23311-150963582-0-130293%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23222-23458-150963582-0-130440%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-23075-23311-150963582-0-130293[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-23222-23458-150963582-0-130440[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -19113,9 +19113,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23075-23311-150963582-0-130293%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23222-23458-150963582-0-130440%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-23075-23311-150963582-0-130293[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-23222-23458-150963582-0-130440[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -20553,9 +20553,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23075-23311-150963582-0-130293%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23222-23458-150963582-0-130440%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-23075-23311-150963582-0-130293[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-23222-23458-150963582-0-130440[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -22840,9 +22840,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23075-23311-150963582-0-130293%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23222-23458-150963582-0-130440%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-23075-23311-150963582-0-130293[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-23222-23458-150963582-0-130440[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -24432,9 +24432,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23075-23311-150963582-0-130293%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23222-23458-150963582-0-130440%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-23075-23311-150963582-0-130293[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-23222-23458-150963582-0-130440[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -34928,6 +34928,10 @@
             },
             "description": "Tab ids kept out of the strip. Never contains `McpOutputSETTINGS_TAB_ID`."
           },
+          "mainPageId": {
+            "type": "string",
+            "description": "Explicit opening page. An omitted value uses automatic selection."
+          },
           "favoriteTabs": {
             "type": "array",
             "items": {
@@ -35335,6 +35339,10 @@
               "type": "string"
             },
             "description": "Tab ids kept out of the strip. Never contains `McpOutputSETTINGS_TAB_ID`."
+          },
+          "mainPageId": {
+            "type": "string",
+            "description": "Explicit opening page. An omitted value uses automatic selection."
           },
           "favoriteTabs": {
             "type": "array",

@@ -1804,10 +1804,8 @@ const providerImplementation: MarketDataProvider = {
   /**
    * The Projections page: one chart plus every live expiration's chain.
    *
-   * A failed chart is `partial`, not `failed` — the option tables and their per-panel
-   * projections still render, exactly as `_p28_update_view` keeps them when only the
-   * chart came back empty. Only an empty sweep *and* an empty chart make the page a
-   * failure, and that arrives here as an empty payload with both blocks reported.
+   * The envelope carries any chart or options data that loaded and identifies the
+   * failed blocks. The page fails only when neither source yields usable data.
    */
   async projections({ symbol, timeframe, force }) {
     const normalized = symbol.trim().toUpperCase()
@@ -1821,17 +1819,12 @@ const providerImplementation: MarketDataProvider = {
     try {
       const { payload, failures } = await getProjections(normalized, timeframe, Boolean(force))
       if (!failures.length) return ok(payload, PROJECTIONS_SOURCE)
+      const errors = failures.map(({ block, reason }) => err(PROJECTIONS_SOURCE, reason, 'projections', block))
+      const reason = failures.map(({ block, reason }) => `${block}: ${reason}`).join(' · ')
       if (!payload.candles.length && !payload.buckets.some((bucket) => bucket.rows.length)) {
-        return failed(payload, failures[0].reason, PROJECTIONS_SOURCE)
+        return { ...failed(payload, reason, PROJECTIONS_SOURCE), errors }
       }
-      return partial(
-        payload,
-        failures.map((failure) =>
-          err(PROJECTIONS_SOURCE, failure.reason, 'projections', failure.block),
-        ),
-        PROJECTIONS_SOURCE,
-        failures[0].reason,
-      )
+      return partial(payload, errors, PROJECTIONS_SOURCE, `${failures[0].block}: ${failures[0].reason}`)
     } catch (error) {
       return failed(emptyProjections(normalized, timeframe), describeError(error), PROJECTIONS_SOURCE)
     }
