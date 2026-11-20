@@ -3,6 +3,7 @@ import { api, queryKeys } from '@/api/client'
 import { useQuery } from '@/api/progressiveQuery'
 import { forcing } from '@/api/queries'
 import { queryFreshness } from '@/api/queryPersistence'
+import { EthMarketView } from '@/components/eth/EthMarketView'
 import { useSnapshotClock } from '@/api/snapshotHealth'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { ETH_DAY_MS, ETH_LIVE_MAX_AGE_MS, ETH_SOURCE_URL, type EthActivityDay, type EthLayerValues, type EthTpsSample } from '@shared/eth'
@@ -223,18 +224,30 @@ export function EthPage({ onStatusChange }: { onStatusChange: (panels: PanelStat
   })
   const now = useSnapshotClock()
   const [linkError, setLinkError] = useState(false)
+  const [view, setView] = useState<'network' | 'market'>('network')
   useEffect(() => onStatusChange([{ label: 'Ethereum', envelope: data, error, loading: isFetching }], ''),
     [data, error, isFetching, onStatusChange])
   const ecosystem = data?.data.ecosystem ?? []
   const mainnet = data?.data.mainnet
   const savedMainnet = mainnet && now - mainnet.asOf > ETH_LIVE_MAX_AGE_MS
+  const viewControls = <div className="eth-view-controls" role="group" aria-label="Ethereum research view">
+    <button type="button" aria-pressed={view === 'network'} onClick={() => setView('network')}>Network</button>
+    <button type="button" aria-pressed={view === 'market'} onClick={() => setView('market')}>Market &amp; supply</button>
+  </div>
+  if (view === 'market') return <EthMarketView payload={data?.data} loading={isPending && !error} viewControls={viewControls} />
   return <div className="eth-page">
     <header className="eth-header">
       <div className="eth-title"><svg viewBox="0 0 40 64" aria-hidden="true"><path className="eth-logo-muted" d="M20 1 1 32l19 11 19-11L20 1ZM1 36l19 27 19-27-19 11L1 36Z" /><path className="eth-logo-accent" d="M20 1v42l19-11L20 1Zm0 46v16l19-27-19 11Z" /></svg><div><h1>Ethereum <span>/ Research workbench</span></h1><p>Inspect throughput, fees and stablecoin supply on one shared timeline.</p></div></div>
-      <div className="eth-source"><button type="button" onClick={async () => {
-        setLinkError(false)
-        try { await api.openExternal(ETH_SOURCE_URL) } catch { setLinkError(true) }
-      }}>Data by growthepie ↗</button>{linkError && <span role="status">Could not open growthepie.</span>}</div>
+      <div className="eth-header-actions">
+        {viewControls}
+        <div className="eth-source">
+          <button type="button" onClick={async () => {
+            setLinkError(false)
+            try { await api.openExternal(ETH_SOURCE_URL) } catch { setLinkError(true) }
+          }}>Data by growthepie ↗</button>
+          {linkError && <span role="status">Could not open growthepie.</span>}
+        </div>
+      </div>
     </header>
     <section className="eth-snapshot" aria-label="Recent Ethereum network samples">
       <div className="eth-snapshot-metric"><h2>Ecosystem · recent</h2><Rate sample={ecosystem.at(-1)} now={now} /></div>

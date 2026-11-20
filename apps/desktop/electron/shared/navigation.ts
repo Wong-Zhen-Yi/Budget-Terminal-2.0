@@ -1,23 +1,21 @@
 import { SETTINGS_TAB_ID, TABS } from './contract.js'
-import type { AppSettings } from './contract.js'
 
 export const DEFAULT_TAB_ID = 'dashboard-2'
 
-export function isVisibleImplementedPage(tab: { id: string; implemented: boolean }, hidden: readonly string[]): boolean {
-  return tab.implemented && !hidden.includes(tab.id)
+export function isMainPageAvailable(id: string, hidden: readonly string[]): boolean {
+  return TABS.some(tab => tab.id === id && tab.implemented) && !hidden.includes(id)
 }
 
-export function openingPage(settings?: Pick<AppSettings, 'mainPageId' | 'tabOrder' | 'hiddenTabs'>): string {
-  if (!settings) return DEFAULT_TAB_ID
-  const visible = new Set(TABS.filter(tab => isVisibleImplementedPage(tab, settings.hiddenTabs)).map(tab => tab.id))
-  if (settings.mainPageId && visible.has(settings.mainPageId)) return settings.mainPageId
-  return visible.has(DEFAULT_TAB_ID) ? DEFAULT_TAB_ID : settings.tabOrder.find(id => visible.has(id)) ?? SETTINGS_TAB_ID
+export function resolveMainPage(mainPage: string | undefined, order: readonly string[], hidden: readonly string[]): string {
+  if (mainPage && isMainPageAvailable(mainPage, hidden)) return mainPage
+  if (isMainPageAvailable(DEFAULT_TAB_ID, hidden)) return DEFAULT_TAB_ID
+  return order.find(id => isMainPageAvailable(id, hidden)) ?? SETTINGS_TAB_ID
 }
 
 /** Stable workspace membership; user ordering still applies within each workspace. */
 export const WORKSPACES = [
-  { id: 'overview', label: 'Overview', pages: ['dashboard', 'dashboard-2', 'news', 'calendar', 'youtube', 'dictionary'] },
-  { id: 'markets', label: 'Markets', pages: ['pre-market', 'heatmap', 'up-down', 'trading-volumes', 'beta', 'market-cap', 'price', 'etf', 'sp500', 'forex', 'crypto', 'polymarket'] },
+  { id: 'overview', label: 'Overview', pages: ['dashboard', 'dashboard-2', 'pre-market', 'news', 'calendar', 'youtube', 'dictionary'] },
+  { id: 'markets', label: 'Markets', pages: ['heatmap', 'up-down', 'trading-volumes', 'beta', 'market-cap', 'price', 'etf', 'sp500', 'forex', 'crypto', 'polymarket'] },
   { id: 'research', label: 'Research', pages: ['browser', 'stocks', 'stock-discovery', 'fundamentals', 'scorecard', 'defeatbeta', 'valuation', 'institutions'] },
   { id: 'focus', label: 'Focus', pages: ['macro', 'bmnr', 'bitcoin', 'eth', 'pltr', 'hood', 'hims', 'sofi', 'mu', 'googl', 'anthropic', 'amzn', 'avgo', 'nvda', 'semiconductors', 'homebuilders', 'vst', 'gold', 'oil'] },
   { id: 'trading', label: 'Trading', pages: ['charts', 'options', 'technical-screen', 'quant', 'backtest'] },

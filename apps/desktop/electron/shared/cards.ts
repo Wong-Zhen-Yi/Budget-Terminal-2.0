@@ -217,6 +217,7 @@ export function buildCardModels(state: CardsPayload, portfolios: Portfolio[]): C
       symbols.push(symbol)
       if (holding && holding.shares > 0) shares[symbol] = holding.shares
     }
+    if (!symbols.length) continue
     models.push({
       id: `portfolio:${portfolio.id}`,
       portfolioId: portfolio.id,

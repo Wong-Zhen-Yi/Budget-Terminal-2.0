@@ -6,6 +6,8 @@ export const DIVERSIFIED_BUDGETS = {
   'world-bank': { label: 'World Bank', minute: 20, day: 1_000 },
   imf: { label: 'IMF', minute: 20, day: 1_000 },
   growthepie: { label: 'growthepie', minute: 10, day: 10 * 60 * 24 },
+  'coin-metrics': { label: 'Coin Metrics', minute: 6, day: 1_000 },
+  ultrasound: { label: 'ultrasound.money', minute: 10, day: 1_000 },
 } as const
 export type DiversifiedProvider = keyof typeof DIVERSIFIED_BUDGETS
 const publicHosts: Record<DiversifiedProvider, string[]> = {
@@ -14,6 +16,8 @@ const publicHosts: Record<DiversifiedProvider, string[]> = {
   'world-bank': ['api.worldbank.org'],
   imf: ['api.imf.org'],
   growthepie: ['api.growthepie.com', 'sse.growthepie.com'],
+  'coin-metrics': ['community-api.coinmetrics.io'],
+  ultrasound: ['ultrasound.money'],
 }
 
 /** Fail over immediately under pressure, without queueing the whole startup behind one provider. */

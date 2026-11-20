@@ -115,7 +115,6 @@ export function Sp500Page({ onStatusChange }: { onStatusChange: (panels: PanelSt
 
       <Button onClick={() => void copy()}>Copy Snapshot</Button>
     </div>
-    {queries.some((query) => query.error || query.data?.errors.length) && <p className="text-2xs text-warn">Some index data is unavailable. See Settings for details.</p>}
     <Source envelope={marketQ.data} loading={marketQ.isFetching} />
     <div className="grid shrink-0 grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
       <Metric label="S&P 500" value={number(quote?.price)} sub={`Daily ${pct(quote?.change)}`} />

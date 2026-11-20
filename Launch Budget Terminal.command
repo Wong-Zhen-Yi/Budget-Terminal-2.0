@@ -1,15 +1,19 @@
 #!/bin/sh
-# The shared build includes the Main page setting and its MCP schema.
-# Ethereum Research workbench includes four linked charts and a shared date inspector.
+# Shared build includes both Ethereum views, the opening page preference, Obscure controls and current MCP schemas.
 # Agents connects when external MCP servers are offline.
 # Projections keeps BMNR chart data available when the options listing fails.
 # Ethereum Focus metrics and growthepie MCP schemas rebuild through the shared launcher.
+# The shared build restores the cloud deployment previously verified with GitHub sign-in.
+# GitHub sign-in uses the shared cloud's OAuth configuration check.
+# GitHub sign-in uses Budget Terminal's shared cloud deployment.
+# The shared build includes faster startup recovery and hides empty portfolio cards.
+# Pre-Market opens from the Overview workspace after the shared build.
 # The shared build includes NVDA Focus and its MCP tool.
 # The shared build includes Macro indicator trends, the Treasury yield curve and release countdowns.
 # Adaptive cache budgets and idle Quant worker cleanup rebuild through the shared launcher.
 # Agents retains Desktop and Telegram history for up to 30 days within storage limits.
 # Agents History rebuilds with Desktop and Telegram filters and a dedicated transcript reader.
-# Heatmaps and other data pages keep provider diagnostics out of the content area.
+# The shared build keeps heatmaps in place when changing timeframes and removes inline data diagnostics.
 # Macro centers Activity, Prices and Employment beside the compass, release schedule and rates.
 # Macro cycle compass shows nine states and release changes through the shared build path.
 # Agents includes the Summarize macro quick prompt; rebuild current source through the shared launcher.
@@ -46,6 +50,7 @@
 # Finnhub prioritizes saved portfolio stocks for pre-market/live feeds and REST refreshes; see docs/finnhub-streaming.md.
 # Dependency security refresh: patched Electron and schema-generation dependencies; see docs/dependency-maintenance.md.
 # Focus provider verification: npm run probe:maintenance-live -- --focus
+# Recurring maintenance checklist: docs/maintenance/Maintainence.md
 # Windows terminal command: btd restart saves, rebuilds and reopens the app.
 # Telegram: natural screenshot requests use MCP and send photos without captions or follow-up text.
 # Trading Volumes defaults to a compact YTD table beside the expanded dot plot.

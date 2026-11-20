@@ -263,7 +263,7 @@ export function ProjectionsPage({
         <Button variant="accent" onClick={() => void exportTopVolume()}>
           Export Top Volume
         </Button>
-        <span className="ml-auto text-2xs text-text-muted">Projection range: All expirations</span>
+        <span className={`ml-auto min-w-0 flex-1 truncate text-right text-2xs ${notice ? toneClass[notice.tone] : 'text-text-muted'}`} role="status" title={notice?.text}>{notice?.text ?? 'Projection range: All expirations'}</span>
       </div>
 
       <div className="flex shrink-0 flex-wrap items-center gap-1 border border-border bg-surface px-2 py-1">
@@ -291,10 +291,6 @@ export function ProjectionsPage({
           </Button>
         ))}
       </div>
-
-      {notice ? (
-        <p className={`shrink-0 px-1 text-2xs ${toneClass[notice.tone]}`}>{notice.text}</p>
-      ) : null}
 
       <section className="grid shrink-0 grid-cols-2 gap-3 border border-border bg-surface px-2 py-1 lg:grid-cols-5">
         <Metric
@@ -409,7 +405,7 @@ export function ProjectionsPage({
       </div>
 
       <p className="shrink-0 px-1 text-2xs text-text-dim">{PROXY_SOURCE_NOTE}</p>
-      <p className={`shrink-0 px-1 text-2xs ${toneClass[status.tone]}`}>{status.text}</p>
+      <p className={`shrink-0 truncate px-1 text-2xs ${toneClass[status.tone]}`} title={status.text}>{status.text}</p>
     </div>
   )
 }

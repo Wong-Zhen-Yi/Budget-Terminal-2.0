@@ -24,6 +24,8 @@ export function BrowserPage({ active, onStatusChange }: { active: boolean; onSta
   const [reader, setReader] = useState<BrowserPageContent | null>(null)
   const viewport = useRef<HTMLDivElement>(null)
   const blank = !tab?.url || tab.url === 'about:blank'
+  const statusError = error || tab?.error || query.error?.message
+    || (query.data?.meta.freshness === 'failed' ? query.data.meta.failureReason || 'Browser status unavailable.' : '')
 
   useEffect(() => { setAddress(blank ? '' : tab?.url ?? ''); setReader(null) }, [tab?.id, tab?.url, blank])
   useEffect(() => {
@@ -113,8 +115,16 @@ export function BrowserPage({ active, onStatusChange }: { active: boolean; onSta
       <button type="submit" disabled={pending || !address.trim() || !state}>Go</button>
       <button type="button" disabled={pending || blank || tab?.loading} onClick={() => reader ? setReader(null) : void control({ action: 'read' })}>{reader ? 'Close reader' : 'Read page'}</button>
     </form>
-    <div className="browser-activity" role="status" aria-live="polite"><span className={tab?.loading || pending ? 'is-working' : ''}>●</span>{pending || tab?.loading ? 'Loading · ' : ''}{state?.activity ?? 'Starting Chromium…'}<span className="browser-activity-note">Shared with your agent · no downloads or device permissions</span></div>
-    {(error || tab?.error || query.error || query.data?.meta.freshness === 'failed') && <div className="browser-error" role="alert">{error || tab?.error || String(query.error || query.data?.meta.failureReason)} <button type="button" onClick={() => void query.refetch()}>Retry status</button></div>}
+    <div className="browser-activity">
+      <span className={tab?.loading || pending ? 'is-working' : ''} aria-hidden="true">●</span>
+      {statusError ? <>
+        <span className="min-w-0 flex-1 truncate text-warn" role="alert" title={statusError}>{statusError}</span>
+        <button className="shrink-0" type="button" onClick={() => { setError(''); void query.refetch() }}>Retry status</button>
+      </> : <>
+        <span className="min-w-0 flex-1 truncate" role="status">{pending || tab?.loading ? 'Loading · ' : ''}{state?.activity ?? 'Starting Chromium…'}</span>
+        <span className="browser-activity-note">Shared with your agent · no downloads or device permissions</span>
+      </>}
+    </div>
     <div className="browser-content">
       <div ref={viewport} className="browser-viewport" aria-label="Website content">
         {blank ? <div className="browser-start">

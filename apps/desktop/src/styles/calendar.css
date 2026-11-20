@@ -28,9 +28,7 @@
 .calendar-toolbar-actions { margin-left: auto; max-width: 100%; }
 .calendar-toolbar-actions > select { width: 96px; flex: 0 0 96px; }
 .calendar-filter-bar { gap: 10px 20px; }
-.calendar-hint { margin-left: auto; color: var(--color-text-muted); font-size: 14px; }
-.calendar-data-status { display: flex; flex-wrap: wrap; gap: 4px 20px; flex-shrink: 0; color: var(--color-text-muted); font-size: 14px; }
-.calendar-data-status > span { overflow-wrap: anywhere; }
+.calendar-hint { flex: 1; min-width: 0; text-align: right; color: var(--color-text-muted); font-size: 14px; }
 .calendar-grid-container { flex: 1; min-width: 0; min-height: 214px; display: flex; }
 
 .calendar-month-grid {

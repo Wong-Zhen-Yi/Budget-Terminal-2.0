@@ -16,7 +16,6 @@ import {
 } from '@shared/valuation'
 import { useRefreshValuation, useValuation } from '@/api/valuationQueries'
 import { effectiveFreshness, errorMessage, useSnapshotClock } from '@/api/snapshotHealth'
-import { DataFreshness } from '@/components/ui/DataFreshness'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { Button } from '@/components/ui/Button'
 import { DataTable, type Column } from '@/components/ui/DataTable'
@@ -591,7 +590,6 @@ export function ValuationPage({
         </span>
       </div>
 
-      <DataFreshness envelope={envelope} loading={query.isFetching} error={query.error} />
       <section className="grid shrink-0 grid-cols-3 divide-x divide-border border border-border bg-surface py-1.5 lg:grid-cols-6">
         <Tile
           title="Verdict"
@@ -657,11 +655,8 @@ export function ValuationPage({
             ) : null}
           </button>
         ))}
+        <span className={`ml-auto min-w-0 flex-1 truncate px-1 text-right text-2xs ${notice ? toneClass[notice.tone] : ''}`} role="status" title={notice?.text}>{notice?.text}</span>
       </div>
-
-      {notice ? (
-        <p className={`shrink-0 px-1 text-2xs ${toneClass[notice.tone]}`}>{notice.text}</p>
-      ) : null}
 
       <div className="flex min-h-0 flex-1 flex-col">
         {activeTab === 'main' ? (
@@ -1024,7 +1019,7 @@ export function ValuationPage({
         ) : null}
       </div>
 
-      <p className={`shrink-0 px-1 text-2xs ${toneClass[status.tone]}`}>{status.text}</p>
+      <p className={`shrink-0 truncate px-1 text-2xs ${toneClass[status.tone]}`} title={status.text}>{status.text}</p>
     </div>
   )
 }

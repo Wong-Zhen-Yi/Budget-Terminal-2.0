@@ -65,12 +65,15 @@ try {
       check(document.querySelector('.settings-toolbar').getBoundingClientRect().height === toolbar.height, 'Switching views resized Preferences')
       check(document.querySelector('.settings-scroll').scrollHeight <= document.querySelector('.settings-scroll').clientHeight + 1, 'Compact Workspace must fit the desktop viewport')
       check(visible(card('navigation')) && !visible(card('api')), 'Category filtering failed')
-      check(card('api') === original, 'Filtering remounted diagnostics')
-      const mainPage = card('navigation').querySelector('select[aria-label="Main page"]')
-      check(mainPage.value === '' && mainPage.options[0].text === 'Automatic', 'Automatic opening page missing')
-      mainPage.value = 'charts'; mainPage.dispatchEvent(new Event('change', { bubbles: true })); await wait(80)
-      check(window.fixtureSettings.mainPageId === 'charts' && mainPage.value === 'charts', 'Main page choice did not save')
+      await setSearch('choose main page')
+      const mainPage = card('navigation').querySelector('#settings-main-page')
+      check(visible(mainPage) && mainPage.value === '', 'Main page picker must be searchable and default to automatic')
+      mainPage.value = 'charts'
+      mainPage.dispatchEvent(new Event('change', { bubbles: true })); await wait(80)
+      check(window.fixtureSettings.mainPage === 'charts' && mainPage.value === 'charts', 'Main page selection did not save')
       check(document.querySelector('.settings-feedback').textContent.includes('next launch'), 'Main page save feedback missing')
+      await setSearch('')
+      check(card('api') === original, 'Filtering remounted diagnostics')
       const shortcutDetails = document.querySelector('.settings-shortcut-details')
       check(!shortcutDetails.open && document.querySelectorAll('.settings-shortcuts kbd').length === 7, 'Compact shortcut reference missing')
       shortcutDetails.querySelector('summary').click(); await wait(80)
@@ -106,20 +109,15 @@ try {
       showAuth.click(); await wait(40)
       check(!showAuth.checked && JSON.parse(localStorage.getItem('budget-terminal:auth-prompt')).state.hidden, 'Popup preference must persist')
       showAuth.click(); await wait(40)
-      const setInput = async (label, value) => {
-        const input = sync.querySelector('[aria-label="' + label + '"]')
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value)
-        input.dispatchEvent(new Event('input', { bubbles: true })); await wait(30)
-      }
-      await setInput('Convex deployment URL', 'https://fixture.convex.cloud')
+      check(!sync.querySelector('input[type=url]'), 'Settings must use the shared endpoint without asking for a URL')
       window.githubNotConfigured = true
       clickText(sync, 'Sign in with GitHub'); await wait(80)
-      check(sync.textContent.includes('AUTH_GITHUB_ID') && !sync.textContent.includes('Cancel sign-in'), 'Missing GitHub credentials must show setup guidance before opening a browser')
+      check(sync.textContent.includes('cloud sign-in is unavailable') && !sync.textContent.includes('Cancel sign-in'), 'Unavailable cloud sign-in must show an error before opening a browser')
       window.githubNotConfigured = false
       clickText(sync, 'Sign in with GitHub'); await wait(80)
       check(sync.textContent.includes('Complete GitHub sign-in') && !sync.querySelector('input[type=url]'), 'Browser approval status missing')
       clickText(sync, 'Cancel sign-in'); await wait(80)
-      check(sync.querySelector('[aria-label="Convex deployment URL"]'), 'Cancelled sign-in must restore the form')
+      check(sync.querySelector('button[type=submit]') && !sync.querySelector('input[type=url]'), 'Cancelled sign-in must restore the GitHub button without a URL field')
       clickText(sync, 'Sign in with GitHub'); await wait(80)
       window.fixtureSync = { ...window.fixtureSync, state: 'synced', signedIn: true, signInPending: false, cloudUpdatedAt: Date.now(), localUpdatedAt: Date.now(), revision: 3 }
       await wait(2100)
@@ -134,14 +132,29 @@ try {
       clickText(sync, 'Confirm replacement'); await wait(80)
       check(window.syncCommands.some(command => command.type === 'resolve' && command.use === 'cloud'), 'Cloud choice did not reach the host')
       clickText(sync, 'Disconnect sync'); await wait(80)
-      check(sync.querySelector('input[type=url]') && sync.textContent.includes('Not connected'), 'Disconnect must retain normal local operation and restore sign-in')
-      check(sync.textContent.includes('Convex Auth v2') && !sync.querySelector('input[type=email]'), 'V2 must explain GitHub reconnection and omit unsupported email-code controls')
+      check(sync.querySelector('button[type=submit]') && !sync.querySelector('input[type=url]') && sync.textContent.includes('Not connected'), 'Disconnect must retain local operation and restore sign-in without a URL field')
+      check(sync.textContent.includes('Sign in with GitHub') && !sync.querySelector('input[type=email]'), 'GitHub must be available after disconnect')
       clickText(card('maintenance'), 'Reset Cache'); await wait(80)
       clickText(document.querySelector('[role=dialog]'), 'Reset Cache'); await wait(80)
       check(window.maintenanceCalls.join() === 'resetCache', 'Confirmed maintenance did not run exactly once')
       const retained = document.querySelector('table[aria-label="Provider usage"]')
       choose('privacy'); await wait(80)
       check(!visible(card('mcp')) && visible(card('privacy')), 'Privacy category failed')
+      const privacy = card('privacy')
+      const obscureSwitch = privacy.querySelector('[role=switch]')
+      check(obscureSwitch.getAttribute('aria-checked') === 'true', 'Obscure should start enabled')
+      obscureSwitch.click(); await wait(80)
+      check(obscureSwitch.getAttribute('aria-checked') === 'false', 'Obscure switch did not toggle')
+      clickText(privacy, 'Selected only'); await wait(80)
+      check(privacy.querySelectorAll('input[type=checkbox]').length === 1, 'Selected-only filter should show the saved portfolio')
+      clickText(privacy, 'Selected only')
+      const pageSearch = privacy.querySelector('input[type=search]')
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(pageSearch, 'personal finance')
+      pageSearch.dispatchEvent(new Event('input', { bubbles: true })); await wait(80)
+      const protection = privacy.querySelectorAll('input[type=checkbox]')
+      check(protection.length === 1 && privacy.textContent.includes('Masks values and recurring bill names'), 'Privacy search must describe matching protection')
+      protection[0].click(); await wait(80)
+      check(window.fixtureSettings.obscuredTabs.includes('personal-finance') && protection[0].checked, 'Protected page choice did not persist')
       choose('integrations'); await wait(80)
       check(visible(card('mcp')) && !visible(card('privacy')), 'Integrations category failed')
       const keys = card('market-api-keys')
@@ -312,7 +325,7 @@ try {
       cloudSyncCommand: async command => {
         window.syncCommands.push(command)
         if (command.type === 'signInGitHub' && window.githubNotConfigured) {
-          const message = 'GitHub sign-in is not configured. Add AUTH_GITHUB_ID and AUTH_GITHUB_SECRET in Convex.'
+          const message = 'Budget Terminal cloud sign-in is unavailable. Try again later or continue locally.'
           window.fixtureSync = { ...window.fixtureSync, state: 'error', message, signInPending: false }
           return { ...envelope(window.fixtureSync), meta: { freshness: 'failed', failureReason: message } }
         }
@@ -330,7 +343,11 @@ try {
       mutateSettings: async mutation => {
         if (window.refuseMutation) throw Error('Fixture save failure')
         if (mutation.type === 'setTime12h') window.fixtureSettings.time12h = mutation.value
-        if (mutation.type === 'setMainPage') window.fixtureSettings.mainPageId = mutation.id ?? undefined
+        if (mutation.type === 'setMainPage') window.fixtureSettings.mainPage = mutation.id ?? undefined
+        if (mutation.type === 'setTabObscured') {
+          const remaining = window.fixtureSettings.obscuredTabs.filter(id => id !== mutation.id)
+          window.fixtureSettings.obscuredTabs = mutation.obscured ? [...remaining, mutation.id] : remaining
+        }
         return envelope({ ...window.fixtureSettings })
       },
       maintenance: async action => { window.maintenanceCalls.push(action); return envelope({ performed: false, message: 'Fixture action completed' }) },

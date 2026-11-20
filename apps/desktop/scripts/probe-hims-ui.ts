@@ -73,7 +73,7 @@ try {
         const root = createRoot(document.getElementById('root'))
         root.render(<QueryClientProvider client={client}><Page /></QueryClientProvider>)
         await settle()
-        check(text().includes('Loading Hims & Hers'), 'Missing initial loading state')
+        check(document.querySelector('[data-hims-page]').getAttribute('aria-busy') === 'true', 'Missing initial loading state')
         window.ready = true
         await settle()
         check(text().includes('2.9M') && text().includes('$750M') && text().includes('-$0.37'), 'KPI metrics missing')
@@ -104,7 +104,8 @@ try {
         check(window.calls === calls, 'Quarter selection repeated provider load')
         select.value = '2026 Q2'; select.dispatchEvent(new Event('change', { bubbles: true })); await settle()
         window.ready = false; void window.reloadAll().catch(() => {}); await settle()
-        check(text().includes('Updating cached dashboard') && text().includes('2.9M'), 'Refresh hid cached content or presented another initial load')
+        check(document.querySelector('[data-hims-page]').getAttribute('aria-busy') === 'true' && text().includes('2.9M'), 'Refresh must retain cached content')
+        check(!text().includes('Updating cached dashboard'), 'Refresh must omit the cached-data status block')
         check(!text().includes('Loading Hims & Hers dashboard'), 'Cached refresh is labelled as initial loading')
         window.ready = true; await settle(); check(window.forced, 'Refresh did not force data reload')
         window.forced = false; await window.reloadAll(); await settle(); check(window.forced, 'Explicit reload did not force HIMS')

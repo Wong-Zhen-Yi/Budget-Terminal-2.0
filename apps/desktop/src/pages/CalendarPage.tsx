@@ -112,7 +112,6 @@ function DetailPanel({ title, children }: { title: ReactNode; children: ReactNod
 
 function MonthlyCalendar({
   payload,
-  envelope,
   loading,
   mainName,
   options,
@@ -120,7 +119,6 @@ function MonthlyCalendar({
   setNotice,
 }: {
   payload: CalendarMonthPayload | undefined
-  envelope: Envelope<CalendarMonthPayload> | undefined
   loading: boolean
   mainName: string
   options: OptionPosition[]
@@ -130,7 +128,6 @@ function MonthlyCalendar({
   const state = useCalendarPage()
   const today = calendarToday(state.timezone)
   const prefix = monthPrefix(state.year, state.month)
-  const refreshing = false
   const exportMonth = useCallback(async () => {
     const inMonth = (date: string) => date.startsWith(prefix)
     const content = buildCalendarExport({
@@ -204,20 +201,10 @@ function MonthlyCalendar({
         <Checkbox checked={state.showCompany} onChange={checked => state.setCategory('showCompany', checked)} label={`Company (${companyRows.length})`} />
         <Checkbox checked={state.showOptions} onChange={checked => state.setCategory('showOptions', checked)} label={`Options (${optionRows.length})`} />
         <Checkbox checked={state.showMarketHolidays} onChange={checked => state.setCategory('showMarketHolidays', checked)} label="Market holidays" />
-        <span className="calendar-hint">Hover to preview · Click a day to pin</span>
+        <span className="calendar-hint truncate" role="status" title={notice || undefined}>{notice || 'Hover to preview · Click a day to pin'}</span>
       </div>
-      <div className="calendar-data-status" role="status">
-        {loading || refreshing ? 'Loading calendar and economic readings…' : `${economicRows.length} economic releases · ${economicRows.filter(event => event.importance === 'high').length} high impact · ${monthLabel(state.year, state.month)}`}
-        {envelope?.meta.failureReason && envelope.meta.freshness !== 'failed' ? <span className="text-warn">Some calendar data is unavailable.</span> : null}
-      </div>
-      {notice ? <div className="shrink-0 border border-border bg-surface-raised px-2 py-1 text-2xs text-text-muted" role="status">{notice}</div> : null}
-      {envelope?.meta.freshness === 'failed' && !payload?.generatedAt ? (
-        <div className="shrink-0">
-          <PanelMessage>Calendar data unavailable. See Settings for details.</PanelMessage>
-        </div>
-      ) : null}
 
-      <div className="calendar-grid-container">
+      <div className="calendar-grid-container" aria-busy={loading}>
         <CalendarMonthGrid
           year={state.year}
           month={state.month}
@@ -405,12 +392,11 @@ function EarningsCalendar({
           className="w-36"
         />
         <Checkbox checked={state.earningsChangedOnly} onChange={state.setEarningsChangedOnly} label="Changed dates only" />
-        <span className={`ml-auto text-2xs ${query.data && effectiveFreshness(query.data, now, FRESHNESS.calendar) === 'stale' ? 'text-warn' : 'text-text-muted'}`}>
-          {cacheText(query.data, query.data?.data.symbolUniverseCount ?? 0, now)}
+        <span className={`ml-auto min-w-0 flex-1 truncate text-right text-2xs ${query.data && effectiveFreshness(query.data, now, FRESHNESS.calendar) === 'stale' ? 'text-warn' : 'text-text-muted'}`} role="status" title={notice || undefined}>
+          {notice || cacheText(query.data, query.data?.data.symbolUniverseCount ?? 0, now)}
         </span>
       </div>
 
-      {notice ? <div className="border border-border bg-surface-raised px-2 py-1 text-2xs text-text-muted">{notice}</div> : null}
       <Panel
         title="Weekly Earnings Calendar"
         warning={warningOf(query.data)}
@@ -490,7 +476,6 @@ export function CalendarPage({ onStatusChange }: { onStatusChange: (panels: Pane
       {state.subTab === 'calendar' ? (
         <MonthlyCalendar
           payload={monthQuery.data?.data}
-          envelope={monthQuery.data}
           loading={monthQuery.isFetching}
           mainName={main?.name ?? 'Main Portfolio'}
           options={options}

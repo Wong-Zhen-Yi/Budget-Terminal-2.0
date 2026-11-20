@@ -50,16 +50,11 @@ export function MoneyPage({ onStatusChange }: { onStatusChange: (panels: PanelSt
   return <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto p-2">
     <div className="flex flex-wrap items-center gap-2">
       <h1 className="text-sm font-semibold text-text">Money</h1>
-      <p className="flex-1 text-2xs text-text-muted">US money supply and Federal Reserve liquidity</p>
+      <p className="flex-1 text-2xs text-text-muted">US money supply and Federal Reserve liquidity · FRED</p>
       <label className="text-2xs text-text-muted">History <select aria-label="History range" className="border border-border bg-surface p-1 text-text" value={years} onChange={(event) => setYears(Number(event.target.value))}>{[1, 3, 5, 10].map((year) => <option key={year} value={year}>{year}Y</option>)}</select></label>
 
 
     </div>
-    <p role="status" className="text-2xs text-text-muted">{busy ? 'Loading FRED observations…'
-      : query.isError && query.data ? 'Showing saved FRED observations.'
-      : query.isError || query.data?.meta.freshness === 'failed' ? 'FRED observations unavailable. See Settings for details.'
-      : query.data?.meta.freshness === 'partial' ? 'Some FRED observations are unavailable.'
-      : 'FRED · Federal Reserve · Monetary values in USD billions.'}</p>
     <div className="grid shrink-0 grid-cols-2 gap-2 md:grid-cols-3 2xl:grid-cols-6">
       {['M2SL', 'M2YoY', 'BOGMBASE', 'WALCL', 'WRESBAL', 'RRPONTSYD'].map((id) => {
         const row = id === 'M2YoY' ? m2 : byId(id)

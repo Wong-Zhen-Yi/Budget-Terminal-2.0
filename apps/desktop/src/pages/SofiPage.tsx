@@ -45,7 +45,6 @@ function Trend({ title, quarters, metrics, unit, warning, loading }: {
 export function SofiPage({ onStatusChange }: { onStatusChange: (panels: PanelStatus[], sourcePath: string) => void }) {
   const query = useSofi()
   const [range, setRange] = useState<StocksRangePreset>('1Y')
-  const notice = ''
   const payload = query.data?.data
   const reports = payload?.reports
   const quarters = reports?.quarters ?? []
@@ -92,7 +91,6 @@ export function SofiPage({ onStatusChange }: { onStatusChange: (panels: PanelSta
       <span className="ml-auto text-2xs text-text-muted">{status}</span>
 
     </div>
-    {notice ? <p role="status" className="shrink-0 px-2 py-1 text-2xs text-text-muted">{notice}</p> : null}
     <div className="grid shrink-0 grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
       <Tile label={payload?.market?.chart.stats.priceBasis === 'equity-perp-mark' ? 'Equity-perp mark' : 'Share price'} value={currency(payload?.price)} sub={`${payload?.market?.chart.stats.changeBasis === '24h' ? '24h' : 'Daily'} change ${percent(payload?.changePct)}`} title={`${payload?.market?.chart.stats.priceSource ?? 'Yahoo Finance'} · quote retrieved ${quoteTime}`} />
       <Tile label="Market capitalization" value={payload?.market?.metrics.marketCap && payload.market.metrics.marketCap !== 'N/A' ? `$${payload.market.metrics.marketCap}` : EM_DASH} sub="Yahoo Finance · USD" />

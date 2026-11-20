@@ -62,6 +62,7 @@ export function PortfolioPage({
   const fundamentalsQuery = useFundamentals(holdings)
 
   const [subTab, setSubTab] = useState<SubTabId>('stocks')
+  const [analyticsPanels, setAnalyticsPanels] = useState<PanelStatus[]>([])
   const [managing, setManaging] = useState(false)
   const [addingPositions, setAddingPositions] = useState(false)
   const [movingPositions, setMovingPositions] = useState(false)
@@ -154,11 +155,13 @@ export function PortfolioPage({
           error: fundamentalsQuery.error,
           enabled: fundamentalsQuery.isEnabled,
         },
+        ...analyticsPanels,
       ],
       payload?.sourcePath ?? '',
     )
   }, [
     onStatusChange,
+    analyticsPanels,
     optionQuotesQuery.data,
     optionQuotesQuery.isFetching,
     optionQuotesQuery.error,
@@ -370,7 +373,11 @@ export function PortfolioPage({
           <button
             key={tab.id}
             type="button"
-            onClick={() => setSubTab(tab.id)}
+            onClick={() => {
+              if (tab.id === subTab) return
+              setAnalyticsPanels([])
+              setSubTab(tab.id)
+            }}
             className={`h-8 shrink-0 border-b-2 px-3 text-2xs transition-colors ${
               tab.id === subTab
                 ? 'border-accent text-text'
@@ -418,8 +425,6 @@ export function PortfolioPage({
             </div>
           }
         >
-          {Object.values(quotesQuery.data?.data.holdings ?? {}).some(quote => quote.priceBasis === 'published-close') && <div className="shrink-0 px-2 py-1 text-2xs text-text-dim">DefeatBeta prices are published daily closes, not live quotes. The status bar shows the source date.</div>}
-          {Object.values(quotesQuery.data?.data.holdings ?? {}).some(quote => quote.priceBasis === 'equity-perp-mark') && <div className="shrink-0 px-2 py-1 text-2xs text-text-muted">PERP prices are Hyperliquid equity-perpetual marks, used for market value, gain and allocation. Their changes are 24h; other quotes use the previous stock close.</div>}
           <PositionsTable
             onResearch={(symbol) => onNavigate?.('stocks', symbol)}
             portfolio={selected}
@@ -488,11 +493,11 @@ export function PortfolioPage({
       ) : null}
 
       {subTab === 'heatmap' ? (
-        <HeatmapTab portfolio={selected} rows={rows} visible />
+        <HeatmapTab portfolio={selected} rows={rows} visible onStatusChange={setAnalyticsPanels} />
       ) : null}
 
       {subTab === 'momentum' ? (
-        <MomentumTab positions={positions} cashAmount={cashAmount} valuationComplete={summary.complete} visible />
+        <MomentumTab positions={positions} cashAmount={cashAmount} valuationComplete={summary.complete} visible onStatusChange={setAnalyticsPanels} />
       ) : null}
 
       {subTab === 'metrics' ? (
@@ -501,6 +506,7 @@ export function PortfolioPage({
           cashAmount={cashAmount}
           currentValues={currentValues}
           valuationComplete={summary.complete}
+          onStatusChange={setAnalyticsPanels}
           visible
         />
       ) : null}

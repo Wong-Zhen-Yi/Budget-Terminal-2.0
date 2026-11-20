@@ -65,10 +65,6 @@ export function MuPage({ onStatusChange, onNavigate }: {
     }
     catch (error) { setNotice(`Export failed: ${error instanceof Error ? error.message : String(error)}`) }
   }
-  const laneStatus = (block: MuBlock) => {
-    const time = payload?.laneFetchedAt[block]
-    return <div className="shrink-0 border-t border-border px-2 py-1 text-2xs text-text-muted">{block} · {payload?.progress[block] ?? (busy ? 'loading' : 'unavailable')}{time ? ` · fetched ${new Date(time).toLocaleString()}` : ''}</div>
-  }
   const unitColumns: Array<Column<NonNullable<typeof earnings>['units'][number]>> = [
     { key: 'name', header: 'Business unit', cell: row => row.name, wrap: true, width: '46%' },
     { key: 'revenue', header: 'Revenue', cell: row => compactCurrency(row.revenue), numeric: true, align: 'right' },
@@ -88,13 +84,12 @@ export function MuPage({ onStatusChange, onNavigate }: {
   return <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-auto p-2" data-mu-page>
     <div className="flex shrink-0 flex-wrap items-center gap-1">
       <h1 className="pr-2 text-sm font-semibold text-text">MU — Micron Technology</h1>
-      <span className="ml-auto text-2xs text-text-muted" role="status">{status}</span>
+      <span className="ml-auto min-w-0 flex-1 truncate text-right text-2xs text-text-muted" role="status">{status}</span>
 
       <Button disabled={!payload || MU_BLOCKS.every(block => payload.progress[block] === 'unavailable')} onClick={() => void onExport()}>Export snapshot</Button>
       <Button onClick={() => onNavigate('charts', 'MU')}>Charts</Button><Button onClick={() => onNavigate('fundamentals', 'MU')}>Fundamentals</Button>
       <Button onClick={() => void api.openExternal('https://investors.micron.com/overview/default.aspx')}>Investor relations</Button>
     </div>
-    {query.data?.meta.freshness === 'failed' && query.data.errors.length ? <p role="alert" className="shrink-0 px-2 py-1 text-2xs text-down">Micron data unavailable. See Settings for details.</p> : null}
     <div className="grid shrink-0 grid-cols-2 gap-2 md:grid-cols-3 2xl:grid-cols-6">
       <Tile label={market?.chart.stats.priceBasis === 'equity-perp-mark' ? 'Equity-perp mark' : 'Share price'} value={currency(market?.chart.stats.price)} sub={`${market?.chart.stats.priceSource ?? 'USD'} · ${percent(market?.chart.stats.change)} ${market?.chart.stats.changeBasis === '24h' ? '24h' : 'daily'}`} />
       <Tile label="Market cap" value={market?.metrics.marketCap ?? unavailable} sub="Yahoo Finance · market" />
@@ -105,18 +100,18 @@ export function MuPage({ onStatusChange, onNavigate }: {
     </div>
     <div className="grid shrink-0 grid-cols-1 gap-2 xl:grid-cols-3">
       <Panel title="MU stock performance" className="h-[340px] min-w-0 xl:col-span-2" warning={warning('market')} actions={<div className="flex gap-1">{STOCKS_RANGE_PRESETS.map(preset => <Button key={preset} variant="toggle" active={range === preset} onClick={() => { setLogicalRange(null); setRange(preset) }}>{preset}</Button>)}</div>}>
-        {market ? <StocksChart payload={market.chart} mfiEnabled={false} autoFollow={false} rangePreset={range} logicalRange={logicalRange} onLogicalRangeChange={setLogicalRange} onManualRange={() => setRange('')} onHoverCandle={() => {}} /> : <PanelMessage>{empty('market')}</PanelMessage>}{laneStatus('market')}
+        {market ? <StocksChart payload={market.chart} mfiEnabled={false} autoFollow={false} rangePreset={range} logicalRange={logicalRange} onLogicalRangeChange={setLogicalRange} onManualRange={() => setRange('')} onHoverCandle={() => {}} /> : <PanelMessage>{empty('market')}</PanelMessage>}
       </Panel>
       <Panel title="Market & balance sheet" className="h-[340px] min-w-0" warning={warning('financials') || warning('market')}>
         <div className="min-h-0 flex-1 overflow-auto p-2 text-2xs">{[
           ['Next earnings · Yahoo estimate', market?.metrics.earningsDate], ['Target low', market?.targets.low], ['Target mean', market?.targets.mean], ['Target high', market?.targets.high], ['Upside to mean', market?.targets.upsideToMean], ['Analysts', market?.targets.analysts],
           ['Cash · latest Yahoo snapshot', compactCurrency(payload?.financials?.facts.totalCash)], ['Debt · latest Yahoo snapshot', compactCurrency(payload?.financials?.facts.totalDebt)],
-        ].map(([label, value]) => <div key={label} className="flex gap-2 border-b border-border/60 py-1"><span className="flex-1 text-text-muted">{label}</span><span className="num text-text">{value || unavailable}</span></div>)}</div>{laneStatus('financials')}
+        ].map(([label, value]) => <div key={label} className="flex gap-2 border-b border-border/60 py-1"><span className="flex-1 text-text-muted">{label}</span><span className="num text-text">{value || unavailable}</span></div>)}</div>
       </Panel>
     </div>
     <div className="grid shrink-0 grid-cols-1 gap-2 xl:grid-cols-2">
       <Panel title={`Memory cycle · ${memory?.period ?? '--'}`} className="h-[310px] min-w-0" warning={warning('memory')}>
-        <DataTable columns={memoryColumns} rows={memory ? memoryRows : []} rowKey={row => row.label} layout="fixed" empty={empty('memory')} /><div className="shrink-0 px-2 py-1 text-2xs text-text-muted">Pricing and bit shipments are reported sequential changes; qualitative ranges remain as disclosed.</div>{laneStatus('memory')}
+        <DataTable columns={memoryColumns} rows={memory ? memoryRows : []} rowKey={row => row.label} layout="fixed" empty={empty('memory')} /><div className="shrink-0 px-2 py-1 text-2xs text-text-muted">Pricing and bit shipments are reported sequential changes; qualitative ranges remain as disclosed.</div>
       </Panel>
       <Panel title={`HBM, inventory & investment · ${memory?.period ?? '--'}`} className="h-[310px] min-w-0" warning={warning('memory')}>
         <DataTable columns={[
@@ -131,7 +126,7 @@ export function MuPage({ onStatusChange, onNavigate }: {
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2"><LineChart labels={history.dates} series={history.series.map((series, index) => ({ values: series.values, color: colorForIndex(index), label: { revenue: 'Revenue', netIncome: 'Net income', operatingCashFlow: 'Operating cash flow', freeCashFlow: 'Free cash flow' }[series.key] }))} format={compactCurrency} empty={empty('financials')} /></div><div className="shrink-0 px-2 py-1 text-2xs text-text-muted">SEC/Yahoo statements · fiscal period end dates · free cash flow = operating cash flow − capex</div>
       </Panel>
       <Panel title={`Business units · ${earnings?.period ?? '--'}`} className="h-[300px] min-w-0" warning={warning('earnings')} actions={earnings ? <button className="text-2xs text-accent" onClick={() => void api.openExternal(earnings.sourceUrl)}>Earnings release</button> : null}>
-        <DataTable columns={unitColumns} rows={earnings?.units ?? []} rowKey={row => row.name} layout="fixed" empty={empty('earnings')} /><div className="shrink-0 px-2 py-1 text-2xs text-text-muted">Reported segment basis · revenue in USD · published {earnings?.publishedAt || '--'}</div>{laneStatus('earnings')}
+        <DataTable columns={unitColumns} rows={earnings?.units ?? []} rowKey={row => row.name} layout="fixed" empty={empty('earnings')} /><div className="shrink-0 px-2 py-1 text-2xs text-text-muted">Reported segment basis · revenue in USD · published {earnings?.publishedAt || '--'}</div>
       </Panel>
     </div>
     <div className="grid shrink-0 grid-cols-1 gap-2 xl:grid-cols-2">

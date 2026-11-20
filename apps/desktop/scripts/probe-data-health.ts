@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { DataFreshness } from '../src/components/ui/DataFreshness.js'
 import { StatusBar } from '../src/components/chrome/StatusBar.js'
 import { MacroBar } from '../src/components/dashboard/MacroBar.js'
 import { effectiveFreshness, registerSnapshot } from '../src/api/snapshotHealth.js'
@@ -89,9 +88,6 @@ try {
   assert.match(settingsFooter, /Current page data: OK/, 'Settings must distinguish its local data health from global feed diagnostics')
   registerSnapshot(fresh, 30_000)
   assert.equal(effectiveFreshness(fresh), 'stale', 'An expired successful snapshot must be visibly stale')
-  assert.match(renderToStaticMarkup(createElement(DataFreshness, { envelope: fresh })), /STALE/)
-  assert.doesNotMatch(renderToStaticMarkup(createElement(DataFreshness, { envelope: fresh, error: failure })), /REFRESH FAILED|text-warn|data issue/,
-    'Retained snapshots keep neutral provenance without refresh-warning banners')
   const dependent = { ...fresh, meta: { ...fresh.meta, fetchedAt: Date.now(), expiresAt: Date.now() - 1 } }
   assert.equal(effectiveFreshness(dependent, Date.now(), Infinity), 'stale', 'Derived snapshots preserve dependency expiry')
   const mixed = { ...fresh, meta: { ...fresh.meta, fetchedAt: Date.now() - 4 * 86400_000, expiresAt: Date.now() + 15_000 } }
@@ -137,16 +133,13 @@ try {
   assert.equal(useDataHealth.getState().records['stocks:Quote'].previousSession, undefined)
   // Server rendering uses Zustand's initial hook snapshot; the report reads current state.
   assert.match(renderToStaticMarkup(createElement(DataHealthPanel, { onStatus: () => {} })), /\[STALE\] Stocks/)
-  const rendered = renderToStaticMarkup(createElement(DataFreshness, { envelope, coverage: '3/5 holdings', loading: true }))
-  for (const text of ['STALE', 'Refreshing', 'fixture', 'Snapshot:', '3/5 holdings']) assert.ok(rendered.includes(text), text)
-  assert.doesNotMatch(rendered, /Provider unavailable|text-warn|data issue/)
   useDataHealth.getState().clear()
   assert.deepEqual(JSON.parse(storage.get('budget-terminal:data-health')!).state.records, {})
   assert.equal(useDataHealth.getState().startupLoads.heatmap.durationMs, 90_000)
   globalThis.localStorage.setItem = () => { throw new Error('Quota exceeded') }
   assert.doesNotThrow(() => useDataHealth.getState().record('stocks', [{ label: 'Quote', envelope, loading: false }]))
   assert.equal(useDataHealth.getState().records['stocks:Quote'].freshness, 'stale')
-  console.log('PASS: prior-session labeling, changed health at unchanged timestamp, stale warning, inline provenance and persisted clear')
+  console.log('PASS: prior-session labeling, changed health at unchanged timestamp, snapshot expiry and persisted clear')
 } finally {
   if (descriptor) Object.defineProperty(globalThis, 'localStorage', descriptor)
   else Reflect.deleteProperty(globalThis, 'localStorage')

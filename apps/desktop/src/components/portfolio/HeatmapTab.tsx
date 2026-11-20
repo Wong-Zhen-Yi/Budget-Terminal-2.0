@@ -4,14 +4,13 @@ import type { HeatmapInterval, Portfolio } from '@shared/contract'
 import { HEATMAP_INTERVALS } from '@shared/contract'
 import { weightedMove } from '@shared/analytics'
 import { sectorFor } from '@shared/sectors'
+import { FRESHNESS } from '@shared/freshness'
 import type { PositionRow } from '@shared/portfolioMath'
 import { useReturns } from '@/api/portfolioQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { Treemap, type TreemapTile } from '@/components/charts/Treemap'
 import { Button } from '@/components/ui/Button'
-import { DataFreshness } from '@/components/ui/DataFreshness'
-import { FRESHNESS } from '@shared/freshness'
-import { PrivateNumber, useNumberPrivacy } from '@/components/ui/NumberPrivacy'
+import { PrivateNumber } from '@/components/ui/NumberPrivacy'
 import { currency, percent, plainPercent } from '@/lib/format'
 
 interface HeatmapTabProps {
@@ -23,7 +22,6 @@ interface HeatmapTabProps {
 }
 
 export function HeatmapTab({ portfolio, rows, visible, compact = false, onStatusChange }: HeatmapTabProps) {
-  const maskNumbers = useNumberPrivacy()
   const [interval, setInterval] = useState<HeatmapInterval>('live')
   const [hovered, setHovered] = useState<TreemapTile | null>(null)
 
@@ -49,12 +47,12 @@ export function HeatmapTab({ portfolio, rows, visible, compact = false, onStatus
 
   useEffect(() => {
     onStatusChange?.([{ label: 'Heatmap returns', envelope: returnsQuery.data,
-      error: returnsQuery.error, loading: returnsQuery.isFetching, enabled: returnsQuery.isEnabled }], '')
+      error: returnsQuery.error, loading: returnsQuery.isFetching, enabled: returnsQuery.isEnabled, freshnessMs: FRESHNESS.chartDaily }], '')
   }, [onStatusChange, returnsQuery.data, returnsQuery.error, returnsQuery.isFetching, returnsQuery.isEnabled])
 
   const tiles: TreemapTile[] = useMemo(
     () =>
-      rows.some(row => row.includeInWeight && row.marketValue === null) ? [] : included.map((row) => {
+      !complete ? [] : included.map((row) => {
         const change = historical
           ? (returnsQuery.data?.data.returns[row.ticker] ?? null)
           : row.changePercent
@@ -68,7 +66,7 @@ export function HeatmapTab({ portfolio, rows, visible, compact = false, onStatus
           subtitle: `${HEATMAP_INTERVALS.find((entry) => entry.key === interval)?.label ?? ''} ${percent(change)}`,
         }
       }),
-    [rows, included, historical, returnsQuery.data, totalValue, interval],
+    [complete, included, historical, returnsQuery.data, totalValue, interval],
   )
 
   const move = weightedMove(tiles)
@@ -81,10 +79,6 @@ export function HeatmapTab({ portfolio, rows, visible, compact = false, onStatus
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      {rows.some(row => row.includeInWeight && row.marketValue === null) && <p className="px-2 text-2xs text-warn">Market marks missing; allocation unavailable.</p>}
-      {historical && included.length > 0 && <DataFreshness envelope={returnsQuery.data} loading={returnsQuery.isFetching}
-        error={returnsQuery.error} freshnessMs={FRESHNESS.chartDaily}
-        coverage={`${maskNumbers ? '****' : `${Object.keys(returnsQuery.data?.data.returns ?? {}).length}/${included.length}`} holdings`} />}
       <div className={`${compact ? 'grid grid-cols-2' : 'flex flex-wrap'} shrink-0 border border-border bg-surface`}>
         <Stat label="Holdings" value={String(holdings.length)} />
         {!compact ? <Stat label="Priced holdings" value={`${included.length}/${holdings.length}`} /> : null}
@@ -115,7 +109,7 @@ export function HeatmapTab({ portfolio, rows, visible, compact = false, onStatus
         ) : null}
       </div>
 
-      <div className={`flex shrink-0 items-center gap-1${compact ? ' flex-wrap' : ''}`}>
+      <div className={`flex shrink-0 items-center gap-1${compact ? ' flex-wrap' : ''}`} aria-busy={historical && returnsQuery.isFetching}>
         <span className="pr-1 text-2xs text-text-muted">Interval</span>
         {HEATMAP_INTERVALS.map((entry) => (
           <Button
@@ -127,32 +121,28 @@ export function HeatmapTab({ portfolio, rows, visible, compact = false, onStatus
             {entry.label}
           </Button>
         ))}
-        {historical && returnsQuery.isFetching ? (
-          <span className="pl-2 text-2xs text-text-dim">Loading {interval} returns...</span>
-        ) : null}
       </div>
 
       <div className={`portfolio-heatmap-map flex flex-1 flex-col border border-border bg-surface p-1 ${compact ? 'min-h-48 overflow-hidden' : 'min-h-0'}`}>
-        <Treemap tiles={tiles} onHover={setHovered} format={(value) => percent(value)} />
+        <Treemap tiles={tiles} onHover={setHovered} format={(value) => percent(value)}
+          empty={complete ? undefined : 'Market marks missing. Allocation unavailable.'} />
       </div>
 
-      <div className={`flex shrink-0 flex-wrap items-center border border-border bg-surface px-2 py-1 text-2xs ${compact ? 'gap-x-3 gap-y-1' : 'gap-4'}`}>
+      <div className={`shrink-0 border border-border bg-surface px-2 py-1 text-2xs ${compact ? 'grid grid-rows-[repeat(3,1.25rem)] gap-y-1' : 'flex items-center gap-4'}`}>
         {detail && detailRow ? (
           <>
-            <span className="font-semibold text-text">{detail.label}</span>
-            <span className="text-text-muted">Sector: {detail.group}</span>
-            <span className="text-text-muted">
-              Weight: <span className="num text-text"><PrivateNumber>{plainPercent(detail.weight, 2)}</PrivateNumber></span>
-            </span>
-            <span className="text-text-muted">
-              Price: <span className="num text-text"><PrivateNumber>{currency(detailRow.price)}</PrivateNumber></span>
-            </span>
-            <span className="text-text-muted">
-              Market Value: <span className="num text-text"><PrivateNumber>{currency(detailRow.marketValue)}</PrivateNumber></span>
-            </span>
-            <span className={(detail.changePct ?? 0) >= 0 ? 'text-up' : 'text-down'}>
-              Change: <PrivateNumber>{percent(detail.changePct)}</PrivateNumber>
-            </span>
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="shrink-0 font-semibold text-text">{detail.label}</span>
+              <span className="truncate text-text-muted" title={detail.group}>Sector: {detail.group}</span>
+            </div>
+            <div className="flex min-w-0 items-center gap-3 text-text-muted">
+              <span className="truncate">Weight: <span className="num text-text"><PrivateNumber>{plainPercent(detail.weight, 2)}</PrivateNumber></span></span>
+              <span className="truncate">Price: <span className="num text-text"><PrivateNumber>{currency(detailRow.price)}</PrivateNumber></span></span>
+            </div>
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="truncate text-text-muted">Market Value: <span className="num text-text"><PrivateNumber>{currency(detailRow.marketValue)}</PrivateNumber></span></span>
+              <span className={`truncate ${(detail.changePct ?? 0) >= 0 ? 'text-up' : 'text-down'}`}>Change: <PrivateNumber>{percent(detail.changePct)}</PrivateNumber></span>
+            </div>
           </>
         ) : (
           <span className="text-text-dim">Hover a tile for detail</span>

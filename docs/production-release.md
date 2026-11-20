@@ -1,6 +1,14 @@
 # Production release configuration
 
-> Historical record-sync work: the repository database feature has been restored to commit `3208321debc5e46712d95fb36db563c59e9ba80c`. The implementation and setup now follow [optional Convex snapshot sync](convex-sync.md). The protocol 2 release workflow below is no longer active in this checkout. A later repair deployed the matching snapshot backend to the existing saved-data development service after a private backup and record/snapshot comparison; existing records and accounts were retained. Live desktop sync subsequently reached revision 22. See the follow-up repair in the sync guide. The separate production service remains unchanged.
+On 2026-11-18, Budget Terminal tested the production deployment as the shared desktop endpoint and then restored the existing deployment that had passed two-device GitHub sign-in. The production account and snapshot tables were empty at the rollback. A private recovery export was taken before upgrading production to the current snapshot backend and Convex Auth v2. Production callback registration and a completed sign-in still require verification through the production OAuth App and an authenticated browser.
+
+The exact v2 production GitHub callback is `https://wonderful-otter-684.ap-southeast-2.convex.site/api/auth/callback/github/callback`. Follow the current [Convex sync and operator setup guide](convex-sync.md).
+
+Production returned a GitHub 404 after browser login while a secret-shaped value was configured as the Client ID. That value was removed from the authorization flow and the backend now rejects this configuration before generating a GitHub URL. The replacement credentials were installed and the signed-out redirect probe passed. Production remains separate from the desktop's shared deployment. If the old value belongs to an active GitHub secret, revoke that secret in GitHub.
+
+## Historical record-sync release notes
+
+The steps below document the previous protocol 2 release workflow. The current application uses Convex Auth v2 snapshot sync.
 
 Configured on 2026-11-10. The backend and production GitHub OAuth credentials are installed. Production preflight and the live GitHub authorization redirect pass; completed browser sign-in and rollout acceptance remain pending.
 

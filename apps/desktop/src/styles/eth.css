@@ -220,3 +220,18 @@
   .eth-source { font-size: 10px; }
   .eth-title { gap: 10px; }
 }
+
+.eth-view-controls { display: flex; flex-wrap: wrap; gap: 3px; }
+.eth-view-controls button {
+  padding: 4px 8px;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.eth-view-controls button:hover { background: var(--color-surface-hover); color: var(--color-text); }
+.eth-view-controls button[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-dim);
+  color: var(--color-text);
+}

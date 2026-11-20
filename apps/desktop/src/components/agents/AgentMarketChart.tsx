@@ -1,5 +1,6 @@
 import { fitStockChart } from '@/charts/stockChartLayout'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { CandlestickSeries, ColorType, createChart, CrosshairMode, LineSeries } from 'lightweight-charts'
 import type { IChartApi, ISeriesApi, LogicalRange, UTCTimestamp } from 'lightweight-charts'
 import { CHARTS_INTERVALS, CHARTS_RANGES } from '@shared/contract'
@@ -46,9 +47,10 @@ export function AgentMarketChart({ chart, symbol }: { chart: AgentCandlestick; s
         {CHARTS_RANGES.map(value => <button key={value} type="button" aria-pressed={range === value} onClick={() => setRange(value)}>{value}</button>)}
       </div>
     </div>
-    {query.isPending && <p role="status">Loading full available {interval.toLowerCase()} history for {symbol}…</p>}
-    {failure && !candles.length && <div className="agents-history-warning" role="alert">{failure} <button type="button" disabled={query.isFetching} onClick={() => { void query.refetch() }}>Retry history</button></div>}
-    <HistoryPlot candles={candles} interval={interval} range={range} onRangeChange={setRange} symbol={symbol} unit={unit} />
+    <HistoryPlot candles={candles} interval={interval} range={range} onRangeChange={setRange} symbol={symbol} unit={unit}
+      empty={query.isPending ? <span role="status">Loading full available {interval.toLowerCase()} history for {symbol}…</span>
+        : failure && !candles.length ? <div className="agents-history-warning" role="alert" title={failure}>Chart history unavailable. <button type="button" disabled={query.isFetching} onClick={() => { void query.refetch() }}>Retry history</button></div>
+        : null} />
     {candles.length > 0 && <p className="agents-candlestick-caption" data-history-count={candles.length}>
       {envelope?.meta.freshness === 'stale' || envelope?.meta.freshness === 'partial' || query.error || raw.length > candles.length ? 'Available history (coverage may be incomplete)' : 'Full available history loaded'}: {date(candles[0].time)} – {date(candles.at(-1)!.time)} · {candles.length.toLocaleString()} candles · {interval} · {envelope?.meta.source} · {envelope?.meta.freshness}
       {envelope?.meta.fetchedAt ? ` · Fetched ${new Date(envelope.meta.fetchedAt).toLocaleString()}` : ''}
@@ -60,8 +62,9 @@ export function AgentMarketChart({ chart, symbol }: { chart: AgentCandlestick; s
   </figure>
 }
 
-function HistoryPlot({ candles, interval, range, onRangeChange, symbol, unit }: {
+function HistoryPlot({ candles, interval, range, onRangeChange, symbol, unit, empty }: {
   candles: Candle[]; interval: ChartsInterval; range: ViewRange; onRangeChange: (range: ViewRange) => void; symbol: string; unit?: string
+  empty: ReactNode
 }) {
   const container = useRef<HTMLDivElement>(null)
   const api = useRef<IChartApi | null>(null)
@@ -160,26 +163,29 @@ function HistoryPlot({ candles, interval, range, onRangeChange, symbol, unit }: 
     <p className="agents-history-ohlc" aria-label={`${symbol} OHLC readout`}>{current
       ? `${time(current, intraday)} · O ${prices.format(current.open)} · H ${prices.format(current.high)} · L ${prices.format(current.low)} · C ${prices.format(current.close)}${unit ? ` ${unit}` : ''}`
       : 'OHLC values appear here when history is available.'}</p>
-    <div ref={container} className="agents-history-canvas" role="region" tabIndex={0}
-      aria-label={`${symbol} interactive price chart. Scroll to zoom, drag to pan, hover for OHLC. Keyboard: plus/minus to zoom, left/right to pan, Home to reset.`}
-      onWheelCapture={() => onRangeChange('Custom')}
-      onPointerDown={event => { drag.current = { x: event.clientX, y: event.clientY } }}
-      onPointerMove={event => {
-        if (drag.current && Math.hypot(event.clientX - drag.current.x, event.clientY - drag.current.y) > 3) onRangeChange('Custom')
-      }} onPointerUp={() => { drag.current = null }} onPointerLeave={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }}
-      onKeyDown={event => {
-        if (event.key === '+' || event.key === '=') { event.preventDefault(); zoom(0.65) }
-        else if (event.key === '-') { event.preventDefault(); zoom(1.5) }
-        else if (event.key === 'Home') { event.preventDefault(); reset() }
-        else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-          event.preventDefault()
-          const current = api.current?.timeScale().getVisibleLogicalRange()
-          if (!current) return
-          onRangeChange('Custom')
-          const shift = Math.max(1, (current.to - current.from) * 0.2) * (event.key === 'ArrowLeft' ? -1 : 1)
-          api.current!.timeScale().setVisibleLogicalRange({ from: current.from + shift, to: current.to + shift })
-        }
-      }} />
+    <div className="relative">
+      <div ref={container} className="agents-history-canvas" role="region" tabIndex={0}
+        aria-label={`${symbol} interactive price chart. Scroll to zoom, drag to pan, hover for OHLC. Keyboard: plus/minus to zoom, left/right to pan, Home to reset.`}
+        onWheelCapture={() => onRangeChange('Custom')}
+        onPointerDown={event => { drag.current = { x: event.clientX, y: event.clientY } }}
+        onPointerMove={event => {
+          if (drag.current && Math.hypot(event.clientX - drag.current.x, event.clientY - drag.current.y) > 3) onRangeChange('Custom')
+        }} onPointerUp={() => { drag.current = null }} onPointerLeave={() => { drag.current = null }} onPointerCancel={() => { drag.current = null }}
+        onKeyDown={event => {
+          if (event.key === '+' || event.key === '=') { event.preventDefault(); zoom(0.65) }
+          else if (event.key === '-') { event.preventDefault(); zoom(1.5) }
+          else if (event.key === 'Home') { event.preventDefault(); reset() }
+          else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+            event.preventDefault()
+            const current = api.current?.timeScale().getVisibleLogicalRange()
+            if (!current) return
+            onRangeChange('Custom')
+            const shift = Math.max(1, (current.to - current.from) * 0.2) * (event.key === 'ArrowLeft' ? -1 : 1)
+            api.current!.timeScale().setVisibleLogicalRange({ from: current.from + shift, to: current.to + shift })
+          }
+        }} />
+      {empty && <div className="absolute inset-0 grid place-items-center bg-surface px-2 text-center text-2xs text-text-muted">{empty}</div>}
+    </div>
     <p className="agents-candlestick-legend">Scroll to zoom · Drag to pan · Hover for OHLC · +/−, ←/→ and Home work when the chart is focused · Dates/times in UTC · Green: close ≥ open · Red: close &lt; open</p>
   </>
 }

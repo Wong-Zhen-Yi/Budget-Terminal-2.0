@@ -45,6 +45,7 @@ const settings = z.object({
   tabOrder: strings, hiddenTabs: strings, favoriteTabs: strings,
   mainPageId: id.optional(),
   sidebarCollapsed: z.boolean().optional(), obscuredTabs: strings.optional(), lastBackupAt: number.nonnegative().optional(),
+  mainPage: id.optional(),
   backtestPage: z.object({ rows: z.array(z.object({ symbol: text, weight: number }).strict()).max(10_000),
     compareSymbol: text, interval: z.enum(['1D', '1W']), range: z.enum(['Max', '5Y', '3Y', '1Y', 'YTD']),
     splitterSizes: z.array(number.positive()).length(2) }).strict().optional(),

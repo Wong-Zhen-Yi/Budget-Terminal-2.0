@@ -153,12 +153,12 @@ try {
       }
     }
   }
-  assert.equal(mutationVariants, 47)
-  validateCall(toolName('mutateSettings'), {
-    request: { type: 'setMainPage', id: null },
-    requestId: randomUUID(),
-    expectedRevision: 'a'.repeat(64),
-  })
+  assert.equal(mutationVariants, 47) // Includes the startup page preference.
+  for (const id of ['charts', null]) {
+    validateCall(toolName('mutateSettings'), {
+      request: { type: 'setMainPage', id }, requestId: randomUUID(), expectedRevision: 'a'.repeat(64),
+    })
+  }
   assert.equal(events.length, 5)
   assert(events.some(domains => domains.includes('articles')), 'Article edits must notify the renderer')
   const screenshotTool = tools.find((tool) => tool.name === toolName('screenshot'))!

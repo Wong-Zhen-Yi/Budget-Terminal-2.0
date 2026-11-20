@@ -29,12 +29,13 @@ export function TechnicalScreenPage({
   const expired = Boolean(envelope?.data) && (!Number.isFinite(age) || age < 0 || age > 12 * 60 * 60_000)
   const payload = expired ? null : envelope?.data
   const failure = scan.data?.meta.freshness === 'failed'
-    ? scan.data.meta.failureReason
+    ? scan.data.meta.failureReason || 'Scan unavailable'
     : scan.error?.message
+  const statusEnvelope = scan.data?.meta.freshness === 'failed' ? scan.data : envelope
 
   useEffect(() => {
-    onStatusChange([{ label: 'Technical Indicators', envelope, error: scan.error ?? snapshot.error, enabled: true, loading: scan.isPending || snapshot.isFetching }], '')
-  }, [onStatusChange, envelope, scan.isPending])
+    onStatusChange([{ label: 'Technical Indicators', envelope: statusEnvelope, error: scan.error ?? snapshot.error, enabled: true, loading: scan.isPending || snapshot.isFetching }], '')
+  }, [onStatusChange, statusEnvelope, scan.error, scan.isPending, snapshot.error, snapshot.isFetching])
   useEffect(() => {
     const timer = window.setInterval(() => setClock(Date.now()), 60_000)
     return () => window.clearInterval(timer)
@@ -91,8 +92,8 @@ export function TechnicalScreenPage({
           onChange={setPreset} className="w-52" aria-label="Technical screen" />
         <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search ticker or company"
           aria-label="Search technical results" className="h-7 w-48 border border-border-strong bg-surface-raised px-2 text-2xs text-text outline-none focus:border-accent" />
-        <span className="ml-auto text-2xs text-text-muted">
-          {scan.isPending ? 'Fetching daily history…' : payload ? `Updated ${dateTime(payload.completedAt)}` : expired ? 'Saved scan expired — run again' : 'Run a scan to find matches'}
+        <span className="ml-auto min-w-0 flex-1 truncate text-right text-2xs text-text-muted" role="status">
+          {scan.isPending ? 'Fetching daily history…' : failure ? 'Scan failed. See Settings for details.' : payload ? `Updated ${dateTime(payload.completedAt)}` : expired ? 'Saved scan expired — run again' : 'Run a scan to find matches'}
         </span>
       </section>
 
@@ -107,10 +108,6 @@ export function TechnicalScreenPage({
 
       {selected.estimated ? (
         <p className="shrink-0 text-2xs text-warn">Estimate: extrapolates the last two completed indicator readings one session ahead. A projected cross is not a confirmed signal or price forecast.</p>
-      ) : null}
-      {failure ? <p className="shrink-0 text-2xs text-down">Scan failed: {failure}{payload ? ' Showing the previous result.' : ''}</p> : null}
-      {payload && Object.keys(payload.errors).length ? (
-        <p className="shrink-0 text-2xs text-warn">{Object.keys(payload.errors).length} ticker(s) had insufficient or unavailable daily history and were excluded.</p>
       ) : null}
       <DataTable columns={columns} rows={rows} rowKey={(row) => row.ticker} layout="fixed" minWidth="900px"
         defaultSort={{ key: 'volume', direction: 'desc' }} onRowDoubleClick={(row) => onNavigate('stocks', row.ticker)}

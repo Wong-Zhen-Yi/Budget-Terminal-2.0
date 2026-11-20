@@ -49,7 +49,7 @@ export const operations = {
   earningsCalendar: 'Get upcoming earnings events.',
   crypto: 'Get cryptocurrency market research, including public Hyperliquid perpetual-market marks, funding, open interest and volume. Coins use CoinGecko spot quotes with labelled Hyperliquid perp fallbacks. Stock proxies use Hyperliquid equity perps with Yahoo fallback; ETFs and stock metadata use Yahoo. This tool never uses Finnhub.',
   bitcoin: 'Get Bitcoin research and metrics.',
-  eth: 'Get Ethereum network activity from growthepie. Returns recent ecosystem TPS and the mainnet TPS, block interval in seconds and median transaction fee in USD. Historical mainnet and tracked L2 series include trailing seven-day averages for TPS, gas throughput (Mgas/s), fees paid (USD/day), and stablecoin supply (USD) for up to 90 UTC dates. Preserve each live observation time, layer coverage and stale or partial warnings.',
+  eth: 'Get Ethereum market and network data. growthepie supplies recent ecosystem and mainnet TPS, mainnet block interval and median fee, plus seven-day averages by layer for TPS, gas throughput, user fees and stablecoin supply. Layer 2 settlement fees are paid to Mainnet. Coin Metrics supplies completed UTC daily ETH reference price, market cap, supply, issuance and active Mainnet addresses. ultrasound.money supplies Beacon validator balances with matching ETH supply and rolling seven-day ETH fee burn. Preserve observation dates, provider coverage and stale or partial warnings. UTC issuance and rolling burn use different windows.',
   bmnr: 'Get BMNR company and asset research.',
   sofi: 'Get SOFI market data, book valuation, operating metrics and eight quarters of earnings results.',
   mu: 'Get Micron (MU) market data, financials, earnings and DRAM/NAND/HBM disclosures.',
@@ -96,8 +96,8 @@ export const operations = {
   quantPair: 'Analyze a quantitative trading pair.',
   youtube: 'Get ticker-related YouTube research videos.',
   youtubeThumbnail: 'Get a research-video thumbnail.',
-  settings: 'Read Budget Terminal settings, including the chosen main page and automatic backup status.',
-  mutateSettings: 'Edit the opening page, navigation, clock, privacy and research settings.',
+  settings: 'Read Budget Terminal settings, including the preferred startup page, and automatic backup status.',
+  mutateSettings: 'Edit saved navigation, startup page, clock, protected page selection and research settings.',
 } as const
 
 export type Operation = keyof typeof operations

@@ -13,6 +13,7 @@ interface TabBarProps {
   clockCountry: string
   time12h: boolean
   obscured: boolean
+  obscurePageCount?: number
   onToggleObscure: () => void
   agentChatAvailable?: boolean
 }
@@ -24,6 +25,7 @@ export function TabBar({
   clockCountry,
   time12h,
   obscured,
+  obscurePageCount,
   onToggleObscure,
   agentChatAvailable = true,
 }: TabBarProps) {
@@ -59,15 +61,19 @@ export function TabBar({
       <button
         type="button"
         onClick={onToggleObscure}
-        title={`Obscure the pages selected in Settings (${isMac ? '⌘⇧H' : 'Ctrl+Shift+H'})`}
+        title={`Toggle Obscure mode (${isMac ? '⌘⇧H' : 'Ctrl+Shift+H'}). Choose pages in Settings → Privacy.`}
+        aria-label="Obscure mode"
         aria-pressed={obscured}
-        className={`no-drag h-9 shrink-0 border px-3 text-2xs ${isMac ? 'rounded-lg' : ''} ${
+        className={`no-drag flex h-9 shrink-0 items-center gap-1.5 rounded border px-2 text-2xs focus-visible:outline-2 focus-visible:outline-accent-hover ${
           obscured
             ? 'border-accent bg-accent-dim text-text'
             : 'border-border-strong bg-surface-raised text-text hover:bg-surface-hover'
         }`}
       >
-        {obscured ? 'Reveal' : 'Obscure'}
+        <span>Obscure</span>
+        <span aria-hidden="true" className={obscured ? 'text-text' : 'text-text-muted'}>
+          {!obscured ? 'Off' : obscurePageCount === 0 ? 'No pages' : 'On'}
+        </span>
       </button>
 
       <button

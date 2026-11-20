@@ -11,7 +11,6 @@ import { api } from '@/api/client'
 import { useCrypto, useCryptoProviderUsage } from '@/api/cryptoQueries'
 import { useChartsHistory } from '@/api/chartsQueries'
 import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
-import { StartupLoadError } from '@/api/snapshotResult'
 import { useCryptoWorkspace } from '@/stores/crypto'
 import { CryptoPriceChart } from '@/components/crypto/CryptoPriceChart'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
@@ -62,13 +61,6 @@ export function CryptoPage({ onStatusChange }: { onStatusChange: (panels: PanelS
   const chartFailure = history.isError || history.data?.meta.freshness === 'failed'
   const chartFreshness = history.data ? effectiveFreshness(history.data, now, FRESHNESS.chartIntraday) : 'loading'
   const chartSource = history.data?.data.stats?.source ?? 'Hyperliquid crypto perpetual'
-  const partial = query.data?.meta.freshness === 'partial'
-    || (query.error instanceof StartupLoadError && query.error.state === 'degraded')
-  const status = partial ? 'Some crypto data is unavailable.'
-    : query.isError || query.data?.meta.freshness === 'failed' ? 'Crypto data refresh failed. See Settings for details.'
-    : loading && !payload ? 'Fetching crypto market data...'
-    : !payload ? 'Loading crypto market data...'
-    : ''
 
   useEffect(() => {
     onStatusChange([
@@ -85,12 +77,7 @@ export function CryptoPage({ onStatusChange }: { onStatusChange: (panels: PanelS
 
   const markets = useMemo(() => (payload?.hyperliquid?.markets ?? []).filter(row => row.symbol.toLowerCase().includes(search.trim().toLowerCase())), [payload?.hyperliquid, search])
 
-  return <div className="crypto-workspace">
-    {(cooldown || status) && <div className="crypto-notice" role="status">
-      <span>{cooldown ? `CoinGecko rate limited · ${payload ? 'Showing available snapshots and labelled fallback prices' : 'Spot data unavailable'}` : status}</span>
-      {cooldown && <span className="num">Auto-retry in {cooldownSeconds}s</span>}
-    </div>}
-
+  return <div className="crypto-workspace" aria-busy={loading}>
     <div className="crypto-ribbon" aria-label="Market overview">
       {['BTC', 'ETH', 'SOL'].map(label => <div className="crypto-ribbon-item" key={label} title={quotes[label]?.source ?? 'Awaiting quote'}>
         <strong>{label}{perpQuote(quotes[label]) ? ' PERP' : ''}</strong><span className="num">{cryptoPrice(quotes[label]?.price)}</span>
@@ -129,9 +116,13 @@ export function CryptoPage({ onStatusChange }: { onStatusChange: (panels: PanelS
           <div className="crypto-mark num">{cryptoPrice(market?.markPrice)}<small className={changeClass(market?.changePct)}>{cryptoPercent(market?.changePct)} <span className="crypto-muted">24h</span></small></div>
         </div><div className="crypto-timeframes" aria-label="Candle interval">{CRYPTO_CHART_INTERVALS.map(choice =>
           <button type="button" key={choice.label} aria-pressed={interval === choice.interval} onClick={() => setInterval(choice.interval)}>{choice.label}</button>)}</div></div>
-        {chartFailure && !chartCandles.length && <div className="crypto-chart-error" role="alert">Chart history is unavailable. <button type="button" disabled={history.isFetching} onClick={() => void history.refetch()}>Retry chart</button></div>}
-        {!chartCandles.length && !chartFailure && <div className="crypto-empty">{history.isFetching ? 'Loading perpetual candles...' : 'No candle history returned.'}</div>}
-        <CryptoPriceChart candles={chartCandles} context={`${symbol}:${interval}`} />
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <CryptoPriceChart candles={chartCandles} context={`${symbol}:${interval}`} />
+          {!chartCandles.length && <div className="absolute inset-0 flex items-center justify-center bg-surface text-center">
+            {chartFailure ? <div className="crypto-chart-error" role="alert">Chart history is unavailable. <button type="button" disabled={history.isFetching} onClick={() => void history.refetch()}>Retry chart</button></div>
+              : <div className="crypto-empty" role="status">{history.isFetching ? 'Loading perpetual candles...' : 'No candle history returned.'}</div>}
+          </div>}
+        </div>
         <div className="crypto-chart-caption"><span>{chartSource} · {chartFreshness} · {chartCandles.length} candles</span><span>UTC · Volume in base asset · Scroll to zoom, drag to pan</span></div>
       </section>
 
@@ -160,7 +151,7 @@ export function CryptoPage({ onStatusChange }: { onStatusChange: (panels: PanelS
       </Section>
     </div>
     <footer className="crypto-footer"><div className="crypto-feed-states">
-      <span className={`crypto-badge ${cooldown || spotWarning ? 'crypto-warning' : ''}`}>Spot: {cooldown ? 'rate limited' : freshness}</span>
+      <span className={`crypto-badge ${cooldown || spotWarning ? 'crypto-warning' : ''}`} title={cooldown ? `CoinGecko rate limited · Auto-retry in ${cooldownSeconds}s` : undefined}>Spot: {cooldown ? 'rate limited' : freshness}</span>
       <span className={`crypto-badge ${venueRecent ? 'crypto-positive' : ''}`}>Perpetuals: {venueRecent ? 'live mark' : payload?.hyperliquid ? 'snapshot' : 'unavailable'}</span>
       <span className="crypto-badge">News: {payload?.news.length ? 'ready' : 'unavailable'}</span>
     </div></footer>

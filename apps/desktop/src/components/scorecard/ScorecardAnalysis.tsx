@@ -3,8 +3,7 @@ import type { Envelope, FundamentalsPagePayload } from '@shared/contract'
 import { scorecardBarDomain, SCORECARD_METRICS, type ScorecardMetricKey, type ScorecardRow } from '@shared/scorecard'
 import { queryKeys } from '@/api/client'
 import { queryFreshness } from '@/api/queryPersistence'
-import { effectiveFreshness, errorMessage, useSnapshotClock } from '@/api/snapshotHealth'
-import { DataFreshness } from '@/components/ui/DataFreshness'
+import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
 import { Select } from '@/components/ui/Select'
 import { scorecardMetricValue } from './format'
 
@@ -47,12 +46,8 @@ export function ScorecardAnalysis({ rows, queries, metric, onMetricChange, view,
           <div><dt>Compare values, not scores</dt><dd>Sort arrows order companies numerically. Larger values are not always better; sector, growth, risk, and fiscal periods matter.</dd></div></dl>
       </section>}
       {view === 'sources' && <section className="scorecard-sources" aria-label="Source details"><p className="scorecard-eyebrow">EVIDENCE & COVERAGE</p><h2>Source details</h2>
-        {queries.map((query, index) => {
-          const row = rows[index]
-          const failure = errorMessage(query.error)
+        {rows.map(row => {
           return <section key={row.symbol} className="scorecard-source"><h3>{row.symbol}<span>{Object.values(row.values).filter(value => value !== null).length}/{SCORECARD_METRICS.length} metrics</span></h3>
-            <DataFreshness envelope={query.data} error={query.error} loading={query.isFetching} freshnessMs={queryFreshness(queryKeys.fundamentalsPage(row.symbol))} />
-            {failure && query.data && <p role="status">Showing saved financials.</p>}
             <p className="scorecard-source-origin">{row.statementSources.length ? `Annual statements: ${row.statementSources.join(', ')}` : 'Annual statement sources unavailable'}</p>
             {row.currencyNote && <p>{row.currencyNote}</p>}
             {row.issues.length > 0 && <ul>{row.issues.map((issue, i) => <li key={i}>{issue}</li>)}</ul>}

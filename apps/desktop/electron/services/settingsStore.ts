@@ -2,7 +2,7 @@ import { checkRecordRevision } from './mcpContext.js'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
-import { DEFAULT_FAVORITE_TABS, isVisibleImplementedPage } from '../shared/navigation.js'
+import { DEFAULT_FAVORITE_TABS, isMainPageAvailable } from '../shared/navigation.js'
 
 import type { AppSettings, AppSettingsMutation } from '../shared/contract.js'
 import {
@@ -43,6 +43,7 @@ export const settingsSchema = z.object({
   version: z.number().catch(1),
   clockCountry: z.string().catch(DEFAULT_CLOCK_COUNTRY),
   time12h: z.boolean().catch(true),
+  mainPage: z.string().optional().catch(undefined),
   tabOrder: z.array(z.string()).catch([]),
   hiddenTabs: z.array(z.string()).catch([]),
   mainPageId: z.string().optional().catch(undefined),
@@ -119,8 +120,10 @@ function normalize(settings: StoredSettings): StoredSettings {
     ...new Set(ids.filter((id) => KNOWN_TABS.includes(id) && id !== SETTINGS_TAB_ID)),
   ]
   settings.hiddenTabs = keep(settings.hiddenTabs)
-  if (!TABS.some(tab => tab.id === settings.mainPageId && isVisibleImplementedPage(tab, settings.hiddenTabs))) {
-    delete settings.mainPageId
+  settings.mainPage ??= settings.mainPageId
+  delete settings.mainPageId
+  if (settings.mainPage !== undefined && !isMainPageAvailable(settings.mainPage, settings.hiddenTabs)) {
+    delete settings.mainPage
   }
   settings.favoriteTabs = keep(settings.favoriteTabs)
   settings.obscuredTabs = keep(settings.obscuredTabs ?? [...DEFAULT_OBSCURED_TABS])
@@ -180,9 +183,9 @@ function toPayload(settings: StoredSettings): AppSettings {
     lastBackupAt: settings.lastBackupAt,
     clockCountry: settings.clockCountry,
     time12h: settings.time12h,
+    ...(settings.mainPage ? { mainPage: settings.mainPage } : {}),
     tabOrder: [...settings.tabOrder],
     hiddenTabs: [...settings.hiddenTabs],
-    ...(settings.mainPageId === undefined ? {} : { mainPageId: settings.mainPageId }),
     favoriteTabs: [...settings.favoriteTabs],
     sidebarCollapsed: settings.sidebarCollapsed,
     obscuredTabs: [...(settings.obscuredTabs ?? [])],
@@ -217,20 +220,21 @@ function apply(settings: StoredSettings, mutation: AppSettingsMutation): void {
       settings.time12h = mutation.value
       return
     }
+    case 'setMainPage': {
+      if (mutation.id === null) {
+        delete settings.mainPage
+      } else {
+        if (!isMainPageAvailable(mutation.id, settings.hiddenTabs)) {
+          throw new Error('Choose a visible, available page for startup.')
+        }
+        settings.mainPage = mutation.id
+      }
+      return
+    }
     case 'setTabHidden': {
       if (mutation.id === SETTINGS_TAB_ID) throw new Error('Settings must remain visible.')
       if (!KNOWN_TABS.includes(mutation.id)) throw new Error(`Unknown page ${mutation.id}.`)
       settings.hiddenTabs = toggle(settings.hiddenTabs, mutation.id, mutation.hidden)
-      return
-    }
-    case 'setMainPage': {
-      if (mutation.id === null) {
-        delete settings.mainPageId
-      } else if (TABS.some(tab => tab.id === mutation.id && isVisibleImplementedPage(tab, settings.hiddenTabs))) {
-        settings.mainPageId = mutation.id
-      } else {
-        throw new Error('Choose a visible, implemented page as the main page.')
-      }
       return
     }
     case 'moveTab': {
@@ -295,12 +299,11 @@ export async function mutateSettings(mutation: AppSettingsMutation): Promise<App
   let failure: unknown = null
   const run = writeChain.then(async () => {
     try {
-      const settings = await loadSettings()
-      checkRecordRevision(toPayload(settings))
-      const next = { ...settings, tabOrder: [...settings.tabOrder] }
+      const previous = await loadSettings()
+      checkRecordRevision(toPayload(previous))
+      const next = { ...previous, tabOrder: [...previous.tabOrder] }
       apply(next, mutation)
-      normalize(next)
-      await persist(next)
+      await persist(normalize(next))
       cached = next
     } catch (error) {
       failure = error

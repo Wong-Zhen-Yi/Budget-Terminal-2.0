@@ -114,15 +114,15 @@ export function AvgoPage({ onStatusChange, onNavigate }: {
     <div className="shrink-0 px-2 py-1 text-2xs text-text-muted">{earnings?.period ?? 'Period unavailable'} · earnings release</div>
   </Panel>
   const guidance = <Panel title={`Next-quarter guidance · ${earnings?.guidancePeriod ?? '--'}`} className="h-[390px]" warning={warning('earnings')}>
-    <Metrics rows={earnings?.guidance ?? []} empty={empty('earnings')} /><p className="shrink-0 p-3 text-2xs text-text-muted">Management outlook as of the release date; approximate and lower-bound disclosures retain their wording.</p>{source}{laneStatus('earnings')}
+    <Metrics rows={earnings?.guidance ?? []} empty={empty('earnings')} /><p className="shrink-0 p-3 text-2xs text-text-muted">Management outlook as of the release date; approximate and lower-bound disclosures retain their wording.</p>{source}
   </Panel>
   const news = <Panel title="AVGO news" className="h-[420px]" warning={warning('market')}>
     <DataTable columns={[
       { key: 'title', header: 'Headline', cell: row => <button className="text-left text-accent hover:underline" onClick={() => void api.openExternal(row.url)}>{row.title}</button>, wrap: true, width: '70%' },
       { key: 'source', header: 'Source / date', cell: row => `${row.source} · ${new Date(row.publishedAt).toLocaleDateString()}`, wrap: true },
-    ]} rows={market?.news ?? []} rowKey={row => row.id} layout="fixed" empty={market ? 'No recent AVGO headlines.' : empty('market')} />{laneStatus('market')}
+    ]} rows={market?.news ?? []} rowKey={row => row.id} layout="fixed" empty={market ? 'No recent AVGO headlines.' : empty('market')} />
   </Panel>
-  const filings = <Panel title="Broadcom SEC filings" className="h-[420px]" warning={warning('financials')}>{payload?.financials ? <FilingsTable filings={payload.financials.sec.filings} compact /> : <PanelMessage>{empty('financials')}</PanelMessage>}{laneStatus('financials')}</Panel>
+  const filings = <Panel title="Broadcom SEC filings" className="h-[420px]" warning={warning('financials')}>{payload?.financials ? <FilingsTable filings={payload.financials.sec.filings} compact /> : <PanelMessage>{empty('financials')}</PanelMessage>}</Panel>
   const latestFiling = [...payload?.financials?.sec.filings ?? []].sort((a, b) => b.filedDate.localeCompare(a.filedDate))[0]
 
   return <div className="avgo-page flex min-h-0 min-w-0 flex-1 flex-col overflow-auto" data-avgo-page data-avgo-section={section}>
@@ -164,7 +164,6 @@ export function AvgoPage({ onStatusChange, onNavigate }: {
         </span>
       })}</div>
     </div>
-    {query.data?.meta.freshness === 'failed' && query.data.errors.length ? <p role="alert" className="shrink-0 px-2 py-1 text-2xs text-down">Broadcom data unavailable. See Settings for details.</p> : null}
     <div className="avgo-kpis shrink-0" aria-label="AVGO financial snapshot">
       <Tile label="Market cap" value={market?.metrics.marketCap ?? '--'} sub="Yahoo Finance · market" />
       <Tile label="Forward P/E" value={market?.metrics.forwardPe ?? '--'} sub="Yahoo Finance · estimate" />
@@ -220,7 +219,7 @@ export function AvgoPage({ onStatusChange, onNavigate }: {
       </div> : section === 'Financials' ? <>
         {cashChart}
         <Panel title={`Results, cash flow & dividend · ${earnings?.period ?? '--'}`} className="h-[430px]" warning={warning('earnings')}>
-          <Metrics rows={earnings?.metrics.filter(row => !/^ai/.test(row.id)) ?? []} empty={empty('earnings')} />{source}{laneStatus('earnings')}
+          <Metrics rows={earnings?.metrics.filter(row => !/^ai/.test(row.id)) ?? []} empty={empty('earnings')} />{source}
         </Panel>
       </> : section === 'Guidance' ? guidance : <div className="avgo-detail-grid">{news}{filings}</div>}
     </div>

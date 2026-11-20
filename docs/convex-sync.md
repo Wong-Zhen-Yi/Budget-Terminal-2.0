@@ -2,7 +2,11 @@
 
 Budget Terminal reads and writes its local stores first. Convex is an optional remote copy; no account or internet connection is required to use the application. Startup preloads every implemented page independently of cloud sign-in. Sync progress and failures appear only in Settings.
 
-## Configure with the CLI
+Every installation uses the same Budget Terminal cloud deployment. To connect a device, choose **Sign in with GitHub** on the startup screen or in **Settings > Data & storage > Cloud sync**. Use the same GitHub account on each device to access the same cloud workspace.
+
+The desktop uses the existing deployment that passed two-device GitHub sign-in and sync acceptance. This restores access to accounts and cloud copies created before the production rollout attempt.
+
+## Configure with the CLI (operators)
 
 Use the repository's existing Convex project when upgrading. From the repository root:
 
@@ -43,7 +47,7 @@ npm run convex:codegen           # Refresh generated bindings without deploying
 npm run convex:dev               # Watch and deploy development changes
 npm run convex:setup             # Back up, check and upgrade configured development
 npm run convex:deploy            # Back up, check and deploy production explicitly
-npm run probe:convex-auth-live   # Validate the configured development auth endpoints
+npm run probe:convex-auth-live   # Validate the desktop's shared auth endpoints
 ```
 
 Production is separate: configure its own GitHub OAuth App and variables first. `convex:deploy` exports production before deploying it. Upgrading development does not update production.
@@ -52,20 +56,20 @@ Production is separate: configure its own GitHub OAuth App and variables first. 
 
 1. Relaunch Budget Terminal using any double-click launcher.
 2. Open **Settings > Data & storage > Cloud sync**.
-3. Enter the exact `.convex.cloud` deployment URL and choose **Sign in with GitHub**. Regional hosts are supported.
+3. Choose **Sign in with GitHub**.
 4. Approve in your system browser and return to the application. Repeat on each device with the same GitHub account.
 
-V1 sessions cannot be reused as v2 sessions. An encrypted legacy session is left intact until a successful replacement or explicit disconnect, but the app asks for a new GitHub sign-in. The deployment URL is remembered. Local data and sync checkpoints remain available.
+V1 sessions and sessions issued by a different deployment require a fresh GitHub sign-in. The encrypted session is preserved until successful replacement or explicit disconnect. Local data and sync checkpoints remain available. If this device previously synced with another deployment, its cloud copy stays there. To bring this device’s local copy into the shared cloud, review the workspace import option after signing in.
 
 The internal user-creation callback looks up the verified, stable GitHub provider ID in the retained v1 `authAccounts` table. If present, it returns that original user ID, preserving snapshot ownership and archived records. New GitHub accounts receive a new empty user row. Email addresses, login names and display names never link accounts. Legacy auth and record-era tables and indexes are retained for recovery; no v1 sign-in endpoints are deployed.
 
 Convex Auth v2 currently lacks the old standalone email-code sign-in method, so the desktop now offers GitHub only. An email-only legacy account without a linked GitHub identity needs a separately reviewed account migration; an email match does not prove ownership. Do not create a new cloud copy over that account's saved data. Local saves and recovery exports remain available.
 
-The Convex developer CLI login is separate from Budget Terminal user sign-in. Other devices only need the application, deployment URL and GitHub account, with no developer credentials.
+The Convex developer CLI login is separate from Budget Terminal user sign-in. Other devices only need the application and the GitHub account.
 
 ## Desktop authentication and privacy
 
-Signed-out users see an account popup on the front screen at launch. **Sign in** and **Sign up** both use the existing GitHub flow; the first successful sign-in creates the account. Sign-in persists by default: encrypted credentials are restored before the first renderer account check, so a signed-in user skips the popup. Browser approval closes it automatically. **Continue locally**, the close button or Escape dismisses it for this app session. **Don’t show again** saves a device-only preference across restarts; **Settings → Cloud sync → Show sign-in popup at startup** restores it. Sign-in remains available in Settings even with the popup disabled. Without a saved deployment URL, the popup asks for the URL of the user's cloud setup. All implemented pages continue preloading behind the popup. Account status is checked live and excluded from the persisted renderer market cache.
+Signed-out users see an account popup on the front screen at launch. **Sign in** and **Sign up** both open GitHub for the shared Budget Terminal deployment. The first successful sign-in creates the account. Sign-in persists by default: encrypted credentials are restored before the first renderer account check, so a signed-in user skips the popup. Browser approval closes it automatically. **Continue locally**, the close button or Escape dismisses it for this app session. **Don’t show again** saves a device-only preference across restarts; **Settings → Cloud sync → Show sign-in popup at startup** restores it. Sign-in remains available in Settings even with the popup disabled. All implemented pages continue preloading behind the popup. Account status is checked live and excluded from the persisted renderer market cache.
 
 Authentication runs in Electron's main process behind `window.api`. OAuth state, one-time codes, access tokens and refresh tokens never enter the renderer, local MCP tools or browser response text. Sessions are encrypted with Electron safeStorage in `sync-session.bin`; a working OS keyring is required and plaintext storage is refused.
 

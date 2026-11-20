@@ -114,7 +114,7 @@ try {
         failure = 'stale'; await client.invalidateQueries({ queryKey: queryKeys.chartsHistory('AAPL', '1 Day', 'Max') }); await settle()
         check(!card().textContent.includes('Stale cached history; coverage may be incomplete') && card().querySelector('[data-history-count]').dataset.historyCount === '12000', 'Retained history stays usable without a saved-data warning banner')
         failure = 'failed'; text = fence('FAIL'); await render()
-        check(card().querySelector('[role=alert]').textContent.includes('Synthetic provider outage') && !card().querySelector('[data-history-count]'), 'Provider failures cannot pretend to have full history')
+        check(card().querySelector('[role=alert]').title.includes('Synthetic provider outage') && !card().querySelector('[data-history-count]'), 'Provider failures cannot pretend to have full history')
         failure = ''; await click('Retry history')
         check(card().querySelector('[data-history-count]').dataset.historyCount === '12000', 'Failed history can be retried inline')
         let release; gate = new Promise(resolve => { release = resolve }); text = fence('WAIT'); await render()

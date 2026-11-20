@@ -53,17 +53,6 @@
 .auth-popup h1 { margin: 24px 0 8px; text-align: center; font-size: 23px; font-weight: 600; letter-spacing: -.025em; }
 .auth-popup #auth-description { margin-bottom: 24px; text-align: center; color: var(--color-text-muted); font-size: 14px; }
 .auth-popup-actions { display: flex; flex-direction: column; gap: 12px; }
-.auth-popup-actions label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
-.auth-popup-actions input {
-  width: 100%;
-  min-width: 0;
-  height: 40px;
-  padding: 0 10px;
-  border: 1px solid var(--color-border-strong);
-  border-radius: 7px;
-  background: var(--color-bg);
-  color: var(--color-text);
-}
 .auth-popup-primary { gap: 10px; height: 44px; border-radius: 8px; border-color: var(--color-accent); background: var(--color-accent); font-size: 14px; font-weight: 600; }
 .auth-popup-primary:hover { background: var(--color-accent-hover); }
 .auth-popup-hint, .auth-popup-footer p { font-size: 12px; color: var(--color-text-muted); }

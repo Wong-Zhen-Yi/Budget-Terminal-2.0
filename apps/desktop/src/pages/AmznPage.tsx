@@ -32,7 +32,6 @@ export function AmznPage({ onStatusChange, onNavigate }: {
   const query = useAmzn()
   const now = useSnapshotClock()
   const freshness = query.data ? effectiveFreshness(query.data, now, FRESHNESS.amzn) : 'unavailable'
-  const notice = ''
   const refreshing = false
   const [range, setRange] = useState<StocksRangePreset>('1Y')
   const [logicalRange, setLogicalRange] = useState<LogicalRange | null>(null)
@@ -47,10 +46,6 @@ export function AmznPage({ onStatusChange, onNavigate }: {
   const mix = latest?.revenueCategories.every(category => category.revenue !== null)
     ? latest.revenueCategories.map(category => ({ label: category.name, value: category.revenue! })) : []
   useEffect(() => onStatusChange([{ label: 'AMZN', envelope: query.data, error: query.error, enabled: query.isEnabled, loading: busy }], ''), [onStatusChange, query.data, busy])
-  const laneStatus = (block: AmznBlock) => {
-    const time = payload?.laneFetchedAt[block]
-    return <div className="shrink-0 border-t border-border px-2 py-1 text-2xs text-text-muted">{block} · {payload?.progress[block] ?? (busy ? 'loading' : 'unavailable')}{time ? ` · fetched ${new Date(time).toLocaleString()}` : ''}</div>
-  }
   const historyColumns: Array<Column<AmznReport>> = [
     { key: 'period', header: 'Quarter', cell: row => <button className="text-accent hover:underline" onClick={() => void api.openExternal(row.sourceUrl)}>{row.period} ↗</button>, width: '13%' },
     { key: 'revenue', header: 'Revenue', cell: row => compactCurrency(row.revenue), numeric: true, align: 'right' },
@@ -63,13 +58,11 @@ export function AmznPage({ onStatusChange, onNavigate }: {
   return <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-auto p-2" data-amzn-page>
     <div className="flex shrink-0 flex-wrap items-center gap-1">
       <h1 className="pr-2 text-sm font-semibold text-text">AMZN · Amazon.com</h1>
-      <span className="ml-auto text-2xs text-text-muted" role="status">{busy ? 'Loading AMZN...' : query.error ? 'AMZN load failed' : `${freshness} · ${latest?.period ?? 'earnings unavailable'}`}</span>
+      <span className="ml-auto min-w-0 flex-1 truncate text-right text-2xs text-text-muted" role="status">{busy ? 'Loading AMZN...' : query.error ? 'AMZN load failed' : `${freshness} · ${latest?.period ?? 'earnings unavailable'}`}</span>
 
       {['charts', 'fundamentals', 'options', 'valuation'].map(id => <Button key={id} className="capitalize" onClick={() => onNavigate(id, 'AMZN')}>{id}</Button>)}
       <Button onClick={() => void api.openExternal('https://ir.aboutamazon.com/overview/default.aspx')}>Investor relations</Button>
     </div>
-    {notice ? <p role="status" className="shrink-0 px-2 py-1 text-2xs text-text-muted">{notice}</p> : null}
-    {(!query.data || query.data.meta.freshness === 'failed') && (query.error || query.data?.errors.length) ? <p role="alert" className="shrink-0 px-2 py-1 text-2xs text-down">Amazon data unavailable. See Settings for details.</p> : null}
     <div className="grid shrink-0 grid-cols-2 gap-2 lg:grid-cols-3 2xl:grid-cols-6">
       <Tile label={market?.chart.stats.priceBasis === 'equity-perp-mark' ? 'Equity-perp mark' : 'Share price'} value={currency(market?.chart.stats.price)} sub={`${market?.chart.stats.priceSource ?? 'USD'} · ${percent(market?.chart.stats.change)} ${market?.chart.stats.changeBasis === '24h' ? '24h' : 'daily'}`} />
       <Tile label="Market cap" value={market?.metrics.marketCap ?? '--'} sub="Yahoo Finance · market snapshot" />
@@ -80,14 +73,14 @@ export function AmznPage({ onStatusChange, onNavigate }: {
     </div>
     <div className="grid shrink-0 grid-cols-1 gap-2 xl:grid-cols-3">
       <Panel title="AMZN stock performance" className="h-[380px] min-w-0 xl:col-span-2" warning={warning('market')} actions={<div className="flex gap-1">{STOCKS_RANGE_PRESETS.map(preset => <Button key={preset} variant="toggle" active={range === preset} onClick={() => { setLogicalRange(null); setRange(preset) }}>{preset}</Button>)}</div>}>
-        {market?.chart.candles.length ? <div className="flex min-h-0 flex-1" data-amzn-price-range={range}><StocksChart payload={market.chart} mfiEnabled={false} autoFollow={false} rangePreset={range} logicalRange={logicalRange} onLogicalRangeChange={setLogicalRange} onManualRange={() => setRange('')} onHoverCandle={() => {}} /></div> : <PanelMessage>{empty('market')}</PanelMessage>}{laneStatus('market')}
+        {market?.chart.candles.length ? <div className="flex min-h-0 flex-1" data-amzn-price-range={range}><StocksChart payload={market.chart} mfiEnabled={false} autoFollow={false} rangePreset={range} logicalRange={logicalRange} onLogicalRangeChange={setLogicalRange} onManualRange={() => setRange('')} onHoverCandle={() => {}} /></div> : <PanelMessage>{empty('market')}</PanelMessage>}
       </Panel>
       <Panel title="Valuation & balance sheet" className="h-[380px] min-w-0" warning={warning('financials') || warning('market')}>
         <div className="min-h-0 flex-1 overflow-auto p-2 text-2xs">{[
           ['Trailing P/E', market?.metrics.pe], ['Forward P/E · estimate', market?.metrics.forwardPe], ['Next earnings · Yahoo estimate', market?.metrics.earningsDate],
           ['Target mean · analyst estimate', market?.targets.mean], ['Target low / high', market ? `${market.targets.low} / ${market.targets.high}` : '--'], ['Upside to mean', market?.targets.upsideToMean],
           ['Cash · latest Yahoo snapshot', compactCurrency(payload?.financials?.facts.totalCash)], ['Debt · latest Yahoo snapshot', compactCurrency(payload?.financials?.facts.totalDebt)],
-        ].map(([label, value]) => <div key={label} className="flex gap-2 border-b border-border/60 py-2"><span className="flex-1 text-text-muted">{label}</span><span className="num text-right text-text">{value || '--'}</span></div>)}</div>{laneStatus('financials')}
+        ].map(([label, value]) => <div key={label} className="flex gap-2 border-b border-border/60 py-2"><span className="flex-1 text-text-muted">{label}</span><span className="num text-right text-text">{value || '--'}</span></div>)}</div>
       </Panel>
     </div>
     <div className="grid shrink-0 grid-cols-1 gap-2 xl:grid-cols-2">
@@ -139,7 +132,7 @@ export function AmznPage({ onStatusChange, onNavigate }: {
       </Panel>
     </div>
     <Panel title="Quarterly financial history · USD" className="h-[340px] shrink-0 min-w-0" warning={warning('earnings')}>
-      <DataTable columns={historyColumns} rows={[...reports].reverse()} rowKey={row => row.period} layout="fixed" empty={empty('earnings')} />{laneStatus('earnings')}
+      <DataTable columns={historyColumns} rows={[...reports].reverse()} rowKey={row => row.period} layout="fixed" empty={empty('earnings')} />
     </Panel>
     <div className="grid shrink-0 grid-cols-1 gap-2 xl:grid-cols-2">
       <Panel title="AMZN news" className="h-[310px] min-w-0" warning={warning('market')}>

@@ -13,6 +13,7 @@ import { withSavedDataLock } from './automaticBackup.js'
 import { subscribeSavedDataChanged } from './savedDataEvents.js'
 import { beginGitHubSignIn, GitHubSetupError, type GitHubSignIn, type OAuthTokens } from './cloudSyncOAuth.js'
 import { convexDeploymentUrl } from '../shared/cloudOAuth.js'
+import { CLOUD_DEPLOYMENT_URL } from '../shared/cloudDeployment.js'
 
 const readRef = api.sync.read
 const userRef = api.sync.identity
@@ -31,7 +32,7 @@ type Session = z.infer<typeof sessionSchema>
 const checkpointSchema = z.object({ account: z.string(), baseline: z.string().optional(), revision: z.number().int().nonnegative(), lastSyncedAt: z.number().optional(), cloudUpdatedAt: z.number().optional() })
 const urlSchema = z.string().trim().url().transform(convexDeploymentUrl)
 const commandSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('signInGitHub'), url: urlSchema }),
+  z.strictObject({ type: z.literal('signInGitHub') }),
   z.object({ type: z.literal('cancelSignIn') }),
   z.object({ type: z.literal('sync') }), z.object({ type: z.literal('disconnect') }),
   z.object({ type: z.literal('resolve'), use: z.enum(['local', 'cloud']) }),
@@ -56,7 +57,6 @@ const http = (url: string) => new ConvexHttpClient(url, { logger: false,
   fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(12_000) }) })
 
 let session: Session | undefined
-let savedUrl = ''
 let engine: CloudSyncEngine | undefined
 let client: ConvexHttpClient | undefined
 let subscription: ConvexClient | undefined
@@ -147,7 +147,6 @@ function needsRefresh(token: string) {
 }
 
 async function expireSession() {
-  savedUrl = session?.url ?? savedUrl
   session = undefined
   client?.clearAuth()
   client = undefined
@@ -282,7 +281,6 @@ async function attach(value: Session) {
   await subscription?.close()
   subscription = undefined
   session = value
-  savedUrl = value.url
   client = http(value.url)
   const account = accountKey(value)
   let checkpoint: SyncCheckpoint = { account, revision: 0 }
@@ -348,7 +346,7 @@ async function attach(value: Session) {
 }
 
 export function cloudSyncStatus(): CloudSyncStatus {
-  return { url: session?.url ?? savedUrl, signedIn: Boolean(session), encryptionAvailable,
+  return { url: CLOUD_DEPLOYMENT_URL, signedIn: Boolean(session), encryptionAvailable,
     credentialCleanupRequired,
     authState: pendingGitHub ? 'signingIn' : authState, githubLogin: session?.githubLogin, workspaceApprovalRequired, revocation,
     state: authError ? 'error' : engine?.state ?? 'disconnected', pending: engine?.pending ?? false,
@@ -394,14 +392,16 @@ async function restoreSession() {
     let decoded: z.infer<typeof sessionSchema> | { authVersion: unknown; url: string }
     try { decoded = JSON.parse(decrypted.result) }
     catch { throw new CredentialError('reauthRequired', 'Saved credentials are invalid. Sign in again; local data is preserved.') }
+    if (urlSchema.parse(decoded.url) !== CLOUD_DEPLOYMENT_URL) {
+      throw new CredentialError('reauthRequired', 'This device was connected to a different cloud service. Sign in with GitHub to connect to Budget Terminal cloud. Your local data is preserved.')
+    }
     if (decoded.authVersion !== 2) {
-      savedUrl = urlSchema.parse(decoded.url)
       message = 'Cloud sync now uses Convex Auth v2. Sign in with the same GitHub account again to reconnect your saved cloud data.'
       authState = 'reauthRequired'
       return
     }
     const stored = sessionSchema.parse(decoded)
-    stored.url = urlSchema.parse(stored.url)
+    stored.url = CLOUD_DEPLOYMENT_URL
     if (stored.tokens.userId !== stored.userId) throw new Error('Saved identity mismatch')
     if (decrypted.shouldReEncrypt) await saveSession(stored)
     if (!closed) { await attach(stored); authState = 'offline' }
@@ -442,15 +442,16 @@ export function cloudSyncCommand(input: CloudSyncCommand) {
       } else if (command.type === 'signInGitHub' || command.type === 'revokeOtherSessions') {
         const managingSessions = command.type === 'revokeOtherSessions'
         if (credentialCleanupRequired || pendingGitHub || !await checkEncryption() || (managingSessions ? !session : Boolean(session))) throw new Error('Sign-in unavailable')
-        const url = managingSessions ? session!.url : command.url
+        const url = CLOUD_DEPLOYMENT_URL
         const originalUserId = session?.userId
         const login = http(url)
         const flow = await beginGitHubSignIn(url, {
           isConfigured: async () => {
             const config = await login.query(authConfigRef, {})
-            if (config.authVersion !== 2) throw new GitHubSetupError('This backend needs the Convex Auth v2 update. Run npm run convex:setup from the repository, then retry. Local data is available.')
-            if (config.accountControlsVersion !== 2) throw new GitHubSetupError('This backend needs the account security update. Deploy the current Convex backend with npm run convex:setup, then retry. Local data is available.')
-            return config.githubConfigured
+            if (config.authVersion !== 2 || config.accountControlsVersion !== 2 || !config.githubConfigured) {
+              throw new GitHubSetupError('Budget Terminal cloud sign-in is unavailable. Try again later or continue locally.')
+            }
+            return true
           },
           startSignIn: args => managingSessions
             ? remote(connection => connection.mutation(startSignInRef, { ...args, purpose: 'revokeOthers' }))
@@ -473,7 +474,7 @@ export function cloudSyncCommand(input: CloudSyncCommand) {
             pendingGitHub = undefined
             authError = result.reason !== 'cancelled'
             message = result.reason === 'expired' ? 'GitHub sign-in expired. Try again.' :
-              result.reason === 'cancelled' ? undefined : result.reason === 'accountMismatch' ? 'Use the same GitHub account to sign out other devices. Your current account is unchanged.' : 'GitHub sign-in failed. Check the backend GitHub OAuth configuration and try again.'
+              result.reason === 'cancelled' ? undefined : result.reason === 'accountMismatch' ? 'Use the same GitHub account to sign out other devices. Your current account is unchanged.' : 'GitHub sign-in failed. Try again or continue locally.'
             return
           }
           try {
@@ -523,7 +524,7 @@ export function cloudSyncCommand(input: CloudSyncCommand) {
         message = error.message
         return failed(cloudSyncStatus(), message, 'cloud sync')
       }
-      return failed(cloudSyncStatus(), message ?? 'Could not complete the sync command. Check your connection, cloud setup and OS credential keyring. Local saves remain available.', 'cloud sync')
+      return failed(cloudSyncStatus(), message ?? 'Could not complete the sync command. Check your connection and OS credential keyring, then try again. Local saves remain available.', 'cloud sync')
     }
   })
 }

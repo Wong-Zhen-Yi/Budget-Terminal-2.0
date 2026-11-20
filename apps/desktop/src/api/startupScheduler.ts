@@ -9,7 +9,7 @@ export interface StartupTask {
   id: string
   tab: string
   label: string
-  refresh?: boolean
+  refresh?: boolean | 'until-ready'
   refreshIntervalMs?: number
   run: (observe: StartupSnapshotObserver, maintenance: boolean) => Promise<unknown>
 }
@@ -93,8 +93,11 @@ export function createStartupScheduler(options: {
   }
 
   function maintain(entry: Entry) {
-    if (!current(entry) || entry.task.refresh === false) return
-    const delay = entry.task.refreshIntervalMs ?? startupRefreshDelay(entry.snapshots, entry.status?.state !== 'ready')
+    const unhealthy = entry.status?.state !== 'ready'
+    const policy = entry.task.refresh
+    if (!current(entry) || policy === false || (policy === 'until-ready' && !unhealthy)) return
+    const delay = unhealthy ? startupRefreshDelay(entry.snapshots, true)
+      : entry.task.refreshIntervalMs ?? startupRefreshDelay(entry.snapshots)
     if (!Number.isFinite(delay)) return
     entry.timer = setTimer(() => {
       entry.timer = undefined

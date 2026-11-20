@@ -19,6 +19,7 @@ try {
       import { createRoot } from 'react-dom/client'
       import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
       import { EthPage } from './src/pages/EthPage'
+      import { queryKeys } from './src/api/client'
       import { buildTasks } from './src/api/prefetch'
       const check = (ok, message) => { if (!ok) throw Error(message) }
       const settle = () => new Promise(resolve => setTimeout(resolve, 130))
@@ -27,11 +28,14 @@ try {
         day: end - (89-i)*DAY, mainnetTps: 20+i, layer2Tps: 250+2*i,
         gasThroughputMgasPerSecond: i === 88 ? undefined : { mainnet: 10+i/10, layer2: 80+i },
         feesPaidUsdPerDay: i === 88 ? { mainnet: 0, layer2: 0 } : { mainnet: 400000+i*100, layer2: 150000+i*200 },
-        stablecoinSupplyUsd: { mainnet: 150e9+i*1e8, layer2: 14e9+i*1e7 },
+        stablecoinSupplyUsd: { mainnet: 150e9+i*1e8, layer2: 14e9+i*1e7 }, layer2SettlementUsdPerDay: 1000+i,
       })).filter((_, i) => i !== 80)
+      const market = Array.from({ length: 91 }, (_, i) => ({ day: end-(90-i)*DAY,
+        priceUsd: 2100+i, marketCapUsd: 250e9+i*1e8, supplyEth: 121e6+i*100, issuanceEth: 2000, activeAddresses: 750000+i }))
       const fixture = { data: {
         ecosystem: Array.from({ length: 40 }, (_, i) => ({ asOf: now-180000+i*100, tps: 350+i })),
-        mainnet: { asOf: now-180000, tps: 24.2, blockTimeSeconds: 12, medianTransactionFeeUsd: .7448 }, daily,
+        mainnet: { asOf: now-180000, tps: 24.2, blockTimeSeconds: 12, medianTransactionFeeUsd: .7448 }, daily, market,
+        staking: { asOf: now-3000, validatorBalanceEth: 40e6, supplyEth: 120e6 }, burn: { asOf: now-3000, sevenDayEth: 1200 },
       }, errors: [], meta: { source: 'fixture', fetchedAt: now, freshness: 'fresh' } }
       let calls = 0, request, statuses, rejectSource = false
       window.api.eth = async value => { calls++; request = value; return fixture }
@@ -84,11 +88,19 @@ try {
         rejectSource = true; button('Data by growthepie ↗').click(); await settle()
         check(document.querySelector('.eth-source [role="status"]').textContent.includes('Could not open'), 'Source-link failure hidden')
         rejectSource = false; button('Data by growthepie ↗').click(); await settle()
-        client.setQueryData(['eth'], { ...fixture, errors: [{ source: 'fixture', operation: 'eth', reason: 'Unavailable history' }], meta: { ...fixture.meta, freshness: 'partial' }, data: { ...fixture.data, daily: [] } }); await settle()
+        client.setQueryData(queryKeys.eth, { ...fixture, errors: [{ source: 'fixture', operation: 'eth', reason: 'Unavailable history' }], meta: { ...fixture.meta, freshness: 'partial' }, data: { ...fixture.data, daily: [] } }); await settle()
         check(document.querySelectorAll('.eth-chart-card .eth-empty').length === 4 && !document.querySelector('.eth-plot svg'), 'Unavailable history fabricated chart data')
         check(statuses[0].envelope.meta.freshness === 'partial', 'Settings lost partial-data diagnostics')
-        client.setQueryData(['eth'], fixture); await settle()
-        button('Transactions per second').click(); await settle()
+        client.setQueryData(queryKeys.eth, fixture); await settle()
+        button('Market & supply').click(); await settle()
+        const marketView = document.querySelector('.eth-market-view-page')
+        check(marketView?.textContent.includes('$2,190.00'), 'Latest ETH reference price missing')
+        check(marketView.textContent.includes('33.33%') && marketView.textContent.includes('1,200 ETH'), 'Staking share or burn missing')
+        check(document.querySelectorAll('.eth-market-view-chart-canvas canvas').length >= 3, 'Market charts did not render')
+        button('L2 settlement').click(); await settle()
+        check(marketView.textContent.includes('Paid to Mainnet'), 'Settlement chart missing')
+        button('Network').click(); await settle()
+        check(document.querySelectorAll('.eth-chart-card').length === 4 && calls === 1, 'Returning to network activity lost the warmed payload')
         host.render(null); await settle(); render(); await settle()
         check(calls === 1, 'Revisiting ETH fetched warmed data again')
         window.verifyLayout = fit => {

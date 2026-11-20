@@ -1,14 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import type { PositionInput, ReturnTimeframe } from '@shared/contract'
 import { RETURN_TIMEFRAMES } from '@shared/contract'
 import { ema } from '@shared/analytics'
+import { FRESHNESS } from '@shared/freshness'
 import { useMomentum } from '@/api/portfolioQueries'
 import { LineChart } from '@/components/charts/LineChart'
+import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { Button } from '@/components/ui/Button'
 import { currency, percent } from '@/lib/format'
-import { DataFreshness } from '@/components/ui/DataFreshness'
-import { FRESHNESS } from '@shared/freshness'
 import { useNumberPrivacy } from '@/components/ui/NumberPrivacy'
 
 interface MomentumTabProps {
@@ -16,13 +16,18 @@ interface MomentumTabProps {
   cashAmount: number
   visible: boolean
   valuationComplete: boolean
+  onStatusChange?: (panels: PanelStatus[]) => void
 }
 
 /** Portfolio value candles built from daily adjusted holding OHLC. */
-export function MomentumTab({ positions, cashAmount, visible, valuationComplete }: MomentumTabProps) {
+export function MomentumTab({ positions, cashAmount, visible, valuationComplete, onStatusChange }: MomentumTabProps) {
   const maskNumbers = useNumberPrivacy()
   const [timeframe, setTimeframe] = useState<ReturnTimeframe>('1mo')
   const query = useMomentum(positions, cashAmount, timeframe, visible)
+  useEffect(() => {
+    onStatusChange?.([{ label: 'Momentum', envelope: query.data, error: query.error,
+      loading: query.isFetching, enabled: query.isEnabled, freshnessMs: FRESHNESS.chartDaily }])
+  }, [onStatusChange, query.data, query.error, query.isFetching, query.isEnabled])
   const data = query.data?.data
   const complete = valuationComplete && Boolean(data && !data.excludedTickers.length)
   const values = data?.values ?? []
@@ -52,9 +57,7 @@ export function MomentumTab({ positions, cashAmount, visible, valuationComplete 
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <DataFreshness envelope={query.data} loading={query.isFetching} error={query.error} freshnessMs={FRESHNESS.chartDaily}
-        coverage={data ? `${maskNumbers ? '****' : `${data.includedTickers.filter(ticker => ticker !== 'CASH').length}/${positions.length}`} holdings in history` : undefined} />
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex shrink-0 items-center gap-1" aria-busy={query.isFetching}>
         {RETURN_TIMEFRAMES.map((entry) => (
           <Button
             key={entry.key}
@@ -65,7 +68,6 @@ export function MomentumTab({ positions, cashAmount, visible, valuationComplete 
             {entry.label}
           </Button>
         ))}
-        {query.isFetching ? <span className="pl-2 text-2xs text-text-dim">Loading...</span> : null}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col border border-border bg-surface p-2">
@@ -97,7 +99,7 @@ export function MomentumTab({ positions, cashAmount, visible, valuationComplete 
       </div>
 
       <p className="shrink-0 text-center text-2xs text-text-dim">One candle per trading day using adjusted holding OHLC. Wicks sum holding highs/lows as range bounds; peaks may occur at different times. Current shares and included cash are held constant.</p>
-      <p className="shrink-0 text-center text-2xs text-text-muted">{summary()}</p>
+      <p className="shrink-0 truncate text-center text-2xs text-text-muted" title={summary()}>{summary()}</p>
     </div>
   )
 }

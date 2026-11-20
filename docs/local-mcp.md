@@ -9,21 +9,25 @@ recent ecosystem TPS samples (mainnet plus tracked Layer 2s) and a separately ti
 mainnet snapshot with TPS, block interval in seconds and median transaction fee in USD.
 Up to 90 UTC dates show mainnet and Layer 2 trailing seven-day averages for TPS,
 gas throughput (Mgas/s), user fees (USD/day), and tracked stablecoin supply (USD).
+The history also includes seven-day average fees tracked L2s paid to Mainnet for
+settlement and data availability. Report these fees separately from user fees.
 Keep each live reading's `asOf` and use the historical date for the corresponding
 rolling average. Stablecoin values are reported by layer. Missing fields or dates
-indicate unavailable observations.
-The shared cache refreshes recent readings about every 30 seconds and historical
-data hourly. growthepie's public endpoints require no payment or API key.
-Data source and terms are described by [growthepie](https://www.growthepie.com/answers/ethereum-ecosystem-tps).
-Screenshot page `eth` shows the Research workbench: recent readings, four linked
-30D/90D metric charts and a shared UTC date inspector. Select a chart heading to
-inspect its layer breakdown; select a chart date, use chart arrow keys or move the
-date slider to update all four charts. Compare shows each layer's absolute change
-from the earliest available earlier observation for that metric in the selected
-range, with the baseline date and units labeled. Missing dates remain gaps and
-are never substituted with zero or another date. Startup preloading, permissions
-and the ETH request/response contract are unchanged.
-Rebuild with `npm run build:mcp` and reconnect local clients after catalog changes.
+indicate unavailable observations. The `market` series from Coin Metrics adds up
+to 98 completed UTC dates for ETH reference price, market cap, supply, issuance
+and active Mainnet addresses. Compute supply change from two matching supply
+observations. The `staking` snapshot from ultrasound.money reports aggregate
+Beacon validator balances, including rewards, and total ETH supply at the same
+slot. Its ratio describes the share of ETH in validator balances. The `burn`
+snapshot contains fees burned in the rolling seven days ending at its own
+`asOf`. Daily issuance covers completed UTC dates and uses a different window.
+The shared cache refreshes recent TPS about every 30 seconds, protocol snapshots
+about every five minutes and historical data hourly. All endpoints are keyless.
+See [growthepie](https://www.growthepie.com/ethereum-ecosystem), [Coin Metrics](https://docs.coinmetrics.io/packages/coin-metrics-community-data) and [ultrasound.money](https://ultrasound.money/).
+Screenshot page `eth` for the Ethereum research workbench. Network opens with four
+linked 30D/90D charts and a shared UTC date inspector for layer breakdown and
+comparison. Market & supply shows simultaneous market and network charts with
+supply, staking and network ledgers. Rebuild with `npm run build:mcp` and reconnect local clients.
 
 `budget_terminal_hood` now includes `presentation`: the reviewed November 11,
 2026 Robinhood investor deck and the October 27 Q3 2026 earnings deck. History
@@ -60,7 +64,7 @@ See [Anthropic research maintenance](anthropic-focus.md). Rebuild with
 `npm run build:mcp` and reconnect MCP clients to discover the new tool.
 
 
-Cloud sync now uses Convex Auth v2. Sign-in, sign-out, session rotation, provider
+Cloud sync uses Convex Auth v2 and the same Budget Terminal deployment on every installation. Sign-in, sign-out, session rotation, provider
 credentials and sync conflict choices remain desktop-only. MCP cannot access auth
 tokens, change the cloud account or bypass local read/write permissions. Existing
 MCP writes still save through local stores; optional sync observes those saved-data
@@ -252,15 +256,11 @@ is refused. Failed or uncertain attempts are not automatically executed again.
 Large results replay a small receipt instructing the client to read saved records.
 The private journal retains up to 500 write receipts across restarts; it refuses new IDs at capacity rather than evicting IDs and risking duplicate edits.
 
-Use a `setMainPage` request with `id` set to a visible, implemented page ID to choose
-which page opens on the next launch. Use `id: null` to restore automatic selection.
-The settings read exposes an explicit choice as `mainPageId`. Hiding the chosen
-page restores automatic selection.
-
-**A private write journal survives app restart.** It records only hashed tool/request IDs, argument fingerprints, outcome states and timestamps in the restricted `.mcp/write-journal.json` file. Arguments, financial records, article content and provider errors are never stored there. Before execution the journal durably records an uncertain outcome; completion updates it atomically. A crash between saving the record and updating the journal remains uncertain, so this is not an exactly-once guarantee.
-
-After interruption, call `budget_terminal_operation_status` with `request: { "tool": "budget_terminal_mutate_settings", "requestId": "original-id" }`, then read the saved records. States are completed, failed, refused, uncertain or unknown. An existing ID never executes again after restart; its small receipt instructs the caller to read records. Unknown does not prove an edit never happened. An unreadable journal blocks writes and reports its failure in Settings. At capacity, inspect records, disconnect clients and close the app before archiving the private journal locally; archived IDs no longer provide deduplication protection. The journal is excluded from backups and exports. Read tools do not accept a top-level `requestId`.
-
+`budget_terminal_settings` returns `data.mainPage` when a startup page is saved.
+Use `budget_terminal_mutate_settings` with `request: { "type": "setMainPage", "id": "charts" }`
+to select a visible, implemented page for the next launch. Set `id` to `null` or
+hide the selected page to restore automatic selection. The Obscure switch uses
+desktop session state. The saved `obscuredTabs` list is available through the settings tools.
 
 ## Concurrent edit protection
 

@@ -96,20 +96,34 @@ try {
     assert(eth.data.ecosystem.length > 1 && eth.data.mainnet?.blockTimeSeconds && eth.data.daily.length > 30)
     assert(eth.data.mainnet.medianTransactionFeeUsd !== undefined)
     const latest = eth.data.daily.at(-1)
-    assert(latest?.gasThroughputMgasPerSecond && latest.feesPaidUsdPerDay && latest.stablecoinSupplyUsd)
-    console.log('PASS live growthepie: keyless TPS, mainnet block interval and median fee, gas throughput, user fees, stablecoins')
+    assert(latest?.gasThroughputMgasPerSecond && latest.feesPaidUsdPerDay && latest.stablecoinSupplyUsd
+      && latest.layer2SettlementUsdPerDay !== undefined)
+    const market = eth.data.market?.at(-1)
+    assert(eth.data.market!.length >= 90 && market && market.priceUsd > 0 && market.marketCapUsd > 0 && market.supplyEth > 0)
+    assert(market.issuanceEth !== undefined && market.activeAddresses !== undefined)
+    const staking = eth.data.staking
+    assert(staking && staking.validatorBalanceEth > 0 && staking.supplyEth > staking.validatorBalanceEth)
+    assert(eth.data.burn && eth.data.burn.sevenDayEth >= 0)
+    console.log('PASS live Ethereum: growthepie activity and settlement, Coin Metrics market and supply, ultrasound.money validator balances and fee burn')
   } else {
     const fetchOriginal = globalThis.fetch
     const day = Math.floor(now / ETH_DAY_MS) * ETH_DAY_MS
     const seen: string[] = []
     let unavailable = false
+    let burnUnavailable = false
     const utcDate = day - ETH_DAY_MS
     const daily = (data: unknown[][], gas: number, fees: number, stables: number | null) => ({ metrics: {
       txcount: { daily: { types: ['value', 'unix'], data } },
       throughput: { daily: { types: ['unix', 'value'], data: [[utcDate, gas]] } },
       fees: { daily: { types: ['eth', 'unix', 'usd'], data: [[123, utcDate, fees]] } },
       stables_mcap: { daily: { types: ['unix', 'usd'], data: [[utcDate, stables]] } },
+      rent_paid: { daily: { types: ['usd', 'unix'], data: [[0, utcDate]] } },
     } })
+    const market = (timestamp: number) => ({
+      asset: 'eth', time: new Date(timestamp).toISOString(),
+      PriceUSD: '2400.5', CapMrktCurUSD: '289000000000', SplyCur: '120200000.125', IssTotNtv: '2190', AdrActCnt: '800123',
+    })
+    const slot = Math.floor((now / 1000 - 1_606_824_023) / 12)
     globalThis.fetch = async (input, options) => {
       const url = String(input)
       seen.push(url)
@@ -119,6 +133,19 @@ try {
       ] })
       if (url === ethEndpoints.mainnet) return unavailable ? new Response(null, { status: 503 })
         : Response.json({ data: { chain_name: 'ethereum', tps: 20, timestamp: now - 2000, block_time: 12.1, tx_cost_median_usd: 0 } })
+      if (url === encodeURI(ethEndpoints.market)) return Response.json({ data: [
+        market(utcDate), market(day), market(utcDate - ETH_DAY_MS / 2),
+        { ...market(utcDate - ETH_DAY_MS), IssTotNtv: null },
+        { ...market(utcDate - 2 * ETH_DAY_MS), asset: 'btc' },
+      ] })
+      if (url === ethEndpoints.staking) return Response.json({
+        slot, executionBalancesSum: (170_000_000n * 10n ** 18n).toString(),
+        beaconBalancesSum: (40_000_000n * 10n ** 9n).toString(),
+        beaconDepositsSum: (90_000_000n * 10n ** 9n).toString(),
+      })
+      if (url === ethEndpoints.burn) return Response.json({
+        d7: { timestamp: new Date(now).toISOString(), sum: { eth: burnUnavailable ? -1 : 0 } },
+      })
       assert.equal(url, ethEndpoints.daily)
       return Response.json({ data: {
         ethereum: daily([[1_728_000, utcDate], [1_728_000, day - 2 * ETH_DAY_MS], [1, day]], 2.5, 310_000, 100_000_000),
@@ -132,22 +159,30 @@ try {
       assert.deepEqual(eth.data.mainnet, { asOf: now - 2000, tps: 20, blockTimeSeconds: 12.1, medianTransactionFeeUsd: 0 })
       assert.deepEqual(eth.data.daily, [{
         day: utcDate, mainnetTps: 20, layer2Tps: 200, gasThroughputMgasPerSecond: { mainnet: 2.5, layer2: 75 },
-        feesPaidUsdPerDay: { mainnet: 310_000, layer2: 200_000 }, stablecoinSupplyUsd: undefined,
+        feesPaidUsdPerDay: { mainnet: 310_000, layer2: 200_000 }, stablecoinSupplyUsd: undefined, layer2SettlementUsdPerDay: 0,
       }])
+      assert.deepEqual(eth.data.market, [
+        { day: utcDate - ETH_DAY_MS, priceUsd: 2400.5, marketCapUsd: 289e9, supplyEth: 120_200_000.125, activeAddresses: 800_123, issuanceEth: undefined },
+        { day: utcDate, priceUsd: 2400.5, marketCapUsd: 289e9, supplyEth: 120_200_000.125, activeAddresses: 800_123, issuanceEth: 2190 },
+      ])
+      assert.deepEqual(eth.data.staking, { asOf: (1_606_824_023 + slot * 12) * 1000, validatorBalanceEth: 40e6, supplyEth: 120e6 })
+      assert.deepEqual(eth.data.burn, { asOf: now, sevenDayEth: 0 })
       assert.equal((await getEth()).meta.freshness, 'cached')
-      assert.equal(seen.length, 3)
+      assert.equal(seen.length, 6)
       unavailable = true
+      burnUnavailable = true
       const degraded = await getEth({ force: true })
       assert.equal(degraded.meta.freshness, 'partial')
-      assert.equal(degraded.errors[0]?.operation, 'mainnet')
+      assert.deepEqual(degraded.errors.map(error => error.operation), ['mainnet', 'burn'])
       assert.deepEqual(degraded.data.mainnet, eth.data.mainnet)
+      assert.deepEqual(degraded.data.burn, eth.data.burn)
       const legacy = { asOf: now - 3000, tps: 19 }
       await cache.set('eth:mainnet', legacy, 30_000)
       await cache.delete('eth:mainnet:2')
       const upgraded = await getEth()
       assert.equal(upgraded.meta.freshness, 'partial')
       assert.deepEqual(upgraded.data.mainnet, legacy)
-      console.log('PASS: growthepie metric units, UTC alignment, cache reuse and fallback to saved and pre-upgrade snapshots')
+      console.log('PASS Ethereum: UTC alignment, market and staking units, zero burn and settlement, cache reuse, fallback to saved and pre-upgrade snapshots')
     } finally { globalThis.fetch = fetchOriginal }
   }
 
