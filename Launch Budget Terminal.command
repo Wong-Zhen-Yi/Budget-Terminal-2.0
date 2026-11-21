@@ -53,7 +53,7 @@
 # Finnhub prioritizes saved portfolio stocks for pre-market/live feeds and REST refreshes; see docs/finnhub-streaming.md.
 # Dependency security refresh: patched Electron and schema-generation dependencies; see docs/dependency-maintenance.md.
 # Focus provider verification: npm run probe:maintenance-live -- --focus
-# Recurring maintenance checklist: docs/maintenance/Maintainence.md
+# Maintenance checklist and verification commands: docs/maintenance/Maintainence.md
 # Windows terminal command: btd restart saves, rebuilds and reopens the app.
 # Run btd --help on Windows for all terminal commands and options.
 # Telegram: natural screenshot requests use MCP and send photos without captions or follow-up text.

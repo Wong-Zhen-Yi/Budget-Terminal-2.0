@@ -54,7 +54,7 @@ rem Gold and Oil pages are in the Focus workspace.
 rem Finnhub prioritizes saved portfolio stocks for pre-market/live feeds and REST refreshes; see docs/finnhub-streaming.md.
 rem Dependency security refresh: patched Electron and schema-generation dependencies; see docs/dependency-maintenance.md.
 rem Focus provider verification: npm run probe:maintenance-live -- --focus
-rem Recurring maintenance checklist: docs/maintenance/Maintainence.md
+rem Maintenance checklist and verification commands: docs/maintenance/Maintainence.md
 rem Windows terminal command: btd restart saves, rebuilds and reopens the app.
 rem Run btd --help for all Windows terminal commands and options.
 rem Telegram: natural screenshot requests use MCP and send photos without captions or follow-up text.
