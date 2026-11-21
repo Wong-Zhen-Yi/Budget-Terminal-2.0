@@ -722,6 +722,24 @@ Object.assign(window.api, {
 const emptyCardPortfolio = { ...portfolio.portfolios[0], id: 'empty-card-book', tickers: [], holdings: {} }
 const dependencyTasks = buildTasks({ ...portfolio, portfolios: [...portfolio.portfolios, emptyCardPortfolio] }, undefined, { stocks: 'AAPL', fundamentals: 'AAPL' },
   { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 })
+const { recordStartupSnapshot } = await import('../src/api/startupHealth.js')
+const { useDataHealth } = await import('../src/stores/dataHealth.js')
+const newsResult = ok({ articles: [{ ticker: 'FIX', title: 'Fixture headline', category: 'portfolio', publishedAt: Date.now() }] }, 'fixture')
+Object.assign(window.api, {
+  newsPage: async () => newsResult,
+  quotes: async () => ({ ...ok({ macro: {}, holdings: {}, missing: ['FIX'] }, 'fixture'),
+    meta: { ...newsResult.meta, freshness: 'partial', failureReason: 'Fixture quote unavailable' } }),
+})
+const newsClient = new QueryClient()
+const newsTask = dependencyTasks.find(task => task.tab === 'news')!
+await newsTask.run(newsClient, 1, (key, result, error) => recordStartupSnapshot('news', key, result, error))
+assert.equal(useDataHealth.getState().records['news:News Feeds']?.freshness, 'fresh')
+assert.equal(useDataHealth.getState().records['news:Quotes']?.freshness, 'partial', 'News quote coverage remains visible in Settings')
+newsClient.clear()
+Object.assign(window.api, { newsPage: async () => ({ ...newsResult,
+  meta: { ...newsResult.meta, freshness: 'partial', failureReason: 'Fixture article feed unavailable' } }) })
+await assert.rejects(newsTask.run(newsClient), /Fixture article feed unavailable/, 'A missing article feed must still degrade startup')
+newsClient.clear()
 const cardClient = new QueryClient()
 await assert.rejects(dependencyTasks.find(task => task.label === 'Card performance')!.run(cardClient), /Fixture intraday/)
 assert.deepEqual(cardIntervals.sort(), ['1d', '1y', '30d'].sort(), 'A partial 1D card must not skip 30D and 1Y')

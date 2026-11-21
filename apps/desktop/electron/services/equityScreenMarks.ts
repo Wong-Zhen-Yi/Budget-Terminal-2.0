@@ -1,6 +1,6 @@
 import type { EnvelopeError, Quote } from '../shared/contract.js'
 import { equityMarket } from '../shared/equityMarkets.js'
-import { getQuotes } from './yahoo/quotes.js'
+import { getPreferredQuoteOverlay, getQuote } from './yahoo/quotes.js'
 import { finnhubQuotes, finnhubSymbol } from './finnhubQuotes.js'
 
 /** Overlay only current prices. Screener ranks, reported multiples, volumes and
@@ -13,17 +13,32 @@ export async function markEquityScreenRows<Row extends { ticker: string; price: 
   sources: string[]
 }> {
   const useFinnhub = await finnhubQuotes.configured('AAPL')
-  const symbols = rows.map(row => row.ticker).filter(symbol => equityMarket(symbol) || useFinnhub && finnhubSymbol(symbol))
-  if (!symbols.length) return { rows, errors: [], marked: false, sources: [] }
-  const batch = await getQuotes(symbols, force)
+  const candidates = new Map<string, boolean>()
+  for (const { ticker, price } of rows) {
+    if (!equityMarket(ticker) && !(useFinnhub && finnhubSymbol(ticker))) continue
+    candidates.set(ticker, (candidates.get(ticker) ?? true) && price !== null)
+  }
+  const quotes = new Map<string, Quote>()
+  const errors: EnvelopeError[] = []
+  const symbols = [...candidates.keys()]
+  const results = await Promise.allSettled(symbols.map(symbol =>
+    candidates.get(symbol) ? getPreferredQuoteOverlay(symbol, force) : getQuote(symbol, force)))
+  results.forEach((result, index) => {
+    const symbol = symbols[index]
+    if (result.status === 'fulfilled' && result.value) quotes.set(symbol, result.value)
+    const reason = result.status === 'fulfilled' ? result.value?.fallbackReason
+      : result.reason instanceof Error ? result.reason.message : String(result.reason)
+    if (reason) errors.push({ source: 'market prices', operation: 'quote', symbol, reason })
+  })
+  const applied = [...quotes.values()]
   return {
     rows: rows.map(row => {
-      const quote = batch.quotes[row.ticker]
+      const quote = quotes.get(row.ticker)
       return quote ? { ...row, price: quote.price, priceSource: quote.source, priceBasis: quote.priceBasis }
-        : equityMarket(row.ticker) ? { ...row, priceSource: 'Yahoo stock snapshot (selected live quote unavailable)' } : row
+        : row.price !== null && candidates.has(row.ticker) ? { ...row, priceSource: 'Yahoo Finance' } : row
     }),
-    errors: batch.errors.map(error => ({ source: 'market prices', operation: 'quote', symbol: error.symbol, reason: error.reason })),
-    marked: Object.values(batch.quotes).some(quote => quote.priceBasis === 'equity-perp-mark' || quote.source === 'Finnhub'),
-    sources: [...new Set(Object.values(batch.quotes).flatMap(quote => quote.source ? [quote.source] : []))],
+    errors,
+    marked: applied.some(quote => quote.priceBasis === 'equity-perp-mark' || quote.source === 'Finnhub'),
+    sources: [...new Set(applied.flatMap(quote => quote.source ? [quote.source] : []))],
   }
 }

@@ -11,7 +11,7 @@ import { getYahooSeries } from './yahoo/series.js'
 import { withYahooSummary } from './yahoo/requests.js'
 import { fetchPortfolioNews } from './yahoo/newsPage.js'
 import { equityMarket } from '../shared/equityMarkets.js'
-import { getQuote } from './yahoo/quotes.js'
+import { getPreferredQuoteOverlay, getQuote } from './yahoo/quotes.js'
 import { finnhubQuotes } from './finnhubQuotes.js'
 
 const SOURCE = 'Yahoo Finance; company and ETF issuer catalog'
@@ -47,17 +47,19 @@ const defaults: HomebuilderFetchers = {
     if (series.status === 'rejected') warnings.push(`History failed: ${describeError(series.reason)}`)
     else if (series.value.stale) warnings.push('History refresh failed; showing cached data.')
     if (!history.length) warnings.push('Adjusted price history unavailable.')
-    if (finite(raw.regularMarketPrice) === null) warnings.push('Share price unavailable.')
-    const perp = equityMarket(symbol) || await finnhubQuotes.configured(symbol) ? await getQuote(symbol, force).catch(error => {
-      warnings.push(`Selected price refresh failed; showing Yahoo stock quote: ${describeError(error)}`)
-      return undefined
-    }) : undefined
-    const price = perp?.price ?? finite(raw.regularMarketPrice)
+    const stockPrice = finite(raw.regularMarketPrice)
+    const mark = equityMarket(symbol) || await finnhubQuotes.configured(symbol)
+      ? await (stockPrice === null ? getQuote(symbol, force) : getPreferredQuoteOverlay(symbol, force)).catch(error => {
+        warnings.push(`Selected price refresh failed: ${describeError(error)}`)
+        return undefined
+      }) : undefined
+    const price = mark?.price ?? stockPrice
+    if (price === null) warnings.push('Share price unavailable.')
     const previous = finite(raw.regularMarketPreviousClose)
     if (price === null && !history.length) throw new Error(warnings.join(' · '))
-    return { value: { price, dailyChange: perp?.change ?? finite(raw.regularMarketChangePercent) ?? (price !== null && previous !== null && previous > 0 ? (price / previous - 1) * 100 : null),
-      marketCap: finite(raw.marketCap), quoteTime: perp?.asOf ?? timestamp(raw.regularMarketTime), history,
-      priceSource: perp?.source ?? 'Yahoo Finance', changeBasis: perp?.changeBasis ?? 'previous-close' }, warnings }
+    return { value: { price, dailyChange: mark?.change ?? finite(raw.regularMarketChangePercent) ?? (price !== null && previous !== null && previous > 0 ? (price / previous - 1) * 100 : null),
+      marketCap: finite(raw.marketCap), quoteTime: mark?.asOf ?? timestamp(raw.regularMarketTime), history,
+      priceSource: mark?.source ?? 'Yahoo Finance', changeBasis: mark?.changeBasis ?? 'previous-close' }, warnings }
   },
   async profile(symbol) {
     const raw = await withYahooSummary(symbol, () => paced(() => yahoo.quoteSummary(symbol, { modules: ['assetProfile', 'summaryDetail', 'defaultKeyStatistics', 'financialData', 'calendarEvents'] })))

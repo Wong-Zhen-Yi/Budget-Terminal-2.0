@@ -56,9 +56,9 @@ export async function getAnthropic({ force = false }: AnthropicRequest = {}, fet
       if (!result.filings.length) throw new Error('No Anthropic SEC filings returned.')
       return result.filings.slice(0, 20)
     }, value => { data.filings = value }),
-    ...['roadshow', 'models', 'safety'].map(id => lane(id,
+    ...Object.keys(anthropicReviewedHashes).map(id => lane(id,
       async () => anthropicDocumentHash(await fetchers.document(ANTHROPIC_SOURCES.find(source => source.id === id)!.url)),
-      () => undefined, hash => hash !== anthropicReviewedHashes[id as keyof typeof anthropicReviewedHashes])),
+      () => undefined, hash => hash !== anthropicReviewedHashes[id])),
   ])
   data.checks.sort((a, b) => a.id.localeCompare(b.id))
   data.reviewReasons = anthropicReviewReasons(data)

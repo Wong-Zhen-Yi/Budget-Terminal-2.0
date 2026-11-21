@@ -53,6 +53,6 @@ After OAuth installation, `check:production` passed protocol, GitHub-only config
 
 The post-setup `build:release`, typecheck, release probe, launcher probe and agent/browser privacy checks passed. Build and launcher verification used the launcher's installed Node.js 24.22.1; the shell's Node.js 22.23.2 correctly failed the repository's runtime security requirement. An exact-value scan found neither supplied OAuth credential in 1,696 tracked/source and generated output files. Both secure-input files and the temporary upload file were removed. All three double-click launchers were updated; their local-account behavior is preserved.
 
-Application bundles are written to `apps/desktop/out/`. This repository does not currently package/sign installers, configure auto-updates or publish GitHub releases. Do not describe a successful bundle build as a signed installer or public release.
+Application bundles are written to `apps/desktop/out/`. Settings and the terminal launcher can update a Git checkout from the published `main` branch. This repository does not currently package/sign installers or publish GitHub releases. Do not describe a successful bundle build as a signed installer or public release.
 
 Public rollout acceptance remains separate: controlled production sign-in, two accounts/devices, deployed quota and cleanup/deletion checks, representative load/cost measurement, platform backups/budget alerts and the published privacy/retention/support policy. Keep `database.md` until those requirements are verified.

@@ -92,17 +92,17 @@ export const queryKeys = {
   mu: ['mu'] as const,
   googl: ['googl'] as const,
   nvda: ['nvda'] as const,
-  anthropic: ['anthropic', 2] as const,
+  anthropic: ['anthropic', 3] as const,
   amzn: ['amzn'] as const,
   avgo: ['avgo'] as const,
   homebuilders: ['homebuilders', 1] as const,
-  semiconductors: ['semiconductors', 1] as const,
+  semiconductors: ['semiconductors', 2] as const,
   vst: ['vst', 2] as const,
   hood: ['hood'] as const,
   hims: ['hims'] as const,
   gold: ['gold'] as const,
   oil: ['oil'] as const,
-  heatmap: (etf: string) => ['heatmap', etf, 'yahoo-v2'] as const,
+  heatmap: (etf: string) => ['heatmap', etf, 'yahoo-v3'] as const,
   // One key per ticker, so switching back to a fund already loaded repaints instantly
   // the way `_p13_last_result` does. Arbitrage is keyed the same way and separately: it
   // is a second, opt-in load over the same basket, not part of the holdings payload.

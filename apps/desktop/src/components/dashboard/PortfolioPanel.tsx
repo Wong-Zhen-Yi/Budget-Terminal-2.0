@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useLayoutEffect, useMemo, useRef } from 'react'
 
 import type { Portfolio, Quote } from '@shared/contract'
 import { buildPortfolioRows, type PortfolioRow } from '@shared/portfolioMath'
@@ -15,6 +15,27 @@ interface PortfolioPanelProps {
   className?: string
   onSelectPortfolio: (id: string) => void
   onSelectTicker: (ticker: string) => void
+}
+
+function PortfolioTicker({ ticker, price }: { ticker: string; price: number | null }) {
+  const label = useRef<HTMLSpanElement>(null)
+  const previousPrice = useRef(price)
+
+  useLayoutEffect(() => {
+    const previous = previousPrice.current
+    previousPrice.current = price
+    if (previous === null || price === null || price === previous
+      || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    const color = price > previous ? 'var(--color-up)' : 'var(--color-down)'
+    const flash = label.current?.animate([
+      { backgroundColor: `color-mix(in srgb, ${color} 32%, transparent)` },
+      { backgroundColor: 'transparent' },
+    ], { duration: 420, easing: 'ease-out' })
+    return () => flash?.cancel()
+  }, [price])
+
+  return <span ref={label} className="-mx-1 inline-block rounded-sm px-1">{ticker}</span>
 }
 
 /**
@@ -37,7 +58,11 @@ export function PortfolioPanel({
   )
 
   const columns: Array<Column<PortfolioRow>> = [
-    { key: 'ticker', header: 'Ticker', cell: (row) => row.ticker },
+    {
+      key: 'ticker',
+      header: 'Ticker',
+      cell: (row) => <PortfolioTicker key={selected?.id} ticker={row.ticker} price={row.price} />,
+    },
     {
       key: 'price',
       header: 'Price',

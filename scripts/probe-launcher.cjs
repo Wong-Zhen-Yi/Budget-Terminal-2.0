@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const { spawnSync } = require('node:child_process')
 const { join, resolve } = require('node:path')
-const { chmodSync, copyFileSync, mkdtempSync, mkdirSync, readFileSync, statSync, writeFileSync, rmSync } = require('node:fs')
+const { chmodSync, copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, statSync, writeFileSync, rmSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { launch: runLaunch, createLauncherOutput } = require('./launch.cjs')
 const { dev } = require('./dev.cjs')
@@ -10,6 +10,7 @@ const launch = options => runLaunch({ verifyBuild() {}, ...options })
 const { findCodex } = require('./codex-runtime.cjs')
 const { tryRun, ensureElectron } = require('./ensure-electron.cjs')
 const { supportedNodeVersion, supportedNpmVersion, runtimeEnvironment, assertCertificateEnvironment } = require('./runtime.cjs')
+const { createUpdater, updateErrorMessage } = require('./update.cjs')
 const { version: electronVersion } = require('electron/package.json')
 
 const log = { log() {}, error() {} }
@@ -371,3 +372,74 @@ if (process.platform === 'win32') {
   console.log(windowsCheck.stdout.trim())
 }
 console.log('Launcher checks passed: supported toolchains, production and live platform commands, dev runtime recovery, inherited environment, Codex discovery and handoff, optional Agents runtime, failure paths, complete renderer/asset verification, exact Electron version and transient locks.')
+
+async function probeUpdates() {
+  const directory = mkdtempSync(join(tmpdir(), 'budget-update-'))
+  try {
+    const source = join(directory, 'published')
+    const local = join(directory, 'installed checkout')
+    const git = (cwd, ...args) => {
+      const result = spawnSync('git', ['-c', 'core.hooksPath=/dev/null', ...args], { cwd, encoding: 'utf8', timeout: 10_000 })
+      assert.equal(result.status, 0, result.stderr || result.error?.message)
+      return result.stdout.trim()
+    }
+    const commit = (cwd, message) => {
+      git(cwd, 'add', '.')
+      git(cwd, '-c', 'user.name=Budget Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-m', message)
+      return git(cwd, 'rev-parse', 'HEAD')
+    }
+    git(directory, 'init', '-b', 'main', source)
+    writeFileSync(join(source, '.gitignore'), '/ignored.txt\n')
+    const initial = commit(source, 'Initial revision')
+    git(directory, 'clone', source, local)
+    const updater = createUpdater(local, async (command, args, options) => {
+      assert.equal(command, 'git')
+      const fixtureArgs = args.map(arg => arg === 'https://github.com/Wong-Zhen-Yi/Budget-Terminal-2.0.git' ? source : arg)
+      const result = spawnSync(command, ['-c', 'protocol.file.allow=always', ...fixtureArgs], options)
+      if (result.error) throw result.error
+      if (result.status !== 0) throw Object.assign(new Error(result.stderr), { code: result.status })
+      return result
+    })
+    assert.deepEqual(await updater.check(), { status: 'current', revision: initial })
+    writeFileSync(join(source, 'app.txt'), 'updated source')
+    const revision = commit(source, 'Published update')
+    const pending = await updater.check()
+    assert.deepEqual(pending, { status: 'available', revision, current: initial })
+    assert.equal(git(local, 'rev-parse', 'HEAD'), initial, 'Check preserves the checked-out revision')
+    assert(!existsSync(join(local, 'app.txt')), 'Check preserves the working tree')
+    writeFileSync(join(local, 'app.txt'), 'local work')
+    assert.deepEqual(await updater.check(), pending, 'Local work must not prevent checking for an update')
+    await assert.rejects(updater.install(pending), /local changes/)
+    assert.equal(readFileSync(join(local, 'app.txt'), 'utf8'), 'local work')
+    rmSync(join(local, 'app.txt'))
+    assert.deepEqual(await updater.install(pending), { status: 'updated', revision })
+    assert.equal(git(local, 'rev-parse', 'HEAD'), revision)
+    assert.equal(readFileSync(join(local, 'app.txt'), 'utf8'), 'updated source')
+    assert.deepEqual(await updater.check(), { status: 'current', revision })
+
+    writeFileSync(join(source, 'ignored.txt'), 'published file')
+    git(source, 'add', '-f', 'ignored.txt')
+    commit(source, 'Published file previously ignored')
+    writeFileSync(join(local, 'ignored.txt'), 'local ignored file')
+    await assert.rejects(updater.install(await updater.check()), /could not apply/)
+    assert.equal(git(local, 'rev-parse', 'HEAD'), revision)
+    assert.equal(readFileSync(join(local, 'ignored.txt'), 'utf8'), 'local ignored file')
+    git(local, 'switch', '-c', 'work')
+    await assert.rejects(updater.check(), /main branch/)
+    git(local, 'switch', 'main')
+    writeFileSync(join(local, 'app.txt'), 'local commit')
+    const diverged = commit(local, 'Local work')
+    await assert.rejects(updater.check(), /fast-forward/)
+    assert.equal(git(local, 'rev-parse', 'HEAD'), diverged)
+    await assert.rejects(createUpdater(directory).check(), /Git clone/)
+    assert(!updateErrorMessage(Object.assign(new Error('private path'), { code: 128 })).includes('private path'))
+    console.log('PASS: source updates check and fast-forward through Git, preserve local and ignored files, and reject other branches and diverged histories.')
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+probeUpdates().catch(error => {
+  console.error(error)
+  process.exitCode = 1
+})

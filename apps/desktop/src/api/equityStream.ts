@@ -41,12 +41,18 @@ export function applyEquityMarketUpdate(client: QueryClient, update: EquityMarke
     if (root === 'quotes') {
       const payload = data as QuotesPayload
       const holdings = { ...payload.holdings }
+      const missing = new Set(payload.missing)
       let changed = false
-      for (const [symbol, quote] of quotes) if (holdings[symbol]) {
-        holdings[symbol] = { ...quote, sector: holdings[symbol].sector }
+      for (const [symbol, quote] of quotes) {
+        const previous = Object.hasOwn(holdings, symbol) ? holdings[symbol] : undefined
+        if (!previous && !(quote.source === 'Finnhub' && missing.has(symbol))) continue
+        if (quote.source === 'Finnhub' && previous?.source === quote.source
+          && (quote.asOf ?? 0) < (previous.asOf ?? 0)) continue
+        holdings[symbol] = { ...quote, sector: previous?.sector }
+        missing.delete(symbol)
         changed = true
       }
-      if (changed) data = { ...payload, holdings }
+      if (changed) data = { ...payload, holdings, missing: [...missing] }
     } else if (root === 'crypto') {
       const payload = data as CryptoPayload
       const next = { ...payload.quotes }
@@ -77,7 +83,7 @@ export function applyEquityMarketUpdate(client: QueryClient, update: EquityMarke
       let changed = false
       const holdings = payload.holdings.map(row => {
         const quote = quotes.get(row.symbol)
-        if (!quote) return row
+        if (!quote || quote.source === 'Finnhub') return row
         changed = true
         return { ...row, price: quote.price, priceSource: quote.source, priceBasis: quote.priceBasis }
       })
@@ -100,7 +106,7 @@ export function applyEquityMarketUpdate(client: QueryClient, update: EquityMarke
       let changed = false
       const rows = payload.rows.map(row => {
         const quote = quotes.get(row.company.symbol)
-        if (!quote || !row.market) return row
+        if (!quote || !row.market || (root === 'semiconductors' && quote.source === 'Finnhub')) return row
         changed = true
         return { ...row, market: { ...row.market, price: quote.price, dailyChange: quote.change,
           priceSource: quote.source, quoteTime: quote.asOf, changeBasis: quote.changeBasis } }

@@ -23,6 +23,13 @@ try {
   const research = anthropicResearch()
   assert.equal(research.topics.length, 5)
   for (const topic of research.topics) for (const fact of topic.facts) assert(research.sources.some(source => source.id === fact.source))
+  assert.equal(research.listing.symbol, 'ANT')
+  assert.equal(research.listing.firstTradeDate, '2026-11-19')
+  assert(research.sources.some(source => source.id === research.listing.source && source.url.endsWith('/ipo-close')))
+  const listingFacts = research.topics.find(topic => topic.id === 'capital')?.facts
+  assert.equal(listingFacts?.find(fact => fact.title === 'IPO offer price')?.value, '$83 / share')
+  assert.equal(listingFacts?.find(fact => fact.title === 'Gross IPO proceeds')?.value, '$93.5B')
+  assert.equal(listingFacts?.find(fact => fact.title === 'Issuer IPO proceeds')?.value, '$91.6B')
   assert.equal(research.quarters.length, 7)
   assert(research.quarters.every(row => row.revenue > 0 && row.compute > 0))
   assert.equal(research.quarters.at(-1)?.revenue, 17)
@@ -32,18 +39,18 @@ try {
   assert.deepEqual(anthropicComputeSeries([{ period: 'missing', revenue: 0, compute: 0 }])[0], { period: 'missing', spendPerRevenue: null, revenuePerSpend: null })
   assert.equal(anthropicComputeSeries([{ period: 'bad', revenue: NaN, compute: 1 }])[0].spendPerRevenue, null)
   const buckets = anthropicCommitmentBuckets(research.capitalSnapshot)
-  assert.deepEqual(buckets.map(row => Number(row.value.toFixed(1))), [70.7, 380.9, 448.4])
-  assert.equal(buckets.reduce((total, row) => total + row.value, 0), 900)
+  assert.deepEqual(buckets.map(row => Number(row.value.toFixed(1))), [70.7, 380.9, 449.3])
+  assert.equal(buckets.reduce((total, row) => total + row.value, 0), 900.9)
   assert.deepEqual(anthropicCommitmentBuckets({ ...research.capitalSnapshot, commitmentsThrough2030: 1000 }), [])
   assert.deepEqual(anthropicCommitmentBuckets({ ...research.capitalSnapshot, commitmentsNext12Months: -1 }), [])
-  assert.equal(research.capitalSnapshot.cash + research.capitalSnapshot.shortTermInvestments, 132)
+  assert.equal((research.capitalSnapshot.cash + research.capitalSnapshot.shortTermInvestments).toFixed(1), '131.9')
   assert(research.sources.some(source => source.id === research.capitalSnapshot.source))
   assert(research.sources.some(source => source.id === research.operatingMetrics.source))
-  assert.deepEqual(anthropicReviewReasons(research, Date.parse('2026-11-16')), [])
-  assert(anthropicReviewReasons(research, Date.parse('2026-11-22')).includes('Scheduled weekly research review is due.'))
-  const newsRows = [{ title: 'Claude &amp; research', slug: { current: 'release' }, articleType: 'news', publishedOn: '2026-11-16' }, { title: 'Bad URL', slug: { current: 'javascript:alert(1)' }, articleType: 'news', publishedOn: '2026-11-17' }]
+  assert.deepEqual(anthropicReviewReasons(research, Date.parse('2026-11-27')), [])
+  assert(anthropicReviewReasons(research, Date.parse('2026-11-28')).includes('Scheduled weekly research review is due.'))
+  const newsRows = [{ title: 'Claude &amp; research', slug: { current: 'release' }, articleType: 'news', publishedOn: '2026-11-22' }, { title: 'Bad URL', slug: { current: 'javascript:alert(1)' }, articleType: 'news', publishedOn: '2026-11-23' }]
   const news = '<a href="/news/release">Release</a><script>self.__next_f.push(' + JSON.stringify([1, '1:' + JSON.stringify(newsRows) + '\n']) + ')</script>'
-  assert.deepEqual(parseAnthropicNews(news), [{ title: 'Claude & research', url: 'https://www.anthropic.com/news/release', date: '2026-11-16' }])
+  assert.deepEqual(parseAnthropicNews(news), [{ title: 'Claude & research', url: 'https://www.anthropic.com/news/release', date: '2026-11-22' }])
   const cards = '<article><time>Oct 26, 2026</time><a href="/news/s1-sec"><h3>Registration filing</h3><p>Description is not the title.</p></a></article><article><time>Oct 27, 2026</time><a href="/news/partner"><h3>Partner news</h3></a></article>'
   assert.deepEqual(parseAnthropicNews(cards).map(row => [row.title, row.date]), [['Partner news', '2026-10-27'], ['Registration filing', '2026-10-26']])
   assert.throws(() => parseAnthropicNews('<html>Bot challenge</html>'))
@@ -54,12 +61,13 @@ try {
   let documents = 0, filings = 0, fail = false
   const fetchers = {
     document: async (url: string) => { documents++; if (fail) throw Error('HTTP 503'); return url.endsWith('/news') ? news : document },
-    filings: async () => { filings++; if (fail) throw Error('SEC unavailable'); return { filings: [{ accessionNumber: 'new-filing', form: 'S-1/A', filedDate: '2026-11-16', reportPeriod: '', description: 'Registration amendment', items: '', documentUrl: 'https://www.sec.gov/Archives/edgar/data/2130357/new/filing.htm' }], warnings: [], freshness: 'fresh' as const } },
+    filings: async () => { filings++; if (fail) throw Error('SEC unavailable'); return { filings: [{ accessionNumber: 'new-filing', form: '8-K', filedDate: '2026-11-22', reportPeriod: '', description: 'Current report', items: '', documentUrl: 'https://www.sec.gov/Archives/edgar/data/2130357/new/filing.htm' }], warnings: [], freshness: 'fresh' as const } },
   }
   const first = await getAnthropic({}, fetchers, storage)
   assert.equal(first.meta.freshness, 'fresh')
   assert.equal(first.data.checks.length, 5)
   assert(first.data.checks.filter(check => check.changed).length === 3)
+  assert(first.data.checks.some(check => check.id === 'ipo-close' && check.changed))
   assert(first.data.reviewReasons.some(reason => reason.includes('New announcements')))
   assert(first.data.reviewReasons.some(reason => reason.includes('SEC filings')))
   assert.equal(first.data.reviewedAt, research.reviewedAt)
@@ -83,9 +91,8 @@ try {
     console.log(JSON.stringify({ meta: live.meta, checks: live.data.checks, latestAnnouncements: live.data.announcements.slice(0, 4), latestFilings: live.data.filings.slice(0, 3), reviewReasons: live.data.reviewReasons }, null, 2))
     assert.equal(live.errors.length, 0, JSON.stringify(live.errors))
     assert(live.data.announcements.length >= 5, 'Live announcement coverage is unexpectedly small')
-    assert.equal(live.data.announcements.find(row => row.url.endsWith('/news/s1-sec'))?.date, '2026-10-26')
-    assert(live.data.filings.some(row => row.form === 'S-1/A'))
-    assert(live.data.filings.some(row => row.form === 'FWP'))
+    assert.equal(live.data.announcements.find(row => row.url.endsWith('/news/ipo-close'))?.date, '2026-11-20')
+    assert(live.data.filings.some(row => row.form === '424B4'))
   }
   console.log('PASS: Anthropic source parsing, review triggers, provenance, cache, stale fallback, startup and MCP permission')
 } finally {

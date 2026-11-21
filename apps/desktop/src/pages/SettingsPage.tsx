@@ -8,6 +8,7 @@ import { DEFAULT_QUANT_PAGE_SETTINGS } from '@shared/quant'
 import { DEFAULT_YOUTUBE_PAGE_SETTINGS } from '@shared/youtube'
 import { usePortfolio } from '@/api/queries'
 import { useMaintenance, useSettings, useSettingsMutation } from '@/api/settingsQueries'
+import { api } from '@/api/client'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { ControllerControls } from '@/components/settings/ControllerControls'
 import { ClockPanel } from '@/components/settings/ClockPanel'
@@ -88,6 +89,16 @@ export function SettingsPage({
   const [busy, setBusy] = useState<MaintenanceAction | null>(null)
   const [category, setCategory] = useState<Category>('dashboard')
   const [search, setSearch] = useState('')
+  const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'failed'>('idle')
+  const checkForUpdates = async () => {
+    setUpdateState('checking')
+    try {
+      await api.checkForUpdates()
+      setUpdateState('idle')
+    } catch {
+      setUpdateState('failed')
+    }
+  }
   const diagnosticsRequest = useSettingsNavigation(state => state.diagnosticsRequest)
   useEffect(() => {
     if (!diagnosticsRequest) return
@@ -240,10 +251,14 @@ export function SettingsPage({
     <div className="settings-page">
       <header className="settings-toolbar">
         <nav className="settings-tabs" aria-label="Settings categories">{navigation}</nav>
-        <label className={`settings-search${category === 'dashboard' || category === 'controller' ? ' settings-search--inactive' : ''}`} aria-hidden={category === 'dashboard' || category === 'controller'}><span aria-hidden="true">⌕</span>
-          <input type="search" aria-label="Search settings" placeholder="Search settings…" value={search} disabled={category === 'dashboard' || category === 'controller'}
+        {category === 'dashboard' ? <button className="settings-update" type="button" disabled={updateState === 'checking'}
+          onClick={() => void checkForUpdates()}>
+          {updateState === 'checking' ? 'Checking for updates…' : updateState === 'failed' ? 'Retry update check' : 'Check for updates'}
+        </button> :
+        <label className={`settings-search${category === 'controller' ? ' settings-search--inactive' : ''}`} aria-hidden={category === 'controller'}><span aria-hidden="true">⌕</span>
+          <input type="search" aria-label="Search settings" placeholder="Search settings…" value={search} disabled={category === 'controller'}
             onChange={event => { setSearch(event.target.value); scrollRef.current?.scrollTo({ top: 0 }) }} />
-        </label>
+        </label>}
       </header>
       <div className="settings-dashboard-host" hidden={category !== 'dashboard'}>
         <AppDashboard settings={settings} />

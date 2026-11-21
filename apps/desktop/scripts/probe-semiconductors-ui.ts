@@ -23,6 +23,7 @@ try {
       import { SEMICONDUCTOR_CATALOG } from './electron/shared/semiconductorCatalog'
       import { buildTasks } from './src/api/prefetch'
       import { useRefreshSemiconductors } from './src/api/semiconductorsQueries'
+      import { queryKeys } from './src/api/client'
       const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnMount: false, refetchOnWindowFocus: false, gcTime: Infinity } } })
       const check = (value, message) => { if (!value) throw Error(message) }
       const settle = () => new Promise(resolve => setTimeout(resolve, 250))
@@ -120,14 +121,14 @@ try {
         check(calls === 1, 'Company selection, filters or comparison triggered a provider fetch')
         mode = 'partial'; await client.invalidateQueries({ queryKey: ['semiconductors'], refetchType: 'none' })
         let startupError; try { await task.run(client, 10) } catch (error) { startupError = error }
-        check(startupError?.state === 'degraded' && client.getQueryData(['semiconductors', 1]).data.rows[0].market, 'Partial startup treated as ready or discarded content')
+        check(startupError?.state === 'degraded' && client.getQueryData(queryKeys.semiconductors).data.rows[0].market, 'Partial startup treated as ready or discarded content')
         await selectCompany('NVDA')
         check(!text().includes('HTTP 503') && startupError.message.includes('HTTP 503') && text().includes('Company news fixture'), 'Partial outage must keep diagnostics and healthy news without inline provider errors')
         mode = 'failed'; let failure
         try { await window.reloadSemiconductors() } catch (error) { failure = error }
         await settle()
         check(request.force && failure?.state === 'failed' && table().querySelectorAll('tbody tr').length === SEMICONDUCTOR_CATALOG.length, 'Failed refresh must retain catalog and report failure')
-        check(client.getQueryData(['semiconductors', 1]).data.rows[0].market, 'Failed refresh discarded the saved market snapshot')
+        check(client.getQueryData(queryKeys.semiconductors).data.rows[0].market, 'Failed refresh discarded the saved market snapshot')
         mode = 'waiting'; const recovery = window.reloadSemiconductors(); await settle()
         check(text().includes('Loading company data'), 'Loading progress missing')
         mode = 'success'; releaseLoading(); await recovery; await settle()

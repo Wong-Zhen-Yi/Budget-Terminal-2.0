@@ -21,6 +21,8 @@
 .settings-search input { width: 100%; min-width: 0; background: transparent; border: 0; outline: 0; color: var(--color-text); font: inherit; font-size: 12px; }
 .settings-search input::placeholder { color: var(--color-text-muted); }
 .settings-search:focus-within { outline: 2px solid var(--color-accent-hover); outline-offset: 2px; }
+.settings-update { flex-shrink: 0; margin-left: auto; padding: 7px 10px; border: 1px solid var(--color-border-strong); border-radius: 5px; background: var(--color-surface-raised); color: var(--color-text); font: inherit; cursor: pointer; }
+.settings-update:disabled { color: var(--color-text-muted); cursor: wait; }
 .settings-tabs { display: flex; flex: 1; min-width: 0; gap: 4px; overflow-x: auto; }
 .settings-tabs button { flex-shrink: 0; color: var(--color-text-muted); font: inherit; font-size: 12px; border: 1px solid transparent; border-radius: 5px; background: transparent; padding: 7px 10px; cursor: pointer; white-space: nowrap; }
 .settings-tabs button[aria-pressed=true] { background: color-mix(in srgb, var(--color-accent) 22%, transparent); color: #a6c9ff; border-color: color-mix(in srgb, var(--color-accent) 22%, transparent); }

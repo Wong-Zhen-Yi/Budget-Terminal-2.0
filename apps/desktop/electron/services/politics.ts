@@ -136,8 +136,11 @@ export async function fetchPoliticsLivePage(page: number): Promise<PoliticsHtmlP
   }
   if (status < 200 || status >= 300) throw new Error(`HTTP ${status}`)
   const parsed = parsePoliticsHtml(html)
-  if (!parsed.rawCount && !html.includes('"data":[]')) {
+  if (!parsed.hasTradePayload) {
     throw new Error('Capitol Trades response did not contain a trade payload')
+  }
+  if (parsed.page !== undefined && parsed.page !== page) {
+    throw new Error(`Capitol Trades returned page ${parsed.page} when page ${page} was requested.`)
   }
   return parsed
 }

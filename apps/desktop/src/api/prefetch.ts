@@ -661,13 +661,14 @@ export function buildTasks(
         }, onSnapshot)
         const tickers = newsQuoteTickers(result.data.articles)
         const preferences = useNewsPageStore.getState()
-        const requests: Array<Promise<unknown>> = []
         const images: Array<Promise<Envelope<NewsThumbnailPayload>>> = []
-        if (tickers.length) requests.push(warmStartupQuery(client, {
+        // Quote badges are optional article metadata. Warm them and report their
+        // coverage in Settings independently of the article feed.
+        const quotes = tickers.length ? warmStartupSnapshot(client, {
           queryKey: queryKeys.quotes(tickers),
           queryFn: () => api.quotes({ holdings: tickers, background: true, backgroundOrder }),
           staleTime: queryFreshness(queryKeys.quotes(tickers)),
-        }, onSnapshot))
+        }, onSnapshot).catch(() => undefined) : undefined
         if (preferences.showImages) for (const url of initialNewsImages(result.data.articles, preferences.filter, preferences.sort)) {
           // Prepare optional images without letting a publisher denial overwrite
           // article-feed readiness. Image envelopes retain their own diagnostics.
@@ -677,7 +678,7 @@ export function buildTasks(
             queryFn: () => api.newsThumbnail({ url }), staleTime: Infinity,
           }, assetObserver))
         }
-        const [outcomes, imageOutcomes] = await Promise.all([Promise.allSettled(requests), Promise.allSettled(images)])
+        const [, imageOutcomes] = await Promise.all([quotes, Promise.allSettled(images)])
         const imageErrors = imageOutcomes.flatMap(outcome => outcome.status === 'rejected'
           ? ['Image request could not complete.'] : outcome.value.errors.map(error => error.reason))
         useDataHealth.getState().record('news', [{ label: 'News images', loading: false, freshnessMs: 30 * 60_000,
@@ -685,9 +686,6 @@ export function buildTasks(
             meta: { source: 'news images', fetchedAt: Date.now(), freshness: imageErrors.length ? 'partial' : 'fresh',
               ...(imageErrors.length ? { failureReason: `${imageErrors.length} image issue(s); article feeds are tracked separately.` } : {}) } },
         }])
-        const failure = outcomes.find((entry) => entry.status === 'rejected' && !(entry.reason instanceof StartupLoadError && entry.reason.state === 'degraded'))
-          ?? outcomes.find((entry) => entry.status === 'rejected')
-        if (failure?.status === 'rejected') throw failure.reason
         assertStartupReady(result)
         return result
       },

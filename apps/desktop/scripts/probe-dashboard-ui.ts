@@ -15,6 +15,7 @@ const bundle = await build({
       import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
       import { MacroBar } from './src/components/dashboard/MacroBar'
       import { useMacroCharts } from './src/api/dashboardQueries'
+      import { createBatchedEquityUpdates } from './src/api/equityStream'
       import { markReloadQuery } from './src/api/pageProgress'
       import { queryKeys } from './src/api/client'
       import { MACRO_SYMBOLS } from './electron/shared/contract'
@@ -175,13 +176,31 @@ const bundle = await build({
         selector.value = 'MSFT'; selector.dispatchEvent(new Event('change', {bubbles: true})); await settle()
         check(heatmap.querySelector('[title="MSFT  +1.00%"]') && !heatmap.querySelector('[title^="AAPL "]'), 'Heatmap follows the selected portfolio using warm quotes')
         check(pie.textContent.includes('MSFT') && !pie.textContent.includes('AAPL'), 'Pie follows the selected portfolio')
-        client.setQueryData(queryKeys.quotes(['MSFT']), envelope({holdings: {MSFT: {price: 300, change: -2, absChange: -6}}, macro})); await settle()
+        const ticker = document.querySelector('.dashboard-holdings tr[data-row-key="MSFT"] td span')
+        check(ticker.textContent === 'MSFT' && ticker.getAnimations().length === 0, 'Loading a portfolio must not trigger a ticker flash')
+        const stream = createBatchedEquityUpdates(client)
+        const quote = { symbol: 'MSFT', source: 'Finnhub', price: 300, asOf: Date.now(), change: -2, absChange: -6 }
+        const publish = update => stream.enqueue({ quotes: [{...quote, ...update}], candles: [] })
+        const motionPreference = window.matchMedia
+        window.matchMedia = () => ({matches: false})
+        publish({}); await settle()
+        const rise = ticker.getAnimations()[0]
+        check(rise?.effect.getKeyframes()[0].backgroundColor.includes('--color-up'), 'Higher trade price must flash green despite a negative daily move')
         check(pie.querySelector('svg title').textContent === 'MSFT 75.0%', 'Pie updates with quote changes without another request')
         const falling = heatmap.querySelector('[title="MSFT  -2.00%"]')
         const red = document.createElement('div'); red.style.background = heatColor(-2)
         check(falling && falling.style.background === red.style.background, 'Quote updates recolor losing holdings red')
-        client.setQueryData(queryKeys.quotes(['MSFT']), envelope({holdings: {MSFT: {price: 300, change: -2, absChange: -6, sector: 'Financial Services'}}, macro})); await settle()
+        client.setQueryData(queryKeys.quotes(['MSFT']), envelope({holdings: {MSFT: {...quote, sector: 'Financial Services'}}, macro})); await settle()
+        check(ticker.getAnimations()[0] === rise, 'An unchanged price must not restart the flash')
         check(heatmap.textContent.includes('Sector: Financials'), 'Provider sectors must reach tiles and normalize aliases without a new request')
+        publish({price: 280, asOf: quote.asOf + 1}); await settle()
+        const fall = ticker.getAnimations()[0]
+        check(fall?.effect.getKeyframes()[0].backgroundColor.includes('--color-down'), 'Lower trade price must flash red on the same ticker element')
+        window.matchMedia = () => ({matches: true})
+        publish({price: 290, asOf: quote.asOf + 2}); await settle()
+        check(ticker.getAnimations().length === 0, 'Reduced motion must disable ticker flashes')
+        window.matchMedia = motionPreference
+        stream.stop()
         const unknownBook = {...books[1], tickers: ['UNKNOWNTICKER'], holdings: {UNKNOWNTICKER: {ticker: 'UNKNOWNTICKER', shares: 1, avgPrice: 90, includeInWeight: true}}}
         client.setQueryData(queryKeys.quotes(['UNKNOWNTICKER']), envelope({holdings: {UNKNOWNTICKER: {price: 100, change: 1, absChange: 1}}, macro}))
         client.setQueryData(queryKeys.portfolio, envelope({portfolios: [unknownBook], activeId: 'MSFT'})); await settle()

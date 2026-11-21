@@ -92,6 +92,15 @@ try {
     $content = [IO.File]::ReadAllText($desktopShim)
     Assert-Check ($content.Contains('"' + $launcher + '" %*')) 'The desktop command quotes the checkout and forwards options.'
     Assert-Check (-not $content.Contains('-Tui')) 'The installed command must open the desktop app.'
+    foreach ($option in @('--help', '-Help')) {
+      $helpText = (& $desktopShim $option | Out-String)
+      Assert-Check ($LASTEXITCODE -eq 0) "The installed command must accept $option."
+      foreach ($entry in @('start', 'restart', 'update', '-Dev', '-Logs', '-Attached', '-Setup', '-RuntimeOnly', '--help')) {
+        Assert-Check ($helpText -match ('(?m)^  ' + [Regex]::Escape($entry) + '[, ]+\S')) "Help must describe $entry."
+      }
+    }
+    Assert-Check (-not (Test-Path -LiteralPath (Join-Path $testRoot 'BudgetTerminal\launcher-logs'))) 'Help must return without launching a worker.'
+    Assert-Check (-not (Test-Path -LiteralPath (Join-Path $testRoot 'BudgetTerminal\runtimes'))) 'Help must return without installing Node.'
     Assert-Check ($script:fixtureUserPath -eq ($bin + ';C:\fixture-bin')) 'Install the command directory on the fixture PATH.'
     Install-BudgetDesktopCommand
     Assert-Check ($script:pathWrites -eq 1) 'Repeated installation must not rewrite PATH.'

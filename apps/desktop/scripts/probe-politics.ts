@@ -96,6 +96,20 @@ function checkParsing(): void {
   equal(tickerless.ticker, '', 'a tickerless holding carries an empty ticker')
   equal(tickerless.amountValue, 100_000, 'a tickerless holding keeps its value')
   equal(parsePoliticsHtml('<html>no RSC payload</html>').rawCount, 0, 'missing data parses empty')
+
+  const current = '1c:{"data":"$1d","meta":"$42"}\n'
+    + '1e:{"_txId":1,"issuer":"$1f","politician":"$20"}\n'
+    + `0:{"initial":{"trades":{"data":${JSON.stringify(rawRows)},"meta":{"paging":{"page":2,"size":12,"totalPages":5,"totalItems":58}}}}}`
+  const cut = current.indexOf('issuerTicker') + 5
+  const streamed = [current.slice(0, cut), current.slice(cut)]
+    .map(chunk => `<script>self.__next_f.push(${JSON.stringify([1, chunk])})</script>`).join('')
+  const latest = parsePoliticsHtml(streamed)
+  equal(latest.hasTradePayload, true, 'split Flight scripts must contain the inline trades')
+  equal(latest.page, 2, 'the actual source page is reported')
+  equal(latest.totalCount, 58, 'nested paging metadata supplies the total')
+  equal(latest.totalPages, 5, 'nested paging metadata supplies the last page')
+  equal(latest.trades[0].ticker, 'AAPL', 'reference rows do not shadow the inline table')
+  equal(parsePoliticsHtml('<html>"data":[]</html>').hasTradePayload, undefined, 'an unrelated empty array is not a valid trade page')
 }
 
 function checkNormalization(): void {

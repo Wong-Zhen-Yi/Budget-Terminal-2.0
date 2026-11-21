@@ -58,6 +58,7 @@ export class FinnhubQuotes {
   private active = 0
   private waiters: Array<{ symbol: string; resume: () => void }> = []
   private watched = new Map<string, number>()
+  private watchedByUpstream = new Map<string, Set<string>>()
   private portfolio = new Set<string>()
   private portfolioLoader?: () => Promise<string[]>
   private portfolioLoading?: Promise<void>
@@ -166,7 +167,7 @@ export class FinnhubQuotes {
       if (this.portfolioLoading !== loading) return
       this.portfolio = new Set(symbols.map(symbol => finnhubSymbol(symbol.trim().toUpperCase()))
         .filter((symbol): symbol is string => Boolean(symbol)))
-      for (const symbol of this.portfolio) if (!this.watched.has(symbol)) this.watched.set(symbol, -Infinity)
+      for (const symbol of this.portfolio) this.watch(symbol, symbol)
       this.rotation = 0
       this.rotationAt = 0
       this.syncSubscriptions()
@@ -180,6 +181,14 @@ export class FinnhubQuotes {
 
   private isPortfolio(symbol: string): boolean {
     return this.portfolio.has(finnhubSymbol(symbol) ?? '')
+  }
+
+  private watch(symbol: string, upstreamSymbol: string): void {
+    if (this.watched.has(symbol)) return
+    this.watched.set(symbol, -Infinity)
+    const aliases = this.watchedByUpstream.get(upstreamSymbol) ?? new Set<string>()
+    aliases.add(symbol)
+    this.watchedByUpstream.set(upstreamSymbol, aliases)
   }
 
   /** Refresh portfolio stocks first, then rotate the remaining requested symbols. */
@@ -206,7 +215,7 @@ export class FinnhubQuotes {
     const upstreamSymbol = finnhubSymbol(symbol)
     if (!upstreamSymbol) return null
     await this.preparePortfolio()
-    if (!this.watched.has(symbol)) this.watched.set(symbol, -Infinity)
+    this.watch(symbol, upstreamSymbol)
     const generation = this.generation
     let key: string | undefined
     try { key = await (this.credential ??= this.getKey()) }
@@ -300,7 +309,7 @@ export class FinnhubQuotes {
           asOf: row.t * 1_000, currency: 'USD', source: 'Finnhub', changeBasis: 'previous-close' }
         // A periodic REST close must never overwrite a newer extended-hours trade.
         const trade = this.trades.get(symbol)
-        if (trade && trade.asOf > quote.asOf!) quote = this.tradeQuote(symbol, trade) ?? quote
+        if (trade && trade.asOf >= quote.asOf!) quote = this.tradeQuote(symbol, trade) ?? quote
         this.quotes.set(symbol, { value: quote, fetchedAt: this.now() })
         this.changed.delete(symbol)
         for (const listener of this.listeners) listener(quote)
@@ -364,6 +373,7 @@ export class FinnhubQuotes {
       if (message.type === 'error') { failed(); return }
       this.retryMs = 1_000
       if (message.type !== 'trade' || !Array.isArray(message.data)) return
+      const portfolioUpdates = new Map<string, Quote>()
       for (const value of message.data) {
         if (!value || typeof value !== 'object') continue
         const row = value as { s?: unknown; p?: unknown; t?: unknown }
@@ -371,17 +381,23 @@ export class FinnhubQuotes {
           || typeof row.p !== 'number' || !Number.isFinite(row.p) || row.p <= 0
           || typeof row.t !== 'number' || !Number.isFinite(row.t)
           || row.t < Date.UTC(2000, 0, 1) || row.t > this.now() + 30_000) continue
-        for (const symbol of this.watched.keys()) {
-          if (finnhubSymbol(symbol) !== row.s || row.t <= (this.trades.get(symbol)?.asOf ?? 0)
-            || row.t <= (this.quotes.get(symbol)?.value.asOf ?? 0)) continue
+        for (const symbol of this.watchedByUpstream.get(row.s) ?? []) {
+          const previous = this.trades.get(symbol)
+          if (row.t < (previous?.asOf ?? 0) || row.t < (this.quotes.get(symbol)?.value.asOf ?? 0)
+            || (row.t === previous?.asOf && row.p === previous.price)) continue
           const trade = { price: row.p, asOf: row.t }
           this.trades.set(symbol, trade)
           const quote = this.tradeQuote(symbol, trade)
           if (!quote) continue // Keep early trades until the initial REST reference arrives.
           this.quotes.set(symbol, { value: quote, fetchedAt: this.now() })
-          this.changed.set(symbol, quote)
+          if (this.portfolio.has(row.s)) {
+            this.changed.delete(symbol)
+            portfolioUpdates.set(symbol, quote)
+          } else this.changed.set(symbol, quote)
         }
       }
+      // Deliver the latest trade per holding in this message without waiting for the background flush.
+      for (const quote of portfolioUpdates.values()) for (const listener of this.listeners) listener(quote)
       if (this.changed.size && !this.flushTimer) {
         this.flushTimer = setTimeout(() => {
           this.flushTimer = undefined
@@ -397,8 +413,7 @@ export class FinnhubQuotes {
   private syncSubscriptions(): void {
     const socket = this.socket
     if (!socket || socket.readyState !== 1) return
-    const background = [...new Set([...this.watched.keys()].map(finnhubSymbol)
-      .filter((value): value is string => value !== undefined && !this.portfolio.has(value)))]
+    const background = [...this.watchedByUpstream.keys()].filter(symbol => !this.portfolio.has(symbol))
     // Pin portfolios that fit; only spare slots rotate through the startup universe.
     // Oversized portfolios rotate among themselves before any background symbols.
     const pinned = this.portfolio.size <= 50 ? [...this.portfolio, ...background.filter(symbol => this.visible.has(symbol)).slice(0, 50 - this.portfolio.size)] : []

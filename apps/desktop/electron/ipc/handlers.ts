@@ -23,6 +23,7 @@ import { cloudSyncCommand, cloudSyncStatus } from '../services/cloudSyncHost.js'
 import { liveStatusEvents } from '../services/liveStatusEvents.js'
 import { finnhubQuotes } from '../services/finnhubQuotes.js'
 import { marketApiKeys } from '../services/marketApiKeysHost.js'
+import { checkForUpdates } from '../services/appUpdates.js'
 
 export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent) => boolean): () => void {
   const handle: typeof ipcMain.handle = (channel, listener) => {
@@ -32,6 +33,10 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
     })
   }
   const provider = yahooProvider
+  handle(CHANNELS.checkForUpdates, async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (window) await checkForUpdates(window)
+  })
   finnhubQuotes.setCredentialLoader(() => marketApiKeys.getForService('finnhub'))
   finnhubQuotes.setPortfolioLoader(async () => (await readPortfolios()).portfolios
     .filter(portfolio => !portfolio.readOnly).flatMap(portfolio => portfolio.tickers))

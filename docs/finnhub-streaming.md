@@ -23,6 +23,10 @@ Mapped stock proxies use Hyperliquid equity perps with Yahoo stock fallback; ETF
 and stock metadata use Yahoo. Crypto does not publish Finnhub visibility hints or
 consume Finnhub live quotes. Other pages and saved portfolios can still use Finnhub.
 
+Heatmap and Semiconductors use Yahoo Finance and labelled Hyperliquid equity
+perpetual marks. Their startup loads, manual refreshes and live price updates
+leave Finnhub request and subscription capacity available for portfolio tracking.
+
 Subscriptions are capped at 50 unique upstream symbols on one socket. Portfolio
 symbols stay subscribed continuously when they fit; spare slots rotate through
 other requested stocks every 30 seconds. Visible-page stocks pin into spare slots before background rotation. Portfolios larger than 50 unique supported
@@ -44,8 +48,13 @@ Automatic REST refreshes use these minimum intervals per symbol:
 
 Initial requests still load every implemented page. Explicit forced refreshes retain the shared budget and cooldown. Cached reads and streaming trades do not postpone REST reference maintenance. Stream connections remain available for extended-hours trades. Visibility hints are validated desktop-only IPC; MCP cannot set UI priorities and continues using the same quote cache and background budget.
 
-Renderer notifications are coalesced per symbol over 250 milliseconds. Malformed,
-future, unsolicited and out-of-order trades are ignored. Reconnects use bounded
+Portfolio quotes are published as WebSocket messages arrive, using the latest
+trade per symbol in each message. Background stock notifications are coalesced
+over 250 milliseconds. The renderer batches updates over 50 milliseconds to
+limit redraws. Holding tickers on both dashboards flash green or red when the
+displayed price rises or falls, with flashes disabled for reduced motion.
+Malformed, future, unsolicited and older trades are ignored. Different prices
+with the same millisecond timestamp are accepted in arrival order. Reconnects use bounded
 backoff and restore subscriptions. Removing or replacing the key closes the old
 connection and discards queued updates. Shutdown closes the connection.
 

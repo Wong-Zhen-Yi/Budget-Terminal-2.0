@@ -156,6 +156,41 @@ try {
     assert(after.meta.expiresAt && after.meta.expiresAt > Date.now(), 'An older fresh profile must not expire newly refreshed market data')
   } finally { Date.now = clock }
 
+  const { finnhubQuotes } = await import('../electron/services/finnhubQuotes.js')
+  const { hyperliquidEquities } = await import('../electron/services/hyperliquidEquities.js')
+  const { yahoo } = await import('../electron/services/yahoo/client.js')
+  const fallbackStorage = new TtlCache()
+  const nvda = targets.filter(company => company.symbol === 'NVDA')
+  await getSemiconductors({}, fetchers, fallbackStorage, nvda)
+  await fallbackStorage.delete('semiconductors:v3:NVDA:market')
+  const originalFetch = globalThis.fetch
+  const originalYahoo = { quote: yahoo.quote, chart: yahoo.chart }
+  const originalHyperliquidQuote = hyperliquidEquities.getQuote
+  try {
+    const time = new Date()
+    Object.assign(yahoo, {
+      quote: async () => ({ regularMarketPrice: 105, regularMarketPreviousClose: 100, marketCap: 200, regularMarketTime: time }),
+      chart: async () => ({ quotes: [{ date: time, close: 104, adjclose: 103 }] }),
+    })
+    finnhubQuotes.setCredentialLoader(async () => 'fixture')
+    let finnhubRequests = 0
+    globalThis.fetch = async () => { finnhubRequests++; return new Response('', { status: 429 }) }
+    hyperliquidEquities.getQuote = async () => { throw Error('Hyperliquid offline') }
+    const fallback = await withSourceEnvelope(() => getSemiconductors({}, undefined, fallbackStorage, nvda))
+    assert.equal(finnhubRequests, 0, 'Semiconductors must never request a Finnhub quote')
+    assert.equal(fallback.meta.freshness, 'cached', JSON.stringify(fallback.errors))
+    assert.equal(fallback.data.rows[0].progress.market, 'loaded')
+    assert.equal(fallback.data.rows[0].market?.price, 105)
+    assert.equal(fallback.data.rows[0].market?.priceSource, 'Yahoo Finance')
+    assert.equal(fallback.data.rows[0].market?.history[0]?.close, 103)
+  } finally {
+    globalThis.fetch = originalFetch
+    Object.assign(yahoo, originalYahoo)
+    hyperliquidEquities.getQuote = originalHyperliquidQuote
+    finnhubQuotes.setCredentialLoader(async () => undefined)
+    await fallbackStorage.close()
+  }
+
   if (process.argv.includes('--live')) {
     const symbols = ['NVDA', 'TXN', 'GFS', 'MU', 'AMAT', 'AMKR', 'CDNS', 'ENTG']
     const live = await getSemiconductors({ force: true }, undefined, cache, process.argv.includes('--all') ? companies : companies.filter(company => symbols.includes(company.symbol)))

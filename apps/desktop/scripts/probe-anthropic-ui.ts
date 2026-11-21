@@ -19,6 +19,7 @@ try {
     import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
     import { AnthropicPage } from './src/pages/AnthropicPage'
     import { anthropicResearch } from './electron/shared/anthropic'
+    import { queryKeys } from './src/api/client'
     import { buildTasks } from './src/api/prefetch'
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnMount: false, refetchOnWindowFocus: false } } })
     const settle = () => new Promise(resolve => setTimeout(resolve, 180))
@@ -27,9 +28,9 @@ try {
     window.api.anthropic = async input => {
       calls++; request = input
       const data = anthropicResearch()
-      data.announcements = [{ title: 'New research disclosure', date: '2026-11-16', url: 'https://www.anthropic.com/news/research' }]
-      data.filings = [{ form: 'S-1/A', filedDate: '2026-11-16', description: 'Registration update', accessionNumber: 'test', documentUrl: data.sources[0].url }]
-      data.checks = ['announcements', 'models', 'roadshow', 'safety', 'SEC filings'].map(id => ({ id, checkedAt: Date.now(), changed: false }))
+      data.announcements = [{ title: 'New research disclosure', date: '2026-11-22', url: 'https://www.anthropic.com/news/research' }]
+      data.filings = [{ form: '424B4', filedDate: '2026-11-19', description: 'Final prospectus', accessionNumber: 'test', documentUrl: data.sources[0].url }]
+      data.checks = ['announcements', 'ipo-close', 'models', 'safety', 'SEC filings'].map(id => ({ id, checkedAt: Date.now(), changed: false }))
       data.reviewReasons = ['New announcements were published after the research review.']
       return { data, errors: fail ? [{ reason: 'Source unavailable', source: 'fixture', operation: 'check' }] : [], meta: { source: 'fixture', freshness: fail ? 'partial' : 'fresh', fetchedAt: Date.now() } }
     }
@@ -56,11 +57,20 @@ try {
       check(task, 'Startup task missing'); await task.run(client, 7)
       check(request.background && request.backgroundOrder === 7, 'Startup priority missing')
       render(); await settle(); check(calls === 1, 'First visit refetched warmed dossier')
+      const quote = document.querySelector('.ant-quote-link')
+      check(quote.textContent.includes('Nasdaq · ANT'), 'Confirmed listing is missing')
+      check(document.querySelector('.ant-identity time').dateTime === '2026-11-19', 'Trading date is missing')
+      quote.click(); await settle()
+      check(opened === 'https://www.nasdaq.com/market-activity/stocks/ant', 'Nasdaq quote link incorrect')
       check(document.querySelectorAll('.ant-quarter').length === 7, 'Quarterly chart incomplete')
       document.querySelector('[aria-label="Inspect source for Enterprise adoption"]').click(); await settle()
       check(document.querySelector('.ant-selected-fact').innerText.includes('September 30, 2026'), 'Full evidence detail missing')
       check(document.querySelector('[data-ant-visual="adoption"]').innerText.includes('Nested groups'), 'Customer lower-bound qualification missing')
       section('Capital').click(); await settle()
+      document.querySelector('[aria-label="Inspect source for Issuer IPO proceeds"]').click(); await settle()
+      check(document.querySelector('.ant-source-detail').innerText.includes('IPO and private placement closing'), 'IPO closing evidence missing')
+      check(document.querySelectorAll('.ant-source-chips .ant-evidence-selected').length === 1, 'Facts sharing a source look selected')
+      check(document.querySelector('[data-ant-visual="liquidity"]').innerText.includes('pre-IPO'), 'Pre-IPO liquidity needs a period label')
       check(document.querySelectorAll('.ant-round-bars button').length === 4, 'Funding history incomplete')
       document.querySelector('[aria-label="Inspect Series G funding source"]').dispatchEvent(new MouseEvent('click', { bubbles: true })); await settle()
       check(document.querySelector('.ant-source-detail').innerText.includes('Series G'), 'Evidence selection failed')
@@ -91,7 +101,7 @@ try {
       refresh().click(); await settle(); check(request.force && calls === 2, 'Manual update check did not force refresh')
       fail = true; refresh().click(); await settle()
       check(document.body.innerText.includes('Saved research remains available'), 'Failed check feedback missing')
-      check(client.getQueryData(['anthropic', 2]).meta.freshness === 'fresh', 'Incomplete refresh replaced reviewed snapshot')
+      check(client.getQueryData(queryKeys.anthropic).meta.freshness === 'fresh', 'Incomplete refresh replaced reviewed snapshot')
       fail = false; refresh().click(); await settle()
       check(document.body.innerText.includes('Public sources checked'), 'Refresh recovery failed')
       check(!document.body.innerText.includes('Page needs attention'), 'Global diagnostics banner restored')

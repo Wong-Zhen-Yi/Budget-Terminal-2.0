@@ -5,7 +5,7 @@
 # Heatmap historical replay speed follows the selected timeframe; rebuild desktop and MCP through the shared launcher.
 # Anthropic funding, customer depth, compute ratios and capital visualisations rebuild through the shared launcher.
 # Anthropic Focus research, source update checks and MCP tools rebuild through the shared launcher.
-param([Parameter(Position = 0)][ValidateSet('start', 'restart')][string]$Command = 'start', [switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Setup, [switch]$Attached)
+param([Parameter(Position = 0)][ValidateSet('start', 'restart', 'update')][string]$Command = 'start', [switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Setup, [switch]$Attached, [Alias('-help')][switch]$Help)
 # Shared snapshot validation, account quotas and typed cloud contracts rebuild through the shared launcher; backend policies deploy separately.
 # Auth lifecycle passed live two-device acceptance; the shared launcher rebuilds current source.
 # Auth workspace ownership, async credential storage and session controls rebuild through the shared launcher.
@@ -149,9 +149,41 @@ function Stop-BudgetTerminal {
 function Start-BudgetTerminal {
   # Incremental charts, indexed live updates and cache checkpoints: docs/performance.md.
   # Settings uses compact horizontal categories without the redundant Preferences label, overview or introductory header.
+  if ($Help) {
+    Write-Output @'
+Budget Terminal command help
+
+Usage
+  btd [start|restart] [-Dev] [-Logs] [-Attached]
+  btd update
+  btd -Setup
+  btd -RuntimeOnly
+  btd --help
+
+Commands
+  start         Check dependencies, rebuild the app and open it in the background.
+                Running btd without a command also starts the app.
+  restart       Close the app gracefully, wait for saves, rebuild and reopen it.
+                If the app is already closed, start it.
+  update        Check for and apply source updates from the published main branch.
+                Run btd restart afterward to build and use the update.
+
+Options
+  -Dev          Run in development mode with live reloading. Keep the terminal open.
+  -Logs         Open Settings diagnostics when the app opens.
+  -Attached     Keep startup output in the current terminal instead of launching
+                in the background. Keep the terminal open while the app runs.
+  -Setup        Install dependencies, verify Electron, build the app and install
+                the btd command without opening the app.
+  -RuntimeOnly  Locate or install a supported Node.js runtime and print its path.
+  --help, -Help Show this command reference.
+'@
+    return
+  }
   try {
     if ($Command -eq 'restart' -and ($RuntimeOnly -or $Setup)) { throw 'Restart cannot be combined with setup or runtime-only options.' }
-    if (-not ($Attached -or $RuntimeOnly -or $Dev -or $Setup)) {
+    if ($Command -eq 'update' -and ($RuntimeOnly -or $Setup -or $Dev -or $Logs)) { throw 'Update cannot be combined with launch options.' }
+    if (-not ($Attached -or $RuntimeOnly -or $Dev -or $Setup -or $Command -eq 'update')) {
       $logDirectory = Join-Path $env:LOCALAPPDATA 'BudgetTerminal\launcher-logs'
       New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
       $session = [Guid]::NewGuid().ToString('N')
@@ -170,6 +202,10 @@ function Start-BudgetTerminal {
     # The selected complete toolchain also owns npm.cmd and all nested scripts.
     $env:PATH = (Split-Path -Parent $node) + [IO.Path]::PathSeparator + $env:PATH
     if ($RuntimeOnly) { Write-Output $node; return }
+    if ($Command -eq 'update') {
+      & $node (Join-Path $PSScriptRoot 'launch.cjs') update
+      exit $LASTEXITCODE
+    }
     if ($Command -eq 'restart') { Stop-BudgetTerminal }
     if (-not $Setup) { & (Join-Path $PSScriptRoot 'install-bt.ps1') -Quiet }
     $launchArguments = @()
@@ -179,7 +215,7 @@ function Start-BudgetTerminal {
     & $node (Join-Path $PSScriptRoot 'launch.cjs') @launchArguments
     if ($Setup -and $LASTEXITCODE -eq 0) {
       & (Join-Path $PSScriptRoot 'install-bt.ps1')
-      Write-Host 'Checks passed. Open a new terminal and type btd for the desktop app.'
+      Write-Host 'Checks passed. Open a new terminal and type btd for the desktop app or btd --help for commands.'
     }
     exit $LASTEXITCODE
   } catch {

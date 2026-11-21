@@ -250,6 +250,7 @@ async function probePortfolioPriority(): Promise<void> {
   let release: (() => void) | undefined
   let gate: Promise<void> | undefined
   const sockets: TestSocket[] = []
+  const prices: number[] = []
   const client = new FinnhubQuotes(async () => 'fixture', async input => {
     calls.push(new URL(String(input)).searchParams.get('symbol')!)
     if (gate) await gate
@@ -260,11 +261,20 @@ async function probePortfolioPriority(): Promise<void> {
     return socket as unknown as WebSocket
   })
   client.setPortfolioLoader(async () => holdings)
+  client.subscribe(quote => { if (quote.symbol === 'AAPL') prices.push(quote.price) })
   client.start()
   try {
     await client.poll()
     assert.deepEqual(calls, ['AAPL', 'BRK.B'], 'Startup must seed all portfolios, normalize aliases and exclude other instruments')
     sockets[0].open()
+    const ticks = (...data: Array<{ p: number; t: number }>) => sockets[0].message({
+      type: 'trade', data: data.map(row => ({ s: 'AAPL', ...row })),
+    })
+    ticks({ p: 111, t: now - 50 }, { p: 112, t: now - 50 })
+    assert.deepEqual(prices, [110, 112], 'Portfolio quote did not publish the latest trade in the message immediately')
+    ticks({ p: 113, t: now - 50 })
+    ticks({ p: 113, t: now - 50 }, { p: 109, t: now - 60 })
+    assert.deepEqual(prices, [110, 112, 113], 'Distinct same-millisecond trade was lost or an older/duplicate trade was accepted')
     const active = new Set<string>()
     const apply = () => {
       for (const row of sockets[0].sent.splice(0)) {
@@ -499,17 +509,56 @@ try {
   const screen = await markEquityScreenRows([{ ticker: 'TEST', price: 1 }])
   assert.equal(screen.rows[0].priceSource, 'Finnhub', 'Unmapped stocks must also use Finnhub')
   assert.equal(screen.rows[0].price, 110)
+  const { emptyHeatmapPayload, overlayHeatmapPrices } = await import('../electron/services/heatmap.js')
+  const heatmap = { ...emptyHeatmapPayload('SPY'), holdings: ['AAPL', 'TEST'].map(symbol => ({
+    symbol, name: symbol, weight: .1, sector: 'Information Technology', price: 95, changes: { live: 1 },
+  })) }
+  let heatmapRequests = 0
+  globalThis.fetch = async () => { heatmapRequests++; throw new Error('Heatmap must not request Finnhub quotes') }
+  const overlay = await overlayHeatmapPrices(heatmap, true)
+  assert.equal(heatmapRequests, 0)
+  assert.deepEqual(overlay.holdings.map(row => [row.price, row.priceSource]), [[90, 'Hyperliquid fixture'], [95, undefined]])
+  assert.equal(overlay.holdings[0].changes, heatmap.holdings[0].changes, 'Current marks must preserve Yahoo historical returns')
+  globalThis.fetch = async () => Response.json({ c: 110, pc: 100, t: Date.now() / 1_000 })
   const { applyEquityMarketUpdate } = await import('../src/api/equityStream.js')
+  const { retainedLoader } = await import('../src/api/snapshotResult.js')
   const renderer = new QueryClient()
   const snapshot = { data: { rows: [{ ticker: 'AAPL', price: 90 }], source: 'Yahoo stock screen' }, meta: envelope.meta, errors: [] }
   renderer.setQueryData(['marketCap', 'fixture'], snapshot)
+  const heatmapKey = ['heatmap', 'SPY']
+  const semiconductorKey = ['semiconductors', 'fixture']
+  renderer.setQueryData(heatmapKey, { ...envelope, data: heatmap })
+  renderer.setQueryData(semiconductorKey, { ...envelope, data: { rows: [{ company: { symbol: 'AAPL' }, market: { price: 95 } }] } })
   const update = { quotes: [await getQuote('AAPL')], candles: [] }
   applyEquityMarketUpdate(renderer, update)
+  assert.equal(renderer.getQueryData<{ data: typeof heatmap }>(heatmapKey)?.data.holdings[0].price, 95)
+  assert.equal(renderer.getQueryData<{ data: { rows: Array<{ market: { price: number } }> } }>(semiconductorKey)?.data.rows[0].market.price, 95)
   const firstUpdate = renderer.getQueryData<typeof snapshot>(['marketCap', 'fixture'])!
   assert.equal(firstUpdate.data.rows[0].price, 110)
   assert.match(firstUpdate.data.source, /Finnhub/)
   applyEquityMarketUpdate(renderer, update)
   assert.equal(renderer.getQueryData<typeof snapshot>(['marketCap', 'fixture'])!.data.source, firstUpdate.data.source, 'Repeated ticks grew source text')
+  const quotesKey = ['quotes', 'AAPL,MSFT']
+  const missingQuote = { ...envelope, data: { ...envelope.data, missing: ['MSFT'] } }
+  renderer.setQueryData(quotesKey, missingQuote)
+  const rendererIndex = createEquityQueryIndex(renderer)
+  try {
+    assert.deepEqual(rendererIndex.symbolsFor([heatmapKey, semiconductorKey]), [], 'Research pages must not enroll symbols in Finnhub visibility')
+    const msft = { ...update.quotes[0], symbol: 'MSFT', price: 120 }
+    const tick = { quotes: [msft], candles: [] }
+    applyEquityMarketUpdate(renderer, tick, rendererIndex.matching(tick))
+    const recovered = renderer.getQueryData<typeof envelope>(quotesKey)!
+    assert.equal(recovered.data.holdings.MSFT.price, 120)
+    assert.deepEqual(recovered.data.missing, [])
+
+    const before = recovered.data.holdings.AAPL
+    const refresh = retainedLoader(renderer, quotesKey, async () => recovered)()
+    const newest = { ...before, price: 121, asOf: before.asOf! + 1 }
+    applyEquityMarketUpdate(renderer, { quotes: [newest], candles: [] })
+    applyEquityMarketUpdate(renderer, { quotes: [before], candles: [] })
+    assert.equal(renderer.getQueryData<typeof envelope>(quotesKey)!.data.holdings.AAPL.price, 121)
+    assert.equal((await refresh).data.holdings.AAPL.price, 121, 'Late quote batch replaced a newer Finnhub trade')
+  } finally { rendererIndex.stop() }
   renderer.clear()
   globalThis.fetch = async () => new Response('fixture-only-key', { status: 401 })
   const fallback = await getQuotes(['AAPL'], true)
@@ -522,7 +571,14 @@ try {
   const stockFallback = await getQuotes(['MSFT'], true)
   assert.equal(stockFallback.quotes.MSFT.source, 'Yahoo Finance')
   assert.equal(stockFallback.quotes.MSFT.priceBasis, undefined, 'Finnhub-enabled fallback must be a stock quote')
-  assert.equal(fallbackCalls, 0, 'Finnhub-enabled stocks requested a perpetual fallback')
+  const completeScreen = await captureSources(() => markEquityScreenRows([{ ticker: 'AAPL', price: 100 }, { ticker: 'MSFT', price: 105 }], true))
+  assert.deepEqual(completeScreen.value.rows.map(row => row.price), [100, 105], 'Complete screen prices survive Finnhub cooldown')
+  assert.deepEqual(completeScreen.value.errors, [])
+  assert.equal(completeScreen.snapshot, undefined, 'Unused overlays cannot add stale or failed metadata')
+  const missingScreenPrice = await markEquityScreenRows([{ ticker: 'MSFT', price: null }], true)
+  assert.equal(missingScreenPrice.rows[0].price, 105)
+  assert.match(missingScreenPrice.errors[0]?.reason ?? '', /Finnhub/, 'An actual fallback for a missing price keeps its diagnostic')
+  assert.equal(fallbackCalls, 1, 'Only the independent Heatmap used the perpetual provider')
   finnhubQuotes.setCredentialLoader(async () => undefined)
   assert.equal((await getQuote('AAPL', true)).source, 'Hyperliquid fixture')
   console.log('PASS: Finnhub precedence, large portfolio queuing, stale stock retention, perp overwrite protection, stock-only fallback, key removal/replacement, automatic updates, provenance, coalescing, budget/cooldown and secret redaction')
@@ -564,12 +620,17 @@ try {
             const response = await fetch(...args)
             console.log('Live Finnhub HTTP status: ' + response.status)
             return response
+          }, Date.now, url => {
+            const socket = new WebSocket(url)
+            socket.addEventListener('open', () => console.log('PASS live Finnhub: WebSocket connected'))
+            return socket
           })
           const quote = await liveClient.resolve('AAPL', true)
           if (!quote || quote.value.price <= 0) throw Error('No live quote')
           console.log('PASS live Finnhub: AAPL quote, timestamp and authentication validated; key redacted')
           if (${process.argv.includes('--stream')}) {
             stage = 'live WebSocket trades'
+            liveClient.setPortfolioLoader(async () => ['AAPL', 'NVDA', 'TSLA'])
             liveClient.start()
             const poll = setInterval(() => { void liveClient.poll() }, 1_200)
             const seen = new Map()

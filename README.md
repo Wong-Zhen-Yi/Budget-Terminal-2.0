@@ -29,7 +29,7 @@
 ## One workspace, from research to records
 
 On Windows, double-click **Launch Budget Terminal.cmd** to open the desktop app
-directly. It checks and updates the app automatically. You can also type `btd` in a new terminal.
+directly. You can also type `btd` in a new terminal. To download app updates, use **Settings → App dashboard → Check for updates** or run `btd update`.
 See [Quick start](#quick-start).
 
 Budget Terminal brings public market data and your saved financial records into an
@@ -227,9 +227,15 @@ directory and checks dependencies and builds the latest desktop source before op
 To install or repair it manually on Windows, run `npm run setup:desktop` from the checkout.
 Background `btd` startup logs are saved under `%LOCALAPPDATA%\BudgetTerminal\launcher-logs`.
 `btd restart` gracefully closes the running app, waits for pending saves, rebuilds the latest source and reopens it. If the app is closed, it starts it. Restart never forces termination; a shutdown timeout stops the launch and leaves an error in the startup logs.
-Optional arguments include `btd -Dev`
-for live updates and `btd -Logs` to open diagnostics. To remove only this command,
+Run `btd --help` for the full list of commands and options, including `btd -Dev`
+for live reloading and `btd -Logs` to open diagnostics. To remove only the `btd` command,
 run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-bt.ps1 -Uninstall`.
+
+### Update Budget Terminal
+
+Open **Settings → App dashboard** and click **Check for updates**. If an update is available, choose **Install update**. On Windows, `btd update` checks and applies the same source update from any directory. On macOS and Linux, run `sh 'Launch Budget Terminal.sh' update` from the checkout.
+
+Updates use the project's published `main` branch and require Git and a clean checkout on `main` that can be fast-forwarded. After updating, close Budget Terminal and reopen it with the launcher to rebuild the app and MCP tools. On Windows, `btd restart` handles both steps.
 
 ### Launch behavior and troubleshooting
 

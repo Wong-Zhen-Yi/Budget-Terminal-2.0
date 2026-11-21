@@ -15,7 +15,7 @@ const use = (pages: string, purpose: string): ApiUse => ({ pages: pages.split('|
 /** Public service inventory. Dependencies include fallback and shared data consumers, not request attribution. */
 export const API_CATALOG: ApiDefinition[] = [
   ...MARKET_API_PROVIDERS.filter(provider => provider.id !== 'finnhub').map(provider => ({ id: provider.id, label: provider.label, inactive: true, uses: [] })),
-  { id: 'finnhub', label: 'Finnhub', uses: [use('dashboard|dashboard-2|portfolio|stocks|charts|price|market-cap|heatmap|cards|up-down|fundamentals|valuation|homebuilders|semiconductors|googl|nvda|amzn|avgo|mu|sofi|vst|hood|hims|pltr|bmnr', 'Preferred supported US stock quotes when a key is saved. Large batches queue within a 60 requests/minute budget. Failed refreshes retain a stale Finnhub quote or use Yahoo stock quotes; perpetual marks cannot replace them. Other providers retain history and other data.')] },
+  { id: 'finnhub', label: 'Finnhub', uses: [use('dashboard|dashboard-2|portfolio|stocks|charts|price|market-cap|cards|up-down|fundamentals|valuation|homebuilders|googl|nvda|amzn|avgo|mu|sofi|vst|hood|hims|pltr|bmnr', 'Preferred supported US stock quotes when a key is saved. Large batches queue within a 60 requests/minute budget. Failed refreshes retain a stale Finnhub quote or use Yahoo stock quotes; perpetual marks cannot replace them. Other providers retain history and other data.')] },
   { id: 'coinbase', label: 'Coinbase', inactive: true, uses: [] },
   { id: 'binance', label: 'Binance', inactive: true, uses: [] },
   { id: 'world-bank', label: 'World Bank', uses: [use('macro|economic', 'Annual US CPI inflation, distinct from monthly releases.')] },
@@ -29,7 +29,7 @@ export const API_CATALOG: ApiDefinition[] = [
   ] },
   { id: 'hyperliquid', label: 'Hyperliquid', uses: [
     use('crypto', 'Shared live perpetual mark prices, candles, funding, open interest and venue volume; labelled price fallback when CoinGecko is unavailable. Crypto prices use only Hyperliquid and CoinGecko; stock/ETF proxies retain stock providers.'),
-    use('portfolio|stocks|stock-discovery|price|market-cap|heatmap|cards|up-down|charts', 'Mapped equity perpetual marks and supported live chart bars; coverage depends on the symbol.'),
+    use('portfolio|stocks|stock-discovery|price|market-cap|heatmap|semiconductors|cards|up-down|charts', 'Mapped equity perpetual marks and supported live chart bars; coverage depends on the symbol.'),
   ] },
   { id: 'coingecko', label: 'CoinGecko', uses: [use('crypto', 'Coin rankings, prices, market capitalizations and global market totals.'), use('bmnr', 'Public Ethereum treasury holdings.')] },
   { id: 'alternative', label: 'Alternative.me', uses: [use('crypto', 'Crypto Fear & Greed sentiment index.')] },
@@ -38,8 +38,8 @@ export const API_CATALOG: ApiDefinition[] = [
   { id: 'treasury', label: 'U.S. Treasury', uses: [use('macro|economic|bonds|valuation', 'Yield curves and shared risk-free rate inputs.')] },
   { id: 'economic-releases', label: 'BLS / BEA / Census / Federal Reserve', uses: [use('calendar', 'Official economic release schedules and FOMC meeting dates.'), use('macro|economic', 'Labor statistics and New York Fed rate data.')] },
   { id: 'umich', label: 'University of Michigan', uses: [use('macro|economic', 'Consumer sentiment time series.')] },
-  { id: 'anthropic', label: 'Anthropic public disclosures', uses: [use('anthropic', 'Official announcements and content-change checks for reviewed funding, models and safety policy. No API key or private-company price feed.')] },
-  { id: 'sec', label: 'SEC EDGAR', uses: [use('anthropic', 'Registration statements, IPO amendments, free-writing prospectuses and effectiveness filings.'), use('fundamentals|scorecard|bmnr|sofi|mu|googl|amzn|avgo|vst|hims', 'Company facts, filing submissions and published financial reports.')] },
+  { id: 'anthropic', label: 'Anthropic public disclosures', uses: [use('anthropic', 'Official announcements and content-change checks for the IPO closing, reviewed model release and safety policy.')] },
+  { id: 'sec', label: 'SEC EDGAR', uses: [use('anthropic', 'Public company reports, the final IPO prospectus and related registration filings.'), use('fundamentals|scorecard|bmnr|sofi|mu|googl|amzn|avgo|vst|hims', 'Company facts, filing submissions and published financial reports.')] },
   { id: 'nvidia', label: 'NVIDIA investor relations', uses: [use('nvda', 'Quarterly CFO commentary, market-platform revenue and guidance.')] },
   { id: 'ir', label: 'Company investor relations', uses: [use('sofi|mu|googl|amzn|avgo|hood|hims', 'Quarterly reports, operating metrics and company disclosures.')] },
   { id: 'bitcoin-network', label: 'Blockchain.info / mempool.space', uses: [use('bitcoin', 'Network statistics, recent blocks, fees and mempool activity.')] },

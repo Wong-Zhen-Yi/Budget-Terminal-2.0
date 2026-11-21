@@ -177,6 +177,16 @@ function launch({ development = false, logs = false, setupOnly = false, platform
   return 0
 }
 
-if (require.main === module) process.exitCode = launch({ development: process.argv.includes('--dev'), logs: process.argv.includes('--logs'), setupOnly: process.argv.includes('--setup') })
+if (require.main === module) {
+  if (process.argv[2] === 'update') {
+    if (process.argv.length === 3) void require('./update.cjs').runUpdate()
+    else {
+      console.error('Run the update command without launch options.')
+      process.exitCode = 1
+    }
+  } else {
+    process.exitCode = launch({ development: process.argv.includes('--dev'), logs: process.argv.includes('--logs'), setupOnly: process.argv.includes('--setup') })
+  }
+}
 
 module.exports = { launch, platformName, createLauncherOutput }

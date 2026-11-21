@@ -19,6 +19,7 @@ try {
         import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
         import { HeatmapPage } from './src/pages/HeatmapPage'
         import { useRefreshHeatmap } from './src/api/heatmapQueries'
+        import { queryKeys } from './src/api/client'
         import { buildIntervalSummaries } from './electron/shared/heatmap'
         const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
         const check = (value, message) => { if (!value) throw Error(message) }
@@ -73,7 +74,7 @@ try {
           progress = preview(progress, [holdings[0], ...holdings.slice(1).map(row => ({ ...row, price: null, changes: {} }))])
           await new Promise(resolve => setTimeout(resolve, 650))
           check(body().includes('1/3') && status.loading, 'Tiles and quote coverage must populate during loading')
-          check(client.getQueryState(['heatmap', 'SPY', 'yahoo-v2']).fetchStatus === 'fetching' && !client.getQueryData(['heatmap', 'SPY', 'yahoo-v2']), 'Preview must not mark the completed query ready')
+          check(client.getQueryState(queryKeys.heatmap('SPY')).fetchStatus === 'fetching' && !client.getQueryData(queryKeys.heatmap('SPY')), 'Preview must not mark the completed query ready')
           mode = 'partial'; finishLoad(); await settle()
           check(calls === 1 && body().includes('2026-10-15'), 'Actual price date must stay visible')
           check(body().includes('Live') && !body().includes('DefeatBeta'), 'Yahoo provider label and Live control')

@@ -32,6 +32,9 @@ import { getIndexSectors } from './sectors.js'
 import { getIssuerEtfHoldings } from './etf/holdings.js'
 import { getSp500SectorMap, resolveSector } from './etf/sectorMap.js'
 import { fetchSparkCloses, yahooSymbol, type SparkSeries } from './yahoo/spark.js'
+import { equityMarket } from '../shared/equityMarkets.js'
+import { hyperliquidEquities } from './hyperliquidEquities.js'
+import { captureSources } from './sourceHealth.js'
 
 export const HEATMAP_SOURCE = 'Issuer holdings + Yahoo Finance'
 const PRICE_SOURCE = 'Yahoo Finance'
@@ -209,6 +212,21 @@ const progress = new Map<HeatmapEtfKey, HeatmapPayload>()
 
 export function getHeatmapProgress(etf: HeatmapEtfKey): HeatmapPayload | null {
   return progress.get(etf) ?? null
+}
+
+/** Overlay labelled Hyperliquid marks for the explicitly mapped equities. */
+export async function overlayHeatmapPrices(payload: HeatmapPayload, force = false): Promise<HeatmapPayload> {
+  const sources = new Set<string>()
+  const holdings = await Promise.all(payload.holdings.map(async row => {
+    if (!equityMarket(row.symbol)) return row
+    const quote = await captureSources(() => hyperliquidEquities.getQuote(row.symbol, force))
+      .then(({ value, snapshot }) => snapshot?.stale ? undefined : value, () => undefined)
+    if (!quote?.source) return row
+    sources.add(quote.source)
+    return { ...row, price: quote.price, priceSource: quote.source, priceBasis: quote.priceBasis }
+  }))
+  return sources.size ? { ...payload, holdings,
+    priceSource: `${[...sources].sort().join(' + ')} + Yahoo other prices; returns use Yahoo stock history` } : payload
 }
 
 /** One cached load per index, with local previews while its provider work is pending. */

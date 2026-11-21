@@ -160,38 +160,17 @@ export function normalizePoliticsTrade(value: unknown): PoliticsTrade | null {
   }
 }
 
-function extractNextPayload(html: string, pushStart: number): string {
-  const chunk = html.slice(pushStart)
-  const argumentStart = chunk.indexOf('push(')
-  if (argumentStart < 0) return ''
-  const text = chunk.slice(argumentStart + 5)
-  let depth = 0
-  let inString = false
-  let escaped = false
-  let end = -1
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index]
-    if (inString) {
-      if (escaped) escaped = false
-      else if (char === '\\') escaped = true
-      else if (char === '"') inString = false
-    } else if (char === '"') inString = true
-    else if (char === '(') depth += 1
-    else if (char === ')') {
-      if (depth === 0) {
-        end = index
-        break
-      }
-      depth -= 1
-    }
+function extractNextPayload(html: string): string {
+  const chunks: string[] = []
+  // Flight records can span several script pushes. Join the text segments in
+  // document order without executing the provider's scripts.
+  for (const [, argument] of html.matchAll(/self\.__next_f\.push\(([\s\S]*?)\)\s*;?\s*<\/script>/g)) {
+    try {
+      const payload: unknown = JSON.parse(argument)
+      if (Array.isArray(payload) && payload[0] === 1 && typeof payload[1] === 'string') chunks.push(payload[1])
+    } catch { /* Ignore non-JSON script arguments. */ }
   }
-  if (end < 0) return ''
-  try {
-    const payload = JSON.parse(text.slice(0, end)) as unknown
-    return Array.isArray(payload) && typeof payload[1] === 'string' ? payload[1] : ''
-  } catch {
-    return ''
-  }
+  return chunks.join('')
 }
 
 export interface PoliticsHtmlParse {
@@ -200,21 +179,22 @@ export interface PoliticsHtmlParse {
   /** Trade count across every page, as reported by the source's paginator. */
   totalCount: number
   totalPages: number
+  /** Page actually returned by the provider, when published. */
+  page?: number
+  hasTradePayload?: boolean
 }
 
 const EMPTY_PARSE: PoliticsHtmlParse = { trades: [], rawCount: 0, totalCount: 0, totalPages: 0 }
 
 /** Parse the React Server Component payload used by capitoltrades.com. */
 export function parsePoliticsHtml(html: string): PoliticsHtmlParse {
-  const marker = html.indexOf('_txId')
-  if (marker < 0) return EMPTY_PARSE
-  const pushStart = html.lastIndexOf('self.__next_f.push', marker)
-  if (pushStart < 0) return EMPTY_PARSE
-  const payload = extractNextPayload(html, pushStart)
-  const dataMarker = payload.indexOf('"data":[{')
-  if (dataMarker < 0) return EMPTY_PARSE
-  const arrayStart = payload.indexOf('[', dataMarker)
-  if (arrayStart < 0) return EMPTY_PARSE
+  const payload = extractNextPayload(html)
+  // Prefer the current inline trades object over earlier Flight references
+  // and over the other, unrelated data arrays in the page.
+  const data = /"trades":\{"data":\[/.exec(payload)
+    ?? /"data":\[\{(?=[^{}]*"_txId")/.exec(payload)
+  if (!data) return EMPTY_PARSE
+  const arrayStart = data.index + data[0].indexOf('[')
   let depth = 0
   let arrayEnd = -1
   let inString = false
@@ -244,7 +224,7 @@ export function parsePoliticsHtml(html: string): PoliticsHtmlParse {
   } catch {
     return EMPTY_PARSE
   }
-  if (!Array.isArray(raw)) return EMPTY_PARSE
+  if (!Array.isArray(raw) || !raw.every(entry => '_txId' in recordOf(entry))) return EMPTY_PARSE
   const trades = raw.flatMap((entry): PoliticsTrade[] => {
     const record = recordOf(entry)
     const politician = recordOf(record.politician)
@@ -272,12 +252,15 @@ export function parsePoliticsHtml(html: string): PoliticsHtmlParse {
   trades.sort((left, right) => right.transactionDate.localeCompare(left.transactionDate))
   // The paginator that follows the data array carries the full result size; without it the
   // page can only guess at the last page from a full-looking batch.
+  const paging = /^,"meta":\{"paging":\{"page":(\d+),"size":\d+,"totalPages":(\d+),"totalItems":(\d+)\}/.exec(payload.slice(arrayEnd))
   const totals = /"totalCount":(\d+),"totalPages":(\d+)/.exec(payload)
   return {
     trades,
     rawCount: raw.length,
-    totalCount: totals ? Number(totals[1]) : 0,
-    totalPages: totals ? Number(totals[2]) : 0,
+    totalCount: paging ? Number(paging[3]) : totals ? Number(totals[1]) : 0,
+    totalPages: paging ? Number(paging[2]) : totals ? Number(totals[2]) : 0,
+    page: paging ? Number(paging[1]) : undefined,
+    hasTradePayload: true,
   }
 }
 

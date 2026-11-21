@@ -1,7 +1,7 @@
 import type { Quote } from '../../shared/contract.js'
 import { cache, TTL, type CachedResult } from '../cache.js'
 import { paced, periodStart, yahoo } from './client.js'
-import { observeSource } from '../sourceHealth.js'
+import { captureSources, observeSource } from '../sourceHealth.js'
 import { equityMarket } from '../../shared/equityMarkets.js'
 import { hyperliquidEquities } from '../hyperliquidEquities.js'
 import { regularMarketRefreshAt } from '../../shared/marketRefresh.js'
@@ -109,6 +109,21 @@ export async function resolveYahooQuote(symbol: string, force = false, store = c
 /** One quote, session-aware caching and coalescing across concurrent callers. */
 export async function getQuote(symbol: string, force = false): Promise<Quote> {
   return (await resolveQuote(symbol, force)).value
+}
+
+/** Upgrade a usable stock quote without inheriting failures from an unused overlay. */
+export async function getPreferredQuoteOverlay(symbol: string, force = false): Promise<Quote | undefined> {
+  symbol = symbol.trim().toUpperCase()
+  const result = await captureSources(async () => {
+    if (await finnhubQuotes.configured(symbol)) {
+      const quote = await finnhubQuotes.resolve(symbol, force)
+      return quote && !quote.stale ? quote.value : undefined
+    }
+    if (equityMarket(symbol)) return hyperliquidEquities.getQuote(symbol, force)
+  }).catch(() => undefined)
+  if (!result?.value || result.snapshot?.stale || result.value.fallbackReason) return undefined
+  if (result.snapshot) observeSource(result.snapshot)
+  return result.value
 }
 
 async function resolveQuote(symbol: string, force = false): Promise<CachedResult<Quote> & { stale: boolean }> {

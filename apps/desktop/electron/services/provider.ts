@@ -214,7 +214,7 @@ import {
   getPoliticsPage,
   POLITICS_SOURCE,
 } from './politics.js'
-import { HEATMAP_SOURCE, emptyHeatmapPayload, getHeatmap } from './heatmap.js'
+import { HEATMAP_SOURCE, emptyHeatmapPayload, getHeatmap, overlayHeatmapPrices } from './heatmap.js'
 import {
   ETF_ARBITRAGE_SOURCE,
   ETF_AUM_SOURCE,
@@ -1466,7 +1466,8 @@ const providerImplementation: MarketDataProvider = {
   async heatmap({ etf, force }) {
     const key = normalizeEtfKey(etf)
     try {
-      const { payload, errors } = await getHeatmap(key, force)
+      const { payload: history, errors } = await getHeatmap(key, force)
+      const payload = await overlayHeatmapPrices(history, force)
       if (!errors.length) return ok(payload, HEATMAP_SOURCE, { asOf: Date.parse(payload.priceAsOfDate!) })
       if (!payload.quoteCoverage) return { ...failed(payload, errors.map(error => error.reason).join(' · '), HEATMAP_SOURCE), errors }
       // Missing Yahoo histories render as outlined no-data tiles beside the coverage
@@ -2075,17 +2076,6 @@ export const yahooProvider: MarketDataProvider = new Proxy(providerImplementatio
           && row.price >= result.data.minimumPrice && row.price <= result.data.maximumPrice) : marked.rows
         result.data = { ...result.data, rows,
           source: marked.marked ? `${result.data.source} screen candidates; ${marked.sources.join(' + ')} current quotes` : result.data.source }
-        if (marked.errors.length) {
-          result.errors = [...result.errors, ...marked.errors]
-          result.meta = { ...result.meta, freshness: 'partial', failureReason: marked.errors.map(error => error.reason).join(' · ') }
-        }
-      }
-      if (property === 'heatmap' && result.data?.holdings) {
-        const marked = await markEquityScreenRows(result.data.holdings.map((row: { symbol: string; price: number | null }) => ({ ticker: row.symbol, price: row.price })), force)
-        result.data = { ...result.data,
-          holdings: result.data.holdings.map((row: object, index: number) => ({ ...row, price: marked.rows[index].price,
-            priceSource: marked.rows[index].priceSource, priceBasis: marked.rows[index].priceBasis })),
-          priceSource: marked.marked ? `${marked.sources.join(' + ')} + Yahoo other prices; returns use Yahoo stock history` : result.data.priceSource }
         if (marked.errors.length) {
           result.errors = [...result.errors, ...marked.errors]
           result.meta = { ...result.meta, freshness: 'partial', failureReason: marked.errors.map(error => error.reason).join(' · ') }

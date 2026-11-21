@@ -1,8 +1,8 @@
 import { useCallback, useContext, useEffect, useSyncExternalStore } from 'react'
 import { hashKey, useQuery as useBaseQuery, useQueryClient, type UseQueryOptions } from '@tanstack/react-query'
-import { pagePreview, subscribePagePreview, trackPageQuery } from './pageProgress'
+import { pagePreview, subscribePagePreview } from './pageProgress'
 import { PageQueryScope, registerPageQuery } from './pageQueryScope'
-import { retainUsableSnapshot } from './snapshotResult'
+import { retainedLoader } from './snapshotResult'
 
 /** Paint transient data without writing success into the query or persisted cache. */
 export const useQuery: typeof useBaseQuery = ((options: UseQueryOptions, client?: Parameters<typeof useBaseQuery>[1]) => {
@@ -14,9 +14,9 @@ export const useQuery: typeof useBaseQuery = ((options: UseQueryOptions, client?
   const preview = useSyncExternalStore(subscribe, () => pagePreview(key), () => undefined)
   const queryFn = options.queryFn
   const result = useBaseQuery({ ...options,
-    ...(typeof queryFn === 'function' ? { queryFn: async context => retainUsableSnapshot(
-      queryClient.getQueryData(options.queryKey), await trackPageQuery(options.queryKey, () => queryFn(context)), options.queryKey,
-    ) } : {}),
+    ...(typeof queryFn === 'function' ? {
+      queryFn: context => retainedLoader(queryClient, options.queryKey, () => queryFn(context))(),
+    } : {}),
   }, client)
   if (!result.isFetching || !preview) return result
   // Retain a completed snapshot during refresh; cold loads fill in as blocks arrive.

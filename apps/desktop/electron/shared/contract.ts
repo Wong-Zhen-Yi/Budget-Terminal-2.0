@@ -3534,6 +3534,7 @@ export interface PoliticsExportRequest {
 }
 
 export const CHANNELS = {
+  checkForUpdates: 'system:check-for-updates',
   cloudSyncStatus: 'cloud-sync:status',
   cloudSyncCommand: 'cloud-sync:command',
   appMetrics: 'system:app-metrics',
@@ -3765,6 +3766,7 @@ export interface DiagnosticEntry {
 export interface DiagnosticSnapshot { entries: DiagnosticEntry[]; files: number; bytes: number }
 
 export interface DesktopApi {
+  checkForUpdates(): Promise<void>
   cloudSyncStatus(): Promise<Envelope<CloudSyncStatus>>
   cloudSyncCommand(command: CloudSyncCommand): Promise<Envelope<CloudSyncStatus>>
   diagnosticLogs: () => Promise<Envelope<DiagnosticSnapshot>>

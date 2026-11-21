@@ -11,12 +11,15 @@ import { getYahooSeries } from './yahoo/series.js'
 import { withYahooSummary } from './yahoo/requests.js'
 import { fetchPortfolioNews } from './yahoo/newsPage.js'
 import { equityMarket } from '../shared/equityMarkets.js'
-import { getQuote } from './yahoo/quotes.js'
-import { finnhubQuotes } from './finnhubQuotes.js'
+import { hyperliquidEquities } from './hyperliquidEquities.js'
+import { captureSources, observeSource } from './sourceHealth.js'
 
 const SOURCE = 'Yahoo Finance · reviewed SEC company catalog'
 const DAY = 86_400_000
 type Lane = 'market' | 'profile' | 'news'
+function laneCacheKey(symbol: string, lane: Lane): string {
+  return `semiconductors:${lane === 'market' ? 'v3' : 'v2'}:${symbol}:${lane}`
+}
 interface LaneData<T> { value: T; warnings: string[]; fetchedAt: number }
 export interface SemiconductorFetchers {
   market: (symbol: string, force: boolean) => Promise<{ value: SemiconductorMarket; warnings: string[] }>
@@ -47,17 +50,25 @@ const defaults: SemiconductorFetchers = {
     if (series.status === 'rejected') warnings.push(`History failed: ${describeError(series.reason)}`)
     else if (series.value.stale) warnings.push('History refresh failed; showing cached data.')
     if (!history.length) warnings.push('Adjusted price history unavailable.')
-    if (finite(raw.regularMarketPrice) === null) warnings.push('Share price unavailable.')
-    const perp = equityMarket(symbol) || await finnhubQuotes.configured(symbol) ? await getQuote(symbol, force).catch(error => {
-      warnings.push(`Selected price refresh failed; showing Yahoo stock quote: ${describeError(error)}`)
-      return undefined
-    }) : undefined
-    const price = perp?.price ?? finite(raw.regularMarketPrice)
+    const stockPrice = finite(raw.regularMarketPrice)
+    const preferred = equityMarket(symbol)
+      ? await captureSources(() => hyperliquidEquities.getQuote(symbol, force)).catch(error => {
+        if (stockPrice === null) warnings.push(`Selected price refresh failed: ${describeError(error)}`)
+        return undefined
+      }) : undefined
+    // The quote and adjusted history already loaded from Yahoo cover this lane
+    // when the preferred live mark is unavailable or stale.
+    const selected = preferred && (stockPrice === null || !preferred.snapshot?.stale && !preferred.value.fallbackReason)
+      ? preferred : undefined
+    if (selected?.snapshot) observeSource(selected.snapshot)
+    const mark = selected?.value
+    const price = mark?.price ?? stockPrice
+    if (price === null) warnings.push('Share price unavailable.')
     const previous = finite(raw.regularMarketPreviousClose)
     if (price === null && !history.length) throw new Error(warnings.join(' · '))
-    return { value: { price, dailyChange: perp?.change ?? finite(raw.regularMarketChangePercent) ?? (price !== null && previous !== null && previous > 0 ? (price / previous - 1) * 100 : null),
-      marketCap: finite(raw.marketCap), quoteTime: perp?.asOf ?? timestamp(raw.regularMarketTime), history,
-      priceSource: perp?.source ?? 'Yahoo Finance', changeBasis: perp?.changeBasis ?? 'previous-close' }, warnings }
+    return { value: { price, dailyChange: mark?.change ?? finite(raw.regularMarketChangePercent) ?? (price !== null && previous !== null && previous > 0 ? (price / previous - 1) * 100 : null),
+      marketCap: finite(raw.marketCap), quoteTime: mark?.asOf ?? timestamp(raw.regularMarketTime), history,
+      priceSource: mark?.source ?? 'Yahoo Finance', changeBasis: mark?.changeBasis ?? 'previous-close' }, warnings }
   },
   async profile(symbol) {
     const raw = await withYahooSummary(symbol, () => paced(() => yahoo.quoteSummary(symbol, { modules: ['assetProfile', 'summaryDetail', 'defaultKeyStatistics', 'financialData', 'calendarEvents'] })))
@@ -93,7 +104,7 @@ export async function getSemiconductors({ force = false }: SemiconductorsRequest
   await Promise.all(payload.rows.map(async row => {
     await Promise.all((['market', 'profile', 'news'] as const).map(async block => {
       const saved = await storage.get<LaneData<SemiconductorMarket | SemiconductorProfile | NewsArticle[]>>(
-        `semiconductors:v2:${row.company.symbol}:${block}`, { allowStale: true, observe: false })
+        laneCacheKey(row.company.symbol, block), { allowStale: true, observe: false })
       if (!saved) return
       if (block === 'market') row.market = saved.value.value as SemiconductorMarket
       else if (block === 'profile') row.profile = saved.value.value as SemiconductorProfile
@@ -106,7 +117,7 @@ export async function getSemiconductors({ force = false }: SemiconductorsRequest
   publishPageProgress(payload, SOURCE, errors, CHANNELS.semiconductors)
   const lane = async <T>(row: SemiconductorRow, block: Lane, ttl: number, loader: () => Promise<{ value: T; warnings: string[] }>, apply: (value: T) => void) => {
     try {
-      const result = await storage.resolveWithStaleFallback<LaneData<T>>(`semiconductors:v2:${row.company.symbol}:${block}`, ttl,
+      const result = await storage.resolveWithStaleFallback<LaneData<T>>(laneCacheKey(row.company.symbol, block), ttl,
         async () => ({ ...await loader(), fetchedAt: Date.now() }), { force })
       apply(result.value.value)
       const warnings = [...result.value.warnings]

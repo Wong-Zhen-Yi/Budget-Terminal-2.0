@@ -1,4 +1,8 @@
 @echo off
+rem The shared build includes the completed Anthropic IPO and Nasdaq ANT listing.
+rem The shared build includes provider fallback fixes and Finnhub-free Heatmap and Semiconductors data.
+rem The shared build includes live Finnhub portfolio ticker flashes on both dashboards.
+rem The shared build applies source downloaded through Settings or btd update on the next launch.
 rem Shared build includes both Ethereum views, the opening page preference, Obscure controls and current MCP schemas.
 rem Agents connects when external MCP servers are offline.
 rem Projections keeps BMNR chart data available when the options listing fails.
@@ -52,6 +56,7 @@ rem Dependency security refresh: patched Electron and schema-generation dependen
 rem Focus provider verification: npm run probe:maintenance-live -- --focus
 rem Recurring maintenance checklist: docs/maintenance/Maintainence.md
 rem Windows terminal command: btd restart saves, rebuilds and reopens the app.
+rem Run btd --help for all Windows terminal commands and options.
 rem Telegram: natural screenshot requests use MCP and send photos without captions or follow-up text.
 rem Trading Volumes defaults to a compact YTD table beside the expanded dot plot.
 rem Crypto bypasses Finnhub for coins, stock proxies and live updates; shared builds refresh app and MCP.

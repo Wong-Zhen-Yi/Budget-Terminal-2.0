@@ -1,4 +1,7 @@
 #!/bin/sh
+# The shared build includes the completed Anthropic IPO and Nasdaq ANT listing.
+# The shared build includes provider fallback fixes and Finnhub-free Heatmap and Semiconductors data.
+# The shared build includes live Finnhub portfolio ticker flashes on both dashboards.
 # Shared build includes both Ethereum views, the opening page preference, Obscure controls and current MCP schemas.
 # Agents connects when external MCP servers are offline.
 # Projections keeps BMNR chart data available when the options listing fails.
@@ -52,10 +55,12 @@
 # Focus provider verification: npm run probe:maintenance-live -- --focus
 # Recurring maintenance checklist: docs/maintenance/Maintainence.md
 # Windows terminal command: btd restart saves, rebuilds and reopens the app.
+# Run btd --help on Windows for all terminal commands and options.
 # Telegram: natural screenshot requests use MCP and send photos without captions or follow-up text.
 # Trading Volumes defaults to a compact YTD table beside the expanded dot plot.
 # Crypto bypasses Finnhub for coins, stock proxies and live updates; shared builds refresh app and MCP.
 # Linux/macOS entry point; shared runtime checks and startup live in scripts/.
+# The shared launcher also accepts update to download new source before the next build.
 # Keep dependency checks and build output visible in this terminal before opening the app.
 # Shared launcher presents five numbered stages with measured completion times.
 # Incremental charts, indexed live updates and cache checkpoints: docs/performance.md.

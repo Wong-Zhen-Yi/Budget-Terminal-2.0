@@ -24,7 +24,10 @@ export function createEquityQueryIndex(client: QueryClient) {
     const root = String(query.queryKey[0])
     const next = new Set<string>()
     if (data) {
-      if (root === 'quotes') Object.keys(data.holdings ?? {}).forEach(symbol => next.add(symbol))
+      if (root === 'quotes') {
+        for (const symbol of Object.keys(data.holdings ?? {})) next.add(symbol)
+        for (const symbol of (data.missing as string[] | undefined) ?? []) next.add(symbol)
+      }
       else if (root === 'crypto') Object.keys(data.quotes ?? {}).forEach(symbol => next.add(symbol))
       else if (root === 'chartsCompare') Object.keys(data.series ?? {}).forEach(symbol => next.add(symbol))
       else if (root === 'marketCap' || root === 'priceScreen') {
@@ -62,8 +65,8 @@ export function createEquityQueryIndex(client: QueryClient) {
     symbolsFor(keys: QueryKey[]): string[] {
       const result = new Set<string>()
       for (const key of keys) {
-        // Crypto has an independent provider policy, including its stock proxies.
-        if (key[0] === 'crypto') continue
+        // These pages do not enroll symbols in Finnhub's visible-quote priority.
+        if (key[0] === 'crypto' || key[0] === 'heatmap' || key[0] === 'semiconductors') continue
         const query = cache.find({ queryKey: key, exact: true })
         if (query) for (const symbol of memberships.get(query)?.symbols ?? []) result.add(symbol)
       }

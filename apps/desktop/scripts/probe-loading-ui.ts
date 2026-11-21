@@ -153,6 +153,14 @@ try {
             document.querySelector('[data-settings-category="' + category + '"]').click()
             await settle()
           }
+          await chooseSettingsCategory('dashboard')
+          const updateButton = document.querySelector('.settings-update')
+          check(updateButton?.textContent === 'Check for updates', 'Settings is missing the update button')
+          updateButton.click()
+          await settle()
+          check(updateButton.disabled, 'Update button remains enabled during the check')
+          for (let i = 0; i < 20 && updateButton.disabled; i++) await settle()
+          check(!updateButton.disabled && updateButton.textContent === 'Check for updates', 'Update IPC did not complete')
           await chooseSettingsCategory('diagnostics')
           const orderTable = document.querySelector('table[aria-label="Startup page load order"]')
           check(orderTable && orderTable.getBoundingClientRect().height > 0, 'Page load order is not visible in Settings')
@@ -284,6 +292,7 @@ try {
         activity: [{ id: 1, tool: 'budget_terminal_stocks', source: 'external', startedAt: Date.now(), durationMs: 23, state: 'partial' }] };
       window.api = new Proxy({
         platform: 'win32',
+        checkForUpdates: () => window.captureApi.checkForUpdates(),
         onScreenshotRequested: listener => window.captureApi.onScreenshotRequested(listener),
         screenshotReady: result => window.captureApi.screenshotReady(result),
         onPortfolioChanged: () => () => {},
@@ -346,10 +355,15 @@ try {
     bundle: true, platform: 'node', format: 'cjs', external: ['electron'],
   })
   await writeFile(join(directory, 'main.cjs'), `
-    const { app, BrowserWindow, nativeImage } = require('electron');
+    const { app, BrowserWindow, ipcMain, nativeImage } = require('electron');
     const assert = require('node:assert/strict');
     const { createScreenshotService, mcpExecution } = require('./capture.cjs');
     const fs = require('fs');
+    let updateChecks = 0;
+    ipcMain.handle('system:check-for-updates', async () => {
+      updateChecks++;
+      await new Promise(resolve => setTimeout(resolve, 300));
+    });
     app.setPath('userData', ${JSON.stringify(join(directory, 'userData'))});
     app.whenReady().then(async () => {
       const window = new BrowserWindow({ show: false, width: 1400, height: 950, webPreferences: { backgroundThrottling: false, preload: ${JSON.stringify(join(directory, 'preload.cjs'))} } });
@@ -358,6 +372,7 @@ try {
         await window.loadFile(${JSON.stringify(join(directory, 'index.html'))});
         console.log(await window.webContents.executeJavaScript('window.runProbe()'));
         if (!${statusBarOnly}) {
+        assert.equal(updateChecks, 1, 'Settings must send exactly one update check through IPC');
         const capture = createScreenshotService(() => window);
         const snapshot = () => window.webContents.executeJavaScript('JSON.stringify({ page: document.querySelector("h1")?.textContent, navigation: localStorage.getItem("budget-terminal:navigation"), scroll: document.querySelector("[data-startup-order-scroll]")?.scrollTop })');
         const original = await snapshot();

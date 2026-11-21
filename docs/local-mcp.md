@@ -45,23 +45,24 @@ Anthropic is available in Focus and preloads at startup. The read-only
 `budget_terminal_anthropic` tool accepts `{ "request": {} }` or
 `{ "request": { "force": true } }` with the existing market-research permission.
 It returns reviewed disclosures, seven quarters of revenue and compute costs,
-Series E?H funding history, proposed IPO terms, products, governance, risks,
+Series E through H funding history, completed IPO terms, products, governance, risks,
 source links, official announcements, SEC filings and research review reasons.
+The structured `listing` field includes the Nasdaq symbol ANT, first trading date
+and exchange quote link.
 Structured `operatingMetrics` and `capitalSnapshot` include dated customer-count
 lower bounds, approximate NRR, cash, short-term investments, separate undrawn
 credit and compute commitment horizons for the page visualisations. Customer
 thresholds overlap; the through-2030 commitment includes the next-12-month amount.
 The ratio charts use rounded quarterly revenue/compute flows, not gross margins.
 `reviewedAt` and `nextReviewAt` date the curated research; envelope freshness
-and individual `checks[].checkedAt` date the live checks. These dates are not
-interchangeable. The proposed ANT symbol has no live equity quote on this page.
+and individual `checks[].checkedAt` date the live checks.
 Sources are checked every six hours while open, including during startup and
 background page preparation. Updates & sources also supports an explicit check.
 New announcements, later SEC filings, changed reviewed documents or an overdue
 weekly review flag research for review; financial figures never silently restate.
 Failed source checks retain available snapshots and appear in Settings diagnostics.
 See [Anthropic research maintenance](anthropic-focus.md). Rebuild with
-`npm run build:mcp` and reconnect MCP clients to discover the new tool.
+`npm run build:mcp` and reconnect MCP clients to discover the updated schema.
 
 
 Cloud sync uses Convex Auth v2 and the same Budget Terminal deployment on every installation. Sign-in, sign-out, session rotation, provider
@@ -201,6 +202,7 @@ Cache status, cache configuration and heatmap loading progress remain desktop-on
 services. They are explicitly excluded from the MCP route registry so adding these
 local controls does not prevent MCP or the Agents workspace from starting.
 System memory sampling for cache budgets also takes place locally in the desktop app.
+Application updates are available from desktop Settings and the terminal launcher. They have no MCP tool or permission. The next launch rebuilds the local MCP bundle from the updated source.
 
 ## Permissions, approval and diagnostics
 
@@ -445,6 +447,8 @@ Errors return `structuredContent.error` with `code`, `message`, `retryable` and 
 
 Finnhub quotes share the desktop streaming-first cache: REST reference maintenance is slower while trades are healthy, for background stocks, outside extended trading hours, and while all app windows are hidden/minimized. Initial page preloading is unchanged. Visible-stock hints are desktop-only and do not add an MCP tool or permission. Explicit force requests remain subject to provider budgets and cooldowns. See [Finnhub streaming](finnhub-streaming.md).
 
+MCP portfolio quote reads share the Finnhub quote cache. Push updates and dashboard ticker flashes are desktop-only.
+
 ## Alphabet Focus
 
 `budget_terminal_googl` reads the GOOGL Focus data: Class A market research and the eight latest quarterly earnings releases from Alphabet's SEC filings (CIK 1652044). It exposes Search, YouTube ads, Network, subscriptions/platforms/devices, Cloud and Other Bets revenue, segment operating income, traffic acquisition costs, quarterly cash flow, capex, buybacks and dividends. USD values are absolute dollars, growth and margins are percentages, and missing metrics remain null. Free cash flow is operating cash flow less purchases of property and equipment; capex is company-wide, with no inferred AI-only allocation. Quote marks and historical candles retain their independent provider labels. This read uses market-research permission and preserves lane timestamps and partial/stale errors. GOOGL is preloaded at startup, including when hidden; failures appear in Settings.
@@ -454,6 +458,10 @@ Run `npm run probe:googl -- --live`, `npm run probe:googl-ui`, `npm run build:mc
 `budget_terminal_nvda` returns the NVDA Focus page's stock research and the latest NVIDIA CFO commentary. The read requires market-research permission and accepts an optional `force` in `request`. The first three `quarters` entries are the reported, previous and year-ago fiscal quarters. Each quarter's platform amounts follow `platformLabels` in order. Company-reported growth rates refer to the latest quarter. Monetary amounts are in USD at the precision published by NVIDIA. Guidance is a forward-looking midpoint and percentage range. Quote and chart sources can differ. Use lane timestamps and envelope errors to check for stale or incomplete data. The screenshot page ID is `nvda`. Reconnect MCP clients after rebuilding to load the updated catalog.
 
 The equity `heatmap` response includes optional per-holding `history` arrays (`dates` and `closes`, ascending daily Yahoo closes) for up to one year of historical replay. Uncached Yahoo history batches run one at a time, with at least one second between batches. The desktop automatically builds missing replay history and retries about every two minutes while the Heatmap is open and replay is unavailable. Replay uses current issuer holdings, sectors and weights. Desktop playback advances one trading day per frame at the speed of the selected Heatmap timeframe. Playback controls are desktop-only.
+
+Heatmap and Semiconductors use Yahoo Finance and labelled Hyperliquid equity perpetual marks. They leave the shared Finnhub budget available for portfolio tracking. Check the per-row price source for both tools. Politics validates the page number reported by Capitol Trades before caching or exporting its disclosures.
+
+The Price and Market Cap screens and Homebuilders retain usable Yahoo prices when a preferred price overlay is unavailable. Their responses report incomplete coverage when underlying requirements such as a usable price or history are missing.
 
 
 ### Macro Focus

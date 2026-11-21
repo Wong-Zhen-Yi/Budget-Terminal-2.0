@@ -8,6 +8,7 @@ export type Subscribe = <Payload>(channel: string, listener: (payload?: Payload)
 
 export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS.Platform): DesktopApi {
   return {
+    checkForUpdates: () => invoke(CHANNELS.checkForUpdates),
     cloudSyncStatus: () => invoke(CHANNELS.cloudSyncStatus),
     cloudSyncCommand: command => invoke(CHANNELS.cloudSyncCommand, command),
     diagnosticLogs: () => invoke('diagnostics:read'),
