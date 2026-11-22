@@ -158,13 +158,15 @@ Failed dependency checks stop startup. There is no interface selection menu, and
 No administrator access is needed. Double-click it again whenever you need to open
 the app. From the checkout, `npm.cmd run setup` runs the Windows checks without opening the app.
 
-On macOS, install a supported Node.js version with npm, then double-click
+On macOS, double-click
 [Launch Budget Terminal.command](Launch%20Budget%20Terminal.command) in Finder.
 It checks the runtime, installs dependencies, builds the latest source and opens
 the desktop app. Keep its Terminal window open while using the app. Homebrew,
-Volta, fnm and nvm installation locations are checked automatically. Launch errors
-stay visible so you can fix them and retry. Keep the launcher in the checkout;
-you can create a Finder alias for convenient access elsewhere.
+Volta, fnm and nvm installation locations are checked automatically. If needed,
+the launcher downloads and verifies Node.js with npm and installs it under
+`~/Library/Application Support/BudgetTerminal/runtimes` without administrator
+access. Launch errors stay visible so you can fix them and retry. Keep the launcher
+in the checkout. You can create a Finder alias to open it from elsewhere.
 
 For a manual installation on any platform:
 
@@ -241,8 +243,10 @@ Updates use the project's published `main` branch and require Git and a clean ch
 ### Test with demo data
 
 On Windows, double-click [Launch Budget Terminal Demo.cmd](Launch%20Budget%20Terminal%20Demo.cmd)
-or run `btd -Demo` if the terminal command is installed. On macOS and Linux, run
-`sh './Launch Budget Terminal.sh' --demo` from the checkout. Keep the launcher terminal open until you close the demo app.
+or run `btd -Demo` if the terminal command is installed. On macOS, double-click
+[Launch Budget Terminal Demo.command](Launch%20Budget%20Terminal%20Demo.command).
+On Linux, run `sh './Launch Budget Terminal.sh' --demo` from the checkout.
+Keep the launcher terminal open until you close the demo app.
 
 The app displays **Demo data** in the top bar. It opens with two sample portfolios, an options record,
 personal finance entries and a goal, chart watchlists, a backtest allocation, custom cards, and articles.

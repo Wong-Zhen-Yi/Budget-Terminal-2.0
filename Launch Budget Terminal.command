@@ -1,6 +1,7 @@
 #!/bin/sh
 # The shared build includes the direct Tailscale link under Settings > Labs.
-# Pass --demo to this launcher in Terminal to open temporary sample data.
+# Double-click Launch Budget Terminal Demo.command for temporary sample data.
+# The shared launcher can install a private Node.js runtime if needed.
 # The shared build includes the streamlined Charts workspaces and updated chart rendering.
 # The shared dependency install uses the project's pinned esbuild script approvals.
 # The shared build brings the Dashboard Lite chart layout to Dashboard 1.

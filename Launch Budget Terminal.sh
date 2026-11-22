@@ -77,6 +77,7 @@
 # Shared launcher presents five numbered stages with measured completion times.
 # Incremental charts, indexed live updates and cache checkpoints: docs/performance.md.
 # macOS users can double-click Launch Budget Terminal.command; both use this startup path.
+# On macOS, install a verified per-user runtime if none is available.
 # Curated design references live in docs/; output/ is for ignored local captures.
 
 cd "$(dirname "$0")" || exit 1
@@ -100,6 +101,10 @@ for runtime in /opt/homebrew/opt/node@24/bin/node /usr/local/opt/node@24/bin/nod
     exec "$runtime" scripts/launch.cjs "$@"
   fi
 done
+
+if [ "$(uname -s)" = Darwin ]; then
+  exec /bin/sh scripts/bootstrap-mac.sh "$@"
+fi
 
 echo 'Install Node.js 22.23.4+, 24.22.1+, or 26.12.1+ with npm 10.9.8+, then launch again.' >&2
 exit 1

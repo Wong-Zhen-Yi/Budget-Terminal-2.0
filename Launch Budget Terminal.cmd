@@ -77,6 +77,7 @@ rem Keep dependency checks and build output visible in this terminal before open
 rem Shared launcher presents five numbered stages with measured completion times.
 rem Incremental charts, indexed live updates and cache checkpoints: docs/performance.md.
 rem macOS: double-click Launch Budget Terminal.command. Linux: Launch Budget Terminal.sh.
+rem macOS also has Launch Budget Terminal Demo.command for temporary sample data.
 rem Curated design references live in docs/; output/ is for ignored local captures.
 title Budget Terminal
 cd /d "%~dp0" || exit /b 1

@@ -62,7 +62,7 @@ if (process.platform !== 'win32') {
     const output = join(directory, 'launch-output')
     mkdirSync(checkout)
     mkdirSync(join(home, '.local/bin'), { recursive: true })
-    for (const file of ['Launch Budget Terminal.command', 'Launch Budget Terminal.sh']) {
+    for (const file of ['Launch Budget Terminal.command', 'Launch Budget Terminal Demo.command', 'Launch Budget Terminal.sh']) {
       const source = resolve(__dirname, '..', file)
       assert(statSync(source).mode & 0o111, `${file} must be executable after checkout`)
       copyFileSync(source, join(checkout, file))
@@ -79,13 +79,32 @@ esac
 exit 99
 `)
     chmodSync(node, 0o755)
-    for (const status of [0, 7]) {
-      const result = spawnSync('/bin/sh', [join(checkout, 'Launch Budget Terminal.command'), '--logs', 'argument with spaces'], {
-        cwd: tmpdir(), encoding: 'utf8', input: '', timeout: 10_000,
-        env: { ...process.env, HOME: home, BUDGET_LAUNCHER_PROBE_OUTPUT: output, BUDGET_LAUNCHER_PROBE_STATUS: String(status) },
-      })
-      assert.equal(result.status, status, result.stderr || result.error?.message)
-      assert.deepEqual(readFileSync(output, 'utf8').trim().split('\n'), [checkout, 'scripts/launch.cjs', '--logs', 'argument with spaces'], 'Finder launch must resolve its checkout, find Node outside PATH, forward arguments and preserve errors')
+    const run = (file, args, status) => spawnSync('/bin/sh', [file, ...args], {
+      cwd: tmpdir(), encoding: 'utf8', input: '', timeout: 10_000,
+      env: { ...process.env, HOME: home, BUDGET_LAUNCHER_PROBE_OUTPUT: output, BUDGET_LAUNCHER_PROBE_STATUS: String(status) },
+    })
+    for (const [file, mode] of [['Launch Budget Terminal.command', []], ['Launch Budget Terminal Demo.command', ['--demo']]]) {
+      for (const status of [0, 7]) {
+        const result = run(join(checkout, file), ['--logs', 'argument with spaces'], status)
+        assert.equal(result.status, status, result.stderr || result.error?.message)
+        assert.deepEqual(readFileSync(output, 'utf8').trim().split('\n'), [checkout, 'scripts/launch.cjs', ...mode, '--logs', 'argument with spaces'], 'Finder launch must resolve its checkout, find Node outside PATH, forward arguments and preserve errors')
+      }
+    }
+    if (process.platform === 'darwin') {
+      const scripts = join(checkout, 'scripts')
+      mkdirSync(scripts)
+      const bootstrap = join(scripts, 'bootstrap-mac.sh')
+      copyFileSync(join(__dirname, 'bootstrap-mac.sh'), bootstrap)
+      const architecture = process.arch === 'arm64' ? 'arm64' : 'x64'
+      const bin = join(home, 'Library/Application Support/BudgetTerminal/runtimes', `node-v24.22.1-darwin-${architecture}`, 'bin')
+      mkdirSync(bin, { recursive: true })
+      for (const command of ['node', 'npm']) {
+        copyFileSync(node, join(bin, command))
+        chmodSync(join(bin, command), 0o755)
+      }
+      const result = run(bootstrap, ['--setup'], 0)
+      assert.equal(result.status, 0, result.stderr || result.error?.message)
+      assert.deepEqual(readFileSync(output, 'utf8').trim().split('\n'), [checkout, 'scripts/launch.cjs', '--setup'], 'Reuse the private runtime and forward arguments')
     }
   } finally {
     rmSync(directory, { recursive: true, force: true })
