@@ -12,13 +12,15 @@
 .mobile-topbar {
   display: flex;
   flex: none;
-  padding: 4px 10px;
+  align-items: center;
+  padding: 6px 10px;
   gap: 6px;
   justify-content: space-between;
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
 }
 
+.mobile-topbar h1 { min-width: 0; }
 .mobile-topbar button {
   display: flex;
   min-width: 44px;
@@ -35,15 +37,25 @@
 
 .mobile-topbar button:active, .mobile-topbar button[aria-pressed="true"] { background: var(--color-surface-hover); }
 .mobile-topbar button:disabled { opacity: .45; }
-.mobile-topbar-actions { display: flex; flex: none; gap: 2px; }
+.mobile-topbar-actions { display: flex; flex: none; }
+.mobile-topbar-actions [aria-pressed="true"] { color: var(--color-accent-hover); }
 .mobile-topbar svg { width: 22px; height: 22px; }
-.mobile-page-button { min-width: 0; }
-.mobile-page-button span:last-child { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.mobile-topbar .mobile-page-button {
+  max-width: 100%;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface-raised);
+  padding-inline: 10px;
+}
+.mobile-page-button span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.mobile-page-button svg { flex: none; width: 16px; height: 16px; color: var(--color-text-muted); }
 
-[data-terminal-mobile] .workspace-header { padding: 4px 10px; }
-[data-terminal-mobile] .workspace-header h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-[data-terminal-mobile] .workspace-header button,
-[data-terminal-mobile] .workspace-pages button { min-height: 44px; }
+.mobile-workspace-nav {
+  flex: none;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+.mobile-workspace-nav button { min-height: 44px; font-size: 13px; }
 [data-terminal-mobile] .workspace-pages {
   flex-wrap: nowrap;
   overflow-x: auto;
@@ -56,10 +68,27 @@
 [data-terminal-mobile] [data-page-id] table { min-width: max-content; }
 [data-terminal-mobile] input:not([type="checkbox"], [type="radio"], [type="range"]),
 [data-terminal-mobile] select, [data-terminal-mobile] textarea { font-size: max(16px, 1em); }
-[data-terminal-mobile] [role="dialog"][aria-label="Page search"] { max-height: min(75dvh, 720px); }
-[data-terminal-mobile] [role="dialog"][aria-label="Page search"] button { min-height: 44px; }
-[data-terminal-mobile] [role="dialog"][aria-label="Page search"] input { min-height: 46px; }
-[data-terminal-mobile] [role="dialog"][aria-label="Page search"] button span:first-child { font-size: 14px; }
+.mobile-picker-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  justify-content: center;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  background: rgb(0 0 0 / .5);
+}
+.mobile-picker { max-height: 100%; border-radius: 12px; overflow: hidden; }
+.mobile-picker > div { padding: 0 14px; font-size: 16px; font-weight: 600; color: var(--color-text); }
+.mobile-picker > div button { color: var(--color-accent-hover); font-size: 14px; }
+.mobile-picker button { min-height: 44px; }
+.mobile-picker input { min-height: 46px; padding-inline: 14px; }
+.mobile-picker ul { overscroll-behavior: contain; }
+.mobile-picker li + li { border-top: 1px solid var(--color-border); }
+.mobile-picker li button { height: auto; padding: 8px 14px; }
+.mobile-picker li button[aria-current="page"] { box-shadow: inset 3px 0 var(--color-accent); color: var(--color-text); }
+.mobile-picker li button span:first-child { font-size: 14px; }
+.mobile-picker li button span:not(:first-child) { flex-shrink: 0; }
 [data-terminal-mobile] [data-page-id] [role="tablist"] { overflow-x: auto; }
 [data-terminal-mobile] [data-page-id] [role="tablist"] > button { flex-shrink: 0; }
 
@@ -132,7 +161,6 @@
 }
 
 @media (max-width: 600px) {
-  [data-terminal-mobile] .workspace-heading > span { display: none; }
   [data-terminal-mobile] .settings-toolbar { flex-direction: column; align-items: stretch; gap: 6px; padding: 6px; }
   [data-terminal-mobile] .settings-toolbar-actions, [data-terminal-mobile] .settings-search { width: 100%; min-width: 0; }
   [data-terminal-mobile] .settings-tabs button { min-height: 44px; }

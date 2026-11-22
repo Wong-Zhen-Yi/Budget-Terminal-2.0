@@ -1,4 +1,5 @@
 #!/bin/sh
+# The shared build includes the compact iPhone navigation and touch-friendly page picker.
 # The shared build includes the direct Tailscale link under Settings > Labs.
 # Double-click Launch Budget Terminal Demo.command for temporary sample data.
 # The shared launcher can install a private Node.js runtime if needed.

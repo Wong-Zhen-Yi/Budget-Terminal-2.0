@@ -1,4 +1,5 @@
 #!/bin/sh
+# The shared build includes the compact iPhone navigation and touch-friendly page picker.
 # The shared build includes the direct Tailscale link under Settings > Labs.
 # Pass --demo to this launcher to open temporary sample data.
 # The shared build includes the streamlined Charts workspaces and updated chart rendering.

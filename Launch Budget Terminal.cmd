@@ -1,4 +1,5 @@
 @echo off
+rem The shared build includes the compact iPhone navigation and touch-friendly page picker.
 rem The shared build includes the direct Tailscale link under Settings > Labs.
 rem On Windows, double-click Launch Budget Terminal Demo.cmd for temporary sample data.
 rem The shared build includes the streamlined Charts workspaces and updated chart rendering.

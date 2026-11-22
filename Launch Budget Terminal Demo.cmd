@@ -1,4 +1,5 @@
 @echo off
+rem The shared build includes the compact iPhone navigation and touch-friendly page picker.
 rem The shared build includes the direct Tailscale link. Demo data cannot be shared over Tailscale.
 rem On macOS, use Launch Budget Terminal Demo.command.
 title Budget Terminal Demo

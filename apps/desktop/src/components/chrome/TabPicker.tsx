@@ -25,37 +25,64 @@ function rank(label: string, query: string): number | null {
 export function TabPicker({
   tabs,
   recent = [],
+  favorites = [],
+  currentPage,
+  mobile = false,
   onSelect,
   onClose,
 }: {
   /** The visible tabs, in navigation order. */
   tabs: PickerTab[]
   recent?: string[]
+  favorites?: string[]
+  currentPage?: string
+  mobile?: boolean
   onSelect: (id: string) => void
   onClose: () => void
 }) {
   const [query, setQuery] = useState('')
   const [highlighted, setHighlighted] = useState(0)
   const input = useRef<HTMLInputElement>(null)
+  const close = useRef<HTMLButtonElement>(null)
+  const overlay = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const viewport = window.visualViewport
+    const element = overlay.current
+    if (!mobile || !viewport || !element) return
+    const fit = () => {
+      element.style.height = `${viewport.height}px`
+      element.style.top = `${viewport.offsetTop}px`
+    }
+    fit()
+    viewport.addEventListener('resize', fit)
+    viewport.addEventListener('scroll', fit)
+    return () => {
+      viewport.removeEventListener('resize', fit)
+      viewport.removeEventListener('scroll', fit)
+    }
+  }, [mobile])
 
   useEffect(() => {
     const previous = document.activeElement
-    input.current?.focus()
-    return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus() }
-  }, [])
+    const initial = mobile ? close : input
+    initial.current?.focus({ preventScroll: true })
+    return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus({ preventScroll: true }) }
+  }, [mobile])
 
   const matches = useMemo(() => {
     const needle = query.trim().toLowerCase()
+    const priority = [...new Set([...favorites, ...recent])]
     return tabs
       .map((tab, order) => ({ tab, order, score: rank(tab.label, needle) ?? (workspaceFor(tab.id)?.label.toLowerCase().includes(needle) ? 3 : null) }))
       .filter((entry): entry is { tab: PickerTab; order: number; score: number } =>
         entry.score !== null,
       )
       .sort((a, b) => a.score - b.score || (!needle
-        ? (recent.includes(a.tab.id) ? recent.indexOf(a.tab.id) : Infinity) -
-          (recent.includes(b.tab.id) ? recent.indexOf(b.tab.id) : Infinity) : 0) || a.order - b.order)
+        ? (priority.includes(a.tab.id) ? priority.indexOf(a.tab.id) : Infinity) -
+          (priority.includes(b.tab.id) ? priority.indexOf(b.tab.id) : Infinity) : 0) || a.order - b.order)
       .map((entry) => entry.tab)
-  }, [tabs, query, recent])
+  }, [tabs, query, recent, favorites])
 
   useEffect(() => {
     input.current?.closest('[role=dialog]')?.querySelector(`[data-result-index="${highlighted}"]`)?.scrollIntoView({ block: 'nearest' })
@@ -66,9 +93,10 @@ export function TabPicker({
 
   return (
     <div
+      ref={overlay}
       role="presentation"
       onClick={onClose}
-      className="fixed inset-0 z-40 flex justify-center bg-black/50 px-4 pt-16"
+      className={mobile ? 'mobile-picker-overlay' : 'fixed inset-0 z-40 flex justify-center bg-black/50 px-4 pt-16'}
     >
       <div
         role="dialog"
@@ -90,17 +118,19 @@ export function TabPicker({
           }
         }}
         onClick={(event) => event.stopPropagation()}
-        className="flex h-fit max-h-[70vh] w-full max-w-lg flex-col rounded border border-border-strong bg-surface shadow-2xl"
+        className={`flex h-fit max-h-[70vh] w-full max-w-lg flex-col rounded border border-border-strong bg-surface shadow-2xl ${mobile ? 'mobile-picker' : ''}`}
       >
         <div className="flex items-center justify-between border-b border-border px-3 py-2 text-2xs text-text-muted">
-          <span>Find a page · {query ? `${tabs.length} available` : 'recent pages first'}</span>
-          <button type="button" onClick={onClose} className="px-2 py-1 hover:text-text">Close (Esc)</button>
+          <span>{mobile ? 'Find a page' : <>Find a page · {query ? `${tabs.length} available` : 'recent pages first'}</>}</span>
+          <button ref={close} type="button" onClick={onClose} className="px-2 py-1 hover:text-text">{mobile ? 'Done' : 'Close (Esc)'}</button>
         </div>
         <input
           ref={input}
           value={query}
           placeholder="Search pages"
           aria-label="Search pages"
+          type={mobile ? 'search' : 'text'}
+          autoComplete={mobile ? 'off' : undefined}
           onChange={(event) => {
             setQuery(event.target.value)
             setHighlighted(0)
@@ -133,14 +163,16 @@ export function TabPicker({
                 type="button"
                 data-result-index={index}
                 disabled={!tab.implemented}
+                aria-current={tab.id === currentPage ? 'page' : undefined}
                 onMouseEnter={() => setHighlighted(index)}
                 onClick={() => onSelect(tab.id)}
                 className={`flex h-8 w-full items-center gap-2 px-2 text-left text-2xs ${
-                  index === active ? 'bg-accent-dim text-text' : 'text-text-muted hover:bg-surface-hover'
+                  (!mobile || query) && index === active ? 'bg-accent-dim text-text' : 'text-text-muted hover:bg-surface-hover'
                 }`}
               >
                 <span className="truncate">{tab.label}</span>
-                {!query && recent.includes(tab.id) ? <span className="text-text-dim">Recent</span> : null}
+                {!query && (favorites.includes(tab.id) || recent.includes(tab.id))
+                  ? <span className="text-text-dim">{favorites.includes(tab.id) ? 'Favorite' : 'Recent'}</span> : null}
                 <span className="ml-auto text-text-dim">{workspaceFor(tab.id)?.label ?? 'Preferences'}</span>
                 {!tab.implemented ? (
                   <span className="ml-auto shrink-0 text-text-dim">unavailable</span>

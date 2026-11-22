@@ -9,7 +9,7 @@ import { Sp500Page } from '@/pages/Sp500Page'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { FOCUS_DASHBOARD_TAB_ID, SETTINGS_TAB_ID, TABS, VALUE_MASKED_TABS } from '@shared/contract'
-import { adjacentPage, isLabPageEnabled, pagesInVisualOrder, resolveMainPage } from '@shared/navigation'
+import { adjacentPage, isLabPageEnabled, pagesInVisualOrder, resolveMainPage, workspaceFor } from '@shared/navigation'
 import { useWarmPages } from '@/api/prefetch'
 import { useEquityMarketStream } from '@/api/equityStream'
 import { useMcpScreenshot, useScreenshotReady } from '@/api/mcpScreenshot'
@@ -404,7 +404,9 @@ export function App() {
     <div className={`terminal-shell flex h-full flex-col bg-bg ${isMac ? 'platform-mac' : ''}`}>
       {mobile ? <MobileHeader label={TAB_BY_ID.get(activeTab)?.label ?? 'Budget Terminal'}
         onOpenPicker={() => setPickerOpen(true)} onReload={() => void reload()} reloading={reloading}
-        onToggleObscure={toggleObscure} obscured={obscured} /> : <TabBar
+        onToggleObscure={toggleObscure} obscured={obscured}
+        favorite={favorites.includes(activeTab)} savingFavorite={savingFavorite || !settings}
+        onToggleFavorite={!settingsQuery.isPending && workspaceFor(activeTab) ? () => void toggleFavorite() : undefined} /> : <TabBar
         onOpenPicker={() => setPickerOpen(true)}
         onReload={() => void reload()}
         reloading={reloading}
@@ -427,7 +429,7 @@ export function App() {
         />}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {!settingsQuery.isPending && (activeTab !== 'agents' || mobile) && <WorkspaceHeader tabs={visibleTabs} activeTab={activeTab} onSelectTab={setActiveTab}
-            isMac={isMac}
+            isMac={isMac} mobile={mobile}
             favorite={favorites.includes(activeTab)} onToggleFavorite={() => void toggleFavorite()}
             saving={savingFavorite || !settings} />}
           <div className="relative flex min-h-0 flex-1 flex-col">
@@ -477,7 +479,10 @@ export function App() {
       {pickerOpen && !screenshotPage ? (
         <TabPicker
           tabs={visibleTabs.map((tab) => ({ ...tab }))}
-          recent={mobile ? [...new Set([...favorites, ...recent])] : recent}
+          recent={recent}
+          mobile={mobile}
+          favorites={mobile ? favorites : undefined}
+          currentPage={mobile ? activeTab : undefined}
           onSelect={(id) => {
             setPickerOpen(false)
             if (TAB_BY_ID.get(id)?.implemented) setActiveTab(id)

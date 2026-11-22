@@ -4,19 +4,31 @@ import { browserInputRequest, browserSearchUrl } from '@shared/browserSearch'
 import { isSafeExternalUrl } from '../../electron/services/urls'
 import { mobileTelegramProfile } from './client'
 
-export function MobileHeader({ label, onOpenPicker, onReload, reloading, onToggleObscure, obscured }: {
+export function MobileHeader({ label, onOpenPicker, onReload, reloading, onToggleObscure, obscured, favorite, onToggleFavorite, savingFavorite }: {
   label: string
   onOpenPicker: () => void
   onReload: () => void
   reloading: boolean
   onToggleObscure: () => void
   obscured: boolean
+  favorite: boolean
+  onToggleFavorite?: () => void
+  savingFavorite: boolean
 }) {
   return <header className="mobile-topbar">
-    <button type="button" className="mobile-page-button" onClick={onOpenPicker} aria-label="Find a page">
-      <span aria-hidden="true">☰</span><span>{label}</span>
-    </button>
+    <h1>
+      <button type="button" className="mobile-page-button" onClick={event => {
+        event.currentTarget.focus({ preventScroll: true })
+        onOpenPicker()
+      }} aria-label={`Find a page, current page ${label}`} aria-haspopup="dialog">
+        <span>{label}</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+    </h1>
     <div className="mobile-topbar-actions">
+      {onToggleFavorite && <button type="button" onClick={onToggleFavorite} disabled={savingFavorite} aria-pressed={favorite} aria-label={favorite ? 'Remove page from favorites' : 'Add page to favorites'}>
+        <svg viewBox="0 0 24 24" fill={favorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2-5.5-2.9-5.5 2.9 1-6.2L3 9.6l6.2-.9Z"/></svg>
+      </button>}
       <button type="button" onClick={onToggleObscure} aria-pressed={obscured} aria-label={obscured ? 'Reveal obscured pages' : 'Obscure selected pages'}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/>{obscured && <path d="M4 20 20 4"/>}</svg>
       </button>
