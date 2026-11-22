@@ -1,0 +1,77 @@
+.dashboard-price-chart {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  background: var(--color-surface);
+}
+
+.dashboard-price-chart-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  padding: 7px 10px 5px;
+}
+
+.dashboard-price-chart-instrument,
+.dashboard-price-chart-quote {
+  display: flex;
+  align-items: baseline;
+  gap: 4px 9px;
+}
+
+.dashboard-price-chart-instrument h2 { font-size: 19px; font-weight: 650; }
+.dashboard-price-chart-instrument span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--color-text-muted); }
+.dashboard-price-chart-quote { flex-wrap: wrap; min-height: 27px; }
+.dashboard-price-chart-quote strong { font-size: 22px; letter-spacing: -.03em; }
+.dashboard-price-chart-instrument span, .dashboard-price-chart-quote span { font-size: 12px; }
+.dashboard-price-chart-ticker { display: flex; gap: 4px; align-items: center; }
+.dashboard-price-chart-ticker input {
+  width: 74px;
+  height: 25px;
+  padding: 0 6px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  background: var(--color-bg);
+  font: 12px var(--font-mono);
+  text-transform: uppercase;
+}
+
+.dashboard-price-chart :is(button, input):focus-visible { outline: 2px solid var(--color-accent-hover); outline-offset: -2px; }
+.dashboard-price-chart button.h-8 { height: 25px; border-radius: 4px; font-size: 12px; line-height: 1; }
+.dashboard-price-chart-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border-block: 1px solid var(--color-border);
+}
+.dashboard-price-chart-controls, .dashboard-price-chart-actions { display: flex; flex-wrap: wrap; gap: 3px; min-width: 0; }
+.dashboard-price-chart-actions { margin-left: auto; }
+.dashboard-price-chart-controls button[aria-pressed=false] { border-color: transparent; background: transparent; }
+.dashboard-price-chart-controls button[aria-pressed=false]:hover { background: var(--color-surface-hover); }
+.dashboard-price-chart-readouts {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 0 10px;
+  min-height: 24px;
+  padding: 3px 10px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+.dashboard-price-chart-readouts span { white-space: nowrap; }
+.dashboard-price-chart-readouts b { color: var(--color-text); font-weight: 500; }
+
+@container dashboard-lite (max-width: 790px) {
+  .dashboard-price-chart-controls { gap: 2px; }
+  .dashboard-price-chart-controls button { padding-inline: 4px; }
+}

@@ -2,7 +2,7 @@ import { checkRecordRevision } from './mcpContext.js'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
-import { DEFAULT_FAVORITE_TABS, isMainPageAvailable } from '../shared/navigation.js'
+import { DEFAULT_FAVORITE_TABS, isLabPageEnabled, isMainPageAvailable } from '../shared/navigation.js'
 
 import type { AppSettings, AppSettingsMutation } from '../shared/contract.js'
 import {
@@ -13,6 +13,7 @@ import {
   CLOCK_COUNTRIES,
   DEFAULT_CLOCK_COUNTRY,
   DEFAULT_OBSCURED_TABS,
+  LAB_FEATURES,
   SETTINGS_TAB_ID,
   TABS,
 } from '../shared/contract.js'
@@ -46,6 +47,7 @@ export const settingsSchema = z.object({
   mainPage: z.string().optional().catch(undefined),
   tabOrder: z.array(z.string()).catch([]),
   hiddenTabs: z.array(z.string()).catch([]),
+  enabledLabs: z.array(z.string()).catch([]),
   mainPageId: z.string().optional().catch(undefined),
   favoriteTabs: z.array(z.string()).catch([...DEFAULT_FAVORITE_TABS]),
   sidebarCollapsed: z.boolean().catch(false),
@@ -77,6 +79,7 @@ function emptySettings(): StoredSettings {
     time12h: true,
     tabOrder: [...KNOWN_TABS],
     hiddenTabs: [],
+    enabledLabs: [],
     favoriteTabs: [...DEFAULT_FAVORITE_TABS],
     sidebarCollapsed: false,
     // A fresh install obscures Personal Finance, like `DEFAULT_PRIVACY_SETTINGS`.
@@ -88,8 +91,16 @@ function emptySettings(): StoredSettings {
   }
 }
 
+function portableSettings(settings: StoredSettings) {
+  // Opting into an experiment applies to this desktop. Keep portable snapshots
+  // compatible with the shared backend and with versions that do not have Labs.
+  const { enabledLabs: _enabledLabs, ...portable } = settings
+  if (TABS.some(tab => tab.id === portable.mainPage && tab.lab)) delete portable.mainPage
+  return portable
+}
+
 export function defaultSyncSettings(): unknown {
-  return normalize(emptySettings())
+  return portableSettings(normalize(emptySettings()))
 }
 
 /**
@@ -120,9 +131,11 @@ function normalize(settings: StoredSettings): StoredSettings {
     ...new Set(ids.filter((id) => KNOWN_TABS.includes(id) && id !== SETTINGS_TAB_ID)),
   ]
   settings.hiddenTabs = keep(settings.hiddenTabs)
+  const enabledLabs = normalizeLabs(settings.enabledLabs)
+  settings.enabledLabs = enabledLabs
   settings.mainPage ??= settings.mainPageId
   delete settings.mainPageId
-  if (settings.mainPage !== undefined && !isMainPageAvailable(settings.mainPage, settings.hiddenTabs)) {
+  if (settings.mainPage !== undefined && !isMainPageAvailable(settings.mainPage, settings.hiddenTabs, enabledLabs)) {
     delete settings.mainPage
   }
   settings.favoriteTabs = keep(settings.favoriteTabs)
@@ -186,6 +199,7 @@ function toPayload(settings: StoredSettings): AppSettings {
     ...(settings.mainPage ? { mainPage: settings.mainPage } : {}),
     tabOrder: [...settings.tabOrder],
     hiddenTabs: [...settings.hiddenTabs],
+    enabledLabs: normalizeLabs(settings.enabledLabs),
     favoriteTabs: [...settings.favoriteTabs],
     sidebarCollapsed: settings.sidebarCollapsed,
     obscuredTabs: [...(settings.obscuredTabs ?? [])],
@@ -208,6 +222,10 @@ function toggle(ids: string[], id: string, on: boolean): string[] {
   return on ? [...without, id] : without
 }
 
+function normalizeLabs(ids: readonly string[]): AppSettings['enabledLabs'] {
+  return LAB_FEATURES.filter(feature => ids.includes(feature.id)).map(feature => feature.id)
+}
+
 function apply(settings: StoredSettings, mutation: AppSettingsMutation): void {
   switch (mutation.type) {
     case 'setClockCountry': {
@@ -224,7 +242,7 @@ function apply(settings: StoredSettings, mutation: AppSettingsMutation): void {
       if (mutation.id === null) {
         delete settings.mainPage
       } else {
-        if (!isMainPageAvailable(mutation.id, settings.hiddenTabs)) {
+        if (!isMainPageAvailable(mutation.id, settings.hiddenTabs, normalizeLabs(settings.enabledLabs))) {
           throw new Error('Choose a visible, available page for startup.')
         }
         settings.mainPage = mutation.id
@@ -237,13 +255,23 @@ function apply(settings: StoredSettings, mutation: AppSettingsMutation): void {
       settings.hiddenTabs = toggle(settings.hiddenTabs, mutation.id, mutation.hidden)
       return
     }
+    case 'setLabEnabled': {
+      if (!LAB_FEATURES.some(feature => feature.id === mutation.id)) throw new Error('Unknown Labs feature.')
+      if (typeof mutation.enabled !== 'boolean') throw new Error('Choose whether to enable this Labs feature.')
+      settings.enabledLabs = toggle(settings.enabledLabs, mutation.id, mutation.enabled)
+      return
+    }
     case 'moveTab': {
-      const from = settings.tabOrder.indexOf(mutation.id)
+      const enabledLabs = normalizeLabs(settings.enabledLabs)
+      const available = settings.tabOrder.filter(id => isLabPageEnabled(id, enabledLabs))
+      const from = available.indexOf(mutation.id)
       const to = from + mutation.direction
       if (from < 0) throw new Error(`Unknown page ${mutation.id}.`)
-      if (to < 0 || to >= settings.tabOrder.length) return
-      const [moved] = settings.tabOrder.splice(from, 1)
-      settings.tabOrder.splice(to, 0, moved)
+      if (to < 0 || to >= available.length) return
+      const source = settings.tabOrder.indexOf(available[from])
+      const destination = settings.tabOrder.indexOf(available[to])
+      const [moved] = settings.tabOrder.splice(source, 1)
+      settings.tabOrder.splice(destination, 0, moved)
       return
     }
     case 'setTabFavorite': {
@@ -316,14 +344,20 @@ export async function mutateSettings(mutation: AppSettingsMutation): Promise<App
 }
 
 /** Replace the whole document, used by the user-data import. */
-export async function replaceSettings(source: unknown): Promise<AppSettings> {
+export async function replaceSettings(source: unknown, { preserveLabs = false } = {}): Promise<AppSettings> {
   const parsed = settingsSchema.safeParse(source)
   if (!parsed.success) throw new Error('The backup does not contain valid settings.')
   let failure: unknown = null
   const run = writeChain.then(async () => {
     try {
-      cached = normalize({ ...parsed.data, lastBackupAt: (await loadSettings()).lastBackupAt })
-      await persist(cached)
+      const previous = await loadSettings()
+      const next = { ...parsed.data, lastBackupAt: previous.lastBackupAt }
+      if (preserveLabs) {
+        next.enabledLabs = previous.enabledLabs
+        if (TABS.some(tab => tab.id === previous.mainPage && tab.lab)) next.mainPage = previous.mainPage
+      }
+      await persist(normalize(next))
+      cached = next
     } catch (error) {
       failure = error
     }
@@ -340,12 +374,12 @@ export async function replaceSettings(source: unknown): Promise<AppSettings> {
  * Taken at the back of the write queue so a mutation still in flight when Export was
  * clicked is part of the backup rather than the edit the backup is missing.
  */
-export async function exportSettings(): Promise<StoredSettings> {
-  let snapshot: StoredSettings | undefined
+export async function exportSettings(): Promise<ReturnType<typeof portableSettings>> {
+  let snapshot: ReturnType<typeof portableSettings> | undefined
   let failure: unknown = null
   const run = writeChain.then(async () => {
     try {
-      snapshot = { ...(await loadSettings()) }
+      snapshot = portableSettings(await loadSettings())
     } catch (error) {
       failure = error
     }

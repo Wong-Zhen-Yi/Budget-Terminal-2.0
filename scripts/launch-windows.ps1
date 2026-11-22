@@ -161,7 +161,8 @@ Usage
   btd --help
 
 Commands
-  start         Check dependencies, rebuild the app and open it in the background.
+  start         Show startup checks and build output, then open the desktop app.
+                You can close the terminal once the app has been launched.
                 Running btd without a command also starts the app.
   restart       Close the app gracefully, wait for saves, rebuild and reopen it.
                 If the app is already closed, start it.
@@ -171,8 +172,8 @@ Commands
 Options
   -Dev          Run in development mode with live reloading. Keep the terminal open.
   -Logs         Open Settings diagnostics when the app opens.
-  -Attached     Keep startup output in the current terminal instead of launching
-                in the background. Keep the terminal open while the app runs.
+  -Attached     Keep the app and its runtime output attached to this terminal.
+                Keep the terminal open while the app runs.
   -Setup        Install dependencies, verify Electron, build the app and install
                 the btd command without opening the app.
   -RuntimeOnly  Locate or install a supported Node.js runtime and print its path.
@@ -183,18 +184,6 @@ Options
   try {
     if ($Command -eq 'restart' -and ($RuntimeOnly -or $Setup)) { throw 'Restart cannot be combined with setup or runtime-only options.' }
     if ($Command -eq 'update' -and ($RuntimeOnly -or $Setup -or $Dev -or $Logs)) { throw 'Update cannot be combined with launch options.' }
-    if (-not ($Attached -or $RuntimeOnly -or $Dev -or $Setup -or $Command -eq 'update')) {
-      $logDirectory = Join-Path $env:LOCALAPPDATA 'BudgetTerminal\launcher-logs'
-      New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
-      $session = [Guid]::NewGuid().ToString('N')
-      $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + (Join-Path $PSScriptRoot 'launch-windows.ps1') + '"'), '-Attached')
-      if ($Command -eq 'restart') { $arguments += '-Command'; $arguments += 'restart' }
-      if ($Logs) { $arguments += '-Logs' }
-      Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList $arguments -WindowStyle Hidden -WorkingDirectory (Split-Path -Parent $PSScriptRoot) -RedirectStandardOutput (Join-Path $logDirectory "$session.log") -RedirectStandardError (Join-Path $logDirectory "$session.error.log") | Out-Null
-      $action = if ($Command -eq 'restart') { 'restarting' } else { 'starting' }
-      Write-Host "Budget Terminal is $action independently. You can close this terminal. Startup logs: $logDirectory"
-      return
-    }
     if ($Setup -and ($RuntimeOnly -or $Dev -or $Logs)) {
       throw 'Setup cannot be combined with launch options.'
     }
@@ -212,6 +201,7 @@ Options
     if ($Setup) { $launchArguments += '--setup' }
     if ($Dev) { $launchArguments += '--dev' }
     if ($Logs) { $launchArguments += '--logs' }
+    if (-not ($Attached -or $Setup -or $Dev)) { $launchArguments += '--detach' }
     & $node (Join-Path $PSScriptRoot 'launch.cjs') @launchArguments
     if ($Setup -and $LASTEXITCODE -eq 0) {
       & (Join-Path $PSScriptRoot 'install-bt.ps1')

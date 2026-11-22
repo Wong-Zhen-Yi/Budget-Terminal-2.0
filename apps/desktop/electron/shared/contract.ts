@@ -548,10 +548,25 @@ export const DEFAULT_CLOCK_COUNTRY = 'US'
  * controls would leave no way back.
  */
 export const SETTINGS_TAB_ID = 'settings'
+export const FOCUS_DASHBOARD_TAB_ID = 'focus-dashboard'
 
 /** `DEFAULT_PRIVACY_SETTINGS` is `{'obscured_pages': [2]}`, and page 2 is Personal Finance. */
 export const DEFAULT_OBSCURED_TABS: ReadonlyArray<string> = ['personal-finance']
 export const VALUE_MASKED_TABS: ReadonlyArray<string> = ['portfolio', 'personal-finance']
+
+export const LAB_FEATURES = [
+  {
+    id: 'dashboard-lite',
+    label: 'Dashboard Lite',
+    description: 'A compact widescreen view of market charts, options volume, holdings, price targets and news.',
+  },
+  {
+    id: 'news-lite',
+    label: 'News Lite',
+    description: 'A searchable headline feed with portfolio filters, a story reader and a saved reading queue.',
+  },
+] as const
+export type LabFeatureId = (typeof LAB_FEATURES)[number]['id']
 
 /**
  * Everything the Settings page owns. Kept in its own file rather than the holdings
@@ -577,6 +592,8 @@ export interface AppSettings {
   tabOrder: string[]
   /** Tab ids kept out of the strip. Never contains `SETTINGS_TAB_ID`. */
   hiddenTabs: string[]
+  /** Experimental features enabled in Settings → Labs. */
+  enabledLabs: LabFeatureId[]
   /** Pinned page shortcuts, in pin order. Hidden pages retain their pin. */
   favoriteTabs: string[]
   sidebarCollapsed: boolean
@@ -599,6 +616,7 @@ export type AppSettingsMutation =
   | { type: 'setClockCountry'; code: string }
   | { type: 'setTime12h'; value: boolean }
   | { type: 'setTabHidden'; id: string; hidden: boolean }
+  | { type: 'setLabEnabled'; id: LabFeatureId; enabled: boolean }
   | { type: 'setMainPage'; id: string | null }
   | { type: 'setTabFavorite'; id: string; favorite: boolean }
   | { type: 'setSidebarCollapsed'; value: boolean }
@@ -1342,17 +1360,19 @@ export const OPTION_BUCKETS: ReadonlyArray<{ key: OptionBucketKey; label: string
  * `_PAGE_LABELS`. Only Dashboard is implemented; the rest are placeholders for the
  * page-by-page migration.
  */
-export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boolean }> = [
+export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boolean; lab?: LabFeatureId }> = [
   { id: 'articles', label: 'Articles', implemented: true },
   { id: 'agents', label: 'Agents', implemented: true },
   { id: 'notifications', label: 'Notifications', implemented: true },
   { id: 'browser', label: 'Browser', implemented: true },
   { id: 'dashboard', label: 'Dashboard', implemented: true },
   { id: 'dashboard-2', label: 'Dashboard 2.0', implemented: true },
+  { id: 'dashboard-lite', label: 'Dashboard Lite', implemented: true, lab: 'dashboard-lite' },
   { id: 'portfolio', label: 'Portfolio', implemented: true },
   { id: 'personal-finance', label: 'Personal Finance', implemented: true },
   { id: 'global', label: 'Global', implemented: true },
   { id: 'news', label: 'News', implemented: true },
+  { id: 'news-lite', label: 'News Lite', implemented: true, lab: 'news-lite' },
   { id: 'calendar', label: 'Calendar', implemented: true },
   { id: 'pre-market', label: 'Pre-Market', implemented: true },
   { id: 'trading-volumes', label: 'Trading Volumes', implemented: true },
@@ -1375,6 +1395,7 @@ export const TABS: ReadonlyArray<{ id: string; label: string; implemented: boole
   { id: 'sp500', label: 'S&P500', implemented: true },
   { id: 'forex', label: 'Forex', implemented: true },
   { id: 'crypto', label: 'Crypto', implemented: true },
+  { id: FOCUS_DASHBOARD_TAB_ID, label: 'Focus Dashboard', implemented: true },
   { id: 'bitcoin', label: 'Bitcoin', implemented: true },
   { id: 'eth', label: 'Ethereum', implemented: true },
   { id: 'bmnr', label: 'BMNR', implemented: true },

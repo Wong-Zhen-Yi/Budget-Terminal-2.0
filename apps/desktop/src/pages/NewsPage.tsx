@@ -54,6 +54,8 @@ export function NewsPage({
   }, [portfolioQuery.data])
 
   const query = useNewsPage(holdings)
+  const hasHoldings = holdings.length > 0
+  const fetching = hasHoldings && query.isFetching
 
   const filter = useNewsPageStore((state) => state.filter)
   const sort = useNewsPageStore((state) => state.sort)
@@ -87,7 +89,7 @@ export function NewsPage({
   const columns = useCardColumns(gridRef)
 
   const searchQuery = useNewsTickerSearch(searchTickers)
-  const payload = query.data?.data
+  const payload = hasHoldings ? query.data?.data : undefined
 
   /**
    * One clock for every age badge on the page. The reference never updates its ages at all;
@@ -163,16 +165,17 @@ export function NewsPage({
   /* ---------------------------------------------------------------- status */
 
   useEffect(() => {
-    const loading = query.isFetching
+    const envelope = hasHoldings ? query.data : undefined
+    const error = hasHoldings ? query.error : undefined
     onStatusChange(
       [
-        { label: 'Portfolio News', envelope: query.data, error: query.error, enabled: query.isEnabled, loading },
-        { label: 'Market & Macro', envelope: query.data, error: query.error, enabled: query.isEnabled, loading },
-        { label: 'News Feeds', envelope: query.data, error: query.error, enabled: query.isEnabled, loading },
+        { label: 'Portfolio News', envelope, error, enabled: hasHoldings, loading: fetching },
+        { label: 'Market & Macro', envelope, error, enabled: hasHoldings, loading: fetching },
+        { label: 'News Feeds', envelope, error, enabled: hasHoldings, loading: fetching },
       ],
       '',
     )
-  }, [onStatusChange, query.data, query.isFetching])
+  }, [onStatusChange, hasHoldings, fetching, query.data, query.error])
 
   const counts = useMemo(() => {
     const portfolio = articles.filter((article) => article.category === 'portfolio').length
@@ -181,7 +184,7 @@ export function NewsPage({
 
   const status = useMemo<{ text: string; tone: Tone }>(() => {
     if (notice) return notice
-    if (query.isFetching) {
+    if (fetching) {
       return { text: payload ? 'Refreshing news...' : 'Loading news...', tone: 'muted' }
     }
     if (!holdings.length) return { text: 'Add a holding to load portfolio news.', tone: 'warning' }
@@ -197,7 +200,7 @@ export function NewsPage({
     return { text: base, tone: 'positive' }
   }, [
     notice,
-    query.isFetching,
+    fetching,
     query.data,
     payload,
     holdings,
@@ -310,8 +313,8 @@ export function NewsPage({
 
   /* ----------------------------------------------------------------- render */
 
-  const busy = refreshing || query.isFetching
-  const loading = query.isLoading
+  const busy = refreshing || fetching
+  const loading = hasHoldings && query.isLoading
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">

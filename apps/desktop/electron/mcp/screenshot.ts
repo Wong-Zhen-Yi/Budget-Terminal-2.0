@@ -3,7 +3,9 @@ import { ipcMain, type BrowserWindow } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { CHANNELS, TABS, type Envelope, type EnvelopeError } from '../shared/contract.js'
 import { describeError, failed, partial } from '../shared/envelope.js'
+import { isLabPageEnabled } from '../shared/navigation.js'
 import { authorizeBrowserScreenshot, compositeBrowserScreenshot } from '../services/browser.js'
+import { readSettings } from '../services/settingsStore.js'
 import type { PageScreenshot, ScreenshotCommand, ScreenshotPayload, ScreenshotReady, ScreenshotRequest } from '../shared/screenshot.js'
 
 const SOURCE = 'Electron page capture'
@@ -36,7 +38,12 @@ export function createScreenshotService(getWindow: () => BrowserWindow | undefin
       return failed({ screenshots: [] }, 'Open a Budget Terminal window to take screenshots.', SOURCE)
     }
     const page = request.page ?? 'current'
-    const tabs = TABS.filter((tab) => tab.implemented)
+    const requestedTab = TABS.find(tab => tab.id === page)
+    const enabledLabs = page === 'all' || requestedTab?.lab ? (await readSettings()).enabledLabs : []
+    if (requestedTab?.lab && !isLabPageEnabled(page, enabledLabs)) {
+      return failed({ screenshots: [] }, `Enable ${requestedTab.label} in Settings → Labs to capture it.`, SOURCE)
+    }
+    const tabs = TABS.filter(tab => tab.implemented && isLabPageEnabled(tab.id, enabledLabs))
     if (!['all', 'current'].includes(page) && !tabs.some((tab) => tab.id === page)) {
       return failed({ screenshots: [] }, `Unknown page "${page}". Available pages: ${tabs.map((tab) => tab.id).join(', ')}.`, SOURCE)
     }

@@ -8,8 +8,8 @@ import { useAgents, useAgentCommand } from '@/api/agentsQueries'
 import { Sp500Page } from '@/pages/Sp500Page'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { SETTINGS_TAB_ID, TABS, VALUE_MASKED_TABS } from '@shared/contract'
-import { adjacentPage, pagesInVisualOrder, resolveMainPage } from '@shared/navigation'
+import { FOCUS_DASHBOARD_TAB_ID, SETTINGS_TAB_ID, TABS, VALUE_MASKED_TABS } from '@shared/contract'
+import { adjacentPage, isLabPageEnabled, pagesInVisualOrder, resolveMainPage } from '@shared/navigation'
 import { useWarmPages } from '@/api/prefetch'
 import { useEquityMarketStream } from '@/api/equityStream'
 import { useMcpScreenshot, useScreenshotReady } from '@/api/mcpScreenshot'
@@ -26,6 +26,7 @@ import { WorkspaceHeader, WorkspaceSidebar } from '@/components/chrome/Workspace
 import { isTextEntry } from '@/lib/shortcuts'
 import { useControllerNavigation } from '@/input/useControllerNavigation'
 import { DashboardPage } from '@/pages/DashboardPage'
+import { FocusDashboardPage } from '@/pages/FocusDashboardPage'
 import { BacktestPage } from '@/pages/BacktestPage'
 import { CardsPage } from '@/pages/CardsPage'
 import { CalendarPage } from '@/pages/CalendarPage'
@@ -63,6 +64,7 @@ import { GlobalPage } from '@/pages/GlobalPage'
 import { PersonalFinancePage } from '@/pages/PersonalFinancePage'
 import { PortfolioPage } from '@/pages/PortfolioPage'
 import { NewsPage } from '@/pages/NewsPage'
+import { NewsLitePage } from '@/pages/NewsLitePage'
 import { OptionsPage } from '@/pages/OptionsPage'
 import { ProjectionsPage } from '@/pages/ProjectionsPage'
 import { PreMarketPage } from '@/pages/PreMarketPage'
@@ -101,12 +103,13 @@ export function App() {
   const isMac = window.api.platform === 'darwin'
   const settingsQuery = useSettings()
   const settings = settingsQuery.data?.data
+  const enabledLabs = settings?.enabledLabs
   const [tabOverride, setActiveTab] = useState<string>()
-  const initialPage = resolveMainPage(settings?.mainPage, settings?.tabOrder ?? DEFAULT_TAB_ORDER, settings?.hiddenTabs ?? [])
-  const selectedTab = tabOverride ?? initialPage
+  const initialPage = resolveMainPage(settings?.mainPage, settings?.tabOrder ?? DEFAULT_TAB_ORDER, settings?.hiddenTabs ?? [], enabledLabs)
+  const selectedTab = tabOverride && isLabPageEnabled(tabOverride, enabledLabs) ? tabOverride : initialPage
   useEffect(() => {
-    if (!settingsQuery.isPending) setActiveTab(current => current ?? initialPage)
-  }, [initialPage, settingsQuery.isPending])
+    if (!settingsQuery.isPending) setActiveTab(current => current && isLabPageEnabled(current, enabledLabs) ? current : initialPage)
+  }, [enabledLabs, initialPage, settingsQuery.isPending])
   useEffect(() => {
     let disposed = false
     const open = () => {
@@ -118,7 +121,7 @@ export function App() {
     return () => { disposed = true; unsubscribe() }
   }, [])
   const { command: screenshot, complete: completeScreenshot } = useMcpScreenshot()
-  const screenshotPage = screenshot?.page ?? null
+  const screenshotPage = screenshot?.page && isLabPageEnabled(screenshot.page, enabledLabs) ? screenshot.page : null
   const activeTab = screenshotPage ?? selectedTab
   useEquityMarketStream(activeTab)
   const auth = useCloudSyncStatus()
@@ -187,7 +190,7 @@ export function App() {
     const hidden = new Set(settings?.hiddenTabs ?? [])
     return order.flatMap((id) => {
       const tab = TAB_BY_ID.get(id)
-      return tab && (!hidden.has(id) || screenshotPage === id) ? [tab] : []
+      return tab && isLabPageEnabled(id, settings?.enabledLabs) && (!hidden.has(id) || screenshotPage === id) ? [tab] : []
     })
   }, [settings, screenshotPage])
 
@@ -383,6 +386,7 @@ export function App() {
   const visibleIds = useMemo(() => visibleTabs.map((tab) => tab.id), [visibleTabs])
   const renderCachedPage = useCallback((tabId: string) => renderPage({
     tabId,
+    visibleTabs,
     active: tabId === activeTab && !hideCurrent && !pickerOpen,
     onStatusChange: statusFor(tabId),
     onNavigate: handleStocksNavigate,
@@ -390,8 +394,8 @@ export function App() {
     agentFavorite: favorites.includes('agents'),
     savingFavorite: savingFavorite || !settings,
     onToggleFavorite: toggleFavorite,
-    maskNumbers: obscured && (settings?.obscuredTabs ?? []).includes(tabId),
-  }), [statusFor, handleStocksNavigate, activeTab, hideCurrent, pickerOpen, favorites, savingFavorite, settings, toggleFavorite, obscured])
+    obscuredPages: obscured ? settings?.obscuredTabs : undefined,
+  }), [statusFor, handleStocksNavigate, activeTab, hideCurrent, pickerOpen, favorites, savingFavorite, settings, toggleFavorite, obscured, visibleTabs])
 
   return (
     <div className={`terminal-shell flex h-full flex-col bg-bg ${isMac ? 'platform-mac' : ''}`}>
@@ -499,6 +503,7 @@ function PlaceholderPage({ tabId }: { tabId: string }) {
  */
 function renderPage({
   tabId,
+  visibleTabs,
   active,
   onStatusChange,
   onNavigate,
@@ -506,9 +511,10 @@ function renderPage({
   agentFavorite,
   savingFavorite,
   onToggleFavorite,
-  maskNumbers,
+  obscuredPages,
 }: {
   tabId: string
+  visibleTabs: typeof TABS
   active: boolean
   onStatusChange: (panels: PanelStatus[], sourcePath: string) => void
   onNavigate: (tabId: string, symbol?: string) => void
@@ -516,8 +522,9 @@ function renderPage({
   agentFavorite: boolean
   savingFavorite: boolean
   onToggleFavorite: () => void
-  maskNumbers: boolean
+  obscuredPages?: readonly string[]
 }) {
+  const maskNumbers = obscuredPages?.includes(tabId) ?? false
   return (
     tabId === 'agents' ? (
       <AgentsPage onStatusChange={onStatusChange} favorite={agentFavorite} savingFavorite={savingFavorite} onToggleFavorite={onToggleFavorite} />
@@ -527,8 +534,10 @@ function renderPage({
       <BrowserPage active={active} onStatusChange={onStatusChange} />
     ) : tabId === 'articles' ? (
       <ArticlesPage onStatusChange={onStatusChange} />
-    ) : tabId === 'dashboard' || tabId === 'dashboard-2' ? (
-      <DashboardPage onStatusChange={onStatusChange} newsFocused={tabId === 'dashboard-2'} />
+    ) : tabId === 'dashboard' || tabId === 'dashboard-2' || tabId === 'dashboard-lite' ? (
+      <DashboardPage onStatusChange={onStatusChange} newsFocused={tabId === 'dashboard-2'} lite={tabId === 'dashboard-lite'} />
+    ) : tabId === FOCUS_DASHBOARD_TAB_ID ? (
+      <FocusDashboardPage tabs={visibleTabs} onSelectTab={onSelectTab} obscuredPages={obscuredPages} />
     ) : tabId === 'global' ? (
       <GlobalPage onStatusChange={onStatusChange} />
     ) : tabId === 'portfolio' ? (
@@ -555,6 +564,8 @@ function renderPage({
       <PricePage onStatusChange={onStatusChange} />
     ) : tabId === 'news' ? (
       <NewsPage onStatusChange={onStatusChange} />
+    ) : tabId === 'news-lite' ? (
+      <NewsLitePage onStatusChange={onStatusChange} />
     ) : tabId === 'calendar' ? (
       <CalendarPage onStatusChange={onStatusChange} />
     ) : tabId === 'heatmap' ? (

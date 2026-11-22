@@ -7,6 +7,7 @@ import type { ArticlesPayload } from '@shared/articles'
 import type { CacheStatus } from '@shared/cachePolicy'
 import { MIB } from '@shared/cachePolicy'
 import { TABS } from '@shared/contract'
+import { isLabPageEnabled } from '@shared/navigation'
 import { api, queryKeys } from '@/api/client'
 import { rendererQueryPersister } from '@/api/queryPersistence'
 import { sortRecords, useDataHealth } from '@/stores/dataHealth'
@@ -145,7 +146,7 @@ export function AppDashboard({ settings }: { settings: AppSettings }) {
   const agents = cached<AgentsState>(queryKeys.agents)
   // Settings remains private even when another page has been temporarily revealed.
   const protectedPage = (id: string) => settings.obscuredTabs.includes(id)
-  const privatePortfolio = protectedPage('portfolio') || protectedPage('dashboard') || protectedPage('dashboard-2')
+  const privatePortfolio = ['portfolio', 'dashboard', 'dashboard-2', 'dashboard-lite'].some(protectedPage)
   const privateFinance = protectedPage('personal-finance')
   const privateAgents = protectedPage('agents')
   const portfolios = portfolio?.portfolios.filter(item => !item.readOnly) ?? []
@@ -211,7 +212,7 @@ export function AppDashboard({ settings }: { settings: AppSettings }) {
     { title: 'Workspace & research', cards: [
       <Card title="Saved items" note="Protected pages excluded" key="saved"><Bars unit="records" rows={saved} /></Card>,
       <Card title="Research snapshots" note="Prepared queries, not instrument counts" key="coverage"><Bars unit="cached queries" rows={queryGroups.map(group => ({ label: group.label, value: client.getQueryCache().getAll().filter(query => group.roots.includes(String(query.queryKey[0])) && query.state.data !== undefined).length }))} /></Card>,
-      <Card title="Page configuration" key="configuration">{configuration('Visible', TABS.length - settings.hiddenTabs.length, 'Hidden')}{configuration('Protected', settings.obscuredTabs.length, 'Unprotected')}</Card>,
+      <Card title="Page configuration" key="configuration">{configuration('Visible', TABS.filter(tab => !settings.hiddenTabs.includes(tab.id) && isLabPageEnabled(tab.id, settings.enabledLabs)).length, 'Hidden')}{configuration('Protected', settings.obscuredTabs.length, 'Unprotected')}</Card>,
     ] },
     { title: 'Finances & protection', cards: [
       <Card title="Portfolio composition" note="Holdings per saved portfolio · counts" key="portfolio">{privatePortfolio ? privateMessage : portfolio ? <Donut unit="holdings" rows={portfolios.map((item, index) => ({ label: `Portfolio ${index + 1}`, value: Object.keys(item.holdings).length }))} /> : <Empty />}</Card>,

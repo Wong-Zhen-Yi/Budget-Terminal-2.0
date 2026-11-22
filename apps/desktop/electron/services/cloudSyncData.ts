@@ -91,7 +91,7 @@ function snapshot(payload: string) {
 async function replace(payload: string): Promise<void> {
   const value = snapshot(payload) // Validate every store before replacing any of them.
   await importUserData(value.userData)
-  await replaceSettings(value.settings)
+  await replaceSettings(value.settings, { preserveLabs: true })
   await replaceCards(value.cards)
   await replaceArticles(value.articles)
 }

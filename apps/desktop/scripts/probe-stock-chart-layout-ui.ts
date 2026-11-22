@@ -183,7 +183,8 @@ try {
           const position = () => {
             const scale = window.lastChart.timeScale()
             const ratio = scale.logicalToCoordinate(79) / scale.width()
-            check(Math.abs(ratio - 0.65) < 0.02, 'Shared chart right spacing ' + componentName + ': ' + ratio + ', range ' + JSON.stringify(scale.getVisibleLogicalRange()))
+            const expected = componentName === 'PriceChart' ? 0.98 : 0.65
+            check(Math.abs(ratio - expected) < 0.02, 'Chart right spacing ' + componentName + ': ' + ratio + ', range ' + JSON.stringify(scale.getVisibleLogicalRange()))
           }
           for (const component of [<CandlestickChart candles={candles} />, <MiniChart payload={data} style="candles" active />, <PriceChart payload={data} indicators={{ volume: true, rsi: true, ma200: true }} />]) {
             componentName = component.type.name
@@ -200,7 +201,7 @@ try {
             position()
           }
           app.unmount()
-          return 'PASS: shared candle charts, Multi Charts and Dashboard spacing, resize and complete indicator pane removal'
+          return 'PASS: candle and Multi Charts spacing, Dashboard Lite spacing, resize and complete indicator pane removal'
         }
       `,
     },

@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>News workspace · Budget Terminal prototype</title>
+  <style>
+    html { color-scheme: dark; }
+    body { margin: 0; }
+
+    #news-prototype {
+      --bg: #080b12;
+      --surface: #0d1420;
+      --raised: #121b2b;
+      --hover: #172233;
+      --border: #1e2b3f;
+      --border-strong: #2c3e59;
+      --text: #d5dee9;
+      --muted: #7d8ea6;
+      --accent: #2f6fd0;
+      --accent-hover: #3b82e8;
+      --accent-dim: #1b3f7a;
+      --warn: #d6b25e;
+      --mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+      max-width: 1260px;
+      margin: 0 auto;
+      color: var(--text);
+      font: 14px/1.5 'Segoe UI', system-ui, sans-serif;
+    }
+
+    #news-prototype *, #news-prototype *::before, #news-prototype *::after { box-sizing: border-box; }
+    #news-prototype [hidden] { display: none !important; }
+    #news-prototype :is(h1, h2, h3, p) { margin: 0; }
+    #news-prototype :is(button, input, select, textarea) { font: inherit; color: inherit; }
+    #news-prototype button { cursor: pointer; }
+    #news-prototype button:disabled { cursor: default; opacity: .42; }
+    #news-prototype :focus-visible { outline: 2px solid var(--accent-hover); outline-offset: -2px; }
+    #news-prototype .muted { color: var(--muted); }
+    #news-prototype .label { font: 11px/1.4 var(--mono); letter-spacing: .09em; text-transform: uppercase; }
+    #news-prototype .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+    #news-prototype .topline { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+    #news-prototype .brand { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+    #news-prototype .brand-mark { display: inline-grid; place-items: center; width: 23px; height: 23px; border-radius: 5px; background: var(--accent-dim); font: 600 12px var(--mono); }
+    #news-prototype .sample { display: flex; align-items: center; gap: 7px; color: var(--warn); white-space: nowrap; }
+    #news-prototype .sample::before, #news-prototype .unread-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    #news-prototype .sample::before { content: ''; }
+    #news-prototype .heading { display: flex; justify-content: space-between; align-items: end; gap: 18px; margin: 17px 0; }
+    #news-prototype h1 { font-size: 37px; font-weight: 650; line-height: 1.05; letter-spacing: -.045em; }
+    #news-prototype .commands { display: flex; align-items: center; gap: 8px; min-width: 0; width: min(100%, 430px); }
+    #news-prototype .search { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; padding: 0 9px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
+    #news-prototype .search:focus-within { border-color: var(--accent-hover); }
+    #news-prototype .search-icon { width: 12px; height: 12px; position: relative; border: 1.5px solid var(--muted); border-radius: 50%; flex: none; margin-right: 2px; }
+    #news-prototype .search-icon::after { content: ''; width: 5px; height: 1.5px; position: absolute; right: -4px; bottom: -2px; transform: rotate(45deg); background: var(--muted); }
+    #news-prototype .search input { width: 100%; min-width: 0; height: 36px; border: 0; background: transparent; outline: none; }
+    #news-prototype .search input::placeholder { color: var(--muted); }
+    #news-prototype .key { padding: 1px 5px; border: 1px solid var(--border-strong); border-radius: 4px; font: 11px/1.4 var(--mono); color: var(--muted); }
+    #news-prototype .control { min-height: 35px; padding: 6px 10px; background: var(--raised); border: 1px solid var(--border); border-radius: 6px; color: var(--text); white-space: nowrap; }
+    #news-prototype .control:hover:not(:disabled), #news-prototype .ticker:hover, #news-prototype .source-button:hover { background: var(--hover); border-color: var(--border-strong); }
+    #news-prototype .control[aria-pressed="true"], #news-prototype .ticker[aria-pressed="true"] { background: color-mix(in srgb, var(--accent-dim) 50%, var(--surface)); border-color: var(--accent); }
+
+    #news-prototype .ticker-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin: 6px 0 14px; }
+    #news-prototype .ticker { display: flex; align-items: center; justify-content: space-between; min-height: 41px; gap: 5px; padding: 7px 11px; text-align: left; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+    #news-prototype .symbol { font: 600 12px/1.4 var(--mono); letter-spacing: .045em; }
+    #news-prototype .ticker small { font-size: 11px; }
+
+    #news-prototype .workspace { background: var(--surface); border-radius: 10px; overflow: clip; }
+    #news-prototype .workspace-top { display: flex; align-items: stretch; justify-content: space-between; gap: 8px; padding: 0 10px; border-bottom: 1px solid var(--border); background: var(--raised); }
+    #news-prototype .views { display: flex; align-items: stretch; gap: 4px; }
+    #news-prototype .view { display: flex; align-items: center; gap: 6px; min-height: 48px; padding: 0 10px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); white-space: nowrap; }
+    #news-prototype .view:hover { color: var(--text); background: var(--hover); }
+    #news-prototype .view[aria-pressed="true"] { border-bottom-color: var(--accent-hover); color: var(--text); font-weight: 600; }
+    #news-prototype .count { color: var(--muted); font: 11px/1.3 var(--mono); }
+    #news-prototype .sort { display: flex; align-items: center; }
+    #news-prototype .sort select { min-height: 32px; padding: 4px 7px; border-radius: 5px; border: 1px solid var(--border-strong); background: var(--surface); }
+    #news-prototype .panes { display: grid; grid-template-columns: minmax(0, 44fr) minmax(0, 56fr); }
+    #news-prototype .feed { display: flex; flex-direction: column; min-width: 0; min-height: 440px; border-right: 1px solid var(--border); }
+    #news-prototype .feed-top, #news-prototype .feed-bottom { display: flex; align-items: center; justify-content: space-between; gap: 5px; padding: 8px 11px; }
+    #news-prototype .feed-top { border-bottom: 1px solid var(--border); }
+    #news-prototype .feed-top .control { min-height: 28px; padding: 3px 7px; font-size: 12px; }
+    #news-prototype .feed-bottom { margin-top: auto; min-height: 45px; border-top: 1px solid var(--border); }
+    #news-prototype .feed-bottom .control { min-width: 34px; min-height: 27px; padding: 2px 7px; }
+    #news-prototype .pager { display: flex; gap: 5px; }
+    #news-prototype .stories { list-style: none; margin: 0; padding: 0; }
+    #news-prototype .story { position: relative; border-bottom: 1px solid var(--border); background: var(--surface); }
+    #news-prototype .story:hover { background: var(--hover); }
+    #news-prototype .story.is-current { background: color-mix(in srgb, var(--accent-dim) 31%, var(--surface)); box-shadow: inset 2px 0 var(--accent-hover); }
+    #news-prototype .story-open { display: grid; width: 100%; gap: 4px; background: transparent; border: 0; padding: 9px 42px 10px 12px; text-align: left; }
+    #news-prototype .story-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 7px; font-size: 11px; }
+    #news-prototype .unread-dot { color: var(--accent-hover); flex: none; }
+    #news-prototype .story-title { font-size: 14px; font-weight: 600; line-height: 1.32; }
+    #news-prototype .story-tag { color: var(--text); font: 11px/1.4 var(--mono); }
+    #news-prototype .story-save { position: absolute; right: 4px; top: 7px; width: 36px; height: 36px; padding: 0; background: transparent; border: 0; border-radius: 5px; color: var(--muted); font-size: 21px; }
+    #news-prototype .story-save:hover { background: var(--hover); color: var(--text); }
+    #news-prototype .story-save[aria-pressed="true"] { color: var(--warn); }
+    #news-prototype .empty { padding: 25px 14px; }
+    #news-prototype .empty p { margin: 5px 0 12px; color: var(--muted); }
+
+    #news-prototype .reader { min-width: 0; padding: 15px clamp(14px, 3vw, 32px) 19px; }
+    #news-prototype .reader-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 13px; }
+    #news-prototype .kicker { display: flex; align-items: center; gap: 8px; }
+    #news-prototype .kicker b { color: var(--warn); font-weight: 500; }
+    #news-prototype .reader h2 { font-size: clamp(23px, 3.25vw, 35px); line-height: 1.14; font-weight: 630; letter-spacing: -.035em; text-wrap: pretty; }
+    #news-prototype .reader-actions { display: flex; flex-wrap: wrap; gap: 7px; margin: 12px 0 14px; }
+    #news-prototype .reader-actions .control { min-height: 31px; font-size: 12px; }
+    #news-prototype .brief { line-height: 1.55; }
+    #news-prototype .context { padding: 10px 12px; margin: 14px 0; border-left: 2px solid var(--accent); border-radius: 0 5px 5px 0; background: var(--raised); }
+    #news-prototype .context h3, #news-prototype .coverage h3 { font-size: 13px; font-weight: 650; }
+    #news-prototype .context p { margin-top: 3px; font-size: 13px; line-height: 1.5; }
+    #news-prototype .coverage-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+    #news-prototype .source-list { border-top: 1px solid var(--border); }
+    #news-prototype .source-button { display: flex; align-items: center; width: 100%; min-height: 39px; gap: 10px; padding: 6px 5px; text-align: left; background: transparent; border: 0; border-bottom: 1px solid var(--border); }
+    #news-prototype .source-mark { display: grid; place-items: center; width: 24px; height: 24px; flex: none; background: var(--raised); border: 1px solid var(--border-strong); border-radius: 5px; font: 10px var(--mono); }
+    #news-prototype .source-label { display: flex; flex: 1; flex-wrap: wrap; align-items: baseline; gap: 0 8px; }
+    #news-prototype .source-label strong { font-weight: 550; }
+    #news-prototype .source-label small { font-size: 11px; }
+    #news-prototype .back { display: none; }
+
+    #news-prototype dialog { width: min(470px, calc(100% - 28px)); padding: 18px; color: var(--text); background: var(--raised); border: 1px solid var(--border-strong); border-radius: 8px; }
+    #news-prototype dialog::backdrop { background: color-mix(in srgb, var(--bg) 78%, transparent); }
+    #news-prototype dialog header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+    #news-prototype dialog h2 { font-size: 17px; }
+    #news-prototype dialog textarea { width: 100%; min-height: 175px; padding: 8px; resize: vertical; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 5px; }
+
+    @media (max-width: 590px) {
+      #news-prototype .heading { align-items: stretch; flex-direction: column; gap: 10px; }
+      #news-prototype .commands { width: 100%; }
+      #news-prototype .panes { display: block; }
+      #news-prototype .feed { border-right: 0; min-height: 0; }
+      #news-prototype .reader { display: none; min-height: 390px; }
+      #news-prototype[data-reading="true"] .reader { display: block; }
+      #news-prototype[data-reading="true"] .feed { display: none; }
+      #news-prototype .back { display: inline-block; }
+      #news-prototype .ticker { padding-inline: 6px; }
+    }
+
+    @media (max-width: 440px) {
+      #news-prototype .workspace-top { flex-wrap: wrap; gap: 0; padding-bottom: 5px; }
+      #news-prototype .views { width: 100%; justify-content: space-between; }
+      #news-prototype .view { padding-inline: 5px; font-size: 12px; min-height: 40px; }
+      #news-prototype .ticker { flex-direction: column; align-items: start; gap: 0; }
+      #news-prototype .key { display: none; }
+    }
+
+    @media (max-width: 350px) {
+      #news-prototype .brand .muted, #news-prototype .view .count { display: none; }
+    }
+
+    @media (pointer: coarse) {
+      #news-prototype :is(.control, .ticker, .source-button, .view, .sort select, .search input, .story-save) { min-height: 44px; }
+      #news-prototype .feed-top .control, #news-prototype .feed-bottom .control, #news-prototype .reader-actions .control { min-height: 44px; }
+      #news-prototype .search input { font-size: 16px; }
+      #news-prototype .story-save { width: 44px; }
+      #news-prototype .story-open { padding-right: 50px; }
+    }
+
+    @media (display-mode: browser) {
+      html.news-standalone { background: #080b12; }
+      html.news-standalone body { padding: 12px clamp(10px, 3vw, 36px) 20px; }
+    }
+  </style>
+</head>
+<body>
+<main id="news-prototype" data-reading="false">
+  <div class="topline">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">B</span><span>Budget Terminal</span><span class="muted" aria-hidden="true">/</span><span class="muted">Research</span></div>
+    <span class="sample label">Simulated news</span>
+  </div>
+
+  <div class="heading">
+    <h1>News</h1>
+    <div class="commands">
+      <label class="search">
+        <span class="search-icon" aria-hidden="true"></span>
+        <span class="visually-hidden">Search headlines, tickers, or sources</span>
+        <input type="search" id="news-search" placeholder="Headlines, tickers, sources…" autocomplete="off" spellcheck="false">
+        <kbd class="key" aria-hidden="true">/</kbd>
+      </label>
+      <button class="control" type="button" id="copy-digest">Copy digest</button>
+    </div>
+  </div>
+
+  <section aria-labelledby="portfolio-tickers">
+    <h2 class="label muted" id="portfolio-tickers">Portfolio tickers</h2>
+    <div class="ticker-strip" id="ticker-filters"></div>
+  </section>
+
+  <div class="workspace">
+    <div class="workspace-top">
+      <nav class="views" aria-label="News views">
+        <button class="view" type="button" data-view="all" aria-pressed="true">All news <span class="count"></span></button>
+        <button class="view" type="button" data-view="portfolio" aria-pressed="false">Portfolio <span class="count"></span></button>
+        <button class="view" type="button" data-view="market" aria-pressed="false">Market &amp; macro <span class="count"></span></button>
+        <button class="view" type="button" data-view="saved" aria-pressed="false">Saved <span class="count"></span></button>
+      </nav>
+      <label class="sort">
+        <span class="visually-hidden">Sort headlines</span>
+        <select id="news-sort"><option value="newest">Newest</option><option value="portfolio">Portfolio first</option></select>
+      </label>
+    </div>
+
+    <div class="panes">
+      <section class="feed" aria-label="Headlines">
+        <div class="feed-top">
+          <span class="label muted" id="story-count" role="status"></span>
+          <button class="control" type="button" id="unread-filter" aria-pressed="false">Unread only</button>
+        </div>
+        <ul class="stories" id="news-stories"></ul>
+        <div class="empty" id="feed-empty" hidden>
+          <strong>No matching stories</strong>
+          <p id="empty-hint"></p>
+          <button class="control" type="button" data-action="reset">Show all news</button>
+        </div>
+        <div class="feed-bottom" id="feed-pagination">
+          <span class="count" id="page-range"></span>
+          <span class="pager">
+            <button class="control" type="button" id="previous-page" aria-label="Previous page" data-action="previous">‹</button>
+            <button class="control" type="button" id="next-page" aria-label="Next page" data-action="next">›</button>
+          </span>
+        </div>
+      </section>
+
+      <section class="reader" id="news-reader" aria-label="Story brief"></section>
+    </div>
+  </div>
+
+  <span class="visually-hidden" id="news-announcement" role="status"></span>
+  <dialog id="news-dialog" aria-labelledby="dialog-title">
+    <header>
+      <h2 id="dialog-title"></h2>
+      <form method="dialog"><button class="control" type="submit">Close</button></form>
+    </header>
+    <p id="dialog-copy"></p>
+    <textarea id="digest-preview" aria-label="News digest text" readonly hidden></textarea>
+  </dialog>
+</main>
+
+<script>
+  (() => {
+    const root = document.getElementById('news-prototype')
+    if (location.protocol === 'file:' && window.top === window) document.documentElement.classList.add('news-standalone')
+
+    // Invented headlines, publisher names and excerpts for testing the interaction offline.
+    const stories = [
+      {
+        id: 'chips', tickers: ['NVDA', 'AVGO'], type: 'Supply chain', age: 18,
+        title: 'AI server orders shift toward full-rack systems',
+        summary: 'Server manufacturers in this scenario report that buyers are moving from individual accelerator orders to integrated racks that arrive ready to install.',
+        context: 'NVDA has exposure through accelerators and systems. AVGO has exposure through networking. Watch for firm delivery dates and orders that include the network layer.',
+        coverage: [
+          ['Market Wire', 'Order mix', 'Suppliers describe an increase in bundled system orders. The sample report gives no shipment totals.'],
+          ['Silicon Desk', 'Networking demand', 'An illustrative supplier survey points to stronger demand for switch capacity as buyers configure complete racks.'],
+        ],
+      },
+      {
+        id: 'rates', tickers: ['US10Y', 'SPY'], type: 'Rates', age: 33,
+        title: 'Treasury yields ease ahead of the inflation release',
+        summary: 'In this sample session, the 10-year yield drifts lower before the next inflation print while traders reduce short-term rate positions.',
+        context: 'The next print can test whether the move in yields has support. Compare the release with expectations before reading across to equities.',
+        coverage: [
+          ['Rates Desk', 'Bond market', 'The sample move is concentrated in intermediate maturities ahead of the data release.'],
+          ['Market Wire', 'Equity context', 'Rate-sensitive shares firm in the sample session as bond yields move lower.'],
+        ],
+      },
+      {
+        id: 'cloud', tickers: ['MSFT', 'NVDA'], type: 'Cloud', age: 42,
+        title: 'Microsoft expands reserved AI compute capacity',
+        summary: 'An illustrative rollout adds reserved accelerator capacity for enterprise customers that need predictable access over longer contracts.',
+        context: 'Longer commitments may improve visibility into cloud utilization. Track the pace at which reserved capacity turns into usage and revenue.',
+        coverage: [['Enterprise Desk', 'Cloud capacity', 'The sample rollout prioritizes multi-quarter contracts for customers already running production AI workloads.']],
+      },
+      {
+        id: 'apple', tickers: ['AAPL'], type: 'Demand', age: 56,
+        title: 'Apple suppliers flag a split in handset demand',
+        summary: 'A fictional channel check shows a stronger premium handset mix while suppliers see more varied demand for entry models.',
+        context: 'Mix and unit volume can move in different directions. Look for evidence that stronger premium sales carry through to margins.',
+        coverage: [['Consumer Desk', 'Product mix', 'Illustrative supplier checks suggest stronger replenishment orders for premium models than for entry models.']],
+      },
+      {
+        id: 'oil', tickers: ['WTI', 'XLE'], type: 'Commodities', age: 74,
+        title: 'Oil pares gains as crude inventories build',
+        summary: 'Crude gives back part of its early move in this example after a weekly report shows a larger inventory build than traders expected.',
+        context: 'Check refinery runs and product inventories for clues about whether the crude build reflects weaker demand or a temporary shift in flows.',
+        coverage: [['Energy Desk', 'Weekly inventories', 'A sample inventory release shows rising crude stocks alongside mixed changes in refined products.']],
+      },
+      {
+        id: 'security', tickers: ['MSFT'], type: 'Product', age: 92,
+        title: 'Microsoft bundles new security controls into enterprise plans',
+        summary: 'A hypothetical licensing change puts additional identity controls into a broader security package for large customers.',
+        context: 'Watch renewal pricing and uptake among customers already paying for stand-alone tools.',
+        coverage: [['Enterprise Desk', 'Licensing', 'In the example, the new package rolls out on annual renewal dates.']],
+      },
+      {
+        id: 'dollar', tickers: ['DXY', 'GLD'], type: 'Currencies', age: 118,
+        title: 'Dollar softens as traders trim rate bets',
+        summary: 'In this simulated session, the dollar weakens against several major currencies as market-implied rates shift lower.',
+        context: 'Gold and foreign revenue exposures can react differently depending on what drives the currency move.',
+        coverage: [['Rates Desk', 'Currency market', 'The illustrative move is broad across major currency pairs.']],
+      },
+      {
+        id: 'banks', tickers: ['KRE'], type: 'Credit', age: 143,
+        title: 'Regional banks report steadier deposit balances',
+        summary: 'A fictional round of bank updates shows less movement in deposits than in the previous reporting period.',
+        context: 'Stable balances help funding visibility. Deposit rates show how much banks are paying to retain those balances.',
+        coverage: [['Credit Desk', 'Bank funding', 'The sample disclosures show deposit balances holding steady while funding costs vary by bank.']],
+      },
+      {
+        id: 'retail', tickers: ['XRT'], type: 'Economy', age: 187,
+        title: 'Retail spending slows in the latest sample survey',
+        summary: 'An illustrative consumer survey shows spending on discretionary goods cooling as households prioritize essentials.',
+        context: 'Compare survey responses with reported sales and margins. Discounts can lift units even as nominal spending slows.',
+        coverage: [['Consumer Desk', 'Spending survey', 'The example records softer spending intentions for apparel and home goods.']],
+      },
+    ]
+
+    const holdings = ['NVDA', 'MSFT', 'AAPL', 'AVGO']
+    const pageSize = 4
+    const storageKey = 'budget-terminal.news-workspace-prototype.v1'
+    const mobile = matchMedia('(max-width: 590px)')
+    const find = id => root.querySelector(`#${id}`)
+    const search = find('news-search')
+    const list = find('news-stories')
+    const reader = find('news-reader')
+    const dialog = find('news-dialog')
+    const digestPreview = find('digest-preview')
+    const tickerFilters = find('ticker-filters')
+    const copyDigest = find('copy-digest')
+    const unreadFilter = find('unread-filter')
+    const previousPage = find('previous-page')
+    const nextPage = find('next-page')
+    const viewButtons = [...root.querySelectorAll('[data-view]')]
+    const portfolioStory = story => story.tickers.some(ticker => holdings.includes(ticker))
+    const timeLabel = age => age < 60 ? `${age}m ago` : `${Math.floor(age / 60)}h ${age % 60}m ago`
+    const storyCount = count => count === 1 ? '1 story' : `${count} stories`
+
+    function loadReadingState() {
+      try {
+        const stored = JSON.parse(localStorage.getItem(storageKey))
+        if (Array.isArray(stored?.saved) && Array.isArray(stored?.read)) return stored
+      } catch {
+        // Sandboxed previews can disable storage.
+      }
+      return { saved: ['apple'], read: ['oil', 'security', 'banks'] }
+    }
+
+    const reading = loadReadingState()
+    const saved = new Set(reading.saved)
+    const read = new Set(reading.read)
+    const state = { view: 'all', ticker: '', unread: false, sort: 'newest', selected: 'chips', page: 0 }
+
+    tickerFilters.innerHTML = holdings.map(ticker => `
+      <button class="ticker" type="button" data-ticker="${ticker}" aria-pressed="false">
+        <span class="symbol">${ticker}</span><small class="muted">${storyCount(stories.filter(story => story.tickers.includes(ticker)).length)}</small>
+      </button>`).join('')
+
+    function saveReadingState() {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify({ saved: [...saved], read: [...read] }))
+      } catch {
+        // Reading state remains usable for the current session.
+      }
+    }
+
+    function matchingView(story, view) {
+      if (view === 'portfolio') return portfolioStory(story)
+      if (view === 'market') return !portfolioStory(story)
+      if (view === 'saved') return saved.has(story.id)
+      return true
+    }
+
+    function filteredStories() {
+      const terms = search.value.toLowerCase().trim().split(/[\s,]+/).filter(Boolean)
+      return stories.filter(story => {
+        const searchText = [story.title, story.type, ...story.tickers, ...story.coverage.map(([name]) => name)].join(' ').toLowerCase()
+        return matchingView(story, state.view)
+          && (!state.ticker || story.tickers.includes(state.ticker))
+          && (!state.unread || !read.has(story.id))
+          && terms.every(term => searchText.includes(term.replace(/^\$/, '')))
+      }).sort((a, b) => {
+        const portfolioOrder = state.sort === 'portfolio' ? Number(portfolioStory(b)) - Number(portfolioStory(a)) : 0
+        return portfolioOrder || a.age - b.age
+      })
+    }
+
+    function storyRow(story) {
+      const isSaved = saved.has(story.id)
+      const isUnread = !read.has(story.id)
+      const isCurrent = story.id === state.selected
+      const [firstSource] = story.coverage[0]
+      const extraSources = story.coverage.length - 1
+      return `
+        <li class="story${isCurrent ? ' is-current' : ''}">
+          <button class="story-open" type="button" data-story="${story.id}" aria-current="${isCurrent}">
+            <span class="story-meta muted">${isUnread ? '<span class="unread-dot" aria-hidden="true"></span><span class="visually-hidden">Unread. </span>' : ''}
+              ${story.type} <span aria-hidden="true">·</span> ${timeLabel(story.age)}</span>
+            <span class="story-title">${story.title}</span>
+            <span class="story-meta muted"><span class="story-tag">${story.tickers.join(' · ')}</span>
+              <span aria-hidden="true">/</span> ${firstSource}${extraSources ? ` +${extraSources}` : ''}</span>
+          </button>
+          <button class="story-save" type="button" data-save="${story.id}" aria-pressed="${isSaved}" aria-label="Save story: ${story.title}">${isSaved ? '★' : '☆'}</button>
+        </li>`
+    }
+
+    function readerContent(story) {
+      const isRead = read.has(story.id)
+      const isSaved = saved.has(story.id)
+      const links = story.coverage.map(([name, angle], index) => `
+        <button class="source-button" type="button" data-source="${index}">
+          <span class="source-mark" aria-hidden="true">${name.split(' ').map(word => word[0]).join('')}</span>
+          <span class="source-label"><strong>${name}</strong><small class="muted">${angle}</small></span>
+          <span class="muted" aria-hidden="true">›</span>
+        </button>`).join('')
+      return `
+        <div class="reader-top">
+          <button class="control back" type="button" data-action="back">← Headlines</button>
+          <div class="kicker label"><b>${portfolioStory(story) ? 'Portfolio' : 'Market & macro'}</b><span class="muted">${timeLabel(story.age)}</span></div>
+          <span class="symbol">${story.tickers.join(' · ')}</span>
+        </div>
+        <h2>${story.title}</h2>
+        <div class="reader-actions">
+          <button class="control" type="button" data-reader-save data-save="${story.id}" aria-pressed="${isSaved}">${isSaved ? '★ Saved' : '☆ Save story'}</button>
+          <button class="control" type="button" data-action="read">${isRead ? 'Mark unread' : 'Mark read'}</button>
+        </div>
+        <p class="brief">${story.summary}</p>
+        <div class="context"><h3>Why it matters</h3><p>${story.context}</p></div>
+        <div class="coverage">
+          <div class="coverage-head"><h3>Source previews</h3><span class="count">${story.coverage.length === 1 ? '1 source' : `${story.coverage.length} sources`}</span></div>
+          <div class="source-list">${links}</div>
+        </div>`
+    }
+
+    function render() {
+      const results = filteredStories()
+      state.page = Math.min(state.page, Math.max(0, Math.ceil(results.length / pageSize) - 1))
+      const start = state.page * pageSize
+      const visible = results.slice(start, start + pageSize)
+      if (!visible.some(story => story.id === state.selected)) state.selected = visible[0]?.id ?? ''
+      const selected = visible.find(story => story.id === state.selected)
+      if (!selected) root.dataset.reading = 'false'
+
+      for (const button of viewButtons) {
+        button.setAttribute('aria-pressed', String(button.dataset.view === state.view))
+        button.querySelector('.count').textContent = stories.filter(story => matchingView(story, button.dataset.view)).length
+      }
+      for (const button of tickerFilters.children) {
+        button.setAttribute('aria-pressed', String(button.dataset.ticker === state.ticker))
+      }
+
+      unreadFilter.setAttribute('aria-pressed', String(state.unread))
+      find('story-count').textContent = storyCount(results.length)
+      find('feed-empty').hidden = Boolean(results.length)
+      find('empty-hint').textContent = state.view === 'saved' && !saved.size
+        ? 'Save a story to build your reading list.'
+        : 'Try changing the search or filters.'
+      find('page-range').textContent = results.length ? `${start + 1}–${start + visible.length} of ${results.length}` : ''
+      find('feed-pagination').hidden = results.length <= pageSize
+      previousPage.disabled = state.page === 0
+      nextPage.disabled = start + pageSize >= results.length
+      copyDigest.disabled = !results.length
+      list.innerHTML = visible.map(storyRow).join('')
+      reader.innerHTML = selected ? readerContent(selected) : '<p class="empty muted">Matching stories will appear here.</p>'
+      return selected
+    }
+
+    function refilter() {
+      state.page = 0
+      root.dataset.reading = 'false'
+      render()
+    }
+
+    function openStory(id, focusReader) {
+      state.selected = id
+      root.dataset.reading = 'true'
+      render()
+      if (mobile.matches && focusReader) reader.querySelector('[data-action="back"]').focus()
+      else list.querySelector(`[data-story="${id}"]`)?.focus({ preventScroll: true })
+    }
+
+    function backToFeed() {
+      root.dataset.reading = 'false'
+      list.querySelector(`[data-story="${state.selected}"]`)?.focus()
+    }
+
+    function announce(message) {
+      find('news-announcement').textContent = message
+    }
+
+    function showDialog(title, copy, digest = '') {
+      find('dialog-title').textContent = title
+      find('dialog-copy').textContent = copy
+      digestPreview.hidden = !digest
+      digestPreview.value = digest
+      dialog.showModal()
+      if (digest) {
+        digestPreview.focus()
+        digestPreview.select()
+      }
+    }
+
+    async function copyFilteredDigest() {
+      const results = filteredStories()
+      if (!results.length) return
+      const digest = ['Budget Terminal · News digest (simulated)', '', ...results.map(story =>
+        `${story.title}\n${story.tickers.join(', ')} · ${story.coverage.map(([name]) => name).join(', ')}\n${story.summary}\n`),
+      ].join('\n')
+      try {
+        await navigator.clipboard.writeText(digest)
+        copyDigest.textContent = 'Copied'
+        announce(`${storyCount(results.length)} copied.`)
+        setTimeout(() => { copyDigest.textContent = 'Copy digest' }, 1500)
+      } catch {
+        showDialog('News digest', 'Copy the selected text to keep this digest.', digest)
+      }
+    }
+
+    search.addEventListener('input', refilter)
+    find('news-sort').addEventListener('change', event => { state.sort = event.target.value; refilter() })
+    unreadFilter.addEventListener('click', () => { state.unread = !state.unread; refilter() })
+    copyDigest.addEventListener('click', copyFilteredDigest)
+
+    root.addEventListener('click', event => {
+      const button = event.target.closest('button')
+      if (!button) return
+      const { view, ticker, story, save, source, action } = button.dataset
+      if (view) {
+        state.view = view
+        state.ticker = ''
+        refilter()
+      }
+      if (ticker) {
+        state.view = 'all'
+        state.ticker = state.ticker === ticker ? '' : ticker
+        refilter()
+      }
+      if (story) openStory(story, true)
+      if (save) {
+        const wasSaved = saved.delete(save)
+        if (!wasSaved) saved.add(save)
+        saveReadingState()
+        render()
+        const replacement = button.hasAttribute('data-reader-save')
+          ? reader.querySelector('[data-reader-save]')
+          : list.querySelector(`[data-save="${save}"]`)
+        const fallback = list.querySelector('.story-open') ?? root.querySelector('[data-view="saved"]')
+        const focusTarget = replacement ?? fallback
+        focusTarget.focus({ preventScroll: true })
+        announce(wasSaved ? 'Story removed from Saved.' : 'Story added to Saved.')
+      }
+      if (source !== undefined) {
+        const selected = stories.find(item => item.id === state.selected)
+        const [name, angle, excerpt] = selected.coverage[Number(source)]
+        showDialog(`${name} · ${angle}`, excerpt)
+      }
+
+      switch (action) {
+        case 'previous':
+        case 'next': {
+          state.page += action === 'previous' ? -1 : 1
+          render()
+          if (button.disabled) (action === 'previous' ? nextPage : previousPage).focus()
+          break
+        }
+        case 'back':
+          backToFeed()
+          break
+        case 'read': {
+          const wasRead = read.delete(state.selected)
+          if (!wasRead) read.add(state.selected)
+          saveReadingState()
+          const selected = render()
+          if (selected) reader.querySelector('[data-action="read"]').focus()
+          else unreadFilter.focus()
+          announce(wasRead ? 'Story marked unread.' : 'Story marked read.')
+          break
+        }
+        case 'reset':
+          search.value = ''
+          state.view = 'all'
+          state.ticker = ''
+          state.unread = false
+          refilter()
+          search.focus()
+          break
+      }
+    })
+
+    document.addEventListener('keydown', event => {
+      if (dialog.open || event.ctrlKey || event.altKey || event.metaKey || event.defaultPrevented) return
+      if (event.target.closest?.('input, textarea, select, [contenteditable]')) return
+      if (!root.contains(event.target) && event.target !== document.body) return
+      if (event.key === '/') {
+        event.preventDefault()
+        search.focus()
+      }
+      if (event.key === 'Escape' && mobile.matches && root.dataset.reading === 'true') backToFeed()
+      const step = event.key === 'j' ? 1 : event.key === 'k' ? -1 : 0
+      if (!step) return
+      const results = filteredStories()
+      const current = results.findIndex(story => story.id === state.selected)
+      const index = Math.min(Math.max(current + step, 0), results.length - 1)
+      if (!results[index]) return
+      event.preventDefault()
+      state.page = Math.floor(index / pageSize)
+      openStory(results[index].id, true)
+    })
+
+    render()
+  })()
+</script>
+</body>
+</html>

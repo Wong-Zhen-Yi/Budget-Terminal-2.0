@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import { SETTINGS_TAB_ID } from '@shared/contract'
+import { SETTINGS_TAB_ID, type LabFeatureId } from '@shared/contract'
 import { isMainPageAvailable, resolveMainPage, WORKSPACES, workspaceFor } from '@shared/navigation'
 import { SectionHeader } from '@/components/settings/SettingsSection'
 import { Button } from '@/components/ui/Button'
@@ -22,6 +22,7 @@ export function NavigationPanel({
   tabs,
   hidden,
   mainPage,
+  enabledLabs,
   canSaveMainPage,
   onSetMainPage,
   onSetHidden,
@@ -32,6 +33,7 @@ export function NavigationPanel({
   tabs: NavigationTab[]
   hidden: string[]
   mainPage?: string
+  enabledLabs?: readonly LabFeatureId[]
   canSaveMainPage: boolean
   onSetMainPage: (id: string | null) => Promise<void>
   onSetHidden: (id: string, value: boolean) => void
@@ -41,8 +43,8 @@ export function NavigationPanel({
   const [selected, setSelected] = useState<string | null>(tabs[0]?.id ?? null)
   const [savingMainPage, setSavingMainPage] = useState(false)
   const index = tabs.findIndex((tab) => tab.id === selected)
-  const available = tabs.filter(tab => isMainPageAvailable(tab.id, hidden))
-  const defaultPage = resolveMainPage(undefined, tabs.map(tab => tab.id), hidden)
+  const available = tabs.filter(tab => isMainPageAvailable(tab.id, hidden, enabledLabs))
+  const defaultPage = resolveMainPage(undefined, tabs.map(tab => tab.id), hidden, enabledLabs)
   const defaultLabel = tabs.find(tab => tab.id === defaultPage)?.label
   const options = (pages: NavigationTab[]) => pages.map(tab => <option key={tab.id} value={tab.id}>{tab.label}</option>)
 

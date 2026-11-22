@@ -5,14 +5,15 @@ import { MACRO_SYMBOLS } from '@shared/contract'
 import { decimals, EM_DASH, percent } from '@/lib/format'
 
 /** SPY, DXY, VIX, GLD and WTI across the top — the same five the reference app tracks. */
-export function MacroBar({ macro, loading, charts }: {
+export function MacroBar({ macro, loading, charts, lite = false }: {
   macro: MacroQuotes
   loading: boolean
   charts: Array<{ data?: Envelope<ChartPayload>; isLoading: boolean; isError: boolean }>
+  lite?: boolean
 }) {
   const now = useSnapshotClock()
   return (
-    <div className="dashboard-macro flex shrink-0 gap-1">
+    <div className={lite ? 'dashboard-lite-markets' : 'dashboard-macro flex shrink-0 gap-1'} aria-label={lite ? 'Market overview' : undefined}>
       {MACRO_SYMBOLS.map((entry, index) => {
         const quote = macro[entry.label]
         const up = (quote?.change ?? 0) >= 0
@@ -23,7 +24,7 @@ export function MacroBar({ macro, loading, charts }: {
           .map((candle) => candle.close)
         const low = Math.min(...values)
         const high = Math.max(...values)
-        const points = values.map((value, i) => {
+        const points = values.length < 2 ? '' : values.map((value, i) => {
           const x = 2 + (i / (values.length - 1)) * 196
           const y = high === low ? 14 : 26 - ((value - low) / (high - low)) * 24
           return `${x.toFixed(2)},${y.toFixed(2)}`
@@ -32,6 +33,28 @@ export function MacroBar({ macro, loading, charts }: {
         const warning = chart?.isError || freshness === 'failed' || freshness === 'partial' || freshness === 'stale'
         const message = chart?.isLoading ? 'Loading history…' : 'History unavailable'
         const description = `${entry.label}: last ${values.length} trading sessions (daily closes)`
+        const direction = quote ? (up ? 'text-up' : 'text-down') : 'text-text-muted'
+        const sparkline = points && (
+          <svg
+            viewBox="0 0 200 28"
+            preserveAspectRatio="none"
+            className={`h-7 w-full ${direction}`}
+            role="img"
+            aria-label={description}
+          >
+            <title>{description}</title>
+            <line x1="2" x2="198" y1="14" y2="14" stroke="currentColor" strokeOpacity="0.15" strokeDasharray="3 3" />
+            <polyline points={points} fill="none" stroke="currentColor" strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+          </svg>
+        )
+        if (lite) return (
+          <div className="dashboard-lite-market" key={entry.label}>
+            <span className="text-text-muted">{entry.label}</span>
+            {sparkline || <span aria-label="No market history" />}
+            <strong className="num">{decimals(quote?.price, 2)}</strong>
+            <span className={`num ${direction}`}>{percent(quote?.change)}</span>
+          </div>
+        )
         return (
           <div
             key={entry.label}
@@ -47,19 +70,7 @@ export function MacroBar({ macro, loading, charts }: {
                 {entry.label}: {loading ? '...' : EM_DASH}
               </span>
             )}
-            {values.length >= 2 ? (
-              <svg
-                viewBox="0 0 200 28"
-                preserveAspectRatio="none"
-                className={`h-7 w-full ${quote ? (up ? 'text-up' : 'text-down') : 'text-text-muted'}`}
-                role="img"
-                aria-label={description}
-              >
-                <title>{description}</title>
-                <line x1="2" x2="198" y1="14" y2="14" stroke="currentColor" strokeOpacity="0.15" strokeDasharray="3 3" />
-                <polyline points={points} fill="none" stroke="currentColor" strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
-              </svg>
-            ) : (
+            {sparkline || (
               <span className="flex h-7 items-center text-2xs text-text-dim">{message}</span>
             )}
             {warning && freshness !== 'stale' && values.length >= 2 && (

@@ -439,7 +439,34 @@ async function probeUpdates() {
   }
 }
 
-probeUpdates().catch(error => {
+async function probeDetachedLaunch() {
+  for (const shouldFail of [false, true]) {
+    let verified = false
+    let npmCalls = 0
+    const messages = []
+    const status = await launch({ platform: 'win32', nodeVersion: '24.22.1', environment: { ELECTRON_RUN_AS_NODE: '1' },
+      detach: true, logs: true, locateCodex: () => null,
+      log: { log: message => messages.push(message), error: message => messages.push(message) },
+      verifyBuild() { verified = true },
+      spawn() { npmCalls++; return { status: 0, stdout: '11.0.0' } },
+      async openDetached(env) {
+        assert(verified, 'Verify the build before starting the detached desktop app')
+        assert(messages.some(message => message.includes('[5/5]')))
+        assert.equal(env.ELECTRON_RUN_AS_NODE, undefined)
+        assert.equal(env.BUDGET_TERMINAL_OPEN_DIAGNOSTICS, '1')
+        if (shouldFail) throw new Error('test spawn failure')
+        return 0
+      },
+    })
+    assert.equal(status, shouldFail ? 1 : 0)
+    assert.equal(npmCalls, 4, 'Detached startup must not run an attached preview or rebuild the verified app')
+    assert(!messages.some(message => message.includes('Keep this terminal open')))
+    assert.equal(messages.some(message => message.includes('test spawn failure')), shouldFail)
+  }
+  console.log('PASS: detached desktop starts after all five visible stages and reports launch failures to the terminal.')
+}
+
+Promise.all([probeDetachedLaunch(), probeUpdates()]).catch(error => {
   console.error(error)
   process.exitCode = 1
 })

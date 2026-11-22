@@ -153,7 +153,7 @@ try {
       }
     }
   }
-  assert.equal(mutationVariants, 47) // Includes the startup page preference.
+  assert.equal(mutationVariants, 48) // Includes startup page and Labs preferences.
   for (const id of ['charts', null]) {
     validateCall(toolName('mutateSettings'), {
       request: { type: 'setMainPage', id }, requestId: randomUUID(), expectedRevision: 'a'.repeat(64),

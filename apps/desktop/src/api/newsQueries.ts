@@ -17,11 +17,11 @@ import { queryFreshness } from './queryPersistence'
 import { FRESHNESS } from '@shared/freshness'
 
 /** Refresh the mounted News page on the same five-minute cadence as its source caches. */
-export function useNewsPage(tickers: string[]): UseQueryResult<Envelope<NewsPagePayload>> {
+export function useNewsPage(tickers: string[], enabled = tickers.length > 0): UseQueryResult<Envelope<NewsPagePayload>> {
   return useQuery({
     queryKey: queryKeys.newsPage(tickers),
     queryFn: () => api.newsPage({ tickers, force: forcing() }),
-    enabled: tickers.length > 0,
+    enabled,
     refetchInterval: FRESHNESS.newsPage,
     refetchIntervalInBackground: false,
     staleTime: queryFreshness(queryKeys.newsPage(tickers)),

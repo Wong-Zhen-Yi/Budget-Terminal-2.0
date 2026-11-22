@@ -12,6 +12,7 @@ Illustrative figures in prototypes are sample data. Runtime assets live in
 | --- | --- |
 | [Crypto](crypto/crypto-prototype-prompts.md) | Three layout options, source prompts and an implementation capture. |
 | [Dictionary](dictionary/README.md) | Reference workspace and Reading Room options, plus the implemented layout. |
+| [News](news/news-workspace.html) | Interactive headline feed and story brief with ticker filters, grouped sources, and a reading queue. |
 | [Settings](settings/README.md) | Settings concepts, implementation capture and a standalone Electron renderer. |
 | [YouTube](youtube/README.md) | Research terminal, video library and focus workspace options. |
 

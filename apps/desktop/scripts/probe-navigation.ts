@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path'
 import { createRequire } from 'node:module'
 import { build } from 'esbuild'
 import { adjacentPage, DEFAULT_TAB_ID, pagesInVisualOrder, startupPages, workspaceFor } from '../electron/shared/navigation.js'
-import { TABS } from '../electron/shared/contract.js'
+import { FOCUS_DASHBOARD_TAB_ID, TABS } from '../electron/shared/contract.js'
 
 assert.equal(workspaceFor('dashboard-2')?.id, 'overview')
 assert.equal(DEFAULT_TAB_ID, 'dashboard-2', 'Dashboard 2.0 must be the default opening page')
@@ -14,6 +14,8 @@ assert(TABS.some(tab => tab.id === DEFAULT_TAB_ID && tab.label === 'Dashboard 2.
 assert(startupPages('dashboard', [], []).includes('dashboard-2'), 'Unvisited Dashboard 2.0 must load at startup')
 const defaultStartup = startupPages(DEFAULT_TAB_ID, [], [])
 assert.equal(defaultStartup[0], DEFAULT_TAB_ID)
+assert.equal(workspaceFor(FOCUS_DASHBOARD_TAB_ID)?.pages[0], FOCUS_DASHBOARD_TAB_ID)
+assert(defaultStartup.includes(FOCUS_DASHBOARD_TAB_ID), 'The Focus Dashboard must be ready at startup')
 assert(TABS.filter(tab => tab.implemented).every(tab => defaultStartup.includes(tab.id)),
   'Opening Dashboard 2.0 must still warm every implemented page')
 assert.equal(workspaceFor('hims')?.id, 'focus')
@@ -35,9 +37,9 @@ assert(!startupPages('signals', ['signals'], ['signals']).includes('signals'), '
 const interleaved = ['charts', 'news', 'stocks', 'dashboard-2', 'heatmap', 'portfolio', 'pre-market', 'settings']
   .map(id => TABS.find(tab => tab.id === id)!)
 const visualOrder = pagesInVisualOrder(interleaved)
-assert.deepEqual(visualOrder.map(tab => tab.id), ['news', 'dashboard-2', 'heatmap', 'pre-market', 'stocks', 'charts', 'portfolio', 'settings'])
+assert.deepEqual(visualOrder.map(tab => tab.id), ['news', 'dashboard-2', 'pre-market', 'heatmap', 'stocks', 'charts', 'portfolio', 'settings'])
 assert.equal(adjacentPage(visualOrder, 'news', 1), 'dashboard-2', 'Right must follow the next visible header button')
-assert.equal(adjacentPage(visualOrder, 'dashboard-2', 1), 'heatmap', 'Workspace boundaries must follow sidebar order')
+assert.equal(adjacentPage(visualOrder, 'pre-market', 1), 'heatmap', 'Workspace boundaries must follow sidebar order')
 assert.equal(adjacentPage(visualOrder, 'news', -1), 'settings', 'Left must wrap to the last visible page')
 assert.equal(adjacentPage(visualOrder, 'settings', 1), 'news', 'Right must wrap to the first visible page')
 assert.equal(adjacentPage([], 'news', 1), undefined)
@@ -57,11 +59,14 @@ try {
         import { useEffect, useState } from 'react'
         import { createRoot } from 'react-dom/client'
         import { flushSync } from 'react-dom'
+        import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+        import { queryKeys } from './src/api/client'
         import { PageCache } from './src/components/chrome/PageCache'
         import { WorkspaceHeader, WorkspaceSidebar } from './src/components/chrome/WorkspaceNavigation'
         import { pageIconPaths } from './src/components/chrome/NavigationIcon'
-        import { TABS } from './electron/shared/contract'
-        import { adjacentPage, pagesInVisualOrder, WORKSPACES } from './electron/shared/navigation'
+        import { FocusDashboardPage } from './src/pages/FocusDashboardPage'
+        import { FOCUS_DASHBOARD_TAB_ID, TABS } from './electron/shared/contract'
+        import { adjacentPage, FOCUS_WORKSPACE, pagesInVisualOrder, WORKSPACES } from './electron/shared/navigation'
         const renders = {}, effects = {}, ticks = {}
         const ids = ['a', 'b', 'c', 'd', 'e', 'dictionary', 'settings', 'articles', 'notifications']
         let select, updateShell, hide
@@ -93,19 +98,35 @@ try {
           document.body.append(railHost)
           const railRoot = createRoot(railHost)
           let selected, toggled = false
+          const focusCache = new QueryClient()
+          const renderFocus = (tabs, obscuredPages) => flushSync(() => railRoot.render(
+            <QueryClientProvider client={focusCache}>
+              <FocusDashboardPage tabs={tabs} obscuredPages={obscuredPages} onSelectTab={id => selected = id} />
+            </QueryClientProvider>,
+          ))
           const railProps = {
             tabs: TABS, activeTab: 'articles', favorites: TABS.map(tab => tab.id), recent: [],
             onSelectTab: id => selected = id, onToggleCollapsed: () => toggled = true,
             saving: false, isMac: false,
           }
           flushSync(() => railRoot.render(<WorkspaceSidebar {...railProps} collapsed />))
-          // Compare traversal with real header buttons, including reordered and hidden pages.
-          const reordered = [...TABS].reverse().filter(tab => tab.id !== 'heatmap')
+          // Compare traversal with real shortcuts, including reordered and hidden pages.
+          const reordered = [...TABS].reverse().filter(tab => !['heatmap', 'gold'].includes(tab.id))
           const ordered = pagesInVisualOrder(reordered)
           const renderedOrder = []
           for (const workspace of WORKSPACES) {
             const first = ordered.find(tab => workspace.pages.includes(tab.id))
             if (!first) continue
+            if (workspace === FOCUS_WORKSPACE) {
+              check(first.id === FOCUS_DASHBOARD_TAB_ID, 'Focus Dashboard must lead its workspace even with a saved custom order')
+              renderedOrder.push(first.id)
+              renderFocus(reordered)
+              for (const button of railHost.querySelectorAll('nav[aria-label="Focus pages"] button')) {
+                button.click()
+                renderedOrder.push(selected)
+              }
+              continue
+            }
             flushSync(() => railRoot.render(<WorkspaceHeader tabs={reordered} activeTab={first.id}
               onSelectTab={id => selected = id} favorite={false} onToggleFavorite={() => {}} saving={false} isMac={false} />))
             for (const button of railHost.querySelectorAll('nav[aria-label="Workspace pages"] button:not(:disabled)')) {
@@ -119,10 +140,100 @@ try {
             check(adjacentPage(ordered, renderedOrder[i], 1) === renderedOrder[(i + 1) % renderedOrder.length], 'Right skipped a visible page')
             check(adjacentPage(ordered, renderedOrder[i], -1) === renderedOrder[(i + renderedOrder.length - 1) % renderedOrder.length], 'Left skipped a visible page')
           }
+          const focusButton = () => railHost.querySelector('nav[aria-label="Workspaces"] button[aria-label="Focus"]')
+          const focusCards = () => [...railHost.querySelectorAll('nav[aria-label="Focus pages"] button')]
+          const focusLabels = () => focusCards().map(button => button.getAttribute('aria-label'))
+          flushSync(() => railRoot.render(<WorkspaceSidebar {...railProps} activeTab="nvda" collapsed />))
+          focusButton().click()
+          check(selected === FOCUS_DASHBOARD_TAB_ID, 'Focus must open its landing page when revisited')
+          const withoutDashboard = TABS.filter(tab => tab.id !== FOCUS_DASHBOARD_TAB_ID)
+          flushSync(() => railRoot.render(<WorkspaceSidebar {...railProps} tabs={withoutDashboard} activeTab="nvda" collapsed />))
+          focusButton().click()
+          check(selected === 'nvda', 'Hiding the dashboard must preserve access to Focus pages')
+          const renderHeader = tabs => <WorkspaceHeader tabs={tabs} activeTab="nvda"
+            onSelectTab={id => selected = id} favorite={false} onToggleFavorite={() => {}} saving={false} isMac={false} />
+          flushSync(() => railRoot.render(renderHeader(TABS)))
+          const back = [...railHost.querySelectorAll('header button')].find(button => button.textContent.includes('Focus Dashboard'))
+          check(back && !railHost.querySelector('nav[aria-label="Workspace pages"]'), 'Detail header must offer a dashboard shortcut')
+          back.click()
+          check(selected === FOCUS_DASHBOARD_TAB_ID, 'Dashboard shortcut navigated to the wrong page')
+          flushSync(() => railRoot.render(renderHeader(withoutDashboard)))
+          check(railHost.querySelector('nav[aria-label="Workspace pages"] button'), 'Focus shortcuts must be available with the dashboard hidden')
+          renderFocus(TABS)
+          check(focusCards().length === FOCUS_WORKSPACE.pages.length - 1, 'Focus Dashboard must include every topic')
+          check(focusLabels().join(',') === focusLabels().sort((a, b) => a.localeCompare(b, 'en')).join(','),
+            'Focus Dashboard must sort topic cards by their displayed labels')
+          check(railHost.querySelectorAll('[data-focus-metric]').length === focusCards().length, 'Every Focus card needs a headline metric')
+          const asOf = '2026-10-01', period = 'Q3 2026', timestamp = Date.parse(asOf)
+          const report = fields => ({ earnings: { reports: [{ period, ...fields }] } })
+          const pltrQuarterly = { revenue: [{ endDate: asOf, value: 1.1e9, label: 'Q3' }],
+            netIncome: [], operatingCashFlow: [], freeCashFlow: [], sharesOutstanding: [], researchDevelopment: [] }
+          const fixtures = [
+            ['AMZN', queryKeys.amzn, report({ segments: [{ name: 'AWS', revenue: 31e9 }] }), '$31.0B'],
+            ['Anthropic', queryKeys.anthropic, { quarters: [{ period, revenue: 17 }] }, '$17.0B'],
+            ['AVGO', queryKeys.avgo, { earnings: { period, metrics: [{ id: 'aiRevenue', value: 5e9, text: 'over' }] } }, '> $5.0B'],
+            ['Bitcoin', queryKeys.bitcoin, { stats: { market_price_usd: 45_000, timestamp } }, '$45,000'],
+            ['BMNR', queryKeys.bmnr, { live: { ethHeld: { value: 3e6, asOf } } }, '3.00M'],
+            ['Ethereum', queryKeys.eth, { mainnet: { tps: 15.5, asOf: timestamp } }, '15.5 TPS'],
+            ['Gold', queryKeys.gold, { market: { futuresPrice: { value: 2500, asOf } } }, '$2,500'],
+            ['GOOGL', queryKeys.googl, report({ businesses: [{ name: 'Google Cloud', revenue: 14e9 }] }), '$14.0B'],
+            ['HIMS', queryKeys.hims, report({ metrics: { subscribers: { value: 2e6 } } }), '2.00M'],
+            ['Homebuilders', queryKeys.homebuilders, { rows: [{ company: { symbol: 'ITB' }, market: { price: 106.3, quoteTime: timestamp } }] }, '$106.30'],
+            ['HOOD', queryKeys.hood, { monthly: { period, metrics: [{ id: 'deposits', value: 2e9 }] } }, '$2.0B'],
+            ['Macro', queryKeys.economic, { rows: [{ seriesId: 'CPIAUCSL', available: true, latest: 2.64, latestDate: asOf }] }, '2.64%'],
+            ['MU', queryKeys.mu, { earnings: { period, metrics: [{ id: 'revenue', value: 9e9 }] } }, '$9.0B'],
+            ['NVDA', queryKeys.nvda, { earnings: { quarters: [{ period, dataCenter: 42e9 }] } }, '$42.0B'],
+            ['Oil', queryKeys.oil, { market: { wtiPrice: { value: 69.5, asOf } } }, '$69.50'],
+            ['PLTR', queryKeys.fundamentalsPage('PLTR'), { displayCurrency: 'USD', currencyVersion: 2, quarterly: pltrQuarterly }, '$1.1B'],
+            ['Semiconductors', queryKeys.semiconductors, { rows: [
+              ...[1, 3, -2, null].map(dailyChange => ({ market: { dailyChange } })),
+              { market: { dailyChange: 25, changeBasis: '24h' } },
+            ] }, '2 up / 1 down'],
+            ['SOFI', queryKeys.sofi, { reports: { quarters: [{ endDate: asOf, values: { members: 12e6 } }] } }, '12.00M'],
+            ['VST', queryKeys.vst, { operations: { period, totalGenerationGwh: 25_600 } }, '25.6 TWh'],
+          ]
+          const cardMetric = label => focusCards().find(button => button.getAttribute('aria-label') === label).querySelector('[data-focus-metric]')
+          const metricValue = label => cardMetric(label).querySelector('b').textContent
+          const snapshot = (data, freshness = 'fresh') => ({ data, errors: [], meta: { freshness, source: 'Fixture', fetchedAt: timestamp } })
+          check(metricValue('Bitcoin') === '—', 'An absent reading must leave an empty metric')
+          flushSync(() => {
+            for (const [, key, data] of fixtures) focusCache.setQueryData(key, snapshot(data))
+          })
+          for (const [label, , , expected] of fixtures) check(metricValue(label) === expected, 'Wrong headline metric for ' + label)
+          check(cardMetric('Bitcoin').textContent.includes('Oct 1, 2026'), 'Spot reference must show the observation date')
+          renderFocus(TABS, ['bitcoin'])
+          check(!cardMetric('Bitcoin').textContent.includes('45,000') && !cardMetric('Bitcoin').title.includes('45,000'),
+            'A protected page must not reveal its cached reading in the Focus Dashboard')
+          renderFocus(TABS)
+          check(metricValue('Bitcoin') === '$45,000', 'Removing Obscure protection must restore the reading')
+          flushSync(() => focusCache.setQueryData(queryKeys.bitcoin, snapshot({ stats: { market_price_usd: 17, timestamp } }, 'failed')))
+          check(metricValue('Bitcoin') === '—', 'A failed snapshot must not display data from a failure envelope')
+          check(focusCache.getQueryCache().getAll().every(query => query.getObserversCount() === 0),
+            'Focus readings should not attach query observers')
+          const filter = label => flushSync(() => [...railHost.querySelectorAll('[aria-label="Filter Focus pages"] button')]
+            .find(button => button.textContent === label).click())
+          filter('Digital assets')
+          check(focusLabels().join(',') === 'Bitcoin,BMNR,Ethereum', 'Digital assets must keep the matching topics in alphabetical order')
+          const search = railHost.querySelector('input[aria-label="Search Focus pages"]')
+          const changeSearch = text => flushSync(() => {
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(search, text)
+            search.dispatchEvent(new Event('input', { bubbles: true }))
+          })
+          changeSearch('staking')
+          check(focusCards().length === 1 && focusCards()[0].getAttribute('aria-label') === 'Ethereum', 'Search did not refine the active filter')
+          focusCards()[0].click()
+          check(selected === 'eth', 'Filtered card navigated to the wrong page')
+          changeSearch('unmatched phrase')
+          check(focusCards().length === 0 && railHost.textContent.includes('No matching Focus pages.'), 'Missing search empty state')
+          flushSync(() => [...railHost.querySelectorAll('button')].find(button => button.textContent === 'Clear filters').click())
+          check(focusCards().length === FOCUS_WORKSPACE.pages.length - 1 && !search.value, 'Clear filters did not restore the directory')
+          changeSearch('chip')
+          check(focusLabels().join(',') === 'AVGO,Semiconductors', 'Search results must stay alphabetical')
           if (${JSON.stringify(process.argv.includes('--page-order-only'))}) {
             railRoot.unmount()
+            focusCache.clear()
             railHost.remove()
-            return 'PASS: visual page traversal matches real workspace headers in both directions, custom ordering, hidden pages and wrapping'
+            return 'PASS: visual page traversal, Focus landing and routes, filters, search, 19 cached readings, cache updates and Obscure protection'
           }
           flushSync(() => railRoot.render(<WorkspaceSidebar {...railProps} collapsed />))
           const favoriteButtons = [...railHost.querySelectorAll('nav[aria-label="Favorite pages"] button')]
@@ -149,6 +260,7 @@ try {
           check(!railHost.querySelector('[data-navigation-icon]'), 'Expanded sidebar should show labels')
           check(railHost.textContent.includes('Macro & events') && railHost.textContent.includes('Personal Finance'), 'Expanded labels missing')
           railRoot.unmount()
+          focusCache.clear()
           railHost.remove()
           createRoot(document.getElementById('root')).render(<Shell />)
           await settle()
@@ -203,11 +315,12 @@ try {
     bundle: true,
     jsx: 'automatic',
     write: false,
+    outfile: join(directory, 'renderer.js'),
     format: 'iife',
     define: { 'process.env.NODE_ENV': '"production"' },
   })
-  await writeFile(join(directory, 'renderer.js'), bundle.outputFiles[0].text)
-  await writeFile(join(directory, 'index.html'), '<div id="root"></div><script src="renderer.js"></script>')
+  for (const file of bundle.outputFiles) await writeFile(file.path, file.contents)
+  await writeFile(join(directory, 'index.html'), '<link rel="stylesheet" href="renderer.css"><div id="root"></div><script>window.api = {}</script><script src="renderer.js"></script>')
   await writeFile(join(directory, 'main.cjs'), `
     const { app, BrowserWindow } = require('electron')
     app.setPath('userData', ${JSON.stringify(join(directory, 'userData'))})

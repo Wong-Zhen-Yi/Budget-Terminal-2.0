@@ -217,18 +217,19 @@ Settings → Workspace → Keyboard Shortcuts → Controller controls.
 After Windows setup, open a new PowerShell or Command Prompt window and type `btd`
 for the desktop app.
 
-Double-click launchers show dependency checks and build output in their terminal;
-keep that terminal open while using the app. The Windows `btd` command runs
-independently, so its calling terminal can close. Development mode requires its
+Double-click launchers show dependency checks and build output in their terminal.
+Keep that terminal open while using the app. Development mode also requires its
 terminal to stay open.
 
-`btd` in a new PowerShell or Command Prompt window opens the desktop app from any
-directory and checks dependencies and builds the latest desktop source before opening it.
+`btd` works from any directory. It shows the five startup stages and build output
+in your terminal, then opens the desktop app independently. Once the launcher
+confirms it has launched Budget Terminal, you can close that terminal.
 To install or repair it manually on Windows, run `npm run setup:desktop` from the checkout.
-Background `btd` startup logs are saved under `%LOCALAPPDATA%\BudgetTerminal\launcher-logs`.
-`btd restart` gracefully closes the running app, waits for pending saves, rebuilds the latest source and reopens it. If the app is closed, it starts it. Restart never forces termination; a shutdown timeout stops the launch and leaves an error in the startup logs.
+The detached desktop process writes its output under `%LOCALAPPDATA%\BudgetTerminal\launcher-logs`.
+`btd restart` gracefully closes the running app, waits for pending saves, rebuilds the latest source and reopens it. If the app is closed, it starts it. A shutdown timeout stops the launch and reports the error in the terminal.
 Run `btd --help` for the full list of commands and options, including `btd -Dev`
-for live reloading and `btd -Logs` to open diagnostics. To remove only the `btd` command,
+for live reloading, `btd -Logs` to open diagnostics, and `btd -Attached` to keep
+the app's runtime output in the terminal. To remove only the `btd` command,
 run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-bt.ps1 -Uninstall`.
 
 ### Update Budget Terminal

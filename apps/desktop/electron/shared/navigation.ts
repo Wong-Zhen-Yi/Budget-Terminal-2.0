@@ -1,23 +1,35 @@
-import { SETTINGS_TAB_ID, TABS } from './contract.js'
+import { FOCUS_DASHBOARD_TAB_ID, SETTINGS_TAB_ID, TABS } from './contract.js'
+import type { LabFeatureId } from './contract.js'
 
 export const DEFAULT_TAB_ID = 'dashboard-2'
 
-export function isMainPageAvailable(id: string, hidden: readonly string[]): boolean {
-  return TABS.some(tab => tab.id === id && tab.implemented) && !hidden.includes(id)
+export function isLabPageEnabled(id: string, enabledLabs: readonly LabFeatureId[] = []): boolean {
+  const lab = TABS.find(tab => tab.id === id)?.lab
+  return !lab || enabledLabs.includes(lab)
 }
 
-export function resolveMainPage(mainPage: string | undefined, order: readonly string[], hidden: readonly string[]): string {
-  if (mainPage && isMainPageAvailable(mainPage, hidden)) return mainPage
-  if (isMainPageAvailable(DEFAULT_TAB_ID, hidden)) return DEFAULT_TAB_ID
-  return order.find(id => isMainPageAvailable(id, hidden)) ?? SETTINGS_TAB_ID
+export function isMainPageAvailable(id: string, hidden: readonly string[], enabledLabs?: readonly LabFeatureId[]): boolean {
+  return TABS.some(tab => tab.id === id && tab.implemented) && !hidden.includes(id) && isLabPageEnabled(id, enabledLabs)
 }
 
-/** Stable workspace membership; user ordering still applies within each workspace. */
+export function resolveMainPage(mainPage: string | undefined, order: readonly string[], hidden: readonly string[], enabledLabs?: readonly LabFeatureId[]): string {
+  if (mainPage && isMainPageAvailable(mainPage, hidden, enabledLabs)) return mainPage
+  if (isMainPageAvailable(DEFAULT_TAB_ID, hidden, enabledLabs)) return DEFAULT_TAB_ID
+  return order.find(id => isMainPageAvailable(id, hidden, enabledLabs)) ?? SETTINGS_TAB_ID
+}
+
+export const FOCUS_WORKSPACE = {
+  id: 'focus',
+  label: 'Focus',
+  pages: [FOCUS_DASHBOARD_TAB_ID, 'macro', 'bmnr', 'bitcoin', 'eth', 'pltr', 'hood', 'hims', 'sofi', 'mu', 'googl', 'anthropic', 'amzn', 'avgo', 'nvda', 'semiconductors', 'homebuilders', 'vst', 'gold', 'oil'],
+}
+
+/** Stable workspace membership for navigation. */
 export const WORKSPACES = [
-  { id: 'overview', label: 'Overview', pages: ['dashboard', 'dashboard-2', 'pre-market', 'news', 'calendar', 'youtube', 'dictionary'] },
+  { id: 'overview', label: 'Overview', pages: ['dashboard', 'dashboard-2', 'dashboard-lite', 'pre-market', 'news', 'news-lite', 'calendar', 'youtube', 'dictionary'] },
   { id: 'markets', label: 'Markets', pages: ['heatmap', 'up-down', 'trading-volumes', 'beta', 'market-cap', 'price', 'etf', 'sp500', 'forex', 'crypto', 'polymarket'] },
   { id: 'research', label: 'Research', pages: ['browser', 'stocks', 'stock-discovery', 'fundamentals', 'scorecard', 'defeatbeta', 'valuation', 'institutions'] },
-  { id: 'focus', label: 'Focus', pages: ['macro', 'bmnr', 'bitcoin', 'eth', 'pltr', 'hood', 'hims', 'sofi', 'mu', 'googl', 'anthropic', 'amzn', 'avgo', 'nvda', 'semiconductors', 'homebuilders', 'vst', 'gold', 'oil'] },
+  FOCUS_WORKSPACE,
   { id: 'trading', label: 'Trading', pages: ['charts', 'options', 'technical-screen', 'quant', 'backtest'] },
   { id: 'macro', label: 'Macro & events', pages: ['global', 'economic', 'bonds', 'money', 'ipo', 'politics'] },
   { id: 'money', label: 'My money', pages: ['portfolio', 'personal-finance', 'cards', 'projections'] },
@@ -32,10 +44,20 @@ export function workspaceFor(tabId: string) {
   return WORKSPACES.find((workspace) => workspace.pages.includes(tabId))
 }
 
-/** Match sidebar workspace order and the user's visible page order within each header. */
-export function pagesInVisualOrder<T extends { id: string; implemented: boolean }>(tabs: readonly T[]): T[] {
+export function focusTopicPages<T extends (typeof TABS)[number]>(tabs: readonly T[]): T[] {
+  return tabs
+    .filter(tab => tab.implemented && tab.id !== FOCUS_DASHBOARD_TAB_ID && FOCUS_WORKSPACE.pages.includes(tab.id))
+    .sort((a, b) => a.label.localeCompare(b.label, 'en', { sensitivity: 'base' }))
+}
+
+/** Match sidebar workspace order and the visible shortcuts within each workspace. */
+export function pagesInVisualOrder<T extends (typeof TABS)[number]>(tabs: readonly T[]): T[] {
   return [
-    ...WORKSPACES.flatMap(workspace => tabs.filter(tab => tab.implemented && workspace.pages.includes(tab.id))),
+    ...WORKSPACES.flatMap(workspace => {
+      const pages = tabs.filter(tab => tab.implemented && workspace.pages.includes(tab.id))
+      const dashboard = pages.find(tab => tab.id === FOCUS_DASHBOARD_TAB_ID)
+      return dashboard ? [dashboard, ...focusTopicPages(pages)] : pages
+    }),
     ...tabs.filter(tab => tab.implemented && tab.id === 'settings'),
   ]
 }

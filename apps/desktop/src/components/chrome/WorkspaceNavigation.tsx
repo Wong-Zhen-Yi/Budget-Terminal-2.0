@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 
-import { SETTINGS_TAB_ID } from '@shared/contract'
-import { WORKSPACES, workspaceFor } from '@shared/navigation'
+import { FOCUS_DASHBOARD_TAB_ID, SETTINGS_TAB_ID } from '@shared/contract'
+import { FOCUS_WORKSPACE, WORKSPACES, workspaceFor } from '@shared/navigation'
 import { NavigationIcon } from './NavigationIcon'
 
 interface NavigationTab {
@@ -33,7 +33,7 @@ export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, rece
   const navigationButton = (collapsed ? pageButton.replace('px-3', 'px-1') + 'text-center ' : pageButton) + (isMac ? 'rounded-lg ' : '')
   const activeWorkspace = workspaceFor(activeTab)
   useEffect(() => {
-    if (activeWorkspace) remembered.current.set(activeWorkspace.id, activeTab)
+    if (activeWorkspace && activeTab !== FOCUS_DASHBOARD_TAB_ID) remembered.current.set(activeWorkspace.id, activeTab)
   }, [activeTab, activeWorkspace])
 
   return (
@@ -53,7 +53,8 @@ export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, rece
             const pages = tabs.filter((tab) => workspace.pages.includes(tab.id) && tab.implemented)
             if (!pages.length) return null
             const rememberedId = remembered.current.get(workspace.id)
-            const target = pages.find((tab) => tab.id === rememberedId) ?? pages[0]
+            const target = pages.find((tab) => tab.id === FOCUS_DASHBOARD_TAB_ID) ??
+              pages.find((tab) => tab.id === rememberedId) ?? pages[0]
             const active = workspace.id === activeWorkspace?.id
             const unread = target.id === 'notifications' && unreadNotifications > 0
             return (
@@ -112,12 +113,19 @@ export function WorkspaceHeader({ tabs, activeTab, onSelectTab, favorite, onTogg
   const workspace = workspaceFor(activeTab)
   const page = tabs.find((tab) => tab.id === activeTab)
   const pages = tabs.filter((tab) => workspace?.pages.includes(tab.id))
+  const focusLanding = activeTab === FOCUS_DASHBOARD_TAB_ID
+  const hasFocusDashboard = workspace === FOCUS_WORKSPACE && pages.some(tab => tab.id === FOCUS_DASHBOARD_TAB_ID && tab.implemented)
   return (
     <header className={`workspace-header shrink-0 border-b border-border bg-surface px-4 pt-3 pb-2 ${isMac ? 'px-5 pt-4 pb-3' : ''}`}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-baseline gap-3">
-          <span className="text-2xs text-text-muted">{workspace?.label ?? 'Preferences'} /</span>
-          <h1 className="text-sm font-semibold text-text">{page?.label}</h1>
+          {hasFocusDashboard && !focusLanding ? (
+            <button type="button" onClick={() => onSelectTab(FOCUS_DASHBOARD_TAB_ID)}
+              className="no-drag rounded text-2xs text-text-muted hover:text-accent-hover focus-visible:outline-2 focus-visible:outline-accent-hover">
+              <span aria-hidden="true">← </span>Focus Dashboard
+            </button>
+          ) : !focusLanding ? <span className="text-2xs text-text-muted">{workspace?.label ?? 'Preferences'} /</span> : null}
+          <h1 className={`font-semibold text-text ${focusLanding ? 'text-2xl tracking-tight' : 'text-sm'}`}>{page?.label}</h1>
         </div>
         {workspace ? <button type="button" onClick={onToggleFavorite} disabled={saving}
           aria-pressed={favorite} aria-label={favorite ? 'Remove page from favorites' : 'Add page to favorites'}
@@ -125,7 +133,7 @@ export function WorkspaceHeader({ tabs, activeTab, onSelectTab, favorite, onTogg
           {favorite ? '★ Favorited' : '☆ Favorite'}
         </button> : null}
       </div>
-      {pages.length ? <nav aria-label="Workspace pages" className="workspace-pages mt-2 flex flex-wrap gap-1">
+      {pages.length && !hasFocusDashboard ? <nav aria-label="Workspace pages" className="workspace-pages mt-2 flex flex-wrap gap-1">
         {pages.map((tab) => <button key={tab.id} type="button" disabled={!tab.implemented}
           aria-current={tab.id === activeTab ? 'page' : undefined} onClick={() => onSelectTab(tab.id)}
           className={pageButton + (isMac ? 'rounded-lg ' : '') + (tab.id === activeTab ? selectedStyle : idleStyle)}>{tab.label}</button>)}

@@ -36,7 +36,7 @@ function panelLabels(page: string, key: QueryKey): string[] {
   if (root === 'defeatbetaTerminal') return [`DefeatBeta ${key[2]}`]
   if (root === 'sp500') return [`S&P500 ${String(key[1]).replace(/^./, letter => letter.toUpperCase())}`]
   if (root === 'portfolio' && page === 'calendar') return ['Options Expirations']
-  if (root === 'chart' && page === 'dashboard') {
+  if (root === 'chart' && (page === 'dashboard' || page === 'dashboard-lite')) {
     const macro = MACRO_SYMBOLS.find(entry => entry.symbol === key[1])
     if (macro) return [`${macro.label} history`]
   }

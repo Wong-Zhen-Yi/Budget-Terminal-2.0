@@ -18,7 +18,7 @@ const bundle = await build({
       import { createBatchedEquityUpdates } from './src/api/equityStream'
       import { markReloadQuery } from './src/api/pageProgress'
       import { queryKeys } from './src/api/client'
-      import { MACRO_SYMBOLS } from './electron/shared/contract'
+      import { MACRO_SYMBOLS, OPTION_BUCKETS } from './electron/shared/contract'
       import { DashboardPage } from './src/pages/DashboardPage'
       import { useDashboard } from './src/stores/dashboard'
       import { NEWS_REFRESH_MS } from './src/api/refreshRates'
@@ -216,6 +216,110 @@ const bundle = await build({
         window.checkDashboardLayout()
         return 'PASS: Dashboard 2 portfolio pie, central Agents and right-side portfolio heatmap, live quotes, historical intervals, missing/empty holdings, combined health, portfolio switching and no removed-news requests'
       }
+      window.checkDashboardLiteLayout = () => {
+        const page = document.querySelector('.dashboard-lite')
+        const chart = page.querySelector('.dashboard-lite-chart')
+        const options = page.querySelector('.dashboard-lite-options')
+        const portfolio = page.querySelector('.dashboard-lite-portfolio')
+        const news = page.querySelector('.dashboard-lite-news')
+        const bounds = page.getBoundingClientRect()
+        check(chart.getBoundingClientRect().right <= options.getBoundingClientRect().left, 'Chart and options must sit side by side')
+        check(portfolio.getBoundingClientRect().top >= chart.getBoundingClientRect().bottom, 'Portfolio must sit below the chart')
+        check(news.getBoundingClientRect().bottom <= bounds.bottom && page.scrollWidth <= page.clientWidth, 'All Lite panels must fit the viewport')
+        check(chart.querySelector('canvas') && chart.querySelector('canvas').getBoundingClientRect().height > 110, 'Price chart must have a readable candle area')
+        check(options.querySelectorAll('table').length === 1 && options.querySelectorAll('tbody tr').length === 10, 'Show one expiry table at a time')
+        check(page.querySelectorAll('.dashboard-lite-market svg').length === 5, 'Keep all five market sparklines')
+        return 'PASS: Dashboard Lite layout at ' + innerWidth + ' × ' + innerHeight
+      }
+      window.runDashboardLiteProbe = async () => {
+        root.render(null); await settle()
+        const envelope = data => ({ data, meta: { freshness: 'fresh', fetchedAt: Date.now(), source: 'fixture' }, errors: [] })
+        const tickers = ['AAPL', 'MSFT']
+        const book = { id: 'book', name: 'Fixture holdings', tickers, holdings: Object.fromEntries(tickers.map(ticker =>
+          [ticker, { ticker, shares: 1, avgPrice: 90, includeInWeight: true }])),
+          cashBalance: 100, includeCashInWeight: true, marginDebt: 0, options: [], readOnly: false }
+        const makeChart = ({symbol, timeframe}) => envelope({
+          symbol, timeframe, interval: timeframe === '1 Week' ? '1wk' : '1d',
+          stats: { symbol, longName: symbol + ' Corp.', currency: 'USD', price: 126, change: 1, absChange: 1 },
+          candles: Array.from({length: 70}, (_, i) => {
+            const close = 100 + Math.sin(i / 2) * 5 + i / 3
+            return { time: 1760000000 + i * 86400, open: close - (i % 3 - 1), high: close + 2, low: close - 2, close, volume: 500000 * (i % 5 + 1) }
+          }), indicators: {
+            ma200: [{ time: 1760000000 + 69 * 86400, value: 105 }],
+            rsi: [{ time: 1760000000 + 69 * 86400, value: 54.25 }],
+            rsiMa: [{ time: 1760000000 + 69 * 86400, value: 51.75 }],
+          },
+        })
+        const makeOptions = symbol => envelope({ symbol, buckets: OPTION_BUCKETS.map(({key, label}, i) =>
+          ({ key, label, expiration: '2026-12-' + (4 + i * 7), rows: Array.from({ length: 10 }, (_, rank) => ({
+            ticker: symbol, type: rank % 2 ? 'Put' : 'Call', strike: 115 + i * 5 + rank,
+            lastPrice: 2 + i, volume: 12000 - rank, openInterest: 13000,
+          })) })) })
+        useDashboard.setState({ symbol: 'AAPL', timeframe: '1 Day', portfolioId: null, autoFollow: true,
+          indicators: { volume: true, rsi: true, ma200: true } })
+        const chartReads = []
+        const exports = []
+        const opened = []
+        window.api.chart = async request => { chartReads.push(request); return makeChart(request) }
+        window.api.options = async request => makeOptions(request.symbol)
+        window.api.saveText = async (...args) => { exports.push(args); return true }
+        window.api.openExternal = async url => { opened.push(url); return true }
+        client.setQueryData(queryKeys.portfolio, envelope({ portfolios: [book], activeId: book.id, sourcePath: '' }))
+        client.setQueryData(queryKeys.quotes(tickers), envelope({ holdings: { AAPL: { price: 126, change: 1 }, MSFT: { price: 137, change: 2 } }, macro }))
+        client.setQueryData(queryKeys.targets(tickers), envelope({ targets: tickers.map(ticker => ({ ticker, current: 126, target: 150, upside: 19, unavailableReason: '' })) }))
+        client.setQueryData(queryKeys.news(tickers), envelope({ items: [
+          { id: 'article', ticker: 'AAPL', title: 'Fixture portfolio headline', source: 'Fixture', publishedAt: Date.now(), url: 'https://example.com/article' },
+        ] }))
+        for (const symbol of [...MACRO_SYMBOLS.map(entry => entry.symbol), ...tickers]) {
+          client.setQueryData(queryKeys.chart(symbol, '1 Day'), makeChart({symbol, timeframe: '1 Day'}))
+        }
+        client.setQueryData(queryKeys.options('AAPL'), makeOptions('AAPL'))
+        const render = lite => root.render(<QueryClientProvider client={client}><div className="flex h-full flex-col"><DashboardPage lite={lite} onStatusChange={() => {}} /></div></QueryClientProvider>)
+        render(false); await settle()
+        check(document.querySelector('.dashboard-holdings') && document.querySelectorAll('.dashboard-options section').length === 3, 'Keep Dashboard 1 layout and all three expiry tables')
+        const dashboardChart = document.querySelector('.dashboard-chart .dashboard-price-chart')
+        const chartButton = text => [...dashboardChart.querySelectorAll('button')].find(button => button.textContent === text)
+        const indicatorValues = () => dashboardChart.querySelector('[aria-label="Indicator values"]').textContent
+        check(dashboardChart.querySelector('canvas')?.getBoundingClientRect().height > 160, 'Dashboard 1 chart must have a readable candle area')
+        check(indicatorValues().includes('MA200 $105.00') && indicatorValues().includes('RSI(14) 54.25') &&
+          indicatorValues().includes('RSI MA(14) 51.75'), 'Dashboard 1 chart must retain its technical readouts')
+        chartButton('RSI').click(); await settle()
+        check(chartButton('RSI').getAttribute('aria-pressed') === 'false' && !indicatorValues().includes('RSI(14)'), 'RSI must toggle its readouts')
+        chartButton('RSI').click(); await settle()
+        chartButton('Volume').click(); await settle()
+        check(chartButton('Volume').getAttribute('aria-pressed') === 'false', 'Volume toggle must stay independent')
+        chartButton('Volume').click(); await settle()
+        chartButton('200 MA').click(); await settle()
+        check(!indicatorValues().includes('MA200') && chartButton('200 MA').getAttribute('aria-pressed') === 'false', '200 MA must toggle its overlay and readout')
+        chartButton('200 MA').click(); await settle()
+        check(chartReads.length === 0, 'Toggling indicators must not fetch history')
+        check(chartButton('Auto').getAttribute('aria-pressed') === 'true', 'Keep Dashboard 1 auto-follow')
+        chartButton('Export Top Options').click()
+        check(exports[0]?.[0] === 'AAPL_top_options.csv' && exports[0]?.[1].includes('4 Weeks'), 'Keep Dashboard 1 options export')
+        render(true); await settle()
+        window.checkDashboardLiteLayout()
+        check(chartReads.length === 0, 'Do not fetch prepared chart data on first visit')
+        const page = document.querySelector('.dashboard-lite')
+        const button = text => [...page.querySelectorAll('button')].find(button => button.textContent === text)
+        button('2 Weeks').click(); await settle()
+        check(page.querySelector('.dashboard-lite-option-context').textContent.includes('2026-12-11'), 'The expiry selector must update the displayed date')
+        button('Export CSV').click()
+        check(exports[1]?.[0] === 'AAPL_top_options.csv' && exports[1]?.[1].includes('4 Weeks'), 'Export the options across all three expiries')
+        button('Auto-follow').click(); await settle()
+        check(!page.querySelector('.dashboard-lite-portfolio button.dashboard-lite-ticker'), 'Auto-follow off must leave the chart independent of holdings')
+        button('Auto-follow').click(); await settle()
+        button('MSFT').click(); await settle()
+        check(page.querySelector('.dashboard-price-chart-instrument h2').textContent === 'MSFT' && page.querySelector('.dashboard-lite-option-context strong').textContent === 'MSFT', 'Selecting a holding updates chart and options')
+        button('Price targets').click(); await settle()
+        check(page.querySelector('.dashboard-lite-targets table').textContent.includes('Upside'), 'Targets should use the portfolio panel')
+        page.querySelector('[aria-label="1 Week"]').click(); await settle()
+        check(chartReads.some(request => request.symbol === 'MSFT' && request.timeframe === '1 Week'), 'Candle interval changes load the selected symbol')
+        button('RSI').click(); await settle()
+        check(button('RSI').getAttribute('aria-pressed') === 'false', 'Chart indicator does not toggle')
+        page.querySelector('.dashboard-lite-news li button').click()
+        check(opened[0] === 'https://example.com/article', 'News should open the selected article')
+        return 'PASS: shared chart, Dashboard 1 indicator panes and readouts, Dashboard Lite warm data, expiry tabs, CSV, holding selection, targets, timeframe and news'
+      }
       window.runProbe = async () => {
         for (const entry of MACRO_SYMBOLS) client.setQueryData(queryKeys.chart(entry.symbol, '1 Day'), fixture(entry.symbol))
         root.render(<QueryClientProvider client={client}><Shell /></QueryClientProvider>)
@@ -333,6 +437,15 @@ await writeFile(join(directory, 'main.cjs'), `
         await new Promise(resolve => setTimeout(resolve, 150))
         console.log(await window.webContents.executeJavaScript('window.checkDashboardLayout()'))
         writeFileSync(${JSON.stringify(directory)} + '/dashboard-2-' + width + '.png', (await window.webContents.capturePage()).toPNG())
+      }
+      window.setSize(1440, 810)
+      await new Promise(resolve => setTimeout(resolve, 150))
+      console.log(await window.webContents.executeJavaScript('window.runDashboardLiteProbe()'))
+      for (const [width, height] of [[1440, 810], [1280, 720], [1000, 640]]) {
+        window.setSize(width, height)
+        await new Promise(resolve => setTimeout(resolve, 150))
+        console.log(await window.webContents.executeJavaScript('window.checkDashboardLiteLayout()'))
+        writeFileSync(${JSON.stringify(directory)} + '/dashboard-lite-' + width + '.png', (await window.webContents.capturePage()).toPNG())
       }
       app.exit(0)
     } catch (error) {console.error(error); app.exit(1)}

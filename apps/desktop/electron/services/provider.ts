@@ -510,6 +510,7 @@ const emptySettings: AppSettings = {
   time12h: true,
   tabOrder: TABS.map((tab) => tab.id),
   hiddenTabs: [],
+  enabledLabs: [],
   favoriteTabs: ['dashboard', 'portfolio', 'charts'],
   sidebarCollapsed: false,
   obscuredTabs: [...DEFAULT_OBSCURED_TABS],

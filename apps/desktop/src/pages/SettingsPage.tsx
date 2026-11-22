@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 
-import type { AppSettings, AppSettingsMutation, MaintenanceAction } from '@shared/contract'
-import { DEFAULT_CLOCK_COUNTRY, SETTINGS_TAB_ID, TABS } from '@shared/contract'
+import type { AppSettings, AppSettingsMutation, LabFeatureId, MaintenanceAction } from '@shared/contract'
+import { DEFAULT_CLOCK_COUNTRY, LAB_FEATURES, SETTINGS_TAB_ID, TABS } from '@shared/contract'
+import { isLabPageEnabled } from '@shared/navigation'
 import { DEFAULT_BACKTEST_PAGE_SETTINGS } from '@shared/backtest'
 import { DEFAULT_QUANT_PAGE_SETTINGS } from '@shared/quant'
 import { DEFAULT_YOUTUBE_PAGE_SETTINGS } from '@shared/youtube'
@@ -26,6 +27,7 @@ import { CloudSyncPanel } from '@/components/settings/CloudSyncPanel'
 import { DiagnosticLogsPanel } from '@/components/settings/DiagnosticLogsPanel'
 import { useSettingsNavigation } from '@/stores/settingsNavigation'
 import { AppDashboard } from '@/components/settings/AppDashboard'
+import { Panel } from '@/components/ui/Panel'
 import '@/styles/settings.css'
 
 const categories = [
@@ -35,9 +37,16 @@ const categories = [
   { id: 'privacy', label: 'Privacy' },
   { id: 'data', label: 'Data & storage' },
   { id: 'integrations', label: 'Integrations' },
+  { id: 'labs', label: 'Labs' },
   { id: 'diagnostics', label: 'Diagnostics' },
 ] as const
 type Category = (typeof categories)[number]['id']
+const searchDestinations = [
+  { id: 'dashboard', label: 'App dashboard', terms: 'check for updates app version startup status app metrics' },
+  { id: 'controller', label: 'Controller controls', terms: 'gamepad steam deck playstation xbox button mapping input test controller shortcuts' },
+] as const
+const logSearchTerms = 'application diagnostic logs events search severity area session export folder pause live'
+
 interface SettingsCard {
   id: string
   category: Category
@@ -53,6 +62,7 @@ const fallbackSettings: AppSettings = {
   time12h: true,
   tabOrder: TABS.map((tab) => tab.id),
   hiddenTabs: [],
+  enabledLabs: [],
   favoriteTabs: [],
   sidebarCollapsed: false,
   obscuredTabs: [],
@@ -87,6 +97,7 @@ export function SettingsPage({
     tone: 'muted',
   })
   const [busy, setBusy] = useState<MaintenanceAction | null>(null)
+  const [savingLab, setSavingLab] = useState<LabFeatureId | null>(null)
   const [category, setCategory] = useState<Category>('dashboard')
   const [search, setSearch] = useState('')
   const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'failed'>('idle')
@@ -107,11 +118,21 @@ export function SettingsPage({
     scrollRef.current?.scrollTo({ top: 0 })
   }, [diagnosticsRequest])
   const scrollRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  const updateSearch = (value: string) => {
+    setSearch(value)
+    scrollRef.current?.scrollTo({ top: 0 })
+  }
+
+  const clearSearch = () => {
+    updateSearch('')
+    searchRef.current?.focus()
+  }
 
   const chooseCategory = (next: Category) => {
     setCategory(next)
-    setSearch('')
-    scrollRef.current?.scrollTo({ top: 0 })
+    updateSearch('')
   }
 
   useEffect(() => {
@@ -144,10 +165,11 @@ export function SettingsPage({
   const orderedTabs = useMemo<NavigationTab[]>(
     () =>
       settings.tabOrder
+        .filter(id => isLabPageEnabled(id, settings.enabledLabs))
         .map((id) => TAB_BY_ID.get(id))
         .filter((tab): tab is (typeof TABS)[number] => Boolean(tab))
         .map((tab) => ({ id: tab.id, label: tab.label, implemented: tab.implemented })),
-    [settings.tabOrder],
+    [settings.tabOrder, settings.enabledLabs],
   )
 
   const privacyTabs = useMemo(
@@ -174,12 +196,23 @@ export function SettingsPage({
     [runMaintenance],
   )
 
+  const searching = search.trim().length > 0
+  const terms = search.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []
+  const matchesSearch = (value: string) => {
+    const index = value.toLowerCase()
+    return terms.length > 0 && terms.every(term => index.includes(term))
+  }
+  const matches = (card: Pick<SettingsCard, 'category' | 'terms'>) => searching
+    ? matchesSearch(`${card.terms} ${categories.find(entry => entry.id === card.category)?.label ?? ''}`)
+    : card.category === category
+  const destinations = searching ? searchDestinations.filter(({ label, terms }) => matchesSearch(`${label} ${terms}`)) : []
+
   const groups: Array<{ id: string; title: string; hint: string; cards: SettingsCard[] }> = [
     {
       id: 'workspace', title: 'Workspace', hint: 'A familiar workspace, arranged around the way you research.',
       cards: [
         { id: 'navigation', category: 'workspace', terms: 'choose main page startup homepage launch pages navigation visible hidden order move favorites reset', content:
-          <NavigationPanel tabs={orderedTabs} hidden={settings.hiddenTabs} mainPage={settings.mainPage}
+          <NavigationPanel tabs={orderedTabs} hidden={settings.hiddenTabs} mainPage={settings.mainPage} enabledLabs={settings.enabledLabs}
             canSaveMainPage={Boolean(settingsQuery.data && settingsQuery.data.meta.freshness !== 'failed')}
             onSetMainPage={(id) => write({ type: 'setMainPage', id }, 'Main page updated for the next launch.')}
             onSetHidden={(id, hidden) => void write({ type: 'setTabHidden', id, hidden }, 'Page navigation updated.')}
@@ -217,9 +250,41 @@ export function SettingsPage({
       ],
     },
     {
+      id: 'labs', title: 'Labs', hint: 'Try experimental features on this device.',
+      cards: [{ id: 'labs', category: 'labs', terms: `experimental opt in ${LAB_FEATURES.map(feature => `${feature.label} ${feature.description}`).join(' ')}`,
+        content: <Panel title="Experiments">
+          <ul className="settings-labs">
+            {LAB_FEATURES.map(feature => {
+              const enabled = settings.enabledLabs?.includes(feature.id) ?? false
+              return <li key={feature.id} className="obscure-mode-row">
+                <div>
+                  <h3 id={`lab-${feature.id}`}>{feature.label}</h3>
+                  <p id={`lab-${feature.id}-description`}>{feature.description}</p>
+                </div>
+                <button type="button" className="obscure-switch" role="switch"
+                  aria-labelledby={`lab-${feature.id}`} aria-describedby={`lab-${feature.id}-description`} aria-checked={enabled}
+                  disabled={savingLab !== null || !settingsQuery.data || settingsQuery.data.meta.freshness === 'failed'}
+                  onClick={async () => {
+                    setSavingLab(feature.id)
+                    try {
+                      await write({ type: 'setLabEnabled', id: feature.id, enabled: !enabled },
+                        enabled ? `${feature.label} disabled.` : `${feature.label} enabled.`)
+                    } finally {
+                      setSavingLab(null)
+                    }
+                  }}>
+                  <span className="obscure-switch-track" aria-hidden="true" />
+                  <span aria-hidden="true">{enabled ? 'On' : 'Off'}</span>
+                </button>
+              </li>
+            })}
+          </ul>
+        </Panel> }],
+    },
+    {
       id: 'logs', title: 'Application logs', hint: 'Search local diagnostic events and inspect previous sessions.',
-      cards: [{ id: 'logs', category: 'diagnostics', terms: 'application diagnostic logs events search severity area session export folder pause live',
-        content: <DiagnosticLogsPanel active={active && category === 'diagnostics'} /> }],
+      cards: [{ id: 'logs', category: 'diagnostics', terms: logSearchTerms,
+        content: <DiagnosticLogsPanel active={active && matches({ category: 'diagnostics', terms: logSearchTerms })} /> }],
     },
     {
       id: 'startup', title: 'Startup & providers', hint: 'Detailed loading progress and request pressure live here in Settings.',
@@ -236,12 +301,11 @@ export function SettingsPage({
       ],
     },
   ]
-  const terms = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
-  const matches = (card: SettingsCard) => card.category === category &&
-    terms.every(term => `${card.terms} ${categories.find(entry => entry.id === card.category)?.label}`.toLowerCase().includes(term))
-  const resultCount = groups.flatMap(group => group.cards).filter(matches).length
+  const resultCount = destinations.length + groups.flatMap(group => group.cards).filter(matches).length
+  const showDashboard = !searching && category === 'dashboard'
+  const showController = !searching && category === 'controller'
   const navigation = categories.map(entry => (
-    <button key={entry.id} type="button" aria-pressed={category === entry.id}
+    <button key={entry.id} type="button" aria-pressed={!searching && category === entry.id}
       onClick={() => chooseCategory(entry.id)} data-settings-category={entry.id}>
       {entry.label}
     </button>
@@ -251,29 +315,42 @@ export function SettingsPage({
     <div className="settings-page">
       <header className="settings-toolbar">
         <nav className="settings-tabs" aria-label="Settings categories">{navigation}</nav>
-        {category === 'dashboard' ? <button className="settings-update" type="button" disabled={updateState === 'checking'}
-          onClick={() => void checkForUpdates()}>
-          {updateState === 'checking' ? 'Checking for updates…' : updateState === 'failed' ? 'Retry update check' : 'Check for updates'}
-        </button> :
-        <label className={`settings-search${category === 'controller' ? ' settings-search--inactive' : ''}`} aria-hidden={category === 'controller'}><span aria-hidden="true">⌕</span>
-          <input type="search" aria-label="Search settings" placeholder="Search settings…" value={search} disabled={category === 'controller'}
-            onChange={event => { setSearch(event.target.value); scrollRef.current?.scrollTo({ top: 0 }) }} />
-        </label>}
+        <div className="settings-toolbar-actions">
+          {showDashboard && <button className="settings-update" type="button" disabled={updateState === 'checking'}
+            onClick={() => void checkForUpdates()}>
+            {updateState === 'checking' ? 'Checking for updates…' : updateState === 'failed' ? 'Retry update check' : 'Check for updates'}
+          </button>}
+          <div className="settings-search" role="search" aria-label="Settings">
+            <span aria-hidden="true">⌕</span>
+            <input ref={searchRef} type="search" aria-label="Search settings" placeholder="Search settings…" value={search}
+              onChange={event => updateSearch(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Escape' && search) {
+                  event.preventDefault()
+                  clearSearch()
+                }
+              }} />
+            {search && <button type="button" aria-label="Clear settings search" onClick={clearSearch}>×</button>}
+          </div>
+        </div>
       </header>
-      <div className="settings-dashboard-host" hidden={category !== 'dashboard'}>
+      <div className="settings-dashboard-host" hidden={!showDashboard}>
         <AppDashboard settings={settings} />
       </div>
-      <div className="controller-host" hidden={category !== 'controller'}>
-        <ControllerControls active={active && category === 'controller'} />
+      <div className="controller-host" hidden={!showController}>
+        <ControllerControls active={active && showController} />
       </div>
-      <div className="settings-scroll" ref={scrollRef} hidden={category === 'dashboard' || category === 'controller'}>
+      <div className="settings-scroll" ref={scrollRef} hidden={showDashboard || showController}>
         <div className="settings-content">
           {settingsQuery.error && <p role="alert" className="settings-error">Settings could not load. {settingsQuery.error.message}</p>}
           {status.text && <div className={`settings-feedback settings-feedback--${status.tone}`}>
             <span role={status.tone === 'negative' ? 'alert' : 'status'}>{status.text}</span>
             <button type="button" aria-label="Dismiss settings message" onClick={() => setStatus({ text: '', tone: 'muted' })}>×</button>
           </div>}
-          {search && <p className="settings-search-count" role="status">{resultCount} matching {resultCount === 1 ? 'panel' : 'panels'}</p>}
+          {searching && <p className="settings-search-count" role="status">{resultCount} {resultCount === 1 ? 'result' : 'results'} in Settings</p>}
+          {destinations.length > 0 && <ul className="settings-search-destinations">
+            {destinations.map(({ id, label }) => <li key={id}><button type="button" onClick={() => chooseCategory(id)}>{label}</button></li>)}
+          </ul>}
           {groups.map((group, index) => <section className="settings-group" key={group.id}
             hidden={!group.cards.some(matches)} aria-labelledby={`settings-group-${group.id}`}>
             <header className="settings-group-heading"><span aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
@@ -286,9 +363,9 @@ export function SettingsPage({
               </div>
             })}</div>
           </section>)}
-          {resultCount === 0 && <div className="settings-empty"><h2>No settings match your search.</h2>
-            <p>Try a different term or choose another category.</p>
-            <button type="button" onClick={() => setSearch('')}>Clear search</button>
+          {searching && resultCount === 0 && <div className="settings-empty"><h2>No settings match your search.</h2>
+            <p>Try a different term.</p>
+            <button type="button" onClick={clearSearch}>Clear search</button>
           </div>}
         </div>
       </div>

@@ -6,10 +6,10 @@ import { useMacroCharts } from '@/api/dashboardQueries'
 import { MACRO_SYMBOLS } from '@shared/contract'
 import { useChart, useNews, useOptions, usePortfolio, useQuotes, useTargets } from '@/api/queries'
 import { ChartPanel } from '@/components/dashboard/ChartPanel'
-import { ChartToolbar } from '@/components/dashboard/ChartToolbar'
+import { DashboardLite, DashboardLiteNews } from '@/components/dashboard/DashboardLite'
 import { MacroBar } from '@/components/dashboard/MacroBar'
 import { NewsPanel } from '@/components/dashboard/NewsPanel'
-import { OptionsPanel } from '@/components/dashboard/OptionsPanel'
+import { DashboardLiteOptions, OptionsPanel } from '@/components/dashboard/OptionsPanel'
 import { PortfolioPanel } from '@/components/dashboard/PortfolioPanel'
 import { PortfolioPiePanel } from '@/components/dashboard/PortfolioPiePanel'
 import { PortfolioHeatmapPanel } from '@/components/dashboard/PortfolioHeatmapPanel'
@@ -18,6 +18,7 @@ import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { Splitter } from '@/components/ui/Splitter'
 import { useDashboard } from '@/stores/dashboard'
 import { AgentsPage } from '@/pages/AgentsPage'
+import '@/components/dashboard/ChartPanel.css'
 
 /** Show a panel's warning dot only when something actually went wrong. */
 function warningOf(envelope: Envelope<unknown> | undefined): string | undefined {
@@ -30,10 +31,12 @@ function warningOf(envelope: Envelope<unknown> | undefined): string | undefined 
 export function DashboardPage({
   onStatusChange,
   newsFocused = false,
+  lite = false,
 }: {
   onStatusChange: (panels: PanelStatus[], sourcePath: string) => void
   /** Dashboard 2 places Agents in the center and the portfolio heatmap on the right. */
   newsFocused?: boolean
+  lite?: boolean
 }) {
   const {
     symbol,
@@ -103,16 +106,22 @@ export function DashboardPage({
     agentPanels,
     heatmapPanels,
     portfolioQuery.data,
+    portfolioQuery.error,
     portfolioQuery.isFetching,
     quotesQuery.data,
+    quotesQuery.error,
     quotesQuery.isFetching,
     chartQuery.data,
+    chartQuery.error,
     chartQuery.isFetching,
     optionsQuery.data,
+    optionsQuery.error,
     optionsQuery.isFetching,
     targetsQuery.data,
+    targetsQuery.error,
     targetsQuery.isFetching,
     newsQuery.data,
+    newsQuery.error,
     newsQuery.isFetching,
     macroChartStatus,
   ])
@@ -166,6 +175,65 @@ export function DashboardPage({
     [newsFocused, setHeatmapWidth, setOptionsWidth],
   )
 
+  const selectPortfolioTicker = lite && !autoFollow ? undefined : selectTicker
+  const holdingsPanel = (
+    <PortfolioPanel
+      className={lite ? undefined : 'min-h-24 flex-[3]'}
+      portfolios={portfolios}
+      selected={selected}
+      quotes={quotesQuery.data?.data.holdings ?? {}}
+      loading={portfolioQuery.isLoading || quotesQuery.isLoading}
+      warning={lite ? undefined : warningOf(portfolioQuery.data) ?? warningOf(quotesQuery.data)}
+      activeTicker={lite ? symbol : undefined}
+      onSelectPortfolio={setPortfolioId}
+      onSelectTicker={selectPortfolioTicker}
+    />
+  )
+  const targetsPanel = (
+    <TargetsPanel
+      className={lite ? 'dashboard-lite-targets' : 'min-h-24 flex-[2]'}
+      targets={targetsQuery.data?.data.targets ?? []}
+      loading={targetsQuery.isLoading}
+      warning={lite ? undefined : warningOf(targetsQuery.data)}
+      activeTicker={lite ? symbol : undefined}
+      onSelectTicker={selectPortfolioTicker}
+    />
+  )
+  const chartPanel = !newsFocused && (
+    <ChartPanel
+      className={lite ? 'dashboard-lite-chart' : undefined}
+      symbol={symbol}
+      timeframe={timeframe}
+      indicators={indicators}
+      payload={chartQuery.data?.data ?? null}
+      loading={chartQuery.isLoading}
+      failed={chartQuery.data?.meta.freshness === 'failed' || (chartQuery.isError && !chartQuery.data)}
+      onLoadSymbol={setSymbol}
+      onSetTimeframe={setTimeframe}
+      onToggleIndicator={toggleIndicator}
+      dashboardActions={lite ? undefined : {
+        autoFollow,
+        canExport: buckets.some(bucket => bucket.rows.length > 0),
+        onToggleAutoFollow: toggleAutoFollow,
+        onExportOptions: () => void exportOptions(),
+      }}
+    />
+  )
+
+  if (lite) return (
+    <DashboardLite
+      market={<MacroBar macro={quotesQuery.data?.data.macro ?? {}} loading={quotesQuery.isLoading} charts={macroCharts} lite />}
+      chart={chartPanel}
+      options={<DashboardLiteOptions symbol={symbol} buckets={buckets}
+        loading={optionsQuery.isLoading} onExport={() => void exportOptions()} />}
+      holdings={holdingsPanel}
+      targets={targetsPanel}
+      news={<DashboardLiteNews items={newsQuery.data?.data.items ?? []} loading={newsQuery.isLoading} />}
+      autoFollow={autoFollow}
+      onToggleAutoFollow={toggleAutoFollow}
+    />
+  )
+
   return (
     <div ref={layoutRef} className={`dashboard-layout flex min-h-0 flex-1 gap-1 p-1${newsFocused ? ' dashboard-news-layout' : ''}`}>
       {/* Dashboard 2 pairs holdings with their allocation pie; Dashboard keeps targets. */}
@@ -173,16 +241,7 @@ export function DashboardPage({
         className="dashboard-holdings flex min-h-0 shrink-0 flex-col gap-1"
         style={{ width: leftWidth }}
       >
-        <PortfolioPanel
-          className="min-h-24 flex-[3]"
-          portfolios={portfolios}
-          selected={selected}
-          quotes={quotesQuery.data?.data.holdings ?? {}}
-          loading={portfolioQuery.isLoading || quotesQuery.isLoading}
-          warning={warningOf(portfolioQuery.data) ?? warningOf(quotesQuery.data)}
-          onSelectPortfolio={setPortfolioId}
-          onSelectTicker={selectTicker}
-        />
+        {holdingsPanel}
         {newsFocused ? (
           <PortfolioPiePanel
             className="min-h-24 flex-[2]"
@@ -191,15 +250,7 @@ export function DashboardPage({
             loading={portfolioQuery.isLoading || quotesQuery.isLoading}
             warning={portfolioQuery.error?.message ?? quotesQuery.error?.message ?? warningOf(portfolioQuery.data) ?? warningOf(quotesQuery.data)}
           />
-        ) : (
-          <TargetsPanel
-            className="min-h-24 flex-[2]"
-            targets={targetsQuery.data?.data.targets ?? []}
-            loading={targetsQuery.isLoading}
-            warning={warningOf(targetsQuery.data)}
-            onSelectTicker={selectTicker}
-          />
-        )}
+        ) : targetsPanel}
         {!newsFocused ? (
           <NewsPanel
             className="min-h-24 flex-[3]"
@@ -218,34 +269,9 @@ export function DashboardPage({
 
         <div className="dashboard-main flex min-h-0 min-w-0 flex-1 gap-1">
           <div className={`flex min-h-0 min-w-0 flex-1 flex-col gap-1 ${newsFocused ? 'dashboard-agents-column overflow-hidden border border-border' : 'dashboard-chart'}`} aria-label={newsFocused ? 'Dashboard Agents' : undefined}>
-            {!newsFocused ? (
-              <ChartToolbar
-                symbol={symbol}
-                timeframe={timeframe}
-                indicators={indicators}
-                autoFollow={autoFollow}
-                canExport={buckets.some((bucket) => bucket.rows.length > 0)}
-                onLoadSymbol={setSymbol}
-                onSetTimeframe={setTimeframe}
-                onToggleIndicator={toggleIndicator}
-                onToggleAutoFollow={toggleAutoFollow}
-                onExportOptions={() => void exportOptions()}
-              />
-            ) : null}
             {newsFocused ? (
               <AgentsPage embedded onStatusChange={setAgentPanels} />
-            ) : (
-              <ChartPanel
-                payload={chartQuery.data?.data ?? null}
-                indicators={indicators}
-                loading={chartQuery.isFetching}
-                failureReason={
-                  chartQuery.data?.meta.freshness === 'failed'
-                    ? chartQuery.data.meta.failureReason
-                    : undefined
-                }
-              />
-            )}
+            ) : chartPanel}
           </div>
 
           <Splitter onDrag={dragRight} />

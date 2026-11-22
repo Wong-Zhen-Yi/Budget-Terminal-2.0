@@ -7,32 +7,6 @@ function Assert-Check($Condition, [string]$Message) {
 }
 
 & {
-  $script:detachedLaunch = $null
-  function Start-Process {
-    param($FilePath, $ArgumentList, $WindowStyle, $WorkingDirectory, $RedirectStandardOutput, $RedirectStandardError)
-    $script:detachedLaunch = $PSBoundParameters
-  }
-  Start-BudgetTerminal
-  Assert-Check ($script:detachedLaunch.WindowStyle -eq 'Hidden') 'Desktop startup must create an independent hidden process.'
-  Assert-Check ($script:detachedLaunch.ArgumentList -contains '-Attached') 'The worker must not recursively detach.'
-  Assert-Check ($script:detachedLaunch.ArgumentList -contains ('"' + (Join-Path $PSScriptRoot 'launch-windows.ps1') + '"')) 'Quote the worker path for checkouts containing spaces.'
-  Assert-Check ($script:detachedLaunch.RedirectStandardOutput -ne $script:detachedLaunch.RedirectStandardError) 'Retain separate startup output and errors.'
-  Assert-Check (-not $script:detachedLaunch.ContainsKey('Wait')) 'The calling terminal must return immediately.'
-}
-Write-Host 'PASS: desktop launch detaches with a hidden worker and startup logs.'
-
-& {
-  $Command = 'restart'
-  $script:detachedLaunch = $null
-  function Start-Process {
-    param($FilePath, $ArgumentList, $WindowStyle, $WorkingDirectory, $RedirectStandardOutput, $RedirectStandardError)
-    $script:detachedLaunch = $PSBoundParameters
-  }
-  Start-BudgetTerminal
-  Assert-Check ($script:detachedLaunch.ArgumentList -contains 'restart') 'Forward restart into the detached worker.'
-  Assert-Check ($script:detachedLaunch.WindowStyle -eq 'Hidden') 'Restart must use a hidden worker.'
-}
-& {
   $expectedPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\node_modules\electron\dist\electron.exe'))
   $script:closed = 0
   $script:waited = 0
@@ -61,7 +35,7 @@ Write-Host 'PASS: desktop launch detaches with a hidden worker and startup logs.
   Stop-BudgetTerminal
   Assert-Check ($script:closed -eq 2) 'Restart with no running app proceeds without closing anything.'
 }
-Write-Host 'PASS: restart forwarding, exact executable isolation, clean shutdown wait, timeout and closed-app handling.'
+Write-Host 'PASS: restart isolates the executable, waits for a clean shutdown and handles timeouts and a closed app.'
 
 Assert-Check (Test-BudgetNode $NodePath) 'The running supported Node must be detected.'
 Assert-Check (-not (Test-BudgetNode 'missing-node.exe')) 'Missing Node must be rejected.'
@@ -74,6 +48,34 @@ $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('budget-windows-launcher-' + [
 New-Item -ItemType Directory -Path $testRoot | Out-Null
 try {
   $env:LOCALAPPDATA = $testRoot
+  $env:Path = (Split-Path -Parent $NodePath) + ';' + $originalPath
+  $fixtureScripts = Join-Path $testRoot 'checkout with spaces\scripts'
+  New-Item -ItemType Directory -Path $fixtureScripts | Out-Null
+  Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'launch-windows.ps1') -Destination $fixtureScripts
+  Copy-Item -LiteralPath $runtimeCheck -Destination $fixtureScripts
+  Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\package.json') -Destination (Split-Path -Parent $fixtureScripts)
+  Set-Content -LiteralPath (Join-Path $fixtureScripts 'install-bt.ps1') -Value 'param([switch]$Quiet)'
+  Set-Content -LiteralPath (Join-Path $fixtureScripts 'launch.cjs') -Value @'
+console.log('[1/5] Check toolchain')
+console.log(JSON.stringify(process.argv.slice(2)))
+if (process.argv.includes('--logs') && process.argv.includes('--detach')) process.exitCode = 7
+'@
+  $fixtureLauncher = Join-Path $fixtureScripts 'launch-windows.ps1'
+  foreach ($case in @(
+    @{ Options = @(); Flags = '["--detach"]'; Status = 0 },
+    @{ Options = @('start', '-Logs'); Flags = '["--logs","--detach"]'; Status = 7 },
+    @{ Options = @('-Attached'); Flags = '[]'; Status = 0 },
+    @{ Options = @('-Dev'); Flags = '["--dev"]'; Status = 0 },
+    @{ Options = @('-Setup'); Flags = '["--setup"]'; Status = 0 },
+    @{ Options = @('update'); Flags = '["update"]'; Status = 0 }
+  )) {
+    $options = $case.Options
+    $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $fixtureLauncher @options
+    Assert-Check ($LASTEXITCODE -eq $case.Status) 'Return the shared launcher exit code.'
+    Assert-Check ($output -contains '[1/5] Check toolchain') 'Show startup output in the calling terminal.'
+    Assert-Check ($output -contains $case.Flags) 'Only detach the desktop app for default production startup.'
+  }
+  Write-Host 'PASS: Windows shows launcher output and passes detachment through only for production desktop startup.'
   & {
     . (Join-Path $PSScriptRoot 'install-bt.ps1')
     $script:fixtureUserPath = 'C:\fixture-bin'

@@ -1,4 +1,4 @@
-import { fitStockChart, layoutIndicatorPanes } from '@/charts/stockChartLayout'
+import { layoutIndicatorPanes } from '@/charts/stockChartLayout'
 import { syncTimeSeries } from '@/charts/seriesUpdates'
 import { useEffect, useRef } from 'react'
 import {
@@ -17,12 +17,16 @@ import {
 import type { ChartPayload } from '@shared/contract'
 import type { IndicatorKey } from '@/stores/dashboard'
 
-const COLORS = {
-  up: '#26c281',
-  down: '#f0554e',
+export const DASHBOARD_INDICATOR_COLORS = {
   ma200: '#e0a34a',
   rsi: '#9d7ce0',
   rsiMa: '#7d8ea6',
+}
+
+const COLORS = {
+  up: '#26c281',
+  down: '#f0554e',
+  ...DASHBOARD_INDICATOR_COLORS,
   grid: '#141d2c',
   text: '#7d8ea6',
   border: '#1e2b3f',
@@ -34,6 +38,15 @@ const PANE = { price: 0, volume: 1, rsi: 2 }
 interface PriceChartProps {
   payload: ChartPayload | null
   indicators: Record<IndicatorKey, boolean>
+  onInspect?: (time: number | null) => void
+}
+
+function fitPriceChart(chart: IChartApi | null, count: number) {
+  if (chart && count > 0) chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, count - 90) - 0.5, to: count + 1 })
+}
+
+function indicatorPaneHeight(height: number) {
+  return Math.max(30, Math.min(64, Math.floor(height * 0.18)))
 }
 
 /**
@@ -44,7 +57,7 @@ interface PriceChartProps {
  * stacked pyqtgraph plots. The chart instance is created once and only its data is
  * swapped, so changing ticker or timeframe does not flash a rebuilt canvas.
  */
-export function PriceChart({ payload, indicators }: PriceChartProps) {
+export function PriceChart({ payload, indicators, onInspect }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const previousPayload = useRef<ChartPayload | null>(null)
@@ -65,8 +78,7 @@ export function PriceChart({ payload, indicators }: PriceChartProps) {
       layout: {
         background: { type: ColorType.Solid, color: '#0d1420' },
         textColor: COLORS.text,
-        // Canvas text is not styled by the stylesheet, so it tracks the type scale by hand.
-        fontSize: 14,
+        fontSize: 12,
         panes: { separatorColor: COLORS.border, separatorHoverColor: '#2c3e59' },
       },
       grid: {
@@ -131,6 +143,15 @@ export function PriceChart({ payload, indicators }: PriceChartProps) {
     }
   }, [])
 
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart || !onInspect) return
+    const inspect: Parameters<IChartApi['subscribeCrosshairMove']>[0] = ({ time }) =>
+      onInspect(typeof time === 'number' ? time : null)
+    chart.subscribeCrosshairMove(inspect)
+    return () => chart.unsubscribeCrosshairMove(inspect)
+  }, [onInspect])
+
   // Mark-only updates must not replace the candle series or reset its zoom.
   useEffect(() => {
     const series = seriesRef.current
@@ -168,19 +189,28 @@ export function PriceChart({ payload, indicators }: PriceChartProps) {
     syncTimeSeries(series.rsiMa, previous?.indicators.rsiMa, payload.indicators.rsiMa, line, reset)
     previousPayload.current = payload
 
-    if (replaced) fitStockChart(chart, payload.candles.length)
+    if (replaced) fitPriceChart(chart, payload.candles.length)
   }, [payload?.symbol, payload?.interval, payload?.timeframe, payload?.candles, payload?.indicators])
 
-  // lightweight-charts keeps its bar spacing when the canvas resizes, so a narrower pane
-  // shows fewer bars rather than the same range compressed. Refit so dragging a splitter
-  // still leaves the whole series in view.
+  // Keep the recent-bar window in view when resizing the dashboard or dragging a splitter.
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
     let frame = 0
+    let width = 0
     const observer = new ResizeObserver(() => {
       cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(() => fitStockChart(chartRef.current, seriesRef.current?.candles.data().length ?? 0))
+      frame = requestAnimationFrame(() => {
+        const chart = chartRef.current
+        if (container.clientHeight > 0) {
+          const height = indicatorPaneHeight(container.clientHeight)
+          for (const pane of chart?.panes().slice(1) ?? []) pane.setHeight(height)
+        }
+        if (container.clientWidth > 0 && container.clientWidth !== width) {
+          width = container.clientWidth
+          fitPriceChart(chart, seriesRef.current?.candles.data().length ?? 0)
+        }
+      })
     })
     observer.observe(container)
     return () => {
@@ -200,9 +230,10 @@ export function PriceChart({ payload, indicators }: PriceChartProps) {
     series.rsi.applyOptions({ visible: indicators.rsi })
     series.rsiMa.applyOptions({ visible: indicators.rsi })
 
+    const height = indicatorPaneHeight(containerRef.current?.clientHeight ?? 0)
     layoutIndicatorPanes(chart, [
-      { series: [series.volume], visible: indicators.volume, height: 90 },
-      { series: [series.rsi, series.rsiMa], visible: indicators.rsi, height: 90 },
+      { series: [series.volume], visible: indicators.volume, height },
+      { series: [series.rsi, series.rsiMa], visible: indicators.rsi, height },
     ])
   }, [indicators])
 

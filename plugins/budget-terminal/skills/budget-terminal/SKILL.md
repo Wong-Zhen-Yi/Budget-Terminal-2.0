@@ -7,6 +7,10 @@ Use Budget Terminal tools for data owned by the local app. Open Budget Terminal 
 
 Read `data.mainPage` from `budget_terminal_settings` for a saved startup choice. Use the settings mutation `setMainPage` with a visible page ID or `null` to restore automatic selection. The preference applies on the next launch.
 
+Read `data.enabledLabs` for opted-in experiments. Dashboard Lite and News Lite must be enabled in Settings → Labs for navigation and screenshots. For a requested settings edit, use `setLabEnabled` with `id: "dashboard-lite"` or `"news-lite"` and `enabled: true` or `false` under the existing settings write permissions. Use the existing News tools for News Lite headlines.
+
+Screenshot page `focus-dashboard` for the Focus directory, topic shortcuts and cached headline readings.
+
 Use `budget_terminal_eth` for the Ethereum Focus page. Preserve the separate
 `asOf` times for ecosystem TPS and mainnet TPS, block interval and median
 transaction fees. growthepie history uses trailing seven-day averages for TPS,
@@ -28,7 +32,7 @@ Provider refresh freshness does not revalidate the dated presentation. The 14
 revenue businesses overlap; quarterly annualized revenue is not realized annual
 revenue. Screenshot page: `hood`. Reconnect clients after rebuilding its schema.
 
-Use `budget_terminal_screenshot` with `{ "request": {} }` for the current page, `{ "request": { "page": "charts" } }` for a named tab, or `{ "request": { "page": "all" } }` for every implemented page, including tabs hidden from navigation. It returns PNG image blocks and page/status metadata. The app can be covered, hidden or minimized; capture does not focus or restore its window and restores the selected tab afterward. Screenshots show the current viewport and any loading/failure state; inspect metadata before assuming data is ready. Privacy blur is preserved. Prefer a single page when inspecting a specific issue.
+Use `budget_terminal_screenshot` with `{ "request": {} }` for the current page, `{ "request": { "page": "charts" } }` for a named tab, or `{ "request": { "page": "all" } }` for every available page, including tabs hidden from navigation and enabled Labs pages. It returns PNG image blocks and page/status metadata. The app can be covered, hidden or minimized; capture does not focus or restore its window and restores the selected tab afterward. Screenshots show the current viewport and any loading/failure state; inspect metadata before assuming data is ready. Privacy blur is preserved. Prefer a single page when inspecting a specific issue.
 
 Preserve source, snapshot time, freshness, partial coverage and errors when interpreting results. Prefer existing cached results; request `force` only when a fresh provider fetch is necessary. Calls share the app's provider rate gate.
 

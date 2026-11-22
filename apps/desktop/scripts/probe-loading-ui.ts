@@ -11,6 +11,7 @@ import { TABS } from '../electron/shared/contract'
 const require = createRequire(import.meta.url)
 const root = resolve(import.meta.dirname, '..')
 const statusBarOnly = process.argv.includes('--status-bar-only')
+const labsCaptureOnly = process.argv.includes('--labs-capture-only')
 const toolCount = Object.keys(operations).length + 1
 const implementedPages = TABS.filter(tab => tab.implemented).map(tab => tab.id)
 const directory = await mkdtemp(join(tmpdir(), 'budget-loading-ui-'))
@@ -38,7 +39,7 @@ try {
         const toolCount = ${toolCount}
         window.fixtureSettings = {
           clockCountry: 'US', time12h: true, tabOrder: TABS.map(tab => tab.id),
-          hiddenTabs: [], favoriteTabs: [], obscuredTabs: [], sidebarCollapsed: false, sourcePath: '',
+          hiddenTabs: [], enabledLabs: ['dashboard-lite', 'news-lite'], favoriteTabs: [], obscuredTabs: [], sidebarCollapsed: false, sourcePath: '',
           backtestPage: DEFAULT_BACKTEST_PAGE_SETTINGS, quantPage: DEFAULT_QUANT_PAGE_SETTINGS,
           youtubePage: DEFAULT_YOUTUBE_PAGE_SETTINGS, signalsPage: { filter: 'all', setup: 'all', search: '' },
           automaticBackup: { path: '/fixture/Downloads/budget-terminal-backup.json', savedAt: Date.now() },
@@ -51,6 +52,7 @@ try {
         window.runProbe = async () => {
           createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><App /></QueryClientProvider>)
           await settle()
+          if (${labsCaptureOnly}) return 'Mounted renderer for Labs screenshot checks'
           const meters = () => document.querySelector('footer [aria-label="API request pressure"]')
           check(document.querySelector('footer')?.getClientRects().length === 0, 'Bottom status strip must be hidden without unmounting background monitoring')
           await new Promise(resolve => setTimeout(resolve, 1100))
@@ -337,7 +339,7 @@ try {
     </script><script src="renderer.js"></script></body></html>
   `)
   await build({
-    stdin: { resolveDir: root, contents: `export { createScreenshotService } from './electron/mcp/screenshot'; export { mcpExecution } from './electron/services/mcpContext'` }, outfile: join(directory, 'capture.cjs'),
+    stdin: { resolveDir: root, contents: `export { createScreenshotService } from './electron/mcp/screenshot'; export { mcpExecution } from './electron/services/mcpContext'; export { mutateSettings } from './electron/services/settingsStore'` }, outfile: join(directory, 'capture.cjs'),
     bundle: true, platform: 'node', format: 'cjs', external: ['electron'],
   })
   await build({
@@ -357,7 +359,7 @@ try {
   await writeFile(join(directory, 'main.cjs'), `
     const { app, BrowserWindow, ipcMain, nativeImage } = require('electron');
     const assert = require('node:assert/strict');
-    const { createScreenshotService, mcpExecution } = require('./capture.cjs');
+    const { createScreenshotService, mcpExecution, mutateSettings } = require('./capture.cjs');
     const fs = require('fs');
     let updateChecks = 0;
     ipcMain.handle('system:check-for-updates', async () => {
@@ -372,8 +374,22 @@ try {
         await window.loadFile(${JSON.stringify(join(directory, 'index.html'))});
         console.log(await window.webContents.executeJavaScript('window.runProbe()'));
         if (!${statusBarOnly}) {
-        assert.equal(updateChecks, 1, 'Settings must send exactly one update check through IPC');
+        if (!${labsCaptureOnly}) assert.equal(updateChecks, 1, 'Settings must send exactly one update check through IPC');
         const capture = createScreenshotService(() => window);
+        const disabledLab = await capture({ page: 'dashboard-lite' });
+        assert.equal(disabledLab.meta.freshness, 'failed');
+        assert.match(disabledLab.meta.failureReason, /Settings → Labs/);
+        await mutateSettings({ type: 'setLabEnabled', id: 'dashboard-lite', enabled: true });
+        const disabledNewsLite = await capture({ page: 'news-lite' });
+        assert.equal(disabledNewsLite.meta.freshness, 'failed');
+        assert.match(disabledNewsLite.meta.failureReason, /Enable News Lite/);
+        await mutateSettings({ type: 'setLabEnabled', id: 'news-lite', enabled: true });
+        const enabledNewsLite = await capture({ page: 'news-lite' });
+        assert.equal(enabledNewsLite.meta.freshness, 'fresh', JSON.stringify(enabledNewsLite.errors));
+        assert.equal(enabledNewsLite.data.screenshots[0]?.pageId, 'news-lite');
+        assert.equal(nativeImage.createFromBuffer(Buffer.from(enabledNewsLite.data.screenshots[0].base64, 'base64')).isEmpty(), false);
+        console.log('PASS: MCP rejects disabled News Lite and captures it after enabling the Labs experiment');
+        if (${labsCaptureOnly}) return app.exit(0);
         const snapshot = () => window.webContents.executeJavaScript('JSON.stringify({ page: document.querySelector("h1")?.textContent, navigation: localStorage.getItem("budget-terminal:navigation"), scroll: document.querySelector("[data-startup-order-scroll]")?.scrollTop })');
         const original = await snapshot();
         await window.webContents.executeJavaScript('window.capturePrivacyFixture(); true');
@@ -485,7 +501,7 @@ try {
   })
   assert.equal(result.code, 0, result.output)
   console.log(result.output.trim())
-  console.log('Screenshot: ' + (statusBarOnly ? join(root, 'out', 'status-bar-smoke.png') : screenshot))
+  if (!labsCaptureOnly) console.log('Screenshot: ' + (statusBarOnly ? join(root, 'out', 'status-bar-smoke.png') : screenshot))
 } finally {
   assert.ok(!relative(tmpdir(), directory).startsWith('..'))
   await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })

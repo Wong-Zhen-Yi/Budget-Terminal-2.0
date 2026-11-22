@@ -1,4 +1,5 @@
 import { PageQueryScope } from '@/api/pageQueryScope'
+import { FOCUS_DASHBOARD_TAB_ID } from '@shared/contract'
 import {
   Activity,
   Component,
@@ -21,7 +22,7 @@ interface PageCacheProps {
 /** Hidden chart trees retain sizeable canvas/GPU resources, so keep only recent pages. */
 const MAX_RESIDENT_PAGES = 3
 // Keep inexpensive readers and controls longer without increasing the chart/GPU budget.
-const LIGHT_PAGES = new Set(['dictionary', 'settings', 'articles', 'notifications', 'news', 'calendar', 'ipo', 'politics', 'institutions'])
+const LIGHT_PAGES = new Set([FOCUS_DASHBOARD_TAB_ID, 'dictionary', 'settings', 'articles', 'notifications', 'news', 'news-lite', 'calendar', 'ipo', 'politics', 'institutions'])
 const MAX_LIGHT_PAGES = 8
 type ScrollPositions = Map<string, { path: number[]; top: number; left: number }>
 

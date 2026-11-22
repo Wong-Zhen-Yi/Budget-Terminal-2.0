@@ -32,7 +32,7 @@ try {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value)
       input.dispatchEvent(new Event('input', { bubbles: true })); await wait(80)
     }
-    window.fixtureSettings = { clockCountry: 'US', time12h: true, tabOrder: TABS.map(tab => tab.id), hiddenTabs: [], favoriteTabs: [], sidebarCollapsed: false,
+    window.fixtureSettings = { clockCountry: 'US', time12h: true, tabOrder: TABS.map(tab => tab.id), hiddenTabs: [], enabledLabs: [], favoriteTabs: [], sidebarCollapsed: false,
       obscuredTabs: ['portfolio'], backtestPage: DEFAULT_BACKTEST_PAGE_SETTINGS, signalsPage: { filter: 'all', setup: 'all', search: '' },
       quantPage: DEFAULT_QUANT_PAGE_SETTINGS, youtubePage: DEFAULT_YOUTUBE_PAGE_SETTINGS, sourcePath: '/private/settings.json',
       automaticBackup: { path: '/private/backup.json', savedAt: Date.now() } }
@@ -51,8 +51,40 @@ try {
       const dashboardPadding = getComputedStyle(document.querySelector('.app-dashboard')).padding
       const toolbar = document.querySelector('.settings-toolbar').getBoundingClientRect()
       const tabs = [...document.querySelectorAll('[data-settings-category]')]
-      check(tabs.length === 7 && tabs.every(tab => visible(tab) && tab.getBoundingClientRect().top === tabs[0].getBoundingClientRect().top), 'Preferences must form one horizontal row')
-      check(document.querySelectorAll('[data-settings-card]').length === 13, 'Expected all thirteen settings panels mounted')
+      check(tabs.length === 8 && tabs.every(tab => visible(tab) && tab.getBoundingClientRect().top === tabs[0].getBoundingClientRect().top), 'Preferences must form one horizontal row')
+      check(document.querySelectorAll('[data-settings-card]').length === 14, 'Expected all fourteen settings panels mounted')
+      const settingsSearch = document.querySelector('input[aria-label="Search settings"]')
+      check(visible(settingsSearch) && !settingsSearch.disabled, 'Settings search must be available from the default view')
+      await setSearch('DASHBOARD-LITE')
+      check(visible(card('labs')) && !visible(document.querySelector('.app-dashboard')), 'Search from the App dashboard must find Labs')
+      await setSearch('cache')
+      check(visible(card('cache')) && visible(card('maintenance')), 'Search should display matching settings groups')
+      await setSearch('export')
+      check(visible(card('backups')) && visible(card('logs')), 'Search should find matches in Data & storage and Diagnostics together')
+      settingsSearch.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); await wait(80)
+      check(settingsSearch.value === '' && visible(document.querySelector('.app-dashboard')), 'Escape must restore the previous Settings view')
+      await setSearch('gamepad')
+      clickText(document.querySelector('.settings-search-destinations'), 'Controller controls'); await wait(80)
+      check(visible(document.querySelector('.controller-host')) && visible(settingsSearch) && !settingsSearch.disabled, 'Controller controls must be searchable and keep Settings search available')
+      await setSearch('check for updates')
+      clickText(document.querySelector('.settings-search-destinations'), 'App dashboard'); await wait(80)
+      check(visible(document.querySelector('.settings-update')), 'Searching for updates must take you to the update control')
+      choose('labs'); await wait(80)
+      const lab = card('labs').querySelector('[role=switch][aria-labelledby="lab-dashboard-lite"]')
+      const startupLite = () => card('navigation').querySelector('option[value="dashboard-lite"]')
+      check(visible(lab) && lab.getAttribute('aria-checked') === 'false' && !startupLite(), 'Dashboard Lite must start off in Labs')
+      lab.click(); await wait(80)
+      check(lab.getAttribute('aria-checked') === 'true' && startupLite() && window.fixtureSettings.enabledLabs.includes('dashboard-lite'), 'Labs did not enable Dashboard Lite')
+      lab.click(); await wait(80)
+      check(lab.getAttribute('aria-checked') === 'false' && !startupLite(), 'Turning Labs off must remove Dashboard Lite from startup choices')
+      const newsLab = card('labs').querySelector('[role=switch][aria-labelledby="lab-news-lite"]')
+      const startupNewsLite = () => card('navigation').querySelector('option[value="news-lite"]')
+      check(visible(newsLab) && newsLab.getAttribute('aria-checked') === 'false' && !startupNewsLite(), 'News Lite must start off in Labs')
+      newsLab.click(); await wait(80)
+      check(newsLab.getAttribute('aria-checked') === 'true' && startupNewsLite() && window.fixtureSettings.enabledLabs.includes('news-lite'),
+        'Labs must enable News Lite and expose it as a startup choice')
+      newsLab.click(); await wait(80)
+      check(newsLab.getAttribute('aria-checked') === 'false' && !startupNewsLite(), 'Disabling News Lite must remove it from startup choices')
       useSettingsNavigation.getState().openDiagnostics(); await wait(80)
       check(visible(card('logs')), 'Diagnostics navigation must reveal the log panel')
       choose('dashboard'); await wait(80)
@@ -214,7 +246,7 @@ try {
       choose('dashboard'); await wait(80)
       const toolbarHeight = document.querySelector('.settings-toolbar').getBoundingClientRect().height
       const padding = getComputedStyle(document.querySelector('.app-dashboard')).padding
-      for (const category of ['workspace', 'privacy', 'data', 'integrations', 'diagnostics']) {
+      for (const category of ['workspace', 'privacy', 'data', 'integrations', 'labs', 'diagnostics']) {
         choose(category); await wait(80)
         check(document.querySelector('.settings-toolbar').getBoundingClientRect().height === toolbarHeight, 'Preferences resized in ' + category + ' at ' + innerWidth)
         check(getComputedStyle(document.querySelector('.settings-content')).padding === padding, 'Content spacing changed in ' + category)
@@ -344,6 +376,10 @@ try {
         if (window.refuseMutation) throw Error('Fixture save failure')
         if (mutation.type === 'setTime12h') window.fixtureSettings.time12h = mutation.value
         if (mutation.type === 'setMainPage') window.fixtureSettings.mainPage = mutation.id ?? undefined
+        if (mutation.type === 'setLabEnabled') {
+          const others = window.fixtureSettings.enabledLabs.filter(id => id !== mutation.id)
+          window.fixtureSettings.enabledLabs = mutation.enabled ? [...others, mutation.id] : others
+        }
         if (mutation.type === 'setTabObscured') {
           const remaining = window.fixtureSettings.obscuredTabs.filter(id => id !== mutation.id)
           window.fixtureSettings.obscuredTabs = mutation.obscured ? [...remaining, mutation.id] : remaining

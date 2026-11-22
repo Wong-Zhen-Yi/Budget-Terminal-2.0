@@ -7,6 +7,8 @@ import { McpError, errorDetails } from '../../mcp/errors.js'
 import type { Operation } from '../../mcp/operations.js'
 import { marketResearchInstructions, newsResearchInstructions, optionsResearchInstructions } from '../../mcp/operations.js'
 import { TABS } from '../shared/contract.js'
+import { isLabPageEnabled } from '../shared/navigation.js'
+import { readSettings } from './settingsStore.js'
 import type { ScreenshotPayload } from '../shared/screenshot.js'
 import type { Envelope, Portfolio, PortfolioPayload } from '../shared/contract.js'
 import type { AgentActivity, AgentImage, AgentMessage, AgentModel, AgentsCommand, AgentsState } from '../shared/agents.js'
@@ -828,11 +830,19 @@ export class AgentsService {
       this.add('activity', `Portfolio preview ready for ${before.name}. Review the changes in Agents before saving.`)
       return { proposed: true, saved: false, changes, nextStep: 'Ask the user to review the preview in Agents and click Apply portfolio update or Dismiss.' }
     }
-    if (name === 'terminal_pages') { this.add('activity', 'Checking available pages'); return pages }
+    if (name === 'terminal_pages') {
+      this.add('activity', 'Checking available pages')
+      const { enabledLabs } = await readSettings()
+      return pages.filter(page => isLabPageEnabled(page.id, enabledLabs))
+    }
     if (name === 'terminal_show_page') {
       if (this.researchOnly) throw new Error('Continue research cannot navigate or repeat saved-data edits.')
       if (this.options.trackerId) throw new Error('Tracker checks cannot navigate the UI.')
       const navigation = navigationSchema.parse(args)
+      const tab = TABS.find(page => page.id === navigation.page)
+      if (tab?.lab && !isLabPageEnabled(tab.id, (await readSettings()).enabledLabs)) {
+        throw new Error(`Enable ${tab.label} in Settings → Labs to open it.`)
+      }
       if (navigation.symbol && !['stocks', 'charts', 'fundamentals', 'options', 'valuation'].includes(navigation.page)) throw new Error('Ticker selection is supported on stocks, charts, fundamentals, options and valuation.')
       if (this.navigationWait) throw new Error('A navigation request is already pending.')
       this.add('activity', `Opening ${pages.find(page => page.id === navigation.page)?.label}${navigation.symbol ? ` · ${navigation.symbol}` : ''}`)

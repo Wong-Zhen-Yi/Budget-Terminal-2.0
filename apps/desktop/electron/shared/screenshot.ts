@@ -1,5 +1,5 @@
 export interface ScreenshotRequest {
-  /** An implemented tab id, "current" (default), or "all" for every implemented page. */
+  /** An available tab id, "current" (default), or "all" for every available page. Labs pages must be enabled. */
   page?: string
 }
 

@@ -293,7 +293,7 @@
         "properties": {
           "page": {
             "type": "string",
-            "description": "An implemented tab id, \"current\" (default), or \"all\" for every implemented page.",
+            "description": "An available tab id, \"current\" (default), or \"all\" for every available page. Labs pages must be enabled.",
             "enum": [
               "current",
               "all",
@@ -303,10 +303,12 @@
               "browser",
               "dashboard",
               "dashboard-2",
+              "dashboard-lite",
               "portfolio",
               "personal-finance",
               "global",
               "news",
+              "news-lite",
               "calendar",
               "pre-market",
               "trading-volumes",
@@ -329,6 +331,7 @@
               "sp500",
               "forex",
               "crypto",
+              "focus-dashboard",
               "bitcoin",
               "eth",
               "bmnr",
@@ -3717,6 +3720,27 @@
             "properties": {
               "type": {
                 "type": "string",
+                "const": "setLabEnabled"
+              },
+              "id": {
+                "$ref": "#/definitions/LabFeatureId"
+              },
+              "enabled": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "type",
+              "id",
+              "enabled"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
                 "const": "setMainPage"
               },
               "id": {
@@ -3899,6 +3923,13 @@
           }
         ],
         "description": "Every write the Settings page can make, answered with the whole re-read document."
+      },
+      "LabFeatureId": {
+        "type": "string",
+        "enum": [
+          "dashboard-lite",
+          "news-lite"
+        ]
       },
       "BacktestPageSettings": {
         "type": "object",

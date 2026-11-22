@@ -649,16 +649,22 @@ export function buildTasks(
       }, onSnapshot),
   })
 
+  const newsKey = queryKeys.newsPage(every)
+  const newsOptions = (backgroundOrder?: number) => ({
+    queryKey: newsKey,
+    queryFn: () => api.newsPage({ tickers: every, background: true, backgroundOrder }),
+    staleTime: queryFreshness(newsKey),
+  })
+  tasks.push({
+    tab: 'news-lite', label: 'News',
+    run: (client, backgroundOrder, onSnapshot) => warmStartupQuery(client, newsOptions(backgroundOrder), onSnapshot),
+  })
   if (every.length) {
     tasks.push({
       tab: 'news',
       label: 'News',
       run: async (client, backgroundOrder, onSnapshot) => {
-        const result = await warmStartupSnapshot(client, {
-          queryKey: queryKeys.newsPage(every),
-          queryFn: () => api.newsPage({ tickers: every, background: true, backgroundOrder }),
-          staleTime: queryFreshness(queryKeys.newsPage(every)),
-        }, onSnapshot)
+        const result = await warmStartupSnapshot(client, newsOptions(backgroundOrder), onSnapshot)
         const tickers = newsQuoteTickers(result.data.articles)
         const preferences = useNewsPageStore.getState()
         const images: Array<Promise<Envelope<NewsThumbnailPayload>>> = []
@@ -993,6 +999,10 @@ export function buildTasks(
       }, onSnapshot),
   })
 
+  // Lite reports readiness for the dashboard reads it shares. The global holdings
+  // chart warm-up below already prepares the other holding tickers for both layouts.
+  tasks.push(...tasks.filter(task => task.tab === 'dashboard').map(task => ({ ...task, tab: 'dashboard-lite' })))
+
   const charts = useChartsStore.getState()
   for (const target of portfolioChartTargets(payload, {
     timeframe: dashboard.timeframe, interval: charts.interval, range: charts.range, multiInterval: charts.multiInterval,
@@ -1193,13 +1203,13 @@ export function buildTasks(
   tasks.push(...tasks.filter((task) => task.tab === 'agents' ||
     (task.tab === 'dashboard' && dashboard2Labels.has(task.label)))
     .map((task) => ({ ...task, tab: 'dashboard-2' })))
-
   // Only request inputs belong in these identities. Layout, privacy and navigation
   // edits must not restart loading, and unchanged pages retain their in-flight work.
   const holdingSymbols = [...new Set(payload?.portfolios.flatMap(book => book.tickers) ?? [])].sort()
   const news = useNewsPageStore.getState()
   const revisions: Record<string, unknown> = {
     dashboard: [dashboard.symbol, dashboard.timeframe, active, dashboardTickers, holdingSymbols],
+    'dashboard-lite': [dashboard.symbol, dashboard.timeframe, active, dashboardTickers, holdingSymbols],
     'dashboard-2': [active, dashboardTickers],
     portfolio: [active, upDown, optionPositions],
     'personal-finance': [editable, financeOptionPositions],
@@ -1212,6 +1222,7 @@ export function buildTasks(
     scorecard: useScorecard.getState().symbols,
     defeatbeta: terminalSymbol,
     news: [every, news.showImages, news.filter, news.sort],
+    'news-lite': every,
     youtube: [every, settings?.youtubePage],
     etf: etfTicker,
     'up-down': [upDownPage.activeSource, upDownPage.interval, upDownSymbols],
@@ -1241,7 +1252,7 @@ export function subscribeStartupRequestInputs(schedule: () => void): Array<() =>
     subscribeRequestInputs(useIpoPage, s => s.completedYear, schedule),
     subscribeRequestInputs(useScorecard, s => s.symbols, schedule),
     subscribeRequestInputs(useDefeatBetaTerminal, s => s.symbol, schedule),
-    subscribeRequestInputs(useDashboard, s => [s.symbol, s.timeframe], schedule),
+    subscribeRequestInputs(useDashboard, s => [s.symbol, s.timeframe, s.portfolioId], schedule),
     subscribeRequestInputs(useEtfPage, s => s.ticker, schedule),
     subscribeRequestInputs(useUpDownPage, s => [s.activeSource, s.interval, s.activeSource === 'custom' ? s.customSymbols : []], schedule),
     subscribeRequestInputs(useNewsPageStore, s => [s.showImages, s.filter, s.sort], schedule),

@@ -5,7 +5,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { computeExposure, emptyRiskMetrics } from '../electron/shared/analytics.js'
 import { ok } from '../electron/shared/envelope.js'
-import { MACRO_SYMBOLS, TABS, type AnalyticsPayload, type ChartPayload, type CryptoPayload, type NewsArticle, type OptionPosition, type Portfolio, type SignalsPayload, type SignalsRequest } from '../electron/shared/contract.js'
+import { FOCUS_DASHBOARD_TAB_ID, MACRO_SYMBOLS, TABS, type AnalyticsPayload, type ChartPayload, type CryptoPayload, type NewsArticle, type OptionPosition, type Portfolio, type SignalsPayload, type SignalsRequest } from '../electron/shared/contract.js'
 import { assertStartupReady, runWarmTasks, waitForWarmSlot, warmQuery, warmStartupQuery, StartupLoadError } from '../src/api/warmQueue.js'
 import { recentPages, startupPages } from '../electron/shared/navigation.js'
 import { recordStartupLoad, restoreStartupLoads, startupPageOrder } from '../electron/shared/startupLoading.js'
@@ -457,6 +457,9 @@ assert.equal(backtestQuoteClient.getQueryData<import('../electron/shared/contrac
 backtestQuoteClient.clear()
 console.log('Refresh policy checks passed: hourly company/FX snapshots, 30-minute Heatmap, retained startup loads and Backtest quote/maintenance isolation.')
 const samePageIds = (plan: typeof basePlan, page: string) => plan.filter(task => task.tab === page).map(task => task.id)
+assert.deepEqual(basePlan.filter(task => task.tab === 'dashboard-lite').map(task => task.run),
+  basePlan.filter(task => task.tab === 'dashboard' && !task.label.startsWith('Portfolio ')).map(task => task.run),
+  'Dashboard Lite must warm the shared dashboard reads before any visit')
 const editedPortfolio = { ...portfolio, portfolios: [{ ...portfolio.portfolios[0], tickers: ['AAPL', 'MSFT'] }] }
 const editedPlan = buildTasks(editedPortfolio, undefined, planSymbols, planCalendar)
 assert.notDeepEqual(samePageIds(basePlan, 'news'), samePageIds(editedPlan, 'news'), 'Portfolio edits must prepare new News keys')
@@ -532,7 +535,7 @@ assert.deepEqual(pltrRequests, Array(2).fill({ symbol: 'PLTR', background: true,
 assert(pltrClient.getQueryData(['stocks', 'PLTR']))
 assert(pltrClient.getQueryData(['fundamentalsPage', 'PLTR', 'usd-v2']))
 pltrClient.clear()
-const sharedOrLocal = new Set(['beta', 'bonds', 'dictionary', 'options', 'settings'])
+const sharedOrLocal = new Set(['beta', 'bonds', 'dictionary', FOCUS_DASHBOARD_TAB_ID, 'options', 'settings'])
 const macroTasks = buildTasks(undefined, undefined, { stocks: 'AAPL', fundamentals: 'AAPL' },
   { year: 2026, month: 9, earningsYear: 2026, ipoYear: 2026 })
 for (const { label } of MACRO_SYMBOLS) {
@@ -725,14 +728,21 @@ const dependencyTasks = buildTasks({ ...portfolio, portfolios: [...portfolio.por
 const { recordStartupSnapshot } = await import('../src/api/startupHealth.js')
 const { useDataHealth } = await import('../src/stores/dataHealth.js')
 const newsResult = ok({ articles: [{ ticker: 'FIX', title: 'Fixture headline', category: 'portfolio', publishedAt: Date.now() }] }, 'fixture')
+let newsFetches = 0
 Object.assign(window.api, {
-  newsPage: async () => newsResult,
+  newsPage: async () => { newsFetches++; return newsResult },
   quotes: async () => ({ ...ok({ macro: {}, holdings: {}, missing: ['FIX'] }, 'fixture'),
     meta: { ...newsResult.meta, freshness: 'partial', failureReason: 'Fixture quote unavailable' } }),
 })
 const newsClient = new QueryClient()
 const newsTask = dependencyTasks.find(task => task.tab === 'news')!
-await newsTask.run(newsClient, 1, (key, result, error) => recordStartupSnapshot('news', key, result, error))
+const newsLiteTask = dependencyTasks.find(task => task.tab === 'news-lite')!
+await Promise.all([
+  newsTask.run(newsClient, 1, (key, result, error) => recordStartupSnapshot('news', key, result, error)),
+  newsLiteTask.run(newsClient, 2, (key, result, error) => recordStartupSnapshot('news-lite', key, result, error)),
+])
+assert.equal(newsFetches, 1, 'News Lite must share the prepared feed request with News')
+assert.equal(useDataHealth.getState().records['news-lite:News Feeds']?.freshness, 'fresh')
 assert.equal(useDataHealth.getState().records['news:News Feeds']?.freshness, 'fresh')
 assert.equal(useDataHealth.getState().records['news:Quotes']?.freshness, 'partial', 'News quote coverage remains visible in Settings')
 newsClient.clear()
@@ -1030,7 +1040,10 @@ const quoteFixture = (unit: string): ChartPayload => ({
   indicators: { ma200: [{ time: 1, value: 120 }], rsi: [], rsiMa: [] },
 })
 const quoteHeader = (unit: string) => renderToStaticMarkup(createElement(ChartPanel, {
-  payload: quoteFixture(unit), loading: false, indicators: { ma200: true, rsi: false, volume: false },
+  payload: quoteFixture(unit), symbol: 'FIXTURE', timeframe: '1 Day', loading: false, failed: false,
+  indicators: { ma200: true, rsi: false, volume: false },
+  onLoadSymbol: () => {}, onSetTimeframe: () => {}, onToggleIndicator: () => {},
+  dashboardActions: { autoFollow: true, canExport: false, onToggleAutoFollow: () => {}, onExportOptions: () => {} },
 }))
 const euroHeader = quoteHeader('EUR')
 assert.match(euroHeader, /123\.45 EUR/)

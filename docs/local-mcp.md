@@ -2,6 +2,11 @@
 
 [Back to the README](../README.md)
 
+Use `budget_terminal_screenshot` with `{ "request": { "page": "focus-dashboard" } }`
+to capture the Focus page directory and its headline readings. Readings use the
+same cached data as the corresponding pages and respect Obscure mode. Reconnect
+local MCP clients after rebuilding to refresh the tool description.
+
 Ethereum is available in Focus and preloads at startup. The read-only
 `budget_terminal_eth` tool uses the existing market-research permission and accepts
 `{ "request": {} }` or `{ "request": { "force": true } }`. It returns growthepie's
@@ -264,6 +269,13 @@ to select a visible, implemented page for the next launch. Set `id` to `null` or
 hide the selected page to restore automatic selection. The Obscure switch uses
 desktop session state. The saved `obscuredTabs` list is available through the settings tools.
 
+The settings read returns `data.enabledLabs`. Dashboard Lite and News Lite are opt-in
+pages in Settings → Labs. These preferences are local to the device. An authorized
+settings write can use `request: { "type": "setLabEnabled", "id": "news-lite", "enabled": true }`.
+Use `dashboard-lite` or `news-lite` as the page ID for named captures and agent
+navigation after enabling the experiment. News Lite uses the existing News read tools.
+News Lite bookmarks and read markers are local renderer state.
+
 ## Concurrent edit protection
 
 Portfolio, Cards, personal-finance and settings mutations require `expectedRevision`
@@ -386,8 +398,8 @@ partial-data errors are preserved in structured output and JSON text.
 
 Use `budget_terminal_screenshot` with `{ "request": {} }` to capture the current
 page, `{ "request": { "page": "charts" } }` for a specific tab id, or
-`{ "request": { "page": "all" } }` for every implemented page, including hidden
-tabs. Results contain PNG image blocks with page ids, dimensions, capture times,
+`{ "request": { "page": "all" } }` for every available page, including hidden
+tabs and enabled Labs pages. Results contain PNG image blocks with page ids, dimensions, capture times,
 privacy and startup-loading status, and the visible footer status. Captures show
 the current viewport, including any loading or error state; they do not wait for
 provider fetches. Electron captures its rendered content even when the window is

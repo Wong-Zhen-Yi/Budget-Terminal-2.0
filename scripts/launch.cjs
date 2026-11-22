@@ -1,4 +1,7 @@
-const { spawnSync } = require('node:child_process')
+const { spawn: spawnProcess, spawnSync } = require('node:child_process')
+const { randomUUID } = require('node:crypto')
+const { closeSync, mkdirSync, openSync } = require('node:fs')
+const { once } = require('node:events')
 // Ethereum Research workbench and current MCP sources rebuild through this shared path.
 // Macro cycle compass shows nine states and release changes through the shared build path.
 // Agents includes the Summarize macro quick prompt; rebuild current source through the shared launcher.
@@ -22,6 +25,7 @@ const { findCodex } = require('./codex-runtime.cjs')
 const { verifyDesktopBuild } = require('./verify-desktop-build.cjs')
 
 const root = path.resolve(__dirname, '..')
+const desktopRoot = path.join(root, 'apps', 'desktop')
 
 function platformName(platform) {
   if (platform === 'win32') return 'Windows'
@@ -67,8 +71,36 @@ function createLauncherOutput({ log = console, environment = process.env, termin
   }
 }
 
+async function startDetachedDesktop(env, output) {
+  // Resolve Electron only after installation and build verification have passed.
+  const executable = require('electron')
+  const logDirectory = path.join(env.LOCALAPPDATA, 'BudgetTerminal', 'launcher-logs')
+  mkdirSync(logDirectory, { recursive: true })
+  const session = randomUUID()
+  const stdout = openSync(path.join(logDirectory, `${session}.log`), 'wx')
+  try {
+    const stderr = openSync(path.join(logDirectory, `${session}.error.log`), 'wx')
+    try {
+      // Windows must allow Electron to show its first window.
+      const app = spawnProcess(executable, ['.'], {
+        cwd: desktopRoot, env, detached: true, stdio: ['ignore', stdout, stderr],
+      })
+      await once(app, 'spawn')
+      app.unref()
+    } finally {
+      closeSync(stderr)
+    }
+  } finally {
+    closeSync(stdout)
+  }
+  output.ready('BUDGET TERMINAL LAUNCHED')
+  output.note('You can close this terminal.')
+  output.note(`Desktop logs: ${logDirectory}`)
+  return 0
+}
+
 // Every double-click launcher rebuilds Finnhub-free Crypto proxies/live updates and the MCP bundle.
-function launch({ development = false, logs = false, setupOnly = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, log = console } = {}) {
+function launch({ development = false, logs = false, setupOnly = false, detach = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, openDetached = startDetachedDesktop, log = console } = {}) {
   const output = createLauncherOutput({ log, environment })
   const os = platformName(platform)
   output.header(setupOnly ? 'Setup check' : development ? 'Live development' : 'Desktop launcher', os || platform)
@@ -165,6 +197,12 @@ function launch({ development = false, logs = false, setupOnly = false, platform
   }
   output.stage(5, development ? 'Open live development' : 'Open desktop app')
   output.ready('LAUNCH CHECKS PASSED')
+  if (detach && platform === 'win32' && !development) {
+    return openDetached(env, output).catch(error => {
+      output.error(`Budget Terminal could not start: ${error.message}`)
+      return 1
+    })
+  }
   output.note('Keep this terminal open while using Budget Terminal.')
   output.note(development ? 'Live edits rebuild automatically. Close any existing app window first.' : 'F5 reloads the current page. Startup details are in Settings.')
   log.log('')
@@ -185,7 +223,9 @@ if (require.main === module) {
       process.exitCode = 1
     }
   } else {
-    process.exitCode = launch({ development: process.argv.includes('--dev'), logs: process.argv.includes('--logs'), setupOnly: process.argv.includes('--setup') })
+    const flags = new Set(process.argv.slice(2))
+    Promise.resolve(launch({ development: flags.has('--dev'), logs: flags.has('--logs'), setupOnly: flags.has('--setup'), detach: flags.has('--detach') }))
+      .then(status => { process.exitCode = status })
   }
 }
 

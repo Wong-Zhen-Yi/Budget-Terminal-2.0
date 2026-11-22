@@ -1,11 +1,12 @@
-import type { OptionBucket, OptionRow } from '@shared/contract'
+import { useState } from 'react'
+import { OPTION_BUCKETS, type OptionBucket, type OptionBucketKey, type OptionRow } from '@shared/contract'
+import { Button } from '@/components/ui/Button'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Panel } from '@/components/ui/Panel'
 import { decimals, integer } from '@/lib/format'
 import './OptionsPanel.css'
 
-const columns: Array<Column<OptionRow>> = [
-  { key: 'ticker', header: 'Ticker', cell: (row) => row.ticker },
+const contractColumns: Array<Column<OptionRow>> = [
   {
     key: 'type',
     header: 'Type',
@@ -35,6 +36,11 @@ const columns: Array<Column<OptionRow>> = [
     cell: (row) => integer(row.volume),
   },
 ]
+const columns: Array<Column<OptionRow>> = [
+  { key: 'ticker', header: 'Ticker', cell: (row) => row.ticker },
+  ...contractColumns,
+]
+const emptyBuckets: OptionBucket[] = OPTION_BUCKETS.map(({ key, label }) => ({ key, label, expiration: '', rows: [] }))
 
 /**
  * The three top-volume option tables: this week, two weeks out, four weeks out. Calls
@@ -51,13 +57,7 @@ export function OptionsPanel({
   loading: boolean
   warning?: string
 }) {
-  const shown = buckets.length
-    ? buckets
-    : ([
-        { key: '0_week', label: '0 Week', expiration: '', rows: [] },
-        { key: '2_weeks', label: '2 Weeks', expiration: '', rows: [] },
-        { key: '4_weeks', label: '4 Weeks', expiration: '', rows: [] },
-      ] satisfies OptionBucket[])
+  const shown = buckets.length ? buckets : emptyBuckets
 
   return (
     <div className="dashboard-options flex min-h-0 min-w-0 flex-1 flex-col gap-1">
@@ -83,5 +83,37 @@ export function OptionsPanel({
         </Panel>
       ))}
     </div>
+  )
+}
+
+export function DashboardLiteOptions({ symbol, buckets, loading, onExport }: {
+  symbol: string
+  buckets: OptionBucket[]
+  loading: boolean
+  onExport: () => void
+}) {
+  const [expiry, setExpiry] = useState<OptionBucketKey>(OPTION_BUCKETS[0].key)
+  const selected = buckets.find(bucket => bucket.key === expiry)
+  return (
+    <Panel title="Options volume" className="dashboard-lite-options" actions={
+      <Button disabled={!buckets.some(bucket => bucket.rows.length)} onClick={onExport}>Export CSV</Button>
+    }>
+      <div className="dashboard-lite-expiries" role="group" aria-label="Option expiry">
+        {OPTION_BUCKETS.map(({ key, label }) => (
+          <Button key={key} variant="toggle" active={expiry === key} onClick={() => setExpiry(key)}>{label}</Button>
+        ))}
+      </div>
+      <div className="dashboard-lite-option-context">
+        <strong>{symbol}</strong>
+        <span className="text-text-muted">{selected?.expiration ? `Expires ${selected.expiration}` : '—'}</span>
+      </div>
+      <DataTable
+        key={expiry}
+        columns={contractColumns}
+        rows={selected?.rows ?? []}
+        rowKey={(row, index) => `${row.type}-${row.strike}-${index}`}
+        empty={loading ? `Loading ${symbol} options…` : 'No contracts'}
+      />
+    </Panel>
   )
 }

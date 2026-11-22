@@ -15,14 +15,18 @@
 .settings-toolbar { display: flex; flex: 0 0 auto; align-items: center; gap: 16px; min-height: 50px; padding: 8px var(--settings-padding); border-bottom: 1px solid var(--color-border); background: var(--color-surface); }
 .settings-scroll { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; }
 .settings-content { padding: var(--settings-padding); }
-.settings-search { display: flex; gap: 8px; align-items: center; flex: 0 0 200px; min-width: 0; padding: 5px 10px; border: 1px solid var(--color-border-strong); border-radius: 5px; background: var(--color-bg); color: var(--color-text-muted); }
+.settings-toolbar-actions { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
+.settings-search { display: flex; gap: 8px; align-items: center; width: 200px; min-width: 0; padding: 5px 10px; border: 1px solid var(--color-border-strong); border-radius: 5px; background: var(--color-bg); color: var(--color-text-muted); }
 .settings-search > span { font-size: 20px; line-height: 20px; }
-.settings-search--inactive { visibility: hidden; }
 .settings-search input { width: 100%; min-width: 0; background: transparent; border: 0; outline: 0; color: var(--color-text); font: inherit; font-size: 12px; }
+.settings-search input::-webkit-search-cancel-button { display: none; }
 .settings-search input::placeholder { color: var(--color-text-muted); }
 .settings-search:focus-within { outline: 2px solid var(--color-accent-hover); outline-offset: 2px; }
-.settings-update { flex-shrink: 0; margin-left: auto; padding: 7px 10px; border: 1px solid var(--color-border-strong); border-radius: 5px; background: var(--color-surface-raised); color: var(--color-text); font: inherit; cursor: pointer; }
+.settings-search button { flex: 0 0 22px; height: 22px; border-radius: 4px; color: var(--color-text-muted); font-size: 16px; line-height: 1; cursor: pointer; }
+.settings-search button:hover { background: var(--color-surface-hover); color: var(--color-text); }
+.settings-update { flex-shrink: 0; padding: 7px 10px; border: 1px solid var(--color-border-strong); border-radius: 5px; background: var(--color-surface-raised); color: var(--color-text); font: inherit; cursor: pointer; }
 .settings-update:disabled { color: var(--color-text-muted); cursor: wait; }
+.settings-toolbar :is(.settings-search, .settings-update) { height: 34px; }
 .settings-tabs { display: flex; flex: 1; min-width: 0; gap: 4px; overflow-x: auto; }
 .settings-tabs button { flex-shrink: 0; color: var(--color-text-muted); font: inherit; font-size: 12px; border: 1px solid transparent; border-radius: 5px; background: transparent; padding: 7px 10px; cursor: pointer; white-space: nowrap; }
 .settings-tabs button[aria-pressed=true] { background: color-mix(in srgb, var(--color-accent) 22%, transparent); color: #a6c9ff; border-color: color-mix(in srgb, var(--color-accent) 22%, transparent); }
@@ -87,6 +91,9 @@
 .obscure-switch-track::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--color-text-muted); }
 .obscure-switch[aria-checked="true"] .obscure-switch-track { justify-content: flex-end; background: var(--color-accent-dim); border-color: var(--color-accent); }
 .obscure-switch[aria-checked="true"] .obscure-switch-track::before { background: var(--color-text); }
+.settings-labs { display: grid; gap: 8px; }
+.settings-labs h3 { margin-bottom: 4px; font-size: 13px; font-weight: 600; }
+.settings-labs .obscure-switch:disabled { opacity: .6; }
 .obscure-page-tools input { flex: 1 1 12rem; min-width: 0; }
 .obscure-page-tools input::placeholder { color: var(--color-text-muted); }
 .obscure-page-tools button:hover, .obscure-switch:hover { background: var(--color-surface-hover); }
@@ -149,6 +156,8 @@
 .settings-feedback button { background: transparent; color: var(--color-text-muted); border: 0; padding: 0 4px; cursor: pointer; font-size: 18px; }
 .settings-error { font-size: 13px; margin-bottom: 12px; }
 .settings-search-count { color: var(--color-text-muted); font-size: 12px; margin-bottom: 12px; }
+.settings-search-destinations { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.settings-search-destinations button { padding: 7px 10px; border: 1px solid var(--color-border-strong); border-radius: 5px; background: var(--color-surface-raised); color: var(--color-text); cursor: pointer; }
 .settings-empty { padding: 35px 24px; border: 1px solid var(--color-border); background: var(--color-surface); border-radius: 8px; }
 .settings-empty h2 { font-size: 17px; font-weight: 500; }
 .settings-empty p { margin: 10px 0 20px; color: var(--color-text-muted); }
@@ -159,10 +168,10 @@
 @media (max-height: 850px) {
   .settings-page { --settings-padding: 10px; }
 }
-@container settings (max-width: 1000px) {
+@container settings (max-width: 1120px) {
   .settings-toolbar { flex-wrap: wrap; gap: 8px 12px; }
   .settings-tabs { order: 1; flex-basis: 100%; }
-  .settings-search { margin-left: auto; }
+  .settings-toolbar-actions { margin-left: auto; }
 }
 @container settings (max-width: 480px) {
   .settings-card .terminal-panel .grid-cols-2 { grid-template-columns: minmax(0, 1fr); }

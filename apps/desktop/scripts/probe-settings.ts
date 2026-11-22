@@ -22,7 +22,7 @@ const { mutateSettings, readSettings, resetSettingsCache, settingsPath, replaceS
   '../electron/services/settingsStore.js'
 )
 const { TABS } = await import('../electron/shared/contract.js')
-const { DEFAULT_TAB_ID, resolveMainPage } = await import('../electron/shared/navigation.js')
+const { DEFAULT_TAB_ID, isLabPageEnabled, resolveMainPage } = await import('../electron/shared/navigation.js')
 const { mutatePortfolios, readPortfolios } = await import('../electron/services/portfolioStore.js')
 const { mutateCards, readCards } = await import('../electron/services/cardsStore.js')
 const { yahooProvider } = await import('../electron/services/provider.js')
@@ -56,6 +56,30 @@ async function main(): Promise<void> {
   console.log(`settings path : ${settingsPath()}`)
 
   const defaults = await readSettings()
+  check('Labs is opt-in on a fresh install', defaults.enabledLabs.length === 0 && !isLabPageEnabled('dashboard-lite', defaults.enabledLabs))
+  check('News Lite is opt-in', !isLabPageEnabled('news-lite', defaults.enabledLabs))
+  await expectRejected('disabled Dashboard Lite as startup page', () => mutateSettings({ type: 'setMainPage', id: 'dashboard-lite' }))
+  await expectRejected('disabled News Lite as startup page', () => mutateSettings({ type: 'setMainPage', id: 'news-lite' }))
+  await mutateSettings({ type: 'setLabEnabled', id: 'dashboard-lite', enabled: true })
+  await mutateSettings({ type: 'setLabEnabled', id: 'news-lite', enabled: true })
+  await mutateSettings({ type: 'setMainPage', id: 'dashboard-lite' })
+  resetSettingsCache()
+  const labs = await readSettings()
+  check('both Labs settings and the startup choice survive disk reload', labs.enabledLabs.join(',') === 'dashboard-lite,news-lite' &&
+    resolveMainPage(labs.mainPage, labs.tabOrder, labs.hiddenTabs, labs.enabledLabs) === 'dashboard-lite')
+  const portable = JSON.parse(await (await import('../electron/services/cloudSyncData.js')).readSyncData()).settings
+  check('portable snapshots omit device-local Labs settings', !('enabledLabs' in portable) && !('mainPage' in portable))
+  const afterSync = await replaceSettings(portable, { preserveLabs: true })
+  check('restoring a portable snapshot retains the device’s Labs settings', afterSync.enabledLabs.includes('dashboard-lite') && afterSync.mainPage === 'dashboard-lite')
+  const labsOff = await mutateSettings({ type: 'setLabEnabled', id: 'dashboard-lite', enabled: false })
+  check('disabling one experiment removes it as the startup page and keeps the other experiment',
+    labsOff.enabledLabs.join(',') === 'news-lite' && labsOff.mainPage === undefined)
+  const oldSettings: Partial<Settings> = { ...defaults, tabOrder: defaults.tabOrder.filter(id => !['dashboard-lite', 'news-lite'].includes(id)) }
+  delete oldSettings.enabledLabs
+  const upgradedLabs = await replaceSettings(oldSettings)
+  check('old settings gain both Lite tabs with Labs off',
+    upgradedLabs.tabOrder.includes('dashboard-lite') && upgradedLabs.tabOrder.includes('news-lite') && upgradedLabs.enabledLabs.length === 0)
+
   check('AMZN follows Anthropic by default', defaults.tabOrder.indexOf('amzn') === defaults.tabOrder.indexOf('anthropic') + 1)
   const beforeAmzn = defaults.tabOrder.filter(id => id !== 'amzn').reverse()
   const amznMigration = await replaceSettings({ ...defaults, tabOrder: beforeAmzn, hiddenTabs: ['stocks'], favoriteTabs: ['charts'], obscuredTabs: ['personal-finance'] })

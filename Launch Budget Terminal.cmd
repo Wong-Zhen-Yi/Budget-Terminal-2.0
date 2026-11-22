@@ -1,4 +1,12 @@
 @echo off
+rem The shared build brings the Dashboard Lite chart layout to Dashboard 1.
+rem Use btd for visible startup checks and a desktop app that runs independently of its terminal.
+rem The shared build includes search across all Settings categories.
+rem The shared build includes the live News Lite layout in Settings Labs.
+rem Open docs/design-prototypes/news/news-workspace.html for the standalone News prototype.
+rem The shared build includes Dashboard Lite and the experimental controls in Settings Labs.
+rem The shared build opens the alphabetical Focus Dashboard with a headline metric on every card.
+rem The shared build includes BMNR's prominent filed cash balance and refined treasury layout.
 rem The shared build includes the completed Anthropic IPO and Nasdaq ANT listing.
 rem The shared build includes provider fallback fixes and Finnhub-free Heatmap and Semiconductors data.
 rem The shared build includes live Finnhub portfolio ticker flashes on both dashboards.

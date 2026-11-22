@@ -113,7 +113,7 @@ try {
         strategy: 'Calls', expiry: '2026-12-18', strike: 100, contracts: 1, premium: 5, status: 'Open',
         openDate: '2026-10-01', currentPrice: 0, volume: 0, openInterest: 0, impliedVolatility: 0 }] }
     const settings = { clockCountry: 'US', time12h: true, tabOrder: TABS.map(tab => tab.id),
-      hiddenTabs: [], obscuredTabs: [], favoriteTabs: [], sidebarCollapsed: false, sourcePath: '',
+      hiddenTabs: [], enabledLabs: [], obscuredTabs: [], favoriteTabs: [], sidebarCollapsed: false, sourcePath: '',
       backtestPage: DEFAULT_BACKTEST_PAGE_SETTINGS, quantPage: DEFAULT_QUANT_PAGE_SETTINGS,
       signalsPage: { filter: 'all', setup: 'all', search: '' }, youtubePage: DEFAULT_YOUTUBE_PAGE_SETTINGS }
     const quote = symbol => ({ symbol, price: 100, absChange: 1, change: 1, currency: 'USD', asOf: Date.now() })
@@ -143,6 +143,10 @@ try {
       }
       if (method === 'mutateSettings') {
         if (request.type === 'setMainPage') fixtureSettings = { ...fixtureSettings, mainPage: request.id ?? undefined }
+        if (request.type === 'setLabEnabled') {
+          const others = fixtureSettings.enabledLabs.filter(id => id !== request.id)
+          fixtureSettings = { ...fixtureSettings, enabledLabs: request.enabled ? [...others, request.id] : others }
+        }
         if (request.type === 'setBacktestPage') fixtureSettings = { ...fixtureSettings, backtestPage: request.value }
         if (request.type === 'setClockCountry') fixtureSettings = { ...fixtureSettings, clockCountry: request.code }
         if (request.type === 'setTime12h') fixtureSettings = { ...fixtureSettings, time12h: request.value }
@@ -232,14 +236,15 @@ try {
       const startupOnly = ${JSON.stringify(process.argv.includes('--startup-only'))}
       const mainPageOnly = ${JSON.stringify(process.argv.includes('--main-page'))}
       const authOnly = ${JSON.stringify(process.argv.includes('--auth-only'))}
-      const scenarios = mainPageOnly ? ['empty', 'persisted'] : authOnly ? ['empty'] : reloadOnly ? ['populated'] : refreshOnly ? ['persisted'] : agentsOnly ? ['empty'] : ['empty', 'populated', 'persisted']
+      const focusOnly = ${JSON.stringify(process.argv.includes('--focus'))}
+      const scenarios = mainPageOnly ? ['empty', 'persisted'] : authOnly || focusOnly ? ['empty'] : reloadOnly ? ['populated'] : refreshOnly ? ['persisted'] : agentsOnly ? ['empty'] : ['empty', 'populated', 'persisted']
       for (const scenario of scenarios) {
         console.log('Completed-startup scenario: ' + scenario)
         populated = scenario !== 'empty'
         const restored = scenario === 'persisted'
         restoredCurrency = restored
         fixtureSettings = { ...settings, mainPage: restored ? 'calendar' : undefined,
-          obscuredTabs: mainPageOnly && restored ? ['calendar'] : [],
+          obscuredTabs: focusOnly ? ['anthropic'] : mainPageOnly && restored ? ['calendar'] : [],
           youtubePage: { sortColumn: restored ? 3 : -1, sortDescending: restored },
           backtestPage: restored ? { ...DEFAULT_BACKTEST_PAGE_SETTINGS, rows: [{ symbol: 'MSFT', weight: 100 }] } : DEFAULT_BACKTEST_PAGE_SETTINGS }
         useStocksPage.getState().setSymbol(restored ? 'MSFT' : 'AAPL')
@@ -264,6 +269,43 @@ try {
         check(startup && startup.timings.length === startup.planned, 'Startup failed to complete: ' + scenario)
         check(Object.keys(startup.pages).length === TABS.filter(tab => tab.implemented).length, 'Startup omitted a page state')
         check(visiblePage(restored ? 'calendar' : 'dashboard-2'), 'Startup must open the saved main page or the default')
+        if (focusOnly) {
+          check(startup.pages['focus-dashboard']?.state === 'ready', 'Focus Dashboard was not ready at startup')
+          document.querySelector('.auth-popup[open] .auth-popup-close')?.click()
+          const obscure = document.querySelector('button[aria-label="Obscure mode"]')
+          if (obscure.getAttribute('aria-pressed') === 'true') obscure.click()
+          await wait()
+          const focus = () => document.querySelector('nav[aria-label="Workspaces"] button[aria-label="Focus"]')
+          const anthropicCalls = calls.filter(call => call.method === 'anthropic').length
+          focus().click(); await wait()
+          const dashboard = visiblePage('focus-dashboard')?.querySelector('.focus-dashboard')
+          check(dashboard, 'Focus workspace did not open the dashboard')
+          const anthropic = dashboard.querySelector('#focus-metric-anthropic')
+          check(anthropic?.querySelector('b').textContent === '$17.0B', 'Focus must display a real warmed headline reading')
+          check(calls.filter(call => call.method === 'anthropic').length === anthropicCalls, 'Opening Focus must not request the reading again')
+          obscure.click(); await wait()
+          check(!anthropic.textContent.includes('$17.0B') && !anthropic.title.includes('$17.0B'), 'Focus must hide readings for protected pages')
+          obscure.click(); await wait()
+          for (const [width, height] of [[1400, 950], [960, 600]]) {
+            await window.resizeFixture(width, height); await paint()
+            check(dashboard.scrollWidth <= dashboard.clientWidth && dashboard.scrollHeight <= dashboard.clientHeight + 1,
+              'Focus Dashboard must fit within ' + width + 'x' + height + ' (' +
+              dashboard.scrollWidth + 'x' + dashboard.scrollHeight + ' content in ' +
+              dashboard.clientWidth + 'x' + dashboard.clientHeight + ' available pixels)')
+            check(dashboard.querySelectorAll('nav[aria-label="Focus pages"] button').length === 19,
+              'The Focus Dashboard is missing topic shortcuts')
+            check(dashboard.querySelectorAll('[data-focus-metric]').length === 19, 'A Focus card is missing its headline metric')
+          }
+          const bitcoin = dashboard.querySelector('button[aria-label="Bitcoin"]')
+          bitcoin.click(); await wait()
+          check(visiblePage('bitcoin') && !visiblePage('focus-dashboard'), 'Bitcoin selected from Focus must use the normal page route')
+          check(document.querySelector('.workspace-header h1')?.textContent === 'Bitcoin', 'Focus detail header did not update')
+          const back = [...document.querySelectorAll('.workspace-header button')].find(button => button.textContent.includes('Focus Dashboard'))
+          back.click(); await wait()
+          check(visiblePage('focus-dashboard'), 'Focus detail shortcut did not return to the dashboard')
+          memory.stop(); rendered.unmount(); client.clear()
+          return 'PASS: Focus Dashboard uses warmed readings, honors Obscure mode, fits at 1400x950 and 960x600, and returns from detail pages'
+        }
         if (authOnly) {
           const popup = () => document.querySelector('dialog.auth-popup[open]')
           const click = text => { const button = [...popup().querySelectorAll('button')].find(button => button.textContent.trim() === text); check(button && !button.disabled, 'Missing enabled auth button: ' + text); button.click() }
@@ -477,6 +519,24 @@ try {
           memory.stop(); rendered.unmount(); client.clear()
           return 'PASS: all pages ready at startup, Agents and Notifications ready on first visit, autonomy off and global agent navigation to Charts/MSFT'
         }
+        if (!reloadOnly) {
+          check(startup.pages['dashboard-lite']?.state === 'ready', 'Dashboard Lite must prepare its data with Labs off')
+          check(startup.pages['news-lite']?.state === 'ready', 'News Lite must prepare its feed with Labs off')
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true })); await wait()
+          check(![...document.querySelectorAll('[data-result-index]')].some(button => ['Dashboard Lite', 'News Lite'].includes(button.querySelector('span')?.textContent)),
+            'Labs pages must be absent from navigation before opting in')
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); await wait()
+          await selectPage(TABS.find(tab => tab.id === 'settings'))
+          const settingsPage = visiblePage('settings')
+          settingsPage.querySelector('[data-settings-category="labs"]').click(); await wait()
+          const lab = settingsPage.querySelector('[role="switch"][aria-labelledby="lab-dashboard-lite"]')
+          lab.click(); await wait()
+          check(lab.getAttribute('aria-checked') === 'true', 'Labs must opt into Dashboard Lite before opening it')
+          const newsLab = settingsPage.querySelector('[role="switch"][aria-labelledby="lab-news-lite"]')
+          newsLab.click(); await wait()
+          check(newsLab.getAttribute('aria-checked') === 'true', 'Labs must opt into News Lite before opening it')
+          settingsPage.querySelector('[data-settings-category="dashboard"]').click(); await wait()
+        }
         for (const tab of TABS.filter(tab => tab.implemented && (!reloadOnly || tab.id === 'amzn'))) {
           const before = calls.length
           await selectPage(tab)
@@ -485,7 +545,7 @@ try {
           check(refreshButtons.length <= (tab.id === 'scorecard' ? 1 : 0), 'Page has an unexpected Refresh button: ' + tab.id)
           if (tab.id !== 'settings') check(!visiblePage(tab.id).querySelector('[aria-label="Data freshness"]') &&
             !/Snapshot age:|Cache age at retrieval:/.test(visiblePage(tab.id).innerText), 'Inline data diagnostics on ' + tab.id)
-          if (restored && ['stocks', 'dashboard'].includes(tab.id)) {
+          if (restored && ['stocks', 'dashboard', 'dashboard-lite'].includes(tab.id)) {
             const text = visiblePage(tab.id).innerText
             check(text.includes('123.45 EUR') && text.includes('-2.50 EUR') && !text.includes('$123.45'), 'Foreign quote header mislabeled: ' + tab.id)
           }
@@ -502,6 +562,10 @@ try {
             (call.request?.background && call.request.backgroundOrder >= TABS.filter(tab => tab.implemented).length)
           const initial = calls.slice(before).filter(call => !maintenance(call) && !['startupPriority', 'mcpStatus', 'apiUsage', 'appMetrics', 'mutateSettings', 'browserViewport', 'notificationsStatus'].includes(call.method))
           check(initial.length === 0, 'First-visit request on ' + scenario + '/' + tab.id + ': ' + JSON.stringify(initial))
+          if (tab.id === 'news-lite') {
+            check(visiblePage(tab.id).querySelector('.news-lite-story')?.textContent.includes('Synthetic readiness headline'),
+              'News Lite must render its prepared headline on the first visit')
+          }
           if (scenario === 'populated' && tab.id === 'portfolio') {
             const page = visiblePage(tab.id)
             const headings = () => [...page.querySelectorAll('h2')].map(heading => heading.textContent.trim())
@@ -546,7 +610,7 @@ try {
             check(!visiblePage(tab.id).innerText.includes('Remote'), 'Settings must not offer remote access')
             check(visiblePage(tab.id).innerText.includes('Backups & saved data'), 'Desktop data controls must remain available')
           }
-          if (scenario === 'populated' && ['dashboard', 'news', 'youtube', 'settings'].includes(tab.id)) {
+          if (scenario === 'populated' && ['dashboard', 'dashboard-lite', 'news', 'youtube', 'settings'].includes(tab.id)) {
             await paint()
             check(visiblePage(tab.id), 'Capture page changed: ' + tab.id)
             await window.captureFixture('completed-' + tab.id)

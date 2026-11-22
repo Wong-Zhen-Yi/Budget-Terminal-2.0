@@ -13,8 +13,9 @@ interface PortfolioPanelProps {
   loading: boolean
   warning?: string
   className?: string
+  activeTicker?: string
   onSelectPortfolio: (id: string) => void
-  onSelectTicker: (ticker: string) => void
+  onSelectTicker?: (ticker: string) => void
 }
 
 function PortfolioTicker({ ticker, price }: { ticker: string; price: number | null }) {
@@ -49,6 +50,7 @@ export function PortfolioPanel({
   loading,
   warning,
   className,
+  activeTicker,
   onSelectPortfolio,
   onSelectTicker,
 }: PortfolioPanelProps) {
@@ -61,14 +63,23 @@ export function PortfolioPanel({
     {
       key: 'ticker',
       header: 'Ticker',
-      cell: (row) => <PortfolioTicker key={selected?.id} ticker={row.ticker} price={row.price} />,
+      cell: (row) => {
+        const label = <PortfolioTicker key={selected?.id} ticker={row.ticker} price={row.price} />
+        return activeTicker && onSelectTicker
+          ? <button type="button" className="dashboard-lite-ticker" aria-current={row.ticker === activeTicker || undefined}>{label}</button>
+          : label
+      },
     },
     {
       key: 'price',
       header: 'Price',
       align: 'right',
       numeric: true,
-      cell: (row) => <span title={row.priceSource}>{currency(row.price)}{row.priceBasis === 'equity-perp-mark' ? <span className="ml-1 text-[9px] text-accent">PERP</span> : null}</span>,
+      cell: (row) => (
+        <span title={activeTicker && row.priceBasis === 'published-close' ? 'DefeatBeta published daily close' : row.priceSource}>
+          {currency(row.price)}{row.priceBasis === 'equity-perp-mark' && <span className="ml-1 text-[9px] text-accent">PERP</span>}
+        </span>
+      ),
     },
     {
       key: 'change',
@@ -109,6 +120,7 @@ export function PortfolioPanel({
       actions={
         portfolios.length > 1 ? (
           <select
+            aria-label="Portfolio"
             value={selected?.id ?? ''}
             onChange={(event) => onSelectPortfolio(event.target.value)}
             className="h-7 border border-border-strong bg-surface px-1 text-2xs text-text outline-none"
@@ -122,15 +134,16 @@ export function PortfolioPanel({
         ) : null
       }
     >
-      {Object.values(quotes).some(quote => quote.priceBasis === 'published-close') && <div className="shrink-0 px-2 py-1 text-2xs text-text-dim">DefeatBeta prices are published daily closes, not live quotes.</div>}
+      {!activeTicker && Object.values(quotes).some(quote => quote.priceBasis === 'published-close') && <div className="shrink-0 px-2 py-1 text-2xs text-text-dim">DefeatBeta prices are published daily closes, not live quotes.</div>}
       <DataTable
         columns={columns}
         rows={rows}
         rowKey={(row) => row.ticker}
-        onRowClick={(row) => onSelectTicker(row.ticker)}
+        onRowClick={onSelectTicker ? row => onSelectTicker(row.ticker) : undefined}
         // A faint tint per row direction, as in the reference table.
         rowClassName={(row) =>
-          !row.hasQuote ? '' : (row.changePercent ?? 0) >= 0 ? 'bg-up-bg/40' : 'bg-down-bg/40'
+          row.ticker === activeTicker ? 'dashboard-lite-active-row'
+            : !row.hasQuote ? '' : (row.changePercent ?? 0) >= 0 ? 'bg-up-bg/40' : 'bg-down-bg/40'
         }
         empty={loading ? 'Loading holdings...' : 'No holdings in this portfolio'}
       />

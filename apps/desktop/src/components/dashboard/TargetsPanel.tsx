@@ -14,16 +14,22 @@ export function TargetsPanel({
   loading,
   warning,
   className,
+  activeTicker,
   onSelectTicker,
 }: {
   targets: TargetRow[]
   loading: boolean
   warning?: string
   className?: string
-  onSelectTicker: (ticker: string) => void
+  activeTicker?: string
+  onSelectTicker?: (ticker: string) => void
 }) {
   const columns: Array<Column<TargetRow>> = [
-    { key: 'ticker', header: 'Ticker', cell: (row) => row.ticker },
+    {
+      key: 'ticker', header: 'Ticker', cell: row => activeTicker && onSelectTicker
+        ? <button type="button" className="dashboard-lite-ticker" aria-current={row.ticker === activeTicker || undefined}>{row.ticker}</button>
+        : row.ticker,
+    },
     {
       key: 'current',
       header: 'Current',
@@ -66,8 +72,9 @@ export function TargetsPanel({
         columns={columns}
         rows={targets}
         rowKey={(row) => row.ticker}
-        showIndex
-        onRowClick={(row) => onSelectTicker(row.ticker)}
+        showIndex={!activeTicker}
+        onRowClick={onSelectTicker ? row => onSelectTicker(row.ticker) : undefined}
+        rowClassName={activeTicker ? row => row.ticker === activeTicker ? 'dashboard-lite-active-row' : '' : undefined}
         empty={loading ? 'Loading targets...' : 'No targets for these holdings'}
       />
     </Panel>
