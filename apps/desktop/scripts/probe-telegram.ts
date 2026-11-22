@@ -23,10 +23,13 @@ const uploads: FormData[] = []
 let dispatched = 0
 let resets = 0
 const commands: { command: string; argument: string }[] = []
+const mobileUrl = 'https://test-host.test-tailnet.ts.net:8443/'
+let mobileRequests = 0
 const adapter = new TelegramService({
   load: async () => stored,
   save: async config => { stored = structuredClone(config) },
   reset: async () => { resets++ },
+  mobileLink: async () => { mobileRequests++; return mobileUrl },
   screenshot: async (page, signal) => { assert(!signal.aborted); assert(['current', 'charts', 'all'].includes(page)); captures++; return captureResult },
   models: async () => [{ id: 'fixture', name: 'Fixture model', current: true, reasoning: [{ id: 'default', name: 'Default', current: true }] }],
   command: async (command, argument) => { commands.push({ command, argument }); return `${command} command result` },
@@ -124,22 +127,25 @@ let seeded = false
   const body = init?.body instanceof FormData ? {} : JSON.parse(String(init?.body))
   if (String(url).endsWith('/getUpdates') && body.timeout && !seeded) {
     seeded = true
-    updates = [update(1, 999), update(2, 123, 'group', now, '/screenshot'), update(3, 123, 'private', now - 600),
-      ...['/start', '/new@fixture_bot', '/reset', '/status', '/history', '/resume saved-id', '/models', '/help', '/model fixture', '/model', '/reasoning', '/reasoning high', '/unknown', '/new@other_bot', '/screenshot charts', '/new research', 'send me a screenshot of global page', 'research'].map((text, index) => update(index + 4, 123, 'private', now, text))]
+    updates = [update(1, 999, 'private', now, '/mobile'), update(2, 123, 'group', now, '/mobile'), update(3, 123, 'private', now - 600, '/mobile'),
+      ...['/start', '/new@fixture_bot', '/reset', '/status', '/history', '/resume saved-id', '/models', '/help', '/model fixture', '/model', '/reasoning', '/reasoning high', '/unknown', '/new@other_bot', '/screenshot charts', '/mobile@fixture_bot', '/mobile@other_bot', 'Send me the Budget Terminal mobile link', '/new research', 'send me a screenshot of global page', 'research'].map((text, index) => update(index + 4, 123, 'private', now, text))]
   }
   return originalFetch(url, init)
 }) as typeof fetch
 await adapter.configure({ chatId: '123', enabled: true, receive: true })
 for (let i = 0; i < 100 && requests.filter(request => request.body.text === 'research result').length < 2; i++) await new Promise(resolve => setTimeout(resolve, 5))
 assert.equal(dispatched, 3, 'Only questions and /new questions reach research; commands and other bot mentions do not')
-assert.equal((stored as { offset: number }).offset, 22)
+assert.equal((stored as { offset: number }).offset, 25)
 assert.equal(resets, 4, 'Only configuration and /new reset conversation context; removed aliases do nothing')
 assert.deepEqual(commands, [], 'Slash commands only open model buttons; reasoning is selected through callbacks')
 const menu = requests.find(request => request.method === 'setMyCommands')!
 assert(requests.some(request => request.method === 'sendMessage' && !!request.body.reply_markup), '/model sends selectable buttons')
 assert.deepEqual(menu.body.scope, { type: 'chat', chat_id: '123' })
-assert.deepEqual((menu.body.commands as { command: string }[]).map(command => command.command), ['new', 'model'])
-assert.equal(requests.filter(request => request.body.text === 'Available commands: /new, /model. Ask naturally for a screenshot of a page.').length, 10)
+assert.deepEqual((menu.body.commands as { command: string }[]).map(command => command.command), ['new', 'model', 'mobile'])
+assert.equal(requests.filter(request => request.body.text === 'Available commands: /new, /model, /mobile. Ask naturally for a screenshot of a page.').length, 10)
+assert.equal(mobileRequests, 2, 'Only fresh requests from the configured private chat can retrieve the link')
+assert.equal(requests.filter(request => request.body.text === mobileUrl && request.body.chat_id === '123' &&
+  (request.body.link_preview_options as { is_disabled?: boolean })?.is_disabled).length, 2)
 assert.equal(uploads.length, 6, 'Natural screenshot requests deliver a photo through the model')
 assert(!requests.some(request => String(request.body.text).includes('Logging description')), 'Do not post model descriptions after sending a screenshot')
 assert.equal(requests.filter(request => request.body.text === 'research result').length, 2, 'The next ordinary question still receives its text answer')
@@ -284,7 +290,7 @@ for (const [code, description, expected] of [
 }
 console.log('PASS: Telegram configuration, redaction, Unicode splitting, no send retries, private allowlist, stale-message rejection, persisted offset and cancellation')
 console.log('PASS: private-chat validation, actionable errors retained across successful polling, and safe agent diagnostics')
-console.log('PASS: two-command menu, bot mentions, /new question, model picker routing and removed-command rejection')
+console.log('PASS: command menu, bot mentions, /new question, mobile link permission, model picker routing and removed-command rejection')
 console.log('PASS: failed reset never dispatches a question with old context; command errors never expose private details')
 console.log('PASS: natural Telegram plain text removes asterisks, heading/hash symbols and em dashes while preserving numbers, Unicode and source links')
 console.log('PASS: model then reasoning buttons, supported/current/default choices, callback acknowledgement, short tokens, private-chat authorization, one-time selection, expiry and /new invalidation')

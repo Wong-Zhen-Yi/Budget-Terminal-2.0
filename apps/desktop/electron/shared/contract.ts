@@ -3558,6 +3558,8 @@ export const CHANNELS = {
   checkForUpdates: 'system:check-for-updates',
   cloudSyncStatus: 'cloud-sync:status',
   cloudSyncCommand: 'cloud-sync:command',
+  mobileAccessStatus: 'mobile-access:status',
+  configureMobileAccess: 'mobile-access:configure',
   appMetrics: 'system:app-metrics',
   browserStatus: 'browser:status',
   browserResearch: 'browser:research',
@@ -3790,6 +3792,8 @@ export interface DesktopApi {
   checkForUpdates(): Promise<void>
   cloudSyncStatus(): Promise<Envelope<CloudSyncStatus>>
   cloudSyncCommand(command: CloudSyncCommand): Promise<Envelope<CloudSyncStatus>>
+  mobileAccessStatus(): Promise<import('./mobileAccess.js').MobileAccessStatus>
+  configureMobileAccess(enabled: boolean): Promise<import('./mobileAccess.js').MobileAccessStatus>
   diagnosticLogs: () => Promise<Envelope<DiagnosticSnapshot>>
   diagnosticLogAction: (action: 'folder' | 'export') => Promise<Envelope<{ message: string }>>
   diagnosticsInitial: () => Promise<boolean>

@@ -1,6 +1,6 @@
 import { fitStockChart } from '@/charts/stockChartLayout'
 import { syncTimeSeries } from '@/charts/seriesUpdates'
-import { useEffect, useRef } from 'react'
+import { memo, useEffect, useRef } from 'react'
 import {
   CandlestickSeries,
   ColorType,
@@ -13,12 +13,14 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts'
 
-import type { ChartsHistoryPayload } from '@shared/contract'
+import type { Candle, ChartsHistoryPayload } from '@shared/contract'
 
-export function MiniChart({ payload, style, active }: { payload: ChartsHistoryPayload | null; style: 'candles' | 'line'; active: boolean }) {
+export const MiniChart = memo(function MiniChart({ payload, style, active }: { payload: ChartsHistoryPayload; style: 'candles' | 'line'; active: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
-  const previousPayload = useRef<ChartsHistoryPayload | null>(null)
+  const previousData = useRef<{ rows: Candle[]; style: typeof style; context: string } | null>(null)
+  const rows = payload.candles
+  const context = `${payload.symbol}:${payload.intervalLabel}:${payload.rangeLabel}`
   const seriesRef = useRef<{ candles: ISeriesApi<'Candlestick'>; line: ISeriesApi<'Line'>; priceLine: IPriceLine } | null>(null)
 
   useEffect(() => {
@@ -42,7 +44,7 @@ export function MiniChart({ payload, style, active }: { payload: ChartsHistoryPa
       chart.remove()
       chartRef.current = null
       seriesRef.current = null
-      previousPayload.current = null
+      previousData.current = null
     }
   }, [])
 
@@ -57,18 +59,30 @@ export function MiniChart({ payload, style, active }: { payload: ChartsHistoryPa
     const series = seriesRef.current
     const chart = chartRef.current
     if (!series || !chart) return
-    const rows = payload?.candles ?? []
-    const previous = previousPayload.current
-    const reset = previous?.symbol !== payload?.symbol || previous?.intervalLabel !== payload?.intervalLabel || previous?.rangeLabel !== payload?.rangeLabel
-    const replaced = syncTimeSeries(series.candles, previous?.candles, rows,
-      row => ({ time: row.time as UTCTimestamp, open: row.open, high: row.high, low: row.low, close: row.close }), reset)
-    syncTimeSeries(series.line, previous?.candles, rows, row => ({ time: row.time as UTCTimestamp, value: row.close }), reset)
-    previousPayload.current = payload
+    const previous = previousData.current
+    const styleChanged = previous?.style !== style
+    const reset = previous?.context !== context
+    let replaced: boolean
+    if (style === 'candles') {
+      replaced = syncTimeSeries(series.candles, previous?.rows, rows,
+        row => ({ time: row.time as UTCTimestamp, open: row.open, high: row.high, low: row.low, close: row.close }), reset || styleChanged)
+      const close = rows.at(-1)?.close
+      if (close !== undefined && (styleChanged || close !== previous?.rows.at(-1)?.close)) series.priceLine.applyOptions({ price: close })
+    } else {
+      replaced = syncTimeSeries(series.line, previous?.rows, rows, row => ({ time: row.time as UTCTimestamp, value: row.close }), reset || styleChanged)
+    }
+    if (previous && styleChanged) series[previous.style].setData([])
+    previousData.current = { context, rows, style }
+    if (!rows.length || !(reset || (replaced && !styleChanged))) return
+    fitStockChart(chart, rows.length)
+  }, [context, rows, style])
+
+  useEffect(() => {
+    const series = seriesRef.current
+    if (!series) return
     series.candles.applyOptions({ visible: style === 'candles' })
     series.line.applyOptions({ visible: style === 'line' })
-    if (rows.length) series.priceLine.applyOptions({ price: rows.at(-1)!.close })
-    if (replaced) requestAnimationFrame(() => fitStockChart(chart, rows.length))
-  }, [payload, style])
+  }, [style])
 
   return <div ref={containerRef} className="min-h-44 flex-1" />
-}
+})

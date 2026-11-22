@@ -15,6 +15,7 @@ interface TabBarProps {
   obscured: boolean
   obscurePageCount?: number
   onToggleObscure: () => void
+  demo?: boolean
   agentChatAvailable?: boolean
 }
 
@@ -27,6 +28,7 @@ export function TabBar({
   obscured,
   obscurePageCount,
   onToggleObscure,
+  demo,
   agentChatAvailable = true,
 }: TabBarProps) {
   const isMac = api.platform === 'darwin'
@@ -46,6 +48,7 @@ export function TabBar({
         <img src="./budget-terminal-fold.png" alt="Budget Terminal" width="2048" height="745" draggable={false} />
       </span>
       <img className="terminal-brand-icon" src="./budget-terminal-icon.png" alt="Budget Terminal" width="36" height="36" draggable={false} />
+      {demo && <span className="shrink-0 whitespace-nowrap text-2xs text-warn">Demo data</span>}
       <McpActivity />
       <TopBarAgent available={agentChatAvailable} />
       <button type="button" onClick={onOpenPicker}

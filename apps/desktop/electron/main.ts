@@ -8,6 +8,7 @@ import { loadRenderer } from './services/rendererStartup.js'
 import { isTrustedRendererUrl } from './shared/ipcSecurity.js'
 import { isSafeExternalUrl } from './services/urls.js'
 import { configureBrowserWindow } from './services/browser.js'
+import { assertPrivateBrowserStorage } from './services/browserStorage.js'
 import { configureYouTubePlayer, isYouTubePlayerContents } from './services/youtubePlayer.js'
 import { isYouTubeEmbedUrl } from './shared/youtubePlayer.js'
 import { desktopWindowBounds, useGamingFullscreen } from './shared/windowSize.js'
@@ -15,6 +16,7 @@ import { configureRendererCacheShutdown } from './services/rendererCacheShutdown
 import { assertDesktopCertificateSecurity } from './shared/certificateSecurity.js'
 import { startDiagnostics, observeDiagnosticWindow } from './services/diagnosticHost.js'
 import { diagnosticLog, faultCode } from './services/diagnosticLog.js'
+import { startMobileAccess, stopMobileAccess } from './services/mobileHost.js'
 
 // Windows can retain shader-cache file locks across launches. Keep GPU rendering
 // enabled, but avoid Chromium's optional disk caches before it starts the GPU.
@@ -27,11 +29,23 @@ if (process.platform === 'win32') {
   ])].join(','))
 }
 
-startDiagnostics()
-
 const dirname = fileURLToPath(new URL('.', import.meta.url))
 const isDev = !app.isPackaged
+const demoDirectory = process.env.BUDGET_TERMINAL_DEMO_DIR
+const windowTitle = demoDirectory ? 'Budget Terminal Demo' : 'Budget Terminal'
 if (process.platform === 'darwin') app.setName('Budget Terminal')
+if (demoDirectory) {
+  const roaming = join(demoDirectory, 'roaming')
+  if (process.env.APPDATA !== roaming || process.env.LOCALAPPDATA !== join(demoDirectory, 'local') ||
+      process.env.BUDGET_TERMINAL_DATA_DIR !== join(roaming, 'BudgetTerminalElectron') ||
+      process.env.CODEX_HOME !== join(demoDirectory, 'codex')) {
+    throw new Error('Demo profile is incomplete. Start it from the Budget Terminal demo launcher.')
+  }
+  assertPrivateBrowserStorage(demoDirectory, app.getAppPath())
+  // A demo export must default to the test folder, including during automatic backups.
+  app.setPath('downloads', join(demoDirectory, 'downloads'))
+}
+startDiagnostics()
 // Isolate Electron's instance lock and browser profile with explicit data overrides.
 if (process.env.BUDGET_TERMINAL_DATA_DIR) {
   const profile = join(process.env.BUDGET_TERMINAL_DATA_DIR, 'electron-profile')
@@ -65,7 +79,7 @@ function createWindow(): BrowserWindow {
     ...size,
     show: false,
     backgroundColor: '#080b12',
-    title: 'Budget Terminal',
+    title: windowTitle,
     icon: join(app.getAppPath(), 'resources', process.platform === 'win32' ? 'budget-terminal-icon.ico' : 'budget-terminal-icon.png'),
     // macOS owns the traffic lights and native fullscreen; other platforms keep the
     // existing custom title bar and window controls.
@@ -80,6 +94,7 @@ function createWindow(): BrowserWindow {
       sandbox: true,
     },
   })
+  if (demoDirectory) window.on('page-title-updated', event => event.preventDefault())
   mainWindow = window
   window.once('closed', () => { if (mainWindow === window) mainWindow = null })
 
@@ -181,10 +196,10 @@ if (ownsInstance) app.whenReady().then(async () => {
       ]))
     }
     stage = 'data-session'
-    releaseDataSession = acquireDataSession(app.getAppPath())
+    releaseDataSession = acquireDataSession(demoDirectory ? undefined : app.getAppPath())
     stage = 'notifications'
     const notifications = await import('./services/notificationsHost.js')
-    notifications.configureDesktopNotifications()
+    if (!demoDirectory) notifications.configureDesktopNotifications()
     flushNotifications = notifications.closeNotifications
     void notifications.notificationCenter.initialize().catch(error => {
       diagnosticLog.write('warn', 'app', 'startup-stage-failed', { stage: 'notifications', code: faultCode(error) })
@@ -243,6 +258,7 @@ if (ownsInstance) app.whenReady().then(async () => {
     })
     stage = 'window-create'
     createWindow()
+    void startMobileAccess()
   } catch (error) {
     diagnosticLog.write('error', 'app', 'startup-failed', { stage, code: faultCode(error) })
     dialog.showErrorBox('Budget Terminal could not start', error instanceof Error ? error.message : String(error))
@@ -269,7 +285,7 @@ app.on('before-quit', (event) => {
   finishingQuit = true
   void (async () => {
     try {
-      await Promise.all([stopMcp?.(), flushAgents?.()])
+      await Promise.all([stopMcp?.(), flushAgents?.(), stopMobileAccess()])
       await flushNotifications?.()
       await closeCloudSync?.()
       await flushBackup?.()

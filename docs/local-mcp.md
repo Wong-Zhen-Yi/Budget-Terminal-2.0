@@ -2,8 +2,16 @@
 
 [Back to the README](../README.md)
 
+A [demo launch](../README.md#test-with-demo-data) has its own temporary MCP bridge and saved records.
+The default MCP client configuration still targets your regular profile. For MCP tests against demo data,
+use the connection configuration from the demo window's MCP settings while that window is open.
+
+[Mobile Access](mobile-access.md) uses separate private Tailscale routes for Safari, including a direct link that works without DNS.
+The local MCP bridge retains its existing loopback address, credentials, and permissions.
+Configure Mobile Access under desktop **Settings → Labs** and use `/mobile` in the configured Telegram chat to get the Safari link.
+
 Use `budget_terminal_screenshot` with `{ "request": { "page": "focus-dashboard" } }`
-to capture the Focus page directory and its headline readings. Readings use the
+to capture the Focus page directory and the two headline readings on each card. Readings use the
 same cached data as the corresponding pages and respect Obscure mode. Reconnect
 local MCP clients after rebuilding to refresh the tool description.
 

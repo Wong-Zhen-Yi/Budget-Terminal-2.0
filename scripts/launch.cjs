@@ -100,10 +100,10 @@ async function startDetachedDesktop(env, output) {
 }
 
 // Every double-click launcher rebuilds Finnhub-free Crypto proxies/live updates and the MCP bundle.
-function launch({ development = false, logs = false, setupOnly = false, detach = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, openDetached = startDetachedDesktop, log = console } = {}) {
+function launch({ development = false, demo = false, logs = false, setupOnly = false, detach = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, openDetached = startDetachedDesktop, log = console } = {}) {
   const output = createLauncherOutput({ log, environment })
   const os = platformName(platform)
-  output.header(setupOnly ? 'Setup check' : development ? 'Live development' : 'Desktop launcher', os || platform)
+  output.header(demo ? 'Demo data' : setupOnly ? 'Setup check' : development ? 'Live development' : 'Desktop launcher', os || platform)
   output.stage(1, 'Check toolchain')
   if (!os) {
     output.error(`Budget Terminal supports Windows, macOS, and Linux; found ${platform}.`)
@@ -120,13 +120,13 @@ function launch({ development = false, logs = false, setupOnly = false, detach =
     return 1
   }
   if (logs) env.BUDGET_TERMINAL_OPEN_DIAGNOSTICS = '1'
-  if (setupOnly && (development || logs)) {
+  if (setupOnly && (development || logs || demo)) {
     output.error('Setup cannot be combined with launch options.')
     return 1
   }
 
   // Codex is optional: preserve discovery and handoff without starting inference.
-  const codexPath = locateCodex({ platform, environment: env })
+  const codexPath = demo ? null : locateCodex({ platform, environment: env })
   if (codexPath) {
     const codex = spawn(codexPath, ['--version'], { cwd: root, env, windowsHide: true, stdio: 'pipe', encoding: 'utf8', timeout: 10_000 })
     if (!codex.error && codex.status === 0 && /^codex(?:-cli)?\s+\d+\.\d+/i.test(codex.stdout?.trim() || '')) {
@@ -135,14 +135,14 @@ function launch({ development = false, logs = false, setupOnly = false, detach =
     } else {
       output.warn('Codex could not run; the app will open. Check Agents for setup help.')
     }
-  } else {
+  } else if (!demo) {
     output.note('Agents: optional Codex runtime not found; setup help is in the app.')
   }
 
-  const npm = (args, capture = false) => {
+  const npm = (args, capture = false, childEnv = env) => {
     const command = platform === 'win32' ? env.ComSpec || 'cmd.exe' : 'npm'
     const commandArgs = platform === 'win32' ? ['/d', '/s', '/c', `npm ${args.join(' ')}`] : args
-    return spawn(command, commandArgs, { cwd: root, env, stdio: capture ? 'pipe' : 'inherit', encoding: 'utf8' })
+    return spawn(command, commandArgs, { cwd: root, env: childEnv, stdio: capture ? 'pipe' : 'inherit', encoding: 'utf8' })
   }
   const installed = npm(['--version'], true)
   if (installed.error || installed.status !== 0) {
@@ -180,7 +180,7 @@ function launch({ development = false, logs = false, setupOnly = false, detach =
     return 1
   }
   if (!development) {
-    output.note('Verifying desktop files and assets...')
+    output.note('Verifying desktop and mobile files and assets...')
     try { verifyBuild() } catch (error) {
       output.error(error.message)
       return 1
@@ -197,7 +197,7 @@ function launch({ development = false, logs = false, setupOnly = false, detach =
   }
   output.stage(5, development ? 'Open live development' : 'Open desktop app')
   output.ready('LAUNCH CHECKS PASSED')
-  if (detach && platform === 'win32' && !development) {
+  if (detach && platform === 'win32' && !development && !demo) {
     return openDetached(env, output).catch(error => {
       output.error(`Budget Terminal could not start: ${error.message}`)
       return 1
@@ -206,7 +206,20 @@ function launch({ development = false, logs = false, setupOnly = false, detach =
   output.note('Keep this terminal open while using Budget Terminal.')
   output.note(development ? 'Live edits rebuild automatically. Close any existing app window first.' : 'F5 reloads the current page. Startup details are in Settings.')
   log.log('')
-  const app = npm(['run', development ? 'dev' : 'preview', '--workspace', 'budget-terminal-desktop'])
+  let session
+  let app
+  try {
+    if (demo) {
+      session = require('./demo-session.cjs').createDemoSession(env)
+      output.note('Demo edits are temporary. Each launch starts with the repository sample data.')
+    }
+    app = npm(['run', development ? 'dev' : 'preview', '--workspace', 'budget-terminal-desktop'], false, session?.env)
+  } catch (error) {
+    output.error(error.message)
+    return 1
+  } finally {
+    try { session?.close() } catch { output.warn('The temporary demo profile could not be removed after exit.') }
+  }
   if (app.error || app.status !== 0) {
     output.error('Budget Terminal stopped with an error. See the output above.')
     return app.status || 1
@@ -224,7 +237,7 @@ if (require.main === module) {
     }
   } else {
     const flags = new Set(process.argv.slice(2))
-    Promise.resolve(launch({ development: flags.has('--dev'), logs: flags.has('--logs'), setupOnly: flags.has('--setup'), detach: flags.has('--detach') }))
+    Promise.resolve(launch({ development: flags.has('--dev'), demo: flags.has('--demo'), logs: flags.has('--logs'), setupOnly: flags.has('--setup'), detach: flags.has('--detach') }))
       .then(status => { process.exitCode = status })
   }
 }

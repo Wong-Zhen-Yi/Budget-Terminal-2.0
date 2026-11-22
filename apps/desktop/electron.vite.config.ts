@@ -68,7 +68,7 @@ export default defineConfig({
       outDir: resolve(root, 'out/renderer'),
       // Keep one complete theme for the desktop shell and startup-loaded pages.
       cssCodeSplit: false,
-      rollupOptions: { input: resolve(root, 'src/index.html') },
+      rolldownOptions: { input: { index: resolve(root, 'src/index.html'), mobile: resolve(root, 'src/mobile.html') } },
     },
   },
 })

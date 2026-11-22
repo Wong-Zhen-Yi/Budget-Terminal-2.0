@@ -5,7 +5,7 @@
 # Heatmap historical replay speed follows the selected timeframe; rebuild desktop and MCP through the shared launcher.
 # Anthropic funding, customer depth, compute ratios and capital visualisations rebuild through the shared launcher.
 # Anthropic Focus research, source update checks and MCP tools rebuild through the shared launcher.
-param([Parameter(Position = 0)][ValidateSet('start', 'restart', 'update')][string]$Command = 'start', [switch]$RuntimeOnly, [switch]$Dev, [switch]$Logs, [switch]$Setup, [switch]$Attached, [Alias('-help')][switch]$Help)
+param([Parameter(Position = 0)][ValidateSet('start', 'restart', 'update')][string]$Command = 'start', [switch]$RuntimeOnly, [switch]$Dev, [switch]$Demo, [switch]$Logs, [switch]$Setup, [switch]$Attached, [Alias('-help')][switch]$Help)
 # Shared snapshot validation, account quotas and typed cloud contracts rebuild through the shared launcher; backend policies deploy separately.
 # Auth lifecycle passed live two-device acceptance; the shared launcher rebuilds current source.
 # Auth workspace ownership, async credential storage and session controls rebuild through the shared launcher.
@@ -133,6 +133,7 @@ function Stop-BudgetTerminal {
   foreach ($candidate in $running) {
     $process = Get-Process -Id $candidate.ProcessId -ErrorAction SilentlyContinue
     if (-not $process -or $process.HasExited) { continue }
+    if ($process.MainWindowTitle -eq 'Budget Terminal Demo') { continue }
     # Only close the application window, never unrelated Electron tools or test fixtures.
     if ($process.MainWindowTitle -ne 'Budget Terminal') {
       throw 'Budget Terminal is still starting or has no application window. Wait for it to open, then run btd restart again.'
@@ -155,6 +156,7 @@ Budget Terminal command help
 
 Usage
   btd [start|restart] [-Dev] [-Logs] [-Attached]
+  btd -Demo [-Dev] [-Logs]
   btd update
   btd -Setup
   btd -RuntimeOnly
@@ -171,6 +173,7 @@ Commands
 
 Options
   -Dev          Run in development mode with live reloading. Keep the terminal open.
+  -Demo         Open a temporary workspace with sample data. Keep the terminal open.
   -Logs         Open Settings diagnostics when the app opens.
   -Attached     Keep the app and its runtime output attached to this terminal.
                 Keep the terminal open while the app runs.
@@ -182,6 +185,7 @@ Options
     return
   }
   try {
+    if ($Demo -and ($Command -ne 'start' -or $RuntimeOnly -or $Setup)) { throw 'Demo is a launch mode. Run btd -Demo to open it.' }
     if ($Command -eq 'restart' -and ($RuntimeOnly -or $Setup)) { throw 'Restart cannot be combined with setup or runtime-only options.' }
     if ($Command -eq 'update' -and ($RuntimeOnly -or $Setup -or $Dev -or $Logs)) { throw 'Update cannot be combined with launch options.' }
     if ($Setup -and ($RuntimeOnly -or $Dev -or $Logs)) {
@@ -196,12 +200,13 @@ Options
       exit $LASTEXITCODE
     }
     if ($Command -eq 'restart') { Stop-BudgetTerminal }
-    if (-not $Setup) { & (Join-Path $PSScriptRoot 'install-bt.ps1') -Quiet }
+    if (-not ($Setup -or $Demo)) { & (Join-Path $PSScriptRoot 'install-bt.ps1') -Quiet }
     $launchArguments = @()
     if ($Setup) { $launchArguments += '--setup' }
     if ($Dev) { $launchArguments += '--dev' }
+    if ($Demo) { $launchArguments += '--demo' }
     if ($Logs) { $launchArguments += '--logs' }
-    if (-not ($Attached -or $Setup -or $Dev)) { $launchArguments += '--detach' }
+    if (-not ($Attached -or $Setup -or $Dev -or $Demo)) { $launchArguments += '--detach' }
     & $node (Join-Path $PSScriptRoot 'launch.cjs') @launchArguments
     if ($Setup -and $LASTEXITCODE -eq 0) {
       & (Join-Path $PSScriptRoot 'install-bt.ps1')

@@ -1,5 +1,5 @@
 import { StrictMode } from 'react'
-import { QueryClient } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
 
 import { App } from './App'
@@ -15,6 +15,7 @@ import {
 } from './api/queryPersistence'
 import { manageQueryMemory, QUERY_IDLE_MS } from './api/queryMemory'
 import { registerSnapshot } from './api/snapshotHealth'
+import { isMobileTerminal } from './mobile/client'
 import './styles/theme.css'
 
 const queryClient = new QueryClient({
@@ -51,6 +52,7 @@ const stopLiveStatus = api.onLiveStatusChanged ? subscribeLiveStatus(queryClient
 if (import.meta.hot) import.meta.hot.dispose(() => stopLiveStatus?.())
 
 export default function TerminalRoot() {
+  if (isMobileTerminal()) return <StrictMode><QueryClientProvider client={queryClient}><App /></QueryClientProvider></StrictMode>
   return (
     <StrictMode>
       <PersistQueryClientProvider

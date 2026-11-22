@@ -3,15 +3,17 @@ const { resolve } = require('node:path')
 
 /** Never open Electron onto a partial or missing production build. */
 function verifyDesktopBuild(directory = resolve(__dirname, '../apps/desktop')) {
-  const required = ['out/main/main.js', 'out/main/quantWorker.js', 'out/main/cacheWorker.js', 'out/preload/preload.cjs', 'out/renderer/index.html']
-  const htmlPath = resolve(directory, 'out/renderer/index.html')
+  const required = ['out/main/main.js', 'out/main/quantWorker.js', 'out/main/cacheWorker.js', 'out/preload/preload.cjs']
   try {
-    const html = readFileSync(htmlPath, 'utf8')
-    for (const match of html.matchAll(/(?:src|href)=["'](\.\/assets\/[^"']+)["']/g)) {
-      required.push(`out/renderer/${decodeURIComponent(match[1])}`)
-    }
-    if (!required.some(file => file.endsWith('.js') && file.startsWith('out/renderer/'))) {
-      throw new Error('The renderer HTML does not reference a built JavaScript entry.')
+    for (const entry of ['index.html', 'mobile.html']) {
+      const htmlPath = `out/renderer/${entry}`
+      const html = readFileSync(resolve(directory, htmlPath), 'utf8')
+      const assets = [...html.matchAll(/(?:src|href)=["'](\.\/assets\/[^"']+)["']/g)].map(match =>
+        `out/renderer/${decodeURIComponent(match[1])}`)
+      if (!assets.some(file => file.endsWith('.js'))) {
+        throw new Error(`${entry} does not reference a built JavaScript entry.`)
+      }
+      required.push(htmlPath, ...assets)
     }
     for (const file of required) {
       const info = statSync(resolve(directory, file))

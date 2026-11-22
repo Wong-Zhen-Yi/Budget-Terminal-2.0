@@ -21,6 +21,12 @@ export function CloudSyncPanel() {
     if (status?.signedIn) setError('')
   }, [status?.signedIn])
 
+  if (status?.demo) {
+    return <Panel title="Cloud sync">
+      <p className="p-2 text-2xs text-text-muted" data-cloud-sync>{status.message}</p>
+    </Panel>
+  }
+
   const run = async (command: CloudSyncCommand) => {
     setBusy(true)
     setError('')

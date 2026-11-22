@@ -56,6 +56,8 @@ import { markReloadQuery } from './pageProgress'
 import { createStartupScheduler, type StartupTask } from './startupScheduler'
 import { subscribeRequestInputs } from './requestInputs'
 import { portfolioMarketInputs } from '@shared/portfolioDependencies'
+import { isMobileTerminal, mobileTelegramProfile } from '@/mobile/client'
+import { mobileTelegramKey } from '@/mobile/MobileShell'
 
 /**
  * Load every implemented page's automatic initial data when the app opens.
@@ -1233,7 +1235,14 @@ export function buildTasks(
     options: [options.loaded, options.symbol, options.expiry],
   }
   const counts = new Map<string, number>()
-  return tasks.map(task => {
+  const plan = typeof document !== 'undefined' && isMobileTerminal() ? tasks.flatMap((task): WarmTask[] => {
+    if (task.tab === 'settings' || task.tab === 'browser') return []
+    if (task.label === 'Agents workspace') return [{ tab: task.tab, label: 'Telegram availability', refresh: false,
+      run: (client) => client.fetchQuery({ queryKey: mobileTelegramKey, queryFn: mobileTelegramProfile, staleTime: 60_000 }),
+    }]
+    return [task]
+  }) : tasks
+  return plan.map(task => {
     const index = counts.get(task.tab) ?? 0
     counts.set(task.tab, index + 1)
     return { ...task,

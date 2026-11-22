@@ -14,11 +14,13 @@ function Assert-Check($Condition, [string]$Message) {
   $script:running = @(
     @{ ProcessId = 101; ExecutablePath = $expectedPath; CommandLine = 'electron.exe .' },
     @{ ProcessId = 102; ExecutablePath = $expectedPath; CommandLine = 'electron.exe --type=renderer' },
-    @{ ProcessId = 103; ExecutablePath = 'C:\unrelated\electron.exe'; CommandLine = 'electron.exe .' }
+    @{ ProcessId = 103; ExecutablePath = 'C:\unrelated\electron.exe'; CommandLine = 'electron.exe .' },
+    @{ ProcessId = 104; ExecutablePath = $expectedPath; CommandLine = 'electron.exe .' }
   )
   function Get-CimInstance { $script:running }
   function Get-Process {
     param($Id, $ErrorAction)
+    if ($Id -eq 104) { return [pscustomobject]@{ HasExited = $false; MainWindowTitle = 'Budget Terminal Demo' } }
     Assert-Check ($Id -eq 101) 'Never close renderer processes or another checkout.'
     $fixture = [pscustomobject]@{ HasExited = $false; MainWindowTitle = 'Budget Terminal' }
     $fixture | Add-Member ScriptMethod CloseMainWindow { $script:closed++; return $true }
@@ -65,6 +67,7 @@ if (process.argv.includes('--logs') && process.argv.includes('--detach')) proces
     @{ Options = @(); Flags = '["--detach"]'; Status = 0 },
     @{ Options = @('start', '-Logs'); Flags = '["--logs","--detach"]'; Status = 7 },
     @{ Options = @('-Attached'); Flags = '[]'; Status = 0 },
+    @{ Options = @('-Demo'); Flags = '["--demo"]'; Status = 0 },
     @{ Options = @('-Dev'); Flags = '["--dev"]'; Status = 0 },
     @{ Options = @('-Setup'); Flags = '["--setup"]'; Status = 0 },
     @{ Options = @('update'); Flags = '["update"]'; Status = 0 }
@@ -97,7 +100,7 @@ if (process.argv.includes('--logs') && process.argv.includes('--detach')) proces
     foreach ($option in @('--help', '-Help')) {
       $helpText = (& $desktopShim $option | Out-String)
       Assert-Check ($LASTEXITCODE -eq 0) "The installed command must accept $option."
-      foreach ($entry in @('start', 'restart', 'update', '-Dev', '-Logs', '-Attached', '-Setup', '-RuntimeOnly', '--help')) {
+      foreach ($entry in @('start', 'restart', 'update', '-Dev', '-Demo', '-Logs', '-Attached', '-Setup', '-RuntimeOnly', '--help')) {
         Assert-Check ($helpText -match ('(?m)^  ' + [Regex]::Escape($entry) + '[, ]+\S')) "Help must describe $entry."
       }
     }

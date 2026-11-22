@@ -238,6 +238,19 @@ Open **Settings → App dashboard** and click **Check for updates**. If an updat
 
 Updates use the project's published `main` branch and require Git and a clean checkout on `main` that can be fast-forwarded. After updating, close Budget Terminal and reopen it with the launcher to rebuild the app and MCP tools. On Windows, `btd restart` handles both steps.
 
+### Test with demo data
+
+On Windows, double-click [Launch Budget Terminal Demo.cmd](Launch%20Budget%20Terminal%20Demo.cmd)
+or run `btd -Demo` if the terminal command is installed. On macOS and Linux, run
+`sh './Launch Budget Terminal.sh' --demo` from the checkout. Keep the launcher terminal open until you close the demo app.
+
+The app displays **Demo data** in the top bar. It opens with two sample portfolios, an options record,
+personal finance entries and a goal, chart watchlists, a backtest allocation, custom cards, and articles.
+Each launch copies the checked-in [demo fixture](fixtures/demo-user-data.json) into a fresh temporary profile.
+Edits and automatic backups go into that profile, alongside its own browser session and cache.
+The regular launcher still opens your personal profile, and cloud sync is disabled in the demo.
+Market prices still use the app's usual providers.
+
 ### Launch behavior and troubleshooting
 
 On Windows, the app bypasses Chromium's GPU shader disk caches to avoid locked-file
@@ -460,6 +473,7 @@ The current comparison loads at startup, including when Scorecard is unvisited.
 | [Browser](docs/browser.md) | Embedded Chromium tabs, source reading, research controls, and local login profiles. |
 | [Diagnostic logging](docs/diagnostic-logging.md) | Settings log viewer, retention, export, and privacy. |
 | [Local MCP](docs/local-mcp.md) | Client registration, research tools, record edits, screenshots, and bridge security. |
+| [Mobile Access](docs/mobile-access.md) | Open Budget Terminal on your iPhone or iPad through Tailscale and get the private link from Telegram. |
 | [Development](docs/development.md) | Architecture, verification commands, security checks, and data-layer conventions. |
 | [Design archive](docs/design-prototypes/README.md) | Curated page prototypes, branding concepts, source prompts, and renderers. |
 | [Semiconductors](docs/semiconductors.md) | Semiconductor supply-chain research and data sources. |

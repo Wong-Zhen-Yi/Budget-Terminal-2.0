@@ -7,6 +7,7 @@ import { Panel } from '@/components/ui/Panel'
 import { timestampLabel } from '@/lib/format'
 import { sortRecords, useDataHealth, type HealthRecord } from '@/stores/dataHealth'
 import { useSnapshotClock } from '@/api/snapshotHealth'
+import { copyMobileText, isMobileTerminal } from '@/mobile/client'
 
 const PAGE_LABELS = new Map(TABS.map((tab) => [tab.id, tab.label]))
 
@@ -72,7 +73,8 @@ export function DataHealthPanel({ onStatus }: { onStatus: (message: string) => v
             onClick={async () => {
               const text = currentReport()
               try {
-                await navigator.clipboard.writeText(text)
+                if (isMobileTerminal()) await copyMobileText(text)
+                else await navigator.clipboard.writeText(text)
                 onStatus('Data health report copied to clipboard.')
               } catch {
                 onStatus('Unable to reach the clipboard; the report is shown below.')

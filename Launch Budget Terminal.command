@@ -1,11 +1,15 @@
 #!/bin/sh
+# The shared build includes the direct Tailscale link under Settings > Labs.
+# Pass --demo to this launcher in Terminal to open temporary sample data.
+# The shared build includes the streamlined Charts workspaces and updated chart rendering.
+# The shared dependency install uses the project's pinned esbuild script approvals.
 # The shared build brings the Dashboard Lite chart layout to Dashboard 1.
 # Shared startup checks also run visibly for the Windows btd command before it detaches the app.
 # The shared build includes search across all Settings categories.
 # The shared build includes the live News Lite layout in Settings Labs.
 # Open docs/design-prototypes/news/news-workspace.html for the standalone News prototype.
 # The shared build includes Dashboard Lite and the experimental controls in Settings Labs.
-# The shared build opens the alphabetical Focus Dashboard with a headline metric on every card.
+# The shared build opens the alphabetical Focus Dashboard with two headline metrics on every card.
 # The shared build includes BMNR's prominent filed cash balance and refined treasury layout.
 # The shared build includes the completed Anthropic IPO and Nasdaq ANT listing.
 # The shared build includes provider fallback fixes and Finnhub-free Heatmap and Semiconductors data.

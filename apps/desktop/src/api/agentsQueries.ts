@@ -34,10 +34,10 @@ export async function warmAgentWorkspace(client: QueryClient, backgroundOrder?: 
   return result
 }
 
-export function useAgents(poll = false) {
+export function useAgents(poll = false, enabled = true) {
   // This is live control state, including channel failures. Retaining an older
   // healthy snapshot would freeze chat and turn a Telegram outage into a query error.
-  return useQuery({ queryKey: queryKeys.agents, queryFn: loadAgents, staleTime: Infinity, retry: false,
+  return useQuery({ queryKey: queryKeys.agents, queryFn: loadAgents, staleTime: Infinity, retry: false, enabled,
     refetchInterval: !poll ? false : query => {
       if (api.onLiveStatusChanged) return 30_000 // Bounded reconnect recovery; pushes own streaming cadence.
       const agent = query.state.data?.data

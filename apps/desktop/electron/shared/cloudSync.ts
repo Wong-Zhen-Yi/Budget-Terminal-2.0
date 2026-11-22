@@ -9,6 +9,7 @@ export interface CloudSyncStatus {
   revision?: number
   pending: boolean
   message?: string
+  demo?: true
   signInPending?: boolean
   authState?: 'restoring' | 'signedOut' | 'signingIn' | 'authenticated' | 'offline' | 'reauthRequired' | 'keyringUnavailable' | 'storageError'
   credentialCleanupRequired?: boolean

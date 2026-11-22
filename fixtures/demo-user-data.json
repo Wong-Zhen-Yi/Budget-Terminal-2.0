@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "userData": {
+    "version": 2,
+    "activeId": "portfolio_1",
+    "mainId": "portfolio_1",
+    "order": ["portfolio_1", "portfolio_2"],
+    "portfolios": {
+      "portfolio_1": {
+        "id": "portfolio_1",
+        "name": "Demo Core Portfolio",
+        "tickers": ["VTI", "AAPL", "MSFT", "NVDA"],
+        "holdings": {
+          "VTI": { "ticker": "VTI", "shares": 16.5, "avgPrice": 265, "includeInWeight": true },
+          "AAPL": { "ticker": "AAPL", "shares": 12, "avgPrice": 198.5, "includeInWeight": true },
+          "MSFT": { "ticker": "MSFT", "shares": 7, "avgPrice": 421.25, "includeInWeight": true },
+          "NVDA": { "ticker": "NVDA", "shares": 10, "avgPrice": 145, "includeInWeight": false }
+        },
+        "cashBalance": 1250,
+        "marginDebt": 0,
+        "includeCashInWeight": true,
+        "options": [
+          { "rowId": "demo-option-closed", "ticker": "AAPL", "strategy": "Calls", "expiry": "2026-10-16", "strike": 220, "contracts": 1, "premium": 3.2, "status": "Closed", "openDate": "2026-08-24" }
+        ]
+      },
+      "portfolio_2": {
+        "id": "portfolio_2",
+        "name": "Demo Income Portfolio",
+        "tickers": ["VTI", "SCHD", "BND"],
+        "holdings": {
+          "VTI": { "ticker": "VTI", "shares": 4, "avgPrice": 274, "includeInWeight": true },
+          "SCHD": { "ticker": "SCHD", "shares": 45, "avgPrice": 27.2, "includeInWeight": true },
+          "BND": { "ticker": "BND", "shares": 30, "avgPrice": 73.8, "includeInWeight": true }
+        },
+        "cashBalance": 420,
+        "marginDebt": 250,
+        "includeCashInWeight": false,
+        "options": []
+      }
+    },
+    "personalFinance": {
+      "cash": [
+        { "id": "demo-cash-checking", "desc": "Everyday account", "amount": 2150 },
+        { "id": "demo-cash-savings", "desc": "Emergency savings", "amount": 8400 }
+      ],
+      "debt": [
+        { "id": "demo-debt-card", "desc": "Credit card balance", "amount": 485.5 },
+        { "id": "demo-debt-study", "desc": "Education loan", "amount": 3200 }
+      ],
+      "recurringBills": [
+        { "id": "demo-bill-rent", "desc": "Rent", "amount": 1100, "frequency": "monthly", "currency": "SGD" },
+        { "id": "demo-bill-internet", "desc": "Internet", "amount": 39.9, "frequency": "monthly", "currency": "SGD" },
+        { "id": "demo-bill-software", "desc": "Research software", "amount": 96, "frequency": "yearly", "currency": "USD" }
+      ],
+      "totalsCurrency": "SGD",
+      "goal": { "title": "Build a six-month reserve", "targetAmount": 18000, "currency": "SGD" }
+    },
+    "chartsWatchlists": {
+      "watchlist": ["SPY", "AAPL", "MSFT", "NVDA"],
+      "multiCustomSymbols": ["QQQ", "SCHD", "BND"],
+      "multiOrder": ["QQQ", "SCHD", "BND"]
+    }
+  },
+  "settings": {
+    "version": 1,
+    "clockCountry": "SG",
+    "time12h": false,
+    "mainPage": "portfolio",
+    "tabOrder": [],
+    "hiddenTabs": [],
+    "favoriteTabs": ["portfolio", "personal-finance", "charts", "cards", "articles", "backtest"],
+    "obscuredTabs": [],
+    "backtestPage": {
+      "rows": [{ "symbol": "VTI", "weight": 70 }, { "symbol": "BND", "weight": 30 }],
+      "compareSymbol": "SPY",
+      "interval": "1W",
+      "range": "3Y",
+      "splitterSizes": [380, 620]
+    }
+  },
+  "cards": {
+    "version": 2,
+    "starterCardsVersion": 1,
+    "customCards": [
+      { "id": "custom:demo-balanced", "name": "Demo Balanced Mix", "symbols": ["VTI", "BND", "GLD"], "weighting": "custom", "weights": { "VTI": 60, "BND": 30, "GLD": 10 } },
+      { "id": "custom:demo-tech", "name": "Demo Tech Basket", "symbols": ["AAPL", "MSFT", "NVDA"], "weighting": "equal", "weights": {} }
+    ],
+    "cardOrder": ["builtin:index", "custom:demo-balanced", "custom:demo-tech"],
+    "hiddenPortfolioIds": [],
+    "intervals": { "custom:demo-balanced": "30d", "custom:demo-tech": "1y" }
+  },
+  "articles": {
+    "articles": [
+      {
+        "id": "demo-article-draft",
+        "title": "Demo quarterly portfolio review",
+        "topic": "Portfolio research",
+        "content": "Review the two sample portfolios, compare their cash allocations, and check how excluded holdings affect weights.\n\nDraft question: What changes when a holding appears in both portfolios?",
+        "status": "draft",
+        "createdAt": 1787533200000,
+        "updatedAt": 1787619600000,
+        "revision": 2
+      },
+      {
+        "id": "demo-article-finished",
+        "title": "Demo recurring bills checklist",
+        "topic": "Personal finance",
+        "content": "Check monthly and annual bills, verify their currencies, and review the savings goal after editing a recurring amount. This is a synthetic record for testing.",
+        "status": "finished",
+        "createdAt": 1787706000000,
+        "updatedAt": 1787706000000,
+        "revision": 1
+      }
+    ]
+  }
+}

@@ -345,7 +345,12 @@ async function attach(value: Session) {
   schedule()
 }
 
+const DEMO_SYNC_MESSAGE = 'Cloud sync is disabled while using demo data.'
+
 export function cloudSyncStatus(): CloudSyncStatus {
+  if (process.env.BUDGET_TERMINAL_DEMO_DIR) {
+    return { url: '', signedIn: false, encryptionAvailable: false, state: 'disconnected', pending: false, demo: true, message: DEMO_SYNC_MESSAGE }
+  }
   return { url: CLOUD_DEPLOYMENT_URL, signedIn: Boolean(session), encryptionAvailable,
     credentialCleanupRequired,
     authState: pendingGitHub ? 'signingIn' : authState, githubLogin: session?.githubLogin, workspaceApprovalRequired, revocation,
@@ -412,6 +417,7 @@ async function restoreSession() {
 }
 
 export async function startCloudSync(): Promise<void> {
+  if (process.env.BUDGET_TERMINAL_DEMO_DIR) return
   closed = false
   await withSavedDataLock(recoverSyncData)
   await withSavedDataLock(readLocalSyncData).catch(() => {
@@ -427,6 +433,7 @@ export async function startCloudSync(): Promise<void> {
 
 export function cloudSyncCommand(input: CloudSyncCommand) {
   return enqueue(async () => {
+    if (process.env.BUDGET_TERMINAL_DEMO_DIR) return failed(cloudSyncStatus(), DEMO_SYNC_MESSAGE, 'cloud sync')
     try {
       const command = commandSchema.parse(input)
       message = undefined

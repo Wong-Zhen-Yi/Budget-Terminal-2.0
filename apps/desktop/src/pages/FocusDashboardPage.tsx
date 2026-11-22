@@ -3,7 +3,7 @@ import { useState } from 'react'
 import type { TABS } from '@shared/contract'
 import { focusTopicPages } from '@shared/navigation'
 import { NavigationIcon } from '@/components/chrome/NavigationIcon'
-import { FocusCardMetric } from '@/components/focus/FocusCardMetric'
+import { FocusCardMetrics } from '@/components/focus/FocusCardMetrics'
 import './FocusDashboardPage.css'
 
 const filters = [
@@ -87,7 +87,7 @@ export function FocusDashboardPage({ tabs, onSelectTab, obscuredPages }: {
                   {topics[tab.id] && <span className="focus-dashboard__summary" id={`focus-topic-${tab.id}`}>{topics[tab.id].summary}</span>}
                 </span>
               </span>
-              <FocusCardMetric page={tab.id} obscured={obscuredPages?.includes(tab.id) ?? false} />
+              <FocusCardMetrics page={tab.id} obscured={obscuredPages?.includes(tab.id) ?? false} />
               <span className="focus-dashboard__arrow" aria-hidden="true">→</span>
             </button>
           ))}

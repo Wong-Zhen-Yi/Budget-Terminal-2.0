@@ -163,51 +163,70 @@ try {
           check(focusCards().length === FOCUS_WORKSPACE.pages.length - 1, 'Focus Dashboard must include every topic')
           check(focusLabels().join(',') === focusLabels().sort((a, b) => a.localeCompare(b, 'en')).join(','),
             'Focus Dashboard must sort topic cards by their displayed labels')
-          check(railHost.querySelectorAll('[data-focus-metric]').length === focusCards().length, 'Every Focus card needs a headline metric')
+          check(focusCards().every(card => card.querySelectorAll('[data-focus-metric]').length === 2), 'Every Focus card needs two metrics')
           const asOf = '2026-10-01', period = 'Q3 2026', timestamp = Date.parse(asOf)
           const report = fields => ({ earnings: { reports: [{ period, ...fields }] } })
-          const pltrQuarterly = { revenue: [{ endDate: asOf, value: 1.1e9, label: 'Q3' }],
-            netIncome: [], operatingCashFlow: [], freeCashFlow: [], sharesOutstanding: [], researchDevelopment: [] }
+          const point = value => ({ endDate: asOf, value, label: 'Q3' })
+          const pltrQuarterly = { revenue: [point(1.1e9)], netIncome: [point(210e6)],
+            operatingCashFlow: [], freeCashFlow: [], sharesOutstanding: [], researchDevelopment: [] }
           const fixtures = [
-            ['AMZN', queryKeys.amzn, report({ segments: [{ name: 'AWS', revenue: 31e9 }] }), '$31.0B'],
-            ['Anthropic', queryKeys.anthropic, { quarters: [{ period, revenue: 17 }] }, '$17.0B'],
-            ['AVGO', queryKeys.avgo, { earnings: { period, metrics: [{ id: 'aiRevenue', value: 5e9, text: 'over' }] } }, '> $5.0B'],
-            ['Bitcoin', queryKeys.bitcoin, { stats: { market_price_usd: 45_000, timestamp } }, '$45,000'],
-            ['BMNR', queryKeys.bmnr, { live: { ethHeld: { value: 3e6, asOf } } }, '3.00M'],
-            ['Ethereum', queryKeys.eth, { mainnet: { tps: 15.5, asOf: timestamp } }, '15.5 TPS'],
-            ['Gold', queryKeys.gold, { market: { futuresPrice: { value: 2500, asOf } } }, '$2,500'],
-            ['GOOGL', queryKeys.googl, report({ businesses: [{ name: 'Google Cloud', revenue: 14e9 }] }), '$14.0B'],
-            ['HIMS', queryKeys.hims, report({ metrics: { subscribers: { value: 2e6 } } }), '2.00M'],
-            ['Homebuilders', queryKeys.homebuilders, { rows: [{ company: { symbol: 'ITB' }, market: { price: 106.3, quoteTime: timestamp } }] }, '$106.30'],
-            ['HOOD', queryKeys.hood, { monthly: { period, metrics: [{ id: 'deposits', value: 2e9 }] } }, '$2.0B'],
-            ['Macro', queryKeys.economic, { rows: [{ seriesId: 'CPIAUCSL', available: true, latest: 2.64, latestDate: asOf }] }, '2.64%'],
-            ['MU', queryKeys.mu, { earnings: { period, metrics: [{ id: 'revenue', value: 9e9 }] } }, '$9.0B'],
-            ['NVDA', queryKeys.nvda, { earnings: { quarters: [{ period, dataCenter: 42e9 }] } }, '$42.0B'],
-            ['Oil', queryKeys.oil, { market: { wtiPrice: { value: 69.5, asOf } } }, '$69.50'],
-            ['PLTR', queryKeys.fundamentalsPage('PLTR'), { displayCurrency: 'USD', currencyVersion: 2, quarterly: pltrQuarterly }, '$1.1B'],
+            ['AMZN', queryKeys.amzn, report({ segments: [{ name: 'AWS', revenue: 31e9 }], operatingIncome: 17e9 }), '$31.0B', '$17.0B'],
+            ['Anthropic', queryKeys.anthropic, { quarters: [{ period, revenue: 17, compute: 9.9 }] }, '$17.0B', '$9.9B'],
+            ['AVGO', queryKeys.avgo, { earnings: { period, metrics: [
+              { id: 'aiRevenue', value: 5e9, text: 'over' }, { id: 'revenue', value: 16e9 },
+            ] } }, '> $5.0B', '$16.0B'],
+            ['Bitcoin', queryKeys.bitcoin, { stats: { market_price_usd: 45_000, hash_rate: 940e9, timestamp } }, '$45,000', '940 EH/s'],
+            ['BMNR', queryKeys.bmnr, { live: { ethHeld: { value: 3e6, asOf } },
+              filed: { latest: { cash: 200e6, endDate: '2026-08-31' } } }, '3.00M', '$200.0M'],
+            ['Ethereum', queryKeys.eth, { mainnet: { tps: 15.5, medianTransactionFeeUsd: 0.0052, asOf: timestamp } }, '15.5 TPS', '$0.0052'],
+            ['Gold', queryKeys.gold, { market: { futuresPrice: { value: 2500, asOf }, gldPrice: { value: 225.8, asOf } } }, '$2,500', '$225.80'],
+            ['GOOGL', queryKeys.googl, report({ businesses: [{ name: 'Google Cloud', revenue: 14e9 }], operatingMargin: 32 }), '$14.0B', '32.0%'],
+            ['HIMS', queryKeys.hims, report({ metrics: { subscribers: { value: 2e6 }, revenue: { value: 500e6 } } }), '2.00M', '$500.0M'],
+            ['Homebuilders', queryKeys.homebuilders, { rows: [
+              { company: { symbol: 'ITB' }, market: { price: 106.3, quoteTime: timestamp } },
+              { company: { symbol: 'XHB' }, market: { price: 110, quoteTime: timestamp } },
+            ] }, '$106.30', '$110.00'],
+            ['HOOD', queryKeys.hood, { monthly: { period, metrics: [
+              { id: 'deposits', value: 2e9 }, { id: 'customers', value: 25e6 },
+            ] } }, '$2.0B', '25.00M'],
+            ['Macro', queryKeys.economic, { rows: [
+              { seriesId: 'CPIAUCSL', available: true, latest: 2.64, latestDate: asOf },
+              { seriesId: 'GDPC1', available: true, latest: 3.2, latestDate: '2026-07-01' },
+            ] }, '2.64%', '3.20%'],
+            ['MU', queryKeys.mu, { earnings: { period, metrics: [
+              { id: 'revenue', value: 9e9 }, { id: 'nonGaapGrossMargin', value: 45 },
+            ] } }, '$9.0B', '45.0%'],
+            ['NVDA', queryKeys.nvda, { earnings: { quarters: [{ period, dataCenter: 42e9, revenue: 48e9 }] } }, '$42.0B', '$48.0B'],
+            ['Oil', queryKeys.oil, { market: { wtiPrice: { value: 69.5, asOf }, brentPrice: { value: 72.88, asOf } } }, '$69.50', '$72.88'],
+            ['PLTR', queryKeys.fundamentalsPage('PLTR'), { displayCurrency: 'USD', currencyVersion: 2, quarterly: pltrQuarterly }, '$1.1B', '$210.0M'],
             ['Semiconductors', queryKeys.semiconductors, { rows: [
-              ...[1, 3, -2, null].map(dailyChange => ({ market: { dailyChange } })),
-              { market: { dailyChange: 25, changeBasis: '24h' } },
-            ] }, '2 up / 1 down'],
-            ['SOFI', queryKeys.sofi, { reports: { quarters: [{ endDate: asOf, values: { members: 12e6 } }] } }, '12.00M'],
-            ['VST', queryKeys.vst, { operations: { period, totalGenerationGwh: 25_600 } }, '25.6 TWh'],
+              ...[1, 3, -2, null].map((dailyChange, index) => ({ company: { symbol: 'FIX' + index }, market: { dailyChange } })),
+              { company: { symbol: 'FIXPERP' }, market: { dailyChange: 25, changeBasis: '24h' } },
+            ] }, '2 / 1', '+0.67%'],
+            ['SOFI', queryKeys.sofi, { reports: { quarters: [{ endDate: asOf, values: { members: 12e6, deposits: 14e9 } }] } }, '12.00M', '$14.0B'],
+            ['VST', queryKeys.vst, { operations: { period, totalGenerationGwh: 25_600, totalRevenue: 4e9 } }, '25.6 TWh', '$4.0B'],
           ]
-          const cardMetric = label => focusCards().find(button => button.getAttribute('aria-label') === label).querySelector('[data-focus-metric]')
-          const metricValue = label => cardMetric(label).querySelector('b').textContent
+          const metricPair = label => focusCards().find(button => button.getAttribute('aria-label') === label).querySelector('.focus-dashboard__metric-pair')
+          const metricValues = label => [...metricPair(label).querySelectorAll('b')].map(value => value.textContent)
           const snapshot = (data, freshness = 'fresh') => ({ data, errors: [], meta: { freshness, source: 'Fixture', fetchedAt: timestamp } })
-          check(metricValue('Bitcoin') === '—', 'An absent reading must leave an empty metric')
+          check(metricValues('Bitcoin').every(value => value === '—'), 'An absent snapshot must leave both metrics empty')
           flushSync(() => {
             for (const [, key, data] of fixtures) focusCache.setQueryData(key, snapshot(data))
           })
-          for (const [label, , , expected] of fixtures) check(metricValue(label) === expected, 'Wrong headline metric for ' + label)
-          check(cardMetric('Bitcoin').textContent.includes('Oct 1, 2026'), 'Spot reference must show the observation date')
+          for (const [label, , , first, second] of fixtures) check(metricValues(label).join('|') === first + '|' + second, 'Wrong metrics for ' + label)
+          check(metricPair('Bitcoin').querySelector('.focus-dashboard__shared-period').textContent === 'Oct 1, 2026',
+            'Matching observations must share a date')
+          check([...metricPair('BMNR').querySelectorAll('.focus-dashboard__metric-period')].map(item => item.textContent).join('|') === 'Oct 1, 2026|Aug 31, 2026',
+            'Readings from different observations must retain separate dates')
           renderFocus(TABS, ['bitcoin'])
-          check(!cardMetric('Bitcoin').textContent.includes('45,000') && !cardMetric('Bitcoin').title.includes('45,000'),
-            'A protected page must not reveal its cached reading in the Focus Dashboard')
+          check(metricValues('Bitcoin').every(value => value === '—') && !metricPair('Bitcoin').innerHTML.includes('940'),
+            'A protected page must not reveal either reading in the Focus Dashboard')
           renderFocus(TABS)
-          check(metricValue('Bitcoin') === '$45,000', 'Removing Obscure protection must restore the reading')
+          check(metricValues('Bitcoin').join('|') === '$45,000|940 EH/s', 'Removing Obscure protection must restore both readings')
+          flushSync(() => focusCache.setQueryData(queryKeys.bitcoin, snapshot({ stats: { market_price_usd: 45_500, timestamp } }, 'partial')))
+          check(metricValues('Bitcoin').join('|') === '$45,500|—', 'One missing reading must not suppress the other')
           flushSync(() => focusCache.setQueryData(queryKeys.bitcoin, snapshot({ stats: { market_price_usd: 17, timestamp } }, 'failed')))
-          check(metricValue('Bitcoin') === '—', 'A failed snapshot must not display data from a failure envelope')
+          check(metricValues('Bitcoin').every(value => value === '—'), 'A failed snapshot must not display data from a failure envelope')
           check(focusCache.getQueryCache().getAll().every(query => query.getObserversCount() === 0),
             'Focus readings should not attach query observers')
           const filter = label => flushSync(() => [...railHost.querySelectorAll('[aria-label="Filter Focus pages"] button')]
@@ -233,7 +252,7 @@ try {
             railRoot.unmount()
             focusCache.clear()
             railHost.remove()
-            return 'PASS: visual page traversal, Focus landing and routes, filters, search, 19 cached readings, cache updates and Obscure protection'
+            return 'PASS: visual page traversal, Focus landing and routes, filters, search, 38 cached readings, cache updates and Obscure protection'
           }
           flushSync(() => railRoot.render(<WorkspaceSidebar {...railProps} collapsed />))
           const favoriteButtons = [...railHost.querySelectorAll('nav[aria-label="Favorite pages"] button')]

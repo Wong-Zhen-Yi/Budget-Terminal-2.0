@@ -18,6 +18,8 @@ import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { Splitter } from '@/components/ui/Splitter'
 import { useDashboard } from '@/stores/dashboard'
 import { AgentsPage } from '@/pages/AgentsPage'
+import { isMobileTerminal } from '@/mobile/client'
+import { MobileAgentsPage } from '@/mobile/MobileShell'
 import '@/components/dashboard/ChartPanel.css'
 
 /** Show a panel's warning dot only when something actually went wrong. */
@@ -270,7 +272,7 @@ export function DashboardPage({
         <div className="dashboard-main flex min-h-0 min-w-0 flex-1 gap-1">
           <div className={`flex min-h-0 min-w-0 flex-1 flex-col gap-1 ${newsFocused ? 'dashboard-agents-column overflow-hidden border border-border' : 'dashboard-chart'}`} aria-label={newsFocused ? 'Dashboard Agents' : undefined}>
             {newsFocused ? (
-              <AgentsPage embedded onStatusChange={setAgentPanels} />
+              isMobileTerminal() ? <MobileAgentsPage /> : <AgentsPage embedded onStatusChange={setAgentPanels} />
             ) : chartPanel}
           </div>
 

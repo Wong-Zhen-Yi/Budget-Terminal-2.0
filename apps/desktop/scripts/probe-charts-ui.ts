@@ -18,12 +18,14 @@ try {
         import { createRoot } from 'react-dom/client'
         import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query'
         import { MainWorkspace } from './src/components/chartsworkstation/MainWorkspace'
+        import { ChartsPage } from './src/pages/ChartsPage'
         import { useChartsStore } from './src/stores/charts'
         import { applyEquityMarketUpdate } from './src/api/equityStream'
         import { queryKeys } from './src/api/client'
         import { StocksPage } from './src/pages/StocksPage'
         import { useStocksPage } from './src/stores/stocks'
         import { emptyStocksPayload, buildStocksStats } from './electron/shared/stocks'
+        import { buildRelationshipPayload } from './electron/shared/charts'
         import { PortfolioChartsStatus } from './src/components/chrome/PortfolioChartsStatus'
         import { useDashboard } from './src/stores/dashboard'
         import { useDataHealth } from './src/stores/dataHealth'
@@ -62,6 +64,7 @@ try {
           const toggle = () => [...document.querySelectorAll('button')].find(button => button.textContent === '50-day SMA')
           check(toggle()?.getAttribute('aria-pressed') === 'true', 'SMA must be enabled by default')
           check(document.querySelectorAll('canvas').length > 0, 'Real chart canvas must render')
+          const canvas = document.querySelector('canvas')
           check(document.body.innerText.includes('MA50 155.50'), 'Latest daily SMA readout')
           await click('50-day SMA')
           check(toggle()?.getAttribute('aria-pressed') === 'false' && !useChartsStore.getState().indicators.ma50, 'SMA toggles off')
@@ -73,6 +76,7 @@ try {
           for (const type of ['line', 'area', 'candles']) {
             style.value = type; style.dispatchEvent(new Event('change', { bubbles: true })); await settle()
             check(useChartsStore.getState().chartType === type && toggle()?.getAttribute('aria-pressed') === 'true', 'SMA remains enabled for ' + type)
+            check(document.querySelector('canvas') === canvas, 'Price style changes must reuse the chart canvas')
           }
           await click('Replay')
           check(document.body.innerText.includes('MA50 115.50'), 'Replay SMA must stop at the current bar')
@@ -98,6 +102,100 @@ try {
           check(client.getQueryData(key).data.stats.price === 250, 'Switching back retains the streamed mark')
           window.finishProbe = () => app.unmount()
           return 'PASS: real Charts canvas, SMA, persistence, styles, replay, focus, labelled Hyperliquid source, streamed updates and cached ticker switches'
+        }
+        window.runWorkspacesProbe = async () => {
+          const history = candles.map(row => ({ time: row.time, close: row.close }))
+          const alternate = candles.map((row, index) => ({ time: row.time, close: row.close * (1 + index / 400) + (index % 5) }))
+          window.api.chartsCompare = async request => envelope({
+            symbols: request.symbols, interval: request.interval, range: request.range,
+            series: { AAPL: history, NVDA: alternate },
+          })
+          window.api.chartsRelationship = async request => envelope(buildRelationshipPayload(
+            request.symbols, history, alternate, request.range, request.rollingWindow,
+          ))
+          const watchlist = ['AAPL', 'NVDA', ...Array.from({ length: 10 }, (_, index) => 'PROBE' + index)]
+          useChartsStore.setState({
+            symbol: 'AAPL', interval: '1 Day', range: '5Y',
+            compareSymbols: ['AAPL', 'NVDA'], multiMode: 'watchlist', watchlist,
+          })
+          const app = createRoot(document.getElementById('root'))
+          app.render(<QueryClientProvider client={client}><ChartsPage onStatusChange={() => {}} /></QueryClientProvider>)
+          const fits = () => {
+            const workspace = document.querySelector('main')
+            check(workspace.scrollWidth <= workspace.clientWidth, 'Workspace overflows the compact window horizontally')
+            check(workspace.scrollHeight <= workspace.clientHeight, 'Workspace overflows the compact window vertically')
+          }
+          await settle()
+          fits()
+          const mainPlot = document.querySelector('[aria-label="Price chart"] canvas')
+          const height = mainPlot?.getBoundingClientRect().height
+          const dimensions = [...document.querySelectorAll('main nav, main form, [aria-label="Price chart"], [aria-label="Price chart"] canvas')].map(el => el.tagName + ' ' + el.getBoundingClientRect().height)
+          check(height > 180, 'Main must leave sufficient chart space at a compact width. Viewport ' + innerWidth + '×' + innerHeight + ', ' + dimensions.join(', '))
+          document.querySelector('summary[aria-label="Drawings"]').click()
+          await click('Trend')
+          const drawingOverlay = () => document.querySelector('[aria-label="Price chart"] svg.absolute')
+          const overlay = drawingOverlay()
+          const bounds = overlay.getBoundingClientRect()
+          const anchor = (x, y) => overlay.dispatchEvent(new MouseEvent('click', {
+            bubbles: true, clientX: bounds.left + bounds.width * x, clientY: bounds.top + bounds.height * y,
+          }))
+          anchor(0.2, 0.18); await settle()
+          check(overlay.querySelector('circle'), 'The first click must place the initial trend anchor')
+          anchor(0.35, 0.28); await settle()
+          check(drawingOverlay()?.querySelector('line'), 'Trend drawing must persist after placing both anchors')
+          await click('Undo')
+          check(!drawingOverlay(), 'Undo must remove the drawing overlay')
+          await click('Redo')
+          check(drawingOverlay()?.querySelector('line'), 'Redo must restore both anchors')
+          const svg = drawingOverlay()
+          const handle = svg.querySelector('circle')
+          const savedDrawings = useChartsStore.getState().drawingsByContext
+          handle.setPointerCapture = () => {} // The fixture uses synthetic pointer events.
+          handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+          svg.dispatchEvent(new PointerEvent('pointermove', {
+            bubbles: true, clientX: bounds.left + bounds.width * 0.26, clientY: bounds.top + bounds.height * 0.23,
+          }))
+          await settle()
+          check(useChartsStore.getState().drawingsByContext === savedDrawings, 'Dragging should preview locally without persisting')
+          svg.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }))
+          await settle()
+          check(useChartsStore.getState().drawingsByContext !== savedDrawings, 'Releasing the anchor should save the edit')
+          await click('Undo')
+          check(JSON.stringify(useChartsStore.getState().drawingsByContext) === JSON.stringify(savedDrawings), 'One undo must restore the drawing before the drag')
+          await click('Multi Charts')
+          fits()
+          const cards = [...document.querySelectorAll('main section')]
+          const lastCard = cards.at(-1)
+          check(cards.length === watchlist.length, 'Multi Charts must list every watchlist symbol, got ' + cards.length)
+          check(cards[0].querySelector('canvas'), 'Multi Charts must render the first card, got ' + cards[0].textContent)
+          check(client.getQueryData(queryKeys.chartsHistory(watchlist.at(-1), '1 Day', '1Y'))?.data.candles.length, 'Offscreen cards must still load history')
+          check(!lastCard.querySelector('canvas'), 'Offscreen Multi Charts should avoid creating a canvas')
+          const grid = lastCard.parentElement
+          grid.scrollTop = grid.scrollHeight
+          check(lastCard.getBoundingClientRect().top < grid.getBoundingClientRect().bottom, 'The last card must scroll into view')
+          grid.dispatchEvent(new Event('scroll')) // Drive the handler in the hidden fixture window.
+          await settle()
+          check(lastCard.querySelector('canvas'), 'Scrolling must render the prepared chart')
+          await click('Compare')
+          fits()
+          check(document.querySelector('[aria-label="Normalized performance by ticker"] path'), 'Compare must render normalized paths')
+          check(document.querySelector('table tbody tr')?.textContent.includes('AAPL'), 'Compare must render interval correlation')
+          await click('Relationship')
+          fits()
+          const timePlot = [...document.querySelectorAll('main svg')][0]
+          const scatter = document.querySelector('[aria-label="Daily return scatter plot"]')
+          const paths = [...timePlot.querySelectorAll('path')]
+          const cloud = scatter.querySelector('path')
+          check(cloud?.getAttribute('d').includes('h0'), 'Scatter returns must share a single SVG path')
+          const rect = timePlot.getBoundingClientRect()
+          timePlot.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: rect.left + rect.width * 0.25 }))
+          await settle()
+          check(timePlot.querySelector('path') === paths[0] && scatter.querySelector('path') === cloud, 'Relationship hover must reuse line and scatter geometry')
+          await click('Cheat Sheet')
+          fits()
+          check(document.querySelectorAll('article').length === 24, 'Cheat Sheet must retain all pattern examples')
+          window.finishProbe = () => app.unmount()
+          return 'PASS: all five Charts workspaces at a compact size, drawing drag and undo, viewport-aware Multi Charts, Compare and Relationship plots and Cheat Sheet'
         }
         window.runStocksProbe = async () => {
           const calls = []
@@ -241,6 +339,9 @@ try {
         console.log(await window.webContents.executeJavaScript('window.runPortfolioChartsProbe()'))
         await window.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
         require('node:fs').writeFileSync(${JSON.stringify(join(root, 'out/portfolio-charts-ready-smoke.png'))}, (await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG())
+        await window.webContents.executeJavaScript('window.finishProbe()')
+        window.setSize(960, 660)
+        console.log(await window.webContents.executeJavaScript('window.runWorkspacesProbe()'))
         await window.webContents.executeJavaScript('window.finishProbe()')
         app.exit(0)
       } catch (error) { console.error(error); app.exit(1) }

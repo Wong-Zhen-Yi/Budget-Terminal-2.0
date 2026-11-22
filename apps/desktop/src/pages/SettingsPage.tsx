@@ -25,6 +25,8 @@ import { McpPanel } from '@/components/settings/McpPanel'
 import { MarketApiKeysPanel } from '@/components/settings/MarketApiKeysPanel'
 import { CloudSyncPanel } from '@/components/settings/CloudSyncPanel'
 import { DiagnosticLogsPanel } from '@/components/settings/DiagnosticLogsPanel'
+import { MobileAccessPanel } from '@/components/settings/MobileAccessPanel'
+import { downloadMobileBackup, isMobileTerminal } from '@/mobile/client'
 import { useSettingsNavigation } from '@/stores/settingsNavigation'
 import { AppDashboard } from '@/components/settings/AppDashboard'
 import { Panel } from '@/components/ui/Panel'
@@ -46,6 +48,7 @@ const searchDestinations = [
   { id: 'controller', label: 'Controller controls', terms: 'gamepad steam deck playstation xbox button mapping input test controller shortcuts' },
 ] as const
 const logSearchTerms = 'application diagnostic logs events search severity area session export folder pause live'
+const mobileAccessTerms = 'mobile access ipad iphone tailscale tailnet magicdns telegram private link ios safari'
 
 interface SettingsCard {
   id: string
@@ -83,6 +86,7 @@ export function SettingsPage({
   active: boolean
   onStatusChange: (panels: PanelStatus[], sourcePath: string) => void
 }) {
+  const mobile = isMobileTerminal()
   const settingsQuery = useSettings()
   const mutate = useSettingsMutation()
   const runMaintenance = useMaintenance()
@@ -98,9 +102,19 @@ export function SettingsPage({
   })
   const [busy, setBusy] = useState<MaintenanceAction | null>(null)
   const [savingLab, setSavingLab] = useState<LabFeatureId | null>(null)
-  const [category, setCategory] = useState<Category>('dashboard')
+  const [category, setCategory] = useState<Category>(mobile ? 'workspace' : 'dashboard')
   const [search, setSearch] = useState('')
   const [updateState, setUpdateState] = useState<'idle' | 'checking' | 'failed'>('idle')
+  const [downloading, setDownloading] = useState(false)
+  const downloadBackup = async () => {
+    setDownloading(true)
+    try {
+      await downloadMobileBackup()
+      setStatus({ text: 'Backup downloaded.', tone: 'positive' })
+    } catch {
+      setStatus({ text: 'Could not download the backup. Please try again.', tone: 'negative' })
+    } finally { setDownloading(false) }
+  }
   const checkForUpdates = async () => {
     setUpdateState('checking')
     try {
@@ -205,7 +219,7 @@ export function SettingsPage({
   const matches = (card: Pick<SettingsCard, 'category' | 'terms'>) => searching
     ? matchesSearch(`${card.terms} ${categories.find(entry => entry.id === card.category)?.label ?? ''}`)
     : card.category === category
-  const destinations = searching ? searchDestinations.filter(({ label, terms }) => matchesSearch(`${label} ${terms}`)) : []
+  const destinations = searching && !mobile ? searchDestinations.filter(({ label, terms }) => matchesSearch(`${label} ${terms}`)) : []
 
   const groups: Array<{ id: string; title: string; hint: string; cards: SettingsCard[] }> = [
     {
@@ -223,7 +237,7 @@ export function SettingsPage({
             <ClockPanel country={settings.clockCountry} time12h={settings.time12h}
               onSetCountry={(code) => void write({ type: 'setClockCountry', code }, 'Clock market updated.')}
               onSetTime12h={(value) => void write({ type: 'setTime12h', value }, 'Clock format updated.')} />
-            <ShortcutsPanel />
+            {!mobile && <ShortcutsPanel />}
           </div> },
       ],
     },
@@ -235,6 +249,9 @@ export function SettingsPage({
             onSetObscured={(id, obscured) => void write({ type: 'setTabObscured', id, obscured }, 'Privacy settings updated.')} /> },
         { id: 'mcp', category: 'integrations', column: 'secondary', terms: 'local mcp chatgpt codex tools connection permissions read only approval browser client setup activity', content: <McpPanel /> },
         { id: 'market-api-keys', category: 'integrations', terms: 'finnhub financial modeling modelling prep fmp binance coinbase world bank imf sdmx api keys credentials inactive providers', content: <MarketApiKeysPanel /> },
+        ...(mobile ? [{ id: 'host-settings', category: 'integrations' as const, terms: 'mobile access desktop cloud sync mcp credentials backups cache updates', content: <Panel title="Computer settings">
+          <p className="p-3 text-2xs text-text-muted">Manage Mobile Access, cloud sync, credentials, MCP, backups, and updates in Budget Terminal on the computer.</p>
+        </Panel> }] : []),
       ],
     },
     {
@@ -247,6 +264,14 @@ export function SettingsPage({
             lastBackupAt={settings.lastBackupAt} automaticBackup={settings.automaticBackup} /> },
         { id: 'maintenance', category: 'data', column: 'secondary', terms: 'maintenance reset cache clear remove delete user data portfolios cards finance', content:
           <UserDataPanel mode="maintenance" onRun={onRunMaintenance} busy={busy} sourcePath={holdingsPath} /> },
+        ...(mobile ? [{ id: 'mobile-backup', category: 'data' as const, terms: 'export download backup saved data portfolios cards finance settings', content: <Panel title="Backup">
+          <div className="space-y-2 p-2 text-2xs text-text-muted">
+            <p>Download a copy of your saved records. Restore a backup in Budget Terminal on the computer.</p>
+            <button type="button" className="min-h-11 rounded border border-border-strong px-3 text-text" disabled={downloading} onClick={() => void downloadBackup()}>
+              {downloading ? 'Downloading…' : 'Download backup'}
+            </button>
+          </div>
+        </Panel> }] : []),
       ],
     },
     {
@@ -279,7 +304,9 @@ export function SettingsPage({
               </li>
             })}
           </ul>
-        </Panel> }],
+      </Panel> },
+      ...(!mobile ? [{ id: 'mobile-access', category: 'labs' as const, terms: mobileAccessTerms,
+        content: <MobileAccessPanel active={active && matches({ category: 'labs', terms: mobileAccessTerms })} /> }] : [])],
     },
     {
       id: 'logs', title: 'Application logs', hint: 'Search local diagnostic events and inspect previous sessions.',
@@ -301,10 +328,12 @@ export function SettingsPage({
       ],
     },
   ]
-  const resultCount = destinations.length + groups.flatMap(group => group.cards).filter(matches).length
+  const mobileCards = new Set(['navigation', 'clock', 'privacy', 'host-settings', 'mobile-backup', 'labs', 'load-order', 'health'])
+  const availableGroups = mobile ? groups.map(group => ({ ...group, cards: group.cards.filter(card => mobileCards.has(card.id)) })) : groups
+  const resultCount = destinations.length + availableGroups.flatMap(group => group.cards).filter(matches).length
   const showDashboard = !searching && category === 'dashboard'
   const showController = !searching && category === 'controller'
-  const navigation = categories.map(entry => (
+  const navigation = categories.filter(entry => !mobile || availableGroups.some(group => group.cards.some(card => card.category === entry.id))).map(entry => (
     <button key={entry.id} type="button" aria-pressed={!searching && category === entry.id}
       onClick={() => chooseCategory(entry.id)} data-settings-category={entry.id}>
       {entry.label}
@@ -334,12 +363,12 @@ export function SettingsPage({
           </div>
         </div>
       </header>
-      <div className="settings-dashboard-host" hidden={!showDashboard}>
+      {!mobile && <div className="settings-dashboard-host" hidden={!showDashboard}>
         <AppDashboard settings={settings} />
-      </div>
-      <div className="controller-host" hidden={!showController}>
+      </div>}
+      {!mobile && <div className="controller-host" hidden={!showController}>
         <ControllerControls active={active && showController} />
-      </div>
+      </div>}
       <div className="settings-scroll" ref={scrollRef} hidden={showDashboard || showController}>
         <div className="settings-content">
           {settingsQuery.error && <p role="alert" className="settings-error">Settings could not load. {settingsQuery.error.message}</p>}
@@ -351,7 +380,7 @@ export function SettingsPage({
           {destinations.length > 0 && <ul className="settings-search-destinations">
             {destinations.map(({ id, label }) => <li key={id}><button type="button" onClick={() => chooseCategory(id)}>{label}</button></li>)}
           </ul>}
-          {groups.map((group, index) => <section className="settings-group" key={group.id}
+          {availableGroups.map((group, index) => <section className="settings-group" key={group.id}
             hidden={!group.cards.some(matches)} aria-labelledby={`settings-group-${group.id}`}>
             <header className="settings-group-heading"><span aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
               <div><h2 id={`settings-group-${group.id}`}>{group.title}</h2><p>{group.hint}</p></div>

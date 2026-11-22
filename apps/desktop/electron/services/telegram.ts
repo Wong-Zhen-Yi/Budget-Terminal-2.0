@@ -9,6 +9,7 @@ import type { ScreenshotPayload } from '../shared/screenshot.js'
 export const telegramCommands = [
   { command: 'new', description: 'Start a fresh chat: /new [question]' },
   { command: 'model', description: 'Choose a model, then its reasoning level' },
+  { command: 'mobile', description: 'Get the private Budget Terminal link for iPhone or iPad' },
 ]
 export type TelegramResearchCommand = 'model' | 'reasoning'
 const help = 'Budget Terminal research agent.\n' + telegramCommands.map(command => `/${command.command} — ${command.description}`).join('\n')
@@ -36,6 +37,7 @@ interface Options {
   reset: () => Promise<void>
   command?: (command: TelegramResearchCommand, argument: string) => Promise<string>
   models?: () => Promise<TelegramModelChoice[]>
+  mobileLink?: () => Promise<string>
   screenshot?: (page: string, signal: AbortSignal) => Promise<Envelope<ScreenshotPayload>>
   fetch?: typeof fetch
 }
@@ -275,6 +277,10 @@ export class TelegramService {
             const command = match?.[1].toLowerCase()
             const argument = match?.[3]?.trim() ?? ''
             if (command === 'start') { await this.send(help, signal); continue }
+            if (command === 'mobile' && this.options.mobileLink) {
+              await this.send(await this.options.mobileLink(), signal)
+              continue
+            }
             if (command === 'new') {
               this.modelPicker = null
               try { await this.options.reset() }
@@ -288,7 +294,11 @@ export class TelegramService {
               }
               catch { await this.send('Telegram command could not complete. Check Codex and local history in the desktop app. No research request was sent.', signal) }
               continue
-            } else { await this.send('Available commands: /new, /model. Ask naturally for a screenshot of a page.', signal); continue }
+            } else { await this.send('Available commands: /new, /model, /mobile. Ask naturally for a screenshot of a page.', signal); continue }
+          }
+          if (this.options.mobileLink && /^(?:please )?(?:send|give|get|show)(?: me)? (?:the |a |my )?(?:(?:private )?(?:tailscale|mobile|budget terminal(?: mobile)?) link|(?:private )?link (?:for|to) (?:budget terminal|my iphone|my ipad|mobile access))[.!?]*$/i.test(text)) {
+            await this.send(await this.options.mobileLink(), signal)
+            continue
           }
           await this.api('sendChatAction', { chat_id: config.chatId, action: 'typing' }, signal)
           const photosBeforeReply = this.photosSent

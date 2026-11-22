@@ -31,7 +31,8 @@ async function checkComplete(): Promise<void> {
   assert.equal(bundle.version, 1)
   assert.ok(Number.isFinite(Date.parse(bundle.exportedAt)))
   assert.deepEqual(bundle.userData, await exportUserData())
-  assert.deepEqual(bundle.settings, await exportSettings())
+  // Optional preferences that have no value are omitted from the JSON backup.
+  assert.deepEqual(bundle.settings, JSON.parse(JSON.stringify(await exportSettings())))
   assert.deepEqual(bundle.cards, await exportCards())
   assert.deepEqual(await readdir(downloads), ['budget-terminal-backup.json'])
 }

@@ -118,7 +118,7 @@ export function WorkspaceHeader({ tabs, activeTab, onSelectTab, favorite, onTogg
   return (
     <header className={`workspace-header shrink-0 border-b border-border bg-surface px-4 pt-3 pb-2 ${isMac ? 'px-5 pt-4 pb-3' : ''}`}>
       <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-baseline gap-3">
+        <div className="workspace-heading flex min-w-0 items-baseline gap-3">
           {hasFocusDashboard && !focusLanding ? (
             <button type="button" onClick={() => onSelectTab(FOCUS_DASHBOARD_TAB_ID)}
               className="no-drag rounded text-2xs text-text-muted hover:text-accent-hover focus-visible:outline-2 focus-visible:outline-accent-hover">

@@ -6,6 +6,7 @@ import { api } from '@/api/client'
 import { ArticleContent, articleBlocks, articlePages, headingText } from '@/components/articles/ArticleContent'
 import { articleExport } from '@/components/articles/articleExport'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
+import { isMobileTerminal } from '@/mobile/client'
 import '@/styles/articles.css'
 
 const blank = (): ArticleFields => ({ title: '', topic: '', content: '', status: 'draft' })
@@ -21,6 +22,7 @@ const useEditor = create<{
 }>((set) => ({ selected: null, draft: null, reading: true, set: (selected, draft) => set({ selected, draft }), setReading: reading => set({ reading }) }))
 
 export function ArticlesPage({ onStatusChange }: { onStatusChange: (panels: PanelStatus[], path: string) => void }) {
+  const mobile = isMobileTerminal()
   const query = useArticles()
   const mutate = useArticlesMutation()
   const { selected, draft, reading, set, setReading } = useEditor()
@@ -102,6 +104,7 @@ export function ArticlesPage({ onStatusChange }: { onStatusChange: (panels: Pane
       const { cancelled, paths, failures } = result.data
       if (cancelled) setMessage('Export cancelled.')
       else if (failures.length) setMessage(`Exported ${paths.length} of ${paths.length + failures.length} PDFs. ${failures.map(failure => `${failure.title}: ${failure.message}`).join('; ')}`)
+      else if (mobile) setMessage(all ? 'Downloaded the article PDFs as a ZIP archive.' : 'Downloaded the article PDF.')
       else setMessage(all ? `Exported all ${paths.length} articles as individual PDFs.` : `Article exported to ${paths[0]}`)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Could not export PDFs.') }
     finally { setExporting(null) }
@@ -117,7 +120,7 @@ export function ArticlesPage({ onStatusChange }: { onStatusChange: (panels: Pane
       <header className="articles-header">
         <div><span className="articles-eyebrow">RESEARCH & IDEAS</span><h1>Articles</h1></div>
         <p>Your library. Your thinking.</p>
-        <button className="articles-button" disabled={busy || !!exporting || unavailable || !articles.length} title="Choose a folder for one PDF per saved article, including drafts and articles hidden by filters" onClick={() => void exportArticles(true)}>{exporting === 'all' ? 'Exporting all…' : 'Export all Articles'}</button>
+        <button className="articles-button" disabled={busy || !!exporting || unavailable || !articles.length} title={mobile ? 'Download the saved articles as a ZIP of PDFs' : 'Choose a folder for one PDF per saved article, including drafts and articles hidden by filters'} onClick={() => void exportArticles(true)}>{exporting === 'all' ? 'Exporting all…' : 'Export all Articles'}</button>
         <button className="articles-button articles-primary" disabled={busy || unavailable} onClick={() => choose(null)}>New article</button>
       </header>
       {unavailable && <div role="alert" className="articles-notice">{query.isPending ? 'Loading articles…' : query.data?.meta.failureReason ?? query.error?.message ?? 'Could not load articles.'}{!query.isPending && <button className="articles-button" onClick={() => void query.refetch()}>Retry</button>}</div>}

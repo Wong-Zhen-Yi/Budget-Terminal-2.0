@@ -1,6 +1,6 @@
 import { fitStockChart, layoutIndicatorPanes } from '@/charts/stockChartLayout'
 import { syncTimeSeries } from '@/charts/seriesUpdates'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import {
   AreaSeries,
   CandlestickSeries,
@@ -10,11 +10,9 @@ import {
   HistogramSeries,
   LineSeries,
   LineStyle,
-  type CandlestickData,
   type IChartApi,
   type IPriceLine,
   type ISeriesApi,
-  type Time,
   type UTCTimestamp,
 } from 'lightweight-charts'
 
@@ -42,18 +40,20 @@ const COLORS = {
 
 interface MainChartProps {
   payload: ChartsHistoryPayload | null
+  candles: Candle[]
   chartType: ChartsType
   indicators: Record<ChartsIndicator, boolean>
   averagePrice: number | null
-  supportResistance: SupportResistance
+  supportResistance: SupportResistance | null
   fibonacci: FibonacciModel | null
   drawings: ChartDrawing[]
   drawingTool: DrawingType | null
-  replayLimit: number | null
+  replaying: boolean
   autoFollow: boolean
-  onHover: (candle: Candle | null) => void
+  onHover: (time: number | null) => void
   onDrawingsChange: (drawings: ChartDrawing[]) => void
   onDrawingToolComplete: () => void
+  emptyMessage: string
 }
 
 interface OverlayPoint extends DrawingAnchor {
@@ -61,8 +61,13 @@ interface OverlayPoint extends DrawingAnchor {
   y: number
 }
 
-export function MainChart({
+const INDICATOR_SERIES = ['ma50', 'ma200', 'rsi', 'rsiMa'] as const
+type IndicatorRows = Partial<ChartsHistoryPayload['indicators']>
+type PriceSeries = ISeriesApi<'Candlestick'> | ISeriesApi<'Line'> | ISeriesApi<'Area'>
+
+export const MainChart = memo(function MainChart({
   payload,
+  candles: shownCandles,
   chartType,
   indicators,
   averagePrice,
@@ -70,11 +75,12 @@ export function MainChart({
   fibonacci,
   drawings,
   drawingTool,
-  replayLimit,
+  replaying,
   autoFollow,
   onHover,
   onDrawingsChange,
   onDrawingToolComplete,
+  emptyMessage,
 }: MainChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -88,23 +94,31 @@ export function MainChart({
     rsi: ISeriesApi<'Line'>
     rsiMa: ISeriesApi<'Line'>
   } | null>(null)
-  const priceLines = useRef<IPriceLine[]>([])
-  const candlesRef = useRef(new Map<number, Candle>())
   const fittedContext = useRef('')
-  const previousData = useRef<{ context: string; candles: Candle[]; indicators: ChartsHistoryPayload['indicators'] } | null>(null)
-  const propsRef = useRef({ drawings, drawingTool, onDrawingsChange, onDrawingToolComplete })
-  propsRef.current = { drawings, drawingTool, onDrawingsChange, onDrawingToolComplete }
+  const hoveredTime = useRef<number | null>(null)
+  const previousData = useRef<{ context: string; candles: Candle[]; chartType: ChartsType; volume: boolean; indicators: IndicatorRows } | null>(null)
+  const overlayFrame = useRef(0)
+  const hasOverlay = useRef(false)
+  hasOverlay.current = Boolean(drawings.length || drawingTool)
+  const propsRef = useRef({ drawings, onDrawingsChange, onDrawingToolComplete })
+  propsRef.current = { drawings, onDrawingsChange, onDrawingToolComplete }
   const [pending, setPending] = useState<DrawingAnchor | null>(null)
   const [preview, setPreview] = useState<DrawingAnchor | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
-  const [revision, setRevision] = useState(0)
-  const dragRef = useRef<{ id: string; anchor: number } | null>(null)
-
-  const shownCandles = useMemo(() => {
-    const source = payload?.candles ?? []
-    return replayLimit === null ? source : source.slice(0, Math.max(1, replayLimit))
-  }, [payload?.candles, replayLimit])
-  const lastShownTime = shownCandles.at(-1)?.time ?? Infinity
+  const [, setRevision] = useState(0)
+  const [dragPreview, setDragPreview] = useState<DrawingAnchor | null>(null)
+  const dragRef = useRef<{ id: string; index: number; position: DrawingAnchor | null } | null>(null)
+  const moved = useRef(false)
+  const context = `${payload?.symbol}:${payload?.intervalLabel}:${payload?.rangeLabel}`
+  const { volume: showVolume, ma50: showMa50, ma200: showMa200, rsi: showRsi, avgPrice: showAverage } = indicators
+  const sourceIndicators = payload?.indicators
+  const scheduleOverlay = useCallback(() => {
+    if (!hasOverlay.current || overlayFrame.current) return
+    overlayFrame.current = requestAnimationFrame(() => {
+      overlayFrame.current = 0
+      setRevision((value) => value + 1)
+    })
+  }, [])
 
   useEffect(() => {
     const container = containerRef.current
@@ -144,99 +158,130 @@ export function MainChart({
     const rsiMa = chart.addSeries(LineSeries, { color: COLORS.rsiMa, lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false }, 2)
     rsi.createPriceLine({ price: 70, color: COLORS.down, lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' })
     rsi.createPriceLine({ price: 30, color: COLORS.up, lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: '' })
-    chart.subscribeCrosshairMove((parameter) => {
-      if (!parameter.time) {
-        onHover(null)
-        return
-      }
-      const data = parameter.seriesData.get(candles) as CandlestickData<Time> | undefined
-      const time = typeof parameter.time === 'number' ? Number(parameter.time) : null
-      onHover(data && time !== null ? candlesRef.current.get(time) ?? null : null)
+    chart.subscribeCrosshairMove(({ time }) => {
+      const next = typeof time === 'number' ? time : null
+      if (next === hoveredTime.current) return
+      hoveredTime.current = next
+      onHover(next)
     })
-    chart.timeScale().subscribeVisibleTimeRangeChange(() => setRevision((value) => value + 1))
+    chart.timeScale().subscribeVisibleLogicalRangeChange(scheduleOverlay)
     chartRef.current = chart
     seriesRef.current = { candles, line, area, volume, ma50, ma200, rsi, rsiMa }
-    const observer = new ResizeObserver(() => setRevision((value) => value + 1))
+    const observer = new ResizeObserver(scheduleOverlay)
     observer.observe(container)
     return () => {
       observer.disconnect()
+      cancelAnimationFrame(overlayFrame.current)
+      overlayFrame.current = 0
       chart.remove()
       chartRef.current = null
       seriesRef.current = null
       fittedContext.current = ''
       previousData.current = null
     }
-  }, [onHover])
+  }, [onHover, scheduleOverlay])
 
   useEffect(() => {
     const series = seriesRef.current
-    const chart = chartRef.current
-    if (!series || !chart) return
-    const context = `${payload?.symbol}:${payload?.intervalLabel}:${payload?.rangeLabel}`
+    if (!series) return
     const previous = previousData.current
     const reset = previous?.context !== context
-    const replaced = syncTimeSeries(series.candles, previous?.candles, shownCandles,
-      row => ({ time: row.time as UTCTimestamp, open: row.open, high: row.high, low: row.low, close: row.close }), reset)
-    const closePoint = (row: Candle) => ({ time: row.time as UTCTimestamp, value: row.close })
-    syncTimeSeries(series.line, previous?.candles, shownCandles, closePoint, reset)
-    syncTimeSeries(series.area, previous?.candles, shownCandles, closePoint, reset)
-    syncTimeSeries(series.volume, previous?.candles, shownCandles,
-      row => ({ time: row.time as UTCTimestamp, value: row.volume, color: row.close >= row.open ? `${COLORS.up}80` : `${COLORS.down}80` }), reset)
-    const currentIndicators = {} as ChartsHistoryPayload['indicators']
-    for (const key of ['ma50', 'ma200', 'rsi', 'rsiMa'] as const) {
-      const points = payload?.indicators[key] ?? []
-      currentIndicators[key] = replayLimit === null ? points : points.filter(point => point.time <= lastShownTime)
-      syncTimeSeries(series[key], previous?.indicators[key], currentIndicators[key], pointData, reset)
+    if (reset) hoveredTime.current = null
+    const styleChanged = previous?.chartType !== chartType
+    if (chartType === 'candles') {
+      syncTimeSeries(series.candles, previous?.candles, shownCandles, candleData, reset || styleChanged)
+    } else {
+      syncTimeSeries(series[chartType], previous?.candles, shownCandles, closeData, reset || styleChanged)
     }
-    if (replaced) candlesRef.current = new Map(shownCandles.map(candle => [candle.time, candle]))
-    else for (let index = Math.max(0, (previous?.candles.length ?? 1) - 1); index < shownCandles.length; index++) {
-      const candle = shownCandles[index]
-      candlesRef.current.set(candle.time, candle)
+    if (previous && styleChanged) series[previous.chartType].setData([])
+
+    if (showVolume) syncTimeSeries(series.volume, previous?.volume ? previous.candles : undefined, shownCandles, volumeData, reset)
+    else if (previous?.volume) series.volume.setData([])
+
+    const lastShownTime = shownCandles.at(-1)?.time ?? -Infinity
+    const currentIndicators: IndicatorRows = {}
+    for (const key of INDICATOR_SERIES) {
+      const visible = key === 'ma50' ? showMa50 : key === 'ma200' ? showMa200 : showRsi
+      const points = sourceIndicators?.[key]
+      if (visible && points) {
+        const rows = replaying ? throughTime(points, lastShownTime) : points
+        currentIndicators[key] = rows
+        syncTimeSeries(series[key], previous?.indicators[key], rows, pointData, reset)
+      } else if (previous?.indicators[key]) {
+        series[key].setData([])
+      }
     }
-    previousData.current = { context, candles: shownCandles, indicators: currentIndicators }
-    if (shownCandles.length && (fittedContext.current !== context || autoFollow || replayLimit !== null)) {
+    previousData.current = { context, chartType, candles: shownCandles, volume: showVolume, indicators: currentIndicators }
+    scheduleOverlay()
+  }, [context, chartType, shownCandles, showVolume, showMa50, showMa200, showRsi, sourceIndicators, replaying, scheduleOverlay])
+
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart || !shownCandles.length || (fittedContext.current === context && !autoFollow && !replaying)) return
+    const frame = requestAnimationFrame(() => {
       fittedContext.current = context
-      requestAnimationFrame(() => fitStockChart(chart, shownCandles.length))
-    }
-    setRevision((value) => value + 1)
-  }, [payload?.symbol, payload?.intervalLabel, payload?.rangeLabel, payload?.indicators, shownCandles, lastShownTime, autoFollow, replayLimit])
+      fitStockChart(chart, shownCandles.length)
+      scheduleOverlay()
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [context, shownCandles, autoFollow, replaying, scheduleOverlay])
 
   useEffect(() => {
     const series = seriesRef.current
-    const chart = chartRef.current
-    if (!series || !chart) return
+    if (!series) return
     series.candles.applyOptions({ visible: chartType === 'candles' })
     series.line.applyOptions({ visible: chartType === 'line' })
     series.area.applyOptions({ visible: chartType === 'area' })
-    series.volume.applyOptions({ visible: indicators.volume })
-    series.ma50.applyOptions({ visible: indicators.ma50 })
-    series.ma200.applyOptions({ visible: indicators.ma200 })
-    series.rsi.applyOptions({ visible: indicators.rsi })
-    series.rsiMa.applyOptions({ visible: indicators.rsi })
-    layoutIndicatorPanes(chart, [
-      { series: [series.volume], visible: indicators.volume, height: 90 },
-      { series: [series.rsi, series.rsiMa], visible: indicators.rsi, height: 100 },
-    ])
-  }, [chartType, indicators])
+  }, [chartType])
 
   useEffect(() => {
-    const series = seriesRef.current?.candles
+    const series = seriesRef.current
     if (!series) return
-    for (const line of priceLines.current) series.removePriceLine(line)
-    priceLines.current = []
+    series.ma50.applyOptions({ visible: showMa50 })
+    series.ma200.applyOptions({ visible: showMa200 })
+  }, [showMa50, showMa200])
+
+  useEffect(() => {
+    const chart = chartRef.current
+    const series = seriesRef.current
+    if (!chart || !series) return
+    layoutIndicatorPanes(chart, [
+      { series: [series.volume], visible: showVolume, height: 76 },
+      { series: [series.rsi, series.rsiMa], visible: showRsi, height: 100 },
+    ])
+    scheduleOverlay()
+  }, [showVolume, showRsi, scheduleOverlay])
+
+  useEffect(() => {
+    const series = seriesRef.current?.[chartType]
+    if (!series) return
+    const priceLines: IPriceLine[] = []
     const add = (price: number | null, color: string, title: string, style = LineStyle.Dashed) => {
       if (price === null || !Number.isFinite(price)) return
-      priceLines.current.push(series.createPriceLine({ price, color, lineWidth: 1, lineStyle: style, axisLabelVisible: true, title }))
+      priceLines.push(series.createPriceLine({ price, color, lineWidth: 1, lineStyle: style, axisLabelVisible: true, title }))
     }
-    if (indicators.avgPrice) add(averagePrice, COLORS.ma200, 'Avg')
-    if (indicators.supportResistance) {
+    if (showAverage) add(averagePrice, COLORS.ma200, 'Avg')
+    if (supportResistance) {
       add(supportResistance.support, COLORS.support, 'S')
       add(supportResistance.resistance, COLORS.resistance, 'R')
     }
-    if (indicators.fibonacci && fibonacci) {
-      for (const level of fibonacci.levels) add(level.price, COLORS.fib, level.label, LineStyle.Dotted)
+    for (const level of fibonacci?.levels ?? []) add(level.price, COLORS.fib, level.label, LineStyle.Dotted)
+    return () => {
+      if (!chartRef.current) return
+      for (const line of priceLines) series.removePriceLine(line)
     }
-  }, [averagePrice, supportResistance, fibonacci, indicators])
+  }, [chartType, averagePrice, supportResistance, fibonacci, showAverage])
+
+  useEffect(() => {
+    setPending(null)
+    setPreview(null)
+  }, [context, drawingTool])
+
+  useEffect(() => {
+    setSelected(null)
+    setDragPreview(null)
+    dragRef.current = null
+  }, [context])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -247,6 +292,8 @@ export function MainChart({
         propsRef.current.onDrawingToolComplete()
       }
       if ((event.key === 'Delete' || event.key === 'Backspace') && selected) {
+        if (event.target instanceof HTMLElement && (event.target.matches('input, textarea, select') || event.target.isContentEditable)) return
+        if (!propsRef.current.drawings.some((drawing) => drawing.id === selected)) return
         event.preventDefault()
         propsRef.current.onDrawingsChange(propsRef.current.drawings.filter((drawing) => drawing.id !== selected))
         setSelected(null)
@@ -259,7 +306,7 @@ export function MainChart({
   const coordinateAnchor = (clientX: number, clientY: number): DrawingAnchor | null => {
     const container = containerRef.current
     const chart = chartRef.current
-    const series = seriesRef.current?.candles
+    const series = seriesRef.current?.[chartType]
     if (!container || !chart || !series) return null
     const rect = container.getBoundingClientRect()
     const x = clientX - rect.left
@@ -271,7 +318,7 @@ export function MainChart({
   }
 
   const onOverlayClick = (event: React.MouseEvent<SVGSVGElement>) => {
-    if (dragRef.current || !drawingTool) return
+    if (moved.current || !drawingTool) return
     const anchor = coordinateAnchor(event.clientX, event.clientY)
     if (!anchor) return
     if (drawingTool === 'horizontal' || drawingTool === 'ray' || drawingTool === 'text') {
@@ -307,32 +354,54 @@ export function MainChart({
 
   const onPointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
     const drag = dragRef.current
+    if (!drag && !pending) return
     const anchor = coordinateAnchor(event.clientX, event.clientY)
     if (!anchor) return
     if (!drag) {
-      if (pending) setPreview(anchor)
+      setPreview(anchor)
       return
     }
-    propsRef.current.onDrawingsChange(propsRef.current.drawings.map((drawing) => {
-      if (drawing.id !== drag.id) return drawing
-      const anchors = drawing.anchors.map((value, index) => index === drag.anchor ? anchor : value)
-      return { ...drawing, anchors }
-    }))
+    drag.position = anchor
+    setDragPreview(anchor)
   }
 
-  const overlay = drawings.map((drawing) => toOverlay(drawing, chartRef.current, seriesRef.current?.candles)).filter(Boolean) as Array<{ drawing: ChartDrawing; points: OverlayPoint[] }>
-  const pendingPoint = pending ? anchorToOverlay(pending, chartRef.current, seriesRef.current?.candles) : null
-  const previewPoint = preview ? anchorToOverlay(preview, chartRef.current, seriesRef.current?.candles) : null
+  const finishDrag = (commit: boolean) => {
+    const drag = dragRef.current
+    if (!drag) return
+    dragRef.current = null
+    setDragPreview(null)
+    const position = drag.position
+    if (!commit || !position) return
+    const drawing = propsRef.current.drawings.find((entry) => entry.id === drag.id)
+    const original = drawing?.anchors[drag.index]
+    if (!original || (original.time === position.time && original.price === position.price)) return
+    propsRef.current.onDrawingsChange(propsRef.current.drawings.map((entry) => entry.id === drag.id ? moveAnchor(entry, drag.index, position) : entry))
+  }
+
+  const series = seriesRef.current?.[chartType]
+  const drag = dragRef.current
+  const overlay = drawings.map((drawing) => toOverlay(
+    drag?.id === drawing.id && dragPreview ? moveAnchor(drawing, drag.index, dragPreview) : drawing,
+    chartRef.current,
+    series,
+  )).filter((entry) => entry !== null)
+  const pendingPoint = pending ? anchorToOverlay(pending, chartRef.current, series) : null
+  const previewPoint = preview ? anchorToOverlay(preview, chartRef.current, series) : null
 
   return (
     <div ref={containerRef} className="relative min-h-0 flex-1 overflow-hidden">
-      <svg
-        key={revision}
+      {!shownCandles.length ? (
+        <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center px-3 text-center text-[13px] text-text-muted">{emptyMessage}</div>
+      ) : null}
+      {drawings.length || drawingTool ? <svg
+        aria-hidden="true"
         className={`absolute inset-0 z-10 h-full w-full ${drawingTool ? 'pointer-events-auto cursor-crosshair' : 'pointer-events-none'}`}
         onClick={onOverlayClick}
+        onPointerDownCapture={() => { moved.current = false }}
         onPointerMove={onPointerMove}
-        onPointerUp={() => { dragRef.current = null }}
-        onPointerLeave={() => { dragRef.current = null }}
+        onPointerUp={() => finishDrag(true)}
+        onPointerCancel={() => finishDrag(false)}
+        onLostPointerCapture={() => finishDrag(false)}
       >
         {overlay.map(({ drawing, points }) => (
           <DrawingShape key={drawing.id} drawing={drawing} points={points} selected={selected === drawing.id} onSelect={() => setSelected(drawing.id)} />
@@ -349,46 +418,76 @@ export function MainChart({
             style={{ pointerEvents: 'all' }}
             onPointerDown={(event) => {
               event.stopPropagation()
-              dragRef.current = { id: selected, anchor: index }
+              moved.current = true
+              dragRef.current = { id: selected, index, position: null }
               event.currentTarget.setPointerCapture(event.pointerId)
             }}
           />
         )) : null}
         {pendingPoint ? <circle cx={pendingPoint.x} cy={pendingPoint.y} r="5" fill={COLORS.drawing} /> : null}
-        {pendingPoint && previewPoint && drawingTool ? <DrawingShape drawing={{ id: 'preview', type: drawingTool, anchors: [pending!, preview!], text: '', color: COLORS.drawing, width: 1 }} points={[pendingPoint, previewPoint]} selected={false} onSelect={() => undefined} /> : null}
-      </svg>
+        {pendingPoint && previewPoint && drawingTool ? <DrawingShape drawing={{ id: 'preview', type: drawingTool, anchors: [pendingPoint, previewPoint], text: '', color: COLORS.drawing, width: 1 }} points={[pendingPoint, previewPoint]} selected={false} /> : null}
+      </svg> : null}
     </div>
   )
+})
+
+function candleData(row: Candle) {
+  return { time: row.time as UTCTimestamp, open: row.open, high: row.high, low: row.low, close: row.close }
+}
+
+function closeData(row: Candle) {
+  return { time: row.time as UTCTimestamp, value: row.close }
+}
+
+function volumeData(row: Candle) {
+  return { time: row.time as UTCTimestamp, value: row.volume, color: row.close >= row.open ? `${COLORS.up}80` : `${COLORS.down}80` }
 }
 
 function pointData(point: { time: number; value: number }) {
   return { time: point.time as UTCTimestamp, value: point.value }
 }
 
-function anchorToOverlay(anchor: DrawingAnchor, chart: IChartApi | null, series?: ISeriesApi<'Candlestick'>): OverlayPoint | null {
+function throughTime<T extends { time: number }>(points: T[], lastTime: number): T[] {
+  if (!points.length || points.at(-1)!.time <= lastTime) return points
+  let low = 0
+  let high = points.length
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2)
+    if (points[middle].time <= lastTime) low = middle + 1
+    else high = middle
+  }
+  return points.slice(0, low)
+}
+
+function moveAnchor(drawing: ChartDrawing, index: number, position: DrawingAnchor): ChartDrawing {
+  return { ...drawing, anchors: drawing.anchors.map((anchor, current) => current === index ? position : anchor) }
+}
+
+function anchorToOverlay(anchor: DrawingAnchor, chart: IChartApi | null, series?: PriceSeries): OverlayPoint | null {
   if (!chart || !series) return null
   const x = chart.timeScale().timeToCoordinate(anchor.time as UTCTimestamp)
   const y = series.priceToCoordinate(anchor.price)
   return x === null || y === null ? null : { ...anchor, x, y }
 }
 
-function toOverlay(drawing: ChartDrawing, chart: IChartApi | null, series?: ISeriesApi<'Candlestick'>) {
+function toOverlay(drawing: ChartDrawing, chart: IChartApi | null, series?: PriceSeries) {
   const points = drawing.anchors.map((anchor) => anchorToOverlay(anchor, chart, series))
-  return points.every(Boolean) ? { drawing, points: points as OverlayPoint[] } : null
+  return points.length && points.every((point) => point !== null) ? { drawing, points } : null
 }
 
-function DrawingShape({ drawing, points, selected, onSelect }: { drawing: ChartDrawing; points: OverlayPoint[]; selected: boolean; onSelect: () => void }) {
+function DrawingShape({ drawing, points, selected, onSelect }: { drawing: ChartDrawing; points: OverlayPoint[]; selected: boolean; onSelect?: () => void }) {
   const stroke = selected ? '#ffffff' : drawing.color
-  const common = { stroke, strokeWidth: drawing.width + (selected ? 1 : 0), fill: 'none', style: { pointerEvents: 'stroke' as const }, onClick: (event: React.MouseEvent) => { event.stopPropagation(); onSelect() } }
+  const onClick = onSelect ? (event: React.MouseEvent) => { event.stopPropagation(); onSelect() } : undefined
+  const common = { stroke, strokeWidth: drawing.width + (selected ? 1 : 0), fill: 'none', pointerEvents: onSelect ? 'stroke' : 'none', onClick }
   const first = points[0]
   const second = points[1] ?? first
   if (drawing.type === 'horizontal') return <line x1="0" x2="100%" y1={first.y} y2={first.y} {...common} />
   if (drawing.type === 'ray') return <line x1={first.x} x2="100%" y1={first.y} y2={first.y} {...common} />
   if (drawing.type === 'rectangle') return <rect x={Math.min(first.x, second.x)} y={Math.min(first.y, second.y)} width={Math.abs(second.x - first.x)} height={Math.abs(second.y - first.y)} {...common} fill={`${drawing.color}18`} />
-  if (drawing.type === 'text') return <text x={first.x + 4} y={first.y - 4} fill={stroke} fontSize="12" style={{ pointerEvents: 'all' }} onClick={(event) => { event.stopPropagation(); onSelect() }}>{drawing.text}</text>
+  if (drawing.type === 'text') return <text x={first.x + 4} y={first.y - 4} fill={stroke} fontSize="12" pointerEvents={onSelect ? 'all' : 'none'} onClick={onClick}>{drawing.text}</text>
   if (drawing.type === 'fib') {
     const levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]
-    return <g onClick={(event) => { event.stopPropagation(); onSelect() }} style={{ pointerEvents: 'stroke' }}>{levels.map((level) => {
+    return <g>{levels.map((level) => {
       const y = second.y + (first.y - second.y) * level
       return <line key={level} x1={Math.min(first.x, second.x)} x2="100%" y1={y} y2={y} {...common} />
     })}</g>

@@ -170,7 +170,7 @@ export function StocksPage({
   }, [middleSizes, setMiddleSizes])
 
   return (
-    <div ref={mainRef} className="flex min-h-0 flex-1 gap-0 p-1">
+    <div ref={mainRef} className="stocks-workspace flex min-h-0 flex-1 gap-0 p-1">
       <div className="flex min-h-0 min-w-[300px] flex-col gap-1" style={{ flexGrow: mainSizes[0], flexBasis: 0 }}>
         <TickerPanel
           draft={draft}
@@ -215,7 +215,7 @@ export function StocksPage({
 
       <ResizeHandle orientation="vertical" onDrag={(position) => resizeMain(1, position)} />
 
-      <section className="flex min-h-0 min-w-[360px] flex-col overflow-hidden border border-border bg-surface" style={{ flexGrow: mainSizes[2], flexBasis: 0 }}>
+      <section className="stocks-price-chart flex min-h-0 min-w-[360px] flex-col overflow-hidden border border-border bg-surface" style={{ flexGrow: mainSizes[2], flexBasis: 0 }}>
         <header className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-border px-2 py-1">
           <span className="text-sm font-semibold text-text">{payload?.symbol ?? symbol}</span>
           <span className="num text-sm font-semibold text-text">{quotePrice(stats?.price, stats?.currency)}</span>

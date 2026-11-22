@@ -32,15 +32,23 @@ function enqueue<T>(run: () => Promise<T>): Promise<T> {
 /** Cloud snapshots share the edit queue; callers must not re-enter backup helpers. */
 export const withSavedDataLock = enqueue
 
+async function backupDocument(captured?: Awaited<ReturnType<typeof captureSavedData>>) {
+  return {
+    app: 'budget-terminal-electron',
+    ...(captured ?? await captureSavedData()).data,
+    exportedAt: new Date().toISOString(),
+  }
+}
+
+export function readUserDataBackup() {
+  return enqueue(() => backupDocument())
+}
+
 async function writeSnapshot(target: string, captured?: Awaited<ReturnType<typeof captureSavedData>>): Promise<void> {
   const directory = dirname(target)
   const temporary = join(directory, `.${basename(target)}.${process.pid}.tmp`)
   try {
-    const bundle = {
-      app: 'budget-terminal-electron',
-      ...(captured ?? await captureSavedData()).data,
-      exportedAt: new Date().toISOString(),
-    }
+    const bundle = await backupDocument(captured)
     await mkdir(directory, { recursive: true })
     await writeFile(temporary, JSON.stringify(bundle, null, 2), 'utf8')
     await rename(temporary, target)

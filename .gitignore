@@ -94,6 +94,7 @@ conf/
 
 # Private Telegram bot credentials and remote conversation history.
 **/telegram-settings.bin*
+**/mobile-access.json*
 **/market-api-keys.bin*
 **/telegram-agents.json*
 

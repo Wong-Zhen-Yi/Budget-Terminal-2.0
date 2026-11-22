@@ -95,11 +95,14 @@ import { useSettingsNavigation } from '@/stores/settingsNavigation'
 import { useNavigation } from '@/stores/navigation'
 import { useAuthPrompt } from '@/stores/authPrompt'
 import { useObscureMode } from '@/stores/obscureMode'
+import { isMobileTerminal } from '@/mobile/client'
+import { MobileAgentsPage, MobileBrowserPage, MobileHeader } from '@/mobile/MobileShell'
 
 const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
 const DEFAULT_TAB_ORDER = TABS.map((tab) => tab.id)
 
 export function App() {
+  const mobile = isMobileTerminal()
   const isMac = window.api.platform === 'darwin'
   const settingsQuery = useSettings()
   const settings = settingsQuery.data?.data
@@ -124,11 +127,11 @@ export function App() {
   const screenshotPage = screenshot?.page && isLabPageEnabled(screenshot.page, enabledLabs) ? screenshot.page : null
   const activeTab = screenshotPage ?? selectedTab
   useEquityMarketStream(activeTab)
-  const auth = useCloudSyncStatus()
+  const auth = useCloudSyncStatus(!mobile)
   const [authDismissed, setAuthDismissed] = useState(false)
   const hideAuthPrompt = useAuthPrompt((state) => state.hidden)
   const authStatus = auth.data?.data
-  const authOpen = !screenshotPage && !hideAuthPrompt && !authDismissed && auth.isFetchedAfterMount && !authStatus?.signedIn
+  const authOpen = !mobile && !screenshotPage && !hideAuthPrompt && !authDismissed && auth.isFetchedAfterMount && !authStatus?.signedIn && !authStatus?.demo
   useEffect(() => {
     if (authStatus?.signedIn) setAuthDismissed(false)
   }, [authStatus?.signedIn])
@@ -272,7 +275,7 @@ export function App() {
   }, [setStocksSymbol, setFundamentalsSymbol, setOptionsSymbol, setChartsSymbol, visibleTabs])
 
   // Keep agent navigation active even when its page is not mounted.
-  const agents = useAgents(true)
+  const agents = useAgents(true, !mobile)
   const notifications = useNotifications()
   const unreadNotifications = notifications.data?.data.notifications.filter(notification => !notification.read).length ?? 0
   useEffect(() => window.api.onNotificationClicked(() => handleStocksNavigate('notifications')), [handleStocksNavigate])
@@ -399,7 +402,9 @@ export function App() {
 
   return (
     <div className={`terminal-shell flex h-full flex-col bg-bg ${isMac ? 'platform-mac' : ''}`}>
-      <TabBar
+      {mobile ? <MobileHeader label={TAB_BY_ID.get(activeTab)?.label ?? 'Budget Terminal'}
+        onOpenPicker={() => setPickerOpen(true)} onReload={() => void reload()} reloading={reloading}
+        onToggleObscure={toggleObscure} obscured={obscured} /> : <TabBar
         onOpenPicker={() => setPickerOpen(true)}
         onReload={() => void reload()}
         reloading={reloading}
@@ -408,25 +413,26 @@ export function App() {
         obscured={obscured}
         obscurePageCount={settings?.obscuredTabs.length}
         onToggleObscure={toggleObscure}
+        demo={authStatus?.demo}
         agentChatAvailable={!screenshotPage && !pickerOpen && !(obscured && (settings?.obscuredTabs ?? []).includes('agents'))}
-      />
+      />}
 
       <div className="terminal-workspace flex min-h-0 flex-1">
-        <WorkspaceSidebar
+        {!mobile && <WorkspaceSidebar
           tabs={visibleTabs} activeTab={activeTab} onSelectTab={setActiveTab} favorites={favorites} recent={recent}
           collapsed={settings?.sidebarCollapsed ?? false} onToggleCollapsed={() => void toggleSidebar()}
           isMac={isMac}
           saving={savingSidebar || !settings}
           unreadNotifications={screenshotPage ? 0 : unreadNotifications}
-        />
+        />}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {!settingsQuery.isPending && activeTab !== 'agents' && <WorkspaceHeader tabs={visibleTabs} activeTab={activeTab} onSelectTab={setActiveTab}
+          {!settingsQuery.isPending && (activeTab !== 'agents' || mobile) && <WorkspaceHeader tabs={visibleTabs} activeTab={activeTab} onSelectTab={setActiveTab}
             isMac={isMac}
             favorite={favorites.includes(activeTab)} onToggleFavorite={() => void toggleFavorite()}
             saving={savingFavorite || !settings} />}
           <div className="relative flex min-h-0 flex-1 flex-col">
             {/* Finance pages keep their controls usable and mask numbers in their own subtrees. */}
-            <div
+            <div data-terminal-content=""
               aria-hidden={blurCurrent}
               inert={blurCurrent}
               className={`flex min-h-0 flex-1 flex-col ${
@@ -441,7 +447,7 @@ export function App() {
             {blurCurrent ? (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <p className="border border-border-strong bg-surface px-3 py-2 text-2xs text-text-muted">
-                  This page is obscured. Press {isMac ? '⌘⇧H' : 'Ctrl+Shift+H'} to reveal it.
+                  {mobile ? 'This page is obscured. Tap the privacy button to reveal it.' : <>This page is obscured. Press {isMac ? '⌘⇧H' : 'Ctrl+Shift+H'} to reveal it.</>}
                 </p>
               </div>
             ) : null}
@@ -450,11 +456,11 @@ export function App() {
         </div>
       </div>
 
-      <YouTubePlayer pageActive={activeTab === 'youtube'} onReturn={() => setActiveTab('youtube')}
-        suppressed={Boolean(screenshotPage) || (obscured && (settings?.obscuredTabs ?? []).includes('youtube'))} />
+      {!mobile && <YouTubePlayer pageActive={activeTab === 'youtube'} onReturn={() => setActiveTab('youtube')}
+        suppressed={Boolean(screenshotPage) || (obscured && (settings?.obscuredTabs ?? []).includes('youtube'))} />}
 
       {/* Keep chart observers and diagnostic polling mounted without a visible bottom strip. */}
-      <div hidden>
+      {!mobile && <div hidden>
         <StatusBar
           portfolioCharts={<PortfolioChartsStatus enabled={!settingsQuery.isPending} />}
           panels={panels}
@@ -466,12 +472,12 @@ export function App() {
               : warm.failed || warm.degraded ? `${warm.failed} startup load(s) failed · ${warm.degraded} incomplete. Open Settings for details.` : ''
           }
         />
-      </div>
+      </div>}
 
       {pickerOpen && !screenshotPage ? (
         <TabPicker
           tabs={visibleTabs.map((tab) => ({ ...tab }))}
-          recent={recent}
+          recent={mobile ? [...new Set([...favorites, ...recent])] : recent}
           onSelect={(id) => {
             setPickerOpen(false)
             if (TAB_BY_ID.get(id)?.implemented) setActiveTab(id)
@@ -527,11 +533,11 @@ function renderPage({
   const maskNumbers = obscuredPages?.includes(tabId) ?? false
   return (
     tabId === 'agents' ? (
-      <AgentsPage onStatusChange={onStatusChange} favorite={agentFavorite} savingFavorite={savingFavorite} onToggleFavorite={onToggleFavorite} />
+      isMobileTerminal() ? <MobileAgentsPage /> : <AgentsPage onStatusChange={onStatusChange} favorite={agentFavorite} savingFavorite={savingFavorite} onToggleFavorite={onToggleFavorite} />
     ) : tabId === 'notifications' ? (
       <NotificationsPage onStatusChange={onStatusChange} />
     ) : tabId === 'browser' ? (
-      <BrowserPage active={active} onStatusChange={onStatusChange} />
+      isMobileTerminal() ? <MobileBrowserPage /> : <BrowserPage active={active} onStatusChange={onStatusChange} />
     ) : tabId === 'articles' ? (
       <ArticlesPage onStatusChange={onStatusChange} />
     ) : tabId === 'dashboard' || tabId === 'dashboard-2' || tabId === 'dashboard-lite' ? (

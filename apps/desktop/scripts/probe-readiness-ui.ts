@@ -121,9 +121,15 @@ try {
     const ok = data => ({ data, errors: [], meta: { freshness: 'fresh', source: 'Synthetic readiness fixture', fetchedAt: Date.now() } })
     const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg=='
     let populated = false, calls = [], fixtureSettings = settings, restoredCurrency = false
+    let mobileEnabled = false
     let fixtureAuth = { url: '', signedIn: false, encryptionAvailable: true, state: 'disconnected', pending: false }, authUnavailable = false, authRejected = false
     const fixture = (method, request = {}) => {
       request ??= {} // Native player teardown accepts null instead of a request object.
+      if (method === 'mobileAccessStatus' || method === 'configureMobileAccess') {
+        if (method === 'configureMobileAccess') mobileEnabled = request === true
+        return { available: true, enabled: mobileEnabled, url: mobileEnabled ? 'https://fixture.test-tailnet.ts.net:8443/' : '',
+          directUrl: mobileEnabled ? 'http://100.64.1.1:8081/' : '', message: mobileEnabled ? 'Mobile Access is configured on this computer.' : 'Mobile Access is off.' }
+      }
       if (method === 'cloudSyncStatus') {
         if (authUnavailable) throw Error('Synthetic account status outage')
         return ok(fixtureAuth)
@@ -281,20 +287,25 @@ try {
           const dashboard = visiblePage('focus-dashboard')?.querySelector('.focus-dashboard')
           check(dashboard, 'Focus workspace did not open the dashboard')
           const anthropic = dashboard.querySelector('#focus-metric-anthropic')
-          check(anthropic?.querySelector('b').textContent === '$17.0B', 'Focus must display a real warmed headline reading')
+          const anthropicValues = () => [...anthropic.querySelectorAll('b')].map(item => item.textContent).join('|')
+          check(anthropic && anthropicValues() === '$17.0B|$9.9B', 'Focus must display both warmed readings')
           check(calls.filter(call => call.method === 'anthropic').length === anthropicCalls, 'Opening Focus must not request the reading again')
           obscure.click(); await wait()
-          check(!anthropic.textContent.includes('$17.0B') && !anthropic.title.includes('$17.0B'), 'Focus must hide readings for protected pages')
+          check(anthropicValues() === '—|—', 'Focus must hide both readings for protected pages')
           obscure.click(); await wait()
           for (const [width, height] of [[1400, 950], [960, 600]]) {
             await window.resizeFixture(width, height); await paint()
-            check(dashboard.scrollWidth <= dashboard.clientWidth && dashboard.scrollHeight <= dashboard.clientHeight + 1,
+            check(dashboard.scrollWidth <= dashboard.clientWidth && dashboard.scrollHeight <= dashboard.clientHeight,
               'Focus Dashboard must fit within ' + width + 'x' + height + ' (' +
               dashboard.scrollWidth + 'x' + dashboard.scrollHeight + ' content in ' +
               dashboard.clientWidth + 'x' + dashboard.clientHeight + ' available pixels)')
-            check(dashboard.querySelectorAll('nav[aria-label="Focus pages"] button').length === 19,
-              'The Focus Dashboard is missing topic shortcuts')
-            check(dashboard.querySelectorAll('[data-focus-metric]').length === 19, 'A Focus card is missing its headline metric')
+            const cards = [...dashboard.querySelectorAll('nav[aria-label="Focus pages"] button')]
+            check(cards.length === 19, 'The Focus Dashboard is missing topic shortcuts')
+            for (const card of cards) {
+              const metrics = [...card.querySelectorAll('[data-focus-metric]')].map(item => item.getBoundingClientRect())
+              check(metrics.length === 2 && metrics[0].right <= metrics[1].left && metrics[0].top === metrics[1].top,
+                'Focus metrics must fit side by side for ' + card.getAttribute('aria-label'))
+            }
           }
           const bitcoin = dashboard.querySelector('button[aria-label="Bitcoin"]')
           bitcoin.click(); await wait()
@@ -528,7 +539,18 @@ try {
           window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); await wait()
           await selectPage(TABS.find(tab => tab.id === 'settings'))
           const settingsPage = visiblePage('settings')
+          settingsPage.querySelector('[data-settings-category="integrations"]').click(); await wait()
+          const mobileCard = settingsPage.querySelector('[data-settings-card="mobile-access"]')
+          check(mobileCard.hidden, 'Mobile Access belongs in Labs')
           settingsPage.querySelector('[data-settings-category="labs"]').click(); await wait()
+          check(!mobileCard.hidden, 'Mobile Access must appear under Labs')
+          const mobileLab = mobileCard.querySelector('[role="switch"][aria-labelledby="lab-mobile-access"]')
+          mobileLab.click(); await wait()
+          check(mobileLab.getAttribute('aria-checked') === 'true' && mobileCard.textContent.includes('fixture.test-tailnet.ts.net'), 'Mobile Access must show its link when enabled')
+          check(mobileCard.textContent.includes('http://100.64.1.1:8081/'), 'Mobile Access must show the DNS-independent link')
+          check(!fixtureSettings.enabledLabs.includes('mobile-access'), 'Mobile Access must remain a host-local preference')
+          mobileLab.click(); await wait()
+          check(mobileLab.getAttribute('aria-checked') === 'false', 'Turning off the Mobile Access experiment must stop mobile sharing')
           const lab = settingsPage.querySelector('[role="switch"][aria-labelledby="lab-dashboard-lite"]')
           lab.click(); await wait()
           check(lab.getAttribute('aria-checked') === 'true', 'Labs must opt into Dashboard Lite before opening it')

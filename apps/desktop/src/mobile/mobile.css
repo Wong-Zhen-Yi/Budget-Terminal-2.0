@@ -1,0 +1,148 @@
+[data-terminal-mobile] {
+  color-scheme: dark;
+  -webkit-text-size-adjust: 100%;
+}
+
+[data-terminal-mobile] .terminal-shell {
+  height: 100dvh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  overflow: hidden;
+}
+
+.mobile-topbar {
+  display: flex;
+  flex: none;
+  padding: 4px 10px;
+  gap: 6px;
+  justify-content: space-between;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.mobile-topbar button {
+  display: flex;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 8px;
+  border-radius: 6px;
+  color: var(--color-text);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.mobile-topbar button:active, .mobile-topbar button[aria-pressed="true"] { background: var(--color-surface-hover); }
+.mobile-topbar button:disabled { opacity: .45; }
+.mobile-topbar-actions { display: flex; flex: none; gap: 2px; }
+.mobile-topbar svg { width: 22px; height: 22px; }
+.mobile-page-button { min-width: 0; }
+.mobile-page-button span:last-child { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+[data-terminal-mobile] .workspace-header { padding: 4px 10px; }
+[data-terminal-mobile] .workspace-header h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+[data-terminal-mobile] .workspace-header button,
+[data-terminal-mobile] .workspace-pages button { min-height: 44px; }
+[data-terminal-mobile] .workspace-pages {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  margin-top: 0;
+}
+[data-terminal-mobile] .workspace-pages button { flex: none; }
+[data-terminal-mobile] [data-terminal-content] { overflow: auto; overscroll-behavior: contain; }
+[data-terminal-mobile] [data-page-id] { min-width: 0; }
+[data-terminal-mobile] [data-page-id] table { min-width: max-content; }
+[data-terminal-mobile] input:not([type="checkbox"], [type="radio"], [type="range"]),
+[data-terminal-mobile] select, [data-terminal-mobile] textarea { font-size: max(16px, 1em); }
+[data-terminal-mobile] [role="dialog"][aria-label="Page search"] { max-height: min(75dvh, 720px); }
+[data-terminal-mobile] [role="dialog"][aria-label="Page search"] button { min-height: 44px; }
+[data-terminal-mobile] [role="dialog"][aria-label="Page search"] input { min-height: 46px; }
+[data-terminal-mobile] [role="dialog"][aria-label="Page search"] button span:first-child { font-size: 14px; }
+[data-terminal-mobile] [data-page-id] [role="tablist"] { overflow-x: auto; }
+[data-terminal-mobile] [data-page-id] [role="tablist"] > button { flex-shrink: 0; }
+
+.mobile-handoff {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  min-width: 0;
+  max-width: 640px;
+  padding: 16px;
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+.mobile-handoff h2 { color: var(--color-text); font-size: 20px; font-weight: 650; }
+.mobile-handoff nav { display: flex; flex-wrap: wrap; gap: 8px; }
+.mobile-handoff a, .mobile-handoff button, .mobile-handoff input {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 0 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 6px;
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+.mobile-browser-field { display: flex; gap: 8px; margin-top: 6px; }
+.mobile-browser-field input { flex: 1; min-width: 0; }
+
+/* Wide data can pan inside its page. Keep the navigation and active controls on-screen. */
+@media (max-width: 900px) {
+  [data-terminal-mobile] .dashboard-layout,
+  [data-terminal-mobile] .dashboard-main { flex-direction: column; gap: 8px; }
+  [data-terminal-mobile] .dashboard-layout { padding: 8px; }
+  [data-terminal-mobile] .dashboard-market { order: -1; }
+  [data-terminal-mobile] .dashboard-layout > *,
+  [data-terminal-mobile] .dashboard-main > * { width: 100% !important; flex: none; }
+  [data-terminal-mobile] .dashboard-layout [role="separator"] { display: none; }
+  [data-terminal-mobile] .dashboard-chart { min-height: 360px; }
+  [data-terminal-mobile] .dashboard-holdings .terminal-panel,
+  [data-terminal-mobile] .dashboard-options-column .terminal-panel,
+  [data-terminal-mobile] .dashboard-heatmap-column .terminal-panel { min-height: 220px; max-height: 490px; }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  [data-terminal-mobile] .charts-main-grid > section { min-height: 245px; }
+}
+
+@media (max-width: 1050px) {
+  [data-terminal-mobile] [data-page-id="pre-market"] > div > div {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    flex: none;
+  }
+  [data-terminal-mobile] [data-page-id="pre-market"] .terminal-panel {
+    min-width: 0;
+    min-height: 260px;
+  }
+  [data-terminal-mobile] .stocks-workspace {
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+  }
+  [data-terminal-mobile] .stocks-workspace > div:first-child { display: contents; }
+  [data-terminal-mobile] .stocks-workspace > *,
+  [data-terminal-mobile] .stocks-workspace > div:first-child > * { min-width: 0; flex: none !important; }
+  [data-terminal-mobile] .stocks-workspace > div:first-child > :first-child { order: -2; }
+  [data-terminal-mobile] .stocks-price-chart { order: -1; height: 390px; }
+  [data-terminal-mobile] .stocks-workspace .terminal-panel { min-height: 200px; max-height: 400px; }
+  [data-terminal-mobile] .stocks-workspace [role="separator"] { display: none; }
+}
+
+@media (max-width: 600px) {
+  [data-terminal-mobile] .workspace-heading > span { display: none; }
+  [data-terminal-mobile] .settings-toolbar { flex-direction: column; align-items: stretch; gap: 6px; padding: 6px; }
+  [data-terminal-mobile] .settings-toolbar-actions, [data-terminal-mobile] .settings-search { width: 100%; min-width: 0; }
+  [data-terminal-mobile] .settings-tabs button { min-height: 44px; }
+  [data-terminal-mobile] .focus-dashboard__grid { grid-template-columns: minmax(0, 1fr); }
+  [data-terminal-mobile] [data-page-id="pre-market"] > div > div,
+  [data-terminal-mobile] .charts-main-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  [data-terminal-mobile] .charts-main-grid > section { min-height: 370px; }
+  [data-terminal-mobile] .charts-main-grid > aside { max-height: 420px; }
+  [data-terminal-mobile] .backtest-workspace { flex-direction: column; gap: 8px; }
+  [data-terminal-mobile] .backtest-workspace > section { width: 100% !important; min-height: 360px; flex: none; }
+  [data-terminal-mobile] .backtest-workspace > [role="separator"] { display: none; }
+  [data-terminal-mobile] [data-page-id="institutions"] > div > .grid { grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(240px, auto); grid-template-rows: none; }
+}

@@ -2,6 +2,7 @@ import { fetchRetainedQuery } from './snapshotResult'
 import { useCallback, useEffect, useState } from 'react'
 import { useQueryClient, type UseQueryResult, type QueryClient } from '@tanstack/react-query'
 import { useQuery } from '@/api/progressiveQuery'
+import { isMobileTerminal } from '@/mobile/client'
 
 import type { CryptoPayload, Envelope, ChartsHistoryRequest } from '@shared/contract'
 import { api, queryKeys } from './client'
@@ -42,7 +43,7 @@ export function useRefreshCrypto(): () => Promise<void> {
 /** Diagnostic polling is local IPC and never sends a provider request. */
 export function useCryptoProviderUsage() {
   return useQuery({
-    queryKey: ['apiUsage'], queryFn: () => api.apiUsage(), staleTime: 500,
+    queryKey: ['apiUsage'], queryFn: () => api.apiUsage(), staleTime: 500, enabled: !isMobileTerminal(),
     refetchInterval: 1_000, refetchIntervalInBackground: false, retry: false,
   })
 }

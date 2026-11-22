@@ -5,9 +5,10 @@ import type { CloudSyncCommand } from '@shared/cloudSync'
 const statusKey = ['cloudSyncStatus'] as const
 
 /** Authentication stays live even before Settings has been visited. */
-export function useCloudSyncStatus() {
+export function useCloudSyncStatus(enabled = true) {
   return useQuery({
     queryKey: statusKey,
+    enabled,
     queryFn: () => window.api.cloudSyncStatus(),
     refetchOnMount: 'always',
     refetchInterval: 2000,

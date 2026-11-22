@@ -101,8 +101,44 @@ for (const platform of ['win32', 'darwin', 'linux']) {
   assert(calls.every(([, , options]) => options.env.BUDGET_TERMINAL_OPEN_DIAGNOSTICS === '1'), 'Launch request must reach the main application')
   assert(!calls.some(([, args]) => args.some(arg => String(arg).includes('logViewer'))), 'No separate diagnostic application')
 }
+const demoFixture = require('../fixtures/demo-user-data.json')
+const personalEnvironment = { APPDATA: 'personal-roaming', LOCALAPPDATA: 'personal-local',
+  BUDGET_TERMINAL_DATA_DIR: 'personal-mcp', CODEX_HOME: 'personal-codex', openai_api_key: 'test-placeholder' }
+const demoDirectories = []
+for (const exitCode of [0, 7]) {
+  assert.equal(launch({ demo: true, detach: true, platform: 'win32', nodeVersion: '24.22.1', log,
+    environment: personalEnvironment,
+    locateCodex() { assert.fail('Demo must skip Codex discovery with the personal environment') },
+    openDetached() { assert.fail('Demo must stay attached so its profile can be removed on exit') },
+    spawn(_command, args, { env }) {
+      if (!args.join(' ').includes('run preview')) {
+        assert.equal(env.APPDATA, personalEnvironment.APPDATA, 'Toolchain steps use the normal runtime paths')
+        return { status: 0, stdout: '11.0.0' }
+      }
+      const directory = env.BUDGET_TERMINAL_DEMO_DIR
+      demoDirectories.push(directory)
+      assert.equal(env.APPDATA, join(directory, 'roaming'))
+      assert.equal(env.LOCALAPPDATA, join(directory, 'local'))
+      assert.equal(env.CODEX_HOME, join(directory, 'codex'))
+      assert.equal(env.openai_api_key, undefined)
+      const store = join(env.APPDATA, 'BudgetTerminalElectron')
+      assert.equal(env.BUDGET_TERMINAL_DATA_DIR, store)
+      for (const [name, field] of [['portfolio', 'userData'], ['strategies', 'cards'], ['settings', 'settings'], ['articles', 'articles']]) {
+        assert.deepEqual(JSON.parse(readFileSync(join(store, name + '.json'), 'utf8')), demoFixture[field])
+      }
+      writeFileSync(join(store, 'portfolio.json'), '{}')
+      return { status: exitCode }
+    },
+  }), exitCode)
+  assert(!existsSync(demoDirectories.at(-1)), 'Remove only the temporary profile after success or failure')
+}
+assert.notEqual(demoDirectories[0], demoDirectories[1], 'Each demo launch starts with a new profile')
+assert.equal(personalEnvironment.BUDGET_TERMINAL_DATA_DIR, 'personal-mcp')
+console.log('PASS: demo uses a fresh profile per launch, seeds the saved stores, and cleans up after exit.')
+
 for (const [file, command] of [
   ['Launch Budget Terminal.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -Attached\n/],
+  ['Launch Budget Terminal Demo.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -Demo -Attached\n/],
 ]) {
   const source = readFileSync(resolve(__dirname, '..', file), 'utf8').replace(/\r\n/g, '\n')
   assert.match(source, command, `${file} must launch the application on double click`)
@@ -113,7 +149,7 @@ for (const [file, command] of [
   assert(!source.includes('%*'), 'Double-click setup must not forward app launch options')
   assert(!source.includes('-Setup'), 'Double-click startup must open the app without a separate setup-only pass')
   assert.equal(source.match(/^powershell\.exe/gm)?.length, 1, 'Double-click startup must launch once')
-  assert.match(source, /powershell\.exe[^\r\n]*launch-windows\.ps1" -Attached\nif errorlevel 1 goto :launchFailed/, 'Double-click startup must retain the terminal for dependency checks, build output and errors')
+  assert.match(source, /powershell\.exe[^\r\n]*launch-windows\.ps1" (?:-Demo )?-Attached\nif (?:not )?errorlevel 1/, 'Double-click startup must retain the terminal for dependency checks, build output and errors')
   assert(!source.includes('launch-menu.ps1'), 'Double-click startup must not show an interface chooser')
   assert.match(source, /pause >nul/, 'Double-click startup keeps failures visible')
 }
@@ -134,7 +170,7 @@ for (const platform of ['win32', 'darwin', 'linux']) {
     assert(!calls.some(call => call.args.join(' ').includes('tui')), 'Setup must not build the retired interface')
   }
 }
-for (const options of [{ development: true }, { logs: true }]) {
+for (const options of [{ development: true }, { logs: true }, { demo: true }]) {
   assert.equal(launch({ setupOnly: true, ...options, nodeVersion: '24.22.1', log,
     spawn() { assert.fail('Setup must reject launch options before running commands') },
   }), 1)
@@ -267,6 +303,8 @@ try {
   }
   const html = join(directory, 'out/renderer/index.html')
   writeFileSync(html, '<script src="./assets/entry.js"></script><link href="./assets/theme.css" rel="stylesheet">')
+  assert.throws(() => verifyDesktopBuild(directory), /mobile\.html/)
+  writeFileSync(join(directory, 'out/renderer/mobile.html'), '<script src="./assets/entry.js"></script>')
   verifyDesktopBuild(directory)
   rmSync(join(directory, 'out/renderer/assets/entry.js'))
   assert.throws(() => verifyDesktopBuild(directory), /desktop build is incomplete/)

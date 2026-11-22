@@ -36,8 +36,18 @@ export function ChartsPage({ onStatusChange }: { onStatusChange: (panels: PanelS
   }, [onStatusChange, tab])
   return (
     <main className="flex min-h-0 flex-1 flex-col">
-      <nav className="flex h-9 shrink-0 items-end gap-px border-b border-border bg-surface px-2 pt-1" aria-label="Charts workspace tabs">
-        {TABS.map(([id, label]) => <button key={id} type="button" onClick={() => setTab(id)} className={`h-8 border border-b-0 px-3 text-2xs ${tab === id ? 'border-accent bg-surface-raised text-text' : 'border-border bg-surface text-text-muted hover:text-text'}`}>{label}</button>)}
+      <nav className="flex shrink-0 items-stretch gap-1 overflow-x-auto border-b border-border bg-surface px-3" aria-label="Charts workspaces">
+        {TABS.map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setTab(id)}
+            aria-current={tab === id ? 'page' : undefined}
+            className={`h-10 shrink-0 border-b-2 px-3 text-[13px] font-medium transition-colors focus-visible:outline-accent ${tab === id ? 'border-accent bg-surface-raised text-text' : 'border-transparent text-text-muted hover:bg-surface-hover hover:text-text'}`}
+          >
+            {label}
+          </button>
+        ))}
       </nav>
       {tab === 'main' ? <MainWorkspace onStatus={reportStatus} /> : tab === 'multi' ? <MultiCharts onStatus={reportStatus} /> : tab === 'compare' ? <CompareWorkspace onStatus={reportStatus} /> : tab === 'relationship' ? <RelationshipLab onStatus={reportStatus} /> : <CheatSheet />}
     </main>

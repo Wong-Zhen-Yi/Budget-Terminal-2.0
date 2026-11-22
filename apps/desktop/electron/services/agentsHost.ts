@@ -21,6 +21,7 @@ import { publishSavedDataChanged } from './savedDataEvents.js'
 import { withAutomaticBackup } from './automaticBackup.js'
 import { browserControl } from './browser.js'
 import { agentsChanged } from './liveStatusEvents.js'
+import { telegramMobileLink } from './mobileHost.js'
 
 let service: AgentsService | null = null
 let startup: Promise<unknown> | null = null
@@ -64,6 +65,7 @@ function telegramAgent() {
       reset: () => resetTelegramConversation(telegramWorker()),
       command: (command, argument) => telegramResearchCommand(telegramWorker(), command, argument),
       models: () => telegramModelChoices(telegramWorker()),
+      mobileLink: telegramMobileLink,
       screenshot: async (page, signal) => await invokeMcpTool('budget_terminal_screenshot', { request: { page } }, signal) as Envelope<ScreenshotPayload>,
       reply: async (text, signal) => {
         const worker = telegramWorker()
@@ -88,6 +90,11 @@ function startTelegram() {
     telegramAgent().initialize(),
     telegramWorkspace().initialize().catch(() => { /* Keep corrupt history untouched and report it in the history panel. */ }),
   ]).then(() => {})
+}
+export async function telegramProfile() {
+  await startTelegram()
+  const { enabled, receive, bot } = telegramAgent().snapshot()
+  return enabled && receive && /^[a-z][a-z\d_]{4,31}$/i.test(bot) ? bot : ''
 }
 function snapshot() {
   return { ...agent().snapshot(), telegram: telegramAgent().snapshot(),

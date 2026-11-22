@@ -6,6 +6,8 @@ import { useSettings, useSettingsMutation } from '@/api/settingsQueries'
 import { useYouTube, useYouTubeThumbnail } from '@/api/youtubeQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { useYouTubePlayer } from '@/stores/youtubePlayer'
+import { isMobileTerminal } from '@/mobile/client'
+import { api } from '@/api/client'
 import '@/styles/youtube.css'
 
 const SORT_OPTIONS = [
@@ -250,7 +252,10 @@ export function YouTubePage({ onStatusChange }: { onStatusChange: (panels: Panel
     void saveSettings({ type: 'setYouTubePage', value: next })
   }
   const openVideo = useCallback((video: YouTubeVideo | null) => {
-    if (video) { setManualSelectedKey(rowKey(video)); play(video) }
+    if (!video) return
+    setManualSelectedKey(rowKey(video))
+    if (isMobileTerminal()) void api.openExternal(video.url)
+    else play(video)
   }, [play])
   const clearFilters = () => {
     setFilter('')

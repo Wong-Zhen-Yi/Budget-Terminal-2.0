@@ -26,7 +26,8 @@ export const useScorecard = create<ScorecardState>()(persist((set, get) => ({
     if (!name) return 'Enter a name for this comparison.'
     const existing = state.comparisons.find(entry => entry.name.toLowerCase() === name.toLowerCase())
     if (!existing && state.comparisons.length >= SCORECARD_MAX_SAVED) return `You can save up to ${SCORECARD_MAX_SAVED} comparisons. Delete one first.`
-    const id = existing?.id ?? crypto.randomUUID()
+    const id = existing?.id ?? (crypto.randomUUID?.() ??
+      Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join(''))
     const comparison = { id, name, symbols: [...state.symbols], columns: [...state.columns], chartMetric: state.chartMetric }
     set({ comparisons: existing ? state.comparisons.map(entry => entry.id === id ? comparison : entry) : [...state.comparisons, comparison], selectedId: id })
     return ''

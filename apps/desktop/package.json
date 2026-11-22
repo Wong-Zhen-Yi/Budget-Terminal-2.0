@@ -34,6 +34,7 @@
     "probe:browser": "tsx scripts/probe-browser.ts",
     "probe:inputs-ui": "tsx scripts/probe-inputs-ui.ts",
     "probe:telegram": "tsx scripts/probe-telegram.ts",
+    "probe:mobile": "tsx scripts/probe-mobile.ts",
     "probe:agents": "tsx scripts/probe-agents.ts",
     "probe:agent-recovery": "tsx scripts/probe-agent-recovery.ts",
     "probe:agent-images": "tsx scripts/probe-agent-images.ts",

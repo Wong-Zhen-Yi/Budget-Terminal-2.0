@@ -128,13 +128,23 @@
 .focus-dashboard__topic { display: grid; gap: 3px; min-width: 0; }
 .focus-dashboard__topic strong { color: var(--color-text); font-size: 15px; font-weight: 650; line-height: 1.1; overflow-wrap: anywhere; }
 .focus-dashboard__summary { color: var(--color-text-muted); font-size: 12px; line-height: 1.25; }
-.focus-dashboard__metric {
+.focus-dashboard__metric-pair {
   display: grid;
-  gap: 2px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 8px;
   min-width: 0;
   padding-top: 6px;
   border-top: 1px solid var(--color-border);
 }
+.focus-dashboard__metric {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 3;
+  min-width: 0;
+}
+.focus-dashboard__metric-pair[data-shared-period] .focus-dashboard__metric { grid-row: span 2; }
+.focus-dashboard__shared-period { grid-column: 1 / -1; }
+.focus-dashboard__metric-label { align-self: end; }
 .focus-dashboard__metric-label,
 .focus-dashboard__metric-period { color: var(--color-text-muted); font-size: 11px; line-height: 1.15; }
 .focus-dashboard__metric-value {
@@ -143,8 +153,9 @@
   font-weight: 650;
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
+  overflow-wrap: anywhere;
 }
-.focus-dashboard__metric-period { min-height: 12px; }
+.focus-dashboard__metric-period { min-height: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .focus-dashboard__arrow { position: absolute; top: 5px; right: 7px; color: var(--color-text-muted); font-size: 13px; }
 .focus-dashboard__card:hover .focus-dashboard__arrow { color: var(--color-accent-hover); }
 
@@ -177,8 +188,8 @@
   .focus-dashboard__icon svg { width: 15px; height: 15px; }
   .focus-dashboard__topic strong { font-size: 14px; }
   .focus-dashboard__summary { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .focus-dashboard__metric { padding-top: 3px; gap: 1px; }
-  .focus-dashboard__metric-value { font-size: 15px; }
+  .focus-dashboard__metric-pair { padding-top: 3px; row-gap: 1px; }
+  .focus-dashboard__metric-value { font-size: 14px; }
   .focus-dashboard__metric-period { min-height: 11px; font-size: 10px; }
 }
 
@@ -189,16 +200,16 @@
       padding: 14px;
     }
     .focus-dashboard__topic strong { font-size: 17px; }
-    .focus-dashboard__metric-value { font-size: 22px; }
+    .focus-dashboard__metric-value { font-size: 20px; }
     .focus-dashboard__arrow { top: 10px; right: 11px; }
   }
 }
 
 @media (max-height: 650px) {
-  .focus-dashboard { padding-block: 12px; }
+  .focus-dashboard { padding-block: 12px 8px; }
   .focus-dashboard__card { min-height: 80px; gap: 3px; padding-block: 4px; }
   .focus-dashboard__icon { width: 22px; height: 22px; }
-  .focus-dashboard__metric-label { line-height: 1; }
+  .focus-dashboard__metric-label { line-height: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .focus-dashboard__metric-period { min-height: 10px; line-height: 1; }
 }
 

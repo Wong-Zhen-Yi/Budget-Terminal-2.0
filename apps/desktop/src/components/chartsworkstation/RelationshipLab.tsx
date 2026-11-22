@@ -1,9 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import type { ChartsRelationshipPayload, ChartsRelationshipPoint, ChartsRelationshipRange, ChartsRollingWindow, Envelope, EnvelopeMeta } from '@shared/contract'
 import { useChartsRelationship } from '@/api/chartsQueries'
 import { Button } from '@/components/ui/Button'
 import { useChartsStore } from '@/stores/charts'
+
+const FIELD = 'h-8 rounded border border-border-strong bg-surface-raised px-2 text-[12px] text-text'
+const CONTROL = 'rounded text-[12px]'
+const LEFT_INDEXED = { key: 'leftIndexed', color: '#26c281' } as const
+const RIGHT_INDEXED = { key: 'rightIndexed', color: '#4f8cff' } as const
+const RATIO = { key: 'ratio', color: '#55c2d9' } as const
+const ROLLING = { key: 'rollingCorrelation', color: '#e0a34a' } as const
 
 export function RelationshipLab({ onStatus }: { onStatus: (meta: EnvelopeMeta | undefined, loading: boolean, error?: unknown) => void }) {
   const symbols = useChartsStore((state) => state.relationshipSymbols)
@@ -40,45 +47,157 @@ export function RelationshipLab({ onStatus }: { onStatus: (meta: EnvelopeMeta | 
     ['Observations', String(stats?.observations ?? 0)],
   ]
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
-      <div className="flex shrink-0 flex-wrap items-center gap-1 border border-border bg-surface px-2 py-1">
-        <h2 className="mr-2 text-xs font-semibold text-text">Relationship Lab</h2>
-        <input value={left} onChange={(event) => setLeft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') analyze() }} aria-label="Left ticker" className="h-8 w-24 border border-border-strong bg-surface-raised px-2 text-2xs uppercase text-text" />
-        <Button onClick={() => { setLeft(right); setRight(left); setRelationship([right.trim().toUpperCase(), left.trim().toUpperCase()]) }}>Swap</Button>
-        <input value={right} onChange={(event) => setRight(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') analyze() }} aria-label="Right ticker" className="h-8 w-24 border border-border-strong bg-surface-raised px-2 text-2xs uppercase text-text" />
-        <select value={range} onChange={(event) => setRelationship(symbols, event.target.value as ChartsRelationshipRange)} className="h-8 border border-border-strong bg-surface-raised px-2 text-2xs text-text">{(['1M', '3M', '6M', '1Y', '5Y', 'Max'] as const).map((value) => <option key={value}>{value}</option>)}</select>
-        <select value={rollingWindow} onChange={(event) => setRelationship(symbols, undefined, Number(event.target.value) as ChartsRollingWindow)} className="h-8 border border-border-strong bg-surface-raised px-2 text-2xs text-text">{([30, 60, 120, 252] as const).map((value) => <option key={value} value={value}>{value}D corr</option>)}</select>
-        <Button variant="accent" onClick={analyze}>{query.isFetching ? 'Analyzing…' : 'Analyze'}</Button>
-        <span className="ml-auto text-2xs text-text-muted">{payload?.points.length ? `${payload.symbols[0]}/${payload.symbols[1]} relationship loaded.` : 'Enter two different tickers.'}</span>
-      </div>
-      <div className="grid shrink-0 grid-cols-4 gap-1">{metrics.map(([label, value]) => <div key={label} className="border border-border bg-surface px-2 py-1"><p className="text-[10px] text-text-dim">{label}</p><p className="text-xs font-semibold text-text">{value}</p></div>)}</div>
-      <p className="shrink-0 text-2xs text-text-muted">{point ? `${point.date} · ${displaySymbols[0]} ${point.leftClose.toFixed(2)} · ${displaySymbols[1]} ${point.rightClose.toFixed(2)} · ratio ${point.ratio.toFixed(4)}` : 'Move across a time-series chart to inspect a shared trading date.'}</p>
-      {payload?.points.length ? <div className="grid min-h-0 flex-1 grid-cols-2 grid-rows-2 gap-2"><TimePanel title="Indexed adjusted performance (start = 100)" points={payload.points} series={[{ key: 'leftIndexed', color: '#26c281', label: displaySymbols[0] }, { key: 'rightIndexed', color: '#4f8cff', label: displaySymbols[1] }]} selected={selected} onSelect={setSelected} /><TimePanel title="Price ratio" points={payload.points} series={[{ key: 'ratio', color: '#55c2d9', label: `${displaySymbols[0]}/${displaySymbols[1]}` }]} selected={selected} onSelect={setSelected} /><TimePanel title="Rolling return correlation" points={payload.points} series={[{ key: 'rollingCorrelation', color: '#e0a34a', label: `${payload.rollingWindow}D` }]} selected={selected} onSelect={setSelected} fixedRange={[-1, 1]} /><ScatterPanel points={payload.points} regression={payload.regressionLine} symbols={displaySymbols} selected={selected} /></div> : <div className="flex flex-1 items-center justify-center text-2xs text-text-dim">{query.isFetching ? 'Analyzing adjusted history…' : 'No relationship analysis is available.'}</div>}
+    <div className="flex min-h-0 flex-1 flex-col gap-2 px-3 pt-2 pb-3">
+      <form className="flex shrink-0 flex-wrap items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1.5" onSubmit={(event) => { event.preventDefault(); analyze() }}>
+        <input value={left} onChange={(event) => setLeft(event.target.value)} aria-label="Left ticker" className={`${FIELD} w-24 uppercase`} />
+        <Button className={CONTROL} onClick={() => { setLeft(right); setRight(left); setRelationship([right.trim().toUpperCase(), left.trim().toUpperCase()]) }}>Swap</Button>
+        <input value={right} onChange={(event) => setRight(event.target.value)} aria-label="Right ticker" className={`${FIELD} w-24 uppercase`} />
+        <select value={range} aria-label="Relationship range" onChange={(event) => setRelationship(symbols, event.target.value as ChartsRelationshipRange)} className={FIELD}>{(['1M', '3M', '6M', '1Y', '5Y', 'Max'] as const).map((value) => <option key={value}>{value}</option>)}</select>
+        <select value={rollingWindow} aria-label="Rolling correlation window" onChange={(event) => setRelationship(symbols, undefined, Number(event.target.value) as ChartsRollingWindow)} className={FIELD}>{([30, 60, 120, 252] as const).map((value) => <option key={value} value={value}>{value}D corr</option>)}</select>
+        <Button className={CONTROL} variant="accent" type="submit" disabled={!left.trim() || !right.trim() || left.trim().toUpperCase() === right.trim().toUpperCase()}>Analyze</Button>
+      </form>
+      <dl className="grid shrink-0 grid-cols-4 gap-px overflow-hidden rounded-md border border-border bg-border xl:grid-cols-8">
+        {metrics.map(([label, value]) => (
+          <div key={label} className="min-w-0 bg-surface px-2.5 py-1.5">
+            <dt className="truncate text-[11px] text-text-muted" title={label}>{label}</dt>
+            <dd className="truncate text-[14px] font-semibold tabular-nums text-text" title={value}>{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {payload?.points.length ? (
+        <>
+          <p className="h-6 shrink-0 truncate px-1 text-[12px] tabular-nums text-text-muted">
+            {point ? <><strong className="font-medium text-text">{point.date}</strong> · {displaySymbols[0]} {point.leftClose.toFixed(2)} · {displaySymbols[1]} {point.rightClose.toFixed(2)} · Ratio {point.ratio.toFixed(4)}</> : null}
+          </p>
+          <div className="grid min-h-0 flex-1 grid-cols-2 grid-rows-2 gap-2">
+            <TimePanel title="Indexed adjusted performance" points={payload.points} primary={LEFT_INDEXED} secondary={RIGHT_INDEXED} legend={`${displaySymbols.join(' · ')} · Base 100`} selected={selected} onSelect={setSelected} />
+            <TimePanel title="Price ratio" points={payload.points} primary={RATIO} legend={displaySymbols.join(' / ')} selected={selected} onSelect={setSelected} />
+            <TimePanel title="Rolling return correlation" points={payload.points} primary={ROLLING} legend={`${payload.rollingWindow}D`} selected={selected} onSelect={setSelected} />
+            <ScatterPanel points={payload.points} regression={payload.regressionLine} symbols={displaySymbols} selected={selected} />
+          </div>
+        </>
+      ) : <div className="grid flex-1 place-items-center rounded-md border border-border bg-surface px-3 text-center text-[13px] text-text-muted">{query.isFetching ? 'Analyzing adjusted history…' : 'No relationship analysis is available.'}</div>}
     </div>
   )
 }
 
 type NumericPointKey = 'leftIndexed' | 'rightIndexed' | 'ratio' | 'rollingCorrelation'
 
-function TimePanel({ title, points, series, selected, onSelect, fixedRange }: { title: string; points: ChartsRelationshipPoint[]; series: Array<{ key: NumericPointKey; color: string; label: string }>; selected: number; onSelect: (index: number) => void; fixedRange?: [number, number] }) {
-  const values = series.flatMap((entry) => points.map((point) => point[entry.key])).filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
-  const min = fixedRange?.[0] ?? Math.min(...values)
-  const max = fixedRange?.[1] ?? Math.max(...values)
-  const span = max - min || 1
-  const x = (index: number) => 5 + index / Math.max(1, points.length - 1) * 90
-  const y = (value: number) => 8 + (max - value) / span * 82
-  return <section className="flex min-h-0 flex-col border border-border bg-surface"><header className="flex h-7 shrink-0 items-center px-2 text-[10px] font-semibold text-text uppercase">{title}<span className="ml-auto normal-case text-text-dim">{series.map((entry) => entry.label).join(' · ')}</span></header><svg viewBox="0 0 100 100" preserveAspectRatio="none" className="min-h-0 flex-1 bg-[#0d1420]" onMouseMove={(event) => { const rect = event.currentTarget.getBoundingClientRect(); onSelect(Math.max(0, Math.min(points.length - 1, Math.round((event.clientX - rect.left) / rect.width * (points.length - 1))))) }}>{[25, 50, 75].map((line) => <line key={line} x1="5" x2="95" y1={line} y2={line} stroke="#141d2c" strokeWidth="0.5" />)}{series.map((entry) => { const d = points.map((point, index) => { const value = point[entry.key]; return typeof value === 'number' ? `${index && typeof points[index - 1][entry.key] === 'number' ? 'L' : 'M'} ${x(index)} ${y(value)}` : '' }).join(' '); return <path key={entry.key} d={d} fill="none" stroke={entry.color} strokeWidth="1.5" vectorEffect="non-scaling-stroke" /> })}{selected >= 0 ? <line x1={x(selected)} x2={x(selected)} y1="5" y2="92" stroke="#ffffff" strokeWidth="0.6" strokeDasharray="2 2" /> : null}</svg></section>
+const guides = [25, 50, 75]
+
+function TimePanel({ title, points, primary, secondary, legend, selected, onSelect }: {
+  title: string
+  points: ChartsRelationshipPoint[]
+  primary: { key: NumericPointKey; color: string }
+  secondary?: { key: NumericPointKey; color: string }
+  legend: string
+  selected: number
+  onSelect: (index: number) => void
+}) {
+  const geometry = useMemo(() => {
+    const series = secondary ? [primary, secondary] : [primary]
+    const fixedRange = primary.key === 'rollingCorrelation'
+    let min = fixedRange ? -1 : Infinity
+    let max = fixedRange ? 1 : -Infinity
+    if (!fixedRange) for (const { key } of series) {
+      for (const point of points) {
+        const value = point[key]
+        if (value == null || !Number.isFinite(value)) continue
+        min = Math.min(min, value)
+        max = Math.max(max, value)
+      }
+    }
+    const span = max - min || 1
+    const paths = series.map(({ key, color }) => {
+      let previous = false
+      const d = points.map((point, index) => {
+        const value = point[key]
+        if (value == null || !Number.isFinite(value)) {
+          previous = false
+          return ''
+        }
+        const y = 8 + (max - value) / span * 82
+        const segment = `${previous ? 'L' : 'M'}${timePosition(index, points.length).toFixed(3)},${y.toFixed(3)}`
+        previous = true
+        return segment
+      }).join(' ')
+      return <path key={key} d={d} fill="none" stroke={color} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+    })
+    return paths
+  }, [points, primary, secondary])
+
+  const marker = timePosition(selected, points.length)
+  return (
+    <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-surface">
+      <PanelHeading title={title} legend={legend} />
+      <svg
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        className="min-h-0 flex-1"
+        onPointerMove={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect()
+          if (!rect.width) return
+          const ratio = ((event.clientX - rect.left) / rect.width - 0.05) / 0.9
+          onSelect(Math.max(0, Math.min(points.length - 1, Math.round(ratio * (points.length - 1)))))
+        }}
+      >
+        {guides.map((line) => <line key={line} x1="5" x2="95" y1={line} y2={line} stroke="var(--color-border)" vectorEffect="non-scaling-stroke" />)}
+        {geometry}
+        {selected >= 0 ? <line x1={marker} x2={marker} y1="5" y2="92" stroke="var(--color-text-muted)" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" /> : null}
+      </svg>
+    </section>
+  )
+}
+
+function timePosition(index: number, length: number) {
+  return 5 + index / Math.max(1, length - 1) * 90
 }
 
 function ScatterPanel({ points, regression, symbols, selected }: { points: ChartsRelationshipPoint[]; regression: Array<{ x: number; y: number }>; symbols: [string, string]; selected: number }) {
-  const rows = points.filter((point) => point.leftReturnPct !== null && point.rightReturnPct !== null)
-  const allX = rows.map((point) => point.rightReturnPct!)
-  const allY = rows.map((point) => point.leftReturnPct!)
-  const minX = Math.min(...allX, -1); const maxX = Math.max(...allX, 1); const minY = Math.min(...allY, -1); const maxY = Math.max(...allY, 1)
-  const x = (value: number) => 5 + (value - minX) / (maxX - minX || 1) * 90
-  const y = (value: number) => 92 - (value - minY) / (maxY - minY || 1) * 84
-  const selectedPoint = points[selected]
-  return <section className="flex min-h-0 flex-col border border-border bg-surface"><header className="flex h-7 shrink-0 items-center px-2 text-[10px] font-semibold text-text uppercase">Daily return regression<span className="ml-auto normal-case text-text-dim">{symbols[1]} x · {symbols[0]} y</span></header><svg viewBox="0 0 100 100" preserveAspectRatio="none" className="min-h-0 flex-1 bg-[#0d1420]"><line x1={x(0)} x2={x(0)} y1="5" y2="94" stroke="#334155" strokeWidth="0.5" /><line x1="4" x2="96" y1={y(0)} y2={y(0)} stroke="#334155" strokeWidth="0.5" />{rows.map((point) => <circle key={point.time} cx={x(point.rightReturnPct!)} cy={y(point.leftReturnPct!)} r="0.8" fill="#4f8cff" opacity="0.55" />)}{regression.length === 2 ? <line x1={x(regression[0].x)} y1={y(regression[0].y)} x2={x(regression[1].x)} y2={y(regression[1].y)} stroke="#e0a34a" strokeWidth="1" strokeDasharray="2 2" /> : null}{selectedPoint?.leftReturnPct != null && selectedPoint.rightReturnPct != null ? <circle cx={x(selectedPoint.rightReturnPct)} cy={y(selectedPoint.leftReturnPct)} r="2" fill="#e0a34a" /> : null}</svg></section>
+  const { x, y, cloud } = useMemo(() => {
+    let minX = -1
+    let maxX = 1
+    let minY = -1
+    let maxY = 1
+    const returns: { x: number; y: number }[] = []
+    for (const { leftReturnPct, rightReturnPct } of points) {
+      if (leftReturnPct === null || rightReturnPct === null) continue
+      minX = Math.min(minX, rightReturnPct)
+      maxX = Math.max(maxX, rightReturnPct)
+      minY = Math.min(minY, leftReturnPct)
+      maxY = Math.max(maxY, leftReturnPct)
+      returns.push({ x: rightReturnPct, y: leftReturnPct })
+    }
+    const x = (value: number) => 5 + (value - minX) / (maxX - minX) * 90
+    const y = (value: number) => 92 - (value - minY) / (maxY - minY) * 84
+    // Round line caps draw each return as a dot at a fixed screen size.
+    const cloud = returns.map((point) => `M${x(point.x).toFixed(3)},${y(point.y).toFixed(3)}h0`).join(' ')
+    return { x, y, cloud }
+  }, [points])
+  const point = points[selected]
+  return (
+    <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-surface">
+      <PanelHeading title="Daily return regression" legend={`${symbols[1]} x · ${symbols[0]} y`} />
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="min-h-0 flex-1" role="img" aria-label="Daily return scatter plot">
+        <line x1={x(0)} x2={x(0)} y1="5" y2="94" stroke="var(--color-border-strong)" vectorEffect="non-scaling-stroke" />
+        <line x1="4" x2="96" y1={y(0)} y2={y(0)} stroke="var(--color-border-strong)" vectorEffect="non-scaling-stroke" />
+        <path d={cloud} fill="none" stroke="#4f8cff" strokeWidth="4" strokeLinecap="round" vectorEffect="non-scaling-stroke" opacity="0.55" />
+        {regression.length === 2 ? <line x1={x(regression[0].x)} y1={y(regression[0].y)} x2={x(regression[1].x)} y2={y(regression[1].y)} stroke="#e0a34a" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" /> : null}
+        {point?.leftReturnPct != null && point.rightReturnPct != null ? (
+          <path d={`M${x(point.rightReturnPct)},${y(point.leftReturnPct)}h0`} fill="none" stroke="#e0a34a" strokeWidth="8" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+        ) : null}
+      </svg>
+    </section>
+  )
+}
+
+function PanelHeading({ title, legend }: { title: string; legend: string }) {
+  return (
+    <header className="flex min-h-8 shrink-0 items-center justify-between gap-2 border-b border-border bg-surface-raised px-2.5 py-1">
+      <h3 className="text-[12px] font-semibold text-text">{title}</h3>
+      <span className="text-[11px] text-text-muted">{legend}</span>
+    </header>
+  )
 }
 
 function format(value: number | null | undefined, decimals: number, suffix = ''): string {

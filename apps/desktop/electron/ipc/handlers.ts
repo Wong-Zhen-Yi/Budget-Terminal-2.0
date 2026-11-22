@@ -24,6 +24,7 @@ import { liveStatusEvents } from '../services/liveStatusEvents.js'
 import { finnhubQuotes } from '../services/finnhubQuotes.js'
 import { marketApiKeys } from '../services/marketApiKeysHost.js'
 import { checkForUpdates } from '../services/appUpdates.js'
+import { broadcastMobile, configureMobileAccess, mobileAccessStatus } from '../services/mobileHost.js'
 
 export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent) => boolean): () => void {
   const handle: typeof ipcMain.handle = (channel, listener) => {
@@ -47,6 +48,7 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
   })
   finnhubQuotes.start()
   const stopFinnhubUpdates = finnhubQuotes.subscribe(quote => {
+    broadcastMobile(CHANNELS.equityMarketChanged, { quotes: [quote], candles: [] })
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.webContents.isDestroyed()) window.webContents.send(CHANNELS.equityMarketChanged, { quotes: [quote], candles: [] })
     }
@@ -54,15 +56,19 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
   const finnhubPoll = setInterval(() => { void finnhubQuotes.poll() }, 1_200)
   finnhubPoll.unref()
   const stopLiveStatus = liveStatusEvents.subscribe(event => {
+    if (event.kind === 'notifications') broadcastMobile(CHANNELS.liveStatusChanged, event)
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.webContents.isDestroyed()) window.webContents.send(CHANNELS.liveStatusChanged, event)
     }
   })
   handle(CHANNELS.cloudSyncStatus, () => ok(cloudSyncStatus(), 'cloud sync'))
   handle(CHANNELS.cloudSyncCommand, (_event, command) => cloudSyncCommand(command))
+  handle(CHANNELS.mobileAccessStatus, () => mobileAccessStatus())
+  handle(CHANNELS.configureMobileAccess, (_event, value) => configureMobileAccess(value))
   const stopEquityUpdates = hyperliquidEquities.subscribe(async update => {
     await finnhubQuotes.configured('AAPL')
     const filtered = { ...update, quotes: update.quotes.filter(quote => !finnhubQuotes.prefers(quote.symbol)) }
+    broadcastMobile(CHANNELS.equityMarketChanged, filtered)
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.webContents.isDestroyed()) window.webContents.send(CHANNELS.equityMarketChanged, filtered)
     }
@@ -207,6 +213,7 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
   })
 
   const stopSavedData = subscribeSavedDataChanged((payload) => {
+    broadcastMobile(CHANNELS.savedDataChanged, payload)
     if (payload.domains.includes('portfolio') && !payload.portfolioMetadataOnly) finnhubQuotes.portfolioChanged()
     for (const window of BrowserWindow.getAllWindows()) window.webContents.send(CHANNELS.savedDataChanged, payload)
   })

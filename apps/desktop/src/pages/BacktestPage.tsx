@@ -294,7 +294,7 @@ export function BacktestPage({
         <span className={`ml-auto text-right text-2xs ${toneClass[status.tone]}`}>{status.text}</span>
       </div>
 
-      <div ref={pageRef} className="flex min-h-0 flex-1">
+      <div ref={pageRef} className="backtest-workspace flex min-h-0 flex-1">
         <section
           className="flex min-h-0 shrink-0 flex-col gap-2 border border-border bg-surface p-2"
           style={{ width: leftWidth }}

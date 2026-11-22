@@ -5,11 +5,13 @@ description: Capture app pages, research markets and read or edit saved portfoli
 
 Use Budget Terminal tools for data owned by the local app. Open Budget Terminal before service calls; connection status can diagnose availability. Arguments use a `request` object; pass `{ "request": {} }` for operations without parameters.
 
+For iPhone or iPad access, the configured private Telegram bot answers `/mobile` once Mobile Access is enabled under desktop Settings → Labs. Tailscale Serve is a separate browser endpoint. Keep MCP clients on the local MCP connection.
+
 Read `data.mainPage` from `budget_terminal_settings` for a saved startup choice. Use the settings mutation `setMainPage` with a visible page ID or `null` to restore automatic selection. The preference applies on the next launch.
 
 Read `data.enabledLabs` for opted-in experiments. Dashboard Lite and News Lite must be enabled in Settings → Labs for navigation and screenshots. For a requested settings edit, use `setLabEnabled` with `id: "dashboard-lite"` or `"news-lite"` and `enabled: true` or `false` under the existing settings write permissions. Use the existing News tools for News Lite headlines.
 
-Screenshot page `focus-dashboard` for the Focus directory, topic shortcuts and cached headline readings.
+Screenshot page `focus-dashboard` for the Focus directory, topic shortcuts and two cached readings per card.
 
 Use `budget_terminal_eth` for the Ethereum Focus page. Preserve the separate
 `asOf` times for ecosystem TPS and mainnet TPS, block interval and median

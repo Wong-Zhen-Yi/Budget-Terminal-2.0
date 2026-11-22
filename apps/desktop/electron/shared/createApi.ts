@@ -11,6 +11,8 @@ export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS
     checkForUpdates: () => invoke(CHANNELS.checkForUpdates),
     cloudSyncStatus: () => invoke(CHANNELS.cloudSyncStatus),
     cloudSyncCommand: command => invoke(CHANNELS.cloudSyncCommand, command),
+    mobileAccessStatus: () => invoke(CHANNELS.mobileAccessStatus),
+    configureMobileAccess: enabled => invoke(CHANNELS.configureMobileAccess, enabled),
     diagnosticLogs: () => invoke('diagnostics:read'),
     diagnosticLogAction: action => invoke('diagnostics:action', action),
     diagnosticsInitial: () => invoke('diagnostics:initial'),
