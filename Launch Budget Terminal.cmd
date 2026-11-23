@@ -1,4 +1,5 @@
 @echo off
+rem The shared build includes the Forex currency converter with SGD to USD selected by default.
 rem The shared build includes the mobile Workspaces page with grouped page pills.
 rem The shared build includes 17 staggered index callouts inside the mobile Global map.
 rem The shared build includes compact Portfolio and research toolbars for phone layouts.

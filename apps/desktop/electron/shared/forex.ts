@@ -14,6 +14,12 @@ export const FOREX_PAIRS = [
   { id: 'SGD/JPY', symbol: 'SGDJPY=X' },
 ] as const
 export type ForexPair = typeof FOREX_PAIRS[number]['id']
+type PairCurrency<Pair extends string> = Pair extends `${infer Base}/${infer Counter}` ? Base | Counter : never
+export type ForexCurrency = PairCurrency<ForexPair>
+export const FOREX_CURRENCIES = [...new Set(
+  FOREX_PAIRS.flatMap(({ id }) => id.split('/') as ForexCurrency[]),
+)].sort()
+
 export const FOREX_RANGES = ['1W', '1M', '3M', '6M', '1Y'] as const
 export type ForexRange = typeof FOREX_RANGES[number]
 export const FOREX_DAYS: Record<ForexRange, number> = { '1W': 7, '1M': 31, '3M': 93, '6M': 186, '1Y': 366 }
@@ -39,6 +45,24 @@ export function forexNumber(pair: ForexPair, value: number | null | undefined): 
 }
 export function usableForexQuote(quote: Quote): boolean {
   return Number.isFinite(quote.price) && quote.price > 0 && Number.isFinite(quote.change) && Number.isFinite(quote.absChange)
+}
+
+export function forexConversionRate(rows: readonly ForexQuoteRow[], from: ForexCurrency, to: ForexCurrency): number | undefined {
+  if (from === to) return 1
+  const price = (pair: string) => {
+    const value = rows.find((row) => row.pair === pair)?.quote?.price
+    return value !== undefined && Number.isFinite(value) && value > 0 ? value : undefined
+  }
+  const rate = (base: ForexCurrency, counter: ForexCurrency) => {
+    const inverse = price(`${counter}/${base}`)
+    return price(`${base}/${counter}`) ?? (inverse === undefined ? undefined : 1 / inverse)
+  }
+
+  const direct = rate(from, to)
+  if (direct !== undefined && Number.isFinite(direct)) return direct
+  if (from === 'USD' || to === 'USD') return undefined
+  const cross = (rate(from, 'USD') ?? NaN) * (rate('USD', to) ?? NaN)
+  return Number.isFinite(cross) && cross > 0 ? cross : undefined
 }
 
 const CURRENCY_NEWS: Record<string, RegExp> = {

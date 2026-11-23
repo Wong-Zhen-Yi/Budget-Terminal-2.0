@@ -1,4 +1,5 @@
 #!/bin/sh
+# The shared build includes the Forex currency converter with SGD to USD selected by default.
 # The shared build includes the mobile Workspaces page with grouped page pills.
 # The shared build includes 17 staggered index callouts inside the mobile Global map.
 # The shared build includes compact Portfolio and research toolbars for phone layouts.

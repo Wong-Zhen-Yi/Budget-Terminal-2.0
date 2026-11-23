@@ -8,6 +8,7 @@ import { useForex } from '@/api/forexQueries'
 import { useForexStore } from '@/stores/forex'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { LineChart } from '@/components/charts/LineChart'
+import { CurrencyConverter } from '@/components/forex/CurrencyConverter'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Panel, PanelMessage } from '@/components/ui/Panel'
 import { directionClass, percent } from '@/lib/format'
@@ -54,9 +55,10 @@ export function ForexPage({ onStatusChange }: { onStatusChange: (panels: PanelSt
       <span className="text-2xs text-warn" role="status">{notice}</span>
 
     </div>
-    <div className="flex shrink-0 flex-col gap-2 lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_340px]">
-      <div className="flex shrink-0 flex-col gap-2 lg:min-h-0">
-        <Panel title="Currency pairs" warning={warning(quotes.data, quotes.error)} className="min-h-[280px] shrink-0">
+    <div className="flex shrink-0 flex-col gap-2 lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_340px] lg:grid-rows-[auto_minmax(0,1fr)]">
+      <CurrencyConverter quotes={quotes.data?.data.rows ?? []} />
+      <div className="flex shrink-0 flex-col gap-2 lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:min-h-0">
+        <Panel title="Currency pairs" warning={warning(quotes.data, quotes.error)} className="min-h-[280px] shrink-0 lg:shrink">
           <DataTable rows={rows} columns={columns} rowKey={(entry) => entry.id} onRowClick={(entry) => setPair(entry.id)} rowClassName={(entry) => entry.id === pair ? 'bg-accent/10' : ''} />
           <Freshness envelope={quotes.data} freshnessMs={FRESHNESS.quotes} />
         </Panel>
@@ -66,7 +68,7 @@ export function ForexPage({ onStatusChange }: { onStatusChange: (panels: PanelSt
           <Freshness envelope={history.data} freshnessMs={FRESHNESS.chartDaily} />
         </Panel>
       </div>
-      <Panel title={`${pair} news`} warning={warning(news.data, news.error)} className="h-[420px] shrink-0 lg:h-auto lg:min-h-0">
+      <Panel title={`${pair} news`} warning={warning(news.data, news.error)} className="h-[420px] shrink-0 lg:col-start-2 lg:row-start-2 lg:h-auto lg:min-h-0">
         <p className="shrink-0 border-b border-border px-2 py-2 text-2xs text-text-dim">Currency and central-bank headlines for {pair.split('/').join(' & ')}</p>
         {articles.length ? <div key={pair} className="min-h-0 flex-1 overflow-y-auto">{articles.map((article) => <button key={article.id} className="block w-full border-b border-border p-3 text-left hover:bg-surface-raised" onClick={() => { void api.openExternal(article.url).catch(() => setNotice('Could not open the article.')) }}>
           <span className="mb-1 block text-2xs text-text-dim">{article.source} · {article.publishedAt ? new Date(article.publishedAt).toLocaleString() : 'Time unavailable'}</span>

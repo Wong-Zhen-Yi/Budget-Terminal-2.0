@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import type { NewsArticle } from '../electron/shared/contract.js'
-import { FOREX_PAIRS, forexPair, forexNumber, selectForexNews, usableForexQuote } from '../electron/shared/forex.js'
+import type { ForexQuoteRow } from '../electron/shared/forex.js'
+import { FOREX_CURRENCIES, FOREX_PAIRS, forexConversionRate, forexPair, forexNumber, selectForexNews, usableForexQuote } from '../electron/shared/forex.js'
 import { forexLane, getForexQuotes, getForexHistory, getForexNews } from '../electron/services/forex.js'
 import { cache } from '../electron/services/cache.js'
 import { quoteFromChart } from '../electron/services/yahoo/quotes.js'
@@ -18,6 +19,19 @@ if (process.argv.includes('--offline')) {
   assert.equal(usableForexQuote(quote), true)
   assert.equal(usableForexQuote({ ...quote, price: 0 }), false)
   assert.equal(usableForexQuote({ ...quote, change: Infinity }), false)
+  const rateRow = (pair: ForexQuoteRow['pair'], price: number): ForexQuoteRow => ({
+    pair, quote: { ...quote, price }, freshness: 'fresh', fetchedAt: Date.now(),
+  })
+  const conversionRates = [rateRow('USD/SGD', 1.25), rateRow('GBP/USD', 1.3), rateRow('USD/JPY', 150)]
+  assert.ok(FOREX_CURRENCIES.includes('SGD') && FOREX_CURRENCIES.includes('USD'))
+  assert.equal(forexConversionRate(conversionRates, 'SGD', 'USD'), 0.8)
+  assert.equal(forexConversionRate(conversionRates, 'USD', 'SGD'), 1.25)
+  assert.equal(forexConversionRate(conversionRates, 'SGD', 'JPY'), 120)
+  assert.equal(forexConversionRate([...conversionRates, rateRow('SGD/JPY', 119)], 'SGD', 'JPY'), 119)
+  assert.equal(forexConversionRate([...conversionRates, rateRow('SGD/JPY', 0)], 'SGD', 'JPY'), 120)
+  assert.equal(forexConversionRate([], 'SGD', 'SGD'), 1)
+  assert.equal(forexConversionRate([rateRow('USD/SGD', NaN)], 'SGD', 'USD'), undefined)
+  assert.equal(forexConversionRate(conversionRates, 'EUR', 'GBP'), undefined)
   const article = (title: string, id: string, publishedAt = 1): NewsArticle => ({ id, title, publishedAt, url: `https://example.com/${id}`, summary: '', source: 'Fixture', time: '', ticker: '', category: 'macro', score: null, signals: [], imageUrl: '' })
   const fed = article('Federal Reserve holds rates', 'fed', 3)
   const ecb = article('ECB signals policy shift', 'ecb', 2)
@@ -33,12 +47,15 @@ if (process.argv.includes('--offline')) {
   assert.equal(stale.data, 42)
   assert.equal(stale.meta.freshness, 'stale')
   assert.ok(Math.abs(stale.meta.fetchedAt - first.meta.fetchedAt) < 2)
-  cache.clear()
+  await cache.clear()
   const unavailable = await forexLane('probe:missing', 60_000, false, null, async () => { throw new Error('offline') })
   assert.equal(unavailable.data, null)
   assert.equal(unavailable.meta.freshness, 'failed')
   // Seed the underlying quote cache: one invalid pair must not blank the other nine.
-  FOREX_PAIRS.forEach((pair, index) => cache.set(`quote:yahoo-only:${pair.symbol}`, { ...quote, symbol: pair.symbol, price: index ? 1.26 : 0 }, 60_000))
+  await Promise.all(FOREX_PAIRS.map((pair, index) => cache.set(`quote:yahoo-session-v1:${pair.symbol}`, {
+    quote: { ...quote, symbol: pair.symbol, price: index ? 1.26 : 0 },
+    meta: undefined,
+  }, 60_000)))
   const partial = await getForexQuotes()
   assert.equal(partial.meta.freshness, 'partial')
   assert.equal(partial.data.rows.filter((row) => row.quote).length, 9)
@@ -46,14 +63,14 @@ if (process.argv.includes('--offline')) {
   assert.equal(partial.errors[0].symbol, 'EUR/USD')
   const invalid = await getForexHistory({ pair: 'EUR/USD', range: 'bad' as '1M' })
   assert.equal(invalid.meta.freshness, 'failed')
-  cache.clear()
-  cache.set('forex:news-feed:EURUSD=X', [ecb], 300_000)
+  await cache.clear()
+  await cache.set('forex:news-feed:EURUSD=X', [ecb], 300_000)
   await forexLane('forex:news-feed:DX-Y.NYB', 300_000, false, [], async () => { throw new Error('Feed offline') })
   const partialNews = await getForexNews({ pair: 'EUR/USD' })
   assert.equal(partialNews.meta.freshness, 'partial')
   assert.deepEqual(partialNews.data.articles.map((row) => row.id), ['ecb'])
-  cache.clear()
-  console.log('PASS Forex offline: mappings, direction, precision, relevance, deduplication, stale fallback, partial failure, invalid range')
+  await cache.clear()
+  console.log('PASS Forex offline: mappings, conversion rates, precision, relevance, deduplication, stale fallback, partial failure, invalid range')
 } else {
   const quotes = await getForexQuotes({ force: true })
   for (const row of quotes.data.rows) console.log(`${row.pair}: ${row.quote?.price ?? 'MISSING'} (${row.freshness})`)
