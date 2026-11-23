@@ -14,6 +14,12 @@ export interface StartupTask {
   run: (observe: StartupSnapshotObserver, maintenance: boolean) => Promise<unknown>
 }
 
+export type ReloadProgress =
+  | { phase: 'mounted' }
+  | { phase: 'current' | 'others'; done: number; total: number }
+
+export type ReloadPages = (page: string, onProgress?: (progress: ReloadProgress) => void) => Promise<void>
+
 interface TaskState {
   state: 'ready' | 'degraded' | 'failed'
   reason?: string
@@ -140,21 +146,32 @@ export function createStartupScheduler(options: {
   let reloadPromise: Promise<void> | undefined
   return {
     /** Finish the focused page before checking every other prepared page. */
-    reload(page: string, reloadMounted?: () => Promise<Set<string>>) {
+    reload(page: string, reloadMounted?: () => Promise<Set<string>>, onProgress?: (progress: ReloadProgress) => void) {
       if (reloadPromise) return reloadPromise
-      const check = async (entry: Entry, force: boolean) => {
-        await entry.running
-        if (!current(entry)) return
-        clearTimer(entry.timer)
-        entry.timer = undefined
-        entry.running = refresh(entry, force)
-        await entry.running
-      }
       reloadPromise = (async () => {
         reloaded = await reloadMounted?.() ?? new Set()
         const plan = [...entries.values()]
-        await Promise.all(plan.filter(entry => entry.task.tab === page).map(entry => check(entry, true)))
-        await Promise.all(plan.filter(entry => entry.task.tab !== page).map(entry => check(entry, false)))
+        let done = 0
+        const checkPhase = async (phase: 'current' | 'others') => {
+          const force = phase === 'current'
+          const checks = plan.filter(entry => (entry.task.tab === page) === force)
+          if (!checks.length) return
+          const report = () => onProgress?.({ phase, done, total: plan.length })
+          report()
+          await Promise.all(checks.map(async entry => {
+            await entry.running
+            if (current(entry)) {
+              clearTimer(entry.timer)
+              entry.timer = undefined
+              entry.running = refresh(entry, force)
+              await entry.running
+            }
+            done += 1
+            report()
+          }))
+        }
+        await checkPhase('current')
+        await checkPhase('others')
       })().finally(() => { reloadPromise = undefined; reloaded = undefined })
       return reloadPromise
     },

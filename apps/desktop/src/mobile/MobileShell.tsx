@@ -2,14 +2,16 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { browserInputRequest, browserSearchUrl } from '@shared/browserSearch'
 import { isSafeExternalUrl } from '../../electron/services/urls'
+import type { ReloadProgress } from '@/api/startupScheduler'
+import { ReloadButton } from '@/components/chrome/ReloadButton'
 import { mobileTelegramProfile } from './client'
 
-export function MobileHeader({ label, navigationOpen, onToggleNavigation, onReload, reloading, onToggleObscure, obscured, favorite, onToggleFavorite, savingFavorite }: {
+export function MobileHeader({ label, navigationOpen, onToggleNavigation, onReload, reloadProgress, onToggleObscure, obscured, favorite, onToggleFavorite, savingFavorite }: {
   label: string
   navigationOpen: boolean
   onToggleNavigation: () => void
   onReload: () => void
-  reloading: boolean
+  reloadProgress: ReloadProgress | null
   onToggleObscure: () => void
   obscured: boolean
   favorite: boolean
@@ -40,9 +42,7 @@ export function MobileHeader({ label, navigationOpen, onToggleNavigation, onRelo
       <button type="button" onClick={onToggleObscure} aria-pressed={obscured} aria-label={obscured ? 'Reveal obscured pages' : 'Obscure selected pages'}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/>{obscured && <path d="M4 20 20 4"/>}</svg>
       </button>
-      <button type="button" disabled={reloading} onClick={onReload} aria-label="Refresh page">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14-5L3 9m0-5v5h5m-4 4a8 8 0 0 0 14 5l3-3m0 5v-5h-5"/></svg>
-      </button>
+      <ReloadButton onReload={onReload} progress={reloadProgress} />
     </div>}
   </header>
 }

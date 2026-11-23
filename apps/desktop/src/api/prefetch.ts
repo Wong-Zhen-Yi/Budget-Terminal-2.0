@@ -1,5 +1,5 @@
 import { warmPolymarket } from './polymarketQueries'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { hashKey, useIsRestoring, useQueryClient, type QueryClient } from '@tanstack/react-query'
 
 import { CARD_INTERVALS, MACRO_SYMBOLS, type AppSettings, type PortfolioPayload } from '@shared/contract'
@@ -53,7 +53,7 @@ import { errorMessage } from './snapshotHealth'
 import { createProgressReporter } from './progressReporter'
 import { pageQueryKeys } from './pageQueryScope'
 import { markReloadQuery } from './pageProgress'
-import { createStartupScheduler, type StartupTask } from './startupScheduler'
+import { createStartupScheduler, type ReloadPages, type StartupTask } from './startupScheduler'
 import { subscribeRequestInputs } from './requestInputs'
 import { portfolioMarketInputs } from '@shared/portfolioDependencies'
 import { isMobileTerminal, mobileTelegramProfile } from '@/mobile/client'
@@ -92,7 +92,6 @@ export interface WarmProgress {
   total: number
   label: string
   failed: number
-  reload?: (page: string) => Promise<void>
   degraded: number
   retry?: (page?: string) => void
 }
@@ -1273,7 +1272,7 @@ export function subscribeStartupRequestInputs(schedule: () => void): Array<() =>
   ]
 }
 
-export function useWarmPages(settings: AppSettings | undefined, settingsSettled: boolean, activeTab: string, recent: string[], settingsError?: unknown): WarmProgress & { reload: (page: string) => Promise<void> } {
+export function useWarmPages(settings: AppSettings | undefined, settingsSettled: boolean, activeTab: string, recent: string[], settingsError?: unknown): WarmProgress & { reload: ReloadPages } {
   const queryClient = useQueryClient()
   const isRestoring = useIsRestoring()
   const portfolioQuery = usePortfolio()
@@ -1286,7 +1285,7 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
   const inputs = useRef({ activeTab, recent, settings, payload, settingsError, portfolioError })
   inputs.current = { activeTab, recent, settings, payload, settingsError, portfolioError }
   const reconcile = useRef<(() => void) | undefined>(undefined)
-  const reload = useRef<((page: string) => Promise<void>) | undefined>(undefined)
+  const reload = useRef<ReloadPages | undefined>(undefined)
   const retry = useRef<((page?: string) => void) | undefined>(undefined)
   const prioritize = useRef<((page: string) => void) | undefined>(undefined)
 
@@ -1380,7 +1379,7 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
             (pageRanks.get(task.tab) ?? 0) + (maintenance ? pageOrder.length : 0), observe),
         })))
       }
-      reload.current = async page => {
+      reload.current = async (page, onProgress) => {
         update()
         await scheduler!.reload(page, async () => {
           const keys = pageQueryKeys(page)
@@ -1398,7 +1397,7 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
             finally { markReloadQuery(key, false) }
           }))
           return reloaded
-        })
+        }, onProgress)
       }
       // Coalesce multi-field edits (e.g. symbol + loaded + expiry), then reconcile
       // exact page input identities. Never cancel shared provider requests.
@@ -1433,5 +1432,9 @@ export function useWarmPages(settings: AppSettings | undefined, settingsSettled:
   useEffect(() => { reconcile.current?.() }, [requestSettings, requestPortfolio, settingsError, portfolioError])
   useEffect(() => { prioritize.current?.(activeTab) }, [activeTab])
 
-  return { ...progress, reload: (page: string) => reload.current ? reload.current(page) : Promise.reject(new Error('Page loading is still initializing. Try Reload again shortly.')), retry: page => retry.current?.(page) }
+  const reloadPages = useCallback<ReloadPages>((page, onProgress) => {
+    if (!reload.current) return Promise.reject(new Error('Page loading is still initializing. Try Reload again shortly.'))
+    return reload.current(page, onProgress)
+  }, [])
+  return { ...progress, reload: reloadPages, retry: page => retry.current?.(page) }
 }

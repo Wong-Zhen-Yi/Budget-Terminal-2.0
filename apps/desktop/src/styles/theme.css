@@ -3,6 +3,33 @@
 @import './finance.css';
 @import '../pages/HoodPage.css';
 
+.reload-button { position: relative; }
+.reload-button__track {
+  position: absolute;
+  inset: auto 5px 3px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-border-strong);
+  pointer-events: none;
+}
+.reload-button__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-accent-hover);
+  transition: width .2s ease-out;
+}
+.reload-button__fill[data-waiting] {
+  width: 35%;
+  animation: reload-progress-sweep 1s ease-in-out infinite alternate;
+}
+@keyframes reload-progress-sweep { to { transform: translateX(185%); } }
+@media (prefers-reduced-motion: reduce) {
+  .reload-button__fill { transition: none; }
+  .reload-button__fill[data-waiting] { animation: none; }
+}
+
 .mobile-disclosure,
 .mobile-disclosure-content { display: contents; }
 .mobile-disclosure-toggle,

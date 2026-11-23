@@ -234,7 +234,12 @@ try {
       if (method === 'forexHistory' || method === 'forexNews') data.pair = request.pair
       return result
     }
-    window.fixtureHandler = async (method, request) => { calls.push({ method, request }); return fixture(method, request) }
+    let holdReload
+    window.fixtureHandler = async (method, request) => {
+      calls.push({ method, request })
+      if (holdReload) await holdReload(method, request)
+      return fixture(method, request)
+    }
     window.runReadinessProbe = async () => {
       const element = document.getElementById('root')
       const reloadOnly = ${JSON.stringify(process.argv.includes('--reload'))}
@@ -663,16 +668,63 @@ try {
         }
         if (scenario === 'populated') {
           await selectPage(TABS.find(tab => tab.id === 'amzn'))
-          const beforeReload = calls.length
-          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F5' }))
-          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F5', repeat: true }))
-          await wait()
-          const reloadDeadline = Date.now() + 15000
-          while ([...document.querySelectorAll('button')].some(button => button.textContent === 'Reloading...') && Date.now() < reloadDeadline) await wait()
-          const reloadCalls = calls.slice(beforeReload)
-          check(reloadCalls.filter(call => call.method === 'amzn' && call.request.force).length === 1, 'F5 must force the focused page exactly once')
-          check(!reloadCalls.some(call => call.method !== 'amzn' && call.request?.force), 'Background page checks must retain service caches')
-          check(!document.body.innerText.includes('Reloading...'), 'Reload must finish')
+          const checkReload = async mobile => {
+            const button = document.querySelector('.reload-button')
+            const fill = () => button.querySelector('.reload-button__fill')
+            const width = button.getBoundingClientRect().width
+            check(!button.disabled && !fill(), 'The idle reload button must have no progress bar')
+            const until = async (test, message) => {
+              const deadline = Date.now() + 15000
+              while (!test() && Date.now() < deadline) await wait()
+              check(test(), message)
+            }
+            let releaseCurrent, releaseOthers
+            const current = new Promise(resolve => { releaseCurrent = resolve })
+            const others = new Promise(resolve => { releaseOthers = resolve })
+            holdReload = (method, request) => {
+              if (method === 'amzn' && request?.force) return current
+              if (method === 'globalMarkets') return others
+            }
+            try {
+              await client.invalidateQueries({ queryKey: ['globalMarkets'], refetchType: 'none' })
+              const beforeReload = calls.length
+              if (mobile) button.click()
+              else {
+                window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F5' }))
+                window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F5', repeat: true }))
+              }
+              await until(() => fill()?.hasAttribute('data-waiting'), 'The current-page reload must show a waiting bar')
+              check(button.disabled && button.getAttribute('aria-busy') === 'true', 'The control must be busy during reload')
+              check(button.nextElementSibling.textContent === 'Reloading the current page', 'Announce the current-page phase')
+              check(getComputedStyle(fill()).animationName === 'reload-progress-sweep', 'The waiting bar must animate')
+              check(button.getBoundingClientRect().width === width, 'The button width must stay fixed while reloading')
+              releaseCurrent()
+              await until(() => button.title.startsWith('Checking other pages'), 'Announce the other-page checks')
+              check(parseFloat(fill()?.style.width) > 0, 'The bar must advance as checks finish')
+              check(button.getBoundingClientRect().width === width, 'The button width must stay fixed while checking other pages')
+              releaseOthers()
+              await until(() => !button.disabled && !fill(), 'The control must return to idle when reload finishes')
+              const reloadCalls = calls.slice(beforeReload)
+              check(reloadCalls.filter(call => call.method === 'amzn' && call.request.force).length === 1, 'Reload must force the focused page exactly once')
+              check(!reloadCalls.some(call => call.method !== 'amzn' && call.request?.force), 'Background page checks must retain service caches')
+            } finally {
+              releaseCurrent()
+              releaseOthers()
+              holdReload = undefined
+            }
+          }
+          await checkReload(false)
+          if (reloadOnly) {
+            document.documentElement.setAttribute('data-terminal-mobile', '')
+            await window.resizeFixture(402, 874)
+            rendered.render(<QueryClientProvider client={client}><App /></QueryClientProvider>)
+            await wait()
+            check(document.querySelector('.mobile-topbar .reload-button'), 'The mobile header must have a reload button')
+            await checkReload(true)
+            document.documentElement.removeAttribute('data-terminal-mobile')
+            await window.resizeFixture(1400, 950)
+            rendered.render(<QueryClientProvider client={client}><App /></QueryClientProvider>)
+          }
           await paint(); await window.captureFixture('focused-reload')
           const old = client.getQueryData(['quotes', 'AAPL'])
           client.setQueryData(['quotes', 'AAPL'], { ...old, meta: { ...old.meta, freshness: 'stale', failureReason: 'Synthetic provider outage; previous snapshot preserved', fetchedAt: Date.now() - 120000 } })
@@ -762,7 +814,7 @@ try {
         memory.stop(); rendered.unmount(); client.clear(); useDataHealth.setState({ startup: null }); calls = []
         await wait()
       }
-      if (reloadOnly) return 'PASS: F5 reloads the focused page once, checks other pages without force, and preserves all-page startup'
+      if (reloadOnly) return 'PASS: Desktop F5 and mobile refresh report progress through both reload phases and return to idle'
       if (mainPageOnly) return 'PASS: default and saved launch pages, all-page startup, protected startup content, shared Obscure controls and save without navigation'
       if (startupOnly) return 'PASS: every route is prepared for empty, populated and restored sessions; empty selection screens, thumbnail cooldowns, first visits and F5 reload verified'
       return 'PASS: all ' + TABS.filter(tab => tab.implemented).length + ' routes after completed startup, empty and populated portfolios, persisted Options/ETF/video selections, initial News/video media and no first-visit loads; visible subtab/select/filter/sort sweep recorded separately'

@@ -11,6 +11,7 @@ import { recentPages, startupPages } from '../electron/shared/navigation.js'
 import { recordStartupLoad, restoreStartupLoads, startupPageOrder } from '../electron/shared/startupLoading.js'
 import { createProgressReporter } from '../src/api/progressReporter.js'
 import { retryTransientData } from '../electron/shared/dataRetry.js'
+import type { ReloadProgress } from '../src/api/startupScheduler.js'
 import { observeSource } from '../electron/services/sourceHealth.js'
 import { serviceReadKey } from '../electron/shared/serviceReadKey.js'
 
@@ -313,6 +314,7 @@ schedulerClient.clear()
 
 // Reload must finish the focused page before it checks healthy or failed siblings.
 const reloadEvents: string[] = []
+const reloadProgress: ReloadProgress[] = []
 let releaseReload!: () => void
 const reloadWait = new Promise<void>(resolve => { releaseReload = resolve })
 const reloadScheduler = createStartupScheduler({ onChange: () => {}, onSnapshot: () => {} })
@@ -325,14 +327,22 @@ reloadScheduler.reconcile(['focused', 'other', 'failed'].map(tab => ({ id: tab, 
   },
 })))
 await settleScheduler()
-const firstReload = reloadScheduler.reload('focused')
+const firstReload = reloadScheduler.reload('focused', undefined, progress => reloadProgress.push(progress))
 assert.equal(reloadScheduler.reload('other'), firstReload, 'Repeated F5 must join the same reload')
 await settleScheduler()
 assert.deepEqual(reloadEvents, ['focused:true'])
+assert.deepEqual(reloadProgress, [{ phase: 'current', done: 0, total: 3 }])
 assert.equal(reloadScheduler.snapshot().pages.focused.refreshing, true)
 releaseReload()
 await firstReload
 assert.deepEqual(reloadEvents, ['focused:true', 'other:false', 'failed:false'])
+assert.deepEqual(reloadProgress, [
+  { phase: 'current', done: 0, total: 3 },
+  { phase: 'current', done: 1, total: 3 },
+  { phase: 'others', done: 1, total: 3 },
+  { phase: 'others', done: 2, total: 3 },
+  { phase: 'others', done: 3, total: 3 },
+], 'Progress must count settled checks, including failed requests')
 assert.equal(reloadScheduler.snapshot().pages.failed.state, 'failed')
 assert.match(reloadScheduler.snapshot().pages.failed.reason!, /Fixture reload failure/)
 assert.equal(reloadScheduler.snapshot().done, 3)

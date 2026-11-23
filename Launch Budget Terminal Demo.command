@@ -1,4 +1,5 @@
 #!/bin/sh
+# The shared build includes animated reload progress on desktop and mobile.
 # The shared build includes the Forex currency converter with SGD to USD selected by default.
 # The shared build includes the mobile Workspaces page with grouped page pills.
 # The shared build includes 17 staggered index callouts inside the mobile Global map.

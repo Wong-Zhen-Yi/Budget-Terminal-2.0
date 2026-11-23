@@ -2,14 +2,16 @@ import { useEffect, useState } from 'react'
 
 import { CLOCK_COUNTRIES, DEFAULT_CLOCK_COUNTRY } from '@shared/contract'
 import { api } from '@/api/client'
+import type { ReloadProgress } from '@/api/startupScheduler'
 import { clockTime } from '@/lib/format'
 import { McpActivity } from './McpActivity'
+import { ReloadButton } from './ReloadButton'
 import { TopBarAgent } from './TopBarAgent'
 
 interface TabBarProps {
   onOpenPicker: () => void
   onReload: () => void
-  reloading: boolean
+  reloadProgress: ReloadProgress | null
   clockCountry: string
   time12h: boolean
   obscured: boolean
@@ -22,7 +24,7 @@ interface TabBarProps {
 export function TabBar({
   onOpenPicker,
   onReload,
-  reloading,
+  reloadProgress,
   clockCountry,
   time12h,
   obscured,
@@ -79,15 +81,8 @@ export function TabBar({
         </span>
       </button>
 
-      <button
-        type="button"
-        title="Reload the current page first, then check all other pages"
-        onClick={onReload}
-        disabled={reloading}
-        className={`no-drag h-9 shrink-0 border border-border-strong bg-surface-raised px-3 text-2xs text-text hover:bg-surface-hover disabled:opacity-50 ${isMac ? 'rounded-lg' : ''}`}
-      >
-        {reloading ? 'Reloading...' : `Reload (${isMac ? '⌘ R' : 'F5'})`}
-      </button>
+      <ReloadButton onReload={onReload} progress={reloadProgress} shortcut={isMac ? '⌘ R' : 'F5'}
+        className={`no-drag h-9 w-28 shrink-0 whitespace-nowrap border border-border-strong bg-surface-raised text-2xs text-text enabled:hover:bg-surface-hover ${isMac ? 'rounded-lg' : ''}`} />
 
       {!isMac ? <WindowControls /> : null}
     </div>

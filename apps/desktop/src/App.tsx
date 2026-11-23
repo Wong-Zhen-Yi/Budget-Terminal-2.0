@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FOCUS_DASHBOARD_TAB_ID, SETTINGS_TAB_ID, TABS, VALUE_MASKED_TABS } from '@shared/contract'
 import { adjacentPage, isLabPageEnabled, pagesInVisualOrder, resolveMainPage, workspaceFor } from '@shared/navigation'
 import { useWarmPages } from '@/api/prefetch'
+import type { ReloadProgress } from '@/api/startupScheduler'
 import { useEquityMarketStream } from '@/api/equityStream'
 import { useMcpScreenshot, useScreenshotReady } from '@/api/mcpScreenshot'
 import { useSettings, useSettingsMutation } from '@/api/settingsQueries'
@@ -143,7 +144,7 @@ export function App() {
   }, [selectedTab, settingsQuery.isPending, tabOverride, visit])
   const [panels, setPanels] = useState<PanelStatus[]>([])
   const [sourcePath, setSourcePath] = useState('')
-  const [reloading, setReloading] = useState(false)
+  const [reloadProgress, setReloadProgress] = useState<ReloadProgress | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const mobileNavigationOpen = mobile && pickerOpen && !screenshotPage
   const obscured = useObscureMode(state => state.enabled)
@@ -296,14 +297,14 @@ export function App() {
   const reload = useCallback(async () => {
     if (reloadInFlight.current) return
     reloadInFlight.current = true
-    setReloading(true)
+    setReloadProgress({ phase: 'mounted' })
     try {
-      await warm.reload(activeTabRef.current)
+      await warm.reload(activeTabRef.current, setReloadProgress)
     } catch (error) {
       setNotice(error instanceof Error ? error.message : String(error))
     } finally {
       reloadInFlight.current = false
-      setReloading(false)
+      setReloadProgress(null)
     }
   }, [warm.reload])
 
@@ -406,13 +407,13 @@ export function App() {
     <div className={`terminal-shell flex h-full flex-col bg-bg ${isMac ? 'platform-mac' : ''}`}>
       {mobile ? <MobileHeader label={TAB_BY_ID.get(activeTab)?.label ?? 'Budget Terminal'}
         navigationOpen={mobileNavigationOpen} onToggleNavigation={() => setPickerOpen(open => !open)}
-        onReload={() => void reload()} reloading={reloading}
+        onReload={() => void reload()} reloadProgress={reloadProgress}
         onToggleObscure={toggleObscure} obscured={obscured}
         favorite={favorites.includes(activeTab)} savingFavorite={savingFavorite || !settings}
         onToggleFavorite={!settingsQuery.isPending && workspaceFor(activeTab) ? () => void toggleFavorite() : undefined} /> : <TabBar
         onOpenPicker={() => setPickerOpen(true)}
         onReload={() => void reload()}
-        reloading={reloading}
+        reloadProgress={reloadProgress}
         clockCountry={settings?.clockCountry ?? 'US'}
         time12h={settings?.time12h ?? true}
         obscured={obscured}

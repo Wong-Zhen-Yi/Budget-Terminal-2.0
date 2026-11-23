@@ -37,6 +37,7 @@
 
 .mobile-topbar button:active, .mobile-topbar button[aria-pressed="true"] { background: var(--color-surface-hover); }
 .mobile-topbar button:disabled { opacity: .45; }
+.mobile-topbar .reload-button:disabled { opacity: 1; }
 .mobile-topbar-actions { display: flex; flex: none; }
 .mobile-topbar-actions [aria-pressed="true"] { color: var(--color-accent-hover); }
 .mobile-topbar svg { width: 22px; height: 22px; }
