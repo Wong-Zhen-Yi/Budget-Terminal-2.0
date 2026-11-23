@@ -1,6 +1,6 @@
 #!/bin/sh
 # Telegram /mobile retrieves links and /restart relaunches the app without Codex inference.
-# Pass --mobile-preview to check the current iPhone portrait layouts with sample data.
+# Pass --mobile-preview to try collapsible mobile News filters and tools with sample data.
 # The connected mobile window is available through the Windows launcher.
 # The shared build includes the direct Tailscale link under Settings > Labs.
 # Double-click Launch Budget Terminal Demo.command for temporary sample data.

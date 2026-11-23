@@ -1,6 +1,6 @@
 @echo off
 rem The shared build includes Telegram /restart and the separate Tailscale link command.
-rem Build the current app and open the connected iPhone 17 layout on Windows.
+rem Build the current iPhone 17 layout with collapsible News filters and tools.
 title Budget Terminal Mobile Launcher
 cd /d "%~dp0" || exit /b 1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\launch-windows.ps1" mobile

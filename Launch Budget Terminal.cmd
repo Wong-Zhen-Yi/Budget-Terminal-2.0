@@ -1,6 +1,6 @@
 @echo off
 rem Telegram /mobile retrieves links and /restart relaunches the app without Codex inference.
-rem For the updated phone layouts, run Launch Budget Terminal Mobile.cmd or btd mobile.
+rem For the mobile News toolbar with collapsible filters and tools, run Launch Budget Terminal Mobile.cmd or btd mobile.
 rem The shared build includes the compact iPhone navigation and touch-friendly page picker.
 rem The shared build includes the direct Tailscale link under Settings > Labs.
 rem On Windows, double-click Launch Budget Terminal Demo.cmd for temporary sample data.

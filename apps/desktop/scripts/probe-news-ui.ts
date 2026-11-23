@@ -28,6 +28,7 @@ try {
       createRoot(document.getElementById('root')).render(<Page onStatusChange={() => {}} />)
       window.runProbe = async () => {
         await settle()
+        check(!button('Filters & tools'), 'Desktop must keep the full toolbar visible')
         check(!document.querySelector('aside'), 'Reader must start collapsed')
         document.querySelector('[data-article-id="portfolio"]').click(); await settle()
         check(document.querySelector('aside') && document.body.innerText.includes('Full extracted preview'), 'Reader or preview label missing')
@@ -72,6 +73,40 @@ try {
         document.querySelector('[aria-label="Close the reader"]').click(); await settle()
         check(!document.querySelector('aside'), 'Narrow reader cannot close')
         return 'PASS: narrow reader bounds and close'
+      }
+      window.runMobileProbe = async () => {
+        await settle()
+        const disclosure = button('Filters & tools')
+        const feedFilter = document.querySelector('[aria-label="Filter the news feed"]')
+        const tickerSearch = document.querySelector('[aria-label="Search news for tickers outside the portfolio"]')
+        const portfolio = [...document.querySelectorAll('button')].find(b => b.textContent.startsWith('Portfolio ('))
+        const article = () => document.querySelector('[data-article-id="portfolio"]')
+        const visible = element => element?.getClientRects().length > 0
+        const setInput = (input, value) => {
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value)
+          input.dispatchEvent(new Event('input', { bubbles: true }))
+        }
+        check(disclosure?.getAttribute('aria-expanded') === 'false' && !visible(feedFilter) && !visible(tickerSearch),
+          'Mobile News must start with both control groups collapsed')
+        portfolio.click(); await settle()
+        check(visible(portfolio) && visible(article()), 'Category filters and articles must be usable while collapsed')
+        const articleTop = article().getBoundingClientRect().top
+        disclosure.click(); await settle()
+        check(disclosure.getAttribute('aria-expanded') === 'true' && visible(feedFilter) && visible(tickerSearch),
+          'Expanding must expose both control groups')
+        check(article().getBoundingClientRect().top > articleTop, 'Collapsing must reclaim vertical space for the articles')
+        setInput(feedFilter, 'Portfolio fixture')
+        setInput(tickerSearch, 'NVDA')
+        disclosure.click(); await settle()
+        check(!visible(feedFilter) && !visible(tickerSearch) && visible(article()), 'Collapsing must preserve the filtered feed')
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: '/' })); await settle()
+        check(document.activeElement === feedFilter && feedFilter.value === 'Portfolio fixture' && tickerSearch.value === 'NVDA',
+          'The filter shortcut must reopen and focus the controls without losing drafts')
+        disclosure.click(); await settle()
+        article().click(); await settle()
+        check(document.querySelector('aside')?.innerText.includes('Extracted fixture body'), 'Reader must open with the controls collapsed')
+        check(document.documentElement.scrollWidth <= innerWidth, 'Mobile News must fit horizontally')
+        return 'PASS: mobile News disclosure reclaims article space, retains drafts, and supports keyboard and reader access'
       }
       window.runLiteProbe = async () => {
         await settle()
@@ -159,6 +194,7 @@ try {
   const html = '<html><head><link rel="stylesheet" href="theme.css"></head><body><div id="root" style="height:100vh;display:flex"></div><script>window.api = {}; LITE</script><script src="renderer.js"></script></body></html>'
   await writeFile(join(scratch, 'index.html'), html.replace('LITE', ''))
   await writeFile(join(scratch, 'lite.html'), html.replace('LITE', 'window.newsLite = true;'))
+  await writeFile(join(scratch, 'mobile.html'), html.replace('<html>', '<html data-terminal-mobile>').replace('LITE', ''))
   await writeFile(join(scratch, 'main.cjs'), `
     const { app, BrowserWindow } = require('electron');
     app.setPath('userData', ${JSON.stringify(join(scratch, 'userData'))});
@@ -170,6 +206,9 @@ try {
         window.setSize(700, 850);
         await new Promise(resolve => setTimeout(resolve, 300));
         console.log(await window.webContents.executeJavaScript('window.checkNarrow()'));
+        window.setSize(404, 850);
+        await window.loadFile(${JSON.stringify(join(scratch, 'mobile.html'))});
+        console.log(await window.webContents.executeJavaScript('window.runMobileProbe()'));
         window.setSize(1400, 900);
         await window.loadFile(${JSON.stringify(join(scratch, 'lite.html'))});
         console.log(await window.webContents.executeJavaScript('window.runLiteProbe()'));

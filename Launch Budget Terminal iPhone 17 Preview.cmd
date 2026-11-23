@@ -1,6 +1,6 @@
 @echo off
 rem The shared build includes direct Telegram /mobile and /restart handling.
-rem Rebuild the current portrait layouts and MCP bundle through the shared launcher.
+rem Rebuild the portrait layouts with collapsible News filters and tools and the current MCP bundle.
 rem Use Launch Budget Terminal Mobile.cmd to connect the mobile UI to desktop data.
 title Budget Terminal iPhone 17 Preview
 cd /d "%~dp0" || exit /b 1

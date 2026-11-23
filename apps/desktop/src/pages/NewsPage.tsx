@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 
 import type { NewsArticle } from '@shared/contract'
 import { buildNewsExportText, parseSearchSymbols, splitNewsGroups } from '@shared/news'
@@ -18,6 +18,7 @@ import { NewsTickerSearchBar } from '@/components/news/NewsTickerSearchBar'
 import { NewsToolbar, type Tone } from '@/components/news/NewsToolbar'
 import { Splitter } from '@/components/ui/Splitter'
 import { isTextEntry } from '@/lib/shortcuts'
+import { isMobileTerminal } from '@/mobile/client'
 import { useNewsPageStore } from '@/stores/news'
 import { newsHero, newsQuoteTickers } from '@/api/initialContent'
 
@@ -43,6 +44,11 @@ export function NewsPage({
 }: {
   onStatusChange: (panels: PanelStatus[], sourcePath: string) => void
 }) {
+  const mobile = isMobileTerminal()
+  const [mobileControlsOpen, setMobileControlsOpen] = useState(false)
+  const controlsOpen = !mobile || mobileControlsOpen
+  const controlsId = useId()
+  const tickerSearchId = `${controlsId}-ticker-search`
   const portfolioQuery = usePortfolio()
   // Every saved portfolio's holdings, not just the active one — `_get_fetch_tickers`.
   const holdings = useMemo(() => {
@@ -86,6 +92,7 @@ export function NewsPage({
 
   const gridRef = useRef<HTMLDivElement>(null)
   const filterRef = useRef<HTMLInputElement>(null)
+  const focusFilterOnOpen = useRef(false)
   const columns = useCardColumns(gridRef)
 
   const searchQuery = useNewsTickerSearch(searchTickers)
@@ -271,6 +278,12 @@ export function NewsPage({
 
   /* -------------------------------------------------------------- keyboard */
 
+  useEffect(() => {
+    if (!controlsOpen || !focusFilterOnOpen.current) return
+    focusFilterOnOpen.current = false
+    filterRef.current?.focus()
+  }, [controlsOpen])
+
   /**
    * `j`/`k` and the arrows walk the reading order, Enter opens, `/` jumps to the filter.
    *
@@ -287,7 +300,12 @@ export function NewsPage({
 
       if (event.key === '/') {
         event.preventDefault()
-        filterRef.current?.focus()
+        if (controlsOpen) {
+          filterRef.current?.focus()
+        } else {
+          focusFilterOnOpen.current = true
+          setMobileControlsOpen(true)
+        }
         return
       }
       if (event.key === 'Enter') {
@@ -309,7 +327,7 @@ export function NewsPage({
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [ordered, selectedId, selected, selectArticle, openArticle])
+  }, [controlsOpen, ordered, selectedId, selected, selectArticle, openArticle])
 
   /* ----------------------------------------------------------------- render */
 
@@ -320,6 +338,12 @@ export function NewsPage({
     <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
       <NewsToolbar
         ref={filterRef}
+        controlsId={controlsId}
+        controlsOpen={controlsOpen}
+        mobileDisclosure={mobile ? {
+          tickerSearchId,
+          onToggle: () => setMobileControlsOpen(open => !open),
+        } : undefined}
         counts={counts}
         filter={filter}
         onFilter={setFilter}
@@ -340,19 +364,21 @@ export function NewsPage({
         status={status}
       />
 
-      <NewsTickerSearchBar
-        onSearch={(raw) => {
-          setNotice(null)
-          setSearchTickers(parseSearchSymbols(raw))
-        }}
-        onClear={() => {
-          setSearchTickers([])
-          if (selected?.category === 'search') setSelectedId('')
-        }}
-        status={searchStatus}
-        busy={searchQuery.isFetching}
-        active={searchTickers.length > 0}
-      />
+      <div id={tickerSearchId} hidden={!controlsOpen} className={controlsOpen ? 'contents' : undefined}>
+        <NewsTickerSearchBar
+          onSearch={(raw) => {
+            setNotice(null)
+            setSearchTickers(parseSearchSymbols(raw))
+          }}
+          onClear={() => {
+            setSearchTickers([])
+            if (selected?.category === 'search') setSelectedId('')
+          }}
+          status={searchStatus}
+          busy={searchQuery.isFetching}
+          active={searchTickers.length > 0}
+        />
+      </div>
 
       <div ref={contentRef} className="relative flex min-h-0 flex-1 gap-2">
         <div

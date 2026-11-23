@@ -87,7 +87,6 @@
   [data-terminal-mobile] [data-page-id='projections'] > div > div.grid { flex: none; grid-auto-rows: minmax(230px, auto); }
 
   [data-terminal-mobile] [data-page-id='global'] > div > :last-child { min-height: 360px; }
-  [data-terminal-mobile] [data-page-id='news'] > div > .flex-wrap > :is(.relative, label):has(input) { flex-basis: 100%; margin-left: 0; }
   [data-terminal-mobile] :is(.news-lite-search, .news-lite-toolbar) :is(input, button) { min-height: 38px; }
   [data-terminal-mobile] .news-lite-tickers > button { min-height: 44px; }
   [data-terminal-mobile] .calendar-month-page { overflow-y: auto; }
