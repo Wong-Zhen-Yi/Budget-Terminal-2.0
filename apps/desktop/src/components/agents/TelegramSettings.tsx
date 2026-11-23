@@ -19,7 +19,7 @@ export function TelegramSettings({ state, perform, pending }: { state?: Telegram
       <label>Private chat / user ID<input inputMode="numeric" value={chatId} onChange={event => setChatId(event.target.value)} required pattern="[1-9][0-9]{0,15}" /></label>
       <label><input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} />Enable Telegram delivery</label>
       <label><input type="checkbox" checked={receive} onChange={event => setReceive(event.target.checked)} />Receive research questions from Telegram</label>
-      <p>Keep Budget Terminal open. The token is encrypted with your operating system and never shown to the agent. Incoming text chats use separate history and research tools only. New connections discard queued messages; messages older than five minutes are skipped. Use /new to reset the Telegram conversation.</p>
+      <p>Keep Budget Terminal open. The token is encrypted with your operating system and never shown to the agent. Incoming text chats use separate history and research tools only. New connections discard queued messages; messages older than five minutes are skipped. Use /new for a fresh conversation or /prompts to run a quick prompt.</p>
       {state?.bot && <p>Bot: @{state.bot}. Open this exact bot in Telegram and send /start. Starting the ID lookup bot alone does not enable delivery.</p>}
       <p>Bot connection verifies the token. Use Check private chat to verify access without sending a message; Send test message confirms delivery.</p>
       {state?.error && <p role="alert">{state.error}</p>}

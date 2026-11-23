@@ -4,7 +4,7 @@ import { useAgentComposer } from '@/api/agentComposer'
 import { AgentMessages } from '@/components/agents/AgentMessages'
 import { AgentWorkspacePanel } from '@/components/agents/AgentWorkspacePanel'
 import { useAgentTranscript } from '@/components/agents/useAgentTranscript'
-import { agentQuickPrompts } from '@/lib/agentPrompts'
+import { agentQuickPrompts } from '@shared/agentPrompts'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import '@/styles/agents.css'
 

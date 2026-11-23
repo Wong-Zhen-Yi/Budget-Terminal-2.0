@@ -40,7 +40,7 @@ try {
       import { createRoot } from 'react-dom/client'
       import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
       import { AgentsPage } from './src/pages/AgentsPage'
-      import { agentQuickPrompts } from './src/lib/agentPrompts'
+      import { agentQuickPrompts } from '@shared/agentPrompts'
       import { buildTasks } from './src/api/prefetch'
       import { shouldPersistRemoteQuery } from './src/api/queryPersistence'
       const check = (value, message) => { if (!value) throw Error(message) }
@@ -130,6 +130,7 @@ try {
         const telegram = document.querySelector('.agents-telegram')
         check(telegram.querySelector('input[type=password]')?.autocomplete === 'new-password', 'Telegram token uses a private password field')
         check(telegram.textContent.includes('research tools only'), 'Telegram research restriction is visible')
+        check(telegram.textContent.includes('/prompts'), 'Telegram setup mentions pre-written prompts')
         check([...telegram.querySelectorAll('button')].find(button => button.textContent === 'Send test message').disabled, 'Telegram test is disabled until configured')
         const telegramSize = telegram.closest('.agents-workspace-content').getBoundingClientRect()
         check(telegramSize.height < innerHeight / 2, 'Expanded Telegram setup leaves space for chat')

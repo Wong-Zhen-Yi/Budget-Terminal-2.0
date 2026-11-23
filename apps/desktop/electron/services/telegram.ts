@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { randomBytes } from 'node:crypto'
+import { agentQuickPrompts } from '../shared/agentPrompts.js'
 import type { TelegramState } from '../shared/telegram.js'
 import { formatTelegramText, TelegramError } from '../shared/telegram.js'
 import { agentsChanged, observableStatus } from './liveStatusEvents.js'
@@ -9,6 +10,7 @@ import type { ScreenshotPayload } from '../shared/screenshot.js'
 export const telegramCommands = [
   { command: 'new', description: 'Start a fresh chat: /new [question]' },
   { command: 'model', description: 'Choose a model, then its reasoning level' },
+  { command: 'prompts', description: 'Choose a pre-written research prompt' },
   { command: 'mobile', description: 'Get the private Budget Terminal link for iPhone or iPad' },
   { command: 'restart', description: 'Restart the Budget Terminal desktop app' },
 ]
@@ -32,6 +34,14 @@ interface Update {
 export interface TelegramPickerChoice { id: string; name: string; current: boolean }
 export interface TelegramModelChoice extends TelegramPickerChoice { reasoning: TelegramPickerChoice[] }
 type InlineKeyboard = { inline_keyboard: { text: string; callback_data: string }[][] }
+type PickerKind = 'model' | 'reasoning' | 'prompt'
+type PickerChoice = { label: string; value: string }
+type Picker = { nonce: string; prefix: 'm' | 'p'; choices: PickerChoice[]; kind: PickerKind; modelId?: string; expiresAt: number; messageId?: number }
+
+function modelPickerChoices(choices: TelegramPickerChoice[]): PickerChoice[] {
+  return choices.map(({ id, name, current }) => ({ label: `${name || id}${current ? ' (current)' : ''}`, value: id }))
+}
+
 interface Options {
   load: () => Promise<unknown>
   save: (config: TelegramConfig | null) => Promise<void>
@@ -56,7 +66,7 @@ export class TelegramService {
   private sending = false
   private photosSent = 0
   private deliveryError = ''
-  private modelPicker: { nonce: string; choices: TelegramPickerChoice[]; kind: 'model' | 'reasoning'; modelId?: string; expiresAt: number; messageId?: number } | null = null
+  private picker: Picker | null = null
   constructor(private options: Options) {}
   snapshot() { return { ...this.state } }
   async initialize() {
@@ -211,11 +221,14 @@ export class TelegramService {
     } finally { this.sending = false }
   }
   private async showModelPicker(signal: AbortSignal) {
-    this.modelPicker = null
+    this.picker = null
     if (!this.options.models) throw new Error('Model choices are unavailable.')
     const models = await this.options.models()
     if (!models.length) { await this.send('No models are available. Check Codex in the desktop app.', signal); return }
-    await this.showPicker('Choose a model below. Next, choose its reasoning level.', models, 'model', signal)
+    await this.showPicker('Choose a model below. Next, choose its reasoning level.', modelPickerChoices(models), 'model', signal)
+  }
+  private async showPromptPicker(signal: AbortSignal) {
+    await this.showPicker('Tap a prompt to send it in this conversation.', agentQuickPrompts.map(({ label, prompt }) => ({ label, value: prompt })), 'prompt', signal)
   }
   private async sendMobileLink(signal: AbortSignal) {
     const unavailable = 'Mobile Access is unavailable. Check Settings → Labs on the computer, then send /mobile again.'
@@ -225,43 +238,70 @@ export class TelegramService {
     } catch { /* Link discovery stays local even when Tailscale or the preference is unavailable. */ }
     if (!signal.aborted) await this.send(text, signal)
   }
-  private async showPicker(text: string, choices: TelegramPickerChoice[], kind: 'model' | 'reasoning', signal: AbortSignal, modelId?: string) {
-    const picker = { nonce: randomBytes(12).toString('hex'), choices, kind, modelId, expiresAt: Date.now() + 5 * 60_000, messageId: undefined as number | undefined }
+  private async showPicker(text: string, choices: PickerChoice[], kind: PickerKind, signal: AbortSignal, modelId?: string) {
+    this.picker = null
+    const picker: Picker = { nonce: randomBytes(12).toString('hex'), prefix: kind === 'prompt' ? 'p' : 'm', choices, kind, modelId, expiresAt: Date.now() + 5 * 60_000 }
     const result = await this.send(text, signal, {
-      inline_keyboard: choices.map((choice, index) => [{ text: formatTelegramText(`${choice.name || choice.id}${choice.current ? ' (current)' : ''}`), callback_data: `m:${picker.nonce}:${index}` }]),
+      inline_keyboard: choices.map((choice, index) => [{ text: formatTelegramText(choice.label), callback_data: `${picker.prefix}:${picker.nonce}:${index}` }]),
     })
     picker.messageId = result.messageId
-    this.modelPicker = picker
+    this.picker = picker
   }
-  private async selectModel(query: NonNullable<Update['callback_query']>, signal: AbortSignal) {
+  private async selectPicker(query: NonNullable<Update['callback_query']>, signal: AbortSignal) {
     const config = this.config!
     const message = query.message
     if (query.from.is_bot || String(query.from.id) !== config.chatId || message?.chat.type !== 'private' || String(message.chat.id) !== config.chatId) return
-    const picker = this.modelPicker
-    const match = /^m:([a-f\d]{24}):(\d+)$/.exec(query.data ?? '')
-    const choice = match && picker?.nonce === match[1] ? picker.choices[Number(match[2])] : undefined
+    const picker = this.picker
+    const match = /^([mp]):([a-f\d]{24}):(\d+)$/.exec(query.data ?? '')
+    const choice = match && picker?.prefix === match[1] && picker.nonce === match[2] ? picker.choices[Number(match[3])] : undefined
     if (!picker || !choice || !picker.messageId || message.message_id !== picker.messageId || Date.now() > picker.expiresAt) {
-      await this.api('answerCallbackQuery', { callback_query_id: query.id, text: 'This menu has expired. Send /model for new buttons.' }, signal)
+      const command = match?.[1] === 'p' ? '/prompts' : '/model'
+      await this.api('answerCallbackQuery', { callback_query_id: query.id, text: `This menu has expired. Send ${command} for new buttons.` }, signal)
       return
     }
-    this.modelPicker = null
+    this.picker = null
+    if (picker.kind === 'prompt') {
+      await this.api('answerCallbackQuery', { callback_query_id: query.id, text: 'Running prompt.' }, signal)
+      // Keep the selected prompt visible as a record of what ran.
+      try {
+        await this.api('editMessageText', {
+          chat_id: config.chatId, message_id: picker.messageId, text: choice.label, reply_markup: { inline_keyboard: [] },
+        }, signal)
+      } catch { /* The consumed buttons remain invalid if the edit fails. */ }
+      if (!signal.aborted) await this.replyToResearch(choice.value, signal)
+      return
+    }
     await this.api('answerCallbackQuery', { callback_query_id: query.id, text: picker.kind === 'model' ? 'Selecting model.' : 'Selecting reasoning.' }, signal)
     try {
       if (!this.options.command || !this.options.models) throw new Error('Model selection unavailable.')
       if (picker.kind === 'model') {
-        await this.options.command('model', choice.id)
-        const selected = (await this.options.models()).find(model => model.id === choice.id && model.current)
+        await this.options.command('model', choice.value)
+        const selected = (await this.options.models()).find(model => model.id === choice.value && model.current)
         if (!selected) throw new Error('Model selection could not be verified.')
-        await this.showPicker(`Model: ${selected.name || selected.id}. Choose its reasoning level below.`, selected.reasoning, 'reasoning', signal, selected.id)
+        await this.showPicker(`Model: ${selected.name || selected.id}. Choose its reasoning level below.`, modelPickerChoices(selected.reasoning), 'reasoning', signal, selected.id)
       } else {
         const selected = (await this.options.models()).find(model => model.id === picker.modelId && model.current)
-        if (!selected?.reasoning.some(mode => mode.id === choice.id)) throw new Error('Reasoning selection is no longer valid.')
-        const result = await this.options.command('reasoning', choice.id)
+        if (!selected?.reasoning.some(mode => mode.id === choice.value)) throw new Error('Reasoning selection is no longer valid.')
+        const result = await this.options.command('reasoning', choice.value)
         await this.send(result.slice(0, 20_000), signal)
       }
     } catch { await this.send('Could not complete model and reasoning selection. Check Codex in the desktop app, then send /model to try again.', signal) }
     try { await this.api('editMessageReplyMarkup', { chat_id: config.chatId, message_id: picker.messageId, reply_markup: { inline_keyboard: [] } }, signal) }
     catch { /* Consumed tokens remain invalid even if Telegram cannot remove the buttons. */ }
+  }
+  private async replyToResearch(text: string, signal: AbortSignal) {
+    await this.api('sendChatAction', { chat_id: this.config!.chatId, action: 'typing' }, signal)
+    const photosBeforeReply = this.photosSent
+    let reply: string
+    try { reply = await this.options.reply(text, signal) }
+    catch {
+      if (signal.aborted) return
+      if (this.photosSent === photosBeforeReply) await this.send('Budget Terminal could not complete this research request. Check Codex sign-in and connectivity in the desktop app, then send a new request.', signal)
+      this.state.error = 'Telegram research failed. Check Codex sign-in and connectivity.'
+      return
+    }
+    // A screenshot response is photo-only, even if the model writes a delivery summary.
+    if (!signal.aborted && this.photosSent === photosBeforeReply) await this.send(reply.slice(0, 20_000), signal)
   }
   private async poll(signal: AbortSignal) {
     let failures = 0
@@ -276,7 +316,7 @@ export class TelegramService {
           // Persist acknowledgement before dispatch: never replay a remote action after restart.
           config.offset = update.update_id + 1
           await this.options.save(config)
-          if (update.callback_query) { await this.selectModel(update.callback_query, signal); continue }
+          if (update.callback_query) { await this.selectPicker(update.callback_query, signal); continue }
           const message = update.message
           if (!message || message.chat.type !== 'private' || String(message.chat.id) !== config.chatId || String(message.from?.id) !== config.chatId || message.from?.is_bot) continue
           if (Date.now() / 1000 - message.date > 300) continue
@@ -292,6 +332,11 @@ export class TelegramService {
               await this.sendMobileLink(signal)
               continue
             }
+            if (command === 'prompts') {
+              if (argument) await this.send('Send /prompts by itself to choose a pre-written prompt.', signal)
+              else await this.showPromptPicker(signal)
+              continue
+            }
             if (command === 'restart') {
               if (argument || !this.options.restart) {
                 await this.send(argument ? 'Send /restart by itself to restart Budget Terminal.' : 'Restart is unavailable for this Budget Terminal session.', signal)
@@ -304,7 +349,7 @@ export class TelegramService {
               continue
             }
             if (command === 'new') {
-              this.modelPicker = null
+              this.picker = null
               try { await this.options.reset() }
               catch { await this.send('Could not confirm a new chat. Check local history and Codex in the desktop app.', signal); continue }
               await this.send('Started a new Telegram conversation without previous conversation context. Old chats remain in desktop Agents History.', signal)
@@ -322,18 +367,7 @@ export class TelegramService {
             await this.sendMobileLink(signal)
             continue
           }
-          await this.api('sendChatAction', { chat_id: config.chatId, action: 'typing' }, signal)
-          const photosBeforeReply = this.photosSent
-          let reply: string
-          try { reply = await this.options.reply(text, signal) }
-          catch {
-            if (signal.aborted) return
-            if (this.photosSent === photosBeforeReply) await this.send('Budget Terminal could not complete this research request. Check Codex sign-in and connectivity in the desktop app, then send a new request.', signal)
-            this.state.error = 'Telegram research failed. Check Codex sign-in and connectivity.'
-            continue
-          }
-          // A screenshot response is photo-only, even if the model writes a delivery summary.
-          if (!signal.aborted && this.photosSent === photosBeforeReply) await this.send(reply.slice(0, 20_000), signal)
+          await this.replyToResearch(text, signal)
         }
       } catch (error) {
         if (signal.aborted) return
@@ -355,5 +389,5 @@ export class TelegramService {
     this.config = null
     this.state = { configured: false, enabled: false, receive: false, connected: false, bot: '', chatId: '', error: '' }
   }
-  async close() { this.modelPicker = null; this.controller.abort(); await this.loop; this.loop = null; this.state.connected = false }
+  async close() { this.picker = null; this.controller.abort(); await this.loop; this.loop = null; this.state.connected = false }
 }

@@ -1,4 +1,5 @@
 #!/bin/sh
+# The shared build adds /prompts to Telegram for the four Agents quick prompts.
 # The shared build includes animated reload progress on desktop and mobile.
 # The shared build includes the Forex currency converter with SGD to USD selected by default.
 # The shared build includes the mobile Workspaces page with grouped page pills.

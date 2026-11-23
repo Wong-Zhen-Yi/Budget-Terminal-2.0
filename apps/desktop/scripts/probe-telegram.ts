@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { TelegramService } from '../electron/services/telegram.js'
+import { agentQuickPrompts } from '../electron/shared/agentPrompts.js'
 import { agentFailureReason } from '../electron/shared/agentRuns.js'
 import type { ScreenshotPayload } from '../electron/shared/screenshot.js'
 import { ok } from '../electron/shared/envelope.js'
@@ -141,8 +142,9 @@ assert.deepEqual(commands, [], 'Slash commands only open model buttons; reasonin
 const menu = requests.find(request => request.method === 'setMyCommands')!
 assert(requests.some(request => request.method === 'sendMessage' && !!request.body.reply_markup), '/model sends selectable buttons')
 assert.deepEqual(menu.body.scope, { type: 'chat', chat_id: '123' })
-assert.deepEqual((menu.body.commands as { command: string }[]).map(command => command.command), ['new', 'model', 'mobile', 'restart'])
-assert.equal(requests.filter(request => request.body.text === 'Available commands: /new, /model, /mobile, /restart. Ask naturally for a screenshot of a page.').length, 10)
+assert.deepEqual((menu.body.commands as { command: string }[]).map(command => command.command), ['new', 'model', 'prompts', 'mobile', 'restart'])
+assert(requests.some(request => typeof request.body.text === 'string' && request.body.text.startsWith('Budget Terminal research agent.') && request.body.text.includes('/prompts')))
+assert.equal(requests.filter(request => request.body.text === 'Available commands: /new, /model, /prompts, /mobile, /restart. Ask naturally for a screenshot of a page.').length, 10)
 assert.equal(mobileRequests, 3, 'Only fresh requests from the configured private chat can retrieve the link')
 assert.equal(requests.filter(request => request.body.text === mobileUrl && request.body.chat_id === '123' &&
   (request.body.link_preview_options as { is_disabled?: boolean })?.is_disabled).length, 3)
@@ -242,6 +244,8 @@ console.log('PASS: private /restart acknowledges once, preserves the update offs
 const pickerRequests: { method: string; body: any }[] = []
 const selections: string[] = []
 const reasoningSelections: string[] = []
+const submittedPrompts: { text: string; offset: number }[] = []
+let pickerOffset = 0
 const longModelId = 'fixture-model-' + 'long-name-'.repeat(12)
 let pickerPoll = 0
 let pickerMessageId = 0
@@ -252,7 +256,7 @@ const callback = (id: number, from = 123, type = 'private', data = pickerToken, 
 })
 const picker = new TelegramService({
   load: async () => ({ token, chatId: '123', enabled: true, receive: true, offset: 0 }),
-  save: async () => {}, reset: async () => {},
+  save: async config => { pickerOffset = config?.offset ?? 0 }, reset: async () => {},
   models: async () => [{ id: longModelId, name: 'Research model', current: true, reasoning: [
     { id: 'default', name: 'Model default (low)', current: true }, { id: 'high', name: 'high', current: false },
   ] }],
@@ -261,7 +265,10 @@ const picker = new TelegramService({
     else reasoningSelections.push(argument)
     return 'Model and reasoning selected. Context retained.'
   },
-  reply: async () => { assert.fail('Button selection must never become a research prompt') },
+  reply: async text => {
+    submittedPrompts.push({ text, offset: pickerOffset })
+    return 'Prompt research result'
+  },
   fetch: (async (url, init) => {
     const method = String(url).split('/').pop()!
     const body = JSON.parse(String(init?.body))
@@ -285,8 +292,16 @@ const picker = new TelegramService({
       else if (pickerPoll === 7) result = [update(18, 123, 'private', now, '/model')]
       else if (pickerPoll === 8) result = [callback(19)]
       else if (pickerPoll === 9) {
-        ;(picker as unknown as { modelPicker: { expiresAt: number } }).modelPicker.expiresAt = Date.now() - 1
+        ;(picker as unknown as { picker: { expiresAt: number } }).picker.expiresAt = Date.now() - 1
         result = [callback(20)]
+      } else if (pickerPoll === 10) {
+        result = [update(21, 123, 'private', now, '/prompts@other_bot'), update(22, 123, 'private', now, '/prompts macro'), update(23, 123, 'private', now, '/prompts@fixture_bot')]
+      } else if (pickerPoll === 11) {
+        result = [callback(24, 999), callback(25, 123, 'group'), callback(26, 123, 'private', pickerToken, -1), callback(27), callback(28)]
+      } else if (pickerPoll === 12) {
+        result = [update(29, 123, 'private', now, '/prompts')]
+      } else if (pickerPoll === 13) {
+        result = [update(30, 123, 'private', now, '/new'), callback(31)]
       } else await new Promise<void>((_resolve, reject) => {
         init!.signal!.addEventListener('abort', () => reject(new Error('cancelled')), { once: true })
       })
@@ -295,12 +310,12 @@ const picker = new TelegramService({
   }) as typeof fetch,
 })
 await picker.initialize()
-for (let i = 0; i < 100 && pickerPoll < 10; i++) await new Promise(resolve => setTimeout(resolve, 5))
-assert.equal(pickerPoll, 10)
+for (let i = 0; i < 100 && pickerPoll < 14; i++) await new Promise(resolve => setTimeout(resolve, 5))
+assert.equal(pickerPoll, 14)
 assert.deepEqual(selections, [longModelId, longModelId, longModelId], 'Each fresh model selection starts its reasoning step')
 assert.deepEqual(reasoningSelections, ['high'], 'Only the authorized fresh reasoning button applies once; /new and expiry invalidate it')
 const pickerButtons = pickerRequests.filter(request => request.body.reply_markup?.inline_keyboard?.length)
-assert.equal(pickerButtons.length, 6)
+assert.equal(pickerButtons.length, 8)
 assert.equal(pickerButtons[0].body.reply_markup.inline_keyboard[0][0].text, 'Research model (current)')
 assert.deepEqual(pickerButtons[1].body.reply_markup.inline_keyboard.map((row: { text: string }[]) => row[0].text), ['Model default (low) (current)', 'high'])
 assert(pickerButtons.every(request => Buffer.byteLength(request.body.reply_markup.inline_keyboard[0][0].callback_data) <= 64), 'Long catalog IDs fit Telegram callback limits using opaque tokens')
@@ -308,6 +323,13 @@ assert(pickerRequests.some(request => request.method === 'answerCallbackQuery' &
 assert(pickerRequests.some(request => request.method === 'answerCallbackQuery' && request.body.callback_query_id === 'callback-20' && request.body.text.includes('expired')))
 assert.equal(pickerRequests.filter(request => request.method === 'editMessageReplyMarkup').length, 4)
 assert.equal(pickerRequests.filter(request => request.body.text === 'Model and reasoning selected. Context retained.').length, 1)
+assert.deepEqual(pickerButtons[6].body.reply_markup.inline_keyboard.map((row: { text: string }[]) => row[0].text), agentQuickPrompts.map(({ label }) => label))
+assert.deepEqual(submittedPrompts, [{ text: agentQuickPrompts[1].prompt, offset: 28 }], 'Only the authorized fresh tap submits the exact prompt after saving the update offset')
+assert.deepEqual(pickerRequests.filter(request => request.method === 'sendChatAction').map(request => request.body.chat_id), ['123'])
+assert.deepEqual(pickerRequests.filter(request => request.method === 'editMessageText').map(request => request.body.text), [agentQuickPrompts[1].label])
+assert(pickerRequests.some(request => request.method === 'sendMessage' && request.body.text === 'Prompt research result'))
+assert.deepEqual(pickerRequests.filter(request => request.method === 'answerCallbackQuery' && request.body.text === 'Running prompt.').map(request => request.body.callback_query_id), ['callback-27'])
+assert(pickerRequests.some(request => request.method === 'answerCallbackQuery' && request.body.callback_query_id === 'callback-31' && request.body.text.includes('Send /prompts')))
 await picker.close()
 for (const [code, description, expected] of [
   [400, 'Bad Request: chat not found', /personal numeric user ID/],
@@ -349,6 +371,7 @@ console.log('PASS: command menu, bot mentions, /new question, mobile link permis
 console.log('PASS: failed reset never dispatches a question with old context; command errors never expose private details')
 console.log('PASS: natural Telegram plain text removes asterisks, heading/hash symbols and em dashes while preserving numbers, Unicode and source links')
 console.log('PASS: model then reasoning buttons, supported/current/default choices, callback acknowledgement, short tokens, private-chat authorization, one-time selection, expiry and /new invalidation')
+console.log('PASS: /prompts uses the shared quick prompts, requires an authorized tap, and runs the selection once in the research conversation')
 
 
 console.log('PASS: inline multipart screenshot photos, original PNG bytes, private recipient, photo-only natural replies, photo limits, cancellation and no delivery retries')
