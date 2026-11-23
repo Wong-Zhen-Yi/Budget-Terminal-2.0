@@ -3,6 +3,7 @@ import type { PositionRow } from '@shared/portfolioMath'
 import { sizeBucket } from '@shared/portfolioMath'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { NumberInput } from '@/components/ui/NumberInput'
+import { isMobileTerminal } from '@/mobile/client'
 import { compactNumber, currency, decimals, percent, plainPercent } from '@/lib/format'
 
 interface PositionsTableProps {
@@ -47,6 +48,7 @@ export function PositionsTable({
   onResearch,
 }: PositionsTableProps) {
   const readOnly = portfolio.readOnly
+  const mobile = isMobileTerminal()
 
   const columns: Array<Column<PositionRow>> = [
     {
@@ -83,6 +85,7 @@ export function PositionsTable({
             aria-label={`${row.ticker} shares`}
             value={row.shares}
             onCommit={(value) => onSetShares(row.ticker, value)}
+            className="portfolio-position-number"
           />
         ),
     },
@@ -101,6 +104,7 @@ export function PositionsTable({
             value={row.avgPrice}
             decimals={2}
             onCommit={(value) => onSetAvgPrice(row.ticker, value)}
+            className="portfolio-position-number"
           />
         ),
     },
@@ -231,6 +235,12 @@ export function PositionsTable({
       },
     },
   ]
+
+  if (mobile) {
+    const value = columns.findIndex(column => column.key === 'marketValue')
+    const [marketValue] = columns.splice(value, 1)
+    columns.splice(2, 0, marketValue)
+  }
 
   return (
     <DataTable

@@ -16,7 +16,8 @@ import { configureRendererCacheShutdown } from './services/rendererCacheShutdown
 import { assertDesktopCertificateSecurity } from './shared/certificateSecurity.js'
 import { startDiagnostics, observeDiagnosticWindow } from './services/diagnosticHost.js'
 import { diagnosticLog, faultCode } from './services/diagnosticLog.js'
-import { startMobileAccess, stopMobileAccess } from './services/mobileHost.js'
+import { startMobileAccess, startLocalMobileAccess, stopMobileAccess } from './services/mobileHost.js'
+import { openMobileWindow } from './services/mobileWindow.js'
 
 // Windows can retain shader-cache file locks across launches. Keep GPU rendering
 // enabled, but avoid Chromium's optional disk caches before it starts the GPU.
@@ -32,6 +33,7 @@ if (process.platform === 'win32') {
 const dirname = fileURLToPath(new URL('.', import.meta.url))
 const isDev = !app.isPackaged
 const demoDirectory = process.env.BUDGET_TERMINAL_DEMO_DIR
+const mobilePreview = Boolean(demoDirectory) && process.env.BUDGET_TERMINAL_MOBILE_PREVIEW === '1'
 const windowTitle = demoDirectory ? 'Budget Terminal Demo' : 'Budget Terminal'
 if (process.platform === 'darwin') app.setName('Budget Terminal')
 if (demoDirectory) {
@@ -52,11 +54,16 @@ if (process.env.BUDGET_TERMINAL_DATA_DIR) {
   app.setPath('userData', profile)
   app.setPath('sessionData', profile)
 }
-const ownsInstance = app.requestSingleInstanceLock({ openDiagnostics: process.env.BUDGET_TERMINAL_OPEN_DIAGNOSTICS === '1' })
+const localMobileAvailable = process.platform === 'win32' && !demoDirectory
+let openMobileOnStartup = localMobileAvailable && process.env.BUDGET_TERMINAL_OPEN_MOBILE === '1'
+const ownsInstance = app.requestSingleInstanceLock({ openDiagnostics: process.env.BUDGET_TERMINAL_OPEN_DIAGNOSTICS === '1', openMobile: openMobileOnStartup })
 if (!ownsInstance) app.quit()
 
 let disposeIpc: (() => void) | null = null
 let mainWindow: BrowserWindow | null = null
+let mainWindowReady = false
+let mobileWindow: BrowserWindow | null = null
+let openingMobile: Promise<void> | undefined
 let releaseDataSession: (() => void) | null = null
 let closeCache: (() => Promise<void>) | null = null
 let closeQuantWorker: (() => void) | null = null
@@ -96,7 +103,13 @@ function createWindow(): BrowserWindow {
   })
   if (demoDirectory) window.on('page-title-updated', event => event.preventDefault())
   mainWindow = window
-  window.once('closed', () => { if (mainWindow === window) mainWindow = null })
+  window.once('closed', () => {
+    if (mainWindow === window) {
+      mainWindow = null
+      mainWindowReady = false
+    }
+    if (mobileWindow && !mobileWindow.isDestroyed()) mobileWindow.destroy()
+  })
 
   configureBrowserWindow(window)
   observeDiagnosticWindow(window, rendererUrl)
@@ -106,7 +119,12 @@ function createWindow(): BrowserWindow {
   // Paint once, rather than showing an empty frame and then the UI.
   window.once('ready-to-show', () => {
     if (useGamingFullscreen(process.platform, process.env)) window.setFullScreen(true)
+    mainWindowReady = true
     window.show()
+    if (openMobileOnStartup) {
+      openMobileOnStartup = false
+      showConnectedMobile(window)
+    }
   })
 
   // Docking, rotating or changing desktop scaling must not strand the window.
@@ -159,9 +177,49 @@ function createWindow(): BrowserWindow {
   return window
 }
 
-if (ownsInstance) {
+function showConnectedMobile(parent: BrowserWindow) {
+  if (finishingQuit) return
+  if (parent.isMinimized()) parent.restore()
+  if (mobileWindow) {
+    if (mobileWindow.isMinimized()) mobileWindow.restore()
+    mobileWindow.show()
+    mobileWindow.focus()
+    return
+  }
+  openingMobile ??= (async () => {
+    const [{ createMobileRoutes }, { telegramProfile }] = await Promise.all([import('./services/mobileRoutes.js'), import('./services/agentsHost.js')])
+    const connection = await startLocalMobileAccess(createMobileRoutes(telegramProfile))
+    try {
+      if (parent.isDestroyed() || finishingQuit) {
+        await connection.close()
+        return
+      }
+      const window = await openMobileWindow(connection.origin, connection.token, parent)
+      mobileWindow = window
+      window.once('closed', () => {
+        mobileWindow = null
+        void connection.close()
+      })
+    } catch (error) {
+      await connection.close()
+      throw error
+    }
+  })().catch(error => {
+    if (parent.isDestroyed() || finishingQuit) return
+    diagnosticLog.write('error', 'app', 'startup-failed', { stage: 'local-mobile', code: faultCode(error) })
+    dialog.showErrorBox('Budget Terminal could not open Mobile', 'Check that the current build is complete, then run btd mobile again.')
+  }).finally(() => { openingMobile = undefined })
+}
+
+if (ownsInstance && !mobilePreview) {
   app.on('second-instance', (_event, _argv, _directory, additionalData) => {
-    if ((additionalData as { openDiagnostics?: boolean })?.openDiagnostics) process.env.BUDGET_TERMINAL_OPEN_DIAGNOSTICS = '1'
+    const request = additionalData as { openDiagnostics?: boolean; openMobile?: boolean } | undefined
+    if (request?.openMobile === true && localMobileAvailable) {
+      if (mainWindow && mainWindowReady) showConnectedMobile(mainWindow)
+      else openMobileOnStartup = true
+      return
+    }
+    if (request?.openDiagnostics) process.env.BUDGET_TERMINAL_OPEN_DIAGNOSTICS = '1'
     const window = mainWindow
     if (!window) {
       // macOS keeps the process alive after its window closes. Reuse that process;
@@ -172,7 +230,7 @@ if (ownsInstance) {
     if (window.isMinimized()) window.restore()
     window.show()
     window.focus()
-    if ((additionalData as { openDiagnostics?: boolean })?.openDiagnostics) window.webContents.send('diagnostics:open')
+    if (request?.openDiagnostics) window.webContents.send('diagnostics:open')
   })
 }
 
@@ -244,6 +302,14 @@ if (ownsInstance) app.whenReady().then(async () => {
       return Boolean(frame && frame === event.sender.mainFrame &&
         BrowserWindow.fromWebContents(event.sender) && isTrustedRendererUrl(frame.url, rendererUrl))
     })
+    if (mobilePreview) {
+      stage = 'mobile-preview'
+      const { createMobileRoutes } = await import('./services/mobileRoutes.js')
+      const { origin, token } = await startLocalMobileAccess(createMobileRoutes(async () => ''))
+      mainWindow = await openMobileWindow(origin, token)
+      mainWindow.once('closed', () => { mainWindow = null })
+      return
+    }
     stage = 'mcp-host'
     const { startMcpHost } = await import('./mcp/host.js')
     stopMcp = await startMcpHost()
@@ -256,6 +322,8 @@ if (ownsInstance) app.whenReady().then(async () => {
       diagnosticLog.write('warn', 'app', 'startup-stage-failed', { stage: 'agents', code: faultCode(error) })
       console.warn('Codex startup connection failed:', error)
     })
+    // Load the running desktop's matching mobile routes before a later launcher rebuild.
+    if (localMobileAvailable) void import('./services/mobileRoutes.js').catch(() => {})
     stage = 'window-create'
     createWindow()
     void startMobileAccess()
@@ -272,7 +340,7 @@ if (ownsInstance) app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
+  if (mobilePreview || process.platform !== 'darwin') app.quit()
 })
 
 let finishingQuit = false

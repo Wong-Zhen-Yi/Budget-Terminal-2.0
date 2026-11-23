@@ -99,11 +99,12 @@ async function startDetachedDesktop(env, output) {
   return 0
 }
 
-// Every double-click launcher rebuilds Finnhub-free Crypto proxies/live updates and the MCP bundle.
-function launch({ development = false, demo = false, logs = false, setupOnly = false, detach = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, openDetached = startDetachedDesktop, log = console } = {}) {
+// Every double-click launcher builds the current desktop, mobile and MCP bundles.
+function launch({ development = false, demo = false, mobilePreview = false, mobile = false, logs = false, setupOnly = false, detach = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, openDetached = startDetachedDesktop, log = console } = {}) {
   const output = createLauncherOutput({ log, environment })
   const os = platformName(platform)
-  output.header(demo ? 'Demo data' : setupOnly ? 'Setup check' : development ? 'Live development' : 'Desktop launcher', os || platform)
+  const sampleData = demo || mobilePreview
+  output.header(mobile ? 'Connected mobile window' : mobilePreview ? 'iPhone 17 preview' : demo ? 'Demo data' : setupOnly ? 'Setup check' : development ? 'Live development' : 'Desktop launcher', os || platform)
   output.stage(1, 'Check toolchain')
   if (!os) {
     output.error(`Budget Terminal supports Windows, macOS, and Linux; found ${platform}.`)
@@ -120,13 +121,21 @@ function launch({ development = false, demo = false, logs = false, setupOnly = f
     return 1
   }
   if (logs) env.BUDGET_TERMINAL_OPEN_DIAGNOSTICS = '1'
-  if (setupOnly && (development || logs || demo)) {
+  if (setupOnly && (development || logs || sampleData)) {
     output.error('Setup cannot be combined with launch options.')
+    return 1
+  }
+  if (mobilePreview && development) {
+    output.error('The iPhone 17 preview uses the built mobile interface. Run it without --dev.')
+    return 1
+  }
+  if (mobile && (platform !== 'win32' || development || sampleData || setupOnly || logs)) {
+    output.error('Open the connected mobile window on Windows with btd mobile.')
     return 1
   }
 
   // Codex is optional: preserve discovery and handoff without starting inference.
-  const codexPath = demo ? null : locateCodex({ platform, environment: env })
+  const codexPath = sampleData ? null : locateCodex({ platform, environment: env })
   if (codexPath) {
     const codex = spawn(codexPath, ['--version'], { cwd: root, env, windowsHide: true, stdio: 'pipe', encoding: 'utf8', timeout: 10_000 })
     if (!codex.error && codex.status === 0 && /^codex(?:-cli)?\s+\d+\.\d+/i.test(codex.stdout?.trim() || '')) {
@@ -135,7 +144,7 @@ function launch({ development = false, demo = false, logs = false, setupOnly = f
     } else {
       output.warn('Codex could not run; the app will open. Check Agents for setup help.')
     }
-  } else if (!demo) {
+  } else if (!sampleData) {
     output.note('Agents: optional Codex runtime not found; setup help is in the app.')
   }
 
@@ -195,22 +204,25 @@ function launch({ development = false, demo = false, logs = false, setupOnly = f
     log.log('')
     return 0
   }
-  output.stage(5, development ? 'Open live development' : 'Open desktop app')
+  output.stage(5, mobile ? 'Open connected mobile window' : mobilePreview ? 'Open iPhone 17 preview' : development ? 'Open live development' : 'Open desktop app')
   output.ready('LAUNCH CHECKS PASSED')
-  if (detach && platform === 'win32' && !development && !demo) {
+  if (mobile) env.BUDGET_TERMINAL_OPEN_MOBILE = '1'
+  if (detach && platform === 'win32' && !development && !sampleData) {
     return openDetached(env, output).catch(error => {
       output.error(`Budget Terminal could not start: ${error.message}`)
       return 1
     })
   }
   output.note('Keep this terminal open while using Budget Terminal.')
-  output.note(development ? 'Live edits rebuild automatically. Close any existing app window first.' : 'F5 reloads the current page. Startup details are in Settings.')
+  output.note(mobilePreview ? 'F5 reloads the mobile UI. Relaunch after editing the source.'
+    : development ? 'Live edits rebuild automatically. Close any existing app window first.' : 'F5 reloads the current page. Startup details are in Settings.')
   log.log('')
   let session
   let app
   try {
-    if (demo) {
+    if (sampleData) {
       session = require('./demo-session.cjs').createDemoSession(env)
+      if (mobilePreview) session.env.BUDGET_TERMINAL_MOBILE_PREVIEW = '1'
       output.note('Demo edits are temporary. Each launch starts with the repository sample data.')
     }
     app = npm(['run', development ? 'dev' : 'preview', '--workspace', 'budget-terminal-desktop'], false, session?.env)
@@ -237,7 +249,7 @@ if (require.main === module) {
     }
   } else {
     const flags = new Set(process.argv.slice(2))
-    Promise.resolve(launch({ development: flags.has('--dev'), demo: flags.has('--demo'), logs: flags.has('--logs'), setupOnly: flags.has('--setup'), detach: flags.has('--detach') }))
+    Promise.resolve(launch({ development: flags.has('--dev'), demo: flags.has('--demo'), mobilePreview: flags.has('--mobile-preview'), mobile: flags.has('--mobile'), logs: flags.has('--logs'), setupOnly: flags.has('--setup'), detach: flags.has('--detach') }))
       .then(status => { process.exitCode = status })
   }
 }

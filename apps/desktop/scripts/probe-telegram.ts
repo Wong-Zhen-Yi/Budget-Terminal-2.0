@@ -128,24 +128,25 @@ let seeded = false
   if (String(url).endsWith('/getUpdates') && body.timeout && !seeded) {
     seeded = true
     updates = [update(1, 999, 'private', now, '/mobile'), update(2, 123, 'group', now, '/mobile'), update(3, 123, 'private', now - 600, '/mobile'),
-      ...['/start', '/new@fixture_bot', '/reset', '/status', '/history', '/resume saved-id', '/models', '/help', '/model fixture', '/model', '/reasoning', '/reasoning high', '/unknown', '/new@other_bot', '/screenshot charts', '/mobile@fixture_bot', '/mobile@other_bot', 'Send me the Budget Terminal mobile link', '/new research', 'send me a screenshot of global page', 'research'].map((text, index) => update(index + 4, 123, 'private', now, text))]
+      ...['/start', '/new@fixture_bot', '/reset', '/status', '/history', '/resume saved-id', '/models', '/help', '/model fixture', '/model', '/reasoning', '/reasoning high', '/unknown', '/new@other_bot', '/screenshot charts', '/mobile', '/mobile@fixture_bot', '/mobile@other_bot', 'Send me the Budget Terminal mobile link', '/new research', 'send me a screenshot of global page', 'research'].map((text, index) => update(index + 4, 123, 'private', now, text))]
   }
   return originalFetch(url, init)
 }) as typeof fetch
 await adapter.configure({ chatId: '123', enabled: true, receive: true })
 for (let i = 0; i < 100 && requests.filter(request => request.body.text === 'research result').length < 2; i++) await new Promise(resolve => setTimeout(resolve, 5))
 assert.equal(dispatched, 3, 'Only questions and /new questions reach research; commands and other bot mentions do not')
-assert.equal((stored as { offset: number }).offset, 25)
+assert.equal((stored as { offset: number }).offset, 26)
 assert.equal(resets, 4, 'Only configuration and /new reset conversation context; removed aliases do nothing')
 assert.deepEqual(commands, [], 'Slash commands only open model buttons; reasoning is selected through callbacks')
 const menu = requests.find(request => request.method === 'setMyCommands')!
 assert(requests.some(request => request.method === 'sendMessage' && !!request.body.reply_markup), '/model sends selectable buttons')
 assert.deepEqual(menu.body.scope, { type: 'chat', chat_id: '123' })
-assert.deepEqual((menu.body.commands as { command: string }[]).map(command => command.command), ['new', 'model', 'mobile'])
-assert.equal(requests.filter(request => request.body.text === 'Available commands: /new, /model, /mobile. Ask naturally for a screenshot of a page.').length, 10)
-assert.equal(mobileRequests, 2, 'Only fresh requests from the configured private chat can retrieve the link')
+assert.deepEqual((menu.body.commands as { command: string }[]).map(command => command.command), ['new', 'model', 'mobile', 'restart'])
+assert.equal(requests.filter(request => request.body.text === 'Available commands: /new, /model, /mobile, /restart. Ask naturally for a screenshot of a page.').length, 10)
+assert.equal(mobileRequests, 3, 'Only fresh requests from the configured private chat can retrieve the link')
 assert.equal(requests.filter(request => request.body.text === mobileUrl && request.body.chat_id === '123' &&
-  (request.body.link_preview_options as { is_disabled?: boolean })?.is_disabled).length, 2)
+  (request.body.link_preview_options as { is_disabled?: boolean })?.is_disabled).length, 3)
+assert.equal(requests.filter(request => request.method === 'sendChatAction').length, dispatched, 'Mobile commands bypass the research path entirely')
 assert.equal(uploads.length, 6, 'Natural screenshot requests deliver a photo through the model')
 assert(!requests.some(request => String(request.body.text).includes('Logging description')), 'Do not post model descriptions after sending a screenshot')
 assert.equal(requests.filter(request => request.body.text === 'research result').length, 2, 'The next ordinary question still receives its text answer')
@@ -159,7 +160,8 @@ const failedCommands = new TelegramService({
   save: async () => {},
   reset: async () => { throw new Error('private reset failure ' + token) },
   command: async () => { throw new Error('private command failure ' + token) },
-  reply: async () => { assert.fail('A failed reset must never send its question with old context') },
+  mobileLink: async () => { throw new Error('private link failure ' + token) },
+  reply: async () => { assert.fail('Mobile link failure and failed reset must never reach research') },
   fetch: (async (url, init) => {
     const method = String(url).split('/').pop()
     const body = JSON.parse(String(init?.body))
@@ -169,19 +171,72 @@ const failedCommands = new TelegramService({
       if (failurePolls++) await new Promise<void>((_resolve, reject) => {
         init!.signal!.addEventListener('abort', () => reject(new Error('cancelled')), { once: true })
       })
-      result = [update(1, 123, 'private', now, '/new research'), update(2, 123, 'private', now, '/model')]
+      result = [update(1, 123, 'private', now, '/mobile'), update(2, 123, 'private', now, '/new research'), update(3, 123, 'private', now, '/model')]
     }
     if (method === 'sendMessage') failureMessages.push(body.text)
     return new Response(JSON.stringify({ ok: true, result }))
   }) as typeof fetch,
 })
 await failedCommands.initialize()
-for (let i = 0; i < 100 && failureMessages.length < 2; i++) await new Promise(resolve => setTimeout(resolve, 5))
-assert.equal(failureMessages.length, 2)
-assert.match(failureMessages[0], /Could not confirm a new chat/)
-assert.match(failureMessages[1], /command could not complete/)
+for (let i = 0; i < 100 && failureMessages.length < 3; i++) await new Promise(resolve => setTimeout(resolve, 5))
+assert.equal(failureMessages.length, 3)
+assert.match(failureMessages[0], /Mobile Access is unavailable/)
+assert.match(failureMessages[1], /Could not confirm a new chat/)
+assert.match(failureMessages[2], /command could not complete/)
 assert(!failureMessages.join('').includes(token))
 await failedCommands.close()
+
+for (const confirmDelivery of [true, false]) {
+  const replies: string[] = []
+  let persistedOffset = 0
+  let restartCalls = 0
+  let researchCalls = 0
+  let restartPolls = 0
+  const restartBot = new TelegramService({
+    load: async () => ({ token, chatId: '123', enabled: true, receive: true, offset: 0 }),
+    save: async config => { persistedOffset = config?.offset ?? 0 },
+    reset: async () => { assert.fail('/restart must not reset the Codex conversation') },
+    reply: async () => { researchCalls++; return 'Unexpected research' },
+    restart: () => {
+      restartCalls++
+      assert.equal(persistedOffset, 7, 'Persist the restart update offset before requesting shutdown')
+      assert.match(replies.at(-1) ?? '', /^Restarting Budget Terminal/)
+    },
+    fetch: (async (url, init) => {
+      const method = String(url).split('/').pop()
+      let result: unknown = { username: 'fixture_bot' }
+      if (method === 'getChat') result = { id: 123, type: 'private' }
+      if (method === 'getUpdates') {
+        if (restartPolls++) await new Promise<void>((_resolve, reject) => {
+          init!.signal!.addEventListener('abort', () => reject(new Error('cancelled')), { once: true })
+        })
+        result = [update(1, 999, 'private', now, '/restart'), update(2, 123, 'group', now, '/restart'),
+          update(3, 123, 'private', now - 600, '/restart'), update(4, 123, 'private', now, '/restart@other_bot'),
+          update(5, 123, 'private', now, '/restart computer'), update(6, 123, 'private', now, '/restart@fixture_bot'),
+          update(7, 123, 'private', now, 'research')]
+      }
+      if (method === 'sendMessage') {
+        const { text, chat_id } = JSON.parse(String(init?.body))
+        assert.equal(chat_id, '123')
+        replies.push(text)
+        if (!confirmDelivery && text.startsWith('Restarting')) throw new Error('Synthetic delivery failure')
+      }
+      if (method === 'sendChatAction') assert.fail('/restart must not enter the Codex research path')
+      return new Response(JSON.stringify({ ok: true, result }))
+    }) as typeof fetch,
+  })
+  await restartBot.initialize()
+  for (let i = 0; i < 100 && (confirmDelivery ? !restartCalls : restartBot.snapshot().connected); i++) {
+    await new Promise(resolve => setTimeout(resolve, 5))
+  }
+  await restartBot.close()
+  assert.equal(replies.length, 2, 'Ignore other senders and accept only the authorized restart')
+  assert.match(replies[0], /Send \/restart by itself/)
+  assert.equal(persistedOffset, 7, 'Leave later updates for the relaunched app')
+  assert.equal(restartCalls, confirmDelivery ? 1 : 0, 'Restart only after Telegram acknowledges the reply')
+  assert.equal(researchCalls, 0)
+}
+console.log('PASS: private /restart acknowledges once, preserves the update offset, and bypasses Codex')
 
 // Exercise actual callback updates, including authorization and stale-button rejection.
 const pickerRequests: { method: string; body: any }[] = []

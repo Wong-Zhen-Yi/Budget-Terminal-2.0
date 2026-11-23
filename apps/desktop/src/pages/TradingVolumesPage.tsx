@@ -210,7 +210,7 @@ export function TradingVolumesPage({
         <span className={`ml-auto pl-2 text-2xs ${toneClass[status.tone]}`}>{status.text}</span>
       </div>
 
-      <div ref={panesRef} className="flex min-h-0 min-w-0 flex-1">
+      <div ref={panesRef} className="trading-volumes-panes flex min-h-0 min-w-0 flex-1">
         <div
           className="flex min-h-0 shrink-0 flex-col overflow-hidden border border-border bg-surface [&_td]:px-1 [&_th]:px-1"
           style={{ width: fitTableWidth(tableWidth, availableWidth) }}

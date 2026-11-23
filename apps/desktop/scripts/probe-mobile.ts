@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { request } from 'node:http'
 import { connect } from 'node:net'
 import { resolve } from 'node:path'
-import { createMobileHttp, MobileRequestError } from '../electron/services/mobileHttp.js'
+import { createMobileHttp, LOCAL_MOBILE_HEADER, MobileRequestError } from '../electron/services/mobileHttp.js'
 import { mobileTailnet, type MobileTailnet } from '../electron/services/mobileTailscale.js'
 import { MOBILE_BODY_LIMIT, MOBILE_DIRECT_LOCAL_PORT, MOBILE_DIRECT_PORT, MOBILE_DIRECT_TARGET, MOBILE_HTTPS_PORT, MOBILE_PROXY_TARGET } from '../electron/shared/mobileAccess.js'
 
@@ -33,11 +33,13 @@ assert.equal(mobileTailnet(status, { ...directServe, AllowFunnel: { [directHost]
 
 let tailnet: MobileTailnet | null = directConfigured
 let called = 0
-const server = await createMobileHttp(resolve(import.meta.dirname, '../out/renderer'), () => tailnet, (channel, args) => {
+const renderer = resolve(import.meta.dirname, '../out/renderer')
+function echo(channel: string, args: unknown[]) {
   if (channel !== 'test:echo') throw new MobileRequestError('Not found.', 404)
   called++
   return { args }
-}, 0, 0)
+}
+const server = await createMobileHttp(renderer, echo, { getTailnet: () => tailnet, port: 0, directPort: 0 })
 try {
   const headers = { Host: host, 'tailscale-user-login': login, 'x-forwarded-proto': 'https' }
   const post = { ...headers, Origin: origin, 'x-budget-terminal': 'mobile', 'Content-Type': 'application/json', 'Content-Length': '2' }
@@ -95,3 +97,20 @@ try {
   assert.equal((await send('/', headers)).status, 403, 'Stop serving when the tailnet is unavailable')
 } finally { await server.close() }
 console.log('PASS: private HTTPS and direct Tailscale routing, owner/host checks, same-origin RPC, body limits, and static asset isolation')
+
+const previewToken = 'fixture-preview-token'
+const preview = await createMobileHttp(renderer, echo, { localToken: previewToken })
+try {
+  const previewOrigin = `http://127.0.0.1:${preview.port}`
+  const headers = { [LOCAL_MOBILE_HEADER]: previewToken }
+  assert.equal(preview.directPort, undefined)
+  assert.equal((await fetch(previewOrigin)).status, 403)
+  assert.equal((await fetch(previewOrigin, { headers: { [LOCAL_MOBILE_HEADER]: 'wrong' } })).status, 403)
+  assert.match(await (await fetch(previewOrigin, { headers })).text(), /data-terminal-mobile/)
+  const post = (origin: string) => fetch(`${previewOrigin}/api/call/test:echo`, {
+    method: 'POST', headers: { ...headers, Origin: origin, 'x-budget-terminal': 'mobile', 'Content-Type': 'application/json' }, body: '[]',
+  })
+  assert.equal((await post('http://localhost')).status, 403)
+  assert.deepEqual(await (await post(previewOrigin)).json(), { args: [] })
+} finally { await preview.close() }
+console.log('PASS: local preview authenticates its own window and retains same-origin RPC checks')

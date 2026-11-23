@@ -155,9 +155,29 @@ assert.notEqual(demoDirectories[0], demoDirectories[1], 'Each demo launch starts
 assert.equal(personalEnvironment.BUDGET_TERMINAL_DATA_DIR, 'personal-mcp')
 console.log('PASS: demo uses a fresh profile per launch, seeds the saved stores, and cleans up after exit.')
 
+let previewDirectory
+assert.equal(launch({ mobilePreview: true, detach: true, platform: 'win32', nodeVersion: '24.22.1', log,
+  environment: personalEnvironment,
+  locateCodex() { assert.fail('The preview uses sample data and skips Codex discovery') },
+  openDetached() { assert.fail('The preview stays attached to clean up its sample data') },
+  spawn(_command, args, { env }) {
+    if (args.join(' ').includes('run preview')) {
+      assert.equal(env.BUDGET_TERMINAL_MOBILE_PREVIEW, '1')
+      previewDirectory = env.BUDGET_TERMINAL_DEMO_DIR
+      assert(existsSync(join(env.BUDGET_TERMINAL_DATA_DIR, 'portfolio.json')))
+    }
+    return { status: 0, stdout: '11.0.0' }
+  },
+}), 0)
+assert(previewDirectory && !existsSync(previewDirectory), 'Remove the preview profile on exit')
+
+const connectedLauncher = readFileSync(resolve(__dirname, '../Launch Budget Terminal Mobile.cmd'), 'utf8').replace(/\r\n/g, '\n')
+assert.match(connectedLauncher, /powershell\.exe[^\r\n]*launch-windows\.ps1" mobile\nif not errorlevel 1 exit \/b 0/)
+
 for (const [file, command] of [
   ['Launch Budget Terminal.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -Attached\n/],
   ['Launch Budget Terminal Demo.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -Demo -Attached\n/],
+  ['Launch Budget Terminal iPhone 17 Preview.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -MobilePreview -Attached\n/],
 ]) {
   const source = readFileSync(resolve(__dirname, '..', file), 'utf8').replace(/\r\n/g, '\n')
   assert.match(source, command, `${file} must launch the application on double click`)
@@ -168,7 +188,7 @@ for (const [file, command] of [
   assert(!source.includes('%*'), 'Double-click setup must not forward app launch options')
   assert(!source.includes('-Setup'), 'Double-click startup must open the app without a separate setup-only pass')
   assert.equal(source.match(/^powershell\.exe/gm)?.length, 1, 'Double-click startup must launch once')
-  assert.match(source, /powershell\.exe[^\r\n]*launch-windows\.ps1" (?:-Demo )?-Attached\nif (?:not )?errorlevel 1/, 'Double-click startup must retain the terminal for dependency checks, build output and errors')
+  assert.match(source, /-Attached\nif (?:not )?errorlevel 1/, 'Double-click startup must retain the terminal for dependency checks, build output and errors')
   assert(!source.includes('launch-menu.ps1'), 'Double-click startup must not show an interface chooser')
   assert.match(source, /pause >nul/, 'Double-click startup keeps failures visible')
 }
@@ -189,7 +209,7 @@ for (const platform of ['win32', 'darwin', 'linux']) {
     assert(!calls.some(call => call.args.join(' ').includes('tui')), 'Setup must not build the retired interface')
   }
 }
-for (const options of [{ development: true }, { logs: true }, { demo: true }]) {
+for (const options of [{ development: true }, { logs: true }, { demo: true }, { mobilePreview: true }]) {
   assert.equal(launch({ setupOnly: true, ...options, nodeVersion: '24.22.1', log,
     spawn() { assert.fail('Setup must reject launch options before running commands') },
   }), 1)
@@ -520,6 +540,17 @@ async function probeDetachedLaunch() {
     assert(!messages.some(message => message.includes('Keep this terminal open')))
     assert.equal(messages.some(message => message.includes('test spawn failure')), shouldFail)
   }
+  assert.equal(await launch({ mobile: true, detach: true, platform: 'win32', nodeVersion: '24.22.1', log,
+    environment: personalEnvironment,
+    locateCodex: () => null,
+    spawn() { return { status: 0, stdout: '11.0.0' } },
+    async openDetached(env) {
+      assert.equal(env.BUDGET_TERMINAL_OPEN_MOBILE, '1')
+      assert.equal(env.BUDGET_TERMINAL_DEMO_DIR, undefined)
+      assert.equal(env.BUDGET_TERMINAL_DATA_DIR, personalEnvironment.BUDGET_TERMINAL_DATA_DIR)
+      return 0
+    },
+  }), 0)
   console.log('PASS: detached desktop starts after all five visible stages and reports launch failures to the terminal.')
 }
 

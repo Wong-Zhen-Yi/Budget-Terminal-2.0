@@ -161,9 +161,6 @@
 }
 
 @media (max-width: 600px) {
-  [data-terminal-mobile] .settings-toolbar { flex-direction: column; align-items: stretch; gap: 6px; padding: 6px; }
-  [data-terminal-mobile] .settings-toolbar-actions, [data-terminal-mobile] .settings-search { width: 100%; min-width: 0; }
-  [data-terminal-mobile] .settings-tabs button { min-height: 44px; }
   [data-terminal-mobile] .focus-dashboard__grid { grid-template-columns: minmax(0, 1fr); }
   [data-terminal-mobile] [data-page-id="pre-market"] > div > div,
   [data-terminal-mobile] .charts-main-grid { grid-template-columns: minmax(0, 1fr) !important; }

@@ -2,6 +2,16 @@
 
 Mobile Access opens the Budget Terminal workspace in Safari while Budget Terminal is running on your computer. Safari uses the same saved records and market services. Its page navigation, chart view, and scroll positions are separate from the desktop window.
 
+## Open the connected mobile window on Windows
+
+Run `btd mobile` or double-click **Launch Budget Terminal Mobile.cmd**. The iPhone-sized window uses the same saved records and market services as the desktop. If the desktop is already open, the command uses that session. Otherwise it starts the desktop and opens the mobile window. Mobile Access under **Settings → Labs** continues to manage connections from a phone or tablet over Tailscale.
+
+## Preview the mobile UI with sample data
+
+Double-click **Launch Budget Terminal iPhone 17 Preview.cmd**, or run `btd -MobilePreview`. The launcher builds the current code and opens Budget Terminal's mobile interface in an Electron window. The portrait viewport is 402 × 874 CSS pixels at 3× device pixel ratio, corresponding to the iPhone 17's 1206 × 2622 display pixels. The window shrinks to fit shorter monitors while keeping the same viewport. [iPhone 17 specifications](https://www.apple.com/iphone-17/specs/)
+
+The preview starts with the repository's sample records and discards edits when closed. It can run alongside the regular desktop window and needs only the local computer. Keep the launcher terminal open. Relaunch after editing the source to rebuild, or press **F5** to reload the current build. Use Safari on an iPhone to check WebKit behavior and iOS safe areas.
+
 ## Set up the computer
 
 1. Sign in to [Tailscale](https://tailscale.com/download) on the computer and on your iPhone or iPad using the same account. Turn on Tailscale on both devices. The HTTPS link uses [MagicDNS](https://tailscale.com/docs/features/magicdns).
@@ -18,7 +28,7 @@ Mobile Access opens the Budget Terminal workspace in Safari while Budget Termina
 
 Enable **Receive research questions from Telegram** under **Agents → Telegram** on the computer. Start a private chat with the configured bot and send `/mobile` or “Send me the Budget Terminal mobile link.” Tap the link while Tailscale is connected. You can open it in Safari from Telegram and optionally add it to your Home Screen. [Telegram setup](agents.md#telegram)
 
-The bot replies directly in its configured private chat. Codex sign-in is independent of link delivery. The link carries no token. Budget Terminal checks that the visiting device uses the same Tailscale account as the computer on each request. Use Tailscale Serve for this port. Funnel and tagged devices do not provide the required user identity.
+Budget Terminal looks up the link locally and replies in the configured private chat. Link delivery uses zero Codex tokens and works without Codex sign-in. The link carries no token. Budget Terminal checks that the visiting device uses the same Tailscale account as the computer on each request. Use Tailscale Serve for this port. Funnel and tagged devices do not provide the required user identity.
 
 ## Use a direct link without DNS
 
@@ -41,5 +51,9 @@ Browser opens searches and websites in Safari. YouTube playback opens on the dev
 Turn off **Mobile Access** under **Settings → Labs** to stop serving the workspace immediately. To remove its Tailscale proxies, run `tailscale serve --https=8443 off` and `tailscale serve --tcp=8081 off`. The preference is local to this computer. Demo profiles cannot be shared.
 
 ## Verification
+
+Run `npm run probe:desktop-startup --workspace budget-terminal-desktop -- --mobile-preview` after a build to check the iPhone 17 viewport, temporary sample data, and mobile navigation in Electron.
+
+On Windows, run `npm run probe:desktop-startup --workspace budget-terminal-desktop -- --connected-mobile` to test shared data and update events. Add `--warm` to test opening the mobile window from an already running desktop instance.
 
 After a production build, run `npm run probe:mobile --workspace budget-terminal-desktop` and `npm run probe:telegram --workspace budget-terminal-desktop`. For layout checks, the iPhone 18 Pro profile uses 402 × 874 CSS pixels at 3× scale, and the iPad mini profile uses 756 × 1158 CSS pixels at 2× scale. Test each in both orientations. [iPhone 18 Pro specifications](https://www.apple.com/iphone-18-pro/specs/) [iPad mini specifications](https://www.apple.com/ipad-mini/specs/)

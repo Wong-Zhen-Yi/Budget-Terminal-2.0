@@ -10,8 +10,10 @@ export const telegramCommands = [
   { command: 'new', description: 'Start a fresh chat: /new [question]' },
   { command: 'model', description: 'Choose a model, then its reasoning level' },
   { command: 'mobile', description: 'Get the private Budget Terminal link for iPhone or iPad' },
+  { command: 'restart', description: 'Restart the Budget Terminal desktop app' },
 ]
 export type TelegramResearchCommand = 'model' | 'reasoning'
+const availableCommands = `Available commands: ${telegramCommands.map(({ command }) => `/${command}`).join(', ')}. Ask naturally for a screenshot of a page.`
 const help = 'Budget Terminal research agent.\n' + telegramCommands.map(command => `/${command.command} — ${command.description}`).join('\n')
   + '\nMessages retain context in the current Telegram chat, including after app restart. /new keeps old chats in history but starts without their conversation context. Keep the desktop app open. Saved-data edits require the desktop app. Commands run after any current answer finishes.'
 
@@ -38,6 +40,7 @@ interface Options {
   command?: (command: TelegramResearchCommand, argument: string) => Promise<string>
   models?: () => Promise<TelegramModelChoice[]>
   mobileLink?: () => Promise<string>
+  restart?: () => void
   screenshot?: (page: string, signal: AbortSignal) => Promise<Envelope<ScreenshotPayload>>
   fetch?: typeof fetch
 }
@@ -214,6 +217,14 @@ export class TelegramService {
     if (!models.length) { await this.send('No models are available. Check Codex in the desktop app.', signal); return }
     await this.showPicker('Choose a model below. Next, choose its reasoning level.', models, 'model', signal)
   }
+  private async sendMobileLink(signal: AbortSignal) {
+    const unavailable = 'Mobile Access is unavailable. Check Settings → Labs on the computer, then send /mobile again.'
+    let text = unavailable
+    try {
+      text = (await this.options.mobileLink?.())?.trim() || unavailable
+    } catch { /* Link discovery stays local even when Tailscale or the preference is unavailable. */ }
+    if (!signal.aborted) await this.send(text, signal)
+  }
   private async showPicker(text: string, choices: TelegramPickerChoice[], kind: 'model' | 'reasoning', signal: AbortSignal, modelId?: string) {
     const picker = { nonce: randomBytes(12).toString('hex'), choices, kind, modelId, expiresAt: Date.now() + 5 * 60_000, messageId: undefined as number | undefined }
     const result = await this.send(text, signal, {
@@ -277,8 +288,19 @@ export class TelegramService {
             const command = match?.[1].toLowerCase()
             const argument = match?.[3]?.trim() ?? ''
             if (command === 'start') { await this.send(help, signal); continue }
-            if (command === 'mobile' && this.options.mobileLink) {
-              await this.send(await this.options.mobileLink(), signal)
+            if (command === 'mobile') {
+              await this.sendMobileLink(signal)
+              continue
+            }
+            if (command === 'restart') {
+              if (argument || !this.options.restart) {
+                await this.send(argument ? 'Send /restart by itself to restart Budget Terminal.' : 'Restart is unavailable for this Budget Terminal session.', signal)
+                continue
+              }
+              await this.send('Restarting Budget Terminal. The bot will reconnect when the app opens.', signal)
+              if (signal.aborted) return
+              try { this.options.restart(); return }
+              catch { await this.send('Budget Terminal could not restart. Check the desktop app and try again.', signal) }
               continue
             }
             if (command === 'new') {
@@ -294,10 +316,10 @@ export class TelegramService {
               }
               catch { await this.send('Telegram command could not complete. Check Codex and local history in the desktop app. No research request was sent.', signal) }
               continue
-            } else { await this.send('Available commands: /new, /model, /mobile. Ask naturally for a screenshot of a page.', signal); continue }
+            } else { await this.send(availableCommands, signal); continue }
           }
-          if (this.options.mobileLink && /^(?:please )?(?:send|give|get|show)(?: me)? (?:the |a |my )?(?:(?:private )?(?:tailscale|mobile|budget terminal(?: mobile)?) link|(?:private )?link (?:for|to) (?:budget terminal|my iphone|my ipad|mobile access))[.!?]*$/i.test(text)) {
-            await this.send(await this.options.mobileLink(), signal)
+          if (/^(?:please )?(?:send|give|get|show)(?: me)? (?:the |a |my )?(?:(?:private )?(?:tailscale|mobile|budget terminal(?: mobile)?) link|(?:private )?link (?:for|to) (?:budget terminal|my iphone|my ipad|mobile access))[.!?]*$/i.test(text)) {
+            await this.sendMobileLink(signal)
             continue
           }
           await this.api('sendChatAction', { chat_id: config.chatId, action: 'typing' }, signal)

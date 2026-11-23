@@ -8,7 +8,9 @@ import { MOBILE_BODY_LIMIT, MOBILE_HTTP_PORT } from '../shared/mobileAccess.js'
 import type { MobileTailnet } from './mobileTailscale.js'
 import { startMobileDirect } from './mobileDirect.js'
 
-type MobileRequest = (channel: string, args: unknown[]) => unknown
+export type MobileRequest = (channel: string, args: unknown[]) => unknown
+type MobileAccess = { getTailnet: () => MobileTailnet | null; port?: number; directPort?: number } | { localToken: string }
+export const LOCAL_MOBILE_HEADER = 'x-budget-terminal-local-mobile'
 export class MobileRequestError extends Error {
   constructor(message: string, readonly status = 400) { super(message) }
 }
@@ -35,7 +37,7 @@ async function readArgs(request: IncomingMessage): Promise<unknown[]> {
   return value
 }
 
-export async function createMobileHttp(directory: string, getTailnet: () => MobileTailnet | null, run: MobileRequest, port = MOBILE_HTTP_PORT, directPort?: number) {
+export async function createMobileHttp(directory: string, run: MobileRequest, access: MobileAccess) {
   const html = await readFile(join(directory, 'mobile.html'))
   const assets = new Map<string, { file: string; type: string; compressed?: Promise<Buffer> }>()
   for (const name of await readdir(join(directory, 'assets'))) {
@@ -48,7 +50,12 @@ export async function createMobileHttp(directory: string, getTailnet: () => Mobi
   const subscribers = new Map<ServerResponse, IncomingMessage>()
   const directSources = new WeakMap<Socket, string>()
   function authorizedOrigin(request: IncomingMessage) {
-    const tailnet = getTailnet()
+    if ('localToken' in access) {
+      const host = `127.0.0.1:${request.socket.localPort}`
+      return request.headers.host === host && request.headers[LOCAL_MOBILE_HEADER] === access.localToken
+        ? `http://${host}` : null
+    }
+    const tailnet = access.getTailnet()
     const source = directSources.get(request.socket)
     if (source) {
       const route = tailnet?.direct
@@ -70,7 +77,9 @@ export async function createMobileHttp(directory: string, getTailnet: () => Mobi
     void (async () => {
       const origin = authorizedOrigin(request)
       if (!origin) {
-        response.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Connect to Tailscale with the same account as the Budget Terminal computer.')
+        const message = 'localToken' in access ? 'Open the Budget Terminal mobile window.'
+          : 'Connect to Tailscale with the same account as the Budget Terminal computer.'
+        response.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' }).end(message)
         return
       }
       const path = request.url ?? ''
@@ -105,7 +114,7 @@ export async function createMobileHttp(directory: string, getTailnet: () => Mobi
       }
       if (request.method !== 'POST' || !path.startsWith('/api/call/')) throw new MobileRequestError('Not found.', 404)
       if (request.headers.origin !== origin || request.headers['x-budget-terminal'] !== 'mobile') {
-        throw new MobileRequestError('Open Budget Terminal from its Tailscale URL.', 403)
+        throw new MobileRequestError('Open Budget Terminal from its original page.', 403)
       }
       const channel = path.slice('/api/call/'.length)
       if (!/^[a-zA-Z0-9:-]{1,80}$/.test(channel)) throw new MobileRequestError('Invalid route.')
@@ -133,12 +142,15 @@ export async function createMobileHttp(directory: string, getTailnet: () => Mobi
   })
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject)
-    server.listen(port, '127.0.0.1', () => { server.off('error', reject); resolve() })
+    server.listen('localToken' in access ? 0 : access.port ?? MOBILE_HTTP_PORT, '127.0.0.1', () => {
+      server.off('error', reject)
+      resolve()
+    })
   })
-  const direct = directPort === undefined ? undefined : await startMobileDirect(() => getTailnet()?.direct, (socket, address) => {
+  const direct = 'getTailnet' in access && access.directPort !== undefined ? await startMobileDirect(() => access.getTailnet()?.direct, (socket, address) => {
     directSources.set(socket, address)
     server.emit('connection', socket)
-  }, directPort).catch(() => undefined)
+  }, access.directPort).catch(() => undefined) : undefined
   const disconnect = () => {
     for (const response of subscribers.keys()) response.end()
     subscribers.clear()

@@ -1,11 +1,13 @@
 import { app } from 'electron'
+import { randomUUID } from 'node:crypto'
 import { readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { MOBILE_DIRECT_LOCAL_PORT, type MobileAccessStatus } from '../shared/mobileAccess.js'
-import { createMobileHttp } from './mobileHttp.js'
+import { createMobileHttp, type MobileRequest } from './mobileHttp.js'
 import { readMobileTailnet, type MobileTailnet } from './mobileTailscale.js'
 
 let server: Awaited<ReturnType<typeof createMobileHttp>> | undefined
+let localServer: Awaited<ReturnType<typeof createMobileHttp>> | undefined
 let tailnet: MobileTailnet | null = null
 let enabled = false
 let stopped = false
@@ -32,7 +34,9 @@ async function listen() {
   try {
     const [{ createMobileRoutes }, { telegramProfile }] = await Promise.all([import('./mobileRoutes.js'), import('./agentsHost.js')])
     if (stopped || !enabled) return
-    server = await createMobileHttp(join(import.meta.dirname, '../renderer'), () => tailnet, createMobileRoutes(telegramProfile), undefined, MOBILE_DIRECT_LOCAL_PORT)
+    server = await createMobileHttp(join(import.meta.dirname, '../renderer'), createMobileRoutes(telegramProfile), {
+      getTailnet: () => tailnet, directPort: MOBILE_DIRECT_LOCAL_PORT,
+    })
     refresh = setInterval(() => { void refreshTailnet() }, 15_000)
     refresh.unref()
     await refreshTailnet()
@@ -49,6 +53,25 @@ export function startMobileAccess() {
     catch (reason) { if ((reason as NodeJS.ErrnoException).code !== 'ENOENT') error = 'The local Mobile Access preference could not be read.' }
     if (enabled) await listen()
   })()
+}
+
+export async function startLocalMobileAccess(run: MobileRequest) {
+  if (stopped) throw new Error('Budget Terminal is closing.')
+  const token = randomUUID()
+  const listener = await createMobileHttp(join(import.meta.dirname, '../renderer'), run, { localToken: token })
+  if (stopped) {
+    await listener.close()
+    throw new Error('Budget Terminal is closing.')
+  }
+  localServer = listener
+  return {
+    origin: `http://127.0.0.1:${listener.port}`, token,
+    close: async () => {
+      if (localServer !== listener) return
+      localServer = undefined
+      await listener.close()
+    },
+  }
 }
 
 function snapshot(): MobileAccessStatus {
@@ -105,13 +128,16 @@ export async function configureMobileAccess(value: unknown) {
 
 export function broadcastMobile(channel: string, payload?: unknown) {
   server?.broadcast(channel, payload)
+  localServer?.broadcast(channel, payload)
 }
 
 export async function stopMobileAccess() {
   stopped = true
   await initialization
   await changes
-  await closeListener()
+  const local = localServer
+  localServer = undefined
+  await Promise.all([closeListener(), local?.close()])
 }
 
 export async function telegramMobileLink() {

@@ -1,5 +1,7 @@
 #!/bin/sh
-# The shared build includes the compact iPhone navigation and touch-friendly page picker.
+# Telegram /mobile retrieves links and /restart relaunches the app without Codex inference.
+# Pass --mobile-preview to check the current iPhone portrait layouts with sample data.
+# The connected mobile window is available through the Windows launcher.
 # The shared build includes the direct Tailscale link under Settings > Labs.
 # Pass --demo to this launcher to open temporary sample data.
 # The shared build includes the streamlined Charts workspaces and updated chart rendering.

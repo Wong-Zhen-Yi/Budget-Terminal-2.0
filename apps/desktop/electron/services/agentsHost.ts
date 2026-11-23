@@ -66,6 +66,12 @@ function telegramAgent() {
       command: (command, argument) => telegramResearchCommand(telegramWorker(), command, argument),
       models: () => telegramModelChoices(telegramWorker()),
       mobileLink: telegramMobileLink,
+      restart: process.env.BUDGET_TERMINAL_DEMO_DIR ? undefined : () => {
+        app.relaunch()
+        // The desktop window can delay closing to flush its cache, including on macOS.
+        app.once('window-all-closed', () => app.quit())
+        app.quit()
+      },
       screenshot: async (page, signal) => await invokeMcpTool('budget_terminal_screenshot', { request: { page } }, signal) as Envelope<ScreenshotPayload>,
       reply: async (text, signal) => {
         const worker = telegramWorker()

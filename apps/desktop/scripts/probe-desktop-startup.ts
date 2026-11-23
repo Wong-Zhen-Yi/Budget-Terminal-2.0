@@ -11,23 +11,27 @@ const root = resolve(import.meta.dirname, '..')
 const require = createRequire(import.meta.url)
 const directory = await mkdtemp(join(tmpdir(), 'budget-desktop-startup-'))
 const normalDownloads = join(directory, 'downloads')
-const demoOnly = process.argv.includes('--demo')
+const mobilePreview = process.argv.includes('--mobile-preview')
+const connectedMobile = process.argv.includes('--connected-mobile')
+const warmMobile = process.argv.includes('--warm')
+const demoOnly = mobilePreview || process.argv.includes('--demo')
 let demo: { env: NodeJS.ProcessEnv; close(): void } | undefined
 try {
+  if (connectedMobile) assert.equal(process.platform, 'win32', 'Connected mobile startup is Windows-only')
   await mkdir(normalDownloads)
   const backupName = 'budget-terminal-backup.json'
   const normalBackup = join(normalDownloads, backupName)
-  if (demoOnly) {
+  if (demoOnly || connectedMobile) {
     const { createDemoSession } = require('../../../scripts/demo-session.cjs')
     demo = createDemoSession({ ...process.env, APPDATA: join(directory, 'roaming'), LOCALAPPDATA: join(directory, 'local') })
     parseCloudSnapshot(await readFile(join(root, '../../fixtures/demo-user-data.json'), 'utf8'))
-    await writeFile(normalBackup, 'Existing personal backup fixture')
+    if (demoOnly) await writeFile(normalBackup, 'Existing personal backup fixture')
   }
   // Reproduce unavailable Windows shader caches without touching a real profile.
   // Files at these directory paths prevent Chromium from opening a disk cache.
   const profile = join(directory, 'data', 'electron-profile')
   const shaderCaches = ['GPUCache', 'GPUPersistentCache', 'DawnGraphiteCache', 'DawnWebGPUCache', 'GrShaderCache', 'ShaderCache']
-  if (process.platform === 'win32' && !demoOnly) {
+  if (process.platform === 'win32' && !demoOnly && !connectedMobile) {
     await mkdir(profile, { recursive: true })
     await Promise.all(shaderCaches.map(name => writeFile(join(profile, name), 'unavailable shader cache fixture')))
   }
@@ -37,6 +41,7 @@ try {
     const { readFile } = require('node:fs/promises')
     const { join } = require('node:path')
     const { app, dialog, screen, session } = require('electron')
+    const connectedMobile = ${connectedMobile}
     app.setAppPath(${JSON.stringify(root)})
     app.setPath('userData', ${JSON.stringify(join(directory, 'profile'))})
     app.setPath('appData', ${JSON.stringify(join(directory, 'fixture-appData'))})
@@ -58,7 +63,9 @@ try {
       (_details, callback) => callback({ cancel: true }),
     ))
     app.on('browser-window-created', (_event, window) => {
-      window.webContents.once('did-finish-load', async () => {
+      const verify = async () => {
+        if (window.webContents.getURL() === 'about:blank') return
+        window.webContents.off('did-finish-load', verify)
         try {
           const bounds = window.getBounds()
           const area = screen.getDisplayMatching(bounds).workArea
@@ -66,6 +73,75 @@ try {
           assert(bounds.x + bounds.width <= area.x + area.width, 'Window right edge fits the display')
           assert(bounds.y + bounds.height <= area.y + area.height, 'Window bottom edge fits the work area')
           assert(window.getMinimumSize()[0] < area.width || area.width <= 960, 'Compact displays retain room to resize')
+          if (connectedMobile) {
+            if (window.getTitle() === 'Budget Terminal') {
+              if (${warmMobile}) {
+                console.log('Requesting the mobile window from the running test desktop')
+                const child = require('node:child_process').spawn(process.execPath, [__filename], {
+                  env: { ...process.env, BUDGET_TERMINAL_OPEN_MOBILE: '1' }, stdio: 'ignore',
+                })
+                child.once('error', error => { console.error(error); app.exit(1) })
+                child.unref()
+              }
+              return
+            }
+            assert.equal(window.getTitle(), 'Budget Terminal Mobile')
+            console.log('The connected window loaded')
+            const desktop = window.getParentWindow()
+            assert.equal(desktop?.getTitle(), 'Budget Terminal')
+            const run = script => window.webContents.executeJavaScript(script)
+            const desktopRun = script => desktop.webContents.executeJavaScript(script)
+            const delay = () => new Promise(resolve => setTimeout(resolve, 25))
+            const end = Date.now() + 10_000
+            while (!await run('document.querySelector(".mobile-page-button")?.textContent === "Portfolio"')) {
+              assert(Date.now() < end, 'Connected mobile UI must open the shared start page')
+              await delay()
+            }
+            assert.deepEqual(await run('[innerWidth, innerHeight, devicePixelRatio]'), [402, 874, 3])
+            assert.equal((await fetch(window.webContents.getURL())).status, 403)
+            assert.equal(await desktopRun('window.api.mobileAccessStatus().then(status => status.enabled)'), false)
+            const readCash = 'window.api.portfolio().then(result => result.data.portfolios[0].cashBalance)'
+            const setCash = balance => 'window.api.mutatePortfolio({type:"setCash",portfolioId:"portfolio_1",cashBalance:' + balance + '})'
+            const listen = 'window.receivedChange = false; window.api.onSavedDataChanged(event => { if (event.domains.includes("portfolio")) window.receivedChange = true }); true'
+            await desktopRun(listen)
+            await run(listen)
+            assert.deepEqual((await run(setCash(765))).errors, [])
+            assert.equal(await desktopRun(readCash), 765)
+            await run('window.receivedChange = false')
+            assert.deepEqual((await desktopRun(setCash(876))).errors, [])
+            assert.equal(await run(readCash), 876)
+            while (!await desktopRun('window.receivedChange') || !await run('window.receivedChange')) {
+              assert(Date.now() < end, 'Both windows must receive portfolio update events')
+              await delay()
+            }
+            console.log('PASS: connected mobile shares desktop data and update events with Labs off')
+            app.quit()
+            return
+          }
+          if (process.env.BUDGET_TERMINAL_MOBILE_PREVIEW === '1') {
+            const run = script => window.webContents.executeJavaScript(script)
+            const waitFor = async (script, message) => {
+              const end = Date.now() + 10_000
+              while (!await run(script)) {
+                assert(Date.now() < end, message)
+                await new Promise(resolve => setTimeout(resolve, 25))
+              }
+            }
+            assert.equal(window.getTitle(), 'Budget Terminal iPhone 17 Preview')
+            assert.deepEqual(await run('[innerWidth, innerHeight, screen.width, screen.height, devicePixelRatio]'), [402, 874, 402, 874, 3])
+            assert.equal(await run('navigator.maxTouchPoints'), 5)
+            assert.equal(await run('typeof require'), 'undefined', 'Preview has no Electron preload or Node access')
+            assert.equal((await fetch(window.webContents.getURL())).status, 403, 'Only the native preview can open its local endpoint')
+            await waitFor('document.querySelector(".mobile-page-button")?.textContent === "Portfolio"', 'Mobile UI must open the saved start page')
+            assert.equal(await run('window.api.portfolio().then(result => result.data.portfolios[0].name)'), 'Demo Core Portfolio')
+            await run('document.querySelector(".mobile-page-button").click()')
+            await waitFor('Boolean(document.querySelector(".mobile-picker input"))', 'Mobile page picker must open')
+            await run('Array.from(document.querySelectorAll(".mobile-picker li button")).find(button => button.firstElementChild?.textContent === "Browser").click()')
+            await waitFor('Boolean(document.querySelector("#mobile-browser-address"))', 'Mobile page picker must navigate to Browser')
+            console.log('PASS: iPhone preview opens with a 402 × 874 viewport at 3×, isolated sample data, and mobile navigation')
+            app.quit()
+            return
+          }
           const result = await window.webContents.executeJavaScript(
             '(async () => { const cache = await window.api.cacheStatus(); return { sync: await window.api.cloudSyncStatus(), mcp: await window.api.testMcpConnection(), mobile: await window.api.mobileAccessStatus(), cache, configured: await window.api.configureCache(cache.data.settings), progress: await window.api.heatmapProgress("SPY") } })()',
           )
@@ -146,7 +222,8 @@ try {
           console.log('PASS: built desktop opens with a mounted UI, working MCP connection and all three desktop-only IPC services')
           app.quit()
         } catch (error) { console.error(error); app.exit(1) }
-      })
+      }
+      window.webContents.on('did-finish-load', verify)
     })
     import(${JSON.stringify(pathToFileURL(join(root, 'out/main/main.js')).href)})
       .catch(error => { console.error(error); app.exit(1) })
@@ -157,8 +234,14 @@ try {
   }
   delete env.ELECTRON_RUN_AS_NODE
   delete env.ELECTRON_RENDERER_URL
+  delete env.BUDGET_TERMINAL_OPEN_MOBILE
+  if (mobilePreview) env.BUDGET_TERMINAL_MOBILE_PREVIEW = '1'
+  if (connectedMobile) {
+    delete env.BUDGET_TERMINAL_DEMO_DIR
+    if (!warmMobile) env.BUDGET_TERMINAL_OPEN_MOBILE = '1'
+  }
   const electron = require('electron') as string
-  for (const agentFailure of demoOnly ? [false] : [false, true]) {
+  for (const agentFailure of demoOnly || connectedMobile ? [false] : [false, true]) {
     const output = await new Promise<{ code: number | null; text: string }>((resolveRun, reject) => {
       const child = spawn(electron, [entry], { env: { ...env, BUDGET_PROBE_AGENT_FAILURE: agentFailure ? '1' : '0' }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
       let text = ''
@@ -169,8 +252,8 @@ try {
       child.on('close', code => { clearTimeout(timer); resolveRun({ code, text }) })
     })
     assert.equal(output.code, 0, output.text)
-    assert.match(output.text, demoOnly ? /PASS: demo UI opens/ : /PASS: built desktop opens/)
-    if (process.platform === 'win32' && !demoOnly) {
+    assert.match(output.text, connectedMobile ? /PASS: connected mobile shares desktop data/ : mobilePreview ? /PASS: iPhone preview opens/ : demoOnly ? /PASS: demo UI opens/ : /PASS: built desktop opens/)
+    if (process.platform === 'win32' && !demoOnly && !connectedMobile) {
       assert.doesNotMatch(output.text, /Failed to open persistent cache|Unable to move the cache|Unable to create cache|Gpu Cache Creation failed/i,
         'Unavailable GPU shader caches must not cause startup errors')
       for (const name of shaderCaches) {

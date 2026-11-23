@@ -1,0 +1,220 @@
+@media (max-width: 600px) {
+  [data-terminal-mobile] [data-terminal-content] {
+    overflow-x: clip;
+  }
+
+  [data-terminal-mobile] [data-page-id] :is(input, select, textarea, form) { min-width: 0; max-width: 100%; }
+  [data-terminal-mobile] [data-page-id] .text-2xs { font-size: 12px; }
+  [data-terminal-mobile] [data-page-id] :is(button.no-drag, [role='tab'], input:not([type='checkbox'], [type='radio'], [type='range']), select) {
+    min-height: 36px;
+  }
+  [data-terminal-mobile] [data-page-id] [role='tablist'] {
+    scrollbar-width: thin;
+    overscroll-behavior-inline: contain;
+  }
+  [data-terminal-mobile] [data-page-id] .terminal-panel > header {
+    height: auto;
+    min-height: 38px;
+    flex-wrap: wrap;
+    gap: 2px 8px;
+    padding-block: 4px;
+  }
+  [data-terminal-mobile] [data-page-id] .terminal-panel > header h2 { white-space: normal; }
+  [data-terminal-mobile] [data-page-id] .terminal-panel > header > div { min-width: 0; flex-wrap: wrap; }
+  [data-terminal-mobile] [data-page-id] .terminal-panel > div { min-width: 0; }
+  [data-terminal-mobile] [data-page-id] :is(p, h1, h2, h3) { overflow-wrap: anywhere; }
+
+  /* The library and reader each get the full width. */
+  [data-terminal-mobile] .articles-header { gap: 8px; padding: 10px 12px; }
+  [data-terminal-mobile] .articles-header h1 { font-size: 20px; }
+  [data-terminal-mobile] .articles-button { min-height: 40px; }
+  [data-terminal-mobile] .articles-library-open .articles-library {
+    position: static;
+    width: 100%;
+    border-right: 0;
+    box-shadow: none;
+  }
+  [data-terminal-mobile] .articles-library-open .articles-main { display: none; }
+  [data-terminal-mobile] .articles-library-controls { padding: 12px; gap: 8px; }
+  [data-terminal-mobile] .articles-library-heading .articles-link { min-height: 40px; }
+  [data-terminal-mobile] .articles-toolbar { gap: 6px; padding: 6px 10px; }
+  [data-terminal-mobile] .articles-mode button { min-height: 36px; }
+
+  [data-terminal-mobile] [data-page-id='agents'] .mobile-handoff { gap: 12px; line-height: 1.55; }
+  [data-terminal-mobile] [data-page-id='browser'] .mobile-handoff nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  [data-terminal-mobile] [data-page-id='browser'] .mobile-handoff nav a { justify-content: center; }
+  [data-terminal-mobile] .reminders-page { padding-inline: 12px; }
+  [data-terminal-mobile] .reminders-delivery { padding: 14px; margin-block: 12px; }
+  [data-terminal-mobile] .reminders-delivery > button { align-self: stretch; }
+
+  /* Dashboard quotes occupy a compact grid above the full-width market panels. */
+  [data-terminal-mobile] .dashboard-macro { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+  [data-terminal-mobile] .dashboard-macro > div { grid-column: span 2; padding: 5px 3px; }
+  [data-terminal-mobile] .dashboard-macro > div:nth-child(n + 4) { grid-column: span 3; }
+  [data-terminal-mobile] .dashboard-news-layout .dashboard-agents-column { min-height: 0; }
+  [data-terminal-mobile] .dashboard-news-layout .dashboard-agents-column .mobile-handoff { padding: 12px; }
+  [data-terminal-mobile] .dashboard-lite { overflow-y: auto; }
+  [data-terminal-mobile] .dashboard-lite-grid { flex: none; grid-template-rows: auto; }
+  [data-terminal-mobile] .dashboard-lite-grid > .dashboard-price-chart { min-height: 320px; }
+  [data-terminal-mobile] .dashboard-lite-grid > .terminal-panel { min-height: 235px; }
+  [data-terminal-mobile] .dashboard-price-chart-ticker { max-width: 100%; }
+
+  /* Keep account totals legible and the underlying editable records in order. */
+  [data-terminal-mobile] [data-page-id='portfolio'] > div > div:first-of-type { align-items: stretch; }
+  [data-terminal-mobile] [data-page-id='portfolio'] > div > div:has(> select) > select { flex: 1 1 175px; }
+  [data-terminal-mobile] [data-page-id='portfolio'] > div > div.overflow-x-auto > button { min-height: 40px; font-size: 13px; }
+  [data-terminal-mobile] [data-page-id='portfolio'] :is(td, th) { white-space: nowrap; }
+  [data-terminal-mobile] .portfolio-position-number { width: 96px; }
+  [data-terminal-mobile] [data-page-id='portfolio'] td input[type='checkbox'] { width: 17px; height: 17px; }
+  [data-terminal-mobile] .finance-page { overflow-y: auto; }
+  [data-terminal-mobile] .finance-grid {
+    flex: none;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-template-areas: 'cash' 'debt' 'bills' 'totals' 'goal' 'silos';
+  }
+  [data-terminal-mobile] .finance-cash { grid-area: cash; min-height: 175px; }
+  [data-terminal-mobile] .finance-debt { grid-area: debt; min-height: 175px; }
+  [data-terminal-mobile] .finance-bills { grid-area: bills; min-height: 260px; }
+  [data-terminal-mobile] .finance-totals { grid-area: totals; min-height: 250px; }
+  [data-terminal-mobile] .finance-goal { grid-area: goal; min-height: 310px; }
+  [data-terminal-mobile] .finance-silos { grid-area: silos; min-height: 250px; }
+  [data-terminal-mobile] .finance-donut-ring { min-height: 150px; }
+  [data-terminal-mobile] .finance-goal-ring { min-height: 150px; }
+  [data-terminal-mobile] .cards-grid { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+  [data-terminal-mobile] .cards-grid > article { min-width: 0; height: 310px; }
+  [data-terminal-mobile] [data-page-id='projections'] > div { overflow-y: auto; }
+  [data-terminal-mobile] [data-page-id='projections'] > div > div.grid { flex: none; grid-auto-rows: minmax(230px, auto); }
+
+  [data-terminal-mobile] [data-page-id='global'] > div > :last-child { min-height: 360px; }
+  [data-terminal-mobile] [data-page-id='news'] > div > .flex-wrap > :is(.relative, label):has(input) { flex-basis: 100%; margin-left: 0; }
+  [data-terminal-mobile] :is(.news-lite-search, .news-lite-toolbar) :is(input, button) { min-height: 38px; }
+  [data-terminal-mobile] .news-lite-tickers > button { min-height: 44px; }
+  [data-terminal-mobile] .calendar-month-page { overflow-y: auto; }
+  [data-terminal-mobile] .calendar-grid-container { flex: none; min-height: 290px; }
+  [data-terminal-mobile] .calendar-toolbar-actions { flex-wrap: wrap; }
+  [data-terminal-mobile] .calendar-details { flex: none; grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(120px, auto); max-height: none; }
+  [data-terminal-mobile] .calendar-details > section > header { white-space: normal; }
+  [data-terminal-mobile] [data-page-id='pre-market'] .terminal-panel { min-height: 230px; }
+  [data-terminal-mobile] [data-page-id='trading-volumes'] > div,
+  [data-terminal-mobile] [data-page-id='price'] > div { overflow-y: auto; }
+  [data-terminal-mobile] :is(.trading-volumes-panes, .price-panes) { flex: none; flex-direction: column; gap: 8px; }
+  [data-terminal-mobile] :is(.trading-volumes-panes, .price-panes) > [role='separator'] { display: none; }
+  [data-terminal-mobile] :is(.trading-volumes-panes, .price-panes) > div { width: 100% !important; max-width: none !important; flex: none; }
+  [data-terminal-mobile] .trading-volumes-panes > div:first-child { min-height: 255px; max-height: 330px; }
+  [data-terminal-mobile] .trading-volumes-panes > div:last-child { min-height: 350px; }
+  [data-terminal-mobile] .price-panes > div:first-child { height: 260px; }
+  [data-terminal-mobile] .price-panes > div:last-child { min-height: 300px; padding-left: 0; }
+  [data-terminal-mobile] [data-page-id='beta'] > div > .flex-wrap label { max-width: 100%; }
+  [data-terminal-mobile] [data-page-id='up-down'] > div > .border-b { overflow-x: auto; }
+  [data-terminal-mobile] [data-page-id='up-down'] > div > .border-b button { flex: none; min-height: 40px; }
+  [data-terminal-mobile] :is([data-page-id='heatmap'], [data-page-id='market-cap']) .grid-cols-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  [data-terminal-mobile] [data-page-id='heatmap'] .grid-cols-6 > div,
+  [data-terminal-mobile] [data-page-id='market-cap'] .grid-cols-6 > div { border: 1px solid var(--color-border); }
+
+  /* Symbol entry and comparisons reflow before the charts and results. */
+  [data-terminal-mobile] .stocks-price-chart { min-width: 0; height: 350px; }
+  [data-terminal-mobile] .sd-controls { gap: 6px; }
+  [data-terminal-mobile] .sd-search-form { flex: 1 1 140px; }
+  [data-terminal-mobile] .sd-controls button { min-height: 36px; }
+  [data-terminal-mobile] [data-page-id='fundamentals'] form { min-width: 0; width: 100%; flex: 1 0 100%; flex-wrap: wrap; }
+  [data-terminal-mobile] [data-page-id='fundamentals'] form input { flex: 1 1 120px; width: auto; }
+  [data-terminal-mobile] .scorecard-page .scorecard-table { scrollbar-width: thin; }
+  [data-terminal-mobile] .scorecard-page .scorecard-tickers { grid-template-columns: minmax(0, 1fr); }
+  [data-terminal-mobile] [data-page-id='defeatbeta'] [role='tablist'] { flex-wrap: nowrap; }
+  [data-terminal-mobile] [data-page-id='defeatbeta'] [role='tab'] { white-space: nowrap; }
+  [data-terminal-mobile] .charts-main-grid > section { min-height: 320px; }
+  [data-terminal-mobile] [data-page-id='charts'] nav button { min-height: 44px; }
+  [data-terminal-mobile] [data-page-id='valuation'] .grid-cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  [data-terminal-mobile] [data-page-id='valuation'] .grid-cols-3 > div { border: 1px solid var(--color-border); }
+  [data-terminal-mobile] [data-page-id='options'] form { flex: 1 1 240px; }
+  [data-terminal-mobile] [data-page-id='options'] form input { width: 100%; }
+  [data-terminal-mobile] [data-page-id='technical-screen'] > div > :first-child { flex-wrap: wrap; gap: 4px 8px; }
+  [data-terminal-mobile] .quant-overview { grid-auto-rows: minmax(130px, auto); }
+  [data-terminal-mobile] .quant-card-value { min-width: 0; }
+  [data-terminal-mobile] .backtest-workspace > section:first-child { min-height: 240px; }
+  [data-terminal-mobile] .backtest-workspace > section:first-child > .overflow-auto { max-height: 255px; }
+
+  [data-terminal-mobile] .etf-workspace { overflow-y: auto; }
+  [data-terminal-mobile] .etf-workspace-header { padding: 11px 12px; }
+  [data-terminal-mobile] .etf-workspace .etf-workspace-body { display: flex; flex: none; flex-direction: column; }
+  [data-terminal-mobile] .etf-browser { border-right: 0; border-bottom: 1px solid var(--color-border); }
+  [data-terminal-mobile] .etf-fund-list { flex: none; max-height: 180px; }
+  [data-terminal-mobile] .etf-quick-funds > button { min-height: 36px; }
+  [data-terminal-mobile] .etf-detail { padding: 12px 10px; overflow: visible; }
+  [data-terminal-mobile] .etf-detail .etf-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  [data-terminal-mobile] .etf-detail :is(.etf-holdings-layout, .etf-fees-layout) { grid-template-columns: minmax(0, 1fr); }
+  [data-terminal-mobile] .etf-holdings-table { min-height: 230px; }
+  [data-terminal-mobile] [data-page-id='sp500'] .terminal-panel > header > div { flex: 1 1 auto; }
+  [data-terminal-mobile] [data-page-id='forex'] .terminal-panel :is(th, td) { white-space: nowrap; }
+
+  /* Spot prices, the selected chart and perpetual contracts retain their own reading order. */
+  [data-terminal-mobile] .crypto-workspace { overflow-y: auto; }
+  [data-terminal-mobile] .crypto-layout { display: flex; flex: none; flex-direction: column; }
+  [data-terminal-mobile] .crypto-layout > :is(.crypto-left, .crypto-right) { overflow: visible; }
+  [data-terminal-mobile] .crypto-price-panel { order: -1; min-height: 340px; }
+  [data-terminal-mobile] .crypto-left > .crypto-panel { flex: none; }
+  [data-terminal-mobile] .crypto-breadth { flex: none; min-height: 275px; }
+  [data-terminal-mobile] .crypto-perps { min-height: 260px; }
+  [data-terminal-mobile] .crypto-news { flex: none; max-height: 330px; }
+  [data-terminal-mobile] .crypto-timeframes button { min-height: 36px; }
+
+  /* Keep each Focus page's existing visual order and give its controls room. */
+  [data-terminal-mobile] .focus-dashboard__filters button { min-height: 36px; }
+  [data-terminal-mobile] .focus-dashboard__toolbar input { width: 100%; }
+  [data-terminal-mobile] [data-page-id='bitcoin'] .terminal-panel > header { padding-inline: 10px; }
+  [data-terminal-mobile] .eth-header { flex-wrap: wrap; align-items: flex-start; }
+  [data-terminal-mobile] .eth-header-actions { flex: 1 1 200px; }
+  [data-terminal-mobile] :is(.eth-view-controls, .eth-ranges) button { min-height: 36px; }
+  [data-terminal-mobile] .bmnr-header { flex-wrap: wrap; gap: 6px; }
+  [data-terminal-mobile] .bmnr-cash-detail { white-space: normal; }
+  [data-terminal-mobile] [data-page-id='sofi'] .grid-cols-2 > div { min-width: 0; overflow-wrap: anywhere; }
+  [data-terminal-mobile] [data-page-id='mu'] .terminal-panel h2 { flex: 1 1 165px; }
+  [data-terminal-mobile] .googl-actions { justify-content: flex-start; }
+  [data-terminal-mobile] .googl-ranges button { min-height: 36px; }
+  [data-terminal-mobile] .nvda-controls { flex-wrap: wrap; }
+  [data-terminal-mobile] .nvda-section-heading { flex-wrap: wrap; gap: 4px 10px; }
+  [data-terminal-mobile] .ant-header { flex-wrap: wrap; }
+  [data-terminal-mobile] .ant-index button { min-height: 36px; }
+  [data-terminal-mobile] [data-page-id='amzn'] .grid-cols-2 .truncate { white-space: normal; }
+  [data-terminal-mobile] .avgo-navigation { gap: 4px; }
+  [data-terminal-mobile] .avgo-navigation [role='tablist'] { flex-wrap: nowrap; }
+  [data-terminal-mobile] .hb-ticker-street { grid-template-columns: minmax(0, 1fr); }
+  [data-terminal-mobile] .hb-ticker-street button { min-height: 40px; }
+  [data-terminal-mobile] .semi-nav { overflow-x: auto; scrollbar-width: thin; }
+  [data-terminal-mobile] .semi-nav button { flex: none; min-height: 40px; }
+  [data-terminal-mobile] [data-page-id='vst'] .grid-cols-2 > div { overflow-wrap: anywhere; }
+  [data-terminal-mobile] .hood-tabs button { min-height: 38px; }
+  [data-terminal-mobile] .hood-chart-legend { flex-wrap: wrap; }
+  [data-terminal-mobile] .pltr-tabs [role='tablist'] { flex-wrap: nowrap; }
+  [data-terminal-mobile] .pltr-volume { min-height: 110px; }
+  [data-terminal-mobile] [data-page-id='hims'] label:has(select) { flex-wrap: wrap; }
+  [data-terminal-mobile] [data-page-id='gold'] .terminal-panel .grid { min-width: 0; }
+  [data-terminal-mobile] [data-page-id='oil'] .terminal-panel p { white-space: normal; }
+  [data-terminal-mobile] .macro-header nav button { min-height: 36px; }
+
+  [data-terminal-mobile] [data-page-id='ipo'] > div { overflow-y: auto; }
+  [data-terminal-mobile] [data-page-id='ipo'] > div > header { flex-wrap: wrap; }
+  [data-terminal-mobile] .ipo-panes { flex: none; grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(245px, auto); }
+  [data-terminal-mobile] [data-page-id='institutions'] .grid > .flex-col { min-width: 0; }
+  [data-terminal-mobile] :is(.poly-header, .poly-header-actions) { flex-wrap: wrap; }
+  [data-terminal-mobile] .poly-discovery-bar button { min-height: 36px; }
+  [data-terminal-mobile] [data-page-id='politics'] > div > :first-child { flex-wrap: wrap; gap: 5px 8px; }
+  [data-terminal-mobile] :is(.politics-panes, .politics-analysis) { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+  [data-terminal-mobile] .politics-panes > .terminal-panel { min-height: 315px; }
+  [data-terminal-mobile] .politics-analysis { grid-auto-rows: minmax(315px, auto); }
+  [data-terminal-mobile] .youtube-search { min-height: 42px; }
+  [data-terminal-mobile] .youtube-toolbar :is(button, select) { min-height: 38px; }
+  [data-terminal-mobile] .dictionary-header { gap: 8px; }
+  [data-terminal-mobile] :is(.dictionary-categories, .dictionary-terms) button { min-height: 36px; }
+  [data-terminal-mobile] [data-page-id='bonds'] .terminal-panel > div > .grid { min-width: 0; }
+  [data-terminal-mobile] [data-page-id='money'] .terminal-panel .num { overflow-wrap: anywhere; }
+  [data-terminal-mobile] .economic-headlines { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; }
+
+  [data-terminal-mobile] .settings-toolbar { flex-flow: column nowrap; align-items: stretch; gap: 6px; padding: 6px; }
+  [data-terminal-mobile] :is(.settings-toolbar-actions, .settings-search) { width: 100%; min-width: 0; }
+  [data-terminal-mobile] .settings-tabs { order: 0; flex: none; width: 100%; }
+  [data-terminal-mobile] .settings-tabs button { min-height: 44px; }
+  [data-terminal-mobile] .settings-toolbar .settings-search { height: 40px; }
+  [data-terminal-mobile] .settings-group-heading { min-width: 0; }
+}

@@ -35,7 +35,8 @@ export function ArticlesPage({ onStatusChange }: { onStatusChange: (panels: Pane
   const [pending, setPending] = useState<{ article: Article | null } | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [largeText, setLargeText] = useState(false)
-  const [dualPage, setDualPage] = useState(true)
+  const [dualPage, setDualPage] = useState(!mobile)
+  const showLibrary = libraryOpen && !(mobile && pending)
   const viewport = useRef<HTMLDivElement>(null)
   const articles = useMemo(() => query.data?.data.articles ?? [], [query.data])
   const dirty = draft !== null && (selected === null || (['title', 'topic', 'content', 'status'] as const).some(key => draft[key] !== selected[key]))
@@ -116,7 +117,7 @@ export function ArticlesPage({ onStatusChange }: { onStatusChange: (panels: Pane
   const counts = { draft: articles.filter(row => row.status === 'draft').length, finished: articles.filter(row => row.status === 'finished').length }
 
   return <div className="articles-page">
-    <div className={`articles-layout ${libraryOpen ? 'articles-library-open' : ''}`}>
+    <div className={`articles-layout ${showLibrary ? 'articles-library-open' : ''}`}>
       <header className="articles-header">
         <div><span className="articles-eyebrow">RESEARCH & IDEAS</span><h1>Articles</h1></div>
         <p>Your library. Your thinking.</p>
@@ -147,7 +148,7 @@ export function ArticlesPage({ onStatusChange }: { onStatusChange: (panels: Pane
         </aside>
         <main className="articles-main">
           <div className="articles-toolbar">
-            <button className="articles-button" aria-expanded={libraryOpen} aria-controls="article-library" onClick={() => setLibraryOpen(!libraryOpen)}>{libraryOpen ? 'Hide library' : 'Show library'}</button>
+            <button className="articles-button" aria-expanded={showLibrary} aria-controls="article-library" onClick={() => setLibraryOpen(!showLibrary)}>{showLibrary ? 'Hide library' : 'Show library'}</button>
             {draft && <>
               <div className="articles-mode" aria-label="Article view"><button aria-pressed={reading} onClick={() => setReading(true)}>Read article</button><button aria-pressed={!reading} onClick={() => setReading(false)}>Edit article</button></div>
               <span className={`articles-save-state ${dirty ? 'is-dirty' : ''}`}>{dirty ? 'Unsaved changes' : 'Saved'}</span>
@@ -158,7 +159,10 @@ export function ArticlesPage({ onStatusChange }: { onStatusChange: (panels: Pane
             </>}
           </div>
           {(pending || deleting || message) && <div className="articles-notices">
-            {pending && <div role="alert" className="articles-notice articles-warning"><span>You have unsaved changes.</span><button className="articles-button" onClick={() => open(pending.article)}>Discard changes and continue</button><button className="articles-button articles-primary" onClick={() => setPending(null)}>Keep editing</button></div>}
+            {pending && <div role="alert" className="articles-notice articles-warning"><span>You have unsaved changes.</span><button className="articles-button" onClick={() => open(pending.article)}>Discard changes and continue</button><button className="articles-button articles-primary" onClick={() => {
+              setPending(null)
+              if (mobile) setLibraryOpen(false)
+            }}>Keep editing</button></div>}
             {deleting && <div role="alert" className="articles-notice articles-warning"><span>Delete “{selected?.title}”? This cannot be undone.</span><button className="articles-button articles-danger" disabled={busy} onClick={() => void remove()}>Confirm delete</button><button className="articles-button" disabled={busy} onClick={() => setDeleting(false)}>Cancel</button></div>}
             {message && <p role="status" className="articles-notice">{message}</p>}
           </div>}

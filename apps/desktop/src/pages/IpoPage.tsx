@@ -162,7 +162,7 @@ export function IpoPage({
       </div>
 
       {/* `setStretchFactor(0, 2)` / `setStretchFactor(1, 3)`: completed narrower. */}
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-2">
+      <div className="ipo-panes grid min-h-0 flex-1 grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-2">
         <Panel
           title="Completed IPOs"
           warning={completedFailure || completed?.warning || undefined}

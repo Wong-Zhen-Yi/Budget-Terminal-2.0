@@ -10,7 +10,7 @@ import { headlineCaptions, summarizeHeadlines } from '@shared/economic'
 export function HeadlineStrip({ payload }: { payload: EconomicPayload | undefined }) {
   const values = summarizeHeadlines(payload)
   return (
-    <div className="flex shrink-0 flex-wrap items-start gap-x-6 gap-y-1 border border-border bg-surface px-3 py-2">
+    <div className="economic-headlines flex shrink-0 flex-wrap items-start gap-x-6 gap-y-1 border border-border bg-surface px-3 py-2">
       {headlineCaptions().map(({ seriesId, caption }) => (
         <div key={seriesId} className="flex flex-col">
           <span className="text-2xs text-text-muted">{caption}</span>

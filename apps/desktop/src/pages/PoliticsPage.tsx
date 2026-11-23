@@ -266,7 +266,7 @@ export function PoliticsPage({
         <Button variant="accent" onClick={() => applyFilters()}>Apply</Button>
       </div>
 
-      <div className="grid min-h-[560px] flex-1 grid-cols-[minmax(620px,7fr)_minmax(440px,3fr)] gap-2">
+      <div className="politics-panes grid min-h-[560px] flex-1 grid-cols-[minmax(620px,7fr)_minmax(440px,3fr)] gap-2">
         <Panel title="Trades">
           <DataTable
             columns={tradeColumns}
@@ -279,7 +279,7 @@ export function PoliticsPage({
           />
         </Panel>
 
-        <div className="grid min-h-0 grid-cols-[minmax(150px,2fr)_minmax(240px,3fr)] gap-2">
+        <div className="politics-analysis grid min-h-0 grid-cols-[minmax(150px,2fr)_minmax(240px,3fr)] gap-2">
           <div className="grid min-h-0 grid-rows-2 gap-2">
             <Panel title="Most Traded Tickers">
               <DataTable

@@ -70,6 +70,7 @@ if (process.argv.includes('--logs') && process.argv.includes('--detach')) proces
     @{ Options = @('-Demo'); Flags = '["--demo"]'; Status = 0 },
     @{ Options = @('-Dev'); Flags = '["--dev"]'; Status = 0 },
     @{ Options = @('-Setup'); Flags = '["--setup"]'; Status = 0 },
+    @{ Options = @('mobile'); Flags = '["--mobile","--detach"]'; Status = 0 },
     @{ Options = @('update'); Flags = '["update"]'; Status = 0 }
   )) {
     $options = $case.Options
@@ -100,7 +101,7 @@ if (process.argv.includes('--logs') && process.argv.includes('--detach')) proces
     foreach ($option in @('--help', '-Help')) {
       $helpText = (& $desktopShim $option | Out-String)
       Assert-Check ($LASTEXITCODE -eq 0) "The installed command must accept $option."
-      foreach ($entry in @('start', 'restart', 'update', '-Dev', '-Demo', '-Logs', '-Attached', '-Setup', '-RuntimeOnly', '--help')) {
+      foreach ($entry in @('start', 'restart', 'mobile', 'update', '-Dev', '-Demo', '-Logs', '-Attached', '-Setup', '-RuntimeOnly', '--help')) {
         Assert-Check ($helpText -match ('(?m)^  ' + [Regex]::Escape($entry) + '[, ]+\S')) "Help must describe $entry."
       }
     }

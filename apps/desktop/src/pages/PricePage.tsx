@@ -226,7 +226,7 @@ export function PricePage({
           )}
         </div>
 
-        <div className="flex min-h-0 flex-1">
+        <div className="price-panes flex min-h-0 flex-1">
           <div
             className="flex min-h-0 shrink-0 flex-col overflow-hidden border border-border"
             style={{ width: tableWidth, maxWidth: '65%' }}

@@ -187,7 +187,7 @@ export function CardsPage({
 
       <div className="min-h-0 flex-1 overflow-auto">
         {models.length ? (
-          <div className="grid min-w-[1030px] grid-cols-4 items-start gap-2.5">
+          <div className="cards-grid grid min-w-[1030px] grid-cols-4 items-start gap-2.5">
             {models.map((model) => {
               const interval = state?.intervals[model.id] ?? '1y'
               const cardPerformance: Partial<Record<CardInterval, CardPerformance>> = {}

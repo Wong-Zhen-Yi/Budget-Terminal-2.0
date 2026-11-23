@@ -6,16 +6,40 @@ import { ok } from '@shared/envelope'
 
 export const isMobileTerminal = () => document.documentElement.hasAttribute('data-terminal-mobile')
 
-async function request(channel: string, args: unknown[]) {
+// Keep loopback connections free for live events and user actions during startup preloading.
+const maxLocalBackgroundRequests = 3
+let localBackgroundRequests = 0
+const waitForLocalConnection: (() => void)[] = []
+
+async function sendRequest(channel: string, args: unknown[]) {
   const response = await fetch(`/api/call/${channel}`, {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-budget-terminal': 'mobile' },
     body: JSON.stringify(args),
   })
   if (!response.ok) {
     const result = await response.json().catch(() => null)
-    throw new Error(result?.message ?? 'Check your Tailscale connection and keep Budget Terminal open on the computer.')
+    throw new Error(result?.message ?? 'Keep Budget Terminal open on the computer and reopen the mobile page.')
   }
   return response
+}
+
+async function request(channel: string, args: unknown[]) {
+  const [input] = args
+  if (location.hostname !== '127.0.0.1' || !input || typeof input !== 'object' || !('background' in input) || input.background !== true) {
+    return sendRequest(channel, args)
+  }
+  if (localBackgroundRequests >= maxLocalBackgroundRequests) {
+    await new Promise<void>(resolve => waitForLocalConnection.push(resolve))
+  } else {
+    localBackgroundRequests++
+  }
+  try {
+    return await sendRequest(channel, args)
+  } finally {
+    const next = waitForLocalConnection.shift()
+    if (next) next()
+    else localBackgroundRequests--
+  }
 }
 
 export async function mobileTelegramProfile(): Promise<string> {
