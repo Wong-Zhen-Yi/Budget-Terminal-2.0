@@ -1,4 +1,6 @@
 #!/bin/sh
+# Settings Labs can launch the connected mobile window on Windows.
+# Mobile Access includes a button to copy the Tailscale setup commands after the shared build.
 # Telegram /mobile retrieves links and /restart relaunches the app without Codex inference.
 # Pass --mobile-preview to try collapsible mobile News filters and tools with sample data.
 # The connected mobile window is available through the Windows launcher.

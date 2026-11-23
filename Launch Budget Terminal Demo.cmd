@@ -1,4 +1,6 @@
 @echo off
+rem The connected mobile launcher in Settings Labs is available in the regular Windows desktop session.
+rem Tailscale setup commands are available in the regular desktop session.
 rem The shared build includes direct Telegram /mobile and /restart handling.
 rem For collapsible News filters and tools with sample data, run Launch Budget Terminal iPhone 17 Preview.cmd.
 rem Launch Budget Terminal Mobile.cmd opens the regular workspace in the Windows mobile window.

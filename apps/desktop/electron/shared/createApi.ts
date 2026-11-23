@@ -13,6 +13,7 @@ export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS
     cloudSyncCommand: command => invoke(CHANNELS.cloudSyncCommand, command),
     mobileAccessStatus: () => invoke(CHANNELS.mobileAccessStatus),
     configureMobileAccess: enabled => invoke(CHANNELS.configureMobileAccess, enabled),
+    launchMobileWindow: viewport => invoke(CHANNELS.launchMobileWindow, viewport),
     diagnosticLogs: () => invoke('diagnostics:read'),
     diagnosticLogAction: action => invoke('diagnostics:action', action),
     diagnosticsInitial: () => invoke('diagnostics:initial'),

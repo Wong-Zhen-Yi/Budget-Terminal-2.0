@@ -4,7 +4,9 @@ Mobile Access opens the Budget Terminal workspace in Safari while Budget Termina
 
 ## Open the connected mobile window on Windows
 
-Run `btd mobile` or double-click **Launch Budget Terminal Mobile.cmd**. The iPhone-sized window uses the same saved records and market services as the desktop. If the desktop is already open, the command uses that session. Otherwise it starts the desktop and opens the mobile window. Mobile Access under **Settings → Labs** continues to manage connections from a phone or tablet over Tailscale.
+In the Windows desktop app, open **Settings → Labs → Mobile Access**, choose **iPhone 17** under **Viewport model**, and select **Launch**. The window uses the same saved records and market services as the desktop. You can open it with the Tailscale switch off.
+
+You can also run `btd mobile` or double-click **Launch Budget Terminal Mobile.cmd** to open the default iPhone 17 model. If the desktop is already open, the launcher uses that session. Otherwise it starts the desktop and opens the mobile window.
 
 ## Preview the mobile UI with sample data
 
@@ -16,7 +18,7 @@ The preview starts with the repository's sample records and discards edits when 
 
 1. Sign in to [Tailscale](https://tailscale.com/download) on the computer and on your iPhone or iPad using the same account. Turn on Tailscale on both devices. The HTTPS link uses [MagicDNS](https://tailscale.com/docs/features/magicdns).
 2. Start Budget Terminal with its double-click launcher. Open **Settings → Labs → Mobile Access** and enable it.
-3. If the panel asks for a proxy, run the command below on the computer. Use an Administrator terminal on Windows. Follow Tailscale's prompt if HTTPS needs to be enabled. The command uses a dedicated HTTPS port, so it can coexist with an existing site on port 443. If port 8443 already hosts another service, resolve that conflict before running the command. [Tailscale Serve documentation](https://tailscale.com/docs/reference/tailscale-cli/serve)
+3. If the panel asks for a proxy, expand **Set up Tailscale links** and select **Copy setup commands** to copy the commands for any links that still need configuration. Use an Administrator terminal on Windows. Follow Tailscale's prompt if HTTPS needs to be enabled. The HTTPS command uses a dedicated port, so it can coexist with an existing site on port 443. If port 8443 already hosts another service, resolve that conflict before running the command. [Tailscale Serve documentation](https://tailscale.com/docs/reference/tailscale-cli/serve)
 
    ```sh
    tailscale serve --bg --https=8443 http://127.0.0.1:4387
@@ -55,5 +57,7 @@ Turn off **Mobile Access** under **Settings → Labs** to stop serving the works
 Run `npm run probe:desktop-startup --workspace budget-terminal-desktop -- --mobile-preview` after a build to check the iPhone 17 viewport, temporary sample data, and mobile navigation in Electron.
 
 On Windows, run `npm run probe:desktop-startup --workspace budget-terminal-desktop -- --connected-mobile` to test shared data and update events. Add `--warm` to test opening the mobile window from an already running desktop instance.
+
+Add `--labs` to the connected mobile probe to open the window from **Settings → Labs** and check the selected viewport.
 
 After a production build, run `npm run probe:mobile --workspace budget-terminal-desktop` and `npm run probe:telegram --workspace budget-terminal-desktop`. For layout checks, the iPhone 18 Pro profile uses 402 × 874 CSS pixels at 3× scale, and the iPad mini profile uses 756 × 1158 CSS pixels at 2× scale. Test each in both orientations. [iPhone 18 Pro specifications](https://www.apple.com/iphone-18-pro/specs/) [iPad mini specifications](https://www.apple.com/ipad-mini/specs/)

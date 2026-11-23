@@ -1,4 +1,6 @@
 @echo off
+rem Open the default iPhone 17 model. Choose a model in desktop Settings Labs.
+rem Use Settings Labs in the desktop window to copy Tailscale setup commands for a phone.
 rem The shared build includes Telegram /restart and the separate Tailscale link command.
 rem Build the current iPhone 17 layout with collapsible News filters and tools.
 title Budget Terminal Mobile Launcher

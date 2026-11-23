@@ -1,4 +1,6 @@
 @echo off
+rem Select a viewport model and launch the connected mobile window from Settings Labs.
+rem Mobile Access includes a button to copy the Tailscale setup commands after the shared build.
 rem Telegram /mobile retrieves links and /restart relaunches the app without Codex inference.
 rem For the mobile News toolbar with collapsible filters and tools, run Launch Budget Terminal Mobile.cmd or btd mobile.
 rem The shared build includes the compact iPhone navigation and touch-friendly page picker.

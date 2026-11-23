@@ -14,6 +14,7 @@ const normalDownloads = join(directory, 'downloads')
 const mobilePreview = process.argv.includes('--mobile-preview')
 const connectedMobile = process.argv.includes('--connected-mobile')
 const warmMobile = process.argv.includes('--warm')
+const labsMobile = connectedMobile && process.argv.includes('--labs')
 const demoOnly = mobilePreview || process.argv.includes('--demo')
 let demo: { env: NodeJS.ProcessEnv; close(): void } | undefined
 try {
@@ -40,7 +41,7 @@ try {
     const assert = require('node:assert/strict')
     const { readFile } = require('node:fs/promises')
     const { join } = require('node:path')
-    const { app, dialog, screen, session } = require('electron')
+    const { app, BrowserWindow, dialog, screen, session } = require('electron')
     const connectedMobile = ${connectedMobile}
     app.setAppPath(${JSON.stringify(root)})
     app.setPath('userData', ${JSON.stringify(join(directory, 'profile'))})
@@ -75,7 +76,24 @@ try {
           assert(window.getMinimumSize()[0] < area.width || area.width <= 960, 'Compact displays retain room to resize')
           if (connectedMobile) {
             if (window.getTitle() === 'Budget Terminal') {
-              if (${warmMobile}) {
+              if (${labsMobile}) {
+                const run = script => window.webContents.executeJavaScript(script)
+                const waitFor = async (script, message) => {
+                  const end = Date.now() + 10_000
+                  while (!await run(script)) {
+                    assert(Date.now() < end, message)
+                    await new Promise(resolve => setTimeout(resolve, 25))
+                  }
+                }
+                await waitFor('Boolean(document.querySelector("button[aria-label=Settings]"))', 'Desktop Settings must be available')
+                await run('document.querySelector("button[aria-label=Settings]").click()')
+                await waitFor('Boolean(document.querySelector("[data-settings-category=labs]"))', 'Settings must show Labs')
+                await run('document.querySelector("[data-settings-category=labs]").click()')
+                await waitFor('Boolean(document.getElementById("mobile-viewport"))', 'Labs must show the mobile viewport selector')
+                assert.deepEqual(await run('Array.from(document.getElementById("mobile-viewport").selectedOptions, option => [option.value, option.textContent])'), [['iphone-17', 'iPhone 17']])
+                assert.equal(await run('window.api.launchMobileWindow("unknown-model").then(() => false, error => error.message.includes("supported mobile viewport"))'), true)
+                await run('Array.from(document.querySelectorAll("[data-settings-card=mobile-access] button")).find(button => button.textContent === "Launch").click()')
+              } else if (${warmMobile}) {
                 console.log('Requesting the mobile window from the running test desktop')
                 const child = require('node:child_process').spawn(process.execPath, [__filename], {
                   env: { ...process.env, BUDGET_TERMINAL_OPEN_MOBILE: '1' }, stdio: 'ignore',
@@ -100,6 +118,11 @@ try {
             assert.deepEqual(await run('[innerWidth, innerHeight, devicePixelRatio]'), [402, 874, 3])
             assert.equal((await fetch(window.webContents.getURL())).status, 403)
             assert.equal(await desktopRun('window.api.mobileAccessStatus().then(status => status.enabled)'), false)
+            assert.equal(await run('window.api.launchMobileWindow("iphone-17").then(() => false, () => true)'), true,
+              'The mobile client cannot launch a desktop window')
+            await desktopRun('window.api.launchMobileWindow("iphone-17")')
+            assert.deepEqual(BrowserWindow.getAllWindows().filter(candidate => candidate.getTitle() === 'Budget Terminal Mobile').map(candidate => candidate.id), [window.id],
+              'Launching the same viewport reuses the existing window')
             const readCash = 'window.api.portfolio().then(result => result.data.portfolios[0].cashBalance)'
             const setCash = balance => 'window.api.mutatePortfolio({type:"setCash",portfolioId:"portfolio_1",cashBalance:' + balance + '})'
             const listen = 'window.receivedChange = false; window.api.onSavedDataChanged(event => { if (event.domains.includes("portfolio")) window.receivedChange = true }); true'
@@ -238,7 +261,7 @@ try {
   if (mobilePreview) env.BUDGET_TERMINAL_MOBILE_PREVIEW = '1'
   if (connectedMobile) {
     delete env.BUDGET_TERMINAL_DEMO_DIR
-    if (!warmMobile) env.BUDGET_TERMINAL_OPEN_MOBILE = '1'
+    if (!warmMobile && !labsMobile) env.BUDGET_TERMINAL_OPEN_MOBILE = '1'
   }
   const electron = require('electron') as string
   for (const agentFailure of demoOnly || connectedMobile ? [false] : [false, true]) {

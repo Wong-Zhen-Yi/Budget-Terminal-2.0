@@ -1,4 +1,6 @@
 @echo off
+rem The preview shares the iPhone 17 viewport profile with the connected mobile window.
+rem Use the regular desktop session to copy Tailscale setup commands for a phone.
 rem The shared build includes direct Telegram /mobile and /restart handling.
 rem Rebuild the portrait layouts with collapsible News filters and tools and the current MCP bundle.
 rem Use Launch Budget Terminal Mobile.cmd to connect the mobile UI to desktop data.

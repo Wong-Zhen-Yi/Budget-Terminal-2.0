@@ -25,8 +25,12 @@ import { finnhubQuotes } from '../services/finnhubQuotes.js'
 import { marketApiKeys } from '../services/marketApiKeysHost.js'
 import { checkForUpdates } from '../services/appUpdates.js'
 import { broadcastMobile, configureMobileAccess, mobileAccessStatus } from '../services/mobileHost.js'
+import { isMobileViewportId, type MobileViewportId } from '../shared/mobileAccess.js'
 
-export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent) => boolean): () => void {
+export function registerIpcHandlers(
+  isTrustedSender: (event: IpcMainInvokeEvent) => boolean,
+  launchMobileWindow: (parent: BrowserWindow, viewport: MobileViewportId) => Promise<void>,
+): () => void {
   const handle: typeof ipcMain.handle = (channel, listener) => {
     ipcMain.handle(channel, (event, ...args: unknown[]) => {
       if (!isTrustedSender(event)) throw new Error('Untrusted IPC sender')
@@ -65,6 +69,11 @@ export function registerIpcHandlers(isTrustedSender: (event: IpcMainInvokeEvent)
   handle(CHANNELS.cloudSyncCommand, (_event, command) => cloudSyncCommand(command))
   handle(CHANNELS.mobileAccessStatus, () => mobileAccessStatus())
   handle(CHANNELS.configureMobileAccess, (_event, value) => configureMobileAccess(value))
+  handle(CHANNELS.launchMobileWindow, async (event, viewport: unknown) => {
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    if (!parent || !isMobileViewportId(viewport)) throw new Error('Choose a supported mobile viewport model.')
+    await launchMobileWindow(parent, viewport)
+  })
   const stopEquityUpdates = hyperliquidEquities.subscribe(async update => {
     await finnhubQuotes.configured('AAPL')
     const filtered = { ...update, quotes: update.quotes.filter(quote => !finnhubQuotes.prefers(quote.symbol)) }

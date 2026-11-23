@@ -255,7 +255,7 @@ Edits and automatic backups go into that profile, alongside its own browser sess
 The regular launcher still opens your personal profile, and cloud sync is disabled in the demo.
 Market prices still use the app's usual providers.
 
-On Windows, `btd mobile` or [Launch Budget Terminal Mobile.cmd](Launch%20Budget%20Terminal%20Mobile.cmd) opens an iPhone-sized window connected to your desktop workspace. To use temporary sample data, open [Launch Budget Terminal iPhone 17 Preview.cmd](Launch%20Budget%20Terminal%20iPhone%2017%20Preview.cmd). See [Mobile Access](docs/mobile-access.md#open-the-connected-mobile-window-on-windows) for details.
+On Windows, choose **iPhone 17** and select **Launch** under **Settings → Labs → Mobile Access** to open a mobile window connected to your desktop workspace. You can also use `btd mobile` or [Launch Budget Terminal Mobile.cmd](Launch%20Budget%20Terminal%20Mobile.cmd). To use temporary sample data, open [Launch Budget Terminal iPhone 17 Preview.cmd](Launch%20Budget%20Terminal%20iPhone%2017%20Preview.cmd). See [Mobile Access](docs/mobile-access.md#open-the-connected-mobile-window-on-windows) for details.
 
 ### Launch behavior and troubleshooting
 

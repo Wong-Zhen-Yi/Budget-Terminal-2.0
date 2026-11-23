@@ -18,6 +18,7 @@ import { startDiagnostics, observeDiagnosticWindow } from './services/diagnostic
 import { diagnosticLog, faultCode } from './services/diagnosticLog.js'
 import { startMobileAccess, startLocalMobileAccess, stopMobileAccess } from './services/mobileHost.js'
 import { openMobileWindow } from './services/mobileWindow.js'
+import { DEFAULT_MOBILE_VIEWPORT, type MobileViewportId } from './shared/mobileAccess.js'
 
 // Windows can retain shader-cache file locks across launches. Keep GPU rendering
 // enabled, but avoid Chromium's optional disk caches before it starts the GPU.
@@ -62,8 +63,8 @@ if (!ownsInstance) app.quit()
 let disposeIpc: (() => void) | null = null
 let mainWindow: BrowserWindow | null = null
 let mainWindowReady = false
-let mobileWindow: BrowserWindow | null = null
-let openingMobile: Promise<void> | undefined
+let mobileWindow: { window: BrowserWindow; viewport: MobileViewportId } | null = null
+let openingMobile = Promise.resolve()
 let releaseDataSession: (() => void) | null = null
 let closeCache: (() => Promise<void>) | null = null
 let closeQuantWorker: (() => void) | null = null
@@ -108,7 +109,8 @@ function createWindow(): BrowserWindow {
       mainWindow = null
       mainWindowReady = false
     }
-    if (mobileWindow && !mobileWindow.isDestroyed()) mobileWindow.destroy()
+    const child = mobileWindow?.window
+    if (child && !child.isDestroyed()) child.destroy()
   })
 
   configureBrowserWindow(window)
@@ -178,37 +180,51 @@ function createWindow(): BrowserWindow {
 }
 
 function showConnectedMobile(parent: BrowserWindow) {
-  if (finishingQuit) return
-  if (parent.isMinimized()) parent.restore()
-  if (mobileWindow) {
-    if (mobileWindow.isMinimized()) mobileWindow.restore()
-    mobileWindow.show()
-    mobileWindow.focus()
-    return
-  }
-  openingMobile ??= (async () => {
-    const [{ createMobileRoutes }, { telegramProfile }] = await Promise.all([import('./services/mobileRoutes.js'), import('./services/agentsHost.js')])
-    const connection = await startLocalMobileAccess(createMobileRoutes(telegramProfile))
-    try {
-      if (parent.isDestroyed() || finishingQuit) {
-        await connection.close()
-        return
-      }
-      const window = await openMobileWindow(connection.origin, connection.token, parent)
-      mobileWindow = window
-      window.once('closed', () => {
-        mobileWindow = null
-        void connection.close()
-      })
-    } catch (error) {
-      await connection.close()
-      throw error
+  void launchConnectedMobile(parent, DEFAULT_MOBILE_VIEWPORT).catch(() => {
+    if (!parent.isDestroyed() && !finishingQuit) {
+      dialog.showErrorBox('Budget Terminal could not open Mobile', 'Check that the current build is complete, then run btd mobile again.')
     }
-  })().catch(error => {
-    if (parent.isDestroyed() || finishingQuit) return
-    diagnosticLog.write('error', 'app', 'startup-failed', { stage: 'local-mobile', code: faultCode(error) })
-    dialog.showErrorBox('Budget Terminal could not open Mobile', 'Check that the current build is complete, then run btd mobile again.')
-  }).finally(() => { openingMobile = undefined })
+  })
+}
+
+function launchConnectedMobile(parent: BrowserWindow, viewport: MobileViewportId) {
+  const launch = openingMobile.then(async () => {
+    if (!localMobileAvailable || parent !== mainWindow || parent.isDestroyed() || finishingQuit) {
+      throw new Error('The connected mobile window requires the regular Windows desktop session.')
+    }
+    if (parent.isMinimized()) parent.restore()
+    if (mobileWindow?.viewport === viewport) {
+      const { window } = mobileWindow
+      if (window.isMinimized()) window.restore()
+      window.show()
+      window.focus()
+      return
+    }
+    mobileWindow?.window.destroy()
+    try {
+      const [{ createMobileRoutes }, { telegramProfile }] = await Promise.all([import('./services/mobileRoutes.js'), import('./services/agentsHost.js')])
+      const connection = await startLocalMobileAccess(createMobileRoutes(telegramProfile))
+      try {
+        if (parent.isDestroyed() || finishingQuit) throw new Error('Budget Terminal is closing.')
+        const window = await openMobileWindow(connection.origin, connection.token, viewport, parent)
+        mobileWindow = { window, viewport }
+        window.once('closed', () => {
+          mobileWindow = null
+          void connection.close()
+        })
+      } catch (error) {
+        await connection.close()
+        throw error
+      }
+    } catch (error) {
+      if (!parent.isDestroyed() && !finishingQuit) {
+        diagnosticLog.write('error', 'app', 'startup-failed', { stage: 'local-mobile', code: faultCode(error) })
+      }
+      throw new Error('Could not open the mobile window. Rebuild Budget Terminal and try again.')
+    }
+  })
+  openingMobile = launch.catch(() => undefined)
+  return launch
 }
 
 if (ownsInstance && !mobilePreview) {
@@ -301,7 +317,7 @@ if (ownsInstance) app.whenReady().then(async () => {
       const frame = event.senderFrame
       return Boolean(frame && frame === event.sender.mainFrame &&
         BrowserWindow.fromWebContents(event.sender) && isTrustedRendererUrl(frame.url, rendererUrl))
-    })
+    }, launchConnectedMobile)
     if (mobilePreview) {
       stage = 'mobile-preview'
       const { createMobileRoutes } = await import('./services/mobileRoutes.js')

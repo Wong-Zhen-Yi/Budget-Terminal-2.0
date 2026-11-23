@@ -77,6 +77,7 @@ try {
     import { manageQueryMemory, QUERY_IDLE_MS } from './src/api/queryMemory'
     import { queryFreshness } from './src/api/queryPersistence'
     import { MACRO_SYMBOLS, TABS } from './electron/shared/contract'
+    import { MOBILE_DIRECT_SERVE_COMMAND, MOBILE_SERVE_COMMAND } from './electron/shared/mobileAccess'
     import { DEFAULT_BACKTEST_PAGE_SETTINGS } from './electron/shared/backtest'
     import { DEFAULT_QUANT_PAGE_SETTINGS } from './electron/shared/quant'
     import { DEFAULT_YOUTUBE_PAGE_SETTINGS } from './electron/shared/youtube'
@@ -121,14 +122,14 @@ try {
     const ok = data => ({ data, errors: [], meta: { freshness: 'fresh', source: 'Synthetic readiness fixture', fetchedAt: Date.now() } })
     const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg=='
     let populated = false, calls = [], fixtureSettings = settings, restoredCurrency = false
-    let mobileEnabled = false
+    let mobileEnabled = false, mobileHttpsReady = false, mobileDirectReady = false
     let fixtureAuth = { url: '', signedIn: false, encryptionAvailable: true, state: 'disconnected', pending: false }, authUnavailable = false, authRejected = false
     const fixture = (method, request = {}) => {
       request ??= {} // Native player teardown accepts null instead of a request object.
       if (method === 'mobileAccessStatus' || method === 'configureMobileAccess') {
         if (method === 'configureMobileAccess') mobileEnabled = request === true
-        return { available: true, enabled: mobileEnabled, url: mobileEnabled ? 'https://fixture.test-tailnet.ts.net:8443/' : '',
-          directUrl: mobileEnabled ? 'http://100.64.1.1:8081/' : '', message: mobileEnabled ? 'Mobile Access is configured on this computer.' : 'Mobile Access is off.' }
+        return { available: true, enabled: mobileEnabled, url: mobileEnabled && mobileHttpsReady ? 'https://fixture.test-tailnet.ts.net:8443/' : '',
+          directUrl: mobileEnabled && mobileDirectReady ? 'http://100.64.1.1:8081/' : '', message: mobileEnabled ? 'Mobile Access is on.' : 'Mobile Access is off.' }
       }
       if (method === 'cloudSyncStatus') {
         if (authUnavailable) throw Error('Synthetic account status outage')
@@ -545,7 +546,29 @@ try {
           settingsPage.querySelector('[data-settings-category="labs"]').click(); await wait()
           check(!mobileCard.hidden, 'Mobile Access must appear under Labs')
           const mobileLab = mobileCard.querySelector('[role="switch"][aria-labelledby="lab-mobile-access"]')
+          const setupButton = () => mobileCard.querySelector('button[aria-label="Copy Tailscale setup commands"]')
+          const copiedCommands = async () => {
+            const before = calls.length
+            setupButton().click(); await wait()
+            check(setupButton().textContent === 'Copied', 'Copy setup commands must confirm clipboard success')
+            return calls.slice(before).find(call => call.method === 'writeClipboard')?.request
+          }
+          const checkConnection = async () => {
+            ;[...mobileCard.querySelectorAll('button')].find(button => button.textContent === 'Check connection').click()
+            await wait()
+          }
+          mobileHttpsReady = mobileDirectReady = false
           mobileLab.click(); await wait()
+          check(await copiedCommands() === [MOBILE_SERVE_COMMAND, MOBILE_DIRECT_SERVE_COMMAND].join('\\n'),
+            'Copy setup commands must copy both missing commands as separate lines')
+          mobileHttpsReady = true
+          await checkConnection()
+          mobileCard.querySelector('details').open = true
+          check(await copiedCommands() === MOBILE_DIRECT_SERVE_COMMAND,
+            'Copy setup commands must copy only the command still needed')
+          mobileDirectReady = true
+          await checkConnection()
+          check(!setupButton(), 'Setup commands must be hidden once both links are configured')
           check(mobileLab.getAttribute('aria-checked') === 'true' && mobileCard.textContent.includes('fixture.test-tailnet.ts.net'), 'Mobile Access must show its link when enabled')
           check(mobileCard.textContent.includes('http://100.64.1.1:8081/'), 'Mobile Access must show the DNS-independent link')
           check(!fixtureSettings.enabledLabs.includes('mobile-access'), 'Mobile Access must remain a host-local preference')

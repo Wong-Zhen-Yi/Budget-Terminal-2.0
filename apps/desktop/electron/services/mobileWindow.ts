@@ -2,20 +2,19 @@ import { app, BrowserWindow, screen, shell } from 'electron'
 import { join } from 'node:path'
 import { LOCAL_MOBILE_HEADER } from './mobileHttp.js'
 import { isSafeExternalUrl } from './urls.js'
+import { DEFAULT_MOBILE_VIEWPORT, MOBILE_VIEWPORTS, type MobileViewportId } from '../shared/mobileAccess.js'
 
-const viewport = { width: 402, height: 874 }
-const deviceScaleFactor = 3
-
-export async function openMobileWindow(origin: string, token: string, parent?: BrowserWindow) {
+export async function openMobileWindow(origin: string, token: string, viewport: MobileViewportId = DEFAULT_MOBILE_VIEWPORT, parent?: BrowserWindow) {
+  const { label, width: viewportWidth, height: viewportHeight, deviceScaleFactor } = MOBILE_VIEWPORTS[viewport]
   const { width, height } = screen.getPrimaryDisplay().workAreaSize
   // Leave space for native window decorations on shorter displays.
-  const scale = Math.min(1, (width - 32) / viewport.width, (height - 64) / viewport.height)
+  const scale = Math.min(1, (width - 32) / viewportWidth, (height - 64) / viewportHeight)
   const window = new BrowserWindow({
-    width: Math.ceil(viewport.width * scale),
-    height: Math.ceil(viewport.height * scale),
+    width: Math.ceil(viewportWidth * scale),
+    height: Math.ceil(viewportHeight * scale),
     useContentSize: true,
     parent,
-    title: parent ? 'Budget Terminal Mobile' : 'Budget Terminal iPhone 17 Preview',
+    title: parent ? 'Budget Terminal Mobile' : `Budget Terminal ${label} Preview`,
     icon: join(app.getAppPath(), 'resources', process.platform === 'win32' ? 'budget-terminal-icon.ico' : 'budget-terminal-icon.png'),
     backgroundColor: '#080b12',
     show: false,
@@ -58,7 +57,7 @@ export async function openMobileWindow(origin: string, token: string, parent?: B
     await window.loadURL('about:blank')
     contents.debugger.attach()
     await contents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', {
-      ...viewport, screenWidth: viewport.width, screenHeight: viewport.height,
+      width: viewportWidth, height: viewportHeight, screenWidth: viewportWidth, screenHeight: viewportHeight,
       mobile: true, scale, deviceScaleFactor,
     })
     await contents.debugger.sendCommand('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 })
