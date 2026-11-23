@@ -115,15 +115,15 @@ export function DefeatBetaPage({ active, onStatusChange, onNavigate }: {
   const breakdownRows = rows('breakdown').filter(row => row.breakdown === chosenBreakdown && row.period_type === (period === 'annual' ? 'trailing' : 'quarterly'))
 
   return <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-defeatbeta-terminal>
-    <div className="flex flex-wrap items-center gap-3 border-b border-border bg-surface px-4 py-3">
-      <div className="mr-2"><p className="font-mono text-sm font-semibold tracking-wide text-accent">DEFEAT BETA</p><p className="text-2xs text-text-dim">Equity research terminal</p></div>
+    <div className="defeatbeta-controls flex flex-wrap items-center gap-3 border-b border-border bg-surface px-4 py-3">
+      <div className="mobile-hide mr-2"><p className="font-mono text-sm font-semibold tracking-wide text-accent">DEFEAT BETA</p><p className="text-2xs text-text-dim">Equity research terminal</p></div>
       <form className="flex items-center gap-2" onSubmit={event => { event.preventDefault(); search() }}>
         <input ref={input} aria-label="DefeatBeta ticker" className={`${field} w-28 font-mono uppercase`} value={draft} onChange={event => setDraft(event.target.value)} maxLength={15} />
         <button className={button} type="submit">Load ticker</button>
       </form>
 
       <button type="button" className={button} onClick={() => onNavigate('charts', symbol)}>Open charts ↗</button>
-      <div className="ml-auto text-right"><p className="text-xs text-text">{symbol} <span className="text-text-muted">{profile?.companyName}</span></p><p className="text-2xs text-text-dim">Published data · / ticker · 1–9, 0 tabs</p></div>
+      <div className="defeatbeta-symbol ml-auto text-right"><p className="text-xs text-text">{symbol} <span className="text-text-muted">{profile?.companyName}</span></p><p className="mobile-hide text-2xs text-text-dim">Published data · / ticker · 1–9, 0 tabs</p></div>
     </div>
     <div className="flex flex-wrap border-b border-border bg-bg px-2" role="tablist" aria-label="DefeatBeta research tabs">
       {TERMINAL_TABS.map((name, index) => <button key={name} id={`defeatbeta-tab-${index}`} type="button" role="tab" aria-selected={tab === index} aria-controls="defeatbeta-panel" className={`border-b-2 px-3 py-3 text-2xs ${tab === index ? 'border-accent text-accent' : 'border-transparent text-text-muted hover:text-text'}`} onClick={() => setTab(index)}><span className="mr-1 text-text-dim">{(index + 1) % 10}</span>{name}</button>)}

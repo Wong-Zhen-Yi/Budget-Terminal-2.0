@@ -5,6 +5,7 @@ import { TECHNICAL_PRESETS, type TechnicalPreset } from '@shared/technicalScreen
 import { useTechnicalScan, useTechnicalSnapshot } from '@/api/technicalScreenQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { Button } from '@/components/ui/Button'
+import { MobileDisclosure } from '@/components/ui/MobileDisclosure'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Select } from '@/components/ui/Select'
 
@@ -84,14 +85,16 @@ export function TechnicalScreenPage({
         <p className="text-2xs text-text-muted">Daily signals from the top 100 liquid US stocks in the Quant shortlist.</p>
       </div>
 
-      <section className="flex shrink-0 flex-wrap items-center gap-2 border border-border bg-surface p-2">
+      <section className="technical-scan-toolbar flex shrink-0 flex-wrap items-center gap-2 border border-border bg-surface p-2">
         <Button variant="accent" disabled={scan.isPending} onClick={() => scan.mutate()}>
           {scan.isPending ? 'Scanning…' : 'Run scan'}
         </Button>
         <Select value={preset} options={TECHNICAL_PRESETS.map((entry) => ({ value: entry.id, label: entry.label }))}
           onChange={setPreset} className="w-52" aria-label="Technical screen" />
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search ticker or company"
-          aria-label="Search technical results" className="h-7 w-48 border border-border-strong bg-surface-raised px-2 text-2xs text-text outline-none focus:border-accent" />
+        <MobileDisclosure label="Search">
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search ticker or company"
+            aria-label="Search technical results" className="h-7 w-48 border border-border-strong bg-surface-raised px-2 text-2xs text-text outline-none focus:border-accent" />
+        </MobileDisclosure>
         <span className="ml-auto min-w-0 flex-1 truncate text-right text-2xs text-text-muted" role="status">
           {scan.isPending ? 'Fetching daily history…' : failure ? 'Scan failed. See Settings for details.' : payload ? `Updated ${dateTime(payload.completedAt)}` : expired ? 'Saved scan expired — run again' : 'Run a scan to find matches'}
         </span>

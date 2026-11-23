@@ -1,4 +1,8 @@
 #!/bin/sh
+# The shared build includes the mobile Workspaces page with grouped page pills.
+# The shared build includes 17 staggered index callouts inside the mobile Global map.
+# The shared build includes compact Portfolio and research toolbars for phone layouts.
+# The shared build includes the mobile Dashboard 2.0 portfolio stack and Agent Chat card.
 # Settings Labs can launch the connected mobile window on Windows.
 # Mobile Access includes a button to copy the Tailscale setup commands after the shared build.
 # Telegram /mobile retrieves links and /restart relaunches the app without Codex inference.

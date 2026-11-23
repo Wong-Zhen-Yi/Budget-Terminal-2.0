@@ -154,8 +154,8 @@ export function HeatmapPage({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
-      <div className="flex shrink-0 flex-wrap items-center gap-1">
-        <h1 className="pr-2 text-sm font-semibold text-text">Heatmap</h1>
+      <div className="mobile-tab-strip flex shrink-0 flex-wrap items-center gap-1" role="group" aria-label="Heatmap index and timeframe">
+        <h1 className="mobile-hide pr-2 text-sm font-semibold text-text">Heatmap</h1>
         {HEATMAP_ETFS.map((entry) => (
           <Button
             key={entry.key}

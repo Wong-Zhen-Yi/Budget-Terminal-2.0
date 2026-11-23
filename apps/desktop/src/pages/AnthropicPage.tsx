@@ -57,7 +57,7 @@ export function AnthropicPage({ onStatusChange }: { onStatusChange: (panels: Pan
       </div>
     </header>
     <div className="ant-workspace">
-      <nav className="ant-index" aria-label="Anthropic research sections">
+      <nav className="ant-index mobile-tab-strip" aria-label="Anthropic research sections">
         <span className="ant-eyebrow">Research questions</span>
         {data.topics.map((item, index) => <button key={item.id} aria-pressed={section === item.id} onClick={() => { setSection(item.id); setEvidence(item.facts[0].source); setSelectedFact(null) }}>
           <span>0{index + 1}</span>{item.title}

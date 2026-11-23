@@ -10,6 +10,7 @@ import { usePortfolio } from '@/api/queries'
 import { BarReadout, type BarReadoutHandle } from '@/components/chartsworkstation/BarReadout'
 import { MainChart } from '@/components/chartsworkstation/MainChart'
 import { Button } from '@/components/ui/Button'
+import { MobileDisclosure } from '@/components/ui/MobileDisclosure'
 import { quotePrice, signedQuotePrice } from '@/lib/format'
 import { useChartsStore, type ChartDrawing, type ChartsIndicator, type DrawingType } from '@/stores/charts'
 
@@ -144,22 +145,22 @@ export function MainWorkspace({ onStatus }: { onStatus: (meta: EnvelopeMeta | un
   return (
     <div className={`flex min-h-0 flex-1 flex-col gap-2 ${focus ? 'fixed inset-0 z-40 bg-bg p-3' : 'px-3 pt-2 pb-3'}`}>
       {!focus ? (
-        <div className="shrink-0 rounded-md border border-border bg-surface">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-2 py-1.5">
-            <form className="flex gap-1" onSubmit={(event) => { event.preventDefault(); load() }}>
-              <input value={draft} onChange={(event) => setDraft(event.target.value)} aria-label="Chart ticker" className={`${FIELD} w-20 font-semibold uppercase`} />
-              <Button type="submit" variant="accent" className={CONTROL}>Load</Button>
-            </form>
-            <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Chart timeframe">
-              <select value={store.interval} aria-label="Bar interval" onChange={(event) => { store.setInterval(event.target.value as ChartsInterval); exitReplay() }} className={FIELD}>
-                {CHARTS_INTERVALS.map((value) => <option key={value}>{value}</option>)}
-              </select>
-              <div className="flex flex-wrap gap-px rounded border border-border bg-bg p-0.5">
-                {CHARTS_RANGE_OPTIONS[store.interval].map((value) => (
-                  <button key={value} type="button" aria-pressed={store.range === value} onClick={() => { store.setRange(value); exitReplay() }} className={`h-6 rounded px-2 text-[12px] font-medium focus-visible:outline-accent ${store.range === value ? 'bg-accent-dim text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text'}`}>{value}</button>
-                ))}
-              </div>
+        <div className="charts-toolbar flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1.5 rounded-md border border-border bg-surface px-2 pt-1.5">
+          <form className="flex gap-1" onSubmit={(event) => { event.preventDefault(); load() }}>
+            <input value={draft} onChange={(event) => setDraft(event.target.value)} aria-label="Chart ticker" className={`${FIELD} w-20 font-semibold uppercase`} />
+            <Button type="submit" variant="accent" className={CONTROL}>Load</Button>
+          </form>
+          <div className="charts-timeframe flex min-w-0 flex-wrap items-center gap-1.5" role="group" aria-label="Chart timeframe">
+            <select value={store.interval} aria-label="Bar interval" onChange={(event) => { store.setInterval(event.target.value as ChartsInterval); exitReplay() }} className={FIELD}>
+              {CHARTS_INTERVALS.map((value) => <option key={value}>{value}</option>)}
+            </select>
+            <div className="mobile-tab-strip flex flex-wrap gap-px rounded border border-border bg-bg p-0.5">
+              {CHARTS_RANGE_OPTIONS[store.interval].map((value) => (
+                <button key={value} type="button" aria-pressed={store.range === value} onClick={() => { store.setRange(value); exitReplay() }} className={`h-6 rounded px-2 text-[12px] font-medium focus-visible:outline-accent ${store.range === value ? 'bg-accent-dim text-text' : 'text-text-muted hover:bg-surface-hover hover:text-text'}`}>{value}</button>
+              ))}
             </div>
+          </div>
+          <MobileDisclosure label="Chart tools" className="charts-toolbar-tools">
             <div className="ml-auto flex flex-wrap gap-1.5">
               <select value={store.chartType} aria-label="Chart style" onChange={(event) => store.setChartType(event.target.value as typeof store.chartType)} className={FIELD}>
                 <option value="candles">Candles</option>
@@ -176,42 +177,42 @@ export function MainWorkspace({ onStatus }: { onStatus: (meta: EnvelopeMeta | un
               <Button className={CONTROL} onClick={() => setFocus(true)}>Focus</Button>
               <Button variant="toggle" active={store.sidebarVisible} className={CONTROL} onClick={() => store.setSidebarVisible(!store.sidebarVisible)}>Sidebar</Button>
             </div>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-t border-border px-2 py-1.5">
-            <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Indicators">
-              {INDICATORS.map(([key, label]) => <Button key={key} variant="toggle" active={store.indicators[key]} className={CONTROL} onClick={() => store.toggleIndicator(key)}>{label}</Button>)}
-              {store.indicators.fibonacci ? (
-                <>
-                  <select value={store.fibMode} aria-label="Fibonacci mode" onChange={(event) => store.setFibMode(event.target.value as 'auto' | 'manual')} className={FIELD}>
-                    <option value="auto">Fib auto</option>
-                    <option value="manual">Fib drawing</option>
-                  </select>
-                  {store.fibMode === 'auto' ? <input type="number" min="20" max="500" value={store.fibLookback} onChange={(event) => store.setFibLookback(Number(event.target.value))} aria-label="Fibonacci lookback" className={`${FIELD} w-16`} /> : null}
-                </>
-              ) : null}
+            <div className="charts-toolbar-indicators -mx-2 flex basis-[calc(100%+1rem)] flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-t border-border px-2 py-1.5">
+              <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Indicators">
+                {INDICATORS.map(([key, label]) => <Button key={key} variant="toggle" active={store.indicators[key]} className={CONTROL} onClick={() => store.toggleIndicator(key)}>{label}</Button>)}
+                {store.indicators.fibonacci ? (
+                  <>
+                    <select value={store.fibMode} aria-label="Fibonacci mode" onChange={(event) => store.setFibMode(event.target.value as 'auto' | 'manual')} className={FIELD}>
+                      <option value="auto">Fib auto</option>
+                      <option value="manual">Fib drawing</option>
+                    </select>
+                    {store.fibMode === 'auto' ? <input type="number" min="20" max="500" value={store.fibLookback} onChange={(event) => store.setFibLookback(Number(event.target.value))} aria-label="Fibonacci lookback" className={`${FIELD} w-16`} /> : null}
+                  </>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Drawings and replay">
+                <details ref={drawingsMenu} className="relative" onBlur={(event) => {
+                  if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false
+                }}>
+                  <summary aria-label="Drawings" className={`flex h-8 cursor-pointer list-none items-center gap-1.5 rounded border px-2 text-[12px] hover:bg-surface-hover focus-visible:outline-accent ${tool ? 'border-accent bg-accent-dim text-text' : 'border-border-strong bg-surface-raised text-text'}`}>
+                    {TOOLS.find(([key]) => key === tool)?.[1] ?? 'Drawings'} <span aria-hidden="true" className="text-text-muted">▾</span>
+                  </summary>
+                  <div className="absolute top-full right-0 z-20 mt-1 grid w-52 grid-cols-3 gap-1 rounded-md border border-border-strong bg-surface p-1.5 shadow-xl max-sm:right-auto">
+                    {TOOLS.map(([key, label]) => <Button key={key} variant="toggle" active={tool === key} className={CONTROL} onClick={() => {
+                      const menu = drawingsMenu.current
+                      menu?.querySelector('summary')?.focus()
+                      if (menu) menu.open = false
+                      setTool(tool === key ? null : key)
+                    }}>{label}</Button>)}
+                    <Button className={`${CONTROL} col-span-3`} disabled={!drawings.length} onClick={clearDrawings}>Clear</Button>
+                  </div>
+                </details>
+                <Button className={CONTROL} disabled={!history.undo.length} onClick={undoDrawing}>Undo</Button>
+                <Button className={CONTROL} disabled={!history.redo.length} onClick={redoDrawing}>Redo</Button>
+                <Button className={CONTROL} disabled={!candles.length} onClick={enterReplay}>Replay</Button>
+              </div>
             </div>
-            <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Drawings and replay">
-              <details ref={drawingsMenu} className="relative" onBlur={(event) => {
-                if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false
-              }}>
-                <summary aria-label="Drawings" className={`flex h-8 cursor-pointer list-none items-center gap-1.5 rounded border px-2 text-[12px] hover:bg-surface-hover focus-visible:outline-accent ${tool ? 'border-accent bg-accent-dim text-text' : 'border-border-strong bg-surface-raised text-text'}`}>
-                  {TOOLS.find(([key]) => key === tool)?.[1] ?? 'Drawings'} <span aria-hidden="true" className="text-text-muted">▾</span>
-                </summary>
-                <div className="absolute top-full right-0 z-20 mt-1 grid w-52 grid-cols-3 gap-1 rounded-md border border-border-strong bg-surface p-1.5 shadow-xl max-sm:right-auto">
-                  {TOOLS.map(([key, label]) => <Button key={key} variant="toggle" active={tool === key} className={CONTROL} onClick={() => {
-                    const menu = drawingsMenu.current
-                    menu?.querySelector('summary')?.focus()
-                    if (menu) menu.open = false
-                    setTool(tool === key ? null : key)
-                  }}>{label}</Button>)}
-                  <Button className={`${CONTROL} col-span-3`} disabled={!drawings.length} onClick={clearDrawings}>Clear</Button>
-                </div>
-              </details>
-              <Button className={CONTROL} disabled={!history.undo.length} onClick={undoDrawing}>Undo</Button>
-              <Button className={CONTROL} disabled={!history.redo.length} onClick={redoDrawing}>Redo</Button>
-              <Button className={CONTROL} disabled={!candles.length} onClick={enterReplay}>Replay</Button>
-            </div>
-          </div>
+          </MobileDisclosure>
         </div>
       ) : null}
       <div

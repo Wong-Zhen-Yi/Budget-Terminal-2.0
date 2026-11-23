@@ -20,6 +20,7 @@ const bundle = await build({
       import { queryKeys } from './src/api/client'
       import { MACRO_SYMBOLS, OPTION_BUCKETS } from './electron/shared/contract'
       import { DashboardPage } from './src/pages/DashboardPage'
+      import { mobileTelegramKey } from './src/mobile/MobileShell'
       import { useDashboard } from './src/stores/dashboard'
       import { NEWS_REFRESH_MS } from './src/api/refreshRates'
       import { heatColor } from './src/components/charts/Treemap'
@@ -215,6 +216,56 @@ const bundle = await build({
         client.setQueryData(queryKeys.portfolio, envelope({portfolios: books, activeId: 'AAPL', sourcePath: ''})); await settle()
         window.checkDashboardLayout()
         return 'PASS: Dashboard 2 portfolio pie, central Agents and right-side portfolio heatmap, live quotes, historical intervals, missing/empty holdings, combined health, portfolio switching and no removed-news requests'
+      }
+      window.checkMobileDashboard2Layout = () => {
+        const viewport = document.querySelector('[data-terminal-content]')
+        const stack = viewport.querySelector('.dashboard-2-mobile')
+        const panels = [...stack.children]
+        check(panels.map(panel => panel.querySelector('h2').textContent).join('|') ===
+          'Fixture holdings (2)|Portfolio Pie|Portfolio Heatmap|Agent Chat', 'Mobile Dashboard 2 panel order')
+        const boxes = panels.map(panel => panel.getBoundingClientRect())
+        check(boxes.every((box, index) => !index || box.top >= boxes[index - 1].bottom), 'Mobile panels must stack without overlap')
+        check(boxes.every(box => box.left === boxes[0].left && box.right === boxes[0].right), 'Mobile panels must use the same width')
+        check(viewport.scrollWidth <= viewport.clientWidth, 'Mobile Dashboard 2 horizontal overflow')
+        check(stack.querySelector('table tbody tr') && stack.querySelector('.dashboard-portfolio-pie svg path'), 'Holdings and pie must render from warm data')
+        check(stack.querySelector('.portfolio-heatmap-map').getBoundingClientRect().height >= 192, 'Mobile heatmap must have usable height')
+        const chatLink = panels.at(-1).querySelector('a')
+        check(chatLink.href === 'https://t.me/fixture_bot' && chatLink.target === '_blank', 'Open the configured Telegram bot')
+        check(chatLink.getBoundingClientRect().height >= 44, 'Telegram must have a touch-sized target')
+        viewport.scrollTop = viewport.scrollHeight
+        check(chatLink.getBoundingClientRect().bottom <= viewport.getBoundingClientRect().bottom, 'Telegram action is reachable by scrolling the dashboard')
+        viewport.scrollTop = 0
+        return 'PASS: Dashboard 2 mobile order, chart sizing and Agent Chat action at ' + innerWidth
+      }
+      window.runMobileDashboard2Probe = async () => {
+        root.render(null); await settle()
+        document.documentElement.setAttribute('data-terminal-mobile', '')
+        useDashboard.setState({portfolioId: 'book'})
+        client.setQueryData(mobileTelegramKey, 'fixture_bot')
+        const originalFetch = window.fetch
+        let telegramReads = 0
+        window.fetch = async (url, ...args) => {
+          if (url !== '/api/call/mobile:telegram') return originalFetch(url, ...args)
+          telegramReads++
+          return telegramReads === 1 ? new Response('{}', {status: 503}) : Response.json('fixture_bot')
+        }
+        const noop = () => {}
+        try {
+          root.render(<QueryClientProvider client={client}><div data-terminal-content className="flex h-full flex-col">
+            <div data-page-id="dashboard-2" className="flex min-h-0 flex-1 flex-col"><DashboardPage newsFocused onStatusChange={noop} /></div>
+          </div></QueryClientProvider>)
+          await settle()
+          const chat = document.querySelector('.mobile-agent-chat')
+          check(chat.querySelector('a') && telegramReads === 0, 'Warm Telegram profile must avoid a mobile first-visit read')
+          client.setQueryData(mobileTelegramKey, ''); await settle()
+          check(!chat.querySelector('a') && chat.textContent.includes('Receive research questions from Telegram'), 'Unconfigured chat must show the desktop setup instructions')
+          await client.invalidateQueries({queryKey: mobileTelegramKey}); await settle()
+          const retry = chat.querySelector('button')
+          check(retry?.textContent.trim() === 'Try again', 'Failed Telegram lookup must offer a retry')
+          retry.click(); await settle()
+          check(chat.querySelector('a') && telegramReads === 2, 'Retry must restore the Telegram action')
+          return window.checkMobileDashboard2Layout()
+        } finally { window.fetch = originalFetch }
       }
       window.checkDashboardLiteLayout = () => {
         const page = document.querySelector('.dashboard-lite')
@@ -446,6 +497,14 @@ await writeFile(join(directory, 'main.cjs'), `
         await new Promise(resolve => setTimeout(resolve, 150))
         console.log(await window.webContents.executeJavaScript('window.checkDashboardLiteLayout()'))
         writeFileSync(${JSON.stringify(directory)} + '/dashboard-lite-' + width + '.png', (await window.webContents.capturePage()).toPNG())
+      }
+      window.setContentSize(402, 874)
+      await new Promise(resolve => setTimeout(resolve, 150))
+      console.log(await window.webContents.executeJavaScript('window.runMobileDashboard2Probe()'))
+      for (const [width, height] of [[320, 640], [874, 402], [1158, 756]]) {
+        window.setContentSize(width, height)
+        await new Promise(resolve => setTimeout(resolve, 150))
+        console.log(await window.webContents.executeJavaScript('window.checkMobileDashboard2Layout()'))
       }
       app.exit(0)
     } catch (error) {console.error(error); app.exit(1)}

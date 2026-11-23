@@ -16,6 +16,7 @@ import { usePoliticsPage } from '@/api/politicsQueries'
 import { Donut } from '@/components/charts/Donut'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { Button } from '@/components/ui/Button'
+import { MobileDisclosure } from '@/components/ui/MobileDisclosure'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Panel } from '@/components/ui/Panel'
 
@@ -234,23 +235,24 @@ export function PoliticsPage({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto p-2">
-      <div className="flex shrink-0 items-center gap-3">
+      <div className="politics-toolbar flex shrink-0 items-center gap-3">
         <h1 className="text-sm font-semibold text-text">Congressional Stock Trades</h1>
-        <span className={`ml-auto text-2xs ${TONE_CLASS[status.tone]}`}>{status.text}</span>
-        <SelectFilter
-          label="Export"
-          value={exportPages}
-          values={['5', '25', '50', EXPORT_ALL]}
-          onChange={setExportPages}
-          className="w-16"
-        />
-        <Button onClick={() => void exportTrades()} disabled={exporting}>
-          {exporting ? 'Exporting...' : 'Export for LLM'}
-        </Button>
+        <span role="status" className={`ml-auto text-2xs ${TONE_CLASS[status.tone]}`}>{status.text}</span>
+        <MobileDisclosure label="Export">
+          <SelectFilter
+            label="Export"
+            value={exportPages}
+            values={['5', '25', '50', EXPORT_ALL]}
+            onChange={setExportPages}
+            className="w-16"
+          />
+          <Button onClick={() => void exportTrades()} disabled={exporting}>
+            {exporting ? 'Exporting...' : 'Export for LLM'}
+          </Button>
+        </MobileDisclosure>
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border border-border bg-surface p-2">
-        <SelectFilter label="Politician" value={draft.politician} values={politicianOptions} onChange={(value) => selectAndApply('politician', value)} className="w-52" />
+      <div className="politics-filters flex shrink-0 flex-wrap items-center gap-2 border border-border bg-surface p-2">
         <input
           aria-label="Search ticker"
           value={draft.ticker}
@@ -259,10 +261,13 @@ export function PoliticsPage({
           onKeyDown={(event) => { if (event.key === 'Enter') applyFilters() }}
           className={`${SELECT_CLASS} w-28`}
         />
-        <SelectFilter label="Chamber" value={draft.chamber} values={['All', 'House', 'Senate']} onChange={(value) => setDraft((current) => ({ ...current, chamber: value }))} />
-        <SelectFilter label="Party" value={draft.party} values={['All', 'Democrat', 'Republican', 'Independent']} onChange={(value) => setDraft((current) => ({ ...current, party: value }))} />
-        <SelectFilter label="Type" value={draft.tradeType} values={['All', 'Purchase', 'Sale (Full)', 'Sale (Partial)', 'Exchange']} onChange={(value) => setDraft((current) => ({ ...current, tradeType: value }))} />
-        <SelectFilter label="Theme" value={draft.theme} values={themeOptions} onChange={(value) => selectAndApply('theme', value)} className="w-40" />
+        <MobileDisclosure label="Filters">
+          <SelectFilter label="Politician" value={draft.politician} values={politicianOptions} onChange={(value) => selectAndApply('politician', value)} className="w-52" />
+          <SelectFilter label="Chamber" value={draft.chamber} values={['All', 'House', 'Senate']} onChange={(value) => setDraft((current) => ({ ...current, chamber: value }))} />
+          <SelectFilter label="Party" value={draft.party} values={['All', 'Democrat', 'Republican', 'Independent']} onChange={(value) => setDraft((current) => ({ ...current, party: value }))} />
+          <SelectFilter label="Type" value={draft.tradeType} values={['All', 'Purchase', 'Sale (Full)', 'Sale (Partial)', 'Exchange']} onChange={(value) => setDraft((current) => ({ ...current, tradeType: value }))} />
+          <SelectFilter label="Theme" value={draft.theme} values={themeOptions} onChange={(value) => selectAndApply('theme', value)} className="w-40" />
+        </MobileDisclosure>
         <Button variant="accent" onClick={() => applyFilters()}>Apply</Button>
       </div>
 

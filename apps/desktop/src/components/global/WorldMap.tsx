@@ -4,6 +4,7 @@ import type { GlobalIndexRow, GlobalInterval } from '@shared/contract'
 import type { MarketStatus } from '@shared/globalMarkets'
 import { performancePercent, thousands } from '@/lib/format'
 import { FONT_FAMILY, FONTS, layoutLabels, type LabelInput } from './mapLayout'
+import { layoutMobileMapLabels } from './mobileMapLayout'
 import {
   loadWorldFeatures,
   mapRect,
@@ -80,11 +81,19 @@ function performance(row: MappedRow, interval: GlobalInterval) {
 
 /** `_row_color`: green above the dead band, red below it, amber inside it. */
 function rowColor(row: MappedRow, interval: GlobalInterval, palette: Palette): string {
+  const move = marketMove(row, interval)
+  if (move === 'up') return palette.positive
+  if (move === 'down') return palette.negative
+  if (move === 'flat') return palette.neutral
+  return palette.muted
+}
+
+export function marketMove(row: MappedRow, interval: GlobalInterval): 'up' | 'down' | 'flat' | 'unknown' {
   const payload = performance(row, interval)
-  if (!payload?.available || typeof payload.changePct !== 'number') return palette.muted
-  if (payload.changePct > 0.05) return palette.positive
-  if (payload.changePct < -0.05) return palette.negative
-  return palette.neutral
+  if (!payload?.available || typeof payload.changePct !== 'number' || !Number.isFinite(payload.changePct)) return 'unknown'
+  if (payload.changePct > 0.05) return 'up'
+  if (payload.changePct < -0.05) return 'down'
+  return 'flat'
 }
 
 function pctText(row: MappedRow, interval: GlobalInterval): string {
@@ -99,13 +108,17 @@ function statusColor(row: MappedRow, palette: Palette): string {
   return palette.muted
 }
 
-export function intradayRangeText(row: Pick<GlobalIndexRow, 'dayLow' | 'dayHigh'>): string {
+export function intradayRangePercent(row: Pick<GlobalIndexRow, 'dayLow' | 'dayHigh'>): string {
   const { dayLow, dayHigh } = row
   if (typeof dayLow !== 'number' || typeof dayHigh !== 'number' ||
     !Number.isFinite(dayLow) || !Number.isFinite(dayHigh) || dayLow <= 0 || dayHigh < dayLow) {
-    return 'Day range --'
+    return '--'
   }
-  return `Day range ${((dayHigh - dayLow) / dayLow * 100).toFixed(2)}%`
+  return `${((dayHigh - dayLow) / dayLow * 100).toFixed(2)}%`
+}
+
+export function intradayRangeText(row: Pick<GlobalIndexRow, 'dayLow' | 'dayHigh'>): string {
+  return `Day range ${intradayRangePercent(row)}`
 }
 
 function tooltip(row: MappedRow, interval: GlobalInterval): string {
@@ -155,9 +168,10 @@ function drawBase(
   rect: MapRect,
   paths: Path2D[],
   palette: Palette,
+  compact: boolean,
 ): void {
   ctx.clearRect(0, 0, size.width, size.height)
-  ctx.fillStyle = palette.background
+  ctx.fillStyle = compact ? palette.ocean : palette.background
   ctx.fillRect(0, 0, size.width, size.height)
   ctx.fillStyle = palette.ocean
   ctx.fillRect(rect.x, rect.y, rect.width, rect.height)
@@ -168,8 +182,8 @@ function drawBase(
   for (let lon = -150; lon <= 180; lon += 30) {
     const start = project(-85, lon, rect)
     const end = project(85, lon, rect)
-    ctx.moveTo(start.x, start.y)
-    ctx.lineTo(end.x, end.y)
+    ctx.moveTo(start.x, compact ? size.height : start.y)
+    ctx.lineTo(end.x, compact ? 0 : end.y)
   }
   for (let lat = -60; lat <= 90; lat += 30) {
     const start = project(lat, -180, rect)
@@ -179,8 +193,10 @@ function drawBase(
   }
   ctx.stroke()
 
-  ctx.strokeStyle = palette.landBorder
-  ctx.strokeRect(rect.x, rect.y, rect.width, rect.height)
+  if (!compact) {
+    ctx.strokeStyle = palette.landBorder
+    ctx.strokeRect(rect.x, rect.y, rect.width, rect.height)
+  }
 
   ctx.fillStyle = palette.land
   ctx.strokeStyle = withAlpha(palette.countryBorder, 135 / 255)
@@ -195,10 +211,16 @@ function drawBase(
 export function WorldMap({
   rows,
   interval,
+  mobile,
   className = '',
 }: {
   rows: MappedRow[]
   interval: GlobalInterval
+  mobile?: {
+    detailsId: string
+    selectedSymbol?: string
+    onSelect: (symbol: string, anchor: HTMLButtonElement) => void
+  }
   className?: string
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -229,7 +251,13 @@ export function WorldMap({
     return () => observer.disconnect()
   }, [])
 
-  const rect = useMemo(() => mapRect(size.width, size.height), [size])
+  const compact = Boolean(mobile)
+  const rect = useMemo(() => {
+    if (!compact) return mapRect(size.width, size.height)
+    // Center the geography behind the callouts and crop the untracked Antarctic band.
+    const height = Math.min(size.height, Math.max(size.width / 2.4, size.height * 0.78))
+    return { x: 0, y: (size.height - height) / 2, width: size.width, height: height * 180 / 150 }
+  }, [compact, size])
   // `_world_paths`: reprojecting the whole world is the expensive part, so it is redone
   // only when the drawable rect actually changes.
   const paths = useMemo(() => (features ? worldPaths(features, rect) : []), [features, rect])
@@ -244,11 +272,11 @@ export function WorldMap({
     const context = canvas.getContext('2d')
     if (!context) return
     context.setTransform(ratio, 0, 0, ratio, 0, 0)
-    drawBase(context, size, rect, paths, palette)
-  }, [ready, size, rect, paths, palette])
+    drawBase(context, size, rect, paths, palette, compact)
+  }, [ready, size, rect, paths, palette, compact])
 
   const labels = useMemo(() => {
-    if (!ready || !rows.length) return []
+    if (!ready || compact || !rows.length) return []
     const inputs: LabelInput[] = rows.map((row) => ({
       key: row.symbol,
       point: project(row.lat, row.lon, rect),
@@ -266,16 +294,21 @@ export function WorldMap({
       statusColor: statusColor(row, palette),
     }))
     return layoutLabels(inputs, rect)
-  }, [ready, rows, interval, rect, palette])
+  }, [ready, compact, rows, interval, rect, palette])
 
   const tooltips = useMemo(
-    () => new Map(rows.map((row) => [row.symbol, tooltip(row, interval)])),
-    [rows, interval],
+    () => new Map(compact ? [] : rows.map((row) => [row.symbol, tooltip(row, interval)])),
+    [compact, rows, interval],
   )
+  const mobileLabels = useMemo(() => {
+    if (!ready || !compact) return []
+    const points = rows.map((row) => ({ row, symbol: row.symbol, lon: row.lon, point: project(row.lat, row.lon, rect) }))
+    return layoutMobileMapLabels(points, size.width, size.height)
+  }, [ready, compact, rows, rect, size])
 
   return (
     <div ref={containerRef} className={`relative min-h-0 flex-1 overflow-hidden ${className}`}>
-      <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" />
+      <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" aria-hidden="true" />
 
       {features !== null && !features.length ? (
         <p className="absolute inset-x-0 top-1/2 text-center text-2xs text-text-dim">
@@ -287,10 +320,21 @@ export function WorldMap({
         className="absolute inset-0 h-full w-full"
         width={size.width}
         height={size.height}
-        viewBox={`0 0 ${size.width} ${size.height}`}
+        viewBox={ready ? `0 0 ${size.width} ${size.height}` : undefined}
         role="img"
         aria-label="Global market index map"
+        aria-hidden={compact || undefined}
       >
+        {mobileLabels.map(({ symbol, point, rect: box, row }) => (
+          <g key={symbol} opacity={symbol === mobile?.selectedSymbol ? 1 : 0.76}>
+            <line x1={point.x} y1={point.y}
+              x2={Math.max(box.x, Math.min(point.x, box.x + box.width))}
+              y2={Math.max(box.y, Math.min(point.y, box.y + box.height))}
+              stroke={rowColor(row, interval, palette)} strokeWidth={1} />
+            <circle cx={point.x} cy={point.y} r={symbol === mobile?.selectedSymbol ? 4.5 : 3}
+              fill={rowColor(row, interval, palette)} stroke={palette.background} strokeWidth={1} />
+          </g>
+        ))}
         {/* Leaders first, then boxes over them, then pins on top — `_draw_markers`. */}
         <g>
           {labels
@@ -383,6 +427,19 @@ export function WorldMap({
           ))}
         </g>
       </svg>
+      {mobile && mobileLabels.map(({ symbol, rect: box, row }) => {
+        const change = performance(row, interval)
+        return (
+          <button key={symbol} type="button" className="global-mobile-callout" data-symbol={symbol}
+            data-move={marketMove(row, interval)} onClick={(event) => mobile.onSelect(symbol, event.currentTarget)}
+            aria-expanded={symbol === mobile.selectedSymbol} aria-controls={mobile.detailsId}
+            style={{ left: box.x, top: box.y, width: box.width, height: box.height }}>
+            <strong>{row.country}</strong>
+            <span>{row.shortName || row.name || row.symbol}</span>
+            <span className="global-mobile-change">{performancePercent(change?.available ? change.changePct : null)}</span>
+          </button>
+        )
+      })}
     </div>
   )
 }

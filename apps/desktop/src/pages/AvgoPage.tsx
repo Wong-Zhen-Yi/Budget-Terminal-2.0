@@ -17,6 +17,7 @@ import { StocksChart } from '@/components/stocks/StocksChart'
 import { FilingsTable } from '@/components/fundamentals/FilingsTable'
 import { DataTable } from '@/components/ui/DataTable'
 import { Button } from '@/components/ui/Button'
+import { MobileDisclosure } from '@/components/ui/MobileDisclosure'
 import { Panel, PanelMessage } from '@/components/ui/Panel'
 import { compactCurrency, currency, percent, plainPercent, signedCurrencyPrecise } from '@/lib/format'
 import '@/styles/avgo.css'
@@ -150,10 +151,12 @@ export function AvgoPage({ onStatusChange, onNavigate }: {
           if (next !== null) { event.preventDefault(); setSection(SECTIONS[next]); tabRefs.current[next]?.focus() }
         }}>{item}</button>)}
       </div>
-      <div className="ml-auto flex flex-wrap gap-1 pb-1">
-        <Button onClick={() => onNavigate('charts', 'AVGO')}>Charts</Button><Button onClick={() => onNavigate('fundamentals', 'AVGO')}>Fundamentals</Button>
-        <Button onClick={() => void api.openExternal('https://investors.broadcom.com/')}>Investor relations</Button>
-      </div>
+      <MobileDisclosure label="Related research" className="research-navigation-tools">
+        <div className="ml-auto flex flex-wrap gap-1 pb-1">
+          <Button onClick={() => onNavigate('charts', 'AVGO')}>Charts</Button><Button onClick={() => onNavigate('fundamentals', 'AVGO')}>Fundamentals</Button>
+          <Button onClick={() => void api.openExternal('https://investors.broadcom.com/')}>Investor relations</Button>
+        </div>
+      </MobileDisclosure>
     </nav>
     <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 text-2xs text-text-muted">
       <span role="status">{status}</span>

@@ -34,6 +34,7 @@ import { OptionChainTable } from '@/components/options/OptionChainTable'
 import { OptionSummaryTable } from '@/components/options/OptionSummaryTable'
 import { HIGHLIGHT_LEGEND } from '@/components/options/highlights'
 import { Button } from '@/components/ui/Button'
+import { MobileDisclosure } from '@/components/ui/MobileDisclosure'
 import { Select } from '@/components/ui/Select'
 import { currency } from '@/lib/format'
 import { useOptionsPage, type OptionsTab } from '@/stores/options'
@@ -317,8 +318,8 @@ export function OptionsPage({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-1 p-1">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border border-border bg-surface px-2 py-1">
-        <span className="text-2xs font-semibold text-text">Ticker:</span>
+      <div className="options-toolbar flex shrink-0 flex-wrap items-center gap-2 border border-border bg-surface px-2 py-1">
+        <span className="mobile-hide text-2xs font-semibold text-text">Ticker:</span>
         <form
           className="flex items-center gap-1"
           onSubmit={(event) => {
@@ -344,11 +345,13 @@ export function OptionsPage({
             {loading ? 'Loading...' : 'Load Ticker'}
           </Button>
         </form>
-        <Button variant="accent" onClick={() => void exportTopVolume()}>
-          Export Options by Top Volume
-        </Button>
+        <MobileDisclosure label="Export">
+          <Button variant="accent" onClick={() => void exportTopVolume()}>
+            Export Options by Top Volume
+          </Button>
+        </MobileDisclosure>
         <span className={`min-w-0 flex-1 truncate text-right text-2xs ${notice ? toneClass[notice.tone] : ''}`} role="status" title={notice?.text}>{notice?.text}</span>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="mobile-tab-strip options-views ml-auto flex items-center gap-1" role="group" aria-label="Options views">
           {TABS.map((entry) => (
             <Button
               key={entry.id}
@@ -509,36 +512,40 @@ function ChainTab({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-1">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border border-border bg-surface px-2 py-1">
-        <Button variant="accent" onClick={onLoad}>
-          Reload Chain
-        </Button>
-        <Button variant="accent" onClick={onExport}>
-          Export Chain
-        </Button>
-        <span className="num ml-2 text-sm font-bold text-up">
-          {payload?.spotPrice ? currency(payload.spotPrice) : ''}
-        </span>
-        <span className="ml-4 text-2xs font-semibold text-text">Expiry:</span>
-        <Select
-          aria-label="Expiry"
-          className="w-40"
-          value={payload?.expiry || expiry}
-          options={
-            payload?.expiries.length
-              ? payload.expiries.map((entry) => ({ value: entry.expiry, label: entry.label }))
-              : [{ value: expiry, label: expiry || 'No expirations' }]
-          }
-          onChange={onExpiry}
-        />
-        <span className="ml-2 text-2xs font-semibold text-text">Strategy:</span>
-        <Select
-          aria-label="Strategy"
-          className="w-40"
-          value={strategy}
-          options={OPTIONS_STRATEGIES.map((entry) => ({ value: entry, label: entry }))}
-          onChange={(value) => onStrategy(value as OptionsStrategy)}
-        />
+      <div className="options-chain-toolbar flex shrink-0 flex-wrap items-center gap-2 border border-border bg-surface px-2 py-1">
+        <MobileDisclosure label="Chain tools">
+          <Button variant="accent" onClick={onLoad}>
+            Reload Chain
+          </Button>
+          <Button variant="accent" onClick={onExport}>
+            Export Chain
+          </Button>
+          {payload?.spotPrice ? <span className="num ml-2 text-sm font-bold text-up">{currency(payload.spotPrice)}</span> : null}
+        </MobileDisclosure>
+        <div className="options-chain-field contents">
+          <span className="ml-4 text-2xs font-semibold text-text">Expiry:</span>
+          <Select
+            aria-label="Expiry"
+            className="w-40"
+            value={payload?.expiry || expiry}
+            options={
+              payload?.expiries.length
+                ? payload.expiries.map((entry) => ({ value: entry.expiry, label: entry.label }))
+                : [{ value: expiry, label: expiry || 'No expirations' }]
+            }
+            onChange={onExpiry}
+          />
+        </div>
+        <div className="options-chain-field contents">
+          <span className="ml-2 text-2xs font-semibold text-text">Strategy:</span>
+          <Select
+            aria-label="Strategy"
+            className="w-40"
+            value={strategy}
+            options={OPTIONS_STRATEGIES.map((entry) => ({ value: entry, label: entry }))}
+            onChange={(value) => onStrategy(value as OptionsStrategy)}
+          />
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-1 gap-1">
@@ -619,7 +626,7 @@ function SummaryGrid({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-1">
-      <div className="flex shrink-0 flex-wrap items-center gap-1 border border-border bg-surface px-2 py-1">
+      <div className="mobile-tab-strip flex shrink-0 flex-wrap items-center gap-1 border border-border bg-surface px-2 py-1" role="group" aria-label={`${title} controls`}>
         {controls}
       </div>
 

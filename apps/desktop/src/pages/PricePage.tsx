@@ -182,45 +182,49 @@ export function PricePage({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-2">
-      <h1 className="shrink-0 text-sm font-semibold text-text">Price</h1>
+      <h1 className="mobile-hide shrink-0 text-sm font-semibold text-text">Price</h1>
 
       <section className="flex min-h-0 flex-1 flex-col gap-2 border border-border bg-surface p-2">
-        <div className="flex shrink-0 flex-wrap items-center gap-1">
-          <span className="px-1 text-2xs text-text-muted">Minimum price</span>
-          <NumberInput
-            value={minimumPrice}
-            onCommit={(value) => {
-              setMinimumPrice(value)
-              setNotice(null)
-            }}
-            decimals={2}
-            prefix="$"
-            min={MINIMUM_PRICE}
-            max={MAXIMUM_PRICE}
-            disabled={screen.isFetching}
-            className={PRICE_INPUT}
-            aria-label="Minimum stock price"
-          />
-          <span className="pl-2 text-2xs text-text-muted">Maximum price</span>
-          <NumberInput
-            value={maximumPrice}
-            onCommit={(value) => {
-              setMaximumPrice(value)
-              setNotice(null)
-            }}
-            decimals={2}
-            prefix="$"
-            min={MINIMUM_PRICE}
-            max={MAXIMUM_PRICE}
-            disabled={screen.isFetching}
-            className={PRICE_INPUT}
-            aria-label="Maximum stock price"
-          />
+        <div className="price-toolbar flex shrink-0 flex-wrap items-center gap-1">
+          <div className="price-bound contents">
+            <span className="px-1 text-2xs text-text-muted">Minimum price</span>
+            <NumberInput
+              value={minimumPrice}
+              onCommit={(value) => {
+                setMinimumPrice(value)
+                setNotice(null)
+              }}
+              decimals={2}
+              prefix="$"
+              min={MINIMUM_PRICE}
+              max={MAXIMUM_PRICE}
+              disabled={screen.isFetching}
+              className={PRICE_INPUT}
+              aria-label="Minimum stock price"
+            />
+          </div>
+          <div className="price-bound contents">
+            <span className="pl-2 text-2xs text-text-muted">Maximum price</span>
+            <NumberInput
+              value={maximumPrice}
+              onCommit={(value) => {
+                setMaximumPrice(value)
+                setNotice(null)
+              }}
+              decimals={2}
+              prefix="$"
+              min={MINIMUM_PRICE}
+              max={MAXIMUM_PRICE}
+              disabled={screen.isFetching}
+              className={PRICE_INPUT}
+              aria-label="Maximum stock price"
+            />
+          </div>
           <Button variant="accent" onClick={() => void fetchRange()} disabled={screen.isFetching}>
             {screen.isFetching ? 'Fetching...' : 'Fetch'}
           </Button>
           {status && (
-            <span className={`ml-auto px-1 text-right text-2xs ${toneClass[status.tone]}`}>
+            <span role="status" className={`ml-auto px-1 text-right text-2xs ${toneClass[status.tone]}`}>
               {status.text}
             </span>
           )}

@@ -18,6 +18,7 @@ import {
 } from '@/api/institutionQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { Button } from '@/components/ui/Button'
+import { MobileDisclosure } from '@/components/ui/MobileDisclosure'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 
 type Tone = 'muted' | 'positive' | 'warning' | 'negative'
@@ -309,8 +310,8 @@ export function InstitutionsPage({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
-      <section className="flex shrink-0 flex-wrap items-center gap-2 border border-border bg-surface px-3 py-2">
-        <div className="mr-auto">
+      <section className="institutions-toolbar flex shrink-0 flex-wrap items-center gap-2 border border-border bg-surface px-3 py-2">
+        <div className="mobile-hide mr-auto">
           <h1 className="text-sm font-semibold text-text">Institutions</h1>
           <p className="text-2xs text-text-muted">Latest DATAROMA superinvestor activity by quarter.</p>
         </div>
@@ -327,12 +328,14 @@ export function InstitutionsPage({
         </select>
         <Button onClick={() => void loadQuarter()} disabled={busy}>Load Quarter</Button>
 
-        <Button variant="accent" onClick={() => void copyActivity()} disabled={busy || !payload}>
-          Export Buys/Sells
-        </Button>
-        <Button variant="accent" onClick={() => void copyManagers()} disabled={busy || !payload}>
-          Export Superinvestors
-        </Button>
+        <MobileDisclosure label="Export">
+          <Button variant="accent" onClick={() => void copyActivity()} disabled={busy || !payload}>
+            Export Buys/Sells
+          </Button>
+          <Button variant="accent" onClick={() => void copyManagers()} disabled={busy || !payload}>
+            Export Superinvestors
+          </Button>
+        </MobileDisclosure>
         <p className={`max-w-xl text-right text-2xs ${toneClass[status.tone]}`}>{status.text}</p>
       </section>
 

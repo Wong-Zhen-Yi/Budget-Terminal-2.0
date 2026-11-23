@@ -46,7 +46,7 @@ For the HTTPS link, turn on **Use Tailscale DNS** in the Tailscale app. Disconne
 
 ## What you can do on mobile
 
-Use **Find a page** to open every implemented page available in your settings, including enabled Labs. Most research views use the same charts, filters, and tables. Swipe across wide tables and scroll through stacked panels on narrow screens. Portfolio, Cards, Personal Finance, and Articles edits save to the shared desktop records. You can download a backup, export individual article PDFs, or export the article library as a ZIP of PDFs. The mobile ZIP accepts up to 60 articles and has a 64 MB output limit.
+Tap the current page name to open **Workspaces**. Browse the page pills under each workspace or search by page or workspace name. The list follows your navigation settings, including enabled Labs. Most research views use the same charts, filters, and tables. Swipe across wide tables and scroll through stacked panels on narrow screens. Portfolio, Cards, Personal Finance, and Articles edits save to the shared desktop records. You can download a backup, export individual article PDFs, or export the article library as a ZIP of PDFs. The mobile ZIP accepts up to 60 articles and has a 64 MB output limit.
 
 Browser opens searches and websites in Safari. YouTube playback opens on the device, and Agents opens your Telegram bot. The computer handles its signed-in Chromium profile, desktop agent history and trackers, account credentials, MCP controls, and system maintenance. Notifications are visible in the app inbox, with native desktop delivery handled by the computer.
 

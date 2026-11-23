@@ -3,6 +3,11 @@
 @import './finance.css';
 @import '../pages/HoodPage.css';
 
+.mobile-disclosure,
+.mobile-disclosure-content { display: contents; }
+.mobile-disclosure-toggle,
+.portfolio-mobile-total { display: none; }
+
 .auth-popup {
   position: fixed;
   inset: 0;

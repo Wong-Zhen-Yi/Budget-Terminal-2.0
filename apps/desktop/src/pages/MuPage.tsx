@@ -86,9 +86,11 @@ export function MuPage({ onStatusChange, onNavigate }: {
       <h1 className="pr-2 text-sm font-semibold text-text">MU — Micron Technology</h1>
       <span className="ml-auto min-w-0 flex-1 truncate text-right text-2xs text-text-muted" role="status">{status}</span>
 
-      <Button disabled={!payload || MU_BLOCKS.every(block => payload.progress[block] === 'unavailable')} onClick={() => void onExport()}>Export snapshot</Button>
-      <Button onClick={() => onNavigate('charts', 'MU')}>Charts</Button><Button onClick={() => onNavigate('fundamentals', 'MU')}>Fundamentals</Button>
-      <Button onClick={() => void api.openExternal('https://investors.micron.com/overview/default.aspx')}>Investor relations</Button>
+      <div className="mobile-tab-strip contents gap-1" role="group" aria-label="Related research">
+        <Button disabled={!payload || MU_BLOCKS.every(block => payload.progress[block] === 'unavailable')} onClick={() => void onExport()}>Export snapshot</Button>
+        <Button onClick={() => onNavigate('charts', 'MU')}>Charts</Button><Button onClick={() => onNavigate('fundamentals', 'MU')}>Fundamentals</Button>
+        <Button onClick={() => void api.openExternal('https://investors.micron.com/overview/default.aspx')}>Investor relations</Button>
+      </div>
     </div>
     <div className="grid shrink-0 grid-cols-2 gap-2 md:grid-cols-3 2xl:grid-cols-6">
       <Tile label={market?.chart.stats.priceBasis === 'equity-perp-mark' ? 'Equity-perp mark' : 'Share price'} value={currency(market?.chart.stats.price)} sub={`${market?.chart.stats.priceSource ?? 'USD'} · ${percent(market?.chart.stats.change)} ${market?.chart.stats.changeBasis === '24h' ? '24h' : 'daily'}`} />

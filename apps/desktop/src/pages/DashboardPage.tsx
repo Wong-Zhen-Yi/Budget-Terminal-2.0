@@ -177,10 +177,11 @@ export function DashboardPage({
     [newsFocused, setHeatmapWidth, setOptionsWidth],
   )
 
+  const mobilePortfolio = newsFocused && isMobileTerminal()
   const selectPortfolioTicker = lite && !autoFollow ? undefined : selectTicker
   const holdingsPanel = (
     <PortfolioPanel
-      className={lite ? undefined : 'min-h-24 flex-[3]'}
+      className={mobilePortfolio ? 'dashboard-mobile-holdings' : lite ? undefined : 'min-h-24 flex-[3]'}
       portfolios={portfolios}
       selected={selected}
       quotes={quotesQuery.data?.data.holdings ?? {}}
@@ -236,6 +237,24 @@ export function DashboardPage({
     />
   )
 
+  const portfolioView = {
+    portfolio: selected,
+    quotes: quotesQuery.data?.data.holdings ?? {},
+    loading: portfolioQuery.isLoading || quotesQuery.isLoading,
+    warning: portfolioQuery.error?.message ?? quotesQuery.error?.message ?? warningOf(portfolioQuery.data) ?? warningOf(quotesQuery.data),
+  }
+  const piePanel = <PortfolioPiePanel {...portfolioView} className={mobilePortfolio ? undefined : 'min-h-24 flex-[2]'} />
+  const heatmapPanel = <PortfolioHeatmapPanel {...portfolioView} onStatusChange={setHeatmapPanels} />
+
+  if (mobilePortfolio) return (
+    <div className="dashboard-2-mobile grid grid-cols-[minmax(0,1fr)] gap-2 p-2">
+      {holdingsPanel}
+      {piePanel}
+      {heatmapPanel}
+      <MobileAgentsPage />
+    </div>
+  )
+
   return (
     <div ref={layoutRef} className={`dashboard-layout flex min-h-0 flex-1 gap-1 p-1${newsFocused ? ' dashboard-news-layout' : ''}`}>
       {/* Dashboard 2 pairs holdings with their allocation pie; Dashboard keeps targets. */}
@@ -244,15 +263,7 @@ export function DashboardPage({
         style={{ width: leftWidth }}
       >
         {holdingsPanel}
-        {newsFocused ? (
-          <PortfolioPiePanel
-            className="min-h-24 flex-[2]"
-            portfolio={selected}
-            quotes={quotesQuery.data?.data.holdings ?? {}}
-            loading={portfolioQuery.isLoading || quotesQuery.isLoading}
-            warning={portfolioQuery.error?.message ?? quotesQuery.error?.message ?? warningOf(portfolioQuery.data) ?? warningOf(quotesQuery.data)}
-          />
-        ) : targetsPanel}
+        {newsFocused ? piePanel : targetsPanel}
         {!newsFocused ? (
           <NewsPanel
             className="min-h-24 flex-[3]"
@@ -272,7 +283,7 @@ export function DashboardPage({
         <div className="dashboard-main flex min-h-0 min-w-0 flex-1 gap-1">
           <div className={`flex min-h-0 min-w-0 flex-1 flex-col gap-1 ${newsFocused ? 'dashboard-agents-column overflow-hidden border border-border' : 'dashboard-chart'}`} aria-label={newsFocused ? 'Dashboard Agents' : undefined}>
             {newsFocused ? (
-              isMobileTerminal() ? <MobileAgentsPage /> : <AgentsPage embedded onStatusChange={setAgentPanels} />
+              <AgentsPage embedded onStatusChange={setAgentPanels} />
             ) : chartPanel}
           </div>
 
@@ -280,13 +291,7 @@ export function DashboardPage({
 
           {newsFocused ? (
             <aside className="dashboard-heatmap-column flex min-h-0 min-w-0 shrink-0 flex-col" style={{ width: heatmapWidth }} aria-label="Dashboard portfolio heatmap">
-              <PortfolioHeatmapPanel
-                portfolio={selected}
-                quotes={quotesQuery.data?.data.holdings ?? {}}
-                loading={portfolioQuery.isLoading || quotesQuery.isLoading}
-                warning={portfolioQuery.error?.message ?? quotesQuery.error?.message ?? warningOf(portfolioQuery.data) ?? warningOf(quotesQuery.data)}
-                onStatusChange={setHeatmapPanels}
-              />
+              {heatmapPanel}
             </aside>
           ) : (
             <div className="dashboard-options-column flex min-h-0 shrink-0 flex-col" style={{ width: optionsWidth }}>

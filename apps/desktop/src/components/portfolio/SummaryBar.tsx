@@ -1,5 +1,6 @@
 import type { Portfolio } from '@shared/contract'
 import type { PortfolioSummary } from '@shared/portfolioMath'
+import { MobileDisclosure } from '@/components/ui/MobileDisclosure'
 import { NumberInput } from '@/components/ui/NumberInput'
 import { PrivateNumber } from '@/components/ui/NumberPrivacy'
 import { currency, integer, plainPercent, signedCurrency } from '@/lib/format'
@@ -28,72 +29,79 @@ export function SummaryBar({
   onToggleIncludeCash,
 }: SummaryBarProps) {
   const readOnly = portfolio.readOnly
+  const total = `${currency(summary.total)} USD`
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2">
-      <h1 className="pr-2 text-sm font-semibold text-text">Portfolio</h1>
+    <div className="portfolio-summary flex shrink-0 flex-wrap items-center gap-2">
+      <h1 className="portfolio-desktop-label pr-2 text-sm font-semibold text-text">Portfolio</h1>
+      <div className="portfolio-mobile-total min-w-0">
+        <span className="text-2xs text-text-muted">{summary.complete ? 'Included total' : 'Known total'}</span>
+        <strong className="num text-sm text-text"><PrivateNumber>{total}</PrivateNumber></strong>
+      </div>
 
-      <Chip>
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={portfolio.includeCashInWeight}
-            disabled={readOnly}
-            onChange={(event) => onToggleIncludeCash(event.target.checked)}
-            className="accent-accent"
+      <MobileDisclosure label="Summary" className="portfolio-summary-details">
+        <Chip>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={portfolio.includeCashInWeight}
+              disabled={readOnly}
+              onChange={(event) => onToggleIncludeCash(event.target.checked)}
+              className="accent-accent"
+            />
+            <span
+              className="text-2xs tracking-wide text-text-muted uppercase"
+              title="Include cash in portfolio weight and the total"
+            >
+              Brokerage Cash
+            </span>
+          </label>
+          <NumberInput
+            aria-label="Brokerage cash"
+            value={portfolio.cashBalance}
+            decimals={2}
+            prefix="$"
+            onCommit={onSetCash}
+            className="portfolio-balance-input w-32"
           />
+        </Chip>
+
+        <Chip>
           <span
             className="text-2xs tracking-wide text-text-muted uppercase"
-            title="Include cash in portfolio weight and the total"
+            title="Margin debt is deducted from the portfolio total"
           >
-            Brokerage Cash
+            Margin
           </span>
-        </label>
-        <NumberInput
-          aria-label="Brokerage cash"
-          value={portfolio.cashBalance}
-          decimals={2}
-          prefix="$"
-          onCommit={onSetCash}
-          className="w-32"
-        />
-      </Chip>
+          <NumberInput
+            aria-label="Margin debt"
+            value={portfolio.marginDebt}
+            decimals={2}
+            prefix="$"
+            onCommit={onSetMargin}
+            className="portfolio-balance-input w-32"
+          />
+          {summary.marginUtilization !== null ? (
+            <span
+              className={`num text-2xs ${marginTone(summary.marginUtilization)}`}
+              title="Margin used = margin debt / (stock market value + cash)"
+            >
+              <PrivateNumber>{plainPercent(summary.marginUtilization)}</PrivateNumber>
+            </span>
+          ) : null}
+        </Chip>
 
-      <Chip>
-        <span
-          className="text-2xs tracking-wide text-text-muted uppercase"
-          title="Margin debt is deducted from the portfolio total"
-        >
-          Margin
-        </span>
-        <NumberInput
-          aria-label="Margin debt"
-          value={portfolio.marginDebt}
-          decimals={2}
-          prefix="$"
-          onCommit={onSetMargin}
-          className="w-32"
-        />
-        {summary.marginUtilization !== null ? (
-          <span
-            className={`num text-2xs ${marginTone(summary.marginUtilization)}`}
-            title="Margin used = margin debt / (stock market value + cash)"
-          >
-            <PrivateNumber>{plainPercent(summary.marginUtilization)}</PrivateNumber>
-          </span>
-        ) : null}
-      </Chip>
-
-      <Metric label="Stock P&L" tone={!summary.complete ? 'text-text-muted' : summary.stockPnl >= 0 ? 'text-up' : 'text-down'}>
-        {summary.complete ? signedCurrency(summary.stockPnl) : 'N/A'}
-      </Metric>
-      <Metric label="Options P&L" tone={optionsPnl === null ? 'text-text-muted' : optionsPnl >= 0 ? 'text-up' : 'text-down'}>
-        {optionsPnl === null ? 'N/A' : signedCurrency(optionsPnl)}
-      </Metric>
-      <Metric label="Positions">{integer(summary.positionCount)}</Metric>
-      <Metric label={summary.complete ? 'Included stocks + cash − margin' : 'Known stocks + cash − margin'}>{currency(summary.total)} USD</Metric>
-      {portfolio.options.some(option => option.ticker && option.contracts) && <span className="text-2xs text-text-muted">Options equity is included in Personal Finance net worth.</span>}
-      {!summary.complete && <span className="text-2xs text-warn">Incomplete: {summary.missingReasons.join(' ')}</span>}
+        <Metric label="Stock P&L" tone={!summary.complete ? 'text-text-muted' : summary.stockPnl >= 0 ? 'text-up' : 'text-down'}>
+          {summary.complete ? signedCurrency(summary.stockPnl) : 'N/A'}
+        </Metric>
+        <Metric label="Options P&L" tone={optionsPnl === null ? 'text-text-muted' : optionsPnl >= 0 ? 'text-up' : 'text-down'}>
+          {optionsPnl === null ? 'N/A' : signedCurrency(optionsPnl)}
+        </Metric>
+        <Metric label="Positions">{integer(summary.positionCount)}</Metric>
+        <Metric label={summary.complete ? 'Included stocks + cash − margin' : 'Known stocks + cash − margin'}>{total}</Metric>
+        {portfolio.options.some(option => option.ticker && option.contracts) && <span className="text-2xs text-text-muted">Options equity is included in Personal Finance net worth.</span>}
+        {!summary.complete && <span className="text-2xs text-warn">Incomplete: {summary.missingReasons.join(' ')}</span>}
+      </MobileDisclosure>
     </div>
   )
 }

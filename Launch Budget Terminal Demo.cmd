@@ -1,4 +1,8 @@
 @echo off
+rem The shared build includes the mobile Workspaces page with grouped page pills.
+rem The shared build includes 17 staggered index callouts inside the mobile Global map.
+rem The shared build includes compact Portfolio and research toolbars for phone layouts.
+rem The shared build includes the mobile Dashboard 2.0 portfolio stack and Agent Chat card.
 rem The connected mobile launcher in Settings Labs is available in the regular Windows desktop session.
 rem Tailscale setup commands are available in the regular desktop session.
 rem The shared build includes direct Telegram /mobile and /restart handling.

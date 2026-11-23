@@ -1,4 +1,8 @@
 @echo off
+rem The shared build includes the mobile Workspaces page with grouped page pills.
+rem The shared build includes 17 staggered index callouts inside the mobile Global map.
+rem The shared build includes compact Portfolio and research toolbars for phone layouts.
+rem The shared build includes the mobile Dashboard 2.0 portfolio stack and Agent Chat card.
 rem Select a viewport model and launch the connected mobile window from Settings Labs.
 rem Mobile Access includes a button to copy the Tailscale setup commands after the shared build.
 rem Telegram /mobile retrieves links and /restart relaunches the app without Codex inference.

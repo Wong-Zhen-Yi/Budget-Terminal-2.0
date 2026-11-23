@@ -18,6 +18,7 @@ import {
 } from '@/components/fundamentals/FundamentalsBarChart'
 import { FilingsTable } from '@/components/fundamentals/FilingsTable'
 import { Button } from '@/components/ui/Button'
+import { MobileDisclosure } from '@/components/ui/MobileDisclosure'
 import { Modal } from '@/components/ui/Modal'
 import { Panel } from '@/components/ui/Panel'
 import { compactCurrency, decimals } from '@/lib/format'
@@ -182,19 +183,21 @@ export function FundamentalsPage({
             />
             <Button type="submit" variant="accent" className="h-7" disabled={primaryBusy}>{primaryBusy ? 'Loading...' : 'Analyze'}</Button>
           </form>
-          <form className="flex min-w-[390px] flex-1 items-center gap-1" onSubmit={(event) => { event.preventDefault(); void compare() }}>
-            <label className="shrink-0 text-2xs font-semibold tracking-wide text-text-muted uppercase">Compare</label>
-            <input
-              value={compareDraft}
-              onChange={(event) => setCompareDraft(event.target.value.toUpperCase())}
-              placeholder="Optional ticker"
-              aria-label="Comparison ticker"
-              maxLength={12}
-              className="num h-7 min-w-0 flex-1 border border-border-strong bg-surface-raised px-2 text-center text-sm font-semibold tracking-wide text-text outline-none focus:border-accent"
-            />
-            <Button type="submit" className="h-7" disabled={compareBusy}>{compareBusy ? 'Loading...' : 'Compare'}</Button>
-            <Button className="h-7" onClick={clearCompare} disabled={!compareSymbol && !compareDraft}>Clear</Button>
-          </form>
+          <MobileDisclosure label="Compare" className="fundamentals-compare">
+            <form className="flex min-w-[390px] flex-1 items-center gap-1" onSubmit={(event) => { event.preventDefault(); void compare() }}>
+              <label className="shrink-0 text-2xs font-semibold tracking-wide text-text-muted uppercase">Compare</label>
+              <input
+                value={compareDraft}
+                onChange={(event) => setCompareDraft(event.target.value.toUpperCase())}
+                placeholder="Optional ticker"
+                aria-label="Comparison ticker"
+                maxLength={12}
+                className="num h-7 min-w-0 flex-1 border border-border-strong bg-surface-raised px-2 text-center text-sm font-semibold tracking-wide text-text outline-none focus:border-accent"
+              />
+              <Button type="submit" className="h-7" disabled={compareBusy}>{compareBusy ? 'Loading...' : 'Compare'}</Button>
+              <Button className="h-7" onClick={clearCompare} disabled={!compareSymbol && !compareDraft}>Clear</Button>
+            </form>
+          </MobileDisclosure>
         </div>
         <div className="mt-1 grid grid-cols-1 gap-x-4 text-2xs lg:grid-cols-2">
           <p className={`truncate ${toneClass[primaryStatus.tone]}`} title={primaryStatus.text}>{primaryStatus.text}</p>
@@ -208,7 +211,7 @@ export function FundamentalsPage({
         <>
           <CompanyHeader primary={primaryPayload} compare={comparePayload} />
           {/* Tabs and the presentation controls share one strip; stacked they cost 72px of chart. */}
-          <nav className="flex min-h-9 shrink-0 flex-wrap items-center gap-1 border-b border-border bg-surface px-2">
+          <nav className="mobile-tab-strip flex min-h-9 shrink-0 flex-wrap items-center gap-1 border-b border-border bg-surface px-2" aria-label="Fundamental datasets">
             <TabButton active={workspaceTab === 'statements'} onClick={() => setWorkspaceTab('statements')}>Statements</TabButton>
             <TabButton active={workspaceTab === 'filings'} onClick={() => setWorkspaceTab('filings')}>
               {`SEC Filings (${primaryPayload.sec.filings.length})`}

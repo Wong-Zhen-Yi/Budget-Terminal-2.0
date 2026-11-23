@@ -98,7 +98,9 @@ export function HimsPage({ onStatusChange, onNavigate }: {
       <span className={`num text-xs ${stats && stats.change >= 0 ? 'text-up' : 'text-down'}`}>{percent(stats?.change, true)}</span>
       <span className="text-2xs text-text-muted">NYSE · USD · Consumer health platform</span>
 
-      {['charts', 'fundamentals', 'options', 'valuation'].map(id => <Button key={id} className="capitalize" onClick={() => onNavigate(id, 'HIMS')}>{id}</Button>)}
+      <div className="mobile-tab-strip contents gap-1" role="group" aria-label="Related research">
+        {['charts', 'fundamentals', 'options', 'valuation'].map(id => <Button key={id} className="capitalize" onClick={() => onNavigate(id, 'HIMS')}>{id}</Button>)}
+      </div>
     </div>
     <div className="flex shrink-0 flex-wrap items-center gap-2 text-2xs text-text-muted">
       <span className="min-w-0 flex-1 truncate">Price from daily bars{data?.market?.chart.candles.at(-1) ? ` as of ${new Date(data.market.chart.candles.at(-1)!.time * 1000).toISOString().slice(0, 10)}` : ''}</span>

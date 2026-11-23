@@ -68,27 +68,56 @@
 [data-terminal-mobile] [data-page-id] table { min-width: max-content; }
 [data-terminal-mobile] input:not([type="checkbox"], [type="radio"], [type="range"]),
 [data-terminal-mobile] select, [data-terminal-mobile] textarea { font-size: max(16px, 1em); }
-.mobile-picker-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
+.mobile-navigation {
   display: flex;
-  justify-content: center;
-  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
-    max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
-  background: rgb(0 0 0 / .5);
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
 }
-.mobile-picker { max-height: 100%; border-radius: 12px; overflow: hidden; }
-.mobile-picker > div { padding: 0 14px; font-size: 16px; font-weight: 600; color: var(--color-text); }
-.mobile-picker > div button { color: var(--color-accent-hover); font-size: 14px; }
-.mobile-picker button { min-height: 44px; }
-.mobile-picker input { min-height: 46px; padding-inline: 14px; }
-.mobile-picker ul { overscroll-behavior: contain; }
-.mobile-picker li + li { border-top: 1px solid var(--color-border); }
-.mobile-picker li button { height: auto; padding: 8px 14px; }
-.mobile-picker li button[aria-current="page"] { box-shadow: inset 3px 0 var(--color-accent); color: var(--color-text); }
-.mobile-picker li button span:first-child { font-size: 14px; }
-.mobile-picker li button span:not(:first-child) { flex-shrink: 0; }
+.mobile-navigation-search,
+.mobile-navigation-groups { width: min(100%, 46rem); margin-inline: auto; padding: 12px; }
+.mobile-navigation-search { display: grid; flex: none; gap: 10px; }
+.mobile-navigation-search h2 { font-size: 24px; font-weight: 650; line-height: 1.2; }
+.mobile-navigation-search input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.mobile-navigation-search input::placeholder { color: var(--color-text-muted); }
+.mobile-navigation-scroll { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.mobile-navigation-groups { display: grid; align-content: start; gap: 10px; padding-top: 0; }
+.mobile-navigation-group {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+}
+.mobile-navigation-group h3 { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 650; }
+.mobile-navigation-group h3 svg { margin: 0; width: 18px; height: 18px; color: var(--color-accent-hover); }
+.mobile-navigation-group ul { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.mobile-navigation-group li { min-width: 0; max-width: 100%; }
+.mobile-navigation-pill {
+  min-height: 44px;
+  padding: 6px 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.mobile-navigation-pill:hover { background: var(--color-surface-hover); }
+.mobile-navigation-pill[aria-current="page"] { border-color: var(--color-accent-hover); background: var(--color-accent-dim); }
+.mobile-page-button:focus-visible,
+.mobile-navigation :is(button, input):focus-visible { outline: 2px solid var(--color-accent-hover); outline-offset: 2px; }
+.mobile-navigation-empty { padding: 12px; color: var(--color-text-muted); font-size: 14px; }
 [data-terminal-mobile] [data-page-id] [role="tablist"] { overflow-x: auto; }
 [data-terminal-mobile] [data-page-id] [role="tablist"] > button { flex-shrink: 0; }
 
@@ -117,6 +146,44 @@
 .mobile-browser-field { display: flex; gap: 8px; margin-top: 6px; }
 .mobile-browser-field input { flex: 1; min-width: 0; }
 
+[data-terminal-mobile] .dashboard-mobile-holdings { min-height: 9rem; max-height: min(55dvh, 25rem); }
+[data-terminal-mobile] .dashboard-2-mobile .dashboard-portfolio-pie { min-height: 12rem; max-height: 19rem; }
+
+.mobile-agent-chat {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+[data-terminal-mobile] [data-page-id='agents'] .mobile-agent-chat { margin: 8px; }
+.mobile-agent-chat header { display: flex; align-items: center; gap: 8px; }
+.mobile-agent-chat h2 { color: var(--color-text); font-size: 16px; font-weight: 650; }
+.mobile-agent-chat svg { flex: none; width: 20px; height: 20px; }
+.mobile-agent-chat header svg { color: var(--color-accent-hover); }
+.mobile-agent-chat strong { color: var(--color-text); }
+.mobile-agent-chat :is(a, button) {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--color-accent);
+  border-radius: 6px;
+  background: var(--color-accent-dim);
+  color: var(--color-text);
+  font-weight: 600;
+}
+.mobile-agent-chat :is(a, button):hover { background: var(--color-accent); }
+.mobile-agent-chat :is(a, button):focus-visible { outline: 2px solid var(--color-accent-hover); outline-offset: 2px; }
+.mobile-agent-chat button:disabled { opacity: .55; }
+
 /* Wide data can pan inside its page. Keep the navigation and active controls on-screen. */
 @media (max-width: 900px) {
   [data-terminal-mobile] .dashboard-layout,
@@ -128,8 +195,7 @@
   [data-terminal-mobile] .dashboard-layout [role="separator"] { display: none; }
   [data-terminal-mobile] .dashboard-chart { min-height: 360px; }
   [data-terminal-mobile] .dashboard-holdings .terminal-panel,
-  [data-terminal-mobile] .dashboard-options-column .terminal-panel,
-  [data-terminal-mobile] .dashboard-heatmap-column .terminal-panel { min-height: 220px; max-height: 490px; }
+  [data-terminal-mobile] .dashboard-options-column .terminal-panel { min-height: 220px; max-height: 490px; }
 }
 
 @media (orientation: landscape) and (max-height: 500px) {

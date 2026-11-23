@@ -1,12 +1,13 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { browserInputRequest, browserSearchUrl } from '@shared/browserSearch'
 import { isSafeExternalUrl } from '../../electron/services/urls'
 import { mobileTelegramProfile } from './client'
 
-export function MobileHeader({ label, onOpenPicker, onReload, reloading, onToggleObscure, obscured, favorite, onToggleFavorite, savingFavorite }: {
+export function MobileHeader({ label, navigationOpen, onToggleNavigation, onReload, reloading, onToggleObscure, obscured, favorite, onToggleFavorite, savingFavorite }: {
   label: string
-  onOpenPicker: () => void
+  navigationOpen: boolean
+  onToggleNavigation: () => void
   onReload: () => void
   reloading: boolean
   onToggleObscure: () => void
@@ -15,17 +16,24 @@ export function MobileHeader({ label, onOpenPicker, onReload, reloading, onToggl
   onToggleFavorite?: () => void
   savingFavorite: boolean
 }) {
+  const pageButton = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (!navigationOpen) return
+    const button = pageButton.current
+    return () => button?.focus({ preventScroll: true })
+  }, [navigationOpen])
+
   return <header className="mobile-topbar">
     <h1>
-      <button type="button" className="mobile-page-button" onClick={event => {
-        event.currentTarget.focus({ preventScroll: true })
-        onOpenPicker()
-      }} aria-label={`Find a page, current page ${label}`} aria-haspopup="dialog">
+      <button ref={pageButton} type="button" className="mobile-page-button" onClick={onToggleNavigation}
+        aria-label={navigationOpen ? `Back to ${label}` : `${label}, browse workspaces`}
+        aria-expanded={navigationOpen} aria-controls={navigationOpen ? 'mobile-navigation' : undefined}>
+        {navigationOpen && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M20 12H5m7-7-7 7 7 7"/></svg>}
         <span>{label}</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        {!navigationOpen && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>}
       </button>
     </h1>
-    <div className="mobile-topbar-actions">
+    {!navigationOpen && <div className="mobile-topbar-actions">
       {onToggleFavorite && <button type="button" onClick={onToggleFavorite} disabled={savingFavorite} aria-pressed={favorite} aria-label={favorite ? 'Remove page from favorites' : 'Add page to favorites'}>
         <svg viewBox="0 0 24 24" fill={favorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2-5.5-2.9-5.5 2.9 1-6.2L3 9.6l6.2-.9Z"/></svg>
       </button>}
@@ -35,7 +43,7 @@ export function MobileHeader({ label, onOpenPicker, onReload, reloading, onToggl
       <button type="button" disabled={reloading} onClick={onReload} aria-label="Refresh page">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14-5L3 9m0-5v5h5m-4 4a8 8 0 0 0 14 5l3-3m0 5v-5h-5"/></svg>
       </button>
-    </div>
+    </div>}
   </header>
 }
 
@@ -73,11 +81,29 @@ export function MobileBrowserPage() {
 
 export const mobileTelegramKey = ['mobileTelegram'] as const
 export function MobileAgentsPage() {
+  const heading = useId()
   const telegram = useQuery({ queryKey: mobileTelegramKey, queryFn: mobileTelegramProfile, staleTime: 60_000 })
-  return <section className="mobile-handoff">
-    <h2>Research with the agent</h2>
-    {telegram.data ? <a href={`https://t.me/${telegram.data}`} target="_blank" rel="noreferrer">Open Telegram agent</a>
-      : <p>{telegram.isPending ? 'Checking Telegram…' : 'To chat from this device, enable incoming Telegram messages under Agents on the computer.'}</p>}
-    <p>Manage the desktop agent, trackers, and saved conversations on the computer.</p>
+  return <section className="mobile-agent-chat" aria-labelledby={heading}>
+    <header>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" aria-hidden="true">
+        <path d="M4 4h16v12H9l-5 4V4Z"/><path d="M8 9h8m-8 3h5"/>
+      </svg>
+      <h2 id={heading}>Agent Chat</h2>
+    </header>
+    {telegram.data ? <>
+      <p>Ask a research question or continue your private Telegram conversation.</p>
+      <a href={`https://t.me/${telegram.data}`} target="_blank" rel="noreferrer">
+        Open Telegram
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+          <path d="M7 17 17 7M7 7h10v10"/>
+        </svg>
+      </a>
+    </> : telegram.isPending ? <p role="status">Checking Telegram availability…</p>
+      : telegram.isError ? <>
+        <p role="status">Couldn’t check Telegram. Keep Budget Terminal open on your computer and try again.</p>
+        <button type="button" disabled={telegram.isFetching} onClick={() => void telegram.refetch()}>
+          {telegram.isFetching ? 'Checking…' : 'Try again'}
+        </button>
+      </> : <p>On your computer, go to <strong>Agents → Telegram</strong> and enable <strong>Receive research questions from Telegram</strong>.</p>}
   </section>
 }

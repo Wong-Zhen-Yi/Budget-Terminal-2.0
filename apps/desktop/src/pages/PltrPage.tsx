@@ -11,6 +11,7 @@ import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { CandlestickChart } from '@/components/charts/CandlestickChart'
 import { FinancialCharts, FinancialHistory, LatestSources, OwnershipPanels, RevenueChart, SourcePanels, ValuationPanel, VolumeChart } from '@/components/pltr/PltrPanels'
 import { Button } from '@/components/ui/Button'
+import { MobileDisclosure } from '@/components/ui/MobileDisclosure'
 import { Panel, PanelMessage } from '@/components/ui/Panel'
 import { compactCurrency, compactNumber, currency, percent, signedCurrencyPrecise } from '@/lib/format'
 import '@/styles/pltr.css'
@@ -95,7 +96,9 @@ export function PltrPage({ onStatusChange, onNavigate }: {
           if (next !== null) { event.preventDefault(); setSection(SECTIONS[next]); tabRefs.current[next]?.focus() }
         }}>{item}</button>)}
       </div>
-      <div className="ml-auto flex flex-wrap gap-1 pb-1">{['stocks', 'charts', 'fundamentals', 'options', 'valuation'].map(id => <Button key={id} className="capitalize" aria-label={`Open PLTR ${id}`} onClick={() => onNavigate(id, 'PLTR')}>{id} ↗</Button>)}</div>
+      <MobileDisclosure label="Related research" className="research-navigation-tools">
+        <div className="ml-auto flex flex-wrap gap-1 pb-1">{['stocks', 'charts', 'fundamentals', 'options', 'valuation'].map(id => <Button key={id} className="capitalize" aria-label={`Open PLTR ${id}`} onClick={() => onNavigate(id, 'PLTR')}>{id} ↗</Button>)}</div>
+      </MobileDisclosure>
     </nav>
     <div className="pltr-kpis shrink-0" aria-label="PLTR financial snapshot">{tiles.map(([label, value, subtitle]) => <div key={label} className="pltr-kpi"><div className="text-2xs text-text-muted">{label}</div><div className="num my-1 text-xl font-semibold">{value}</div><div className="text-2xs text-text-muted">{subtitle}</div></div>)}</div>
     <div id="pltr-section-panel" role="tabpanel" aria-labelledby={`${sectionId(section)}-tab`} className="flex shrink-0 flex-col gap-3">

@@ -8,10 +8,35 @@
   [data-terminal-mobile] [data-page-id] :is(button.no-drag, [role='tab'], input:not([type='checkbox'], [type='radio'], [type='range']), select) {
     min-height: 36px;
   }
-  [data-terminal-mobile] [data-page-id] [role='tablist'] {
+  [data-terminal-mobile] [data-page-id] :is([role='tablist'], .mobile-tab-strip) {
+    min-width: 0;
+    max-width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
     scrollbar-width: thin;
     overscroll-behavior-inline: contain;
   }
+  [data-terminal-mobile] [data-page-id] :is([role='tablist'], .mobile-tab-strip) > * {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  [data-terminal-mobile] [data-page-id] .mobile-tab-strip > button { min-height: 40px; }
+  [data-terminal-mobile] .mobile-disclosure { display: block; min-width: 0; }
+  [data-terminal-mobile] [data-page-id] .mobile-disclosure-toggle { display: inline-flex; min-height: 40px; }
+  [data-terminal-mobile] .mobile-disclosure-toggle[aria-expanded='true'] svg { transform: rotate(180deg); }
+  [data-terminal-mobile] .mobile-disclosure-content { display: none; }
+  [data-terminal-mobile] .mobile-disclosure-toggle[aria-expanded='true'] + .mobile-disclosure-content {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding-block: 6px 2px;
+  }
+  [data-terminal-mobile] .mobile-disclosure:has(> [aria-expanded='true']) { flex-basis: 100%; }
+  [data-terminal-mobile] .mobile-hide { display: none; }
+  [data-terminal-mobile] .mobile-tab-strip.contents { display: flex; flex: 1 1 100%; }
+  [data-terminal-mobile] .market-cap-toolbar > .ml-auto,
+  [data-terminal-mobile] .market-cap-toolbar > .ml-auto input { width: 100%; }
   [data-terminal-mobile] [data-page-id] .terminal-panel > header {
     height: auto;
     min-height: 38px;
@@ -40,7 +65,6 @@
   [data-terminal-mobile] .articles-toolbar { gap: 6px; padding: 6px 10px; }
   [data-terminal-mobile] .articles-mode button { min-height: 36px; }
 
-  [data-terminal-mobile] [data-page-id='agents'] .mobile-handoff { gap: 12px; line-height: 1.55; }
   [data-terminal-mobile] [data-page-id='browser'] .mobile-handoff nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   [data-terminal-mobile] [data-page-id='browser'] .mobile-handoff nav a { justify-content: center; }
   [data-terminal-mobile] .reminders-page { padding-inline: 12px; }
@@ -51,18 +75,32 @@
   [data-terminal-mobile] .dashboard-macro { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
   [data-terminal-mobile] .dashboard-macro > div { grid-column: span 2; padding: 5px 3px; }
   [data-terminal-mobile] .dashboard-macro > div:nth-child(n + 4) { grid-column: span 3; }
-  [data-terminal-mobile] .dashboard-news-layout .dashboard-agents-column { min-height: 0; }
-  [data-terminal-mobile] .dashboard-news-layout .dashboard-agents-column .mobile-handoff { padding: 12px; }
   [data-terminal-mobile] .dashboard-lite { overflow-y: auto; }
   [data-terminal-mobile] .dashboard-lite-grid { flex: none; grid-template-rows: auto; }
   [data-terminal-mobile] .dashboard-lite-grid > .dashboard-price-chart { min-height: 320px; }
   [data-terminal-mobile] .dashboard-lite-grid > .terminal-panel { min-height: 235px; }
   [data-terminal-mobile] .dashboard-price-chart-ticker { max-width: 100%; }
 
-  /* Keep account totals legible and the underlying editable records in order. */
-  [data-terminal-mobile] [data-page-id='portfolio'] > div > div:first-of-type { align-items: stretch; }
-  [data-terminal-mobile] [data-page-id='portfolio'] > div > div:has(> select) > select { flex: 1 1 175px; }
-  [data-terminal-mobile] [data-page-id='portfolio'] > div > div.overflow-x-auto > button { min-height: 40px; font-size: 13px; }
+  [data-terminal-mobile] .portfolio-summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    padding: 4px 6px;
+  }
+  [data-terminal-mobile] .portfolio-mobile-total { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; }
+  [data-terminal-mobile] .portfolio-mobile-total strong { overflow-wrap: anywhere; }
+  [data-terminal-mobile] .portfolio-summary-details { display: contents; }
+  [data-terminal-mobile] .portfolio-summary-details > .mobile-disclosure-content { grid-column: 1 / -1; }
+  [data-terminal-mobile] .portfolio-summary-details .portfolio-balance-input { width: 7rem; max-width: 100%; }
+  [data-terminal-mobile] .portfolio-desktop-label { display: none; }
+  [data-terminal-mobile] .portfolio-toolbar { column-gap: 4px; }
+  [data-terminal-mobile] .portfolio-toolbar > select { flex: 1 1 5rem; text-overflow: ellipsis; }
+  [data-terminal-mobile] .portfolio-toolbar > :is(select, button) { min-height: 40px; }
+  [data-terminal-mobile] .portfolio-toolbar > span { flex-basis: 100%; overflow-wrap: anywhere; }
+  [data-terminal-mobile] .portfolio-position-actions { flex-wrap: wrap; }
+  [data-terminal-mobile] .portfolio-workspace { overflow: auto; }
+  [data-terminal-mobile] .portfolio-workspace > .terminal-panel { min-height: 180px; }
   [data-terminal-mobile] [data-page-id='portfolio'] :is(td, th) { white-space: nowrap; }
   [data-terminal-mobile] .portfolio-position-number { width: 96px; }
   [data-terminal-mobile] [data-page-id='portfolio'] td input[type='checkbox'] { width: 17px; height: 17px; }
@@ -84,9 +122,11 @@
   [data-terminal-mobile] .cards-grid { min-width: 0; grid-template-columns: minmax(0, 1fr); }
   [data-terminal-mobile] .cards-grid > article { min-width: 0; height: 310px; }
   [data-terminal-mobile] [data-page-id='projections'] > div { overflow-y: auto; }
+  [data-terminal-mobile] .projections-toolbar form { flex: 1 1 7rem; }
+  [data-terminal-mobile] .projections-toolbar form input { flex: 1; }
+  [data-terminal-mobile] .projections-toolbar > [role='status'] { flex-basis: 100%; text-align: left; }
   [data-terminal-mobile] [data-page-id='projections'] > div > div.grid { flex: none; grid-auto-rows: minmax(230px, auto); }
 
-  [data-terminal-mobile] [data-page-id='global'] > div > :last-child { min-height: 360px; }
   [data-terminal-mobile] :is(.news-lite-search, .news-lite-toolbar) :is(input, button) { min-height: 38px; }
   [data-terminal-mobile] .news-lite-tickers > button { min-height: 44px; }
   [data-terminal-mobile] .calendar-month-page { overflow-y: auto; }
@@ -104,7 +144,14 @@
   [data-terminal-mobile] .trading-volumes-panes > div:last-child { min-height: 350px; }
   [data-terminal-mobile] .price-panes > div:first-child { height: 260px; }
   [data-terminal-mobile] .price-panes > div:last-child { min-height: 300px; padding-left: 0; }
-  [data-terminal-mobile] [data-page-id='beta'] > div > .flex-wrap label { max-width: 100%; }
+  [data-terminal-mobile] .price-toolbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; align-items: end; }
+  [data-terminal-mobile] .price-bound { display: grid; gap: 2px; }
+  [data-terminal-mobile] .price-bound > * { max-width: 100%; }
+  [data-terminal-mobile] .price-bound > span { padding-left: 0; }
+  [data-terminal-mobile] .price-toolbar > [role='status'] { grid-column: 1 / -1; margin-left: 0; padding-left: 0; text-align: left; }
+  [data-terminal-mobile] .beta-toolbar > input { flex: 1 1 8rem; }
+  [data-terminal-mobile] .beta-toolbar label { max-width: 100%; }
+  [data-terminal-mobile] .beta-toolbar > [role='status'] { flex-basis: 100%; margin-left: 0; }
   [data-terminal-mobile] [data-page-id='up-down'] > div > .border-b { overflow-x: auto; }
   [data-terminal-mobile] [data-page-id='up-down'] > div > .border-b button { flex: none; min-height: 40px; }
   [data-terminal-mobile] :is([data-page-id='heatmap'], [data-page-id='market-cap']) .grid-cols-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -116,18 +163,42 @@
   [data-terminal-mobile] .sd-controls { gap: 6px; }
   [data-terminal-mobile] .sd-search-form { flex: 1 1 140px; }
   [data-terminal-mobile] .sd-controls button { min-height: 36px; }
-  [data-terminal-mobile] [data-page-id='fundamentals'] form { min-width: 0; width: 100%; flex: 1 0 100%; flex-wrap: wrap; }
-  [data-terminal-mobile] [data-page-id='fundamentals'] form input { flex: 1 1 120px; width: auto; }
+  [data-terminal-mobile] [data-page-id='fundamentals'] form { min-width: 0; flex: 1 1 8rem; }
+  [data-terminal-mobile] [data-page-id='fundamentals'] form input { flex: 1; width: 0; }
+  [data-terminal-mobile] .fundamentals-compare form { width: 100%; }
   [data-terminal-mobile] .scorecard-page .scorecard-table { scrollbar-width: thin; }
   [data-terminal-mobile] .scorecard-page .scorecard-tickers { grid-template-columns: minmax(0, 1fr); }
-  [data-terminal-mobile] [data-page-id='defeatbeta'] [role='tablist'] { flex-wrap: nowrap; }
-  [data-terminal-mobile] [data-page-id='defeatbeta'] [role='tab'] { white-space: nowrap; }
+  [data-terminal-mobile] .defeatbeta-controls { gap: 6px; padding: 6px 8px; }
+  [data-terminal-mobile] .defeatbeta-controls form { flex: 1 1 8rem; }
+  [data-terminal-mobile] .defeatbeta-controls form input { flex: 1; }
+  [data-terminal-mobile] .defeatbeta-controls > button { white-space: nowrap; }
+  [data-terminal-mobile] .defeatbeta-controls > .defeatbeta-symbol { flex-basis: 100%; text-align: left; }
+  [data-terminal-mobile] .charts-toolbar { padding-bottom: 6px; }
+  [data-terminal-mobile] .charts-toolbar > form { flex: 1; }
+  [data-terminal-mobile] .charts-toolbar > form input { flex: 1 1 5rem; }
+  [data-terminal-mobile] .charts-toolbar-tools { display: contents; }
+  [data-terminal-mobile] .charts-timeframe { order: 2; flex: 1 1 100%; flex-wrap: nowrap; }
+  [data-terminal-mobile] .charts-toolbar-tools > button { order: 1; }
+  [data-terminal-mobile] .charts-toolbar-tools > .mobile-disclosure-content { order: 3; flex-basis: 100%; }
+  [data-terminal-mobile] .charts-toolbar-tools .ml-auto { margin-left: 0; }
+  [data-terminal-mobile] .charts-toolbar-indicators { flex-basis: 100%; margin-inline: 0; padding-inline: 0; }
+  [data-terminal-mobile] .charts-timeframe > select { width: 7.25rem; flex: none; }
   [data-terminal-mobile] .charts-main-grid > section { min-height: 320px; }
   [data-terminal-mobile] [data-page-id='charts'] nav button { min-height: 44px; }
   [data-terminal-mobile] [data-page-id='valuation'] .grid-cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   [data-terminal-mobile] [data-page-id='valuation'] .grid-cols-3 > div { border: 1px solid var(--color-border); }
-  [data-terminal-mobile] [data-page-id='options'] form { flex: 1 1 240px; }
-  [data-terminal-mobile] [data-page-id='options'] form input { width: 100%; }
+  [data-terminal-mobile] .options-toolbar > form { flex: 1 1 12rem; }
+  [data-terminal-mobile] .options-toolbar > form input { flex: 1; }
+  [data-terminal-mobile] .options-toolbar > [role='status'] { order: 1; flex-basis: 100%; text-align: left; }
+  [data-terminal-mobile] .options-toolbar > [role='status']:empty { display: none; }
+  [data-terminal-mobile] .options-views { width: 100%; }
+  [data-terminal-mobile] .options-chain-toolbar .options-chain-field { display: grid; flex: 1 1 5rem; min-width: 0; gap: 2px; }
+  [data-terminal-mobile] .options-chain-field > span { margin: 0; }
+  [data-terminal-mobile] .technical-scan-toolbar > select { flex: 1 1 7rem; }
+  [data-terminal-mobile] .technical-scan-toolbar > [role='status'] { flex-basis: 100%; text-align: left; margin-left: 0; }
+  [data-terminal-mobile] .trading-volumes-toolbar > [role='status'],
+  [data-terminal-mobile] .institutions-toolbar > p { flex-basis: 100%; margin-left: 0; padding-left: 0; text-align: left; }
+  [data-terminal-mobile] .institutions-toolbar > select { flex: 1 1 5rem; }
   [data-terminal-mobile] [data-page-id='technical-screen'] > div > :first-child { flex-wrap: wrap; gap: 4px 8px; }
   [data-terminal-mobile] .quant-overview { grid-auto-rows: minmax(130px, auto); }
   [data-terminal-mobile] .quant-card-value { min-width: 0; }
@@ -169,15 +240,16 @@
   [data-terminal-mobile] .bmnr-cash-detail { white-space: normal; }
   [data-terminal-mobile] [data-page-id='sofi'] .grid-cols-2 > div { min-width: 0; overflow-wrap: anywhere; }
   [data-terminal-mobile] [data-page-id='mu'] .terminal-panel h2 { flex: 1 1 165px; }
-  [data-terminal-mobile] .googl-actions { justify-content: flex-start; }
+  [data-terminal-mobile] .googl-actions { justify-content: flex-start; gap: 6px; }
   [data-terminal-mobile] .googl-ranges button { min-height: 36px; }
   [data-terminal-mobile] .nvda-controls { flex-wrap: wrap; }
   [data-terminal-mobile] .nvda-section-heading { flex-wrap: wrap; gap: 4px 10px; }
   [data-terminal-mobile] .ant-header { flex-wrap: wrap; }
-  [data-terminal-mobile] .ant-index button { min-height: 36px; }
+  [data-terminal-mobile] .ant-index { flex-shrink: 0; }
   [data-terminal-mobile] [data-page-id='amzn'] .grid-cols-2 .truncate { white-space: normal; }
-  [data-terminal-mobile] .avgo-navigation { gap: 4px; }
-  [data-terminal-mobile] .avgo-navigation [role='tablist'] { flex-wrap: nowrap; }
+  [data-terminal-mobile] :is(.avgo-navigation, .pltr-tabs) { gap: 4px; }
+  [data-terminal-mobile] :is(.avgo-navigation, .pltr-tabs) > [role='tablist'] { flex: 1; }
+  [data-terminal-mobile] .research-navigation-tools { margin-left: auto; }
   [data-terminal-mobile] .hb-ticker-street { grid-template-columns: minmax(0, 1fr); }
   [data-terminal-mobile] .hb-ticker-street button { min-height: 40px; }
   [data-terminal-mobile] .semi-nav { overflow-x: auto; scrollbar-width: thin; }
@@ -185,7 +257,6 @@
   [data-terminal-mobile] [data-page-id='vst'] .grid-cols-2 > div { overflow-wrap: anywhere; }
   [data-terminal-mobile] .hood-tabs button { min-height: 38px; }
   [data-terminal-mobile] .hood-chart-legend { flex-wrap: wrap; }
-  [data-terminal-mobile] .pltr-tabs [role='tablist'] { flex-wrap: nowrap; }
   [data-terminal-mobile] .pltr-volume { min-height: 110px; }
   [data-terminal-mobile] [data-page-id='hims'] label:has(select) { flex-wrap: wrap; }
   [data-terminal-mobile] [data-page-id='gold'] .terminal-panel .grid { min-width: 0; }
@@ -197,8 +268,12 @@
   [data-terminal-mobile] .ipo-panes { flex: none; grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(245px, auto); }
   [data-terminal-mobile] [data-page-id='institutions'] .grid > .flex-col { min-width: 0; }
   [data-terminal-mobile] :is(.poly-header, .poly-header-actions) { flex-wrap: wrap; }
-  [data-terminal-mobile] .poly-discovery-bar button { min-height: 36px; }
-  [data-terminal-mobile] [data-page-id='politics'] > div > :first-child { flex-wrap: wrap; gap: 5px 8px; }
+  [data-terminal-mobile] .poly-discovery-bar { gap: 6px; }
+  [data-terminal-mobile] .poly-discovery-bar nav { width: 100%; }
+  [data-terminal-mobile] :is(.politics-toolbar, .politics-filters) { flex-wrap: wrap; gap: 4px 6px; }
+  [data-terminal-mobile] .politics-toolbar > h1 { flex: 1; }
+  [data-terminal-mobile] .politics-toolbar > [role='status'] { order: 1; flex-basis: 100%; margin: 0; }
+  [data-terminal-mobile] .politics-filters > input { flex: 1 1 5rem; }
   [data-terminal-mobile] :is(.politics-panes, .politics-analysis) { min-width: 0; grid-template-columns: minmax(0, 1fr); }
   [data-terminal-mobile] .politics-panes > .terminal-panel { min-height: 315px; }
   [data-terminal-mobile] .politics-analysis { grid-auto-rows: minmax(315px, auto); }

@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseCloudSnapshot } from '../electron/shared/cloudSnapshot.js'
+import { TABS } from '../electron/shared/contract.js'
+import { WORKSPACES } from '../electron/shared/navigation.js'
 
 const root = resolve(import.meta.dirname, '..')
 const require = createRequire(import.meta.url)
@@ -157,11 +159,98 @@ try {
             assert.equal((await fetch(window.webContents.getURL())).status, 403, 'Only the native preview can open its local endpoint')
             await waitFor('document.querySelector(".mobile-page-button")?.textContent === "Portfolio"', 'Mobile UI must open the saved start page')
             assert.equal(await run('window.api.portfolio().then(result => result.data.portfolios[0].name)'), 'Demo Core Portfolio')
-            await run('document.querySelector(".mobile-page-button").click()')
-            await waitFor('Boolean(document.querySelector(".mobile-picker input"))', 'Mobile page picker must open')
-            await run('Array.from(document.querySelectorAll(".mobile-picker li button")).find(button => button.firstElementChild?.textContent === "Browser").click()')
-            await waitFor('Boolean(document.querySelector("#mobile-browser-address"))', 'Mobile page picker must navigate to Browser')
-            console.log('PASS: iPhone preview opens with a 402 × 874 viewport at 3×, isolated sample data, and mobile navigation')
+            const visible = selector => 'Boolean(document.querySelector(' + JSON.stringify(selector) + ')?.getClientRects().length)'
+            const click = selector => run('document.querySelector(' + JSON.stringify(selector) + ').click()')
+            const openNavigation = async () => {
+              await click('.mobile-page-button')
+              await waitFor(visible('#mobile-navigation'), 'Mobile Workspaces must open')
+            }
+            const selectPage = async id => {
+              await openNavigation()
+              await click('[data-navigation-page="' + id + '"]')
+              await waitFor('!' + visible('#mobile-navigation'), 'Choosing a pill must close Workspaces')
+            }
+            const summary = '.portfolio-summary-details > button'
+            const positionTools = '.portfolio-position-actions .mobile-disclosure-toggle'
+            const cash = '[aria-label="Brokerage cash"]'
+            const margin = '[aria-label="Margin debt"]'
+            const atPhoneWidths = async check => {
+              for (const [width, height] of [[402, 874], [320, 568]]) {
+                await window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', {
+                  width, height, screenWidth: width, screenHeight: height, mobile: true, deviceScaleFactor: 3,
+                })
+                await waitFor('innerWidth === ' + width, 'Phone emulation must resize the page')
+                await check(width)
+              }
+            }
+            await waitFor(visible('.portfolio-summary'), 'Portfolio summary must load from sample data')
+            await atPhoneWidths(async width => {
+              await openNavigation()
+              assert.equal(await run(visible('[data-page-id=portfolio]')), false, 'Workspaces takes the place of the active page')
+              assert.equal(await run('document.querySelector("#mobile-navigation [aria-current=page]").dataset.navigationPage'), 'portfolio')
+              const settings = await run('window.api.settings().then(result => result.data)')
+              const available = ${JSON.stringify(TABS)}.filter(tab => tab.implemented &&
+                settings.tabOrder.includes(tab.id) && !settings.hiddenTabs.includes(tab.id) && (!tab.lab || settings.enabledLabs.includes(tab.lab)))
+              const workspaces = ${JSON.stringify([...WORKSPACES, { id: 'settings', label: 'Preferences', pages: ['settings'] }])}
+              const actual = await run('[...document.querySelectorAll(".mobile-navigation-group")].map(group => [group.querySelector("h3").textContent.trim(), [...group.querySelectorAll("[data-navigation-page]")].map(pill => pill.dataset.navigationPage).sort()])')
+              assert.deepEqual(actual, workspaces.map(workspace => [
+                workspace.label, available.filter(tab => workspace.pages.includes(tab.id)).map(tab => tab.id).sort(),
+              ]).filter(([, ids]) => ids.length > 0))
+              assert.equal(await run('(() => { const list = document.querySelector(".mobile-navigation-scroll"); return list.scrollWidth === list.clientWidth && list.scrollHeight > list.clientHeight && [...list.querySelectorAll("button")].every(pill => pill.offsetHeight >= 44 && parseInt(getComputedStyle(pill).borderTopLeftRadius) >= 22) })()'), true,
+                'Pills must wrap and remain touch-sized at ' + width + 'px')
+              await run('(() => { const search = document.querySelector("#mobile-navigation input"); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(search, "trading"); search.dispatchEvent(new Event("input", { bubbles: true })); return true })()')
+              await waitFor('document.querySelectorAll(".mobile-navigation-group").length === 2', 'Search must match workspace and page names')
+              assert.equal(await run('Boolean(document.querySelector("[data-navigation-page=charts]"))'), true)
+              assert.equal(await run('Boolean(document.querySelector("[data-navigation-page=trading-volumes]"))'), true)
+              await click('.mobile-page-button')
+              await waitFor(visible('.portfolio-summary'), 'Back must return to the same page')
+              await waitFor('document.activeElement === document.querySelector(".mobile-page-button")', 'Back must restore focus to the mobile header')
+            })
+            await atPhoneWidths(async width => {
+              assert.equal(await run(visible('.portfolio-mobile-total')), true)
+              assert.equal(await run(visible(cash)), false, 'Cash should start inside the collapsed summary')
+              assert.equal(await run(visible(margin)), false)
+              assert.equal(await run('document.querySelector(".portfolio-summary").offsetHeight <= 58'), true)
+              assert.equal(await run('new Set([...document.querySelectorAll(".portfolio-toolbar > select, .portfolio-toolbar > button")].map(el => el.offsetTop)).size === 1'), true,
+                'Portfolio selector, Manage and Save must share a row at ' + width + 'px')
+              const tableTop = await run('document.querySelector("[data-page-id=portfolio] table").getBoundingClientRect().top')
+              await click(summary)
+              await waitFor(visible(cash), 'Opening the summary must reveal the cash editor')
+              assert.equal(await run(visible(margin)), true)
+              assert(await run('document.querySelector("[data-page-id=portfolio] table").getBoundingClientRect().top') > tableTop)
+              await click(summary)
+              await waitFor('!' + visible(cash), 'Closing the summary must reclaim the extra rows')
+              await click(positionTools)
+              await waitFor(visible('.portfolio-position-actions .mobile-disclosure-content button'), 'Position tools must expose the secondary actions')
+              await click(positionTools)
+              await waitFor('!' + visible('.portfolio-position-actions .mobile-disclosure-content button'), 'Position tools must fold away again')
+            })
+            await run('[...document.querySelectorAll(".portfolio-toolbar button")].find(button => button.textContent === "Manage Portfolios").click()')
+            await waitFor(visible('[role=dialog][aria-label="Manage Portfolios"]'), 'Manage Portfolios must open at 320px')
+            await click('[role=dialog][aria-label="Manage Portfolios"] [aria-label=Close]')
+
+            await selectPage('charts')
+            await waitFor(visible('.charts-toolbar'), 'Charts must open from its pill')
+            await atPhoneWidths(async width => {
+              assert.equal(await run('document.querySelector(".charts-toolbar").offsetHeight <= 116'), true, 'Chart toolbar wraps too far at ' + width + 'px')
+              assert.equal(await run(visible('[aria-label="Chart style"]')), false)
+              await click('.charts-toolbar-tools > button')
+              await waitFor(visible('[aria-label="Chart style"]'), 'Chart tools must reveal chart style and indicators')
+              await click('.charts-toolbar-tools > button')
+              await waitFor('!' + visible('[aria-label="Chart style"]'), 'Chart tools must collapse')
+            })
+            await selectPage('politics')
+            await waitFor(visible('.politics-filters'), 'Politics filters must mount')
+            assert.equal(await run('document.querySelector(".politics-filters").offsetHeight <= 60'), true)
+            await click('.politics-filters .mobile-disclosure-toggle')
+            await waitFor(visible('.politics-filters select'), 'Politics filters must be available on demand')
+            await selectPage('options')
+            await waitFor(visible('.options-views'), 'Options views must mount')
+            assert.equal(await run('new Set([...document.querySelectorAll(".options-views button")].map(el => el.offsetTop)).size === 1'), true,
+              'Options view buttons must stay in one row')
+            await selectPage('browser')
+            await waitFor('Boolean(document.querySelector("#mobile-browser-address"))', 'The Browser pill must open Browser')
+            console.log('PASS: iPhone preview opens with isolated sample data, mobile navigation, and compact toolbars at 402px and 320px')
             app.quit()
             return
           }

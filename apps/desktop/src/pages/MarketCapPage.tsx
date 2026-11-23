@@ -210,28 +210,30 @@ export function MarketCapPage({ onStatusChange, onNavigate }: {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
-      <div className="flex shrink-0 flex-wrap items-center gap-1">
+      <div className="market-cap-toolbar flex shrink-0 flex-wrap items-center gap-1">
         <h1
-          className="pr-2 text-sm font-semibold text-text"
+          className="mobile-hide pr-2 text-sm font-semibold text-text"
           title="Largest 100 US-listed equities in the selected range, in USD. Ranks, search and sorting all apply within the range."
         >
           Market Cap
         </h1>
-        {MARKET_CAP_TIERS.map((range) => (
-          <Button
-            key={range.id}
-            variant="toggle"
-            active={range.id === tier}
-            title={range.label}
-            onClick={() => {
-              setTier(range.id)
-              setSearch('')
-              setSelected(null)
-            }}
-          >
-            {range.short}
-          </Button>
-        ))}
+        <div className="mobile-tab-strip contents gap-1" role="group" aria-label="Market cap tiers">
+          {MARKET_CAP_TIERS.map((range) => (
+            <Button
+              key={range.id}
+              variant="toggle"
+              active={range.id === tier}
+              title={range.label}
+              onClick={() => {
+                setTier(range.id)
+                setSearch('')
+                setSelected(null)
+              }}
+            >
+              {range.short}
+            </Button>
+          ))}
+        </div>
         <div className="ml-auto flex items-center gap-1">
           <SearchInput
             aria-label="Search companies"

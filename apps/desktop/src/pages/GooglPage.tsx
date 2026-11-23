@@ -6,6 +6,7 @@ import { api } from '@/api/client'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { StocksChart } from '@/components/stocks/StocksChart'
 import { Button } from '@/components/ui/Button'
+import { MobileDisclosure } from '@/components/ui/MobileDisclosure'
 import { Panel, PanelMessage } from '@/components/ui/Panel'
 import './GooglPage.css'
 
@@ -62,8 +63,10 @@ export function GooglPage({ onStatusChange, onNavigate }: {
         <label>Reported quarter <select aria-label="Reported quarter" value={report?.period ?? ''} onChange={event => setPeriod(event.target.value)} disabled={!reports.length}>
           {!reports.length && <option value="">—</option>}{reports.map(row => <option key={row.period}>{row.period}</option>)}
         </select></label>
-        <Button onClick={() => void api.openExternal('https://abc.xyz/investor/')}>Investor relations ↗</Button>
-        <Button disabled={!report} onClick={() => report && void api.openExternal(report.sourceUrl)}>Earnings release ↗</Button>
+        <MobileDisclosure label="Filings & investor links">
+          <Button onClick={() => void api.openExternal('https://abc.xyz/investor/')}>Investor relations ↗</Button>
+          <Button disabled={!report} onClick={() => report && void api.openExternal(report.sourceUrl)}>Earnings release ↗</Button>
+        </MobileDisclosure>
       </div>
     </header>
     <div className="googl-summary">

@@ -240,8 +240,8 @@ export function ProjectionsPage({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-1 p-1">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border border-border bg-surface px-2 py-1">
-        <span className="text-2xs font-semibold text-text">Projections</span>
+      <div className="projections-toolbar flex shrink-0 flex-wrap items-center gap-2 border border-border bg-surface px-2 py-1">
+        <span className="mobile-hide text-2xs font-semibold text-text">Projections</span>
         <form
           className="flex items-center gap-1"
           onSubmit={(event) => {
@@ -266,7 +266,7 @@ export function ProjectionsPage({
         <span className={`ml-auto min-w-0 flex-1 truncate text-right text-2xs ${notice ? toneClass[notice.tone] : 'text-text-muted'}`} role="status" title={notice?.text}>{notice?.text ?? 'Projection range: All expirations'}</span>
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-1 border border-border bg-surface px-2 py-1">
+      <div className="mobile-tab-strip flex shrink-0 flex-wrap items-center gap-1 border border-border bg-surface px-2 py-1" role="group" aria-label="Projection timeframe and table rows">
         <span className="mr-1 text-2xs font-semibold text-text-muted">Timeframe</span>
         {PROJECTIONS_TIMEFRAMES.map((entry) => (
           <Button

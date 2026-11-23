@@ -18,6 +18,7 @@ import { yahooProvider } from '../electron/services/provider.js'
 import assert from 'node:assert/strict'
 import { getGlobalMarkets } from '../electron/services/yahoo/globalMarkets.js'
 import { yahoo } from '../electron/services/yahoo/client.js'
+import { layoutMobileMapLabels } from '../src/components/global/mobileMapLayout.js'
 
 async function offline(): Promise<void> {
   const client = yahoo as unknown as { chart: unknown }
@@ -42,7 +43,8 @@ async function offline(): Promise<void> {
     const { createElement } = await import('react')
     const { renderToStaticMarkup } = await import('react-dom/server')
     const { GlobalTable } = await import('../src/components/global/GlobalTable.js')
-    const { intradayRangeText } = await import('../src/components/global/WorldMap.js')
+    const { intradayRangePercent, intradayRangeText, marketMove } = await import('../src/components/global/WorldMap.js')
+    assert.equal(intradayRangePercent({ dayLow: 100, dayHigh: 102.5 }), '2.50%')
     assert.equal(intradayRangeText({ dayLow: 100, dayHigh: 102.5 }), 'Day range 2.50%')
     assert.equal(intradayRangeText({ dayLow: 100, dayHigh: 100 }), 'Day range 0.00%')
     assert.equal(intradayRangeText({ dayLow: null, dayHigh: null }), 'Day range --')
@@ -52,6 +54,26 @@ async function offline(): Promise<void> {
     const rows = payload.rows.map((row) => ({
       ...row, status: formatMarketTiming(row.marketTiming, 'UTC'),
     }))
+    for (const [width, height] of [[306, 376], [388, 480], [860, 238]]) {
+      const labels = layoutMobileMapLabels(rows.map(({ lat, lon, symbol }) => ({
+        symbol, lon, point: { x: (lon + 180) / 360 * width, y: (90 - lat) / 150 * height },
+      })), width, height)
+      assert.equal(new Set(labels.map(({ symbol }) => symbol)).size, 17)
+      assert.notEqual(labels.find(({ symbol }) => symbol === '^GSPC')?.rect.x,
+        labels.find(({ symbol }) => symbol === '^GSPTSE')?.rect.x, 'Neighboring market labels should be staggered')
+      for (const [index, { rect }] of labels.entries()) {
+        assert.ok(rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= width && rect.y + rect.height <= height)
+        for (const { rect: other } of labels.slice(index + 1)) {
+          assert.ok(rect.x + rect.width <= other.x || other.x + other.width <= rect.x ||
+            rect.y + rect.height <= other.y || other.y + other.height <= rect.y, 'Mobile map callouts must never overlap')
+        }
+      }
+    }
+    const row = rows[0]
+    for (const [changePct, expected] of [[2.5, 'up'], [-2.5, 'down'], [0.05, 'flat'], [null, 'unknown']] as const) {
+      const intervals = { ...row.intervals, '1D': { ...row.intervals['1D'], available: true, changePct } }
+      assert.equal(marketMove({ ...row, intervals }, '1D'), expected)
+    }
     for (const interval of ['1D', '1Y'] as const) {
       const html = renderToStaticMarkup(createElement(GlobalTable, { rows, interval, loading: false }))
       assert.ok(html.includes('Intraday Range'))
@@ -69,7 +91,7 @@ async function offline(): Promise<void> {
       assert.equal(row.dayLow, null)
       assert.equal(row.dayHigh, null)
     }
-    console.log('PASS: latest session range, synthetic quote, exchange date, missing range, table render and export')
+    console.log('PASS: latest session range, synthetic quote, exchange date, missing range, non-overlapping mobile callouts, table render and export')
   } finally {
     client.chart = original
   }

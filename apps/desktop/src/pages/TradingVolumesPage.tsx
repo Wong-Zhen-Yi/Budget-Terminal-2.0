@@ -15,6 +15,7 @@ import { buildTradingVolumesLlmExport } from '@/components/tradingvolumes/llmExp
 import { useMarketCapReplay } from '@/components/tradingvolumes/useMarketCapReplay'
 import { VolumeTable } from '@/components/tradingvolumes/VolumeTable'
 import { Button } from '@/components/ui/Button'
+import { MobileDisclosure } from '@/components/ui/MobileDisclosure'
 import { Splitter } from '@/components/ui/Splitter'
 import { useTradingVolumesPage } from '@/stores/tradingVolumes'
 
@@ -167,47 +168,49 @@ export function TradingVolumesPage({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
-      <div className="flex shrink-0 flex-wrap items-center gap-1">
+      <div className="trading-volumes-toolbar flex shrink-0 flex-wrap items-center gap-1">
         <h1 className="pr-2 text-sm font-semibold text-text">Trading Volumes</h1>
 
-        <label
-          className="flex flex-wrap items-center gap-2 px-1 text-2xs text-text-muted"
-          title={`Remove detected outliers from lowest market cap upward. Outliers have market caps less than 1/${LOWER_OUTLIER_FACTOR} of the trend line estimate. Hover to preview remaining outliers.`}
-          onMouseEnter={() => setOutliersHovered(true)}
-          onMouseLeave={() => setOutliersHovered(false)}
-          onFocus={() => setOutliersFocused(true)}
-          onBlur={() => setOutliersFocused(false)}
-        >
-          <span>Remove Outliers</span>
-          <input
-            type="range"
-            min={0}
-            max={outlierCount}
-            step={1}
-            value={removedCount}
-            disabled={outlierCount === 0}
-            aria-label="Remove outliers, lowest market cap first"
-            aria-valuetext={`${removedCount} of ${outlierCount} outliers removed, lowest market cap first`}
-            className="w-32 accent-accent"
-            onChange={(event) => {
-              setNotice(null)
-              setOutliersToRemove(Number(event.target.value))
-            }}
-          />
-          <span className="num">{removedCount} / {outlierCount}</span>
-          <span>Lowest market cap first</span>
-        </label>
-        <Button onClick={() => {
-          setOutliersToRemove(0)
-          setNotice(null)
-        }}>Reset</Button>
+        <MobileDisclosure label="Outliers & export">
+          <label
+            className="flex flex-wrap items-center gap-2 px-1 text-2xs text-text-muted"
+            title={`Remove detected outliers from lowest market cap upward. Outliers have market caps less than 1/${LOWER_OUTLIER_FACTOR} of the trend line estimate. Hover to preview remaining outliers.`}
+            onMouseEnter={() => setOutliersHovered(true)}
+            onMouseLeave={() => setOutliersHovered(false)}
+            onFocus={() => setOutliersFocused(true)}
+            onBlur={() => setOutliersFocused(false)}
+          >
+            <span>Remove Outliers</span>
+            <input
+              type="range"
+              min={0}
+              max={outlierCount}
+              step={1}
+              value={removedCount}
+              disabled={outlierCount === 0}
+              aria-label="Remove outliers, lowest market cap first"
+              aria-valuetext={`${removedCount} of ${outlierCount} outliers removed, lowest market cap first`}
+              className="w-32 accent-accent"
+              onChange={(event) => {
+                setNotice(null)
+                setOutliersToRemove(Number(event.target.value))
+              }}
+            />
+            <span className="num">{removedCount} / {outlierCount}</span>
+            <span>Lowest market cap first</span>
+          </label>
+          <Button onClick={() => {
+            setOutliersToRemove(0)
+            setNotice(null)
+          }}>Reset</Button>
 
 
-        <Button variant="positive" onClick={() => void onExport()}>
-          Export for LLM
-        </Button>
+          <Button variant="positive" onClick={() => void onExport()}>
+            Export for LLM
+          </Button>
+        </MobileDisclosure>
 
-        <span className={`ml-auto pl-2 text-2xs ${toneClass[status.tone]}`}>{status.text}</span>
+        <span role="status" className={`ml-auto pl-2 text-2xs ${toneClass[status.tone]}`}>{status.text}</span>
       </div>
 
       <div ref={panesRef} className="trading-volumes-panes flex min-h-0 min-w-0 flex-1">

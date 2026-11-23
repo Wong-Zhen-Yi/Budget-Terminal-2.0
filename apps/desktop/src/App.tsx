@@ -97,6 +97,7 @@ import { useAuthPrompt } from '@/stores/authPrompt'
 import { useObscureMode } from '@/stores/obscureMode'
 import { isMobileTerminal } from '@/mobile/client'
 import { MobileAgentsPage, MobileBrowserPage, MobileHeader } from '@/mobile/MobileShell'
+import { MobileNavigation } from '@/mobile/MobileNavigation'
 
 const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
 const DEFAULT_TAB_ORDER = TABS.map((tab) => tab.id)
@@ -144,6 +145,7 @@ export function App() {
   const [sourcePath, setSourcePath] = useState('')
   const [reloading, setReloading] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const mobileNavigationOpen = mobile && pickerOpen && !screenshotPage
   const obscured = useObscureMode(state => state.enabled)
   const toggleObscure = useObscureMode(state => state.toggle)
   const [notice, setNotice] = useState('')
@@ -403,7 +405,8 @@ export function App() {
   return (
     <div className={`terminal-shell flex h-full flex-col bg-bg ${isMac ? 'platform-mac' : ''}`}>
       {mobile ? <MobileHeader label={TAB_BY_ID.get(activeTab)?.label ?? 'Budget Terminal'}
-        onOpenPicker={() => setPickerOpen(true)} onReload={() => void reload()} reloading={reloading}
+        navigationOpen={mobileNavigationOpen} onToggleNavigation={() => setPickerOpen(open => !open)}
+        onReload={() => void reload()} reloading={reloading}
         onToggleObscure={toggleObscure} obscured={obscured}
         favorite={favorites.includes(activeTab)} savingFavorite={savingFavorite || !settings}
         onToggleFavorite={!settingsQuery.isPending && workspaceFor(activeTab) ? () => void toggleFavorite() : undefined} /> : <TabBar
@@ -419,7 +422,13 @@ export function App() {
         agentChatAvailable={!screenshotPage && !pickerOpen && !(obscured && (settings?.obscuredTabs ?? []).includes('agents'))}
       />}
 
-      <div className="terminal-workspace flex min-h-0 flex-1">
+      {mobileNavigationOpen && <MobileNavigation tabs={workspaceTabs} activeTab={activeTab}
+        onSelect={id => {
+          setActiveTab(id)
+          setPickerOpen(false)
+        }} />}
+
+      <div className={`terminal-workspace min-h-0 flex-1 ${mobileNavigationOpen ? 'hidden' : 'flex'}`}>
         {!mobile && <WorkspaceSidebar
           tabs={visibleTabs} activeTab={activeTab} onSelectTab={setActiveTab} favorites={favorites} recent={recent}
           collapsed={settings?.sidebarCollapsed ?? false} onToggleCollapsed={() => void toggleSidebar()}
@@ -476,13 +485,10 @@ export function App() {
         />
       </div>}
 
-      {pickerOpen && !screenshotPage ? (
+      {!mobile && pickerOpen && !screenshotPage ? (
         <TabPicker
           tabs={visibleTabs.map((tab) => ({ ...tab }))}
           recent={recent}
-          mobile={mobile}
-          favorites={mobile ? favorites : undefined}
-          currentPage={mobile ? activeTab : undefined}
           onSelect={(id) => {
             setPickerOpen(false)
             if (TAB_BY_ID.get(id)?.implemented) setActiveTab(id)

@@ -20,6 +20,7 @@ import { MovePositionsDialog } from '@/components/portfolio/MovePositionsDialog'
 import { RemovePositionsDialog } from '@/components/portfolio/RemovePositionsDialog'
 import { SummaryBar } from '@/components/portfolio/SummaryBar'
 import { Button } from '@/components/ui/Button'
+import { MobileDisclosure } from '@/components/ui/MobileDisclosure'
 import { PrivateNumber } from '@/components/ui/NumberPrivacy'
 import { Panel } from '@/components/ui/Panel'
 import { currency, decimals, percent, plainPercent } from '@/lib/format'
@@ -327,7 +328,7 @@ export function PortfolioPage({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
+    <div className="portfolio-workspace flex min-h-0 flex-1 flex-col gap-2 p-2">
       <SummaryBar
         portfolio={selected}
         summary={summary}
@@ -339,8 +340,8 @@ export function PortfolioPage({
         }
       />
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
-        <span className="text-2xs text-text-muted">Portfolios</span>
+      <div className="portfolio-toolbar flex shrink-0 flex-wrap items-center gap-2">
+        <span className="portfolio-desktop-label text-2xs text-text-muted">Portfolios</span>
         <select
           aria-label="Active portfolio"
           value={selected.id}
@@ -361,18 +362,19 @@ export function PortfolioPage({
           {saving ? 'Checking...' : 'Save'}
         </Button>
         {saveStatus ? <span role="status" className={`text-2xs ${saveStatus.startsWith('Saved') ? 'text-up' : 'text-down'}`}>{saveStatus}</span> : null}
-        <span className="text-2xs text-text-dim">
+        <span className="portfolio-desktop-label text-2xs text-text-dim">
           Main: {portfolios.find((entry) => entry.id === payload?.mainId)?.name ?? '--'}
         </span>
         {error ? <span className="text-2xs text-down">{error}</span> : null}
         {exportStatus ? <span role="status" className="text-2xs text-up">{exportStatus}</span> : null}
       </div>
 
-      <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-border">
+      <nav aria-label="Portfolio views" className="mobile-tab-strip flex shrink-0 items-center gap-1 overflow-x-auto border-b border-border">
         {SUB_TABS.map((tab) => (
           <button
             key={tab.id}
             type="button"
+            aria-pressed={tab.id === subTab}
             onClick={() => {
               if (tab.id === subTab) return
               setAnalyticsPanels([])
@@ -387,23 +389,25 @@ export function PortfolioPage({
             {tab.label}
           </button>
         ))}
-      </div>
+      </nav>
 
       {subTab === 'stocks' ? (
         <Panel
           title="Stocks"
           className="min-h-0 flex-1"
           actions={
-            <div className="flex items-center gap-1">
+            <div className="portfolio-position-actions flex items-center gap-1">
               {selected.readOnly ? (
                 <span className="pr-1 text-2xs text-text-dim">
                   Combined is a read-only view of every portfolio
                 </span>
               ) : (
-                <>
-                  <Button variant="accent" onClick={() => setAddingPositions(true)}>
-                    + Add Position
-                  </Button>
+                <Button variant="accent" onClick={() => setAddingPositions(true)}>
+                  + Add Position
+                </Button>
+              )}
+              <MobileDisclosure label="Position tools">
+                {!selected.readOnly && <>
                   <Button onClick={() => setMovingPositions(true)} disabled={!selected.tickers.length}>
                     Move Position
                   </Button>
@@ -414,14 +418,14 @@ export function PortfolioPage({
                   >
                     - Remove Position
                   </Button>
-                </>
-              )}
-              <Button onClick={() => void exportForLlm()} disabled={exporting} title="Copy portfolio snapshot to clipboard">
-                {exporting ? 'Exporting...' : 'Export for LLM'}
-              </Button>
-              <Button onClick={() => void exportTickers()} disabled={!selected.tickers.length} title="Copy tickers to clipboard, one per line">
-                Export Tickers
-              </Button>
+                </>}
+                <Button onClick={() => void exportForLlm()} disabled={exporting} title="Copy portfolio snapshot to clipboard">
+                  {exporting ? 'Exporting...' : 'Export for LLM'}
+                </Button>
+                <Button onClick={() => void exportTickers()} disabled={!selected.tickers.length} title="Copy tickers to clipboard, one per line">
+                  Export Tickers
+                </Button>
+              </MobileDisclosure>
             </div>
           }
         >
