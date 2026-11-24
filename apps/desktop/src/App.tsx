@@ -14,6 +14,7 @@ import { useWarmPages } from '@/api/prefetch'
 import type { ReloadProgress } from '@/api/startupScheduler'
 import { useEquityMarketStream } from '@/api/equityStream'
 import { useMcpScreenshot, useScreenshotReady } from '@/api/mcpScreenshot'
+import { useFirstPageRender } from '@/api/firstRender'
 import { useSettings, useSettingsMutation } from '@/api/settingsQueries'
 import { useCloudSyncStatus } from '@/api/cloudSyncQueries'
 import { AuthPopup } from '@/components/auth/AuthPopup'
@@ -187,6 +188,8 @@ export function App() {
   const hideCurrent = obscured && (settings?.obscuredTabs ?? []).includes(activeTab)
   const blurCurrent = hideCurrent && !VALUE_MASKED_TABS.includes(activeTab)
   useScreenshotReady(screenshot, activeTab, hideCurrent, warm.active, completeScreenshot)
+  // The desktop window stays hidden until the opening page has painted its content.
+  useFirstPageRender(activeTab, !mobile && !settingsQuery.isPending)
   const setFundamentalsSymbol = useFundamentalsStore((state) => state.setSymbol)
   const setOptionsSymbol = useOptionsPage((state) => state.setSymbol)
 

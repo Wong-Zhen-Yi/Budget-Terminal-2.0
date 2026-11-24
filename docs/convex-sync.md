@@ -81,7 +81,7 @@ Production is separate: configure its own GitHub OAuth App and variables first. 
 
 ## Reconnect after a v1 upgrade
 
-1. Relaunch Budget Terminal using any double-click launcher.
+1. Relaunch Budget Terminal with `Launch Budget Terminal.cmd` or `btd`.
 2. Open **Settings > Data & storage > Cloud sync**.
 3. Choose **Sign in with GitHub**.
 4. Approve in your system browser and return to the application. Repeat on each device with the same GitHub account.

@@ -1,4 +1,9 @@
 @echo off
+rem The shared build keeps fresh Technical Indicators results visible on phones whose clock runs slightly behind the computer.
+rem The shared build opens the window only once the opening page has rendered, instead of a blank frame.
+rem The shared build keeps BMNR mNAV visible when Yahoo market cap is unavailable by using share price times the filed share count.
+rem The shared build keeps only the phone header and page strip fixed, so every page's title, toolbars and tables scroll together.
+rem The shared build removes the demo, mobile and macOS/Linux launchers; this file is the only launcher.
 rem The shared build includes Google sign-in alongside GitHub on the startup popup and in Settings cloud sync.
 rem The shared build adds QR codes for the existing phone links in Settings Labs.
 rem The shared build loads the open mobile page before background preloads for unseen pages, so Polymarket appears promptly.
@@ -17,10 +22,10 @@ rem The shared build includes the mobile Dashboard 2.0 portfolio stack and Agent
 rem Select a viewport model and launch the connected mobile window from Settings Labs.
 rem Mobile Access includes a button to copy the Tailscale setup commands after the shared build.
 rem Telegram /mobile retrieves links and /restart relaunches the app without Codex inference.
-rem For the mobile News toolbar with collapsible filters and tools, run Launch Budget Terminal Mobile.cmd or btd mobile.
+rem For the mobile News toolbar with collapsible filters and tools, run btd mobile.
 rem The shared build includes the compact phone navigation and touch-friendly page picker.
 rem The shared build includes the direct Tailscale link under Settings > Labs.
-rem On Windows, double-click Launch Budget Terminal Demo.cmd for temporary sample data.
+rem Temporary sample data opens with btd -Demo; there is no separate demo launcher.
 rem The shared build includes the streamlined Charts workspaces and updated chart rendering.
 rem The shared dependency install uses the project's pinned esbuild script approvals.
 rem The shared build brings the Dashboard Lite chart layout to Dashboard 1.
@@ -96,7 +101,7 @@ rem Windows double-click entry point; shared setup and startup live in scripts/.
 rem Keep dependency checks and build output visible in this terminal before opening the app.
 rem Shared launcher presents five numbered stages with measured completion times.
 rem Incremental charts, indexed live updates and cache checkpoints: docs/performance.md.
-rem macOS and Linux launchers are in launchers/macos and launchers/linux.
+rem macOS and Linux start with sh scripts/launch-posix.sh; this is the only double-click launcher.
 rem Curated design references live in docs/; output/ is for ignored local captures.
 title Budget Terminal
 cd /d "%~dp0..\.." || exit /b 1

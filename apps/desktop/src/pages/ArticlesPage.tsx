@@ -60,7 +60,12 @@ export function ArticlesPage({ onStatusChange }: { onStatusChange: (panels: Pane
     onStatusChange([{ label: 'Articles', envelope: query.data, loading: query.isPending, error: query.error }], query.data?.data.sourcePath ?? '')
   }, [query.data, query.isPending, query.error, onStatusChange])
 
-  useEffect(() => { viewport.current?.scrollTo({ top: 0 }) }, [selected?.id, reading])
+  // On phones the reader grows with the page, so the shared content area scrolls instead.
+  const readerScroller = () => {
+    const reader = viewport.current
+    return reader && reader.scrollHeight <= reader.clientHeight ? reader.closest<HTMLElement>('[data-terminal-content]') ?? reader : reader
+  }
+  useEffect(() => { readerScroller()?.scrollTo({ top: 0 }) }, [selected?.id, reading])
 
   const open = (article: Article | null) => {
     set(article, article ? fieldsOf(article) : blank())
@@ -70,7 +75,7 @@ export function ArticlesPage({ onStatusChange }: { onStatusChange: (panels: Pane
     setPending(null)
     // On small workspaces the library is a drawer over the reader.
     if ((viewport.current?.closest('.articles-page')?.clientWidth ?? 1000) < 760) setLibraryOpen(false)
-    viewport.current?.scrollTo({ top: 0 })
+    readerScroller()?.scrollTo({ top: 0 })
   }
   const choose = (article: Article | null) => {
     if (dirty) setPending({ article })
@@ -168,7 +173,8 @@ export function ArticlesPage({ onStatusChange }: { onStatusChange: (panels: Pane
           </div>}
           {draft && reading && sections.length > 0 && <nav className="articles-section-nav" aria-label="Article sections"><label>Jump to section<select className="articles-input" value="" onChange={event => {
             const target = viewport.current?.querySelector<HTMLElement>(`#${event.target.value}`)
-            if (target && viewport.current) { viewport.current.scrollTo({ top: target.getBoundingClientRect().top - viewport.current.getBoundingClientRect().top + viewport.current.scrollTop - 24 }); target.tabIndex = -1; target.focus({ preventScroll: true }) }
+            const scroller = readerScroller()
+            if (target && scroller) { scroller.scrollTo({ top: target.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 24 }); target.tabIndex = -1; target.focus({ preventScroll: true }) }
           }}><option value="">Contents ({sections.length} sections)</option>{sections.map(section => <option key={section.id} value={section.id}>{headingText(section.text)}</option>)}</select></label></nav>}
           <div ref={viewport} className="articles-viewport" tabIndex={0} role="region" aria-label={reading ? 'Article reader' : 'Article editor'}>
             {!draft ? <div className="articles-empty"><span className="articles-empty-symbol" aria-hidden="true">✎</span><span className="articles-eyebrow">WRITING WORKSPACE</span><h2>A home for your ideas</h2><p>Keep research, work through a thesis, or capture your next idea. Select an article from your library or start with a blank page.</p><button className="articles-button articles-primary" disabled={busy || unavailable} onClick={() => choose(null)}>Create your first draft</button></div>
@@ -183,7 +189,7 @@ export function ArticlesPage({ onStatusChange }: { onStatusChange: (panels: Pane
                 {page.length ? <ArticleContent blocks={page} /> : <p className="articles-topic">This article has no content yet. Open the editor to start writing.</p>}
                 {dualPage && <div className="articles-page-number">{index + 1} / {pages.length}</div>}
                 </section>)}</div>
-                <div className="articles-end">End of article<button className="articles-link" onClick={() => viewport.current?.scrollTo({ top: 0 })}>Back to top ↑</button></div>
+                <div className="articles-end">End of article<button className="articles-link" onClick={() => readerScroller()?.scrollTo({ top: 0 })}>Back to top ↑</button></div>
               </article> : <fieldset disabled={busy || unavailable} className="articles-editor">
                 <div className="articles-editor-intro"><span className="articles-eyebrow">{selected ? 'EDIT YOUR ARTICLE' : 'A NEW IDEA'}</span><h2>{selected ? 'Make it your own' : 'Start with a thought'}</h2><p>Plain text or Markdown. Preview your work in the reader.</p></div>
                 <label>Title<input className="articles-input articles-title-input" value={draft.title} maxLength={300} onChange={event => update({ title: event.target.value })} placeholder="Article title" /></label>

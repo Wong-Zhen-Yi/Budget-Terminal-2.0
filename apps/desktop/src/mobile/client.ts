@@ -152,6 +152,7 @@ export function createMobileApi(): DesktopApi {
     ...api,
     diagnosticsInitial: async () => false,
     reportDiagnostics: () => {},
+    reportFirstRender: () => {},
     setEquityQuoteVisibility: async () => {},
     // The desktop rate gate still orders provider work; this orders the browser's connections.
     startupPriority: async order => preferBackgroundOrder(order),

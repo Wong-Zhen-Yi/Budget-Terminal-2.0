@@ -80,6 +80,9 @@ const rendererUrl = isDev && process.env.ELECTRON_RENDERER_URL
   ? process.env.ELECTRON_RENDERER_URL
   : pathToFileURL(join(dirname, '../renderer/index.html')).href
 
+/** Longest the main window waits, after its first paint, for the opening page to render. */
+const FIRST_RENDER_FALLBACK_MS = 12_000
+
 function createWindow(): BrowserWindow {
   const isMac = process.platform === 'darwin'
   const size = desktopWindowBounds(screen.getPrimaryDisplay().workArea)
@@ -118,8 +121,15 @@ function createWindow(): BrowserWindow {
   configureYouTubePlayer(window)
   configureRendererCacheShutdown(window)
 
-  // Paint once, rather than showing an empty frame and then the UI.
-  window.once('ready-to-show', () => {
+  // Show the window once the opening page has painted its content, rather than an
+  // empty frame that fills in afterwards. The renderer reports that page; a bounded
+  // fallback still opens the window if the interface never reports.
+  let painted = false
+  let pageRendered = false
+  let revealTimer: ReturnType<typeof setTimeout> | undefined
+  const reveal = () => {
+    clearTimeout(revealTimer)
+    if (mainWindowReady || window.isDestroyed()) return
     if (useGamingFullscreen(process.platform, process.env)) window.setFullScreen(true)
     mainWindowReady = true
     window.show()
@@ -127,7 +137,19 @@ function createWindow(): BrowserWindow {
       openMobileOnStartup = false
       showConnectedMobile(window)
     }
+  }
+  window.webContents.ipc.handle('shell:first-render', (event) => {
+    const frame = event.senderFrame
+    if (!frame || frame !== window.webContents.mainFrame || !isTrustedRendererUrl(frame.url, rendererUrl)) return
+    pageRendered = true
+    if (painted) reveal()
   })
+  window.once('ready-to-show', () => {
+    painted = true
+    if (pageRendered) reveal()
+    else revealTimer = setTimeout(reveal, FIRST_RENDER_FALLBACK_MS)
+  })
+  window.once('closed', () => clearTimeout(revealTimer))
 
   // Docking, rotating or changing desktop scaling must not strand the window.
   // Let the compositor own maximized/fullscreen bounds, especially in Gamescope.
@@ -182,7 +204,7 @@ function createWindow(): BrowserWindow {
 function showConnectedMobile(parent: BrowserWindow) {
   void launchConnectedMobile(parent, DEFAULT_MOBILE_VIEWPORT).catch(() => {
     if (!parent.isDestroyed() && !finishingQuit) {
-      dialog.showErrorBox('Budget Terminal could not open the iPhone viewport', 'Run Launch Budget Terminal Mobile.cmd in launchers/windows. If the viewport still does not open, check Application logs in Settings.')
+      dialog.showErrorBox('Budget Terminal could not open the iPhone viewport', 'Run btd mobile to rebuild and reopen it. If the viewport still does not open, check Application logs in Settings.')
     }
   })
 }

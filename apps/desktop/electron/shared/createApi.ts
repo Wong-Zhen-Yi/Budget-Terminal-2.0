@@ -18,6 +18,7 @@ export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS
     diagnosticLogAction: action => invoke('diagnostics:action', action),
     diagnosticsInitial: () => invoke('diagnostics:initial'),
     onOpenDiagnostics: listener => subscribe('diagnostics:open', listener),
+    reportFirstRender: () => { void invoke('shell:first-render').catch(() => undefined) },
     reportDiagnostics: (report) => { void invoke('diagnostics:report', report).catch(() => undefined) },
     setEquityQuoteVisibility: symbols => invoke(CHANNELS.equityQuoteVisibility, symbols),
     onEquityMarketChanged: listener => subscribe<EquityMarketUpdate>(CHANNELS.equityMarketChanged, payload => {

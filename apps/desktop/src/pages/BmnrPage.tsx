@@ -450,7 +450,7 @@ function NavBridge({ payload }: { payload: BmnrPayload | undefined }) {
         title: cellTitle(derived.shares),
       },
       { label: '= NAV / share', value: currency(derived.navPerShare.value), emphasis: true },
-      { label: 'Market cap (snapshot)', value: compactCurrency(payload.market.marketCap.value) },
+      { label: 'Market cap (snapshot)', value: compactCurrency(derived.marketCap.value), title: cellTitle(derived.marketCap) },
       {
         label: '= mNAV',
         value: derived.mnav.value === null ? EM_DASH : `${decimals(derived.mnav.value, 3)}x`,

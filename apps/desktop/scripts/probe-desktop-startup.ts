@@ -6,10 +6,54 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseCloudSnapshot } from '../electron/shared/cloudSnapshot.js'
-import { TABS } from '../electron/shared/contract.js'
+import { LAB_FEATURES, TABS } from '../electron/shared/contract.js'
 import { WORKSPACES } from '../electron/shared/navigation.js'
 
 const root = resolve(import.meta.dirname, '..')
+// Runs in the phone renderer. Reports how much of the content area stays fixed while the
+// page scrolls: zero when the content area itself scrolls, otherwise the space around the
+// largest inner scroller. With `spacer`, a tall block is added to that scroller first.
+const pinnedLayoutScript = String.raw`function (id, spacer) {
+  const content = document.querySelector('[data-terminal-content]')
+  const page = document.querySelector('[data-page-id="' + id + '"]')
+  const box = content.getBoundingClientRect()
+  const visible = el => el.getClientRects().length > 0
+  const scrollable = el => /(auto|scroll)/.test(getComputedStyle(el).overflowY)
+  const scrolls = el => scrollable(el) && el.scrollHeight > el.clientHeight + 4
+  const area = el => {
+    const r = el.getBoundingClientRect()
+    return Math.max(0, Math.min(r.bottom, box.bottom) - Math.max(r.top, box.top)) * Math.max(0, Math.min(r.right, box.right) - Math.max(r.left, box.left))
+  }
+  const label = el => (typeof el.className === 'string' && el.className ? el.className : el.tagName).slice(0, 90)
+  const all = [...page.querySelectorAll('*')].filter(visible)
+  let block
+  if (spacer) {
+    const target = all.filter(scrollable).sort((a, b) => area(b) - area(a))[0] ?? page.firstElementChild ?? page
+    block = document.createElement('div')
+    block.style.cssText = 'flex:none;width:1px;height:3000px'
+    target.append(block)
+  }
+  try {
+    const sticky = all.filter(el => /sticky|fixed/.test(getComputedStyle(el).position)).filter(el => {
+      let parent = el.parentElement
+      while (parent && parent !== content && !/(auto|scroll|hidden|clip)/.test(getComputedStyle(parent).overflowY)) parent = parent.parentElement
+      return parent === content
+    }).map(label)
+    // Growing pages must not squash charts that used to take their height from the screen.
+    const collapsed = all.filter(el => el.matches('.tv-lightweight-charts, .recharts-responsive-container, .js-plotly-plot')).filter(el => {
+      const r = el.getBoundingClientRect()
+      return r.width > 150 && r.height < 80
+    }).map(el => label(el.parentElement ?? el))
+    if (collapsed.length) return { mode: 'collapsed', pinned: 0, sticky, collapsed }
+    if (scrolls(content)) return { mode: 'page', pinned: 0, sticky }
+    const scrollers = all.filter(scrolls).sort((a, b) => area(b) - area(a))
+    if (!scrollers.length) return { mode: 'fits', pinned: 0, sticky }
+    const rect = scrollers[0].getBoundingClientRect()
+    const top = Math.max(0, Math.round(rect.top - box.top))
+    const bottom = Math.max(0, Math.round(box.bottom - rect.bottom))
+    return { mode: 'inner', pinned: top + bottom, top, bottom, scroller: label(scrollers[0]), sticky }
+  } finally { block?.remove() }
+}`
 const require = createRequire(import.meta.url)
 const directory = await mkdtemp(join(tmpdir(), 'budget-desktop-startup-'))
 const normalDownloads = join(directory, 'downloads')
@@ -66,6 +110,11 @@ try {
       (_details, callback) => callback({ cancel: true }),
     ))
     app.on('browser-window-created', (_event, window) => {
+      // The window must appear with its opening page painted, not as an empty frame.
+      const shownWithPage = new Promise(resolve => window.once('show', () => {
+        window.webContents.executeJavaScript('(() => { const page = [...document.querySelectorAll("[data-page-id]")].find(el => el.getBoundingClientRect().height > 0); return Boolean(page && page.childElementCount && document.querySelector(".terminal-shell")) })()')
+          .then(resolve, () => resolve(false))
+      }))
       const verify = async () => {
         if (window.webContents.getURL() === 'about:blank') return
         window.webContents.off('did-finish-load', verify)
@@ -291,19 +340,43 @@ try {
               await window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', {
                 width: 390, height: 844, screenWidth: 390, screenHeight: 844, mobile: true, deviceScaleFactor: 2,
               })
+              // Audit every implemented page, including hidden pages and Labs a user may turn on.
+              await run('(async () => { const settings = (await window.api.settings()).data; for (const id of settings.hiddenTabs) await window.api.mutateSettings({ type: "setTabHidden", id, hidden: false }); for (const id of ' + JSON.stringify(${JSON.stringify(LAB_FEATURES.map(lab => lab.id))}) + ') await window.api.mutateSettings({ type: "setLabEnabled", id, enabled: true }); for (const id of settings.obscuredTabs) await window.api.mutateSettings({ type: "setTabObscured", id, obscured: false }) })()')
+              window.webContents.reload()
+              await new Promise(resolve => window.webContents.once('did-finish-load', resolve))
+              await waitFor('Boolean(document.querySelector(".mobile-page-button"))', 'Mobile UI must return after enabling every page')
+              window.webContents.setBackgroundThrottling(false)
               await openNavigation()
               const ids = await run('[...document.querySelectorAll("[data-navigation-page]")].map(el => el.dataset.navigationPage)')
               await click('.mobile-page-button')
               const failures = []
+              const pinned = []
+              const shots = ${JSON.stringify(join(root, 'out', 'mobile-pages'))}
+              await require('node:fs/promises').mkdir(shots, { recursive: true })
+              // Only the mobile header and workspace page strip may stay put. Everything in the
+              // page must scroll with the content, so no toolbar sits above a short inner scroller.
+              const measurePinned = (id, spacer) => run('(' + ${JSON.stringify(pinnedLayoutScript)} + ')(' + JSON.stringify(id) + ', ' + spacer + ')')
               for (const id of ids) {
                 await selectPage(id)
                 await waitFor(visible('[data-page-id="' + id + '"]'), id + ' must mount')
-                await new Promise(resolve => setTimeout(resolve, 100))
+                await new Promise(resolve => setTimeout(resolve, 1200))
                 const result = await run('(() => { const page = document.querySelector("[data-page-id=' + id + ']"); const rect = page.getBoundingClientRect(); return { error: page.innerText.includes("This page could not render"), width: rect.width, height: rect.height, content: page.innerText.length } })()')
                 if (result.error || result.width < 100 || result.height < 100 || !result.content) failures.push({ id, ...result })
+                await run('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+                await require('node:fs/promises').writeFile(join(shots, id + '.png'), (await window.webContents.capturePage()).toPNG())
+                // Measure with today's content, then with a tall block in the page's largest scroll
+                // area so short or empty results cannot hide a pinned toolbar.
+                for (const spacer of [false, true]) {
+                  const layout = await measurePinned(id, spacer)
+                  // Page padding and a closing border are not controls; anything taller is a pinned strip.
+                  if (layout.pinned > 16 || layout.sticky.length || layout.collapsed) { pinned.push({ id, spacer, ...layout }); break }
+                }
               }
               assert.deepEqual(failures, [], 'Every available mobile page must render a usable content area')
               console.log('PASS: all ' + ids.length + ' available mobile pages mounted without render failures or collapsed frames')
+              for (const entry of pinned) console.log('PINNED ' + JSON.stringify(entry))
+              assert.deepEqual(pinned.map(entry => entry.id), [], 'Only the mobile header and page strip may stay fixed while a page scrolls')
+              console.log('PASS: every mobile page scrolls as one column below the header and page strip')
             }
             console.log('PASS: mobile preview opens with isolated sample data, resizes, and reflows navigation and toolbars across compact through large phones and landscape')
             app.quit()
@@ -327,6 +400,10 @@ try {
           while (!await window.webContents.executeJavaScript('Boolean(document.querySelector("#root")?.children.length)')) {
             assert(Date.now() < deadline, 'Desktop UI must mount')
             await new Promise(resolve => setTimeout(resolve, 25))
+          }
+          if (window.getTitle() === 'Budget Terminal' || window.getTitle() === 'Budget Terminal Demo') {
+            assert.equal(await Promise.race([shownWithPage, new Promise(resolve => setTimeout(() => resolve('timeout'), 20_000))]), true,
+              'The desktop window must first appear with its opening page rendered')
           }
           if (demoDirectory) {
             const mobile = await window.webContents.executeJavaScript('window.api.configureMobileAccess(true)')
@@ -414,7 +491,7 @@ try {
       let text = ''
       child.stdout.on('data', chunk => { text += chunk })
       child.stderr.on('data', chunk => { text += chunk })
-      const timer = setTimeout(() => { child.kill(); reject(Error('Desktop startup timed out: ' + text)) }, 30_000)
+      const timer = setTimeout(() => { child.kill(); reject(Error('Desktop startup timed out: ' + text)) }, process.argv.includes('--all-pages') ? 600_000 : 30_000)
       child.on('error', error => { clearTimeout(timer); reject(error) })
       child.on('close', code => { clearTimeout(timer); resolveRun({ code, text }) })
     })

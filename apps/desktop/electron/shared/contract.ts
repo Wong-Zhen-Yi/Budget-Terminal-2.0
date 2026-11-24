@@ -2416,6 +2416,11 @@ export interface BmnrDerived {
   /** `navBuildUp - nav`; equals `minorityInterest` when the filing tags one. */
   navReconciliationGap: BmnrValue
   navPerShare: BmnrValue
+  /**
+   * The market cap mNAV divides by: Yahoo's when it answered, otherwise the share price
+   * times the filed share count, so a failed `quoteSummary` does not blank mNAV.
+   */
+  marketCap: BmnrValue
   mnav: BmnrValue
   premiumPct: BmnrValue
   ethPerShare: BmnrValue
@@ -3800,6 +3805,8 @@ export interface DesktopApi {
   diagnosticLogAction: (action: 'folder' | 'export') => Promise<Envelope<{ message: string }>>
   diagnosticsInitial: () => Promise<boolean>
   onOpenDiagnostics: (listener: () => void) => () => void
+  /** Tells the desktop shell the opening page has painted, so it can show the window. */
+  reportFirstRender: () => void
   reportDiagnostics: (report: { kind: 'pages'; pages: { page: string; state: string }[] } | { kind: 'error' | 'unhandled-rejection'; line?: number; column?: number }) => void
   setEquityQuoteVisibility?(symbols: string[]): Promise<void>
   onEquityMarketChanged(listener: (update: EquityMarketUpdate) => void): () => void

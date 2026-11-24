@@ -1,5 +1,8 @@
 /* Use available space rather than a device model, including phones turned sideways. */
 @media (max-width: 600px), (orientation: landscape) and (max-height: 600px) and (max-width: 1050px) {
+  /* Only the mobile header and page strip stay fixed. Each page grows to its content, so its
+     title, toolbars and tables scroll together instead of pinning above a short inner list. */
+  [data-terminal-mobile] [data-page-id] { flex: none; min-height: 100%; }
   [data-terminal-mobile] [data-page-id] :is(input, select, textarea, form) { min-width: 0; max-width: 100%; }
   [data-terminal-mobile] [data-page-id] .text-2xs { font-size: 12px; }
   [data-terminal-mobile] [data-page-id] :is(button.no-drag, [role='tab'], input:not([type='checkbox'], [type='radio'], [type='range']), select) {
@@ -46,7 +49,11 @@
   [data-terminal-mobile] [data-page-id] .terminal-panel > div { min-width: 0; }
   [data-terminal-mobile] [data-page-id] :is(p, h1, h2, h3) { overflow-wrap: anywhere; }
 
-  /* The library and reader each get the full width. */
+  /* The library and reader each get the full width and scroll with the page header. */
+  [data-terminal-mobile] .articles-page { flex: 1 0 auto; overflow: visible; }
+  [data-terminal-mobile] .articles-layout { position: static; overflow: visible; }
+  [data-terminal-mobile] :is(.articles-workspace, .articles-main) { flex: none; overflow: visible; }
+  [data-terminal-mobile] :is(.articles-list, .articles-viewport) { flex: none; overflow: visible; }
   [data-terminal-mobile] .articles-header { gap: 8px; padding: 10px 12px; }
   [data-terminal-mobile] .articles-header h1 { font-size: 20px; }
   [data-terminal-mobile] .articles-button { min-height: 40px; }

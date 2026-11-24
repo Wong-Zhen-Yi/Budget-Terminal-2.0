@@ -6,13 +6,13 @@ Mobile Access opens the Budget Terminal workspace in your phone or tablet browse
 
 In the Windows desktop app, go to **Settings → Labs → Mobile Access**, choose a phone size, and select **Open phone viewport**. Choose Compact phone (320 × 568), Small phone (360 × 780), Phone (390 × 844), or Large phone (430 × 932). These are generic CSS viewport sizes, not device models. Resize the window to try intermediate sizes and landscape proportions. It initially fits the desktop window's monitor and works with Tailscale off.
 
-Double-click [Launch Budget Terminal Mobile.cmd](../launchers/windows/Launch%20Budget%20Terminal%20Mobile.cmd) or run `btd mobile` to build and open the current version. If the desktop is open, the launcher closes it gracefully and waits for pending saves before rebuilding. It opens the desktop and the viewport together. Use this launcher after a source update.
+Run `btd mobile` to build and open the current version. If the desktop is open, the command closes it gracefully and waits for pending saves before rebuilding. It opens the desktop and the viewport together. Use it after a source update.
 
 ## Preview the mobile UI with sample data
 
-Double-click [Launch Budget Terminal Mobile Preview.cmd](../launchers/windows/Launch%20Budget%20Terminal%20Mobile%20Preview.cmd) or run `btd -MobilePreview`. The launcher builds the current code and opens Budget Terminal's mobile interface in an Electron window. The default viewport is 390 × 844 CSS pixels at 2× device pixel ratio. The window initially fits your monitor; dragging its edges changes the viewport and reflows the interface. Actual phones use their own browser width, height, pixel density, and safe areas automatically. The older iPhone-named launcher remains a compatibility entry point to the same responsive preview.
+Run `btd -MobilePreview` (or `sh scripts/launch-posix.sh --mobile-preview` on macOS and Linux). It builds the current code and opens Budget Terminal's mobile interface in an Electron window. The default viewport is 390 × 844 CSS pixels at 2× device pixel ratio. The window initially fits your monitor; dragging its edges changes the viewport and reflows the interface. Actual phones use their own browser width, height, pixel density, and safe areas automatically.
 
-The preview starts with the repository's sample records and discards edits when closed. It can run alongside the regular desktop window and needs only the local computer. Keep the launcher terminal open. Relaunch after editing the source to rebuild, or press **F5** to reload the current build. Use Safari on an iPhone to check WebKit behavior and iOS safe areas.
+The preview starts with the repository's sample records and discards edits when closed. It can run alongside the regular desktop window and needs only the local computer. Keep its terminal open. Relaunch after editing the source to rebuild, or press **F5** to reload the current build. Use Safari on an iPhone to check WebKit behavior and iOS safe areas.
 
 ## Set up the computer
 

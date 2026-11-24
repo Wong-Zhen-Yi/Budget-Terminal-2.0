@@ -78,9 +78,11 @@ try {
           const cached = { data: { ...payload, completedAt: new Date().toISOString() }, meta: { source: 'fixture', freshness: 'cached', fetchedAt: Date.now() }, errors: [] }
           client.setQueryData(['technicalScreen'], cached); await settle()
           check(document.querySelectorAll('tbody tr').length === 1 && calls === 3, 'Cached result restore')
+          client.setQueryData(['technicalScreen'], { ...cached, data: { ...cached.data, completedAt: new Date(Date.now() + 90_000).toISOString() } }); await settle()
+          check(document.querySelectorAll('tbody tr').length === 1 && !body().includes('Saved scan expired'), 'A phone clock behind the computer must not hide a fresh scan')
           client.setQueryData(['technicalScreen'], { ...cached, data: { ...cached.data, completedAt: '2020-01-01T00:00:00Z' } }); await settle()
           check(body().includes('Saved scan expired') && document.querySelectorAll('tbody tr').length === 0, 'Expired cache must be hidden')
-          return 'PASS: manual scan, four presets, sorting, search, navigation, failures, empty and cached results'
+          return 'PASS: manual scan, four presets, sorting, search, navigation, failures, empty, cached and clock-skewed results'
         }
       `,
     },

@@ -12,6 +12,7 @@ import { Select } from '@/components/ui/Select'
 const number = (value: number) => value.toFixed(2)
 const percent = (value: number) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
 const dateTime = (value: string) => new Date(value).toLocaleString()
+const SCAN_LIFETIME = 12 * 60 * 60_000
 
 export function TechnicalScreenPage({
   onStatusChange,
@@ -27,7 +28,9 @@ export function TechnicalScreenPage({
   const scan = useTechnicalScan()
   const envelope = snapshot.data
   const age = Math.max(clock, Date.now()) - Date.parse(envelope?.data?.completedAt ?? '')
-  const expired = Boolean(envelope?.data) && (!Number.isFinite(age) || age < 0 || age > 12 * 60 * 60_000)
+  // completedAt comes from the computer's clock. A phone clock running behind it
+  // makes a fresh scan look slightly in the future, so only reject implausible skew.
+  const expired = Boolean(envelope?.data) && (!Number.isFinite(age) || Math.abs(age) > SCAN_LIFETIME)
   const payload = expired ? null : envelope?.data
   const failure = scan.data?.meta.freshness === 'failed'
     ? scan.data.meta.failureReason || 'Scan unavailable'

@@ -12,7 +12,8 @@ if (process.platform !== 'linux') throw new Error('This launcher installer requi
 
 const root = path.resolve(__dirname, '..')
 const home = homedir()
-const launcher = path.join(root, 'launchers/linux', 'Launch Budget Terminal.sh')
+// Linux has no double-click wrapper; the desktop entry runs the shared launch script.
+const launcher = path.join(root, 'scripts', 'launch-posix.sh')
 const icon = path.join(root, 'apps/desktop/resources/budget-terminal-icon.png')
 const quote = value => '"' + value.replace(/[\\"`$]/g, '\\$&').replace(/%/g, '%%') + '"'
 const entry = `[Desktop Entry]\nType=Application\nName=Budget Terminal 2.0\nComment=Market research workspace with Steam Deck display support\nExec=/bin/sh ${quote(launcher)}\nIcon=${icon.replace(/\\/g, '\\\\')}\nTerminal=true\nCategories=Office;Finance;\n`
@@ -25,7 +26,6 @@ const destinations = [
   path.join(desktopDirectory, 'Budget Terminal 2.0.desktop'),
 ]
 
-chmodSync(launcher, 0o755)
 for (const destination of destinations) {
   mkdirSync(path.dirname(destination), { recursive: true })
   writeFileSync(destination, entry, { mode: 0o755 })
