@@ -1,4 +1,5 @@
 @echo off
+rem GitHub demo screenshots reflect the current app; this launcher rebuilds desktop and MCP source.
 rem The shared build includes single-line mobile toolbars and swipeable tab groups.
 rem Compatibility name. Prefer Launch Budget Terminal Mobile Preview.cmd.
 rem The shared build adapts mobile layouts to compact, standard, large and landscape phone sizes.

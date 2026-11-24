@@ -19,6 +19,7 @@
 <p align="center">
   <a href="#quick-start">Quick start</a> ·
   <a href="#screenshots">Screenshots</a> ·
+  <a href="#mobile-ui-showcase">Mobile UI</a> ·
   <a href="#explore-the-workspaces">Workspaces</a> ·
   <a href="#documentation">Documentation</a> ·
   <a href="https://github.com/Wong-Zhen-Yi/Budget-Terminal-2.0/issues">Report an issue</a>
@@ -49,86 +50,101 @@ research pages.
 | **Saved pages at launch** | Use cached content while every page refreshes. Settings controls separate page, market-data and image budgets, retention and cache diagnostics. |
 | **🔗 Extend your workspace** | Connect local research tools through MCP while keeping the workspace in the desktop app. |
 | **Work with Agents** | Use the embedded Codex workspace for research and local alerts, with autonomous mode off by default. |
+| **Use your phone** | Open a connected phone viewport on Windows, or enable private phone and tablet access through Tailscale. Telegram provides mobile links and agent quick prompts when configured. |
 
 ## Screenshots
 
-Explore eight views across markets, research, charting, portfolios, and learning.
-The captures use isolated demo profiles or isolated page components with synthetic
-fixtures. Holdings, prices, probabilities, headlines, and indicator values are
-illustrative sample data, not live quotes or personal records. See
-[capture details](docs/assets/screenshots/README.md).
+Captured from the **rendered desktop app** on 24 November 2026 using the checked-in
+[demo portfolio](fixtures/demo-user-data.json), with the full application shell and
+current dark theme. Holdings and financial records are fictional. Market panels
+use the usual public providers and may contain delayed, cached, or unavailable data.
+See [capture details](docs/assets/screenshots/README.md).
 
-### Dashboard
+### Portfolio
 
-Market snapshots, portfolio holdings, price action, analyst targets, and options
-in one workspace.
+The Demo Core Portfolio brings positions, cost basis, gains, cash, and portfolio
+controls together. A second Demo Income Portfolio is included in the demo profile.
 
-![Budget Terminal Dashboard with demo holdings, a candlestick chart, market snapshots, and options tables](docs/assets/screenshots/dashboard.png)
+![Rendered Portfolio in the isolated demo app](docs/assets/screenshots/portfolio.png)
 
-### Polymarket — prediction market research
+### Dashboard 2.0
 
-Discover events and inspect outcome probabilities, price history, order-book depth,
-and market activity in a read-only workspace.
+A portfolio-led overview with market context and research tools.
 
-![Polymarket demo showing searchable market cards, an outcome probability chart, bid and ask depth, and recent activity](docs/assets/screenshots/polymarket.png)
+![Rendered Dashboard 2.0 in the isolated demo app](docs/assets/screenshots/dashboard-2.png)
 
 <details>
-<summary><strong>Semiconductors — supply chain and sector research</strong></summary>
+<summary><strong>Personal Finance</strong></summary>
 
-Explore industry stages, filter companies by subsector, compare performance, and
-follow company research and earnings context.
+Sample accounts, assets, liabilities, recurring bills, and a savings goal.
 
-![Semiconductors demo showing supply-chain stages, a chip-design company table, subsector performance, and linked research panels](docs/assets/screenshots/semiconductors.png)
+![Rendered Personal Finance in the isolated demo app](docs/assets/screenshots/personal-finance.png)
 
 </details>
 
 <details>
-<summary><strong>Crypto — spot watchlist, perpetual charts, and market breadth</strong></summary>
+<summary><strong>Charts</strong></summary>
 
-Keep spot quotes, a candlestick and volume chart, equity proxies, market breadth,
-and venue-specific perpetual funding and open interest together.
+Price action, volume, technical tools, and demo portfolio watchlists.
 
-![Crypto demo showing a spot watchlist, BTC perpetual candlesticks and volume, a top-30 breadth grid, and perpetual market statistics](docs/assets/screenshots/crypto.png)
-
-</details>
-
-<details>
-<summary><strong>Scorecard — compare companies and valuation metrics</strong></summary>
-
-Compare annual financials, margins, valuation multiples, and signed revenue growth
-across companies. Choose metrics and save named comparisons locally.
-
-![Scorecard demo comparing AMZN, MSFT, and GOOGL financial and valuation metrics with a signed revenue-growth bar chart](docs/assets/screenshots/scorecard.png)
+![Rendered Charts in the isolated demo app](docs/assets/screenshots/charts.png)
 
 </details>
 
 <details>
-<summary><strong>Dictionary — offline learning and illustrated chart patterns</strong></summary>
+<summary><strong>Focus Dashboard</strong></summary>
 
-Search 405 offline entries, save terms, and study chart patterns with diagrams,
-confirmation criteria, invalidation conditions, and a reading outline.
+Find company, industry, digital-asset, commodity, and macro research topics.
+Each topic has its own research layout.
 
-![Dictionary Reading Room showing an Ascending Channel entry, an illustrated candlestick pattern, topic navigation, saved terms, and a reading outline](docs/assets/screenshots/dictionary.png)
-
-</details>
-
-<details>
-<summary><strong>Charts — price action and technical tools</strong></summary>
-
-Candlestick history, volume, moving averages, drawing tools, and portfolio context.
-
-![Budget Terminal Charts workspace with demo candlesticks, volume, a moving average, and a portfolio sidebar](docs/assets/screenshots/charts.png)
+![Rendered Focus Dashboard in the isolated demo app](docs/assets/screenshots/focus-dashboard.png)
 
 </details>
 
 <details>
-<summary><strong>Portfolio — positions and allocation</strong></summary>
+<summary><strong>Dictionary</strong></summary>
 
-Position values, gains, portfolio weights, and performance snapshots.
+Browse offline financial terms and illustrated chart patterns.
 
-![Budget Terminal Portfolio workspace with a five-position demo portfolio, gains, and allocation bars](docs/assets/screenshots/portfolio.png)
+![Rendered Dictionary in the isolated demo app](docs/assets/screenshots/dictionary.png)
 
 </details>
+
+## Mobile UI showcase
+
+The same workspace adapts to phones with stacked panels, touch-sized controls,
+collapsible tools, and swipeable tables. Tap the page name to open **Workspaces**
+and search or select a page.
+
+<p align="center">
+  <img src="docs/assets/screenshots/mobile-portfolio.png" alt="Mobile Portfolio with fictional demo holdings and compact controls" width="30%">
+  <img src="docs/assets/screenshots/mobile-dashboard-2.png" alt="Mobile Dashboard 2.0 with stacked demo portfolio panels" width="30%">
+  <img src="docs/assets/screenshots/mobile-workspaces.png" alt="Mobile Workspaces navigation with searchable grouped page pills" width="30%">
+</p>
+
+<details>
+<summary><strong>Mobile Charts — price history and compact chart tools</strong></summary>
+
+<p align="center">
+  <img src="docs/assets/screenshots/mobile-charts.png" alt="Rendered mobile Charts with SPY candles, volume, and the demo portfolio sidebar" width="320">
+</p>
+
+</details>
+
+**How it works:** Budget Terminal stays open on your computer and serves the mobile
+UI with its shared saved records and market services. Enable **Settings → Labs →
+Mobile Access**, connect your computer and phone to the same Tailscale account,
+and open the private link in your phone browser. Telegram's `/mobile` command can
+send you that link when configured. Mobile edits save to the desktop records;
+page navigation and scroll positions are independent.
+
+On Windows, **Open phone viewport** in Settings opens a connected, resizable local
+window without Tailscale. To try sample data, use
+[Launch Budget Terminal Mobile Preview.cmd](launchers/windows/Launch%20Budget%20Terminal%20Mobile%20Preview.cmd).
+The images above are actual renders of that disposable preview at 390 × 844 CSS
+pixels, rather than captures from physical phones. Demo profiles
+cannot be shared remotely. See the [Mobile Access guide](docs/mobile-access.md)
+for setup and device-specific behavior.
 
 ## Quick start
 
@@ -318,21 +334,23 @@ npm run build
 npm run preview --workspace budget-terminal-desktop
 ```
 
-The build produces application bundles. Installer packaging and automatic
-application updates are not configured.
+The build produces application bundles. Installer packaging is not configured.
+Source updates are available through Settings and the launcher commands above;
+relaunch to rebuild the app.
 
 </details>
 
 ## Explore the workspaces
 
-The current navigation includes **58 implemented pages**, including Settings.
+The current navigation includes **67 implemented pages**, including Settings and two optional Labs pages.
+Enable Dashboard Lite and News Lite from Settings → Labs.
 
 | Workspace | Pages |
 | :--- | :--- |
-| **Overview** | Dashboard, Dashboard 2.0, News, Calendar, YouTube, Dictionary |
-| **Markets** | Pre-Market, Heatmap, Up/Down, Trading Volumes, Beta, Market Cap, Price, ETF, S&P500, Forex, Crypto, Polymarket, Gold, Oil |
+| **Overview** | Dashboard, Dashboard 2.0, Dashboard Lite (Labs), Pre-Market, News, News Lite (Labs), Calendar, YouTube, Dictionary |
+| **Markets** | Heatmap, Up/Down, Trading Volumes, Beta, Market Cap, Price, ETF, S&P500, Forex, Crypto, Polymarket |
 | **Research** | Browser, Stocks, Discovery, Fundamentals, Scorecard, DefeatBeta Terminal, Valuation, Institutions |
-| **Focus** | BMNR, Bitcoin, PLTR, HOOD, HIMS, SOFI, MU, AMZN, AVGO, Semiconductors, VST |
+| **Focus** | Focus Dashboard, Macro, BMNR, Bitcoin, Ethereum, PLTR, HOOD, HIMS, SOFI, MU, GOOGL, Anthropic, AMZN, AVGO, NVDA, Semiconductors, Homebuilders, VST, Gold, Oil |
 | **Trading** | Charts, Options, Technical Indicators, Quant, Backtest |
 | **Macro & events** | Global, Economic, Bonds, Money, IPO, Politics |
 | **My money** | Portfolio, Personal Finance, Cards, Projections |
@@ -461,8 +479,10 @@ The current comparison loads at startup, including when Scorecard is unvisited.
 - **Visible data quality.** Supported panels show source, freshness, coverage, and
   partial-data issues. Public feeds can vary in availability; cached results keep
   their limitations visible. See [startup and data freshness](docs/user-guide.md#startup-and-data-freshness).
-- **Desktop-only workspace.** Open Budget Terminal in Electron. Remote browser
-  access, pairing, and the built-in web server are no longer included.
+- **Desktop and connected mobile.** Run the main workspace in Electron. Optional
+  Mobile Access serves the same records and market services to phones and tablets
+  over Tailscale while the app runs. Windows also offers a resizable local phone
+  viewport, and a disposable mobile preview uses demo records. See [Mobile Access](docs/mobile-access.md).
 - **Local MCP tools.** Connect research and saved-record tools to supported local
   clients. Write tools edit local records, not broker orders. See the [MCP setup guide](docs/local-mcp.md).
 - **Optional encrypted credentials.** Settings → Integrations can store Finnhub
