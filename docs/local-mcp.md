@@ -6,10 +6,10 @@ A [demo launch](../README.md#test-with-demo-data) has its own temporary MCP brid
 The default MCP client configuration still targets your regular profile. For MCP tests against demo data,
 use the connection configuration from the demo window's MCP settings while that window is open.
 
-[Mobile Access](mobile-access.md) uses separate private Tailscale routes for Safari, including a direct link that works without DNS.
+[Mobile Access](mobile-access.md) uses separate private Tailscale routes for phone and tablet browsers, including a direct link that works without DNS.
 The local MCP bridge retains its existing loopback address, credentials, and permissions.
-Configure Mobile Access under desktop **Settings → Labs** and use `/mobile` in the configured Telegram chat to get the Safari link.
-The Windows **Open iPhone 17 viewport** button opens a local mobile window through desktop IPC. Mobile clients and MCP tools have no window-launch permission.
+Configure Mobile Access under desktop **Settings → Labs** and use `/mobile` in the configured Telegram chat to get the mobile link.
+The Windows **Open phone viewport** button opens a resizable local mobile window with generic phone-size presets through desktop IPC. Mobile clients and MCP tools have no window-launch permission.
 
 Use `budget_terminal_screenshot` with `{ "request": { "page": "focus-dashboard" } }`
 to capture the Focus page directory and the two headline readings on each card. Readings use the

@@ -108,6 +108,7 @@ ConvertTo-Json -Compress -InputObject @((Get-Location).Path, $Command, [bool]$De
       @{ File = 'Launch Budget Terminal.cmd'; Command = 'start'; Attached = $true },
       @{ File = 'Launch Budget Terminal Demo.cmd'; Command = 'start'; Demo = $true; Attached = $true },
       @{ File = 'Launch Budget Terminal Mobile.cmd'; Command = 'mobile' },
+      @{ File = 'Launch Budget Terminal Mobile Preview.cmd'; Command = 'start'; MobilePreview = $true; Attached = $true },
       @{ File = 'Launch Budget Terminal iPhone 17 Preview.cmd'; Command = 'start'; MobilePreview = $true; Attached = $true }
     )) {
       $wrapper = Join-Path $wrapperLaunchers $case.File
@@ -122,7 +123,7 @@ ConvertTo-Json -Compress -InputObject @((Get-Location).Path, $Command, [bool]$De
   } finally {
     Pop-Location
   }
-  Write-Host 'PASS: all four grouped Windows wrappers launch from a checkout with spaces and pass the correct mode.'
+  Write-Host 'PASS: all grouped Windows wrappers launch from a checkout with spaces and pass the correct mode.'
   & {
     . (Join-Path $PSScriptRoot 'install-bt.ps1')
     $script:fixtureUserPath = 'C:\fixture-bin'

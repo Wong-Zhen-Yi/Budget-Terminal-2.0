@@ -91,9 +91,12 @@ try {
                 await run('document.querySelector("button[aria-label=Settings]").click()')
                 await waitFor('Boolean(document.querySelector("[data-settings-category=labs]"))', 'Settings must show Labs')
                 await run('document.querySelector("[data-settings-category=labs]").click()')
-                const mobileButton = 'Array.from(document.querySelectorAll("[data-settings-card=mobile-access] button")).find(button => button.textContent === "Open iPhone 17 viewport")'
-                await waitFor('Boolean(' + mobileButton + ')', 'Labs must offer a one-click iPhone viewport')
-                assert.match(await run('document.getElementById("mobile-viewport-hint").textContent'), /402 × 874 at 3×/)
+                const mobileButton = 'Array.from(document.querySelectorAll("[data-settings-card=mobile-access] button")).find(button => button.textContent === "Open phone viewport")'
+                await waitFor('Boolean(' + mobileButton + ')', 'Labs must offer a one-click phone viewport')
+                assert.match(await run('document.getElementById("mobile-viewport-hint").textContent'), /390 × 844 at 2×/)
+                assert.deepEqual(await run('[...document.querySelectorAll("[data-settings-card=mobile-access] select option")].map(option => option.value)'), ['compact-phone', 'small-phone', 'phone', 'large-phone'])
+                await run('(() => { const select = document.querySelector("[data-settings-card=mobile-access] select"); select.value = "small-phone"; select.dispatchEvent(new Event("change", { bubbles: true })); return true })()')
+                await waitFor('document.getElementById("mobile-viewport-hint").textContent.includes("360 × 780")', 'Selecting a phone size must update the preview hint')
                 assert.equal(await run('window.api.launchMobileWindow("unknown-model").then(() => false, error => error.message.includes("supported mobile viewport"))'), true)
                 await run(mobileButton + '.click()')
               } else if (${warmMobile}) {
@@ -118,12 +121,12 @@ try {
               assert(Date.now() < end, 'Connected mobile UI must open the shared start page')
               await delay()
             }
-            assert.deepEqual(await run('[innerWidth, innerHeight, devicePixelRatio]'), [402, 874, 3])
+            assert.deepEqual(await run('[innerWidth, innerHeight, devicePixelRatio]'), ${labsMobile ? '[360, 780, 2]' : '[390, 844, 2]'})
             assert.equal((await fetch(window.webContents.getURL())).status, 403)
             assert.equal(await desktopRun('window.api.mobileAccessStatus().then(status => status.enabled)'), false)
-            assert.equal(await run('window.api.launchMobileWindow("iphone-17").then(() => false, () => true)'), true,
+            assert.equal(await run('window.api.launchMobileWindow("phone").then(() => false, () => true)'), true,
               'The mobile client cannot launch a desktop window')
-            await desktopRun('window.api.launchMobileWindow("iphone-17")')
+            await desktopRun('window.api.launchMobileWindow("${labsMobile ? 'small-phone' : 'phone'}")')
             assert.deepEqual(BrowserWindow.getAllWindows().filter(candidate => candidate.getTitle() === 'Budget Terminal Mobile').map(candidate => candidate.id), [window.id],
               'Launching the same viewport reuses the existing window')
             const readCash = 'window.api.portfolio().then(result => result.data.portfolios[0].cashBalance)'
@@ -153,13 +156,20 @@ try {
                 await new Promise(resolve => setTimeout(resolve, 25))
               }
             }
-            assert.equal(window.getTitle(), 'Budget Terminal iPhone 17 Preview')
-            assert.deepEqual(await run('[innerWidth, innerHeight, screen.width, screen.height, devicePixelRatio]'), [402, 874, 402, 874, 3])
+            assert.equal(window.getTitle(), 'Budget Terminal Mobile Preview')
+            assert.deepEqual(await run('[innerWidth, innerHeight, screen.width, screen.height, devicePixelRatio]'), [390, 844, 390, 844, 2])
             assert.equal(await run('navigator.maxTouchPoints'), 5)
             assert.equal(await run('typeof require'), 'undefined', 'Preview has no Electron preload or Node access')
             assert.equal((await fetch(window.webContents.getURL())).status, 403, 'Only the native preview can open its local endpoint')
             await waitFor('document.querySelector(".mobile-page-button")?.textContent === "Portfolio"', 'Mobile UI must open the saved start page')
             assert.equal(await run('window.api.portfolio().then(result => result.data.portfolios[0].name)'), 'Demo Core Portfolio')
+            assert.equal(window.isResizable(), true, 'Phone preview can resize between presets')
+            const originalSize = window.getContentSize()
+            const fitScale = Math.min(1, (area.width - 32) / 390, (area.height - 64) / 844)
+            window.setContentSize(Math.ceil(360 * fitScale), Math.ceil(640 * fitScale))
+            await waitFor('Math.abs(innerWidth - 360) <= 1 && Math.abs(innerHeight - 640) <= 1', 'Native resizing must change the CSS viewport instead of stretching the canvas')
+            window.setContentSize(...originalSize)
+            await waitFor('Math.abs(innerWidth - 390) <= 1 && Math.abs(innerHeight - 844) <= 1', 'Restoring the window must restore its phone size')
             const visible = selector => 'Boolean(document.querySelector(' + JSON.stringify(selector) + ')?.getClientRects().length)'
             const click = selector => run('document.querySelector(' + JSON.stringify(selector) + ').click()')
             const openNavigation = async () => {
@@ -176,11 +186,13 @@ try {
             const cash = '[aria-label="Brokerage cash"]'
             const margin = '[aria-label="Margin debt"]'
             const atPhoneWidths = async check => {
-              for (const [width, height] of [[402, 874], [320, 568]]) {
+              for (const [width, height, deviceScaleFactor] of [[390, 844, 2], [360, 780, 2], [375, 667, 2], [412, 915, 2.625], [430, 932, 3], [320, 568, 2]]) {
                 await window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', {
-                  width, height, screenWidth: width, screenHeight: height, mobile: true, deviceScaleFactor: 3,
+                  width, height, screenWidth: width, screenHeight: height, mobile: true, deviceScaleFactor,
                 })
                 await waitFor('innerWidth === ' + width, 'Phone emulation must resize the page')
+                assert.equal(await run('document.documentElement.scrollWidth === innerWidth && document.body.scrollWidth === innerWidth'), true, 'Phone shell must fit the available width at ' + width + 'px')
+                assert.equal(await run('(() => { const header = document.querySelector(".mobile-topbar"); return [...header.querySelectorAll("button")].every(button => { const rect = button.getBoundingClientRect(); return rect.width >= 44 && rect.height >= 44 && rect.left >= 0 && rect.right <= innerWidth }) })()'), true, 'Header actions stay touch-sized and inside the phone at ' + width + 'px')
                 await check(width)
               }
             }
@@ -258,7 +270,24 @@ try {
               'Options view buttons must stay in one row')
             await selectPage('browser')
             await waitFor('Boolean(document.querySelector("#mobile-browser-address"))', 'The Browser pill must open Browser')
-            console.log('PASS: iPhone preview opens with isolated sample data, mobile navigation, and compact toolbars at 402px and 320px')
+            for (const [width, height] of [[568, 320], [780, 360], [844, 390], [932, 430]]) {
+              await window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', {
+                width, height, screenWidth: width, screenHeight: height, mobile: true, deviceScaleFactor: 2,
+              })
+              await waitFor('innerWidth === ' + width + ' && innerHeight === ' + height, 'Landscape viewport must resize')
+              assert.equal(await run('document.documentElement.scrollWidth === innerWidth'), true, 'Landscape shell must fit')
+              assert.equal(await run('Math.abs(document.querySelector(".terminal-shell").getBoundingClientRect().height - innerHeight) <= 1'), true, 'Shell follows the available browser height')
+              await openNavigation()
+              assert.equal(await run('(() => { const scroll = document.querySelector(".mobile-navigation-scroll"); return scroll.clientHeight > 80 && scroll.scrollWidth === scroll.clientWidth })()'), true, 'Landscape navigation remains usable')
+              await click('.mobile-page-button')
+              await selectPage('charts')
+              await waitFor(visible('.charts-toolbar'), 'Charts remain available in landscape')
+              assert.equal(await run(visible('[aria-label="Chart style"]')), false, 'Short landscape phones keep secondary tools collapsed')
+              await click('.charts-toolbar-tools > button')
+              await waitFor(visible('[aria-label="Chart style"]'), 'Landscape phones can expand tools')
+              await click('.charts-toolbar-tools > button')
+            }
+            console.log('PASS: mobile preview opens with isolated sample data, resizes, and reflows navigation and toolbars across compact through large phones and landscape')
             app.quit()
             return
           }
@@ -372,7 +401,7 @@ try {
       child.on('close', code => { clearTimeout(timer); resolveRun({ code, text }) })
     })
     assert.equal(output.code, 0, output.text)
-    assert.match(output.text, connectedMobile ? /PASS: connected mobile shares desktop data/ : mobilePreview ? /PASS: iPhone preview opens/ : demoOnly ? /PASS: demo UI opens/ : /PASS: built desktop opens/)
+    assert.match(output.text, connectedMobile ? /PASS: connected mobile shares desktop data/ : mobilePreview ? /PASS: mobile preview opens/ : demoOnly ? /PASS: demo UI opens/ : /PASS: built desktop opens/)
     if (process.platform === 'win32' && !demoOnly && !connectedMobile) {
       assert.doesNotMatch(output.text, /Failed to open persistent cache|Unable to move the cache|Unable to create cache|Gpu Cache Creation failed/i,
         'Unavailable GPU shader caches must not cause startup errors')

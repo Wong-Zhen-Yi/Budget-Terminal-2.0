@@ -1,4 +1,5 @@
-@media (max-width: 600px) {
+/* Use available space rather than a device model, including phones turned sideways. */
+@media (max-width: 600px), (orientation: landscape) and (max-height: 600px) and (max-width: 1050px) {
   [data-terminal-mobile] [data-page-id] :is(input, select, textarea, form) { min-width: 0; max-width: 100%; }
   [data-terminal-mobile] [data-page-id] .text-2xs { font-size: 12px; }
   [data-terminal-mobile] [data-page-id] :is(button.no-drag, [role='tab'], input:not([type='checkbox'], [type='radio'], [type='range']), select) {
@@ -287,4 +288,18 @@
   [data-terminal-mobile] .settings-tabs button { min-height: 44px; }
   [data-terminal-mobile] .settings-toolbar .settings-search { height: 40px; }
   [data-terminal-mobile] .settings-group-heading { min-width: 0; }
+}
+
+@media (max-width: 360px) {
+  [data-terminal-mobile] .mobile-page-button { gap: 6px; padding-inline: 6px; }
+  [data-terminal-mobile] .mobile-navigation-search,
+  [data-terminal-mobile] .mobile-navigation-groups { padding-inline: 8px; }
+}
+
+@media (orientation: landscape) and (max-height: 600px) and (max-width: 1050px) {
+  [data-terminal-mobile] .mobile-topbar { padding-block: 2px; }
+  [data-terminal-mobile] .mobile-navigation-search { gap: 6px; padding-block: 6px; }
+  [data-terminal-mobile] .mobile-navigation-search h2 { font-size: 20px; }
+  [data-terminal-mobile] .charts-main-grid > section { min-height: 220px; }
+  [data-terminal-mobile] .stocks-price-chart { height: clamp(220px, 65dvh, 350px); }
 }

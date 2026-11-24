@@ -185,6 +185,7 @@ assert.match(connectedLauncher, /powershell\.exe[^\r\n]*launch-windows\.ps1" mob
 for (const [file, command] of [
   ['Launch Budget Terminal.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -Attached\n/],
   ['Launch Budget Terminal Demo.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -Demo -Attached\n/],
+  ['Launch Budget Terminal Mobile Preview.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -MobilePreview -Attached\n/],
   ['Launch Budget Terminal iPhone 17 Preview.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -MobilePreview -Attached\n/],
 ]) {
   const source = readFileSync(join(windowsLaunchers, file), 'utf8').replace(/\r\n/g, '\n')

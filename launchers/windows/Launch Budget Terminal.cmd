@@ -1,7 +1,7 @@
 @echo off
-rem The shared build disables sideways overscroll in the mobile view.
+rem The shared build adapts mobile layouts to compact, standard, large and landscape phone sizes.
 rem The shared build adds /prompts to Telegram for the four Agents quick prompts.
-rem Open the iPhone 17 viewport from Settings, Labs, Mobile Access.
+rem Open the phone viewport from Settings, Labs, Mobile Access.
 rem The shared build includes animated reload progress on desktop and mobile.
 rem The shared build includes the Forex currency converter with SGD to USD selected by default.
 rem The shared build includes the mobile Workspaces page with grouped page pills.
@@ -12,7 +12,7 @@ rem Select a viewport model and launch the connected mobile window from Settings
 rem Mobile Access includes a button to copy the Tailscale setup commands after the shared build.
 rem Telegram /mobile retrieves links and /restart relaunches the app without Codex inference.
 rem For the mobile News toolbar with collapsible filters and tools, run Launch Budget Terminal Mobile.cmd or btd mobile.
-rem The shared build includes the compact iPhone navigation and touch-friendly page picker.
+rem The shared build includes the compact phone navigation and touch-friendly page picker.
 rem The shared build includes the direct Tailscale link under Settings > Labs.
 rem On Windows, double-click Launch Budget Terminal Demo.cmd for temporary sample data.
 rem The shared build includes the streamlined Charts workspaces and updated chart rendering.

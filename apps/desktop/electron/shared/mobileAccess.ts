@@ -9,11 +9,14 @@ export const MOBILE_DIRECT_SERVE_COMMAND = `tailscale serve --bg --tcp=${MOBILE_
 export const MOBILE_BODY_LIMIT = 8_100_000
 
 export const MOBILE_VIEWPORTS = {
-  'iphone-17': { label: 'iPhone 17', width: 402, height: 874, deviceScaleFactor: 3 },
+  'compact-phone': { label: 'Compact phone', width: 320, height: 568, deviceScaleFactor: 2 },
+  'small-phone': { label: 'Small phone', width: 360, height: 780, deviceScaleFactor: 2 },
+  'phone': { label: 'Phone', width: 390, height: 844, deviceScaleFactor: 2 },
+  'large-phone': { label: 'Large phone', width: 430, height: 932, deviceScaleFactor: 3 },
 } as const
 
 export type MobileViewportId = keyof typeof MOBILE_VIEWPORTS
-export const DEFAULT_MOBILE_VIEWPORT: MobileViewportId = 'iphone-17'
+export const DEFAULT_MOBILE_VIEWPORT: MobileViewportId = 'phone'
 
 export function isMobileViewportId(value: unknown): value is MobileViewportId {
   return typeof value === 'string' && Object.hasOwn(MOBILE_VIEWPORTS, value)

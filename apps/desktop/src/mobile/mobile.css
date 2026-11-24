@@ -7,6 +7,10 @@
 [data-terminal-mobile] body { overscroll-behavior-x: none; }
 
 [data-terminal-mobile] .terminal-shell {
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100vh;
   height: 100dvh;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   overflow: hidden;
@@ -16,14 +20,14 @@
   display: flex;
   flex: none;
   align-items: center;
-  padding: 6px 10px;
+  padding: 6px clamp(4px, 2.5vw, 10px);
   gap: 6px;
   justify-content: space-between;
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
 }
 
-.mobile-topbar h1 { min-width: 0; }
+.mobile-topbar h1 { flex: 1; min-width: 0; }
 .mobile-topbar button {
   display: flex;
   min-width: 44px;
@@ -43,7 +47,7 @@
 .mobile-topbar .reload-button:disabled { opacity: 1; }
 .mobile-topbar-actions { display: flex; flex: none; }
 .mobile-topbar-actions [aria-pressed="true"] { color: var(--color-accent-hover); }
-.mobile-topbar svg { width: 22px; height: 22px; }
+.mobile-topbar svg { flex: none; width: 22px; height: 22px; }
 .mobile-topbar .mobile-page-button {
   max-width: 100%;
   border: 1px solid var(--color-border-strong);

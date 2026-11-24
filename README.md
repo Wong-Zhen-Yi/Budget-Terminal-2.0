@@ -259,7 +259,7 @@ Edits and automatic backups go into that profile, alongside its own browser sess
 The regular launcher still opens your personal profile, and cloud sync is disabled in the demo.
 Market prices still use the app's usual providers.
 
-On Windows, select **Open iPhone 17 viewport** under **Settings → Labs → Mobile Access** to open your desktop workspace in a phone-sized window. After an update, run `btd mobile` or double-click [Launch Budget Terminal Mobile.cmd](launchers/windows/Launch%20Budget%20Terminal%20Mobile.cmd) to save, rebuild, and reopen with the viewport. To use temporary sample data, open [Launch Budget Terminal iPhone 17 Preview.cmd](launchers/windows/Launch%20Budget%20Terminal%20iPhone%2017%20Preview.cmd). See [Mobile Access](docs/mobile-access.md#open-the-connected-mobile-window-on-windows) for details.
+On Windows, select **Open phone viewport** under **Settings → Labs → Mobile Access** to open your desktop workspace in a resizable phone window, with compact through large phone presets. After an update, run `btd mobile` or double-click [Launch Budget Terminal Mobile.cmd](launchers/windows/Launch%20Budget%20Terminal%20Mobile.cmd) to save, rebuild, and reopen with the viewport. To use temporary sample data, open [Launch Budget Terminal Mobile Preview.cmd](launchers/windows/Launch%20Budget%20Terminal%20Mobile%20Preview.cmd). See [Mobile Access](docs/mobile-access.md#open-the-connected-mobile-window-on-windows) for details.
 
 ### Launch behavior and troubleshooting
 
@@ -483,7 +483,7 @@ The current comparison loads at startup, including when Scorecard is unvisited.
 | [Browser](docs/browser.md) | Embedded Chromium tabs, source reading, research controls, and local login profiles. |
 | [Diagnostic logging](docs/diagnostic-logging.md) | Settings log viewer, retention, export, and privacy. |
 | [Local MCP](docs/local-mcp.md) | Client registration, research tools, record edits, screenshots, and bridge security. |
-| [Mobile Access](docs/mobile-access.md) | Open Budget Terminal on your iPhone or iPad through Tailscale and get the private link from Telegram. |
+| [Mobile Access](docs/mobile-access.md) | Open Budget Terminal on your phone or tablet through Tailscale and get the private link from Telegram. |
 | [Development](docs/development.md) | Architecture, verification commands, security checks, and data-layer conventions. |
 | [Design archive](docs/design-prototypes/README.md) | Curated page prototypes, branding concepts, source prompts, and renderers. |
 | [Semiconductors](docs/semiconductors.md) | Semiconductor supply-chain research and data sources. |

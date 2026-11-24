@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   DEFAULT_MOBILE_VIEWPORT, MOBILE_DIRECT_SERVE_COMMAND, MOBILE_SERVE_COMMAND, MOBILE_VIEWPORTS,
+  isMobileViewportId, type MobileViewportId,
 } from '@shared/mobileAccess'
 import { api } from '@/api/client'
 import { Button } from '@/components/ui/Button'
@@ -9,17 +10,18 @@ import { Panel } from '@/components/ui/Panel'
 
 const key = ['mobileAccess'] as const
 const button = 'rounded border border-border-strong bg-surface-raised px-2 py-1 text-text hover:bg-surface-hover disabled:opacity-50'
-const viewport = MOBILE_VIEWPORTS[DEFAULT_MOBILE_VIEWPORT]
 
 export function MobileAccessPanel({ active }: { active: boolean }) {
   const client = useQueryClient()
+  const [viewportId, setViewportId] = useState<MobileViewportId>(DEFAULT_MOBILE_VIEWPORT)
+  const viewport = MOBILE_VIEWPORTS[viewportId]
   const [copyResult, setCopyResult] = useState<{ text: string; ok: boolean }>()
   const status = useQuery({ queryKey: key, queryFn: () => api.mobileAccessStatus(), enabled: active })
   const change = useMutation({
     mutationFn: (enabled: boolean) => api.configureMobileAccess(enabled),
     onSuccess: state => client.setQueryData(key, state),
   })
-  const launch = useMutation({ mutationFn: () => api.launchMobileWindow(DEFAULT_MOBILE_VIEWPORT) })
+  const launch = useMutation({ mutationFn: () => api.launchMobileWindow(viewportId) })
   const state = status.data
   const setupCommands = [!state?.url && MOBILE_SERVE_COMMAND, !state?.directUrl && MOBILE_DIRECT_SERVE_COMMAND]
     .filter(Boolean).join('\n')
@@ -39,10 +41,18 @@ export function MobileAccessPanel({ active }: { active: boolean }) {
         <div className="obscure-mode-row">
           <div>
             <h3 className="font-semibold">Mobile viewport on this PC</h3>
-            <p id="mobile-viewport-hint">{viewport.width} × {viewport.height} at {viewport.deviceScaleFactor}×. Uses your desktop workspace without Tailscale.</p>
+            <label className="my-1 flex flex-wrap items-center gap-2">
+              Phone size
+              <select value={viewportId} disabled={launch.isPending} className={button} onChange={event => {
+                if (isMobileViewportId(event.target.value)) setViewportId(event.target.value)
+              }}>
+                {Object.entries(MOBILE_VIEWPORTS).map(([id, profile]) => <option key={id} value={id}>{profile.label} ({profile.width} × {profile.height})</option>)}
+              </select>
+            </label>
+            <p id="mobile-viewport-hint">{viewport.width} × {viewport.height} at {viewport.deviceScaleFactor}×. Resize the window to try other phone sizes. Uses your desktop workspace without Tailscale.</p>
           </div>
           <Button variant="accent" aria-describedby="mobile-viewport-hint" disabled={launch.isPending} onClick={() => launch.mutate()}>
-            {launch.isPending ? 'Opening…' : `Open ${viewport.label} viewport`}
+            {launch.isPending ? 'Opening…' : 'Open phone viewport'}
           </Button>
         </div>
         {launch.isError && <p role="alert" className="text-warn">Could not open the viewport. Run <strong>Launch Budget Terminal Mobile.cmd</strong> in <code>launchers/windows</code> to rebuild and reopen it.</p>}
@@ -50,7 +60,7 @@ export function MobileAccessPanel({ active }: { active: boolean }) {
       <div className="obscure-mode-row">
         <div>
           <h3 id="lab-mobile-access">Mobile Access on your phone</h3>
-          <p id="lab-mobile-access-description">Use Tailscale to open Budget Terminal in Safari on your iPhone or iPad.</p>
+          <p id="lab-mobile-access-description">Use Tailscale to open Budget Terminal in your phone or tablet browser. The layout adapts to your screen.</p>
         </div>
         <button type="button" className="obscure-switch" role="switch"
           aria-labelledby="lab-mobile-access" aria-describedby="lab-mobile-access-description"

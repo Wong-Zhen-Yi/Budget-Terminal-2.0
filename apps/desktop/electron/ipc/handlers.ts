@@ -71,7 +71,7 @@ export function registerIpcHandlers(
   handle(CHANNELS.configureMobileAccess, (_event, value) => configureMobileAccess(value))
   handle(CHANNELS.launchMobileWindow, async (event, viewport: unknown) => {
     const parent = BrowserWindow.fromWebContents(event.sender)
-    if (!parent || !isMobileViewportId(viewport)) throw new Error('Choose a supported mobile viewport model.')
+    if (!parent || !isMobileViewportId(viewport)) throw new Error('Choose a supported mobile viewport size.')
     await launchMobileWindow(parent, viewport)
   })
   const stopEquityUpdates = hyperliquidEquities.subscribe(async update => {

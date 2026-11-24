@@ -133,7 +133,7 @@ function Stop-BudgetTerminal([string]$RetryCommand = 'btd restart') {
   foreach ($candidate in $running) {
     $process = Get-Process -Id $candidate.ProcessId -ErrorAction SilentlyContinue
     if (-not $process -or $process.HasExited) { continue }
-    if ($process.MainWindowTitle -in @('Budget Terminal Demo', 'Budget Terminal iPhone 17 Preview')) { continue }
+    if ($process.MainWindowTitle -in @('Budget Terminal Demo', 'Budget Terminal Mobile Preview', 'Budget Terminal iPhone 17 Preview')) { continue }
     # Only close the application window, never unrelated Electron tools or test fixtures.
     if ($process.MainWindowTitle -ne 'Budget Terminal') {
       throw "Budget Terminal is still starting or has no application window. Wait for it to open, then retry $RetryCommand."
@@ -171,7 +171,7 @@ Commands
   restart       Close the app gracefully, wait for saves, rebuild and reopen it.
                 If the app is already closed, start it.
   mobile        Save and close the running desktop, rebuild, then open the
-                iPhone 17 viewport with your workspace. No Tailscale setup.
+                phone viewport with your workspace. No Tailscale setup.
                 In an open desktop, use Settings > Labs > Mobile Access to
                 open the viewport without rebuilding.
   update        Check for and apply source updates from the published main branch.
@@ -180,7 +180,7 @@ Commands
 Options
   -Dev          Run in development mode with live reloading. Keep the terminal open.
   -Demo         Open a temporary workspace with sample data. Keep the terminal open.
-  -MobilePreview Open the iPhone 17 mobile UI with temporary sample data.
+  -MobilePreview Open the responsive phone UI with temporary sample data.
   -Logs         Open Settings diagnostics when the app opens.
   -Attached     Keep the app and its runtime output attached to this terminal.
                 Keep the terminal open while the app runs.
@@ -193,7 +193,7 @@ Options
   }
   try {
     if ($Demo -and ($Command -ne 'start' -or $RuntimeOnly -or $Setup)) { throw 'Demo is a launch mode. Run btd -Demo to open it.' }
-    if ($MobilePreview -and ($Command -ne 'start' -or $RuntimeOnly -or $Setup -or $Dev)) { throw 'Run btd -MobilePreview by itself to open the iPhone window.' }
+    if ($MobilePreview -and ($Command -ne 'start' -or $RuntimeOnly -or $Setup -or $Dev)) { throw 'Run btd -MobilePreview by itself to open the phone window.' }
     if ($Command -eq 'mobile' -and ($RuntimeOnly -or $Setup -or $Dev -or $Logs)) { throw 'Run btd mobile to open the connected mobile window.' }
     if ($Command -eq 'restart' -and ($RuntimeOnly -or $Setup)) { throw 'Restart cannot be combined with setup or runtime-only options.' }
     if ($Command -eq 'update' -and ($RuntimeOnly -or $Setup -or $Dev -or $Logs)) { throw 'Update cannot be combined with launch options.' }

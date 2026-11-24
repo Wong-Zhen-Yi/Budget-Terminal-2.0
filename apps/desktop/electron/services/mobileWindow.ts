@@ -5,7 +5,7 @@ import { isSafeExternalUrl } from './urls.js'
 import { DEFAULT_MOBILE_VIEWPORT, MOBILE_VIEWPORTS, type MobileViewportId } from '../shared/mobileAccess.js'
 
 export async function openMobileWindow(origin: string, token: string, viewport: MobileViewportId = DEFAULT_MOBILE_VIEWPORT, parent?: BrowserWindow) {
-  const { label, width: viewportWidth, height: viewportHeight, deviceScaleFactor } = MOBILE_VIEWPORTS[viewport]
+  const { width: viewportWidth, height: viewportHeight, deviceScaleFactor } = MOBILE_VIEWPORTS[viewport]
   const area = (parent ? screen.getDisplayMatching(parent.getBounds()) : screen.getPrimaryDisplay()).workArea
   // Leave space for native window decorations on shorter displays.
   const scale = Math.min(1, (area.width - 32) / viewportWidth, (area.height - 64) / viewportHeight)
@@ -14,11 +14,11 @@ export async function openMobileWindow(origin: string, token: string, viewport: 
     height: Math.ceil(viewportHeight * scale),
     useContentSize: true,
     parent,
-    title: parent ? 'Budget Terminal Mobile' : `Budget Terminal ${label} Preview`,
+    title: parent ? 'Budget Terminal Mobile' : 'Budget Terminal Mobile Preview',
     icon: join(app.getAppPath(), 'resources', process.platform === 'win32' ? 'budget-terminal-icon.ico' : 'budget-terminal-icon.png'),
     backgroundColor: '#080b12',
     show: false,
-    resizable: false,
+    resizable: true,
     maximizable: false,
     fullscreenable: false,
     autoHideMenuBar: true,
@@ -63,6 +63,23 @@ export async function openMobileWindow(origin: string, token: string, viewport: 
       mobile: true, scale, deviceScaleFactor,
     })
     await contents.debugger.sendCommand('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 })
+    // The preset is a starting size. Resizing changes the CSS viewport, so breakpoints
+    // behave like a real phone instead of stretching a fixed device canvas.
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined
+    let resizing = Promise.resolve()
+    window.on('resize', () => {
+      clearTimeout(resizeTimer)
+      resizeTimer = setTimeout(() => {
+        resizing = resizing.then(async () => {
+          if (window.isDestroyed() || !contents.debugger.isAttached()) return
+          const [width, height] = window.getContentSize().map(size => Math.max(1, Math.round(size / scale)))
+          await contents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', {
+            width, height, screenWidth: width, screenHeight: height, mobile: true, scale, deviceScaleFactor,
+          })
+        }).catch(() => { /* Closing the window can cancel an in-flight emulation update. */ })
+      }, 50)
+    })
+    window.once('closed', () => clearTimeout(resizeTimer))
     await window.loadURL(origin)
     window.show()
     return window

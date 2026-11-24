@@ -147,9 +147,9 @@ export async function stopMobileAccess() {
 export async function telegramMobileLink() {
   const { url, directUrl, enabled } = await mobileAccessStatus()
   if (directUrl) {
-    return `Connect Tailscale on your iPhone or iPad, then open this direct link in Safari: ${directUrl}\nIt works without Tailscale DNS. Keep Budget Terminal open on the computer.${url ? `\nHTTPS link for devices using MagicDNS: ${url}` : ''}`
+    return `Connect Tailscale on your phone or tablet, then open this direct link in your browser: ${directUrl}\nIt works without Tailscale DNS. Keep Budget Terminal open on the computer.${url ? `\nHTTPS link for devices using MagicDNS: ${url}` : ''}`
   }
-  return url ? `Open Budget Terminal in Safari on your iPhone or iPad: ${url}\nConnect Tailscale with the same account as this computer. If Safari can’t find the address, enable Use Tailscale DNS in the Tailscale app and reconnect.`
+  return url ? `Open Budget Terminal in your phone or tablet browser: ${url}\nConnect Tailscale with the same account as this computer. If your browser can’t find the address, enable Use Tailscale DNS in the Tailscale app and reconnect.`
     : enabled ? 'The private Tailscale link is unavailable. Check Mobile Access under Settings → Labs on the computer.'
       : 'Enable Mobile Access under Settings → Labs on the computer, then send /mobile again.'
 }

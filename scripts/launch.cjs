@@ -104,7 +104,7 @@ function launch({ development = false, demo = false, mobilePreview = false, mobi
   const output = createLauncherOutput({ log, environment })
   const os = platformName(platform)
   const sampleData = demo || mobilePreview
-  output.header(mobile ? 'Connected mobile window' : mobilePreview ? 'iPhone 17 preview' : demo ? 'Demo data' : setupOnly ? 'Setup check' : development ? 'Live development' : 'Desktop launcher', os || platform)
+  output.header(mobile ? 'Connected mobile window' : mobilePreview ? 'Mobile preview' : demo ? 'Demo data' : setupOnly ? 'Setup check' : development ? 'Live development' : 'Desktop launcher', os || platform)
   output.stage(1, 'Check toolchain')
   if (!os) {
     output.error(`Budget Terminal supports Windows, macOS, and Linux; found ${platform}.`)
@@ -126,7 +126,7 @@ function launch({ development = false, demo = false, mobilePreview = false, mobi
     return 1
   }
   if (mobilePreview && development) {
-    output.error('The iPhone 17 preview uses the built mobile interface. Run it without --dev.')
+    output.error('The mobile preview uses the built mobile interface. Run it without --dev.')
     return 1
   }
   if (mobile && (platform !== 'win32' || development || sampleData || setupOnly || logs)) {
@@ -204,7 +204,7 @@ function launch({ development = false, demo = false, mobilePreview = false, mobi
     log.log('')
     return 0
   }
-  output.stage(5, mobile ? 'Open connected mobile window' : mobilePreview ? 'Open iPhone 17 preview' : development ? 'Open live development' : 'Open desktop app')
+  output.stage(5, mobile ? 'Open connected mobile window' : mobilePreview ? 'Open mobile preview' : development ? 'Open live development' : 'Open desktop app')
   output.ready('LAUNCH CHECKS PASSED')
   if (mobile) env.BUDGET_TERMINAL_OPEN_MOBILE = '1'
   if (detach && platform === 'win32' && !development && !sampleData) {
