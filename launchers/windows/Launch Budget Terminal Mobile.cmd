@@ -1,5 +1,6 @@
 @echo off
 rem The shared build includes Google sign-in alongside GitHub on the startup popup and in Settings cloud sync.
+rem The shared build adds QR codes for the existing phone links in Settings Labs.
 rem The shared build loads the open mobile page before background preloads for unseen pages, so Polymarket appears promptly.
 rem The shared build lets phone pages such as Polymarket, Charts, Valuation, Economic and Dictionary scroll their headers away.
 rem GitHub demo screenshots reflect the current app; this launcher rebuilds desktop and MCP source.

@@ -48,7 +48,7 @@ const searchDestinations = [
   { id: 'controller', label: 'Controller controls', terms: 'gamepad steam deck playstation xbox button mapping input test controller shortcuts' },
 ] as const
 const logSearchTerms = 'application diagnostic logs events search severity area session export folder pause live'
-const mobileAccessTerms = 'mobile access launch window viewport model ipad iphone tailscale tailnet magicdns telegram private link ios safari'
+const mobileAccessTerms = 'mobile access launch window viewport model ipad iphone tailscale tailnet magicdns telegram private phone link qr code ios safari'
 
 interface SettingsCard {
   id: string

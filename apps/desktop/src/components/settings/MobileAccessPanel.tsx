@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { QRCodeSVG } from 'qrcode.react'
 import {
   DEFAULT_MOBILE_VIEWPORT, MOBILE_DIRECT_SERVE_COMMAND, MOBILE_SERVE_COMMAND, MOBILE_VIEWPORTS,
   isMobileViewportId, type MobileViewportId,
@@ -10,12 +11,41 @@ import { Panel } from '@/components/ui/Panel'
 
 const key = ['mobileAccess'] as const
 const button = 'rounded border border-border-strong bg-surface-raised px-2 py-1 text-text hover:bg-surface-hover disabled:opacity-50'
+const linkLabels = {
+  directUrl: 'Direct link (works without DNS)',
+  url: 'HTTPS link (uses MagicDNS)',
+} as const
+const linkTypes = ['directUrl', 'url'] as const
+
+function MobileLinkQr({ url, label, onClose }: { url: string; label: string; onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  useLayoutEffect(() => {
+    const element = dialog.current!
+    element.showModal()
+    return () => element.close()
+  }, [])
+
+  return <dialog ref={dialog} aria-labelledby="mobile-qr-title" aria-describedby="mobile-qr-hint"
+    onCancel={event => { event.preventDefault(); onClose() }}
+    onKeyDown={event => event.stopPropagation()}
+    className="m-auto max-h-[90vh] w-88 max-w-[90vw] overflow-auto rounded border border-border-strong bg-surface p-4 text-xs text-text backdrop:bg-black/60">
+    <header className="flex items-center justify-between gap-2">
+      <h3 id="mobile-qr-title" className="font-semibold">Open Budget Terminal on your phone</h3>
+      <button className={button} type="button" onClick={onClose}>Close</button>
+    </header>
+    <p id="mobile-qr-hint" className="mt-2 text-text-muted">Connect Tailscale on your phone, then scan with your camera.</p>
+    <QRCodeSVG value={url} size={224} marginSize={4} role="img" aria-label={`QR code for ${label}`} className="mx-auto my-4 block h-auto max-w-full" />
+    <p className="text-center">{label}</p>
+    <p className="break-all text-center text-text-muted">{url}</p>
+  </dialog>
+}
 
 export function MobileAccessPanel({ active }: { active: boolean }) {
   const client = useQueryClient()
   const [viewportId, setViewportId] = useState<MobileViewportId>(DEFAULT_MOBILE_VIEWPORT)
   const viewport = MOBILE_VIEWPORTS[viewportId]
   const [copyResult, setCopyResult] = useState<{ text: string; ok: boolean }>()
+  const [qrLink, setQrLink] = useState<(typeof linkTypes)[number]>()
   const status = useQuery({ queryKey: key, queryFn: () => api.mobileAccessStatus(), enabled: active })
   const change = useMutation({
     mutationFn: (enabled: boolean) => api.configureMobileAccess(enabled),
@@ -65,7 +95,7 @@ export function MobileAccessPanel({ active }: { active: boolean }) {
         <button type="button" className="obscure-switch" role="switch"
           aria-labelledby="lab-mobile-access" aria-describedby="lab-mobile-access-description"
           aria-checked={state?.enabled ?? false} disabled={!state?.available || change.isPending}
-          onClick={() => { setCopyResult(undefined); change.mutate(!state?.enabled) }}>
+          onClick={() => { setCopyResult(undefined); setQrLink(undefined); change.mutate(!state?.enabled) }}>
           <span className="obscure-switch-track" aria-hidden="true" />
           <span aria-hidden="true">{state?.enabled ? 'On' : 'Off'}</span>
         </button>
@@ -74,14 +104,20 @@ export function MobileAccessPanel({ active }: { active: boolean }) {
         {change.isError || status.isError ? 'Could not check Mobile Access.' : state?.message ?? 'Checking Mobile Access…'}
       </p>
       {state?.enabled && <>
-        {[[state.directUrl, 'Direct link (works without DNS)'], [state.url, 'HTTPS link (uses MagicDNS)']].map(([url, label]) => url &&
-          <div key={url} className="flex flex-wrap items-center gap-2">
+        {linkTypes.map(type => {
+          const url = state[type]
+          const label = linkLabels[type]
+          return url && <div key={type} className="flex flex-wrap items-center gap-2">
             <div className="min-w-0 flex-1"><p>{label}</p><p className="break-all text-text-muted">{url}</p></div>
             <button className={button} type="button" aria-label={`Copy ${label}`} onClick={() => void copy(url)}>
               <span aria-live="polite">{copyLabel(url, 'Copy')}</span>
             </button>
-          </div>,
-        )}
+            <button className={button} type="button" aria-haspopup="dialog" aria-label={`Show QR code for ${label}`} onClick={() => setQrLink(type)}>
+              QR code
+            </button>
+          </div>
+        })}
+        {active && qrLink && state[qrLink] && <MobileLinkQr url={state[qrLink]} label={linkLabels[qrLink]} onClose={() => setQrLink(undefined)} />}
         <button className={button} type="button" disabled={status.isFetching || change.isPending} onClick={() => void status.refetch()}>Check connection</button>
         <p className="text-text-muted">Send <code>/mobile</code> to your Budget Terminal Telegram bot to get the link on your device.</p>
         {state.canSetUpLinks && setupCommands && <details className="text-text-muted" open={!state.url && !state.directUrl}>

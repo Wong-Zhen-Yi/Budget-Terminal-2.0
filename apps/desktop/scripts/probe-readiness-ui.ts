@@ -128,7 +128,7 @@ try {
       request ??= {} // Native player teardown accepts null instead of a request object.
       if (method === 'mobileAccessStatus' || method === 'configureMobileAccess') {
         if (method === 'configureMobileAccess') mobileEnabled = request === true
-        return { available: true, enabled: mobileEnabled, url: mobileEnabled && mobileHttpsReady ? 'https://fixture.test-tailnet.ts.net:8443/' : '',
+        return { available: true, enabled: mobileEnabled, canSetUpLinks: mobileEnabled, url: mobileEnabled && mobileHttpsReady ? 'https://fixture.test-tailnet.ts.net:8443/' : '',
           directUrl: mobileEnabled && mobileDirectReady ? 'http://100.64.1.1:8081/' : '', message: mobileEnabled ? 'Mobile Access is on.' : 'Mobile Access is off.' }
       }
       if (method === 'cloudSyncStatus') {
@@ -557,10 +557,11 @@ try {
           check(!mobileCard.hidden, 'Mobile Access must appear under Labs')
           const mobileLab = mobileCard.querySelector('[role="switch"][aria-labelledby="lab-mobile-access"]')
           const setupButton = () => mobileCard.querySelector('button[aria-label="Copy Tailscale setup commands"]')
-          const copiedCommands = async () => {
+          const qrButtons = () => [...mobileCard.querySelectorAll('button[aria-haspopup="dialog"]')]
+          const copiedValue = async button => {
             const before = calls.length
-            setupButton().click(); await wait()
-            check(setupButton().textContent === 'Copied', 'Copy setup commands must confirm clipboard success')
+            button.click(); await wait()
+            check(button.textContent === 'Copied', 'Mobile Access must confirm clipboard success')
             return calls.slice(before).find(call => call.method === 'writeClipboard')?.request
           }
           const checkConnection = async () => {
@@ -568,22 +569,46 @@ try {
             await wait()
           }
           mobileHttpsReady = mobileDirectReady = false
+          check(!qrButtons().length, 'Mobile Access must hide QR controls while off')
           mobileLab.click(); await wait()
-          check(await copiedCommands() === [MOBILE_SERVE_COMMAND, MOBILE_DIRECT_SERVE_COMMAND].join('\\n'),
+          check(!qrButtons().length, 'Mobile Access must hide QR controls until a link is available')
+          check(await copiedValue(setupButton()) === [MOBILE_SERVE_COMMAND, MOBILE_DIRECT_SERVE_COMMAND].join('\\n'),
             'Copy setup commands must copy both missing commands as separate lines')
           mobileHttpsReady = true
           await checkConnection()
           mobileCard.querySelector('details').open = true
-          check(await copiedCommands() === MOBILE_DIRECT_SERVE_COMMAND,
+          check(await copiedValue(setupButton()) === MOBILE_DIRECT_SERVE_COMMAND,
             'Copy setup commands must copy only the command still needed')
+          check(qrButtons().length === 1 && qrButtons()[0].ariaLabel.includes('HTTPS link'), 'The HTTPS QR code must be available without the direct link')
           mobileDirectReady = true
           await checkConnection()
           check(!setupButton(), 'Setup commands must be hidden once both links are configured')
           check(mobileLab.getAttribute('aria-checked') === 'true' && mobileCard.textContent.includes('fixture.test-tailnet.ts.net'), 'Mobile Access must show its link when enabled')
           check(mobileCard.textContent.includes('http://100.64.1.1:8081/'), 'Mobile Access must show the DNS-independent link')
+          check(mobileCard.textContent.includes('/mobile'), 'Mobile Access must keep the Telegram link instructions')
+          const patterns = new Set()
+          for (const [label, url] of [['Direct link', 'http://100.64.1.1:8081/'], ['HTTPS link', 'https://fixture.test-tailnet.ts.net:8443/']]) {
+            const qrButton = qrButtons().find(button => button.ariaLabel.includes(label))
+            qrButton.focus(); qrButton.click(); await wait()
+            const dialog = mobileCard.querySelector('dialog[open]')
+            const code = dialog?.querySelector('svg[role="img"]')
+            const pattern = code?.querySelector('path:last-child')?.getAttribute('d')
+            check(pattern && dialog.textContent.includes(url) && code.ariaLabel.includes(label), 'QR dialog must show the selected ' + label)
+            patterns.add(pattern)
+            if (scenario === 'empty') {
+              const screenshot = label === 'Direct link' ? 'mobile-direct-qr' : 'mobile-https-qr'
+              await paint(); await window.captureFixture(screenshot)
+              await paint(); await window.captureFixture(screenshot)
+            }
+            dialog.querySelector('button').click(); await wait()
+            check(!mobileCard.querySelector('dialog[open]') && document.activeElement === qrButton, 'Closing the QR dialog must restore focus')
+            check(await copiedValue(mobileCard.querySelector('button[aria-label^="Copy ' + label + '"]')) === url, 'Copy must still use the displayed ' + label)
+          }
+          check(patterns.size === 2, 'The direct and HTTPS QR patterns must differ')
           check(!fixtureSettings.enabledLabs.includes('mobile-access'), 'Mobile Access must remain a host-local preference')
           mobileLab.click(); await wait()
           check(mobileLab.getAttribute('aria-checked') === 'false', 'Turning off the Mobile Access experiment must stop mobile sharing')
+          check(!qrButtons().length, 'Turning off Mobile Access must remove the QR controls')
           const lab = settingsPage.querySelector('[role="switch"][aria-labelledby="lab-dashboard-lite"]')
           lab.click(); await wait()
           check(lab.getAttribute('aria-checked') === 'true', 'Labs must opt into Dashboard Lite before opening it')
