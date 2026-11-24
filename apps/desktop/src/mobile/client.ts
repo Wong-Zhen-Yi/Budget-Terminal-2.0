@@ -6,6 +6,42 @@ import { ok } from '@shared/envelope'
 
 export const isMobileTerminal = () => document.documentElement.hasAttribute('data-terminal-mobile')
 
+// Plain-HTTP origins (the local mobile window and the direct Tailscale link) share a
+// small per-host browser connection pool. Keep connections free for live events and
+// user actions during startup preloading.
+const maxBackgroundRequests = 3
+// The page on screen may use extra connections, so its preload never waits behind
+// slow requests for unseen pages. One connection always stays free.
+const maxPreferredRequests = 5
+let backgroundRequests = 0
+let preferredOrder: number | null = null
+let waiterSequence = 0
+const waitingRequests: Array<{ order: number; sequence: number; start: () => void }> = []
+
+function canStart(order: number) {
+  return backgroundRequests < (order === preferredOrder ? maxPreferredRequests : maxBackgroundRequests)
+}
+
+/** Start the open page's queued reads first, then lower startup ranks in arrival order. */
+function startWaitingRequests() {
+  while (waitingRequests.length) {
+    const preferred = waitingRequests.findIndex(waiter => waiter.order === preferredOrder)
+    const index = preferred >= 0 ? preferred : waitingRequests.reduce((best, waiter, i) => {
+      const current = waitingRequests[best]
+      return waiter.order < current.order || (waiter.order === current.order && waiter.sequence < current.sequence) ? i : best
+    }, 0)
+    if (!canStart(waitingRequests[index].order)) return
+    const [waiter] = waitingRequests.splice(index, 1)
+    backgroundRequests++
+    waiter.start()
+  }
+}
+
+function preferBackgroundOrder(order: number | null) {
+  preferredOrder = order !== null && Number.isSafeInteger(order) && order >= 0 ? order : null
+  startWaitingRequests()
+}
+
 async function sendRequest(channel: string, args: unknown[]) {
   let response = await fetch(`/api/call/${channel}`, {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-budget-terminal': 'mobile', prefer: 'respond-async' },
@@ -29,7 +65,22 @@ async function sendRequest(channel: string, args: unknown[]) {
 }
 
 async function request(channel: string, args: unknown[]) {
-  return sendRequest(channel, args)
+  const [input] = args
+  if (location.protocol !== 'http:' || !input || typeof input !== 'object' || !('background' in input) || input.background !== true) {
+    return sendRequest(channel, args)
+  }
+  const value = 'backgroundOrder' in input ? input.backgroundOrder : undefined
+  const order = typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : Number.MAX_SAFE_INTEGER
+  await new Promise<void>(start => {
+    waitingRequests.push({ order, sequence: waiterSequence++, start })
+    startWaitingRequests()
+  })
+  try {
+    return await sendRequest(channel, args)
+  } finally {
+    backgroundRequests--
+    startWaitingRequests()
+  }
 }
 
 export async function mobileTelegramProfile(): Promise<string> {
@@ -102,7 +153,8 @@ export function createMobileApi(): DesktopApi {
     diagnosticsInitial: async () => false,
     reportDiagnostics: () => {},
     setEquityQuoteVisibility: async () => {},
-    startupPriority: async () => {},
+    // The desktop rate gate still orders provider work; this orders the browser's connections.
+    startupPriority: async order => preferBackgroundOrder(order),
     onCacheFlush: () => () => {},
     onScreenshotRequested: () => () => {},
     onOpenDiagnostics: () => () => {},

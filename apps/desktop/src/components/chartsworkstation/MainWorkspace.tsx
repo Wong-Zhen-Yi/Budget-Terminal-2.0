@@ -143,7 +143,7 @@ export function MainWorkspace({ onStatus }: { onStatus: (meta: EnvelopeMeta | un
   const intraday = CHARTS_INTERVALS.indexOf(effectiveInterval) < CHARTS_INTERVALS.indexOf('1 Day')
   const stats = payload?.stats
   return (
-    <div className={`flex min-h-0 flex-1 flex-col gap-2 ${focus ? 'fixed inset-0 z-40 bg-bg p-3' : 'px-3 pt-2 pb-3'}`}>
+    <div className={`flex min-h-0 flex-1 flex-col gap-2 ${focus ? 'fixed inset-0 z-40 bg-bg p-3' : 'charts-main-workspace px-3 pt-2 pb-3'}`}>
       {!focus ? (
         <div className="charts-toolbar flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1.5 rounded-md border border-border bg-surface px-2 pt-1.5">
           <form className="flex gap-1" onSubmit={(event) => { event.preventDefault(); load() }}>

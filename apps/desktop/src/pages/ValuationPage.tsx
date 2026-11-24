@@ -535,7 +535,7 @@ export function ValuationPage({
   }, [payload, sourceFilter])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-1 p-1">
+    <div className="valuation-page flex min-h-0 flex-1 flex-col gap-1 p-1">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border border-border bg-surface px-2 py-1">
         <form
           className="flex items-center gap-1"
@@ -658,7 +658,7 @@ export function ValuationPage({
         <span className={`ml-auto min-w-0 flex-1 truncate px-1 text-right text-2xs ${notice ? toneClass[notice.tone] : ''}`} role="status" title={notice?.text}>{notice?.text}</span>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="valuation-content flex min-h-0 flex-1 flex-col">
         {activeTab === 'main' ? (
           <div className="grid min-h-0 flex-1 grid-cols-1 gap-1 xl:grid-cols-[2fr_3fr]">
             <div className="flex min-h-0 flex-col gap-1 overflow-y-auto">

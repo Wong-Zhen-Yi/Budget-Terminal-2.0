@@ -130,7 +130,7 @@ export function EconomicPage({
   const footer = missingSummary(payload)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
+    <div className="economic-page flex min-h-0 flex-1 flex-col gap-2 p-2">
       <div className="flex shrink-0 flex-wrap items-center gap-2">
         <h1 className="text-sm font-semibold text-text">Economic</h1>
         <p className="min-w-0 flex-1 truncate text-2xs text-text-muted">
@@ -196,7 +196,7 @@ export function EconomicPage({
               title="Hide indicators whose provider returned nothing on this network, so the tables show only series that actually loaded."
             />
           </div>
-          <div className="flex min-h-0 flex-1 border border-border bg-surface">
+          <div className="economic-overview-table flex min-h-0 flex-1 border border-border bg-surface">
             <EconomicOverviewTable rows={overviewRows} loading={busy} />
           </div>
         </>
@@ -215,7 +215,7 @@ export function EconomicPage({
               loading={busy}
             />
           </div>
-          <div className="flex min-h-0 flex-[2] flex-col border border-border bg-surface p-2">
+          <div className="economic-series-chart flex min-h-0 flex-[2] flex-col border border-border bg-surface p-2">
             <SeriesChart row={charted} years={lookbackYears(lookback)} />
           </div>
         </div>

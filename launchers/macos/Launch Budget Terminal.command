@@ -1,4 +1,6 @@
 #!/bin/sh
+# The shared build loads the open mobile page before background preloads for unseen pages, so Polymarket appears promptly.
+# The shared build lets phone pages such as Polymarket, Charts, Valuation, Economic and Dictionary scroll their headers away.
 # GitHub demo screenshots reflect the current app; this launcher rebuilds desktop and MCP source.
 # The shared build includes single-line mobile toolbars and swipeable tab groups.
 # The shared build adapts mobile layouts to compact, standard, large and landscape phone sizes.

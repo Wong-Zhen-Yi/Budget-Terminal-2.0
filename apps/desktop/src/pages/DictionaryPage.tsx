@@ -174,7 +174,9 @@ function EntryDetail({ entry, saved, onToggleSaved, recentEntryIds, onOpenTerm }
     const reader = readerRef.current
     const target = articleRef.current?.querySelector<HTMLElement>(`[data-dictionary-section="${id}"]`)
     if (!reader || !target) return
-    reader.scrollTo({ top: reader.scrollTop + target.getBoundingClientRect().top - reader.getBoundingClientRect().top - 24 })
+    // Phone layouts scroll the whole page instead of the reader.
+    if (reader.scrollHeight > reader.clientHeight) reader.scrollTo({ top: reader.scrollTop + target.getBoundingClientRect().top - reader.getBoundingClientRect().top - 24 })
+    else target.scrollIntoView({ block: 'start' })
     setActiveSection(id)
     target.focus({ preventScroll: true })
   }
