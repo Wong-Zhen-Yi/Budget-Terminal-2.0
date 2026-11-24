@@ -22,6 +22,7 @@ export function isMobileViewportId(value: unknown): value is MobileViewportId {
 export interface MobileAccessStatus {
   enabled: boolean
   available: boolean
+  canSetUpLinks: boolean
   url: string
   directUrl: string
   message: string

@@ -125,7 +125,7 @@ function Get-BudgetNode {
   }
 }
 
-function Stop-BudgetTerminal {
+function Stop-BudgetTerminal([string]$RetryCommand = 'btd restart') {
   $electronPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\node_modules\electron\dist\electron.exe'))
   $running = @(Get-CimInstance Win32_Process -Filter "Name = 'electron.exe'" | Where-Object {
     $_.ExecutablePath -and $_.ExecutablePath -ieq $electronPath -and $_.CommandLine -notmatch '\s--type='
@@ -136,10 +136,10 @@ function Stop-BudgetTerminal {
     if ($process.MainWindowTitle -in @('Budget Terminal Demo', 'Budget Terminal iPhone 17 Preview')) { continue }
     # Only close the application window, never unrelated Electron tools or test fixtures.
     if ($process.MainWindowTitle -ne 'Budget Terminal') {
-      throw 'Budget Terminal is still starting or has no application window. Wait for it to open, then run btd restart again.'
+      throw "Budget Terminal is still starting or has no application window. Wait for it to open, then retry $RetryCommand."
     }
     Write-Host 'Closing Budget Terminal and saving pending data...'
-    if (-not $process.CloseMainWindow()) { throw 'Could not request a clean shutdown. Close Budget Terminal, then run btd restart again.' }
+    if (-not $process.CloseMainWindow()) { throw "Could not request a clean shutdown. Close Budget Terminal, then retry $RetryCommand." }
     if (-not $process.WaitForExit(30000)) {
       throw 'Budget Terminal did not finish saving within 30 seconds. Restart stopped without forcing it closed. Check the app before trying again.'
     }
@@ -170,8 +170,10 @@ Commands
                 Running btd without a command also starts the app.
   restart       Close the app gracefully, wait for saves, rebuild and reopen it.
                 If the app is already closed, start it.
-  mobile        Open the iPhone-sized window connected to the desktop workspace.
-                If the desktop app is closed, start it automatically.
+  mobile        Save and close the running desktop, rebuild, then open the
+                iPhone 17 viewport with your workspace. No Tailscale setup.
+                In an open desktop, use Settings > Labs > Mobile Access to
+                open the viewport without rebuilding.
   update        Check for and apply source updates from the published main branch.
                 Run btd restart afterward to build and use the update.
 
@@ -207,6 +209,9 @@ Options
       exit $LASTEXITCODE
     }
     if ($Command -eq 'restart') { Stop-BudgetTerminal }
+    # A running instance retains its main-process modules. Start a fresh session
+    # so the connected window always uses the same build as its desktop host.
+    if ($Command -eq 'mobile') { Stop-BudgetTerminal 'btd mobile' }
     if (-not ($Setup -or $Demo -or $MobilePreview)) { & (Join-Path $PSScriptRoot 'install-bt.ps1') -Quiet }
     $launchArguments = @()
     if ($Setup) { $launchArguments += '--setup' }

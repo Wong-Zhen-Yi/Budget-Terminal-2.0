@@ -6,9 +6,9 @@ import { DEFAULT_MOBILE_VIEWPORT, MOBILE_VIEWPORTS, type MobileViewportId } from
 
 export async function openMobileWindow(origin: string, token: string, viewport: MobileViewportId = DEFAULT_MOBILE_VIEWPORT, parent?: BrowserWindow) {
   const { label, width: viewportWidth, height: viewportHeight, deviceScaleFactor } = MOBILE_VIEWPORTS[viewport]
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize
+  const area = (parent ? screen.getDisplayMatching(parent.getBounds()) : screen.getPrimaryDisplay()).workArea
   // Leave space for native window decorations on shorter displays.
-  const scale = Math.min(1, (width - 32) / viewportWidth, (height - 64) / viewportHeight)
+  const scale = Math.min(1, (area.width - 32) / viewportWidth, (area.height - 64) / viewportHeight)
   const window = new BrowserWindow({
     width: Math.ceil(viewportWidth * scale),
     height: Math.ceil(viewportHeight * scale),
@@ -24,6 +24,8 @@ export async function openMobileWindow(origin: string, token: string, viewport: 
     autoHideMenuBar: true,
     webPreferences: { partition: 'mobile-preview', contextIsolation: true, nodeIntegration: false, sandbox: true },
   })
+  const bounds = window.getBounds()
+  window.setPosition(area.x + Math.floor((area.width - bounds.width) / 2), area.y + Math.floor((area.height - bounds.height) / 2))
   window.removeMenu()
   window.on('page-title-updated', event => event.preventDefault())
 

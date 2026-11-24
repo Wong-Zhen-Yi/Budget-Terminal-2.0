@@ -73,9 +73,32 @@ export function mobileTailnet(status: unknown, serve: unknown): MobileTailnet | 
   return result
 }
 
-export async function readMobileTailnet() {
+export function mobileTailnetIssue(status: unknown): string | undefined {
+  const { BackendState, Health } = (status ?? {}) as { BackendState?: unknown; Health?: unknown }
+  if (BackendState === 'Running') return
+  if (BackendState === 'NeedsLogin') return 'Sign in to Tailscale on this computer, then check the connection again.'
+  if (BackendState === 'NeedsMachineAuth') return 'Approve this computer in Tailscale, then check the connection again.'
+  if (Array.isArray(Health) && Health.some(warning => typeof warning === 'string' && /unable to connect.*coordination server/i.test(warning))) {
+    return 'Tailscale on this computer can’t reach its coordination server. Open the Tailscale app to reconnect.'
+  }
+  return 'Open the Tailscale app on this computer and connect it to your tailnet.'
+}
+
+export async function readMobileTailnet(): Promise<{ tailnet: MobileTailnet | null; message: string }> {
+  let status: unknown
   try {
-    const [status, serve] = await Promise.all([tailscale(['status', '--json']), tailscale(['serve', 'status', '--json'])])
-    return mobileTailnet(status, serve)
-  } catch { return null }
+    status = await tailscale(['status', '--json'])
+  } catch (error) {
+    return { tailnet: null, message: (error as NodeJS.ErrnoException).code === 'ENOENT'
+      ? 'Install and connect Tailscale on this computer, then check the connection again.'
+      : 'Could not check Tailscale on this computer. Open the Tailscale app, then check the connection again.' }
+  }
+  const message = mobileTailnetIssue(status)
+  if (message) return { tailnet: null, message }
+  try {
+    const tailnet = mobileTailnet(status, await tailscale(['serve', 'status', '--json']))
+    return { tailnet, message: tailnet ? '' : 'Connect this computer with a personal Tailscale account that can identify your devices.' }
+  } catch {
+    return { tailnet: null, message: 'Could not check Tailscale Serve on this computer. Check the connection again.' }
+  }
 }

@@ -4,9 +4,9 @@ Mobile Access opens the Budget Terminal workspace in Safari while Budget Termina
 
 ## Open the connected mobile window on Windows
 
-In the Windows desktop app, open **Settings → Labs → Mobile Access**, choose **iPhone 17** under **Viewport model**, and select **Launch**. The window uses the same saved records and market services as the desktop. You can open it with the Tailscale switch off.
+In the Windows desktop app, go to **Settings → Labs → Mobile Access** and select **Open iPhone 17 viewport**. It opens your workspace at 402 × 874 CSS pixels at 3× device pixel ratio. It fits the monitor the desktop window is on and works with Tailscale off.
 
-You can also run `btd mobile` or double-click **Launch Budget Terminal Mobile.cmd** to open the default iPhone 17 model. If the desktop is already open, the launcher uses that session. Otherwise it starts the desktop and opens the mobile window.
+Double-click **Launch Budget Terminal Mobile.cmd** or run `btd mobile` to build and open the current version. If the desktop is open, the launcher closes it gracefully and waits for pending saves before rebuilding. It opens the desktop and the viewport together. Use this launcher after a source update.
 
 ## Preview the mobile UI with sample data
 
@@ -25,6 +25,8 @@ The preview starts with the repository's sample records and discards edits when 
    ```
 
 4. Click **Check connection**, then copy the displayed link or request it from Telegram. Keep Budget Terminal open on the computer. The link resumes working when the app is relaunched.
+
+If Budget Terminal says the computer is disconnected from Tailscale, open the **Tailscale** app on the computer and wait for it to connect before checking again. On Windows, open it from the Start menu if its icon is missing from the system tray.
 
 ## Get the link from Telegram
 

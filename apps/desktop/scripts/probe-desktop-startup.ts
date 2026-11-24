@@ -91,10 +91,11 @@ try {
                 await run('document.querySelector("button[aria-label=Settings]").click()')
                 await waitFor('Boolean(document.querySelector("[data-settings-category=labs]"))', 'Settings must show Labs')
                 await run('document.querySelector("[data-settings-category=labs]").click()')
-                await waitFor('Boolean(document.getElementById("mobile-viewport"))', 'Labs must show the mobile viewport selector')
-                assert.deepEqual(await run('Array.from(document.getElementById("mobile-viewport").selectedOptions, option => [option.value, option.textContent])'), [['iphone-17', 'iPhone 17']])
+                const mobileButton = 'Array.from(document.querySelectorAll("[data-settings-card=mobile-access] button")).find(button => button.textContent === "Open iPhone 17 viewport")'
+                await waitFor('Boolean(' + mobileButton + ')', 'Labs must offer a one-click iPhone viewport')
+                assert.match(await run('document.getElementById("mobile-viewport-hint").textContent'), /402 × 874 at 3×/)
                 assert.equal(await run('window.api.launchMobileWindow("unknown-model").then(() => false, error => error.message.includes("supported mobile viewport"))'), true)
-                await run('Array.from(document.querySelectorAll("[data-settings-card=mobile-access] button")).find(button => button.textContent === "Launch").click()')
+                await run(mobileButton + '.click()')
               } else if (${warmMobile}) {
                 console.log('Requesting the mobile window from the running test desktop')
                 const child = require('node:child_process').spawn(process.execPath, [__filename], {
@@ -139,7 +140,7 @@ try {
               assert(Date.now() < end, 'Both windows must receive portfolio update events')
               await delay()
             }
-            console.log('PASS: connected mobile shares desktop data and update events with Labs off')
+            console.log('PASS: connected mobile shares desktop data and update events with Tailscale off')
             app.quit()
             return
           }

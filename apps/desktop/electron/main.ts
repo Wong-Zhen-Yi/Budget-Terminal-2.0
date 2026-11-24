@@ -182,7 +182,7 @@ function createWindow(): BrowserWindow {
 function showConnectedMobile(parent: BrowserWindow) {
   void launchConnectedMobile(parent, DEFAULT_MOBILE_VIEWPORT).catch(() => {
     if (!parent.isDestroyed() && !finishingQuit) {
-      dialog.showErrorBox('Budget Terminal could not open Mobile', 'Check that the current build is complete, then run btd mobile again.')
+      dialog.showErrorBox('Budget Terminal could not open the iPhone viewport', 'Run Launch Budget Terminal Mobile.cmd again. If the viewport still does not open, check Application logs in Settings.')
     }
   })
 }
@@ -338,7 +338,7 @@ if (ownsInstance) app.whenReady().then(async () => {
       diagnosticLog.write('warn', 'app', 'startup-stage-failed', { stage: 'agents', code: faultCode(error) })
       console.warn('Codex startup connection failed:', error)
     })
-    // Load the running desktop's matching mobile routes before a later launcher rebuild.
+    // Warm the routes so the Settings shortcut can open the viewport promptly.
     if (localMobileAvailable) void import('./services/mobileRoutes.js').catch(() => {})
     stage = 'window-create'
     createWindow()

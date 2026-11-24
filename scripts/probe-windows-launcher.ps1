@@ -80,6 +80,20 @@ if (process.argv.includes('--logs') && process.argv.includes('--detach')) proces
     Assert-Check ($output -contains $case.Flags) 'Only detach the desktop app for default production startup.'
   }
   Write-Host 'PASS: Windows shows launcher output and passes detachment through only for production desktop startup.'
+  $mobileFixture = Join-Path $fixtureScripts 'probe-mobile-launch.ps1'
+  Set-Content -LiteralPath $mobileFixture -Value @'
+. (Join-Path $PSScriptRoot 'launch-windows.ps1') mobile
+function Stop-BudgetTerminal($RetryCommand) {
+  if ($RetryCommand -ne 'btd mobile') { throw 'Wrong retry command for mobile.' }
+  Write-Output 'Saved and closed desktop'
+}
+Start-BudgetTerminal
+'@
+  $output = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $mobileFixture)
+  Assert-Check ($LASTEXITCODE -eq 0) 'The mobile launcher must build and launch after a successful close.'
+  Assert-Check ($output.Count -eq 3 -and $output[0] -eq 'Saved and closed desktop' -and
+    $output[1] -eq '[1/5] Check toolchain' -and $output[2] -eq '["--mobile","--detach"]') 'Mobile must close the old session before the shared build.'
+  Write-Host 'PASS: Windows mobile closes the desktop before rebuilding and launches with the mobile flag.'
   & {
     . (Join-Path $PSScriptRoot 'install-bt.ps1')
     $script:fixtureUserPath = 'C:\fixture-bin'

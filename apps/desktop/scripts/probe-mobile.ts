@@ -3,7 +3,7 @@ import { request } from 'node:http'
 import { connect } from 'node:net'
 import { resolve } from 'node:path'
 import { createMobileHttp, LOCAL_MOBILE_HEADER, MobileRequestError } from '../electron/services/mobileHttp.js'
-import { mobileTailnet, type MobileTailnet } from '../electron/services/mobileTailscale.js'
+import { mobileTailnet, mobileTailnetIssue, type MobileTailnet } from '../electron/services/mobileTailscale.js'
 import { MOBILE_BODY_LIMIT, MOBILE_DIRECT_LOCAL_PORT, MOBILE_DIRECT_PORT, MOBILE_DIRECT_TARGET, MOBILE_HTTPS_PORT, MOBILE_PROXY_TARGET } from '../electron/shared/mobileAccess.js'
 
 const host = `fixture.test-tailnet.ts.net:${MOBILE_HTTPS_PORT}`
@@ -26,6 +26,14 @@ assert.deepEqual(configured, { origin, login, serving: true })
 assert.equal(mobileTailnet(status, {})?.serving, false)
 assert.equal(mobileTailnet(status, { ...serve, AllowFunnel: { [host]: true } })?.serving, false)
 assert.equal(mobileTailnet({ ...status, Self: { ...status.Self, Tags: ['tag:test'] } }, serve), null)
+assert.equal(mobileTailnetIssue(status), undefined)
+assert.match(mobileTailnetIssue({ BackendState: 'NeedsLogin' }) ?? '', /Sign in to Tailscale/)
+const disconnected = { BackendState: 'NoState', Health: [
+  'Unable to connect to the Tailscale coordination server to synchronize the state of your tailnet.',
+  'Fixture text that should not be shown',
+] }
+assert.match(mobileTailnetIssue(disconnected) ?? '', /coordination server.*reconnect/)
+assert.doesNotMatch(mobileTailnetIssue(disconnected) ?? '', /Fixture text/)
 const directServe = { ...serve, TCP: { ...serve.TCP, [MOBILE_DIRECT_PORT]: { TCPForward: MOBILE_DIRECT_TARGET, ProxyProtocol: 1 } } }
 const directConfigured = mobileTailnet(status, directServe)
 assert.deepEqual(directConfigured?.direct, { origin: directOrigin, address, owners: new Set([address, ownerPhone]) })

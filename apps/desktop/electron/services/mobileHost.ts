@@ -9,6 +9,7 @@ import { readMobileTailnet, type MobileTailnet } from './mobileTailscale.js'
 let server: Awaited<ReturnType<typeof createMobileHttp>> | undefined
 let localServer: Awaited<ReturnType<typeof createMobileHttp>> | undefined
 let tailnet: MobileTailnet | null = null
+let tailnetIssue = ''
 let enabled = false
 let stopped = false
 let error = ''
@@ -21,10 +22,11 @@ const demo = () => Boolean(process.env.BUDGET_TERMINAL_DEMO_DIR)
 
 async function refreshTailnet() {
   if (!enabled || stopped) return
-  checking ??= readMobileTailnet().then(next => {
+  checking ??= readMobileTailnet().then(({ tailnet: next, message }) => {
     if (!enabled || stopped) return
     if (tailnet?.origin !== next?.origin || tailnet?.login !== next?.login || tailnet?.direct?.origin !== next?.direct?.origin) server?.disconnect()
     tailnet = next
+    tailnetIssue = message
   }).finally(() => { checking = undefined })
   await checking
 }
@@ -80,11 +82,12 @@ function snapshot(): MobileAccessStatus {
   return {
     enabled,
     available: !demo(),
+    canSetUpLinks: Boolean(tailnet),
     url,
     directUrl,
     message: demo() ? 'Mobile Access is disabled for demo profiles.' : error ||
-      (!enabled ? 'Mobile Access is off.' : !server ? 'Mobile Access is starting.' : !tailnet ? 'Sign in to Tailscale on this computer with a personal Tailscale account.' :
-        url || directUrl ? 'Mobile Access is configured on this computer.' : 'Configure a private Tailscale proxy on this computer, then check again.'),
+      (!enabled ? 'Mobile Access is off.' : !server || (!tailnet && !tailnetIssue) ? 'Checking Mobile Access…' : tailnetIssue ||
+        (url || directUrl ? 'Mobile Access is configured on this computer.' : 'Set up a private Tailscale link below, then check the connection again.')),
   }
 }
 
@@ -97,6 +100,7 @@ export async function mobileAccessStatus() {
 async function closeListener() {
   clearInterval(refresh)
   tailnet = null
+  tailnetIssue = ''
   const active = server
   server = undefined
   await active?.close()
