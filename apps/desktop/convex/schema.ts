@@ -5,8 +5,10 @@ import { legacyAuthTables } from './legacyAuthTables'
 export default defineSchema({
   oauthLimits: defineTable({ key: v.string(), windowStart: v.number(), count: v.number() })
     .index('by_key', ['key']).index('by_window', ['windowStart']),
-  oauthRequests: defineTable({ provider: v.optional(v.union(v.literal('github'), v.literal('google'))), stateHash: v.string(), purpose: v.union(v.literal('signIn'), v.literal('revokeOthers')),
-    expiresAt: v.number(), userId: v.optional(v.id('users')), sessionId: v.optional(v.string()) })
+  oauthRequests: defineTable({ stateHash: v.string(), purpose: v.union(v.literal('signIn'), v.literal('revokeOthers')),
+    expiresAt: v.number(), userId: v.optional(v.id('users')), sessionId: v.optional(v.string()),
+    // Rows created before Google sign-in have no provider and belong to GitHub.
+    provider: v.optional(v.union(v.literal('github'), v.literal('google'))) })
     .index('by_state', ['stateHash']).index('by_expiry', ['expiresAt'])
     .index('by_purpose_expiry', ['purpose', 'expiresAt'])
     .index('by_user_purpose_expiry', ['userId', 'purpose', 'expiresAt']),

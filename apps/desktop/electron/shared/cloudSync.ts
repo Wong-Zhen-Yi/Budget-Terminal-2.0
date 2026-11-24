@@ -14,7 +14,11 @@ export interface CloudSyncStatus {
   authState?: 'restoring' | 'signedOut' | 'signingIn' | 'authenticated' | 'offline' | 'reauthRequired' | 'keyringUnavailable' | 'storageError'
   credentialCleanupRequired?: boolean
   githubLogin?: string
-  authProvider?: 'github' | 'google'
+  googleEmail?: string
+  /** Provider of the connected account. */
+  accountProvider?: 'github' | 'google'
+  /** Provider of the browser approval currently in progress. */
+  signInProvider?: 'github' | 'google'
   workspaceApprovalRequired?: boolean
   revocation?: 'complete' | 'unconfirmed'
 }

@@ -4,8 +4,8 @@ import { components, internal } from './_generated/api'
 import { internalMutation } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
 import type { DefaultFunctionArgs, RegisteredMutation } from 'convex/server'
-import { completion } from './githubAdapter'
 import { authCore } from './authCore'
+import { completion } from './githubAdapter'
 import { DESKTOP_AUTH_ORIGINS } from '../electron/shared/cloudOAuth'
 
 const google = setupGoogle(authCore, {
@@ -13,9 +13,7 @@ const google = setupGoogle(authCore, {
   allowedRedirectOrigins: DESKTOP_AUTH_ORIGINS,
 }).attachUserCallbacks({ createUser: internal.users.createGoogleUser, onSignIn: internal.users.updateGoogleProfile })
 
-
-// The SDK supplies registered functions. Adapt their typed handlers into internal
-// registrations so clients cannot bypass the public quota and purpose checks.
+// Same internal-only adapter as GitHub: public callers must go through the quota and purpose checks in auth.ts.
 function sdkHandler<Args extends DefaultFunctionArgs, Result>(fn: RegisteredMutation<'public', Args, Promise<Result>>) {
   const handler = (fn as unknown as { _handler: (ctx: MutationCtx, args: Args) => Promise<Result> })._handler
   if (typeof handler !== 'function') throw new Error('Convex Auth SDK handler adapter is incompatible. Update and verify the adapter before deploying.')
@@ -31,8 +29,13 @@ export const complete = internalMutation({
   returns: completion,
   handler: sdkHandler(google.completeSignInWithGoogle),
 })
+
+// Google web client IDs end in .apps.googleusercontent.com. Refuse anything else,
+// including a secret pasted into the client ID slot, so it is never published in a redirect.
 export function googleOAuthConfigured(): boolean {
-  const id = process.env.AUTH_GOOGLE_CLIENT_ID?.trim()
-  const secret = process.env.AUTH_GOOGLE_CLIENT_SECRET?.trim()
-  return Boolean(id && secret && id.endsWith('.apps.googleusercontent.com') && id !== secret && !['null', 'undefined'].includes(secret))
+  const clientId = process.env.AUTH_GOOGLE_ID?.trim()
+  const clientSecret = process.env.AUTH_GOOGLE_SECRET?.trim()
+  return Boolean(clientId && clientSecret && clientId !== clientSecret &&
+    ![clientId, clientSecret].some(value => value === 'null' || value === 'undefined') &&
+    /^[a-z0-9-]+\.apps\.googleusercontent\.com$/i.test(clientId))
 }

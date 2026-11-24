@@ -362,9 +362,9 @@ try {
   owner = 'owner-a'; revoked = false
   const account = (backend.account as unknown as { _handler: (ctx: unknown, args: unknown) => Promise<unknown> })._handler
   assert.deepEqual(await account({ ...ctx, db: { get: async () => ({ githubLogin: 'fixture', email: 'private@example.invalid' }) } }, {}),
-    { userId: 'owner-a', githubLogin: 'fixture', authProvider: 'github' }, 'Account settings expose only the authenticated user ID, provider and public login')
-  assert.deepEqual(await account({ ...ctx, db: { get: async () => ({ authProvider: 'google', email: 'private@example.invalid', name: 'Private name' }) } }, {}),
-    { userId: 'owner-a', githubLogin: undefined, authProvider: 'google' }, 'Google account settings must not expose email or name')
+    { userId: 'owner-a', githubLogin: 'fixture' }, 'Account settings expose only the authenticated user ID and public login')
+  assert.deepEqual(await account({ ...ctx, db: { get: async () => ({ googleEmail: 'verified@example.invalid', email: 'private@example.invalid', name: 'Private name' }) } }, {}),
+    { userId: 'owner-a', githubLogin: undefined, googleEmail: 'verified@example.invalid' }, 'Google account settings expose only the verified Google address, never other profile fields')
   const updateProfile = (users.updateGithubProfile as unknown as { _handler: (ctx: unknown, args: unknown) => Promise<null> })._handler
   await updateProfile({ db: { patch: async (id: string, fields: unknown) => {
     assert.equal(id, 'new-owner')

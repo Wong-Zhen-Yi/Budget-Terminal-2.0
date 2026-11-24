@@ -140,7 +140,7 @@ try {
         fixtureAuth = { ...fixtureAuth, signInPending: ['signInGitHub', 'signInGoogle', 'revokeOtherSessions'].includes(request.type),
           credentialCleanupRequired: request.type === 'retryCredentialCleanup' ? false : fixtureAuth.credentialCleanupRequired,
           workspaceApprovalRequired: request.type === 'confirmWorkspace' ? false : fixtureAuth.workspaceApprovalRequired,
-          message: request.type === 'signInGitHub' ? 'Complete GitHub sign-in in your browser.' : undefined }
+          message: request.type === 'signInGitHub' ? 'Complete GitHub sign-in in your browser.' : request.type === 'signInGoogle' ? 'Complete Google sign-in in your browser.' : undefined }
         return ok(fixtureAuth)
       }
       if (method === 'cacheStatus') {
@@ -329,7 +329,7 @@ try {
           const refreshAuth = async () => { await client.refetchQueries({ queryKey: ['cloudSyncStatus'] }); await wait() }
           check(popup() && popup().contains(document.activeElement), 'Signed-out startup must open and focus the popup')
           check(popup().textContent.includes('You’ll stay signed in on this device'), 'Persistent sign-in must be the default')
-          check(!document.querySelector('input[type=password]'), 'GitHub auth must not collect passwords')
+          check(!document.querySelector('input[type=password]'), 'OAuth sign-in must not collect passwords')
           check(!popup().querySelector('input[type=url]') && !popup().querySelector('button[type=submit]').disabled, 'A fresh install must offer sign-in without a URL field')
           window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true })); await wait()
           check(!document.querySelector('[aria-label="Page search"]'), 'Workspace shortcuts escaped the auth popup')
@@ -349,6 +349,10 @@ try {
           authRejected = false; click('Continue with GitHub'); await wait()
           check(popup().textContent.includes('Complete GitHub sign-in') && !popup().querySelector('input'), 'Browser approval state missing')
           check(calls.some(call => call.method === 'cloudSyncCommand' && call.request.type === 'signInGitHub' && !('url' in call.request)), 'Sign-up must leave endpoint selection to the main process')
+          click('Cancel sign-in'); await wait()
+          click('Continue with Google'); await wait()
+          check(popup().textContent.includes('Complete Google sign-in'), 'Google browser approval state missing')
+          check(calls.some(call => call.method === 'cloudSyncCommand' && call.request.type === 'signInGoogle' && !('url' in call.request)), 'Google sign-in must leave endpoint selection to the main process')
           click('Cancel sign-in'); await wait(); click('Sign in'); await wait()
           click('Continue with GitHub'); await wait()
           fixtureAuth = { ...fixtureAuth, signedIn: true, signInPending: false, state: 'synced' }

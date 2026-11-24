@@ -4,8 +4,10 @@ import { v } from 'convex/values'
 
 export const legacyAuthTables = {
   users: defineTable({
-    // Active v2 sign-ins retain only the public login needed by account settings.
+    // Active v2 sign-ins retain only the public label needed by account settings.
     githubLogin: v.optional(v.string()),
+    googleEmail: v.optional(v.string()),
+    // Written by the first Google sign-in release; kept so existing rows still validate.
     authProvider: v.optional(v.union(v.literal('github'), v.literal('google'))),
     name: v.optional(v.string()),
     image: v.optional(v.string()),

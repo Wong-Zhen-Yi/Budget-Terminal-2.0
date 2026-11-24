@@ -1,14 +1,16 @@
 import { randomBytes } from 'node:crypto'
 import { createServer } from 'node:http'
-import { DESKTOP_AUTH_PORTS, desktopOAuthRedirect, oauthSignInUrl } from '../shared/cloudOAuth.js'
-import type { OAuthTokens, OAuthCompletion } from '../shared/cloudOAuth.js'
-export type { OAuthTokens, OAuthCompletion } from '../shared/cloudOAuth.js'
+import { DESKTOP_AUTH_PORTS, desktopOAuthRedirect, providerSignInUrl } from '../shared/cloudOAuth.js'
+import type { OAuthProvider, OAuthTokens, OAuthCompletion } from '../shared/cloudOAuth.js'
+export type { OAuthProvider, OAuthTokens, OAuthCompletion } from '../shared/cloudOAuth.js'
 
-export class GitHubSetupError extends Error {
-  constructor(message = 'GitHub sign-in is not configured on this Convex deployment. Add AUTH_GITHUB_ID and AUTH_GITHUB_SECRET in the Convex dashboard, then retry. Local data is still available.') {
+export class OAuthSetupError extends Error {
+  constructor(message = 'Sign-in is not configured on this Convex deployment. Add the provider credentials in the Convex dashboard, then retry. Local data is still available.') {
     super(message)
   }
 }
+/** Retained name for existing callers and probes. */
+export { OAuthSetupError as GitHubSetupError }
 type CallbackResult = { code: string } | { reason: 'cancelled' | 'expired' | 'failed' }
 
 /** Listen on loopback only. The random path and v2 state bind the response to this device. */
@@ -71,24 +73,30 @@ export async function createOAuthCallback(timeoutMs = 5 * 60_000) {
   return { url: desktopOAuthRedirect(`${origin}${path}`), result, cancel: () => settle({ reason: 'cancelled' }) }
 }
 
-export interface GitHubSignIn {
+export interface OAuthSignIn {
   result: Promise<{ tokens: OAuthTokens; authorization?: string } | { reason: 'cancelled' | 'expired' | 'failed' | 'accountMismatch' }>
   cancel: () => void
 }
-
-export async function beginGitHubSignIn(deploymentUrl: string, dependencies: {
+export type GitHubSignIn = OAuthSignIn
+interface SignInDependencies {
   isConfigured: () => Promise<boolean>
   startSignIn: (args: { redirectTo: string }) => Promise<{ redirect: string; state: string }>
   completeSignIn: (args: { code: string; state: string }) => Promise<OAuthCompletion>
   openExternal: (url: string) => Promise<void>
-}, provider: 'github' | 'google' = 'github'): Promise<GitHubSignIn> {
-  if (!await dependencies.isConfigured()) throw new GitHubSetupError(`${provider} sign-in is not configured on this Convex deployment.`)
+}
+
+export function beginGitHubSignIn(deploymentUrl: string, dependencies: SignInDependencies): Promise<OAuthSignIn> {
+  return beginOAuthSignIn('github', deploymentUrl, dependencies)
+}
+
+export async function beginOAuthSignIn(provider: OAuthProvider, deploymentUrl: string, dependencies: SignInDependencies): Promise<OAuthSignIn> {
+  if (!await dependencies.isConfigured()) throw new OAuthSetupError()
   const callback = await createOAuthCallback()
   try {
     const started = await dependencies.startSignIn({ redirectTo: callback.url })
-    const redirect = oauthSignInUrl(deploymentUrl, started.redirect, started.state, provider)
+    const redirect = providerSignInUrl(provider, deploymentUrl, started.redirect, started.state)
     await dependencies.openExternal(redirect)
-    const result: GitHubSignIn['result'] = callback.result.then(async response => {
+    const result: OAuthSignIn['result'] = callback.result.then(async response => {
       if ('reason' in response) return response
       try {
         // State, the one-time code and session tokens never cross into the renderer.

@@ -15,7 +15,7 @@
     "probe:controller": "tsx scripts/probe-controller.ts",
     "probe:cloud-oauth": "tsx scripts/probe-cloud-oauth.ts",
     "probe:auth-ui": "tsx scripts/probe-readiness-ui.ts --auth-only",
-    "probe:cloud-sync": "tsx scripts/probe-cloud-sync.ts && tsx scripts/probe-auth-policy.ts && tsx scripts/probe-cloud-session.ts && tsx scripts/probe-cloud-auth.ts && tsx scripts/probe-cloud-auth.ts --google",
+    "probe:cloud-sync": "tsx scripts/probe-cloud-sync.ts && tsx scripts/probe-auth-policy.ts && tsx scripts/probe-cloud-session.ts && tsx scripts/probe-cloud-auth.ts",
     "convex:dev": "convex dev",
     "convex:codegen": "convex codegen",
     "convex:setup": "node scripts/setup-convex.mjs",

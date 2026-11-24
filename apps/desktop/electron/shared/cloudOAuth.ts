@@ -13,24 +13,39 @@ export function desktopOAuthRedirect(value: string): string {
   return url.href
 }
 
-/** The OS browser opens only the chosen provider, bound to this deployment and state. */
-export function oauthSignInUrl(deploymentUrl: string, redirect: string, state: string, provider: 'github' | 'google'): string {
+export type OAuthProvider = 'github' | 'google'
+export const OAUTH_PROVIDER_LABELS: Record<OAuthProvider, string> = { github: 'GitHub', google: 'Google' }
+const AUTHORIZE_ENDPOINTS: Record<OAuthProvider, { host: string; path: string }> = {
+  github: { host: 'github.com', path: '/login/oauth/authorize' },
+  google: { host: 'accounts.google.com', path: '/o/oauth2/v2/auth' },
+}
+
+/** The OS browser opens only GitHub, bound to this deployment and the initiating state. */
+export function githubSignInUrl(deploymentUrl: string, redirect: string, state: string): string {
+  return providerSignInUrl('github', deploymentUrl, redirect, state)
+}
+/** The OS browser opens only Google, bound to this deployment and the initiating state. */
+export function googleSignInUrl(deploymentUrl: string, redirect: string, state: string): string {
+  return providerSignInUrl('google', deploymentUrl, redirect, state)
+}
+
+export function providerSignInUrl(provider: OAuthProvider, deploymentUrl: string, redirect: string, state: string): string {
   const deployment = new URL(convexDeploymentUrl(deploymentUrl))
   const url = new URL(redirect)
+  const endpoint = AUTHORIZE_ENDPOINTS[provider]
   const siteHost = deployment.hostname.replace(/\.convex\.cloud$/, '.convex.site')
   const callback = new URL(`https://${siteHost}/api/auth/callback/${provider}/callback`)
-  if (url.protocol !== 'https:' || url.hostname !== (provider === 'google' ? 'accounts.google.com' : 'github.com') || url.port || url.username || url.password ||
-    url.hash || url.pathname !== (provider === 'google' ? '/o/oauth2/v2/auth' : '/login/oauth/authorize') ||
+  if (url.protocol !== 'https:' || url.hostname !== endpoint.host || url.port || url.username || url.password ||
+    url.hash || url.pathname !== endpoint.path ||
     url.searchParams.getAll('state').length !== 1 || url.searchParams.get('state') !== state || !state ||
     url.searchParams.getAll('redirect_uri').length !== 1 || url.searchParams.get('redirect_uri') !== callback.href ||
     url.searchParams.getAll('client_id').length !== 1 || !url.searchParams.get('client_id') ||
     ['undefined', 'null'].includes(url.searchParams.get('client_id')!) ||
     url.searchParams.get('code_challenge_method') !== 'S256' || !url.searchParams.get('code_challenge')) {
-    throw new Error('Invalid provider sign-in URL')
+    throw new Error(`Invalid ${OAUTH_PROVIDER_LABELS[provider]} sign-in URL`)
   }
   return url.href
 }
-export const githubSignInUrl = (deploymentUrl: string, redirect: string, state: string) => oauthSignInUrl(deploymentUrl, redirect, state, 'github')
 /** Convex cloud endpoints may include a region between the deployment and convex.cloud. */
 export function convexDeploymentUrl(value: string): string {
   const url = new URL(value.trim())

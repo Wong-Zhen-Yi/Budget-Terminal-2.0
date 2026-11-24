@@ -24,11 +24,13 @@ function convex(args, capture = false) {
 let configured = false
 try { configured = /^CONVEX_DEPLOYMENT=\S+/m.test(readFileSync(join(root, '.env.local'), 'utf8')) } catch {}
 if (!configured && !process.env.CONVEX_DEPLOYMENT && !process.env.CONVEX_DEPLOY_KEY) {
-  throw new Error('Select your Convex project first with npm run convex:dev. Configure AUTH_GITHUB_ID and AUTH_GITHUB_SECRET on that deployment, then run this setup again.')
+  throw new Error('Select your Convex project first with npm run convex:dev. Configure AUTH_GITHUB_ID, AUTH_GITHUB_SECRET, AUTH_GOOGLE_ID and AUTH_GOOGLE_SECRET on that deployment, then run this setup again.')
 }
 const names = convex(['env', ...target, 'list', '--names-only'], true).split(/\r?\n/)
-if (!['AUTH_GITHUB_ID', 'AUTH_GITHUB_SECRET', 'AUTH_GOOGLE_CLIENT_ID', 'AUTH_GOOGLE_CLIENT_SECRET'].every(name => names.includes(name))) {
-  throw new Error('Configure AUTH_GITHUB_ID, AUTH_GITHUB_SECRET, AUTH_GOOGLE_CLIENT_ID and AUTH_GOOGLE_CLIENT_SECRET using convex env set or the Convex dashboard. Keep credentials out of the source and renderer.')
+// The deployment refuses to start without every provider credential the app config declares.
+const missing = ['AUTH_GITHUB_ID', 'AUTH_GITHUB_SECRET', 'AUTH_GOOGLE_ID', 'AUTH_GOOGLE_SECRET'].filter(name => !names.includes(name))
+if (missing.length) {
+  throw new Error(`Configure ${missing.join(', ')} using convex env set or the Convex dashboard. Keep credentials out of the source and renderer.`)
 }
 convex(['codegen', '--typecheck', 'disable'])
 // Convex's built-in compiler lookup does not resolve hoisted npm workspace dependencies.
@@ -43,12 +45,13 @@ console.log(`Private recovery export saved outside the repository: ${backup}`)
 if (production) convex(['deploy', '--yes', '--typecheck', 'disable'])
 else convex(['dev', '--once', '--typecheck', 'disable', '--tail-logs', 'disable'])
 const config = JSON.parse(convex(['run', ...target, 'sync:authConfiguration', '{}'], true))
-if (config.authVersion !== 2 || config.accountControlsVersion !== 2 || !config.githubConfigured || !config.googleConfigured) throw new Error('Convex Auth v2 account security preflight failed.')
+if (config.authVersion !== 2 || config.accountControlsVersion !== 2 || !config.githubConfigured) throw new Error('Convex Auth v2 account security preflight failed.')
+if (!config.googleConfigured) throw new Error('AUTH_GOOGLE_ID must be a Google web client ID ending in .apps.googleusercontent.com, with its matching AUTH_GOOGLE_SECRET.')
 const site = new URL(convex(['env', ...target, 'get', 'CONVEX_SITE_URL'], true))
 const callback = new URL('/api/auth/callback/github/callback', site)
-console.log('PASS: Convex Auth v2 components deployed and GitHub credential variables present.')
+const googleCallback = new URL('/api/auth/callback/google/callback', site)
+console.log('PASS: Convex Auth v2 components deployed and GitHub and Google credential variables present.')
 console.log(`REQUIRED GitHub OAuth App redirect URI: ${callback.href}`)
+console.log(`REQUIRED Google OAuth client Authorized redirect URI: ${googleCallback.href}`)
 console.log('Register this exact URL in GitHub OAuth App settings before reconnecting devices. Convex CLI and the signed-out live probe cannot verify GitHub callback registration. Keep wildcard matching disabled.')
-console.log('Complete a browser sign-in from Settings using the same GitHub account to verify the full flow.')
-
-console.log(`REQUIRED Google Web OAuth client redirect URI: ${new URL('/api/auth/callback/google/callback', site).href}`)
+console.log('Complete a browser sign-in from Settings with GitHub and with Google to verify both flows.')
