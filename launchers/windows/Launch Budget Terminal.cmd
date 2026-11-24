@@ -104,6 +104,7 @@ rem Shared launcher presents five numbered stages with measured completion times
 rem Incremental charts, indexed live updates and cache checkpoints: docs/performance.md.
 rem macOS and Linux start with sh scripts/launch-posix.sh; this is the only double-click launcher.
 rem Curated design references live in docs/; output/ is for ignored local captures.
+rem Settings dashboard groups quiet providers, keeps chart axes and page configuration counts readable through the shared launcher.
 title Budget Terminal
 cd /d "%~dp0..\.." || exit /b 1
 echo.

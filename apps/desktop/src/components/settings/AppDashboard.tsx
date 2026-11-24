@@ -21,6 +21,7 @@ function activitySample(usage: ApiUsageSnapshot): Sample {
   return { at: usage.sampledAt, active: usage.providers.reduce((sum, provider) => sum + provider.inFlight, 0),
     queued: queues.length ? queues.reduce((sum, provider) => sum + (provider.queued ?? 0), 0) : undefined }
 }
+const axis = (value: number) => value >= 1000 ? `${(value / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k` : value >= 10 ? Math.round(value).toLocaleString() : number(value)
 const number = (value: number) => Number.isInteger(value) ? value.toLocaleString() : value.toLocaleString(undefined, { maximumFractionDigits: 1 })
 const usable = (rows: Datum[]) => rows.filter(row => Number.isFinite(row.value) && row.value >= 0)
 
@@ -71,19 +72,20 @@ function Lines({ samples, labels, unit }: { samples: { at: number; values: (numb
   const span = Math.max(1, samples[samples.length - 1].at - start)
   const points = (index: number) => samples.flatMap(sample => {
     const value = sample.values[index]
-    return value === undefined || !Number.isFinite(value) ? [] : [{ x: samples.length === 1 ? 145 : 30 + (sample.at - start) / span * 230, y: 100 - value / max * 78 }]
+    return value === undefined || !Number.isFinite(value) ? [] : [{ x: samples.length === 1 ? 152 : 40 + (sample.at - start) / span * 225, y: 100 - value / max * 78 }]
   })
   const time = (at: number) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   return <div className="app-dash-line"><div>{labels.map((label, index) => points(index).length > 0 && <span key={label} style={{ color: colors[index + 1] }}>● {label}</span>)}</div>
     <svg viewBox="0 0 280 130" role="img" aria-label={`${unit}: ${labels.map((label, index) => `${label} ${samples.at(-1)?.values[index] ?? 'unmeasured'}`).join(', ')}`}>
-      {[0, 0.5, 1].map(fraction => <g key={fraction}><line x1="30" x2="260" y1={100 - fraction * 78} y2={100 - fraction * 78} stroke="var(--color-border)" /><text x="25" y={104 - fraction * 78} textAnchor="end">{number(fraction * max)}</text></g>)}
+      {[0, 0.5, 1].map(fraction => <g key={fraction}><line x1="40" x2="265" y1={100 - fraction * 78} y2={100 - fraction * 78} stroke="var(--color-border)" /><text x="35" y={104 - fraction * 78} textAnchor="end">{axis(fraction * max)}</text></g>)}
       {labels.map((label, index) => <g key={label}><polyline points={points(index).map(point => `${point.x},${point.y}`).join(' ')} fill="none" stroke={colors[index + 1]} strokeWidth="2" />{points(index).slice(-1).map(point => <circle key="latest" cx={point.x} cy={point.y} r="2.5" fill={colors[index + 1]} />)}</g>)}
-      <text x="30" y="120">{time(start)}</text><text x="260" y="120" textAnchor="end">{time(samples[samples.length - 1].at)}</text>
+      <text x="40" y="120">{time(start)}</text><text x="265" y="120" textAnchor="end">{time(samples[samples.length - 1].at)}</text>
     </svg><small>{unit} · sampled every 5s</small></div>
 }
 
 function Latency({ providers }: { providers: ApiUsageSnapshot['providers'] }) {
-  const observed = providers.filter(provider => provider.latencyMs)
+  // Busiest eight providers keep the panel inside its card.
+  const observed = providers.filter(provider => provider.latencyMs).sort((a, b) => b.latencyMs!.samples - a.latencyMs!.samples).slice(0, 8)
   const max = Math.max(1, ...observed.map(provider => provider.latencyMs!.p95))
   if (!observed.length) return <Empty>Waiting for a completed provider request</Empty>
   return <div className={`app-dash-bars${observed.length > 6 ? ' app-dash-bars--dense' : ''}`}><small>p50 / p95 · milliseconds</small>{observed.map(provider => <div className="app-dash-bar" key={provider.id} title={`${provider.label}: ${number(provider.latencyMs!.p50)} / ${number(provider.latencyMs!.p95)} ms · ${provider.latencyMs!.samples} completed requests`}><span>{provider.label}</span><div className="app-dash-latency"><i style={{ width: `${provider.latencyMs!.p50 / max * 100}%`, background: colors[1] }} /><i style={{ width: `${provider.latencyMs!.p95 / max * 100}%`, background: colors[3] }} /></div><b>{number(provider.latencyMs!.p50)} / {number(provider.latencyMs!.p95)}</b></div>)}</div>
@@ -154,6 +156,14 @@ export function AppDashboard({ settings }: { settings: AppSettings }) {
   const cache = snapshot.cache
   const service = cache?.service
   const providers = snapshot.usage?.providers ?? []
+  const providerRows: Datum[] = [...providers].sort((a, b) => b.requestCount - a.requestCount)
+    .map(provider => ({ id: provider.id, label: provider.label, value: provider.requestCount }))
+  if (providerRows.length > 8) {
+    const rest = providerRows.splice(7)
+    providerRows.push({ id: 'other', label: `${rest.length} others`, value: rest.reduce((sum, row) => sum + row.value, 0), color: colors[5] })
+  }
+  const backupBytes = snapshot.metrics?.backup.bytes
+  const backupInMiB = backupBytes !== undefined && backupBytes >= MIB
   const pages = Object.values(startup?.pages ?? {})
   // Match the startup scheduler's page duration: its longest concurrent task.
   // Key rows by page ID so live rank changes cannot retain duplicate task bars.
@@ -195,7 +205,7 @@ export function AppDashboard({ settings }: { settings: AppSettings }) {
       <Card title="Feed freshness" note="Current-session observed feeds" key="feeds"><Donut unit="feeds" rows={health.length ? feedStates.map(state => ({ label: state[0].toUpperCase() + state.slice(1), value: health.filter(record => record.freshness === state).length })) : []} /></Card>,
     ] },
     { title: 'Providers & requests', cards: [
-      <Card title="Provider requests" note="Rolling windows vary by provider" key="providers"><Bars unit="requests in provider window" rows={providers.map(provider => ({ label: provider.label, value: provider.requestCount }))} /></Card>,
+      <Card title="Provider requests" note="Rolling windows vary by provider" key="providers"><Bars unit="requests in provider window" rows={providerRows} /></Card>,
       <Card title="Request activity" note="Active: all providers · queue: measured providers only" key="volume"><Lines samples={samples.map(sample => ({ at: sample.at, values: [sample.active, sample.queued] }))} labels={['Active', 'Known queued']} unit="Outstanding requests" /></Card>,
       <Card title="Provider response time" note="Last 200 completed requests per provider" key="latency"><Latency providers={providers} /></Card>,
     ] },
@@ -217,7 +227,7 @@ export function AppDashboard({ settings }: { settings: AppSettings }) {
     { title: 'Finances & protection', cards: [
       <Card title="Portfolio composition" note="Holdings per saved portfolio · counts" key="portfolio">{privatePortfolio ? privateMessage : portfolio ? <Donut unit="holdings" rows={portfolios.map((item, index) => ({ label: `Portfolio ${index + 1}`, value: Object.keys(item.holdings).length }))} /> : <Empty />}</Card>,
       <Card title="Personal balances" note="Saved balances · SGD" key="finance">{privateFinance ? privateMessage : finance ? <Bars unit="SGD" rows={[{ label: 'Cash', value: finance.cash.reduce((sum, item) => sum + item.amount, 0) }, { label: 'Debt', value: finance.debt.reduce((sum, item) => sum + item.amount, 0), color: colors[2] }]} /> : <Empty />}</Card>,
-      <Card title="Backups & retention" note={`${snapshot.metrics?.backup.savedAt ? `Backup ${new Date(snapshot.metrics.backup.savedAt).toLocaleDateString()} · ` : ''}${cache ? `${cache.settings.retentionDays}-day page snapshot retention` : ''}`} key="backup">{snapshot.metrics?.backup.state === 'available' && snapshot.metrics.backup.bytes !== undefined ? <Bars unit="MiB · current automatic backup" rows={[{ label: 'Automatic', value: snapshot.metrics.backup.bytes / MIB }]} /> : <Empty>{snapshot.metrics?.backup.state === 'not-created' ? 'No automatic backup file yet' : snapshot.metrics?.backup.state === 'unavailable' ? 'Backup file could not be measured' : 'Reading backup size…'}</Empty>}</Card>,
+      <Card title="Backups & retention" note={`${snapshot.metrics?.backup.savedAt ? `Backup ${new Date(snapshot.metrics.backup.savedAt).toLocaleDateString()} · ` : ''}${cache ? `${cache.settings.retentionDays}-day page snapshot retention` : ''}`} key="backup">{snapshot.metrics?.backup.state === 'available' && snapshot.metrics.backup.bytes !== undefined ? <Bars unit={`${backupInMiB ? 'MiB' : 'KiB'} · current automatic backup`} rows={[{ label: 'Automatic', value: snapshot.metrics.backup.bytes / (backupInMiB ? MIB : 1024) }]} /> : <Empty>{snapshot.metrics?.backup.state === 'not-created' ? 'No automatic backup file yet' : snapshot.metrics?.backup.state === 'unavailable' ? 'Backup file could not be measured' : 'Reading backup size…'}</Empty>}</Card>,
     ] },
   ]
   return <section className="app-dashboard" aria-label="App dashboard">
