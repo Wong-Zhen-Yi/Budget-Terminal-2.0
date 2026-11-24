@@ -20,7 +20,7 @@ function verifyDesktopBuild(directory = resolve(__dirname, '../apps/desktop')) {
       if (!info.isFile() || info.size === 0) throw new Error(`Missing or empty build file: ${file}`)
     }
   } catch (error) {
-    throw new Error(`The desktop build is incomplete: ${error.message}\nClose Budget Terminal and any running dev/build commands, then run Launch Budget Terminal.cmd again (or npm run build from the repository root).`)
+    throw new Error(`The desktop build is incomplete: ${error.message}\nClose Budget Terminal and any running dev/build commands, then run the launcher for your operating system from the launchers folder (or npm run build from the repository root).`)
   }
 }
 

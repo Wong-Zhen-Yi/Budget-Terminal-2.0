@@ -13,8 +13,7 @@
 # Pass --mobile-preview to try collapsible mobile News filters and tools with sample data.
 # The connected mobile window is available through the Windows launcher.
 # The shared build includes the direct Tailscale link under Settings > Labs.
-# Double-click Launch Budget Terminal Demo.command for temporary sample data.
-# The shared launcher can install a private Node.js runtime if needed.
+# Pass --demo to this launcher to open temporary sample data.
 # The shared build includes the streamlined Charts workspaces and updated chart rendering.
 # The shared dependency install uses the project's pinned esbuild script approvals.
 # The shared build brings the Dashboard Lite chart layout to Dashboard 1.
@@ -85,18 +84,12 @@
 # Telegram: natural screenshot requests use MCP and send photos without captions or follow-up text.
 # Trading Volumes defaults to a compact YTD table beside the expanded dot plot.
 # Crypto bypasses Finnhub for coins, stock proxies and live updates; shared builds refresh app and MCP.
-# macOS Finder entry point. Share runtime checks and startup updates with Linux.
-# The shared build applies source downloaded through Settings or the launcher update command.
-# Keep dependency checks and build output visible in Terminal before opening the app.
+# Linux entry point; shared runtime checks and startup live in scripts/.
+# The shared launcher also accepts update to download new source before the next build.
+# Keep dependency checks and build output visible in this terminal before opening the app.
 # Shared launcher presents five numbered stages with measured completion times.
 # Incremental charts, indexed live updates and cache checkpoints: docs/performance.md.
+# macOS launchers are in launchers/macos.
 # Curated design references live in docs/; output/ is for ignored local captures.
-cd "$(dirname "$0")" || exit 1
 
-/bin/sh './Launch Budget Terminal.sh' "$@"
-status=$?
-if [ "$status" -ne 0 ] && [ -t 0 ]; then
-  printf '\nBudget Terminal could not open. Fix the error above, then double-click this file to retry.\nPress Enter to close. '
-  read -r reply
-fi
-exit "$status"
+exec /bin/sh "$(dirname "$0")/../../scripts/launch-posix.sh" "$@"

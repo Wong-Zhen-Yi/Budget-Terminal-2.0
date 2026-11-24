@@ -74,7 +74,7 @@ try {
     assert(error instanceof Error)
     assert.equal(error.cause, locked)
     assert(error.message.includes(output))
-    assert.match(error.message, /disconnect.*MCP.*Launch Budget Terminal.cmd/)
+    assert.match(error.message, /disconnect.*MCP.*launchers folder/)
     return true
   })
   assert.equal(calls, 3, 'Persistent locks must stop after a bounded number of attempts')

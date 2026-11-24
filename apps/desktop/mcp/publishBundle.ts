@@ -17,7 +17,7 @@ export async function retryFileLock<T>(operation: () => Promise<T>, output: stri
     } catch (error) {
       if (!lockCodes.has((error as NodeJS.ErrnoException).code ?? '')) throw error
       if (attempt >= attempts) {
-        throw new Error(`Cannot update MCP bundle "${output}" because another process is keeping it locked. Close Budget Terminal and disconnect Budget Terminal MCP in Codex or other MCP clients, then run Launch Budget Terminal.cmd again. If the lock persists, check antivirus scanning or folder permissions.`, { cause: error })
+        throw new Error(`Cannot update MCP bundle "${output}" because another process is keeping it locked. Close Budget Terminal and disconnect Budget Terminal MCP in Codex or other MCP clients, then run the launcher for your operating system from the launchers folder. If the lock persists, check antivirus scanning or folder permissions.`, { cause: error })
       }
       await pause(delayMs)
     }

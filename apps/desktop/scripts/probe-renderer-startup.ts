@@ -22,7 +22,7 @@ try {
   await assert.rejects(loadRenderer(fakeWindow, import.meta.filename), /Unexpected renderer error/)
   await loadRenderer({ ...fakeWindow, isDestroyed: () => true }, 'missing', undefined, { attempts: 1 })
   await assert.rejects(loadRenderer(fakeWindow, join(directory, 'missing.html'), undefined,
-    { attempts: 2, retryDelayMs: 1 }), /Launch Budget Terminal.cmd/)
+    { attempts: 2, retryDelayMs: 1 }), /launchers folder/)
 
   const entry = join(directory, 'main.cjs')
   await build({

@@ -182,7 +182,7 @@ function createWindow(): BrowserWindow {
 function showConnectedMobile(parent: BrowserWindow) {
   void launchConnectedMobile(parent, DEFAULT_MOBILE_VIEWPORT).catch(() => {
     if (!parent.isDestroyed() && !finishingQuit) {
-      dialog.showErrorBox('Budget Terminal could not open the iPhone viewport', 'Run Launch Budget Terminal Mobile.cmd again. If the viewport still does not open, check Application logs in Settings.')
+      dialog.showErrorBox('Budget Terminal could not open the iPhone viewport', 'Run Launch Budget Terminal Mobile.cmd in launchers/windows. If the viewport still does not open, check Application logs in Settings.')
     }
   })
 }

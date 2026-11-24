@@ -94,6 +94,35 @@ Start-BudgetTerminal
   Assert-Check ($output.Count -eq 3 -and $output[0] -eq 'Saved and closed desktop' -and
     $output[1] -eq '[1/5] Check toolchain' -and $output[2] -eq '["--mobile","--detach"]') 'Mobile must close the old session before the shared build.'
   Write-Host 'PASS: Windows mobile closes the desktop before rebuilding and launches with the mobile flag.'
+  $wrapperCheckout = Join-Path $testRoot 'wrapper checkout with spaces'
+  $wrapperScripts = Join-Path $wrapperCheckout 'scripts'
+  $wrapperLaunchers = Join-Path $wrapperCheckout 'launchers\windows'
+  New-Item -ItemType Directory -Path $wrapperScripts,$wrapperLaunchers | Out-Null
+  Set-Content -LiteralPath (Join-Path $wrapperScripts 'launch-windows.ps1') -Value @'
+param([string]$Command = 'start', [switch]$Demo, [switch]$MobilePreview, [switch]$Attached)
+ConvertTo-Json -Compress -InputObject @((Get-Location).Path, $Command, [bool]$Demo, [bool]$MobilePreview, [bool]$Attached)
+'@
+  Push-Location -LiteralPath $testRoot
+  try {
+    foreach ($case in @(
+      @{ File = 'Launch Budget Terminal.cmd'; Command = 'start'; Attached = $true },
+      @{ File = 'Launch Budget Terminal Demo.cmd'; Command = 'start'; Demo = $true; Attached = $true },
+      @{ File = 'Launch Budget Terminal Mobile.cmd'; Command = 'mobile' },
+      @{ File = 'Launch Budget Terminal iPhone 17 Preview.cmd'; Command = 'start'; MobilePreview = $true; Attached = $true }
+    )) {
+      $wrapper = Join-Path $wrapperLaunchers $case.File
+      Copy-Item -LiteralPath (Join-Path $PSScriptRoot ('..\launchers\windows\' + $case.File)) -Destination $wrapper
+      $launchOutput = & $wrapper | Select-Object -Last 1
+      Assert-Check ($LASTEXITCODE -eq 0) "The grouped launcher must run from outside the checkout."
+      $actual = ConvertFrom-Json -InputObject $launchOutput
+      Assert-Check ($actual[0] -eq $wrapperCheckout -and $actual[1] -eq $case.Command -and
+        $actual[2] -eq [bool]$case.Demo -and $actual[3] -eq [bool]$case.MobilePreview -and
+        $actual[4] -eq [bool]$case.Attached) "$($case.File) must forward its launch mode from the checkout root."
+    }
+  } finally {
+    Pop-Location
+  }
+  Write-Host 'PASS: all four grouped Windows wrappers launch from a checkout with spaces and pass the correct mode.'
   & {
     . (Join-Path $PSScriptRoot 'install-bt.ps1')
     $script:fixtureUserPath = 'C:\fixture-bin'

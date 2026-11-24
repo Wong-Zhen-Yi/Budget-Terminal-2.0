@@ -6,11 +6,11 @@ Mobile Access opens the Budget Terminal workspace in Safari while Budget Termina
 
 In the Windows desktop app, go to **Settings → Labs → Mobile Access** and select **Open iPhone 17 viewport**. It opens your workspace at 402 × 874 CSS pixels at 3× device pixel ratio. It fits the monitor the desktop window is on and works with Tailscale off.
 
-Double-click **Launch Budget Terminal Mobile.cmd** or run `btd mobile` to build and open the current version. If the desktop is open, the launcher closes it gracefully and waits for pending saves before rebuilding. It opens the desktop and the viewport together. Use this launcher after a source update.
+Double-click [Launch Budget Terminal Mobile.cmd](../launchers/windows/Launch%20Budget%20Terminal%20Mobile.cmd) or run `btd mobile` to build and open the current version. If the desktop is open, the launcher closes it gracefully and waits for pending saves before rebuilding. It opens the desktop and the viewport together. Use this launcher after a source update.
 
 ## Preview the mobile UI with sample data
 
-Double-click **Launch Budget Terminal iPhone 17 Preview.cmd**, or run `btd -MobilePreview`. The launcher builds the current code and opens Budget Terminal's mobile interface in an Electron window. The portrait viewport is 402 × 874 CSS pixels at 3× device pixel ratio, corresponding to the iPhone 17's 1206 × 2622 display pixels. The window shrinks to fit shorter monitors while keeping the same viewport. [iPhone 17 specifications](https://www.apple.com/iphone-17/specs/)
+Double-click [Launch Budget Terminal iPhone 17 Preview.cmd](../launchers/windows/Launch%20Budget%20Terminal%20iPhone%2017%20Preview.cmd) or run `btd -MobilePreview`. The launcher builds the current code and opens Budget Terminal's mobile interface in an Electron window. The portrait viewport is 402 × 874 CSS pixels at 3× device pixel ratio, corresponding to the iPhone 17's 1206 × 2622 display pixels. The window shrinks to fit shorter monitors while keeping the same viewport. [iPhone 17 specifications](https://www.apple.com/iphone-17/specs/)
 
 The preview starts with the repository's sample records and discards edits when closed. It can run alongside the regular desktop window and needs only the local computer. Keep the launcher terminal open. Relaunch after editing the source to rebuild, or press **F5** to reload the current build. Use Safari on an iPhone to check WebKit behavior and iOS safe areas.
 

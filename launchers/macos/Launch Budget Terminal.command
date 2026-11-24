@@ -13,7 +13,8 @@
 # Pass --mobile-preview to try collapsible mobile News filters and tools with sample data.
 # The connected mobile window is available through the Windows launcher.
 # The shared build includes the direct Tailscale link under Settings > Labs.
-# Pass --demo to this launcher to open temporary sample data.
+# Double-click Launch Budget Terminal Demo.command for temporary sample data.
+# The shared launcher can install a private Node.js runtime if needed.
 # The shared build includes the streamlined Charts workspaces and updated chart rendering.
 # The shared dependency install uses the project's pinned esbuild script approvals.
 # The shared build brings the Dashboard Lite chart layout to Dashboard 1.
@@ -84,40 +85,18 @@
 # Telegram: natural screenshot requests use MCP and send photos without captions or follow-up text.
 # Trading Volumes defaults to a compact YTD table beside the expanded dot plot.
 # Crypto bypasses Finnhub for coins, stock proxies and live updates; shared builds refresh app and MCP.
-# Linux/macOS entry point; shared runtime checks and startup live in scripts/.
-# The shared launcher also accepts update to download new source before the next build.
-# Keep dependency checks and build output visible in this terminal before opening the app.
+# macOS Finder entry point. Share runtime checks and startup updates with Linux.
+# The shared build applies source downloaded through Settings or the launcher update command.
+# Keep dependency checks and build output visible in Terminal before opening the app.
 # Shared launcher presents five numbered stages with measured completion times.
 # Incremental charts, indexed live updates and cache checkpoints: docs/performance.md.
-# macOS users can double-click Launch Budget Terminal.command; both use this startup path.
-# On macOS, install a verified per-user runtime if none is available.
 # Curated design references live in docs/; output/ is for ignored local captures.
-
 cd "$(dirname "$0")" || exit 1
-printf '\n  Preparing Budget Terminal launcher...\n'
 
-# Finder, Dolphin and Steam may not inherit an interactive terminal's PATH.
-export PATH="$HOME/.local/bin:$HOME/.local/share/fnm/aliases/default/bin:$HOME/Library/Application Support/fnm/aliases/default/bin:$HOME/.volta/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
-
-if command -v node >/dev/null 2>&1 && node scripts/runtime.cjs >/dev/null 2>&1; then
-  exec node scripts/launch.cjs "$@"
+/bin/sh '../../scripts/launch-posix.sh' "$@"
+status=$?
+if [ "$status" -ne 0 ] && [ -t 0 ]; then
+  printf '\nBudget Terminal could not open. Fix the error above, then double-click this file to retry.\nPress Enter to close. '
+  read -r reply
 fi
-
-# Also check Homebrew LTS, nvm and per-user Steam Deck runtimes without sourcing shell profiles.
-for runtime in /opt/homebrew/opt/node@24/bin/node /usr/local/opt/node@24/bin/node \
-  /opt/homebrew/opt/node@22/bin/node /usr/local/opt/node@22/bin/node \
-  /opt/homebrew/opt/node@26/bin/node /usr/local/opt/node@26/bin/node \
-  "${NVM_DIR:-$HOME/.nvm}"/versions/node/*/bin/node \
-  "$HOME"/.local/share/budget-terminal/node-*-linux-*/bin/node; do
-  if [ -x "$runtime" ] && "$runtime" scripts/runtime.cjs >/dev/null 2>&1; then
-    export PATH="$(dirname "$runtime"):$PATH"
-    exec "$runtime" scripts/launch.cjs "$@"
-  fi
-done
-
-if [ "$(uname -s)" = Darwin ]; then
-  exec /bin/sh scripts/bootstrap-mac.sh "$@"
-fi
-
-echo 'Install Node.js 22.23.4+, 24.22.1+, or 26.12.1+ with npm 10.9.8+, then launch again.' >&2
-exit 1
+exit "$status"

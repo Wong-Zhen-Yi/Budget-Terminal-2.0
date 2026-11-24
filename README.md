@@ -28,7 +28,7 @@
 
 ## One workspace, from research to records
 
-On Windows, double-click **Launch Budget Terminal.cmd** to open the desktop app
+On Windows, double-click **Launch Budget Terminal.cmd** in `launchers/windows` to open the desktop app
 directly. You can also type `btd` in a new terminal. To download app updates, use **Settings → App dashboard → Check for updates** or run `btd update`.
 See [Quick start](#quick-start).
 
@@ -141,7 +141,10 @@ cd Budget-Terminal-2.0
 
 ### 2. Install and check the setup
 
-On Windows, double-click [Launch Budget Terminal.cmd](Launch%20Budget%20Terminal.cmd)
+Choose your operating system in the [launchers](launchers) folder.
+Point any shortcuts or aliases that used the repository root to the new location.
+
+On Windows, double-click [Launch Budget Terminal.cmd](launchers/windows/Launch%20Budget%20Terminal.cmd)
 from the checkout. It installs or repairs a supported Node.js runtime, dependencies
 and Electron, builds and checks the desktop app, and installs or updates the per-user
 `btd` command. Dependency checks and build output appear in the launcher terminal,
@@ -159,7 +162,7 @@ No administrator access is needed. Double-click it again whenever you need to op
 the app. From the checkout, `npm.cmd run setup` runs the Windows checks without opening the app.
 
 On macOS, double-click
-[Launch Budget Terminal.command](Launch%20Budget%20Terminal.command) in Finder.
+[Launch Budget Terminal.command](launchers/macos/Launch%20Budget%20Terminal.command) in Finder.
 It checks the runtime, installs dependencies, builds the latest source and opens
 the desktop app. Keep its Terminal window open while using the app. Homebrew,
 Volta, fnm and nvm installation locations are checked automatically. If needed,
@@ -187,14 +190,15 @@ npm run setup:linux
 ```
 
 Double-click **Budget Terminal 2.0** on the desktop, or run
-[Launch Budget Terminal.sh](Launch%20Budget%20Terminal.sh) from the checkout.
+[Launch Budget Terminal.sh](launchers/linux/Launch%20Budget%20Terminal.sh) from the checkout.
 The launcher checks the runtime, installs dependencies, builds the latest source,
 and opens the desktop app. Keep its terminal open while using the app. It finds
 Node in `~/.local/bin`, fnm's default alias, Volta, or a per-user Budget Terminal
 runtime. Install a supported Node.js version first; no SteamOS system changes
-or administrator access are required. Re-run `npm run setup:linux` after moving
-the checkout. For Gaming Mode, add the application menu entry as a non-Steam game
-and leave Proton compatibility disabled.
+or administrator access are required. Re-run `npm run setup:linux` to refresh shortcuts
+that still point to the old launcher location or after moving the checkout. For
+Gaming Mode, add the application menu entry as a non-Steam game and leave Proton
+compatibility disabled.
 
 Steam Deck Desktop Mode opens the window within the display's usable area,
 including panel offsets and desktop scaling. The window refits when docking,
@@ -236,16 +240,16 @@ run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-bt.
 
 ### Update Budget Terminal
 
-Open **Settings → App dashboard** and click **Check for updates**. If an update is available, choose **Install update**. On Windows, `btd update` checks and applies the same source update from any directory. On macOS and Linux, run `sh 'Launch Budget Terminal.sh' update` from the checkout.
+Open **Settings → App dashboard** and click **Check for updates**. If an update is available, choose **Install update**. On Windows, `btd update` checks and applies the same source update from any directory. From the checkout on macOS, run `sh 'launchers/macos/Launch Budget Terminal.command' update`. On Linux, run `sh 'launchers/linux/Launch Budget Terminal.sh' update`.
 
 Updates use the project's published `main` branch and require Git and a clean checkout on `main` that can be fast-forwarded. After updating, close Budget Terminal and reopen it with the launcher to rebuild the app and MCP tools. On Windows, `btd restart` handles both steps.
 
 ### Test with demo data
 
-On Windows, double-click [Launch Budget Terminal Demo.cmd](Launch%20Budget%20Terminal%20Demo.cmd)
+On Windows, double-click [Launch Budget Terminal Demo.cmd](launchers/windows/Launch%20Budget%20Terminal%20Demo.cmd)
 or run `btd -Demo` if the terminal command is installed. On macOS, double-click
-[Launch Budget Terminal Demo.command](Launch%20Budget%20Terminal%20Demo.command).
-On Linux, run `sh './Launch Budget Terminal.sh' --demo` from the checkout.
+[Launch Budget Terminal Demo.command](launchers/macos/Launch%20Budget%20Terminal%20Demo.command).
+On Linux, run `sh 'launchers/linux/Launch Budget Terminal.sh' --demo` from the checkout.
 Keep the launcher terminal open until you close the demo app.
 
 The app displays **Demo data** in the top bar. It opens with two sample portfolios, an options record,
@@ -255,7 +259,7 @@ Edits and automatic backups go into that profile, alongside its own browser sess
 The regular launcher still opens your personal profile, and cloud sync is disabled in the demo.
 Market prices still use the app's usual providers.
 
-On Windows, select **Open iPhone 17 viewport** under **Settings → Labs → Mobile Access** to open your desktop workspace in a phone-sized window. After an update, run `btd mobile` or double-click [Launch Budget Terminal Mobile.cmd](Launch%20Budget%20Terminal%20Mobile.cmd) to save, rebuild, and reopen with the viewport. To use temporary sample data, open [Launch Budget Terminal iPhone 17 Preview.cmd](Launch%20Budget%20Terminal%20iPhone%2017%20Preview.cmd). See [Mobile Access](docs/mobile-access.md#open-the-connected-mobile-window-on-windows) for details.
+On Windows, select **Open iPhone 17 viewport** under **Settings → Labs → Mobile Access** to open your desktop workspace in a phone-sized window. After an update, run `btd mobile` or double-click [Launch Budget Terminal Mobile.cmd](launchers/windows/Launch%20Budget%20Terminal%20Mobile.cmd) to save, rebuild, and reopen with the viewport. To use temporary sample data, open [Launch Budget Terminal iPhone 17 Preview.cmd](launchers/windows/Launch%20Budget%20Terminal%20iPhone%2017%20Preview.cmd). See [Mobile Access](docs/mobile-access.md#open-the-connected-mobile-window-on-windows) for details.
 
 ### Launch behavior and troubleshooting
 

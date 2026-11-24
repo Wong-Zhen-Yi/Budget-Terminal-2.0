@@ -23,7 +23,7 @@ export async function loadRenderer(
       const code = (error as NodeJS.ErrnoException).code
       if (code !== 'ENOENT' && code !== 'ERR_FILE_NOT_FOUND') throw error
       if (attempt === attempts - 1) {
-        throw new Error(`Budget Terminal could not find its built interface:\n${file}\n\nClose Budget Terminal and any running dev/build commands, then run Launch Budget Terminal.cmd again (or npm run build from the repository root).`, { cause: error })
+        throw new Error(`Budget Terminal could not find its built interface:\n${file}\n\nClose Budget Terminal and any running dev/build commands, then run the launcher for your operating system from the launchers folder (or npm run build from the repository root).`, { cause: error })
       }
       await setTimeout(retryDelayMs)
     }

@@ -12,7 +12,7 @@ if (process.platform !== 'linux') throw new Error('This launcher installer requi
 
 const root = path.resolve(__dirname, '..')
 const home = homedir()
-const launcher = path.join(root, 'Launch Budget Terminal.sh')
+const launcher = path.join(root, 'launchers/linux', 'Launch Budget Terminal.sh')
 const icon = path.join(root, 'apps/desktop/resources/budget-terminal-icon.png')
 const quote = value => '"' + value.replace(/[\\"`$]/g, '\\$&').replace(/%/g, '%%') + '"'
 const entry = `[Desktop Entry]\nType=Application\nName=Budget Terminal 2.0\nComment=Market research workspace with Steam Deck display support\nExec=/bin/sh ${quote(launcher)}\nIcon=${icon.replace(/\\/g, '\\\\')}\nTerminal=true\nCategories=Office;Finance;\n`

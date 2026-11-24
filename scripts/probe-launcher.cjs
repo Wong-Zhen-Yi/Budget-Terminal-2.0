@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict')
 const { spawnSync } = require('node:child_process')
-const { join, resolve } = require('node:path')
+const { dirname, join, resolve } = require('node:path')
 const { chmodSync, copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, statSync, writeFileSync, rmSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { launch: runLaunch, createLauncherOutput } = require('./launch.cjs')
@@ -55,17 +55,26 @@ try {
   rmSync(firstRunDirectory, { recursive: true, force: true })
 }
 if (process.platform !== 'win32') {
-  const directory = mkdtempSync(join(tmpdir(), 'budget-mac-launcher-'))
+  const directory = mkdtempSync(join(tmpdir(), 'budget-posix-launcher-'))
   try {
     const checkout = join(directory, 'checkout with spaces')
     const home = join(directory, 'home with spaces')
     const output = join(directory, 'launch-output')
-    mkdirSync(checkout)
+    const scripts = join(checkout, 'scripts')
+    mkdirSync(scripts, { recursive: true })
+    copyFileSync(join(__dirname, 'launch-posix.sh'), join(scripts, 'launch-posix.sh'))
     mkdirSync(join(home, '.local/bin'), { recursive: true })
-    for (const file of ['Launch Budget Terminal.command', 'Launch Budget Terminal Demo.command', 'Launch Budget Terminal.sh']) {
+    const launchers = [
+      ['launchers/macos/Launch Budget Terminal.command', []],
+      ['launchers/macos/Launch Budget Terminal Demo.command', ['--demo']],
+      ['launchers/linux/Launch Budget Terminal.sh', []],
+    ]
+    for (const [file] of launchers) {
       const source = resolve(__dirname, '..', file)
+      const destination = join(checkout, file)
       assert(statSync(source).mode & 0o111, `${file} must be executable after checkout`)
-      copyFileSync(source, join(checkout, file))
+      mkdirSync(dirname(destination), { recursive: true })
+      copyFileSync(source, destination)
     }
     const node = join(home, '.local/bin/node')
     writeFileSync(node, `#!/bin/sh
@@ -83,16 +92,14 @@ exit 99
       cwd: tmpdir(), encoding: 'utf8', input: '', timeout: 10_000,
       env: { ...process.env, HOME: home, BUDGET_LAUNCHER_PROBE_OUTPUT: output, BUDGET_LAUNCHER_PROBE_STATUS: String(status) },
     })
-    for (const [file, mode] of [['Launch Budget Terminal.command', []], ['Launch Budget Terminal Demo.command', ['--demo']]]) {
+    for (const [file, mode] of launchers) {
       for (const status of [0, 7]) {
         const result = run(join(checkout, file), ['--logs', 'argument with spaces'], status)
         assert.equal(result.status, status, result.stderr || result.error?.message)
-        assert.deepEqual(readFileSync(output, 'utf8').trim().split('\n'), [checkout, 'scripts/launch.cjs', ...mode, '--logs', 'argument with spaces'], 'Finder launch must resolve its checkout, find Node outside PATH, forward arguments and preserve errors')
+        assert.deepEqual(readFileSync(output, 'utf8').trim().split('\n'), [checkout, 'scripts/launch.cjs', ...mode, '--logs', 'argument with spaces'], 'Launcher must resolve its checkout, find Node outside PATH, forward arguments and preserve errors')
       }
     }
     if (process.platform === 'darwin') {
-      const scripts = join(checkout, 'scripts')
-      mkdirSync(scripts)
       const bootstrap = join(scripts, 'bootstrap-mac.sh')
       copyFileSync(join(__dirname, 'bootstrap-mac.sh'), bootstrap)
       const architecture = process.arch === 'arm64' ? 'arm64' : 'x64'
@@ -171,7 +178,8 @@ assert.equal(launch({ mobilePreview: true, detach: true, platform: 'win32', node
 }), 0)
 assert(previewDirectory && !existsSync(previewDirectory), 'Remove the preview profile on exit')
 
-const connectedLauncher = readFileSync(resolve(__dirname, '../Launch Budget Terminal Mobile.cmd'), 'utf8').replace(/\r\n/g, '\n')
+const windowsLaunchers = resolve(__dirname, '../launchers/windows')
+const connectedLauncher = readFileSync(join(windowsLaunchers, 'Launch Budget Terminal Mobile.cmd'), 'utf8').replace(/\r\n/g, '\n')
 assert.match(connectedLauncher, /powershell\.exe[^\r\n]*launch-windows\.ps1" mobile\nif not errorlevel 1 exit \/b 0/)
 
 for (const [file, command] of [
@@ -179,7 +187,7 @@ for (const [file, command] of [
   ['Launch Budget Terminal Demo.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -Demo -Attached\n/],
   ['Launch Budget Terminal iPhone 17 Preview.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -MobilePreview -Attached\n/],
 ]) {
-  const source = readFileSync(resolve(__dirname, '..', file), 'utf8').replace(/\r\n/g, '\n')
+  const source = readFileSync(join(windowsLaunchers, file), 'utf8').replace(/\r\n/g, '\n')
   assert.match(source, command, `${file} must launch the application on double click`)
   const windowsSource = readFileSync(join(__dirname, 'launch-windows.ps1'), 'utf8')
   assert.match(windowsSource, /install-bt\.ps1'\)/, 'Setup must check or install the BTD desktop command')
@@ -355,7 +363,7 @@ try {
     spawn() { calls++; return { status: 0, stdout: '10.9.8' } },
   }), 1)
   assert.equal(calls, 4, 'A successful build command with missing assets must never launch Electron')
-  assert(messages.some(message => message.includes('Launch Budget Terminal.cmd')))
+  assert(messages.some(message => message.includes('launchers folder')))
   writeFileSync(join(directory, 'out/renderer/assets/entry.js'), '')
   assert.throws(() => verifyDesktopBuild(directory), /Missing or empty build file/)
   writeFileSync(html, '<div>Not a built renderer</div>')

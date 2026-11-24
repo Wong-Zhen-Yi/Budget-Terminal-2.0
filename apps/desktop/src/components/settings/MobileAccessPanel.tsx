@@ -45,7 +45,7 @@ export function MobileAccessPanel({ active }: { active: boolean }) {
             {launch.isPending ? 'Opening…' : `Open ${viewport.label} viewport`}
           </Button>
         </div>
-        {launch.isError && <p role="alert" className="text-warn">Could not open the viewport. Run <strong>Launch Budget Terminal Mobile.cmd</strong> to rebuild and reopen it.</p>}
+        {launch.isError && <p role="alert" className="text-warn">Could not open the viewport. Run <strong>Launch Budget Terminal Mobile.cmd</strong> in <code>launchers/windows</code> to rebuild and reopen it.</p>}
       </>}
       <div className="obscure-mode-row">
         <div>
