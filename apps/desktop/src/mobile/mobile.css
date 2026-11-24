@@ -248,3 +248,22 @@
   [data-terminal-mobile] .backtest-workspace > [role="separator"] { display: none; }
   [data-terminal-mobile] [data-page-id="institutions"] > div > .grid { grid-template-columns: minmax(0, 1fr); grid-auto-rows: minmax(240px, auto); grid-template-rows: none; }
 }
+
+/* Keep primary controls on one row; long tab groups pan within the available space. */
+[data-terminal-mobile] .news-toolbar-primary {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+[data-terminal-mobile] .news-toolbar-primary > h1 { flex: none; white-space: nowrap; }
+[data-terminal-mobile] .news-toolbar-primary > button { flex: none; margin-left: 0; }
+[data-terminal-mobile] .news-toolbar-filters {
+  flex: 1 1 0%;
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+[data-terminal-mobile] .news-toolbar-filters > button { flex: none; }

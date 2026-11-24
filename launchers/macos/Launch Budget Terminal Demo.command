@@ -1,4 +1,5 @@
 #!/bin/sh
+# The shared build includes single-line mobile toolbars and swipeable tab groups.
 # The shared build adapts mobile layouts to compact, standard, large and landscape phone sizes.
 # The shared build adds /prompts to Telegram for the four Agents quick prompts.
 # The shared build includes the one-click phone viewport for Windows.

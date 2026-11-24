@@ -12,7 +12,11 @@ const scratch = await mkdtemp(join(tmpdir(), 'budget-news-ui-'))
 try {
   const css = (await readdir(join(root, 'out/renderer/assets'))).find(name => name.endsWith('.css'))
   assert(css, 'Build the renderer before running the UI probe')
-  await writeFile(join(scratch, 'theme.css'), await readFile(join(root, 'out/renderer/assets', css)))
+  await writeFile(join(scratch, 'theme.css'), [
+    await readFile(join(root, 'out/renderer/assets', css), 'utf8'),
+    await readFile(join(root, 'src/mobile/mobile.css'), 'utf8'),
+    await readFile(join(root, 'src/mobile/portrait.css'), 'utf8'),
+  ].join('\n'))
   const bundle = await build({
     stdin: { resolveDir: root, loader: 'tsx', contents: `
       import { createRoot } from 'react-dom/client'
@@ -86,8 +90,30 @@ try {
           Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value)
           input.dispatchEvent(new Event('input', { bubbles: true }))
         }
+        const sharedToolbar = document.createElement('div')
+        sharedToolbar.className = 'flex flex-wrap items-center gap-1'
+        sharedToolbar.innerHTML = '<h1>Research</h1><div class="mobile-tab-strip contents gap-1"><button>Charts</button><button>Fundamentals</button><button>Investor relations</button></div><button>Tools</button>'
+        document.getElementById('root').append(sharedToolbar)
+        sharedToolbar.style.cssText = 'position:fixed;left:8px;right:8px;top:0'
+        const [title, strip, tools] = sharedToolbar.children
+        check(Math.abs(title.getBoundingClientRect().top + title.getBoundingClientRect().height / 2 - tools.getBoundingClientRect().top - tools.getBoundingClientRect().height / 2) < 2,
+          'Shared mobile tab groups must stay beside the title and tools')
+        check(strip.getBoundingClientRect().right <= tools.getBoundingClientRect().left,
+          'Shared mobile tab groups must leave room for tools')
+        sharedToolbar.remove()
         check(disclosure?.getAttribute('aria-expanded') === 'false' && !visible(feedFilter) && !visible(tickerSearch),
           'Mobile News must start with both control groups collapsed')
+        const primary = document.querySelector('.news-toolbar-primary')
+        const tabs = document.querySelector('.news-toolbar-filters')
+        const heading = primary.querySelector('h1')
+        const bounds = element => element.getBoundingClientRect()
+        check(Math.abs(bounds(heading).top + bounds(heading).height / 2 - bounds(disclosure).top - bounds(disclosure).height / 2) < 2,
+          'Mobile title and tools must share one line')
+        check(bounds(tabs).left >= bounds(heading).right && bounds(tabs).right <= bounds(disclosure).left,
+          'Category tabs must sit between the title and tools on the same row')
+        check(bounds(primary).height <= 44 && bounds(primary).right <= innerWidth,
+          'Mobile primary toolbar must fit in one row: ' + JSON.stringify({ width: innerWidth, primary: bounds(primary).toJSON(), tabs: bounds(tabs).toJSON() }))
+        portfolio.scrollIntoView({ block: 'nearest', inline: 'nearest' })
         portfolio.click(); await settle()
         check(visible(portfolio) && visible(article()), 'Category filters and articles must be usable while collapsed')
         const articleTop = article().getBoundingClientRect().top
@@ -191,7 +217,7 @@ try {
     } }],
   })
   await writeFile(join(scratch, 'renderer.js'), bundle.outputFiles[0].text)
-  const html = '<html><head><link rel="stylesheet" href="theme.css"></head><body><div id="root" style="height:100vh;display:flex"></div><script>window.api = {}; LITE</script><script src="renderer.js"></script></body></html>'
+  const html = '<html><head><link rel="stylesheet" href="theme.css"></head><body><div id="root" data-page-id="news" style="height:100vh;display:flex"></div><script>window.api = {}; LITE</script><script src="renderer.js"></script></body></html>'
   await writeFile(join(scratch, 'index.html'), html.replace('LITE', ''))
   await writeFile(join(scratch, 'lite.html'), html.replace('LITE', 'window.newsLite = true;'))
   await writeFile(join(scratch, 'mobile.html'), html.replace('<html>', '<html data-terminal-mobile>').replace('LITE', ''))
@@ -209,6 +235,11 @@ try {
         window.setSize(404, 850);
         await window.loadFile(${JSON.stringify(join(scratch, 'mobile.html'))});
         console.log(await window.webContents.executeJavaScript('window.runMobileProbe()'));
+        for (const width of [320, 390, 440, 844]) {
+          window.setSize(width, width === 844 ? 390 : 850);
+          await window.loadFile(${JSON.stringify(join(scratch, 'mobile.html'))});
+          console.log('Width ' + width + ': ' + await window.webContents.executeJavaScript('window.runMobileProbe()'));
+        }
         window.setSize(1400, 900);
         await window.loadFile(${JSON.stringify(join(scratch, 'lite.html'))});
         console.log(await window.webContents.executeJavaScript('window.runLiteProbe()'));

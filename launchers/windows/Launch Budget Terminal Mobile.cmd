@@ -1,4 +1,5 @@
 @echo off
+rem The shared build includes single-line mobile toolbars and swipeable tab groups.
 rem The shared build adapts mobile layouts to compact, standard, large and landscape phone sizes.
 rem The shared build adds /prompts to Telegram for the four Agents quick prompts.
 rem Save and close the running desktop before rebuilding and opening the phone viewport.

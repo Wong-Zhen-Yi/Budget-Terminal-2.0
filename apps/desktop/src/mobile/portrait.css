@@ -10,7 +10,7 @@
     max-width: 100%;
     flex-wrap: nowrap;
     overflow-x: auto;
-    scrollbar-width: thin;
+    scrollbar-width: none;
     overscroll-behavior-x: none;
   }
   [data-terminal-mobile] [data-page-id] :is([role='tablist'], .mobile-tab-strip) > * {
@@ -31,7 +31,7 @@
   }
   [data-terminal-mobile] .mobile-disclosure:has(> [aria-expanded='true']) { flex-basis: 100%; }
   [data-terminal-mobile] .mobile-hide { display: none; }
-  [data-terminal-mobile] .mobile-tab-strip.contents { display: flex; flex: 1 1 100%; }
+  [data-terminal-mobile] .mobile-tab-strip.contents { display: flex; flex: 1 1 0%; }
   [data-terminal-mobile] .market-cap-toolbar > .ml-auto,
   [data-terminal-mobile] .market-cap-toolbar > .ml-auto input { width: 100%; }
   [data-terminal-mobile] [data-page-id] .terminal-panel > header {

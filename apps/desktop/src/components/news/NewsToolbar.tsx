@@ -79,34 +79,36 @@ export const NewsToolbar = forwardRef<
   const { controlsId, controlsOpen, mobileDisclosure } = props
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-1">
-      <h1 className="pr-2 text-sm font-semibold text-text">News</h1>
-      {mobileDisclosure && (
-        <Button
-          className="ml-auto min-h-9 gap-1"
-          aria-expanded={controlsOpen}
-          aria-controls={`${controlsId} ${mobileDisclosure.tickerSearchId}`}
-          onClick={mobileDisclosure.onToggle}
-          onKeyDown={event => {
-            if (event.key === 'Enter') event.stopPropagation()
-          }}
-        >
-          Filters &amp; tools
-          <svg className={`size-4${controlsOpen ? ' rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-            <path d="m6 9 6 6 6-6" />
-          </svg>
-        </Button>
-      )}
+      <div className={mobileDisclosure ? 'news-toolbar-primary' : 'contents'}>
+        <h1 className="pr-2 text-sm font-semibold text-text">News</h1>
+        <div className={mobileDisclosure ? 'mobile-tab-strip news-toolbar-filters flex items-center gap-1' : 'contents'}>
+          {FILTERS.map(({ key, label }) => (
+            <FilterButton
+              key={key}
+              label={label}
+              count={props.counts[key]}
+              active={props.filter === key}
+              onClick={() => props.onFilter(key)}
+            />
+          ))}
+        </div>
 
-      <div className={mobileDisclosure ? 'flex basis-full flex-wrap items-center gap-1' : 'contents'}>
-        {FILTERS.map(({ key, label }) => (
-          <FilterButton
-            key={key}
-            label={label}
-            count={props.counts[key]}
-            active={props.filter === key}
-            onClick={() => props.onFilter(key)}
-          />
-        ))}
+        {mobileDisclosure && (
+          <Button
+            className="ml-auto min-h-9 gap-1"
+            aria-expanded={controlsOpen}
+            aria-controls={`${controlsId} ${mobileDisclosure.tickerSearchId}`}
+            onClick={mobileDisclosure.onToggle}
+            onKeyDown={event => {
+              if (event.key === 'Enter') event.stopPropagation()
+            }}
+          >
+            Filters &amp; tools
+            <svg className={`size-4${controlsOpen ? ' rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </Button>
+        )}
       </div>
 
       <div id={controlsId} hidden={!controlsOpen} className={controlsOpen ? 'contents' : undefined}>
