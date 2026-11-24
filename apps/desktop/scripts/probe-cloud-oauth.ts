@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { request, createServer } from 'node:http'
 import { beginGitHubSignIn, createOAuthCallback, GitHubSetupError } from '../electron/services/cloudSyncOAuth.js'
-import { DESKTOP_AUTH_PORTS, convexDeploymentUrl, desktopOAuthRedirect, githubSignInUrl } from '../electron/shared/cloudOAuth.js'
+import { DESKTOP_AUTH_PORTS, convexDeploymentUrl, desktopOAuthRedirect, githubSignInUrl, oauthSignInUrl } from '../electron/shared/cloudOAuth.js'
 
 const path = `/convex-sync-callback/${'a'.repeat(64)}`
 assert.equal(desktopOAuthRedirect(`http://127.0.0.1:34567${path}`), `http://127.0.0.1:34567${path}`)
@@ -124,3 +124,23 @@ await assert.rejects(beginGitHubSignIn(deployment, {
 }), GitHubSetupError)
 assert.equal(startedWithoutCredentials, false)
 console.log('PASS: v2 GitHub state exchange, deployment-bound redirects, PKCE, loopback allowlist/port fallback, hostile callbacks, one-use listener, cancellation/expiry and no browser token exposure')
+
+const googleEntry = entry().replace('https://github.com/login/oauth/authorize', 'https://accounts.google.com/o/oauth2/v2/auth').replace('/callback/github/callback', '/callback/google/callback').replace('%2Fcallback%2Fgithub%2Fcallback', '%2Fcallback%2Fgoogle%2Fcallback')
+assert.equal(oauthSignInUrl(deployment, googleEntry, state, 'google'), googleEntry)
+for (const invalid of [googleEntry.replace('accounts.google.com/', 'accounts.google.com.evil.invalid/'), entry(), googleEntry.replace('S256', 'plain'), googleEntry + '&state=duplicate']) {
+  assert.throws(() => oauthSignInUrl(deployment, invalid, state, 'google'))
+}
+const googleFlow = await beginGitHubSignIn(deployment, {
+  isConfigured: async () => true,
+  startSignIn: async args => { callbackUrl = args.redirectTo; return { redirect: googleEntry, state } },
+  completeSignIn: async args => {
+    assert.deepEqual(args, { state, code: 'google-code' })
+    return { status: 'complete', tokens }
+  },
+  openExternal: async url => {
+    assert.equal(url, googleEntry)
+    await fetch(`${callbackUrl}?convexAuthCode=google-code`)
+  },
+}, 'google')
+assert.deepEqual(await googleFlow.result, { tokens })
+console.log('PASS: Google provider host, callback, state, PKCE validation and desktop completion')

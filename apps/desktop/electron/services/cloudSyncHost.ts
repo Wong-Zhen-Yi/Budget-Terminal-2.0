@@ -22,17 +22,16 @@ const authenticatedRef = api.auth.isAuthenticated
 const revokeOthersRef = api.auth.revokeOtherSessions
 const authConfigRef = api.sync.authConfiguration
 const writeRef = api.sync.write
-const startSignInRef = api.auth.startSignInWithGithub
-const completeSignInRef = api.auth.completeSignInWithGithub
 const refreshRef = api.auth.refreshSession
 const signOutRef = api.auth.signOut
 const tokensSchema = z.object({ accessToken: z.string().min(1), refreshToken: z.string().min(1), refreshTokenExpiresAt: z.number().finite(), userId: z.string().min(1) })
-const sessionSchema = z.object({ authVersion: z.literal(2), url: z.string(), userId: z.string(), githubLogin: z.string().optional(), tokens: tokensSchema })
+const sessionSchema = z.object({ authVersion: z.literal(2), url: z.string(), userId: z.string(), githubLogin: z.string().optional(), authProvider: z.enum(['github', 'google']).optional(), tokens: tokensSchema })
 type Session = z.infer<typeof sessionSchema>
 const checkpointSchema = z.object({ account: z.string(), baseline: z.string().optional(), revision: z.number().int().nonnegative(), lastSyncedAt: z.number().optional(), cloudUpdatedAt: z.number().optional() })
 const urlSchema = z.string().trim().url().transform(convexDeploymentUrl)
 const commandSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('signInGitHub') }),
+  z.strictObject({ type: z.literal('signInGoogle') }),
   z.object({ type: z.literal('cancelSignIn') }),
   z.object({ type: z.literal('sync') }), z.object({ type: z.literal('disconnect') }),
   z.object({ type: z.literal('resolve'), use: z.enum(['local', 'cloud']) }),
@@ -127,7 +126,7 @@ async function connectTokens(url: string, value: OAuthTokens) {
   if (userId !== tokens.userId) throw new Error('Sign-in identity mismatch.')
   const profile = await login.query(accountRef, {})
   if (profile.userId !== userId) throw new Error('Sign-in identity mismatch.')
-  const next: Session = { authVersion: 2, url, userId, tokens, githubLogin: profile.githubLogin }
+  const next: Session = { authVersion: 2, url, userId, tokens, githubLogin: profile.githubLogin, authProvider: profile.authProvider }
   await saveSession(next)
   await rm(signOutPath(), { force: true }).catch(() => { throw new CredentialError('storageError', 'The saved sign-out marker could not be cleared. Check app-data folder permissions, then retry.') })
   credentialCleanupRequired = false
@@ -156,7 +155,7 @@ async function expireSession() {
   subscription = undefined
   authState = 'reauthRequired'
   authError = true
-  message = 'Your cloud session expired or was revoked. Sign in with GitHub again. Local data is available.'
+  message = 'Your cloud session expired or was revoked. Sign in with your provider again. Local data is available.'
   try { await rm(sessionPath(), { force: true }) }
   catch { credentialCleanupRequired = true; message += ' Saved credentials could not be erased. Retry credential cleanup in Settings.' }
   await atomicSyncFile(signOutPath(), { signedOut: true, cleanupRequired: credentialCleanupRequired, revocation: 'complete' }).catch(() => {})
@@ -353,7 +352,7 @@ export function cloudSyncStatus(): CloudSyncStatus {
   }
   return { url: CLOUD_DEPLOYMENT_URL, signedIn: Boolean(session), encryptionAvailable,
     credentialCleanupRequired,
-    authState: pendingGitHub ? 'signingIn' : authState, githubLogin: session?.githubLogin, workspaceApprovalRequired, revocation,
+    authState: pendingGitHub ? 'signingIn' : authState, githubLogin: session?.githubLogin, authProvider: session?.authProvider, workspaceApprovalRequired, revocation,
     state: authError ? 'error' : engine?.state ?? 'disconnected', pending: engine?.pending ?? false,
     signInPending: Boolean(pendingGitHub),
     localUpdatedAt: engine?.localUpdatedAt,
@@ -398,10 +397,10 @@ async function restoreSession() {
     try { decoded = JSON.parse(decrypted.result) }
     catch { throw new CredentialError('reauthRequired', 'Saved credentials are invalid. Sign in again; local data is preserved.') }
     if (urlSchema.parse(decoded.url) !== CLOUD_DEPLOYMENT_URL) {
-      throw new CredentialError('reauthRequired', 'This device was connected to a different cloud service. Sign in with GitHub to connect to Budget Terminal cloud. Your local data is preserved.')
+      throw new CredentialError('reauthRequired', 'This device was connected to a different cloud service. Sign in with your provider to connect to Budget Terminal cloud. Your local data is preserved.')
     }
     if (decoded.authVersion !== 2) {
-      message = 'Cloud sync now uses Convex Auth v2. Sign in with the same GitHub account again to reconnect your saved cloud data.'
+      message = 'Cloud sync now uses Convex Auth v2. Sign in with the same account again to reconnect your saved cloud data.'
       authState = 'reauthRequired'
       return
     }
@@ -446,8 +445,11 @@ export function cloudSyncCommand(input: CloudSyncCommand) {
         if (pendingGitHub || credentialCleanupRequired) throw new Error('Finish the pending account action first.')
         if (session) await authenticatedClient(true)
         else await restoreSession()
-      } else if (command.type === 'signInGitHub' || command.type === 'revokeOtherSessions') {
+      } else if (command.type === 'signInGitHub' || command.type === 'signInGoogle' || command.type === 'revokeOtherSessions') {
         const managingSessions = command.type === 'revokeOtherSessions'
+        const provider = command.type === 'signInGoogle' || (managingSessions && session?.authProvider === 'google') ? 'google' : 'github'
+        const startSignInRef = provider === 'google' ? api.auth.startSignInWithGoogle : api.auth.startSignInWithGithub
+        const completeSignInRef = provider === 'google' ? api.auth.completeSignInWithGoogle : api.auth.completeSignInWithGithub
         if (credentialCleanupRequired || pendingGitHub || !await checkEncryption() || (managingSessions ? !session : Boolean(session))) throw new Error('Sign-in unavailable')
         const url = CLOUD_DEPLOYMENT_URL
         const originalUserId = session?.userId
@@ -455,7 +457,7 @@ export function cloudSyncCommand(input: CloudSyncCommand) {
         const flow = await beginGitHubSignIn(url, {
           isConfigured: async () => {
             const config = await login.query(authConfigRef, {})
-            if (config.authVersion !== 2 || config.accountControlsVersion !== 2 || !config.githubConfigured) {
+            if (config.authVersion !== 2 || config.accountControlsVersion !== 2 || !(provider === 'google' ? config.googleConfigured : config.githubConfigured)) {
               throw new GitHubSetupError('Budget Terminal cloud sign-in is unavailable. Try again later or continue locally.')
             }
             return true
@@ -465,10 +467,10 @@ export function cloudSyncCommand(input: CloudSyncCommand) {
             : login.mutation(startSignInRef, { ...args, purpose: 'signIn' }),
           completeSignIn: args => managingSessions ? remote(connection => connection.mutation(completeSignInRef, args)) : login.mutation(completeSignInRef, args),
           openExternal: url => shell.openExternal(url),
-        })
+        }, provider)
         pendingGitHub = flow
         if (closed) { flow.cancel(); pendingGitHub = undefined }
-        message = 'Complete GitHub sign-in in your browser. This request expires in 5 minutes.'
+        message = 'Complete account sign-in in your browser. This request expires in 5 minutes.'
         const completion = flow.result.then(result => enqueue(async () => {
           if (pendingGitHub !== flow || closed) {
             if ('tokens' in result && !await cleanupIssuedSession(url, result.tokens)) {
@@ -480,15 +482,15 @@ export function cloudSyncCommand(input: CloudSyncCommand) {
           if ('reason' in result) {
             pendingGitHub = undefined
             authError = result.reason !== 'cancelled'
-            message = result.reason === 'expired' ? 'GitHub sign-in expired. Try again.' :
-              result.reason === 'cancelled' ? undefined : result.reason === 'accountMismatch' ? 'Use the same GitHub account to sign out other devices. Your current account is unchanged.' : 'GitHub sign-in failed. Try again or continue locally.'
+            message = result.reason === 'expired' ? 'Account sign-in expired. Try again.' :
+              result.reason === 'cancelled' ? undefined : result.reason === 'accountMismatch' ? 'Use the same account to sign out other devices. Your current account is unchanged.' : 'Account sign-in failed. Try again or continue locally.'
             return
           }
           try {
             if (managingSessions && result.tokens.userId !== originalUserId) {
               await cleanupIssuedSession(url, result.tokens)
               authError = true
-              message = 'Use the same GitHub account to sign out other devices. Your current account is unchanged.'
+              message = 'Use the same account to sign out other devices. Your current account is unchanged.'
               return
             }
             if (managingSessions && !result.authorization) throw new Error('Missing single-use authorization.')
@@ -502,11 +504,11 @@ export function cloudSyncCommand(input: CloudSyncCommand) {
           catch (error) {
             const cleaned = session?.tokens.refreshToken === result.tokens.refreshToken || await cleanupIssuedSession(url, result.tokens)
             if (error instanceof CredentialError) credentialFailure(error)
-            else { authError = true; message = managingSessions ? 'Could not confirm sign-out of other devices. Check your connection and retry GitHub verification.' : 'GitHub sign-in could not finish. Check your connection and try again. Local data is available.' }
+            else { authError = true; message = managingSessions ? 'Could not confirm sign-out of other devices. Check your connection and retry account verification.' : 'Account sign-in could not finish. Check your connection and try again. Local data is available.' }
             if (!cleaned) { revocation = 'unconfirmed'; message += ' Server cleanup of the unused session is unconfirmed.' }
           }
           finally { pendingGitHub = undefined }
-        })).catch(() => { authError = true; message = 'GitHub sign-in could not finish. Try again.' })
+        })).catch(() => { authError = true; message = 'Account sign-in could not finish. Try again.' })
         activeSignIns.add(completion)
         void completion.finally(() => activeSignIns.delete(completion))
       } else if (command.type === 'cancelSignIn') {

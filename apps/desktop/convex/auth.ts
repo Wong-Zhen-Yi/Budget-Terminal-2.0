@@ -3,6 +3,7 @@ import { ConvexError, v } from 'convex/values'
 import { components, internal } from './_generated/api'
 import { mutation } from './_generated/server'
 import { authCore } from './authCore'
+import { googleOAuthConfigured } from './googleAdapter'
 import { completion, githubOAuthConfigured } from './githubAdapter'
 import { DESKTOP_AUTH_ORIGINS, desktopOAuthRedirect, type OAuthCompletion } from '../electron/shared/cloudOAuth'
 
@@ -14,11 +15,11 @@ const randomSecret = () => Array.from(crypto.getRandomValues(new Uint8Array(32))
 const invalidCode = { status: 'error' as const, userError: { error: 'INVALID_CODE' as const } }
 
 /** Trusted deployment-wide budgets; caller-supplied IDs cannot create fresh buckets. */
-export const startSignInWithGithub = mutation({
+const startSignIn = (provider: 'github' | 'google') => mutation({
   args: { redirectTo: v.string(), purpose: v.optional(v.union(v.literal('signIn'), v.literal('revokeOthers'))) },
   returns: v.object({ redirect: v.string(), state: v.string() }),
   handler: async (ctx, args): Promise<{ redirect: string; state: string }> => {
-    if (!githubOAuthConfigured()) throw new ConvexError({ code: 'AUTH_UNAVAILABLE', message: 'GitHub sign-in is unavailable.' })
+    if (!(provider === 'google' ? googleOAuthConfigured() : githubOAuthConfigured())) throw new ConvexError({ code: 'AUTH_UNAVAILABLE', message: 'Account sign-in is unavailable.' })
     const redirectTo = desktopOAuthRedirect(args.redirectTo)
     if (!DESKTOP_AUTH_ORIGINS.includes(new URL(redirectTo).origin)) throw new Error('Invalid desktop return origin.')
     const purpose = args.purpose ?? 'signIn'
@@ -46,28 +47,28 @@ export const startSignInWithGithub = mutation({
     if (budget) await ctx.db.patch(budget._id, { windowStart: count ? budget.windowStart : now, count: count + 1 })
     else await ctx.db.insert('oauthLimits', { key, windowStart: now, count: 1 })
     for (const expired of await ctx.db.query('oauthRequests').withIndex('by_expiry', q => q.lte('expiresAt', now)).take(25)) await ctx.db.delete(expired._id)
-    const started = await ctx.runMutation(internal.githubAdapter.start, { redirectTo })
-    await ctx.db.insert('oauthRequests', { stateHash: await hash(started.state), purpose, expiresAt: now + 5 * 60_000,
+    const started = await ctx.runMutation(provider === 'google' ? internal.googleAdapter.start : internal.githubAdapter.start, { redirectTo })
+    await ctx.db.insert('oauthRequests', { provider, stateHash: await hash(started.state), purpose, expiresAt: now + 5 * 60_000,
       userId: userId ?? undefined, sessionId: identity?.subject })
     return started
   },
 })
 
 /** Only redemption of a purpose-bound one-time OAuth code may issue an action grant. */
-export const completeSignInWithGithub = mutation({
+const completeSignIn = (provider: 'github' | 'google') => mutation({
   args: { code: v.string(), state: v.string() },
   returns: completion,
   handler: async (ctx, args): Promise<OAuthCompletion> => {
     if (args.code.length > 2048 || args.state.length > 2048) return invalidCode
     const stateHash = await hash(args.state)
     const request = await ctx.db.query('oauthRequests').withIndex('by_state', q => q.eq('stateHash', stateHash)).unique()
-    if (!request || request.expiresAt <= Date.now()) return invalidCode
+    if (!request || (request.provider ?? 'github') !== provider || request.expiresAt <= Date.now()) return invalidCode
     if (request.purpose === 'revokeOthers') {
       const userId = await getAuthUserId(ctx)
       const identity = await ctx.auth.getUserIdentity()
       if (!userId || userId !== request.userId || identity?.subject !== request.sessionId) return invalidCode
     }
-    const result = await ctx.runMutation(internal.githubAdapter.complete, args)
+    const result = await ctx.runMutation(provider === 'google' ? internal.googleAdapter.complete : internal.githubAdapter.complete, args)
     if (result.status !== 'complete') return result
     await ctx.db.delete(request._id)
     if (request.purpose !== 'revokeOthers') return result
@@ -87,16 +88,21 @@ export const completeSignInWithGithub = mutation({
   },
 })
 
+export const startSignInWithGithub = startSignIn('github')
+export const completeSignInWithGithub = completeSignIn('github')
+export const startSignInWithGoogle = startSignIn('google')
+export const completeSignInWithGoogle = completeSignIn('google')
+
 export const revokeOtherSessions = mutation({
   args: { authorization: v.string() },
   returns: v.number(),
   handler: async (ctx, { authorization }): Promise<number> => {
     const userId = await getAuthUserId(ctx)
     const identity = await ctx.auth.getUserIdentity()
-    if (!userId || !identity || !/^[a-f0-9]{64}$/.test(authorization)) throw new Error('Verify with GitHub first.')
+    if (!userId || !identity || !/^[a-f0-9]{64}$/.test(authorization)) throw new Error('Verify with your provider first.')
     const secretHash = await hash(authorization)
     const grant = await ctx.db.query('sessionActionGrants').withIndex('by_secret', q => q.eq('secretHash', secretHash)).unique()
-    if (!grant || grant.expiresAt <= Date.now() || grant.purpose !== 'revokeOtherSessions' || grant.userId !== userId || grant.sessionId !== identity.subject) throw new Error('GitHub verification expired or was already used.')
+    if (!grant || grant.expiresAt <= Date.now() || grant.purpose !== 'revokeOtherSessions' || grant.userId !== userId || grant.sessionId !== identity.subject) throw new Error('Account verification expired or was already used.')
     const sessions = await ctx.runQuery(components.auth.public.listSessions, { userId })
     await ctx.db.delete(grant._id)
     const revoked = await ctx.runMutation(components.auth.public.revokeSessions, {

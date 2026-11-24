@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
-import { request } from 'node:http'
+import { Agent, request } from 'node:http'
 import { connect } from 'node:net'
 import { resolve } from 'node:path'
-import { createMobileHttp, LOCAL_MOBILE_HEADER, MobileRequestError } from '../electron/services/mobileHttp.js'
+import { createMobileHttp, LOCAL_MOBILE_HEADER, MobileDownload, MobileRequestError } from '../electron/services/mobileHttp.js'
 import { mobileTailnet, mobileTailnetIssue, type MobileTailnet } from '../electron/services/mobileTailscale.js'
 import { MOBILE_BODY_LIMIT, MOBILE_DIRECT_LOCAL_PORT, MOBILE_DIRECT_PORT, MOBILE_DIRECT_TARGET, MOBILE_HTTPS_PORT, MOBILE_PROXY_TARGET } from '../electron/shared/mobileAccess.js'
 
@@ -41,8 +41,12 @@ assert.equal(mobileTailnet(status, { ...directServe, AllowFunnel: { [directHost]
 
 let tailnet: MobileTailnet | null = directConfigured
 let called = 0
+let finishSlow!: () => void
+const slow = new Promise<void>(resolve => { finishSlow = resolve })
 const renderer = resolve(import.meta.dirname, '../out/renderer')
 function echo(channel: string, args: unknown[]) {
+  if (channel === 'test:slow') return slow.then(() => ({ loaded: true }))
+  if (channel === 'test:download') return new MobileDownload(Buffer.from('%PDF-fixture'), 'application/pdf')
   if (channel !== 'test:echo') throw new MobileRequestError('Not found.', 404)
   called++
   return { args }
@@ -101,6 +105,45 @@ try {
   assert.match(await wire(proxy(ownerPhone), directPost), /^HTTP\/1.1 200/)
   assert.match(await wire(proxy(ownerPhone), directPost.replace(`Origin: ${directOrigin}`, `Origin: ${origin}`)), /^HTTP\/1.1 403/)
   assert.equal(called, 2)
+  // Model Safari's HTTP/1 connection limit on the direct Tailscale link. Every
+  // page must start preloading without holding a socket until its provider ends.
+  const agent = new Agent({ keepAlive: true, maxSockets: 6 })
+  const asyncSend = (path: string, method = 'GET', body?: string) => new Promise<{ status?: number; body: string }>((resolveResponse, reject) => {
+    const req = request({ host: '127.0.0.1', port: server.port, path, agent,
+      headers: { ...post, Prefer: 'respond-async', 'Content-Length': String(Buffer.byteLength(body ?? '')) }, method }, res => {
+      let data = ''
+      res.setEncoding('utf8')
+      res.on('data', chunk => { data += chunk })
+      res.on('end', () => resolveResponse({ status: res.statusCode, body: data }))
+    })
+    req.setTimeout(3000, () => req.destroy(new Error('Startup occupied all mobile connections')))
+    req.on('error', reject).end(body)
+  })
+  try {
+    const started = await Promise.all(Array.from({ length: 80 }, () => asyncSend('/api/call/test:slow', 'POST', '[]')))
+    assert(started.every(result => result.status === 202), 'All page loads start before providers finish')
+    const slowPath = '/api/results/' + JSON.parse(started[0].body).id
+    assert.equal((await asyncSend(slowPath)).status, 202)
+    const foreground = await asyncSend('/api/call/test:echo', 'POST', '[]')
+    assert.equal(foreground.status, 202)
+    const foregroundPath = '/api/results/' + JSON.parse(foreground.body).id
+    assert.equal((await send(foregroundPath, headers)).status, 403, 'Polling requires the mobile header')
+    const loaded = await asyncSend(foregroundPath)
+    assert.equal(loaded.status, 200)
+    assert.equal(loaded.body, '{"args":[]}')
+    assert.equal((await asyncSend(foregroundPath)).status, 404, 'Release consumed results')
+    finishSlow()
+    for (const result of started) assert.equal((await asyncSend('/api/results/' + JSON.parse(result.body).id)).status, 200)
+    const failure = await asyncSend('/api/call/window:control', 'POST', '[]')
+    assert.equal((await asyncSend('/api/results/' + JSON.parse(failure.body).id)).status, 404, 'Async calls preserve desktop-only exclusions')
+    const download = await asyncSend('/api/call/test:download', 'POST', '[]')
+    assert.equal((await asyncSend('/api/results/' + JSON.parse(download.body).id)).body, '%PDF-fixture', 'Async transport preserves binary downloads')
+    const uncollected = await asyncSend('/api/call/test:echo', 'POST', '[]')
+    const uncollectedPath = '/api/results/' + JSON.parse(uncollected.body).id
+    server.disconnect()
+    assert.equal((await asyncSend(uncollectedPath)).status, 404, 'Disconnect discards retained results')
+  } finally { finishSlow(); agent.destroy() }
+  console.log('PASS: 80 concurrent page loads release HTTP connections, foreground reads complete, and authenticated polling preserves errors and exclusions')
   tailnet = null
   assert.equal((await send('/', headers)).status, 403, 'Stop serving when the tailnet is unavailable')
 } finally { await server.close() }

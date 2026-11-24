@@ -137,7 +137,7 @@ try {
       }
       if (method === 'cloudSyncCommand') {
         if (authRejected) return { ...ok(fixtureAuth), meta: { freshness: 'failed', failureReason: 'Synthetic sign-in failure. Try again.' } }
-        fixtureAuth = { ...fixtureAuth, signInPending: ['signInGitHub', 'revokeOtherSessions'].includes(request.type),
+        fixtureAuth = { ...fixtureAuth, signInPending: ['signInGitHub', 'signInGoogle', 'revokeOtherSessions'].includes(request.type),
           credentialCleanupRequired: request.type === 'retryCredentialCleanup' ? false : fixtureAuth.credentialCleanupRequired,
           workspaceApprovalRequired: request.type === 'confirmWorkspace' ? false : fixtureAuth.workspaceApprovalRequired,
           message: request.type === 'signInGitHub' ? 'Complete GitHub sign-in in your browser.' : undefined }
@@ -343,7 +343,8 @@ try {
           }
           await window.resizeFixture(1400, 950); await paint()
           await window.captureFixture('auth-sign-up')
-          authRejected = true; click('Continue with GitHub'); await wait()
+          check([...popup().querySelectorAll('button')].some(button => button.textContent.trim() === 'Continue with Google'), 'Google sign-in must be available')
+          authRejected = true; click('Continue with Google'); await wait()
           check(popup().textContent.includes('Synthetic sign-in failure'), 'Failed sign-in must offer recovery')
           authRejected = false; click('Continue with GitHub'); await wait()
           check(popup().textContent.includes('Complete GitHub sign-in') && !popup().querySelector('input'), 'Browser approval state missing')
@@ -419,7 +420,7 @@ try {
           check(calls.some(call => call.method === 'cloudSyncCommand' && call.request.type === 'confirmWorkspace' && call.request.use === 'local'), 'Import did not invoke explicit workspace consent')
           check(!panel().querySelector('[data-workspace-approval]'), 'Approved workspace must leave the consent state')
           accountClick('Sign out other devices'); await wait()
-          accountClick('Verify with GitHub'); await wait()
+          accountClick('Verify account'); await wait()
           check(panel().textContent.includes('same account') && panel().textContent.includes('Cancel sign-in'), 'Other-device sign-out must request GitHub verification')
           accountClick('Cancel sign-in'); await wait()
           fixtureAuth = { ...fixtureAuth, signedIn: false, signInPending: false, authState: 'signedOut', revocation: 'unconfirmed' }
@@ -434,7 +435,7 @@ try {
           accountClick('Retry credential cleanup'); await wait()
           check(calls.some(call => call.method === 'cloudSyncCommand' && call.request.type === 'retryCredentialCleanup'), 'Credential cleanup must call the main process')
           accountRoot.unmount(); accountClient.clear()
-          return 'PASS: responsive auth and account controls, workspace consent, GitHub session verification, revocation uncertainty, keyring recovery, persistent dismissal and all-page preloading'
+          return 'PASS: responsive auth and account controls, workspace consent, provider session verification, revocation uncertainty, keyring recovery, persistent dismissal and all-page preloading'
         }
         if (document.querySelector('dialog.auth-popup[open]')) {
           ;[...document.querySelector('dialog.auth-popup').querySelectorAll('button')].find(button => button.textContent === 'Continue locally').click()

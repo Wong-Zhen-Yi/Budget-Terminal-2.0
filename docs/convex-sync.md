@@ -1,8 +1,23 @@
+# Google sign-in setup
+
+Google authentication is implemented alongside GitHub. Configure it on the existing deployment before deploying this revision. Credentials have intentionally been deferred; Google sign-in is not yet enabled on the live deployment.
+
+1. Create a Google OAuth client of type **Web application** in Google Cloud Console and configure its consent screen and audience (add test users while in testing).
+2. Register this exact authorized redirect URI:
+   `https://handsome-kookabura-498.ap-southeast-2.convex.site/api/auth/callback/google/callback`
+3. Set backend-only Convex variables `AUTH_GOOGLE_CLIENT_ID` and `AUTH_GOOGLE_CLIENT_SECRET`. Never put the secret in source, renderer variables or MCP inputs.
+4. Select the existing deployment in the ignored `apps/desktop/.env.local` (`CONVEX_DEPLOYMENT=dev:handsome-kookabura-498`), then run `npm run convex:setup`. Setup requires both providers' credentials, backs up existing data and deploys the integration. It stops before deployment if credentials are missing.
+5. Relaunch with any double-click launcher and choose **Continue with Google** or **Settings > Cloud sync > Sign in with Google**. Complete a real browser sign-in to verify consent and callback registration.
+
+Google uses the same loopback allowlist, state/PKCE validation, shared sign-in quotas, encrypted sessions and workspace approval flow as GitHub. One-time requests are bound to their provider; a Google code cannot redeem a GitHub request. Session revocation reauthenticates with the connected provider. Only provider and optional public GitHub login reach account settings; Google email, picture and name are not copied into the application user profile. Accounts link only by stable provider ID, including retained legacy Google IDs. A Google account and GitHub account with the same email remain separate; choose the original provider to reconnect existing cloud data.
+
+All launchers rebuild the current desktop and MCP sources through the shared launcher. Cloud authentication remains desktop-only and is not exposed through MCP.
+
 # Convex Auth v2 and optional cloud sync
 
 Budget Terminal reads and writes its local stores first. Convex is an optional remote copy; no account or internet connection is required to use the application. Startup preloads every implemented page independently of cloud sign-in. Sync progress and failures appear only in Settings.
 
-Every installation uses the same Budget Terminal cloud deployment. To connect a device, choose **Sign in with GitHub** on the startup screen or in **Settings > Data & storage > Cloud sync**. Use the same GitHub account on each device to access the same cloud workspace.
+Every installation uses the same Budget Terminal cloud deployment. To connect a device, choose **Sign in with Google** or **Sign in with GitHub** on the startup screen or in **Settings > Data & storage > Cloud sync**. Use the same provider and account on each device to access the same cloud workspace.
 
 The desktop uses the existing deployment that passed two-device GitHub sign-in and sync acceptance. This restores access to accounts and cloud copies created before the production rollout attempt.
 
@@ -25,8 +40,10 @@ For a new project, run `npm run convex:dev` to authenticate the CLI and select/c
 | --- | --- |
 | `AUTH_GITHUB_ID` | GitHub OAuth App client ID |
 | `AUTH_GITHUB_SECRET` | GitHub OAuth App client secret |
+| `AUTH_GOOGLE_CLIENT_ID` | Google Web OAuth client ID |
+| `AUTH_GOOGLE_CLIENT_SECRET` | Google Web OAuth client secret |
 
-The existing variable names are retained so an upgrade reuses the deployment's GitHub OAuth App. They are bound to the v2 GitHub component's `CLIENT_ID` and `CLIENT_SECRET`. Neither value is returned by the app's configuration query. `authConfiguration` exposes only `authVersion: 2`, `accountControlsVersion: 2` and `githubConfigured`. The desktop checks both capability versions before opening GitHub, so an older backend offers an upgrade instruction before sign-in begins.
+The existing variable names are retained so an upgrade reuses the deployment's GitHub OAuth App. They are bound to the v2 GitHub component's `CLIENT_ID` and `CLIENT_SECRET`. Neither value is returned by the app's configuration query. `authConfiguration` exposes only `authVersion: 2`, `accountControlsVersion: 2`, `githubConfigured` and `googleConfigured`. The desktop checks both capability versions before opening GitHub, so an older backend offers an upgrade instruction before sign-in begins.
 
 Register this authorization callback URL on the GitHub OAuth App, using the deployment's exact site host (including a regional label if present):
 
@@ -63,13 +80,13 @@ V1 sessions and sessions issued by a different deployment require a fresh GitHub
 
 The internal user-creation callback looks up the verified, stable GitHub provider ID in the retained v1 `authAccounts` table. If present, it returns that original user ID, preserving snapshot ownership and archived records. New GitHub accounts receive a new empty user row. Email addresses, login names and display names never link accounts. Legacy auth and record-era tables and indexes are retained for recovery; no v1 sign-in endpoints are deployed.
 
-Convex Auth v2 currently lacks the old standalone email-code sign-in method, so the desktop now offers GitHub only. An email-only legacy account without a linked GitHub identity needs a separately reviewed account migration; an email match does not prove ownership. Do not create a new cloud copy over that account's saved data. Local saves and recovery exports remain available.
+Convex Auth v2 currently lacks the old standalone email-code sign-in method, so the desktop offers OAuth sign-in. An email-only legacy account without a linked GitHub identity needs a separately reviewed account migration; an email match does not prove ownership. Do not create a new cloud copy over that account's saved data. Local saves and recovery exports remain available.
 
 The Convex developer CLI login is separate from Budget Terminal user sign-in. Other devices only need the application and the GitHub account.
 
 ## Desktop authentication and privacy
 
-Signed-out users see an account popup on the front screen at launch. **Sign in** and **Sign up** both open GitHub for the shared Budget Terminal deployment. The first successful sign-in creates the account. Sign-in persists by default: encrypted credentials are restored before the first renderer account check, so a signed-in user skips the popup. Browser approval closes it automatically. **Continue locally**, the close button or Escape dismisses it for this app session. **Don’t show again** saves a device-only preference across restarts; **Settings → Cloud sync → Show sign-in popup at startup** restores it. Sign-in remains available in Settings even with the popup disabled. All implemented pages continue preloading behind the popup. Account status is checked live and excluded from the persisted renderer market cache.
+Signed-out users see an account popup on the front screen at launch. **Sign in** and **Sign up** offer Google and GitHub for the shared Budget Terminal deployment. The first successful sign-in creates the account. Sign-in persists by default: encrypted credentials are restored before the first renderer account check, so a signed-in user skips the popup. Browser approval closes it automatically. **Continue locally**, the close button or Escape dismisses it for this app session. **Don’t show again** saves a device-only preference across restarts; **Settings → Cloud sync → Show sign-in popup at startup** restores it. Sign-in remains available in Settings even with the popup disabled. All implemented pages continue preloading behind the popup. Account status is checked live and excluded from the persisted renderer market cache.
 
 Authentication runs in Electron's main process behind `window.api`. OAuth state, one-time codes, access tokens and refresh tokens never enter the renderer, local MCP tools or browser response text. Sessions are encrypted with Electron safeStorage in `sync-session.bin`; a working OS keyring is required and plaintext storage is refused.
 

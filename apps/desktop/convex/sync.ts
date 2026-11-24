@@ -3,13 +3,14 @@ import { getAuthUserId } from '@convex-dev/auth/server'
 import { ConvexError, v } from 'convex/values'
 import { CloudSnapshotError, parseCloudSnapshot } from '../electron/shared/cloudSnapshot'
 import { consumeSyncWrite } from './syncLimits'
+import { googleOAuthConfigured } from './googleAdapter'
 import { githubOAuthConfigured } from './githubAdapter'
 
-// Public setup metadata contains only capability versions and a boolean.
+// Public setup metadata contains only capability versions and provider availability booleans.
 export const authConfiguration = query({
   args: {},
-  returns: v.object({ authVersion: v.literal(2), accountControlsVersion: v.literal(2), githubConfigured: v.boolean() }),
-  handler: async () => ({ authVersion: 2 as const, accountControlsVersion: 2 as const, githubConfigured: githubOAuthConfigured() }),
+  returns: v.object({ authVersion: v.literal(2), accountControlsVersion: v.literal(2), githubConfigured: v.boolean(), googleConfigured: v.boolean() }),
+  handler: async () => ({ authVersion: 2 as const, accountControlsVersion: 2 as const, githubConfigured: githubOAuthConfigured(), googleConfigured: googleOAuthConfigured() }),
 })
 
 export const identity = query({
@@ -24,13 +25,13 @@ export const identity = query({
 
 export const account = query({
   args: {},
-  returns: v.object({ userId: v.id('users'), githubLogin: v.optional(v.string()) }),
+  returns: v.object({ userId: v.id('users'), githubLogin: v.optional(v.string()), authProvider: v.optional(v.union(v.literal('github'), v.literal('google'))) }),
   handler: async ctx => {
     const userId = await getAuthUserId(ctx)
     if (!userId) throw new Error('Sign in first.')
     const user = await ctx.db.get(userId)
     if (!user) throw new Error('Account unavailable.')
-    return { userId, githubLogin: user.githubLogin }
+    return { userId, githubLogin: user.githubLogin, authProvider: user.authProvider ?? 'github' }
   },
 })
 

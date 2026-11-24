@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { randomUUID } from 'node:crypto'
 import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -49,6 +50,19 @@ export async function createMobileHttp(directory: string, run: MobileRequest, ac
   assets.set('/budget-terminal-icon.png', { file: join(directory, 'budget-terminal-icon.png'), type: 'image/png' })
   const subscribers = new Map<ServerResponse, IncomingMessage>()
   const directSources = new WeakMap<Socket, string>()
+  // Short polling keeps provider waits off Safari's limited HTTP connections.
+  // Results are session-only, authenticated, origin-bound and bounded in memory.
+  const jobs = new Map<string, { origin: string; expires: number; result?: { status: number; type: string; body: Buffer } }>()
+  let resultBytes = 0
+  const discardJob = (id: string) => {
+    resultBytes -= jobs.get(id)?.result?.body.length ?? 0
+    jobs.delete(id)
+  }
+  const errorResult = (error: unknown) => ({
+    status: error instanceof MobileRequestError ? error.status : 500,
+    type: 'application/json',
+    body: Buffer.from(JSON.stringify({ message: error instanceof MobileRequestError ? error.message : 'Budget Terminal could not complete this request.' })),
+  })
   function authorizedOrigin(request: IncomingMessage) {
     if ('localToken' in access) {
       const host = `127.0.0.1:${request.socket.localPort}`
@@ -84,6 +98,18 @@ export async function createMobileHttp(directory: string, run: MobileRequest, ac
       }
       const path = request.url ?? ''
       if (request.method === 'GET') {
+        if (path.startsWith('/api/results/')) {
+          if (request.headers['x-budget-terminal'] !== 'mobile' || request.headers['sec-fetch-site'] === 'cross-site') throw new MobileRequestError('Open Budget Terminal from its original page.', 403)
+          const id = path.slice('/api/results/'.length)
+          const job = jobs.get(id)
+          if (!job || job.origin !== origin || job.expires < Date.now()) throw new MobileRequestError('This mobile request expired. Refresh the page.', 404)
+          if (!job.result) response.writeHead(202, { 'Content-Type': 'application/json' }).end('{}')
+          else {
+            response.writeHead(job.result.status, { 'Content-Type': job.result.type }).end(job.result.body)
+            discardJob(id)
+          }
+          return
+        }
         if (path === '/') {
           response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(html)
           return
@@ -125,6 +151,24 @@ export async function createMobileHttp(directory: string, run: MobileRequest, ac
       bodyBytes += length
       try {
         const args = await readArgs(request)
+        if (request.headers.prefer === 'respond-async') {
+          if (jobs.size >= 512) throw new MobileRequestError('Budget Terminal is busy. Try again shortly.', 503)
+          const id = randomUUID()
+          const job: { origin: string; expires: number; result?: { status: number; type: string; body: Buffer } } = { origin, expires: Date.now() + 1_800_000 }
+          jobs.set(id, job)
+          response.writeHead(202, { 'Content-Type': 'application/json' }).end(JSON.stringify({ id }))
+          try {
+            const result = await run(channel, args)
+            job.result = result instanceof MobileDownload
+              ? { status: 200, type: result.contentType, body: result.body }
+              : { status: 200, type: 'application/json', body: Buffer.from(JSON.stringify(result ?? null)) }
+          } catch (error) { job.result = errorResult(error) }
+          if (jobs.get(id) !== job) return
+          if (resultBytes + job.result.body.length > 64_000_000) job.result = errorResult(new MobileRequestError('Mobile results are too large. Refresh the page.', 503))
+          resultBytes += job.result.body.length
+          job.expires = Date.now() + 120_000
+          return
+        }
         const result = await run(channel, args)
         if (authorizedOrigin(request) !== origin) throw new MobileRequestError('Mobile access changed. Reopen Budget Terminal.', 403)
         if (result instanceof MobileDownload) response.writeHead(200, { 'Content-Type': result.contentType }).end(result.body)
@@ -152,6 +196,8 @@ export async function createMobileHttp(directory: string, run: MobileRequest, ac
     server.emit('connection', socket)
   }, access.directPort).catch(() => undefined) : undefined
   const disconnect = () => {
+    jobs.clear()
+    resultBytes = 0
     for (const response of subscribers.keys()) response.end()
     subscribers.clear()
   }
@@ -166,6 +212,7 @@ export async function createMobileHttp(directory: string, run: MobileRequest, ac
     for (const [response, request] of subscribers) send(response, request, event)
   }
   const heartbeat = setInterval(() => {
+    for (const [id, job] of jobs) if (job.expires < Date.now()) discardJob(id)
     for (const [response, request] of subscribers) send(response, request, ': ping\n\n')
   }, 15_000)
   heartbeat.unref()

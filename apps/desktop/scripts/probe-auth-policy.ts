@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { getFunctionName } from 'convex/server'
 import * as authentication from '../convex/auth.js'
+import * as googleAdapter from '../convex/googleAdapter.js'
 import * as adapter from '../convex/githubAdapter.js'
 import { cleanup } from '../convex/authMaintenance.js'
 import type { OAuthCompletion } from '../electron/shared/cloudOAuth.js'
@@ -9,6 +10,7 @@ type Row = { _id: string; [key: string]: unknown }
 const tables = new Map<string, Map<string, Row>>()
 const table = (name: string) => { if (!tables.has(name)) tables.set(name, new Map()); return tables.get(name)! }
 const sessions = new Map<string, { userId: string; creationTime: number; lastRefreshedAt: number }>()
+let expectedProvider = 'github'
 let subject: string | null = 'original-session', mintedUser = 'owner-a', starts = 0, redemptions = 0, serial = 0
 const addSession = (id: string, userId: string) => sessions.set(id, { userId, creationTime: Date.now(), lastRefreshedAt: Date.now() })
 addSession('original-session', 'owner-a')
@@ -40,12 +42,12 @@ const ctx = {
   },
   async runMutation(ref: Parameters<typeof getFunctionName>[0], args: Record<string, unknown>) {
     if ('redirectTo' in args) {
-      assert.equal(getFunctionName(ref), 'githubAdapter:start')
+      assert.equal(getFunctionName(ref), `${expectedProvider}Adapter:start`)
       starts++
       return { redirect: 'https://github.com/login/oauth/authorize', state: `fixture-state-${starts}` }
     }
     if ('code' in args) {
-      assert.equal(getFunctionName(ref), 'githubAdapter:complete')
+      assert.equal(getFunctionName(ref), `${expectedProvider}Adapter:complete`)
       redemptions++
       if (args.code !== 'valid-code') return { status: 'error', userError: { error: 'INVALID_CODE' } }
       const sessionId = `issued-${redemptions}`
@@ -155,3 +157,24 @@ assert.equal(table('sessionActionGrants').size, 0)
 assert(![...table('oauthLimits').values()].some(row => row.key === 'expired-account'))
 assert.equal(table('syncWriteLimits').size, 0)
 console.log('PASS: reserved security OAuth capacity, per-account verification quotas, internal-only SDK adapters, purpose/session/account binding, grant hashing, expiry, single-use revocation and bounded cleanup')
+
+for (const fn of [googleAdapter.start, googleAdapter.complete]) assert.equal((fn as unknown as { isInternal: boolean }).isInternal, true)
+const googleStart = handler<{ redirectTo: string; purpose?: 'signIn' | 'revokeOthers' }, { redirect: string; state: string }>(authentication.startSignInWithGoogle)
+const googleComplete = handler<{ code: string; state: string }, OAuthCompletion>(authentication.completeSignInWithGoogle)
+assert.equal(googleAdapter.googleOAuthConfigured(), false)
+await assert.rejects(googleStart(ctx, { redirectTo }), /AUTH_UNAVAILABLE/)
+process.env.AUTH_GOOGLE_CLIENT_ID = 'fixture.apps.googleusercontent.com'
+process.env.AUTH_GOOGLE_CLIENT_SECRET = 'fixture-google-secret'
+assert.equal(googleAdapter.googleOAuthConfigured(), true)
+table('oauthLimits').clear(); table('oauthRequests').clear()
+expectedProvider = 'google'; mintedUser = 'owner-a'
+const googleRequest = await googleStart(ctx, { redirectTo })
+const beforeCrossProvider = redemptions
+assert.equal((await complete(ctx, { code: 'valid-code', state: googleRequest.state })).status, 'error')
+assert.equal(redemptions, beforeCrossProvider, 'Cross-provider redemption cannot reach an SDK adapter')
+assert.equal((await googleComplete(ctx, { code: 'valid-code', state: googleRequest.state })).status, 'complete')
+assert.equal((await googleComplete(ctx, { code: 'valid-code', state: googleRequest.state })).status, 'error', 'Google codes cannot replay')
+for (let i = 1; i < 30; i++) await googleStart(ctx, { redirectTo })
+expectedProvider = 'github'
+await assert.rejects(start(ctx, { redirectTo }), /AUTH_RATE_LIMITED/, 'Google and GitHub share the anonymous quota')
+console.log('PASS: Google configuration, internal adapters, provider-bound redemption, replay protection and shared quotas')

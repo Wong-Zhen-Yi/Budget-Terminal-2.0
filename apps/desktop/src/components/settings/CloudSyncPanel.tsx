@@ -42,7 +42,7 @@ export function CloudSyncPanel() {
     finally { setBusy(false) }
   }
   const stateLabels = { disconnected: 'Not connected', idle: 'Changes pending', syncing: 'Syncing', synced: 'Up to date', conflict: 'Choose a copy', error: 'Needs attention' }
-  const authLabels = { restoring: 'Restoring saved sign-in', signedOut: 'Signed out', signingIn: 'Waiting for GitHub approval',
+  const authLabels = { restoring: 'Restoring saved sign-in', signedOut: 'Signed out', signingIn: 'Waiting for browser approval',
     authenticated: 'Signed in', offline: 'Saved sign-in · Connection unavailable', reauthRequired: 'Sign in again', keyringUnavailable: 'Credential keyring unavailable', storageError: 'Credential storage needs attention' }
 
   return <Panel title="Cloud sync">
@@ -54,7 +54,7 @@ export function CloudSyncPanel() {
       {status?.authState && <p className="text-2xs text-text-muted">{authLabels[status.authState]}</p>}
       {status?.credentialCleanupRequired ? <Button disabled={busy} onClick={() => void run({ type: 'retryCredentialCleanup' })}>Retry credential cleanup</Button> :
         ['keyringUnavailable', 'storageError'].includes(status?.authState ?? '') && !status?.signedIn && <Button disabled={busy} onClick={() => void run({ type: 'retrySession' })}>Retry saved sign-in</Button>}
-      {status?.signedIn && <p className="text-2xs break-all">{status.githubLogin ? `GitHub · @${status.githubLogin}` : 'GitHub account connected'}</p>}
+      {status?.signedIn && <p className="text-2xs break-all">{status.githubLogin ? `GitHub · @${status.githubLogin}` : status.authProvider === 'google' ? 'Google account connected' : 'GitHub account connected'}</p>}
       {status?.signedIn && ['keyringUnavailable', 'storageError'].includes(status.authState ?? '') && <Button disabled={busy} onClick={() => void run({ type: 'retrySession' })}>Retry saving sign-in</Button>}
       {status?.signedIn && (status.localUpdatedAt || status.cloudUpdatedAt) ? <p className="text-2xs text-text-muted">
         {status.cloudUpdatedAt ? `Cloud data updated ${new Date(status.cloudUpdatedAt).toLocaleString()} · Revision ${status.revision ?? 0}` : ''}
@@ -62,7 +62,7 @@ export function CloudSyncPanel() {
       </p> : null}
       {status?.signedIn ? <>
         {status.signInPending ? <div className="flex flex-col gap-2">
-          <p className="text-2xs" role="status">Approve GitHub sign-in using the same account to sign out other devices.</p>
+          <p className="text-2xs" role="status">Approve sign-in using the same account to sign out other devices.</p>
           <Button disabled={busy} onClick={() => void run({ type: 'cancelSignIn' })}>Cancel sign-in</Button>
         </div> : <>
         <div className="flex flex-wrap gap-2">
@@ -71,8 +71,8 @@ export function CloudSyncPanel() {
           <Button disabled={busy || !status.encryptionAvailable} onClick={() => setConfirmSessions(true)}>Sign out other devices</Button>
         </div>
         {confirmSessions && <div className="border border-border p-2 text-2xs">
-          <p>Sign in with the same GitHub account again to end its other sessions. This device will stay connected.</p>
-          <div className="mt-2 flex flex-wrap gap-2"><Button disabled={busy} onClick={() => void run({ type: 'revokeOtherSessions' })}>Verify with GitHub</Button><Button disabled={busy} onClick={() => setConfirmSessions(false)}>Cancel</Button></div>
+          <p>Sign in with the same account again to end its other sessions. This device will stay connected.</p>
+          <div className="mt-2 flex flex-wrap gap-2"><Button disabled={busy} onClick={() => void run({ type: 'revokeOtherSessions' })}>Verify account</Button><Button disabled={busy} onClick={() => setConfirmSessions(false)}>Cancel</Button></div>
         </div>}
         {status.workspaceApprovalRequired && <div className="border border-border p-2 text-2xs" data-workspace-approval>
           <p>This device has saved data that is not linked to this account. Sync stays paused until you choose a copy.</p>
@@ -96,10 +96,11 @@ export function CloudSyncPanel() {
         </div> : null}
         {status.message && status.state !== 'error' && <p className="text-2xs" role="status">{status.message}</p>}
       </> : status?.signInPending ? <div className="flex flex-col gap-2">
-        <p className="text-2xs" role="status">{status.message ?? 'Waiting for GitHub approval in your browser…'}</p>
+        <p className="text-2xs" role="status">{status.message ?? 'Waiting for browser approval in your browser…'}</p>
         <Button disabled={busy} onClick={() => void run({ type: 'cancelSignIn' })}>Cancel sign-in</Button>
       </div> : <form className="flex flex-col gap-2" onSubmit={event => { event.preventDefault(); void run({ type: 'signInGitHub' }) }}>
         <Button type="submit" variant="accent" disabled={busy || status?.credentialCleanupRequired || !status?.encryptionAvailable}>Sign in with GitHub</Button>
+        <Button disabled={busy || status?.credentialCleanupRequired || !status?.encryptionAvailable} onClick={() => void run({ type: 'signInGoogle' })}>Sign in with Google</Button>
         <p className="text-2xs text-text-muted">Approve sign-in in your system browser, then return here.</p>
         {status?.message && status.state !== 'error' ? <p role="status" className="text-2xs">{status.message}</p> : null}
         {status && !status.encryptionAvailable ? <p className="text-2xs text-warn">Enable your OS credential keyring to connect sync. Local saves remain available.</p> : null}

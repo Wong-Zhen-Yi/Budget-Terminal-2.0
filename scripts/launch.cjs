@@ -2,6 +2,7 @@ const { spawn: spawnProcess, spawnSync } = require('node:child_process')
 const { randomUUID } = require('node:crypto')
 const { closeSync, mkdirSync, openSync } = require('node:fs')
 const { once } = require('node:events')
+// Mobile RPC releases browser connections during provider waits; rebuild all entry points here.
 // Ethereum Research workbench and current MCP sources rebuild through this shared path.
 // Macro cycle compass shows nine states and release changes through the shared build path.
 // Agents includes the Summarize macro quick prompt; rebuild current source through the shared launcher.
@@ -14,6 +15,7 @@ const { once } = require('node:events')
 // Auth lifecycle passed live two-device acceptance; the shared launcher rebuilds current source.
 // Auth workspace ownership, async credential storage and session controls rebuild on every launch.
 // Auth restores saved sign-in before opening and remembers the device's Don't show again preference.
+// Google and GitHub sign-in rebuild here for every launcher; provider credentials deploy separately.
 // GitHub sign-in requires the exact v2 callback registered in its OAuth App; see docs/convex-sync.md.
 // Convex Auth v2 runs in the main process; launch always builds current desktop and MCP sources.
 // Windows terminal command: btd restart saves, rebuilds and reopens the app.

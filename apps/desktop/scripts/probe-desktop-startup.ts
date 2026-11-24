@@ -287,6 +287,24 @@ try {
               await waitFor(visible('[aria-label="Chart style"]'), 'Landscape phones can expand tools')
               await click('.charts-toolbar-tools > button')
             }
+            if (${process.argv.includes('--all-pages')}) {
+              await window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', {
+                width: 390, height: 844, screenWidth: 390, screenHeight: 844, mobile: true, deviceScaleFactor: 2,
+              })
+              await openNavigation()
+              const ids = await run('[...document.querySelectorAll("[data-navigation-page]")].map(el => el.dataset.navigationPage)')
+              await click('.mobile-page-button')
+              const failures = []
+              for (const id of ids) {
+                await selectPage(id)
+                await waitFor(visible('[data-page-id="' + id + '"]'), id + ' must mount')
+                await new Promise(resolve => setTimeout(resolve, 100))
+                const result = await run('(() => { const page = document.querySelector("[data-page-id=' + id + ']"); const rect = page.getBoundingClientRect(); return { error: page.innerText.includes("This page could not render"), width: rect.width, height: rect.height, content: page.innerText.length } })()')
+                if (result.error || result.width < 100 || result.height < 100 || !result.content) failures.push({ id, ...result })
+              }
+              assert.deepEqual(failures, [], 'Every available mobile page must render a usable content area')
+              console.log('PASS: all ' + ids.length + ' available mobile pages mounted without render failures or collapsed frames')
+            }
             console.log('PASS: mobile preview opens with isolated sample data, resizes, and reflows navigation and toolbars across compact through large phones and landscape')
             app.quit()
             return

@@ -56,6 +56,10 @@ Turn off **Mobile Access** under **Settings → Labs** to stop serving the works
 
 ## Verification
 
+Mobile service calls release the browser connection while the computer waits for a provider, then collect results with authenticated same-origin polling. This keeps startup preloading for every page from occupying the limited connections on direct HTTP Tailscale links. Results stay in memory for up to two minutes after completion and are removed when collected or mobile access disconnects.
+
+Add `--all-pages` to the mobile preview startup probe to check every available page for render failures or collapsed content areas at a phone viewport. This checks rendering and transport separately from live provider availability.
+
 Run `npm run probe:desktop-startup --workspace budget-terminal-desktop -- --mobile-preview` after a build to check window resizing, temporary sample data, mobile navigation, and compact toolbars across phone widths from 320 to 430 CSS pixels plus landscape layouts in Electron.
 
 On Windows, run `npm run probe:desktop-startup --workspace budget-terminal-desktop -- --connected-mobile` to test shared data and update events. Add `--warm` to test opening the mobile window from an already running desktop instance.

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { createServer } from 'node:http'
-import { DESKTOP_AUTH_PORTS, desktopOAuthRedirect, githubSignInUrl } from '../shared/cloudOAuth.js'
+import { DESKTOP_AUTH_PORTS, desktopOAuthRedirect, oauthSignInUrl } from '../shared/cloudOAuth.js'
 import type { OAuthTokens, OAuthCompletion } from '../shared/cloudOAuth.js'
 export type { OAuthTokens, OAuthCompletion } from '../shared/cloudOAuth.js'
 
@@ -81,12 +81,12 @@ export async function beginGitHubSignIn(deploymentUrl: string, dependencies: {
   startSignIn: (args: { redirectTo: string }) => Promise<{ redirect: string; state: string }>
   completeSignIn: (args: { code: string; state: string }) => Promise<OAuthCompletion>
   openExternal: (url: string) => Promise<void>
-}): Promise<GitHubSignIn> {
-  if (!await dependencies.isConfigured()) throw new GitHubSetupError()
+}, provider: 'github' | 'google' = 'github'): Promise<GitHubSignIn> {
+  if (!await dependencies.isConfigured()) throw new GitHubSetupError(`${provider} sign-in is not configured on this Convex deployment.`)
   const callback = await createOAuthCallback()
   try {
     const started = await dependencies.startSignIn({ redirectTo: callback.url })
-    const redirect = githubSignInUrl(deploymentUrl, started.redirect, started.state)
+    const redirect = oauthSignInUrl(deploymentUrl, started.redirect, started.state, provider)
     await dependencies.openExternal(redirect)
     const result: GitHubSignIn['result'] = callback.result.then(async response => {
       if ('reason' in response) return response

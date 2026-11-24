@@ -6,16 +6,21 @@ import { ok } from '@shared/envelope'
 
 export const isMobileTerminal = () => document.documentElement.hasAttribute('data-terminal-mobile')
 
-// Keep loopback connections free for live events and user actions during startup preloading.
-const maxLocalBackgroundRequests = 3
-let localBackgroundRequests = 0
-const waitForLocalConnection: (() => void)[] = []
-
 async function sendRequest(channel: string, args: unknown[]) {
-  const response = await fetch(`/api/call/${channel}`, {
-    method: 'POST', headers: { 'content-type': 'application/json', 'x-budget-terminal': 'mobile' },
+  let response = await fetch(`/api/call/${channel}`, {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-budget-terminal': 'mobile', prefer: 'respond-async' },
     body: JSON.stringify(args),
   })
+  // Release the browser connection while the computer waits on providers. This
+  // also works on the direct HTTP link, where Safari has few connections per host.
+  if (response.status === 202) {
+    const { id } = await response.json() as { id: string }
+    do {
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      response = await fetch(`/api/results/${id}`, { headers: { 'x-budget-terminal': 'mobile' } })
+      if (response.status === 202) await response.text()
+    } while (response.status === 202)
+  }
   if (!response.ok) {
     const result = await response.json().catch(() => null)
     throw new Error(result?.message ?? 'Keep Budget Terminal open on the computer and reopen the mobile page.')
@@ -24,22 +29,7 @@ async function sendRequest(channel: string, args: unknown[]) {
 }
 
 async function request(channel: string, args: unknown[]) {
-  const [input] = args
-  if (location.hostname !== '127.0.0.1' || !input || typeof input !== 'object' || !('background' in input) || input.background !== true) {
-    return sendRequest(channel, args)
-  }
-  if (localBackgroundRequests >= maxLocalBackgroundRequests) {
-    await new Promise<void>(resolve => waitForLocalConnection.push(resolve))
-  } else {
-    localBackgroundRequests++
-  }
-  try {
-    return await sendRequest(channel, args)
-  } finally {
-    const next = waitForLocalConnection.shift()
-    if (next) next()
-    else localBackgroundRequests--
-  }
+  return sendRequest(channel, args)
 }
 
 export async function mobileTelegramProfile(): Promise<string> {
