@@ -186,7 +186,12 @@ try {
             }
             await waitFor(visible('.portfolio-summary'), 'Portfolio summary must load from sample data')
             await atPhoneWidths(async width => {
+              assert.deepEqual(await run('[document.documentElement, document.body, document.querySelector(".workspace-pages"), document.querySelector("[data-terminal-content]")].map(el => getComputedStyle(el).overscrollBehaviorX)'),
+                ['none', 'none', 'none', 'none'], 'Mobile viewport and workspace tabs suppress horizontal overscroll at ' + width + 'px')
+              assert.deepEqual(await run('(() => { const style = getComputedStyle(document.querySelector("[data-terminal-content]")); return [style.overflowX, style.overflowY, style.overscrollBehaviorY] })()'),
+                ['hidden', 'auto', 'contain'], 'Mobile viewport keeps vertical scrolling at ' + width + 'px')
               await openNavigation()
+              assert.equal(await run('getComputedStyle(document.querySelector(".mobile-navigation-scroll")).overscrollBehaviorX'), 'none', 'Workspaces suppresses horizontal overscroll')
               assert.equal(await run(visible('[data-page-id=portfolio]')), false, 'Workspaces takes the place of the active page')
               assert.equal(await run('document.querySelector("#mobile-navigation [aria-current=page]").dataset.navigationPage'), 'portfolio')
               const settings = await run('window.api.settings().then(result => result.data)')
@@ -215,6 +220,8 @@ try {
               assert.equal(await run('new Set([...document.querySelectorAll(".portfolio-toolbar > select, .portfolio-toolbar > button")].map(el => el.offsetTop)).size === 1'), true,
                 'Portfolio selector, Manage and Save must share a row at ' + width + 'px')
               const tableTop = await run('document.querySelector("[data-page-id=portfolio] table").getBoundingClientRect().top')
+              assert.equal(await run('(() => { const scroller = document.querySelector("[data-page-id=portfolio] table").closest(".overflow-auto"); const left = scroller.scrollLeft; scroller.scrollLeft = 50; const canScroll = scroller.scrollLeft > 0 && getComputedStyle(scroller).overflowX === "auto"; scroller.scrollLeft = left; return canScroll })()'), true,
+                'Portfolio table stays horizontally scrollable at ' + width + 'px')
               await click(summary)
               await waitFor(visible(cash), 'Opening the summary must reveal the cash editor')
               assert.equal(await run(visible(margin)), true)

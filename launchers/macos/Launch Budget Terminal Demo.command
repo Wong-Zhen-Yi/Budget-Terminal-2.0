@@ -1,4 +1,5 @@
 #!/bin/sh
+# The shared build disables sideways overscroll in the mobile view.
 # The shared build adds /prompts to Telegram for the four Agents quick prompts.
 # The shared build includes the one-click iPhone viewport for Windows.
 # The shared build includes animated reload progress on desktop and mobile.

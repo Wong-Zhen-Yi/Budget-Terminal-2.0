@@ -1,4 +1,5 @@
 @echo off
+rem The shared build disables sideways overscroll in the mobile view.
 rem The shared build adds /prompts to Telegram for the four Agents quick prompts.
 rem Preview the fitted iPhone 17 viewport with temporary sample data.
 rem The shared build includes animated reload progress on desktop and mobile.

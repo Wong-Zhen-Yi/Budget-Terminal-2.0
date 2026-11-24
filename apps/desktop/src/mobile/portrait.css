@@ -1,8 +1,4 @@
 @media (max-width: 600px) {
-  [data-terminal-mobile] [data-terminal-content] {
-    overflow-x: clip;
-  }
-
   [data-terminal-mobile] [data-page-id] :is(input, select, textarea, form) { min-width: 0; max-width: 100%; }
   [data-terminal-mobile] [data-page-id] .text-2xs { font-size: 12px; }
   [data-terminal-mobile] [data-page-id] :is(button.no-drag, [role='tab'], input:not([type='checkbox'], [type='radio'], [type='range']), select) {
@@ -14,7 +10,7 @@
     flex-wrap: nowrap;
     overflow-x: auto;
     scrollbar-width: thin;
-    overscroll-behavior-inline: contain;
+    overscroll-behavior-x: none;
   }
   [data-terminal-mobile] [data-page-id] :is([role='tablist'], .mobile-tab-strip) > * {
     flex-shrink: 0;

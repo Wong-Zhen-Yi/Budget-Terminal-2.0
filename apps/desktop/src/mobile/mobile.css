@@ -1,7 +1,10 @@
 [data-terminal-mobile] {
   color-scheme: dark;
   -webkit-text-size-adjust: 100%;
+  overscroll-behavior-x: none;
 }
+
+[data-terminal-mobile] body { overscroll-behavior-x: none; }
 
 [data-terminal-mobile] .terminal-shell {
   height: 100dvh;
@@ -60,11 +63,14 @@
 [data-terminal-mobile] .workspace-pages {
   flex-wrap: nowrap;
   overflow-x: auto;
-  overscroll-behavior-inline: contain;
+  overscroll-behavior-x: none;
   margin-top: 0;
 }
 [data-terminal-mobile] .workspace-pages button { flex: none; }
-[data-terminal-mobile] [data-terminal-content] { overflow: auto; overscroll-behavior: contain; }
+[data-terminal-mobile] [data-terminal-content] {
+  overflow: hidden auto;
+  overscroll-behavior: none contain;
+}
 [data-terminal-mobile] [data-page-id] { min-width: 0; }
 [data-terminal-mobile] [data-page-id] table { min-width: max-content; }
 [data-terminal-mobile] input:not([type="checkbox"], [type="radio"], [type="range"]),
@@ -90,7 +96,7 @@
   color: var(--color-text);
 }
 .mobile-navigation-search input::placeholder { color: var(--color-text-muted); }
-.mobile-navigation-scroll { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.mobile-navigation-scroll { flex: 1; min-height: 0; overflow: hidden auto; overscroll-behavior: none contain; }
 .mobile-navigation-groups { display: grid; align-content: start; gap: 10px; padding-top: 0; }
 .mobile-navigation-group {
   min-width: 0;
