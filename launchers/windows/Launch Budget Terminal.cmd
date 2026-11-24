@@ -1,4 +1,5 @@
 @echo off
+rem The shared build keeps the Polymarket chart at its natural height on phones instead of stretching it to the trade table.
 rem The shared build keeps fresh Technical Indicators results visible on phones whose clock runs slightly behind the computer.
 rem The shared build opens the window only once the opening page has rendered, instead of a blank frame.
 rem The shared build keeps BMNR mNAV visible when Yahoo market cap is unavailable by using share price times the filed share count.
