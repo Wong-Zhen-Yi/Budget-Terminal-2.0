@@ -5,6 +5,7 @@ import { createChart } from 'lightweight-charts'
 import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts'
 import { terminalPricePoints } from '@shared/defeatbetaTerminal'
 import type { TerminalPricePoint, TerminalRow } from '@shared/defeatbetaTerminal'
+import { pointerText } from '@/mobile/touch'
 
 const COLORS = { up: '#26c281', down: '#f0554e', text: '#7d8ea6', border: '#1e2b3f', background: '#0d1420', averages: ['#e4b45a', '#47bba6', '#b79bf2'] }
 const RANGES = [{ count: 21, label: '1M' }, { count: 63, label: '3M' }, { count: 252, label: '1Y' }, { count: 1260, label: '5Y' }, { count: 0, label: 'All' }]
@@ -112,7 +113,7 @@ export function DefeatBetaPriceChart({ symbol, rows, count, onCount }: { symbol:
       <span className="num min-w-24 text-text-muted">{selected?.date ?? 'No data'}</span>
       {[['O', selected?.ohlc?.open], ['H', selected?.ohlc?.high], ['L', selected?.ohlc?.low], ['C', selected?.close]].map(([label, value]) => <span key={label} className="num text-text"><span className="mr-1.5 text-text-dim">{label}</span>{price(typeof value === 'number' ? value : null)}</span>)}
       <span className="num text-text"><span className="mr-1.5 text-text-dim">Vol</span>{volumeText(selected?.volume)}</span>
-      <span className="ml-auto text-text-dim">{hovered === null ? 'Latest session · hover to inspect' : 'Historical session'}</span>
+      <span className="ml-auto text-text-dim">{hovered === null ? `Latest session · ${pointerText('hover', 'touch and hold')} to inspect` : 'Historical session'}</span>
     </div>
     <div className="relative">
       <div ref={containerRef} className="h-[380px] w-full sm:h-[420px]" role="img" aria-label="Published daily candlesticks, moving averages and volume" data-candlestick-canvas />
@@ -126,7 +127,7 @@ export function DefeatBetaPriceChart({ symbol, rows, count, onCount }: { symbol:
           <span className="h-0.5 w-4" style={{ background: COLORS.averages[index] }} />MA{days}<span>{price(selected?.averages[index])}</span>
         </button>)}
       </div>
-      <p className="text-2xs text-text-dim">Scroll to zoom · drag to pan · click MA to toggle</p>
+      <p className="text-2xs text-text-dim">{pointerText('Scroll to zoom · drag to pan · click MA to toggle', 'Pinch to zoom · drag to pan · tap MA to toggle')}</p>
     </div>
   </section>
 }

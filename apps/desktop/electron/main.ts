@@ -11,7 +11,9 @@ import { configureBrowserWindow } from './services/browser.js'
 import { assertPrivateBrowserStorage } from './services/browserStorage.js'
 import { configureYouTubePlayer, isYouTubePlayerContents } from './services/youtubePlayer.js'
 import { isYouTubeEmbedUrl } from './shared/youtubePlayer.js'
-import { desktopWindowBounds, useGamingFullscreen } from './shared/windowSize.js'
+import { desktopWindowBounds, restoreWindowBounds, useGamingFullscreen } from './shared/windowSize.js'
+import { readWindowState, trackWindowState } from './services/windowState.js'
+import { chartWindowHash, normalizeChartSymbol } from './shared/chartWindow.js'
 import { configureRendererCacheShutdown } from './services/rendererCacheShutdown.js'
 import { assertDesktopCertificateSecurity } from './shared/certificateSecurity.js'
 import { startDiagnostics, observeDiagnosticWindow } from './services/diagnosticHost.js'
@@ -85,7 +87,10 @@ const FIRST_RENDER_FALLBACK_MS = 12_000
 
 function createWindow(): BrowserWindow {
   const isMac = process.platform === 'darwin'
-  const size = desktopWindowBounds(screen.getPrimaryDisplay().workArea)
+  // Gaming sessions are always fullscreen; elsewhere reopen where the window was left.
+  const gaming = useGamingFullscreen(process.platform, process.env)
+  const saved = gaming ? undefined : readWindowState()
+  const size = restoreWindowBounds(screen.getAllDisplays().map(display => display.workArea), screen.getPrimaryDisplay().workArea, saved)
   const window = new BrowserWindow({
     ...size,
     show: false,
@@ -107,6 +112,7 @@ function createWindow(): BrowserWindow {
   })
   if (demoDirectory) window.on('page-title-updated', event => event.preventDefault())
   mainWindow = window
+  if (!gaming) trackWindowState(window)
   window.once('closed', () => {
     if (mainWindow === window) {
       mainWindow = null
@@ -114,6 +120,8 @@ function createWindow(): BrowserWindow {
     }
     const child = mobileWindow?.window
     if (child && !child.isDestroyed()) child.destroy()
+    // Pop-out charts belong to this window's session.
+    for (const chart of chartWindows) if (!chart.isDestroyed()) chart.destroy()
   })
 
   configureBrowserWindow(window)
@@ -130,7 +138,8 @@ function createWindow(): BrowserWindow {
   const reveal = () => {
     clearTimeout(revealTimer)
     if (mainWindowReady || window.isDestroyed()) return
-    if (useGamingFullscreen(process.platform, process.env)) window.setFullScreen(true)
+    if (gaming) window.setFullScreen(true)
+    else if (saved?.maximized) window.maximize()
     mainWindowReady = true
     window.show()
     if (openMobileOnStartup) {
@@ -199,6 +208,59 @@ function createWindow(): BrowserWindow {
     app.quit()
   })
   return window
+}
+
+const chartWindows = new Set<BrowserWindow>()
+const MAX_CHART_WINDOWS = 8
+
+/**
+ * A pop-out chart: the same trusted shell document opened with `#chart=<symbol>`, so it
+ * passes the IPC sender check (which ignores the hash) and renders only the chart workspace.
+ */
+async function openChartWindow(parent: BrowserWindow, request: unknown): Promise<void> {
+  const symbol = normalizeChartSymbol(request)
+  if (!symbol) throw new Error('Choose a valid ticker to chart.')
+  if (chartWindows.size >= MAX_CHART_WINDOWS) throw new Error(`Close a chart window first (limit ${MAX_CHART_WINDOWS}).`)
+  const area = screen.getDisplayMatching(parent.getBounds()).workArea
+  const width = Math.min(1180, area.width)
+  const height = Math.min(760, area.height)
+  // Cascade new windows so several pop-outs never stack exactly on top of each other.
+  const offset = (chartWindows.size % 6) * 28
+  const window = new BrowserWindow({
+    width,
+    height,
+    minWidth: Math.min(640, area.width),
+    minHeight: Math.min(420, area.height),
+    x: area.x + Math.max(0, Math.min(Math.floor((area.width - width) / 2) + offset, area.width - width)),
+    y: area.y + Math.max(0, Math.min(Math.floor((area.height - height) / 2) + offset, area.height - height)),
+    show: false,
+    backgroundColor: '#080b12',
+    title: `${symbol} · Budget Terminal Chart`,
+    icon: join(app.getAppPath(), 'resources', process.platform === 'win32' ? 'budget-terminal-icon.ico' : 'budget-terminal-icon.png'),
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: join(dirname, '../preload/preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  })
+  window.removeMenu()
+  chartWindows.add(window)
+  window.once('closed', () => chartWindows.delete(window))
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (isSafeExternalUrl(url)) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  window.webContents.on('will-navigate', (event) => event.preventDefault())
+  window.once('ready-to-show', () => { if (!window.isDestroyed()) window.show() })
+  try {
+    await loadRenderer(window, join(dirname, '../renderer/index.html'),
+      isDev ? process.env.ELECTRON_RENDERER_URL : undefined, { hash: chartWindowHash(symbol) })
+  } catch (error) {
+    if (!window.isDestroyed()) window.destroy()
+    throw error
+  }
 }
 
 function showConnectedMobile(parent: BrowserWindow) {
@@ -339,7 +401,7 @@ if (ownsInstance) app.whenReady().then(async () => {
       const frame = event.senderFrame
       return Boolean(frame && frame === event.sender.mainFrame &&
         BrowserWindow.fromWebContents(event.sender) && isTrustedRendererUrl(frame.url, rendererUrl))
-    }, launchConnectedMobile)
+    }, launchConnectedMobile, openChartWindow)
     if (mobilePreview) {
       stage = 'mobile-preview'
       const { createMobileRoutes } = await import('./services/mobileRoutes.js')

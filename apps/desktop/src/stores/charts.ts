@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
 
 import type {
   ChartsWatchlists,
@@ -13,8 +13,20 @@ import type {
   ChartsRollingWindow,
 } from '@shared/contract'
 import { rangeForInterval, normalizeSymbols } from '@shared/charts'
+import { isChartWindow } from '@/lib/chartWindow'
 
 const STORE_VERSION = 1
+
+/**
+ * Pop-out chart windows start from the main window's saved chart preferences but never
+ * write them back: the main window owns that saved state, and two windows writing the
+ * same key would make the last one closed silently replace the other's indicators,
+ * drawings and symbol. A pop-out's changes last for that window only.
+ */
+function chartsStorage(): StateStorage {
+  if (!isChartWindow()) return window.localStorage
+  return { getItem: key => window.localStorage.getItem(key), setItem: () => {}, removeItem: () => {} }
+}
 
 export type ChartsSubtab = 'main' | 'multi' | 'compare' | 'relationship' | 'cheat'
 export type ChartsType = 'candles' | 'line' | 'area'
@@ -208,6 +220,7 @@ export const useChartsStore = create<ChartsState>()(
     }),
     {
       name: 'budget-terminal:charts',
+      storage: createJSONStorage(chartsStorage),
       version: STORE_VERSION,
       merge: (persisted, current) => ({ ...current, ...normalizeChartsState(persisted) }),
       partialize: (state) => {

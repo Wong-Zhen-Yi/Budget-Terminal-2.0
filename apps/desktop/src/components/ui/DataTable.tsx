@@ -37,6 +37,8 @@ interface DataTableProps<T> {
   onRowClick?: (row: T, index: number) => void
   onRowDoubleClick?: (row: T, index: number) => void
   rowClassName?: (row: T, index: number) => string
+  /** A ticker for the row; enables the right-click symbol menu. */
+  rowSymbol?: (row: T) => string | null | undefined
   empty?: ReactNode
   /**
    * `fixed` honours the declared column widths and lets long text ellipsis instead of
@@ -74,6 +76,7 @@ export function DataTable<T>({
   onRowClick,
   onRowDoubleClick,
   rowClassName,
+  rowSymbol,
   empty = 'No data',
   layout = 'auto',
   minWidth,
@@ -272,6 +275,7 @@ export function DataTable<T>({
                   ref={virtual ? virtualizer.measureElement : undefined}
                   data-index={index}
                   data-row-key={rowKey(row, index)}
+                  data-symbol={rowSymbol?.(row) || undefined}
                   aria-rowindex={index + 2}
                   onClick={onRowClick ? () => onRowClick(row, index) : undefined}
                   onDoubleClick={

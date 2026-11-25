@@ -71,7 +71,7 @@ export function TargetsPanel({
       <DataTable
         columns={columns}
         rows={targets}
-        rowKey={(row) => row.ticker}
+        rowKey={(row) => row.ticker} rowSymbol={(row) => row.ticker}
         showIndex={!activeTicker}
         onRowClick={onSelectTicker ? row => onSelectTicker(row.ticker) : undefined}
         rowClassName={activeTicker ? row => row.ticker === activeTicker ? 'dashboard-lite-active-row' : '' : undefined}

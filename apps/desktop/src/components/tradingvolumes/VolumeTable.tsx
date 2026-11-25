@@ -93,7 +93,7 @@ export function VolumeTable({ rows, interval, loading, onTickerHover }: VolumeTa
       key={interval}
       columns={columns}
       rows={rows}
-      rowKey={(row) => row.ticker}
+      rowKey={(row) => row.ticker} rowSymbol={(row) => row.ticker}
       layout="fixed"
       // `_finish` force-sorts onto the active metric's column, descending, after every
       // render — so picking an interval re-sorts the table as well as the plot.

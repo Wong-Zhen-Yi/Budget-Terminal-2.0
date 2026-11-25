@@ -197,7 +197,7 @@ try {
             return
           }
           if (process.env.BUDGET_TERMINAL_MOBILE_PREVIEW === '1') {
-            const run = script => window.webContents.executeJavaScript(script)
+            const run = script => window.webContents.executeJavaScript(script).catch(error => { throw new Error(error.message + ' Script: ' + script.slice(0, 240)) })
             const waitFor = async (script, message) => {
               const end = Date.now() + 10_000
               while (!await run(script)) {
@@ -298,6 +298,45 @@ try {
             await waitFor(visible('[role=dialog][aria-label="Manage Portfolios"]'), 'Manage Portfolios must open at 320px')
             await click('[role=dialog][aria-label="Manage Portfolios"] [aria-label=Close]')
 
+            // Wide tables keep the ticker in place and fade on the side with more columns.
+            await window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, screenWidth: 390, screenHeight: 844, mobile: true, deviceScaleFactor: 2 })
+            await waitFor('document.querySelector("[data-page-id=portfolio] table")?.dataset.mobileFreeze === "2"', 'Portfolio positions must freeze the rank and Symbol columns')
+            await waitFor('document.querySelector("[data-page-id=portfolio] table").parentElement.dataset.mobileMore === "end"', 'A table with more columns must fade on the right')
+            assert.equal(await run('(() => { const table = document.querySelector("[data-page-id=portfolio] table"); const scroller = table.parentElement; const cell = table.tBodies[0].rows[0].cells[1]; const before = cell.getBoundingClientRect().left; scroller.scrollLeft = 80; const after = cell.getBoundingClientRect().left; scroller.scrollLeft = 0; return Math.abs(before - after) < 1 })()'), true,
+              'The Symbol column must stay in place while the other columns swipe')
+            assert.equal(await run('(() => { const panel = document.querySelector("[data-page-id=portfolio] table").closest(".terminal-panel"); const table = panel.querySelector("table"); return panel.getBoundingClientRect().bottom - table.getBoundingClientRect().bottom < 60 })()'), true,
+              'The positions panel must end under its last row instead of leaving an empty frame')
+
+            // Phone browsers' Back gesture steps through pages and closes Workspaces instead of leaving the app.
+            await selectPage('charts')
+            await waitFor(visible('.charts-toolbar'), 'Charts must open from its pill')
+            await run('history.back()')
+            await waitFor(visible('.portfolio-summary'), 'Back must return to the previous page')
+            await run('history.forward()')
+            await waitFor(visible('.charts-toolbar'), 'Forward must return to the next page')
+            await openNavigation()
+            await run('history.back()')
+            await waitFor('!' + visible('#mobile-navigation') + ' && ' + visible('.charts-toolbar'), 'Back must close Workspaces and keep the page')
+            await openNavigation()
+            await click('[data-navigation-page="portfolio"]')
+            await waitFor(visible('.portfolio-summary'), 'Choosing a page must open it')
+            await run('history.back()')
+            await waitFor(visible('.charts-toolbar'), 'Back after choosing a page from Workspaces must skip the closed sheet')
+
+            // Two quick taps reach the page as one double-click, as phones do not send one reliably.
+            await run('(() => { const el = document.createElement("button"); el.id = "probe-double-tap"; el.style.cssText = "position:fixed;left:100px;top:300px;width:120px;height:60px;z-index:99999"; el.dataset.count = "0"; el.addEventListener("dblclick", () => { el.dataset.count = String(Number(el.dataset.count) + 1) }); document.body.append(el); return true })()')
+            const tap = async () => {
+              await window.webContents.debugger.sendCommand('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 160, y: 330 }] })
+              await window.webContents.debugger.sendCommand('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+            }
+            await tap()
+            await new Promise(resolve => setTimeout(resolve, 120))
+            await tap()
+            await waitFor('document.querySelector("#probe-double-tap").dataset.count === "1"', 'Two quick taps must reach the page as one double-click')
+            await new Promise(resolve => setTimeout(resolve, 700))
+            assert.equal(await run('document.querySelector("#probe-double-tap").dataset.count'), '1', 'A native double-click after a double tap must not repeat the action')
+            await run('document.querySelector("#probe-double-tap").remove()')
+
             await selectPage('charts')
             await waitFor(visible('.charts-toolbar'), 'Charts must open from its pill')
             await atPhoneWidths(async width => {
@@ -310,13 +349,24 @@ try {
             })
             await selectPage('politics')
             await waitFor(visible('.politics-filters'), 'Politics filters must mount')
-            assert.equal(await run('document.querySelector(".politics-filters").offsetHeight <= 60'), true)
+            const politicsFilters = await run('document.querySelector(".politics-filters").offsetHeight')
+            // One row of 44px touch controls and the toggle; the filters themselves stay folded away.
+            assert(politicsFilters <= 64, 'Politics filters must stay on one row, measured ' + politicsFilters + 'px')
             await click('.politics-filters .mobile-disclosure-toggle')
             await waitFor(visible('.politics-filters select'), 'Politics filters must be available on demand')
             await selectPage('options')
             await waitFor(visible('.options-views'), 'Options views must mount')
             assert.equal(await run('new Set([...document.querySelectorAll(".options-views button")].map(el => el.offsetTop)).size === 1'), true,
               'Options view buttons must stay in one row')
+            await waitFor('(() => { const hint = [...document.querySelectorAll("[data-page-id=options] p")].find(p => p.textContent.startsWith("Enter a ticker")); const strip = hint?.parentElement.querySelector(".mobile-tab-strip"); return hint && strip && hint.getBoundingClientRect().top - strip.getBoundingClientRect().bottom < 40 })()',
+              'Before a ticker loads, the Options hint must sit under its controls')
+            // Controls are finger-sized, and a heading that repeats the page name in the header is hidden.
+            await selectPage('technical-screen')
+            await waitFor(visible('.technical-scan-toolbar'), 'Technical Indicators must mount')
+            await waitFor('!' + visible('[data-page-id=technical-screen] h1'), 'A heading that repeats the page name must be hidden on phones')
+            assert.equal(await run('[...document.querySelectorAll(".technical-scan-toolbar :is(button, select)")].filter(el => el.getClientRects().length).every(el => el.getBoundingClientRect().height >= 44)'), true,
+              'Toolbar controls must be at least 44px tall on phones')
+            assert.equal(await run('document.querySelector("[data-page-id=technical-screen]").innerText.includes("Double-tap a stock")'), true, 'Phone hints name taps, not clicks')
             await selectPage('browser')
             await waitFor('Boolean(document.querySelector("#mobile-browser-address"))', 'The Browser pill must open Browser')
             for (const [width, height] of [[568, 320], [780, 360], [844, 390], [932, 430]]) {

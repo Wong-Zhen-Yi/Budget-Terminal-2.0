@@ -21,8 +21,10 @@ const pageButton = 'rounded px-3 py-2 text-left text-2xs transition-colors disab
 const selectedStyle = 'bg-accent-dim text-text'
 const idleStyle = 'text-text-muted hover:bg-surface-hover hover:text-text'
 
-export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, recent, collapsed, onToggleCollapsed, saving, isMac, unreadNotifications = 0 }: NavigationProps & {
+export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, favoriteShortcuts = [], recent, collapsed, onToggleCollapsed, saving, isMac, unreadNotifications = 0 }: NavigationProps & {
   favorites: string[]
+  /** Favorites reachable with Ctrl/⌘+1…9, in shortcut order. */
+  favoriteShortcuts?: readonly string[]
   recent: string[]
   collapsed: boolean
   onToggleCollapsed: () => void
@@ -77,8 +79,11 @@ export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, rece
         <nav aria-label="Favorite pages" className="flex flex-col gap-1">
           {favorites.flatMap((id) => {
             const tab = tabs.find((entry) => entry.id === id && entry.implemented)
+            const shortcut = favoriteShortcuts.indexOf(id)
+            const keys = shortcut >= 0 ? `${isMac ? '⌘' : 'Ctrl+'}${shortcut + 1}` : ''
             return tab ? [<button key={id} type="button" onClick={() => onSelectTab(id)}
-              aria-label={tab.label} title={collapsed ? tab.label : undefined}
+              aria-label={tab.label} aria-keyshortcuts={keys ? (isMac ? `Meta+${shortcut + 1}` : `Control+${shortcut + 1}`) : undefined}
+              title={collapsed ? (keys ? `${tab.label} (${keys})` : tab.label) : keys || undefined}
               aria-current={id === activeTab ? 'page' : undefined}
               className={navigationButton + (id === activeTab ? selectedStyle : idleStyle)}>{collapsed ? <NavigationIcon id={id} /> : tab.label}</button>] : []
           })}

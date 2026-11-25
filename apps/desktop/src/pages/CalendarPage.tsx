@@ -39,6 +39,7 @@ import { Select } from '@/components/ui/Select'
 import { useCalendarPage } from '@/stores/calendar'
 import { CalendarMonthGrid, ECONOMIC_COLORS, EconomicReadings } from '@/components/calendar/CalendarMonthGrid'
 import '@/styles/calendar.css'
+import { pointerText } from '@/mobile/touch'
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
 const EARNINGS_WEEKDAYS = WEEKDAYS.slice(0, 5)
@@ -201,7 +202,7 @@ function MonthlyCalendar({
         <Checkbox checked={state.showCompany} onChange={checked => state.setCategory('showCompany', checked)} label={`Company (${companyRows.length})`} />
         <Checkbox checked={state.showOptions} onChange={checked => state.setCategory('showOptions', checked)} label={`Options (${optionRows.length})`} />
         <Checkbox checked={state.showMarketHolidays} onChange={checked => state.setCategory('showMarketHolidays', checked)} label="Market holidays" />
-        <span className="calendar-hint truncate" role="status" title={notice || undefined}>{notice || 'Hover to preview · Click a day to pin'}</span>
+        <span className="calendar-hint truncate" role="status" title={notice || undefined}>{notice || pointerText('Hover to preview · Click a day to pin', 'Tap a day to pin')}</span>
       </div>
 
       <div className="calendar-grid-container" aria-busy={loading}>

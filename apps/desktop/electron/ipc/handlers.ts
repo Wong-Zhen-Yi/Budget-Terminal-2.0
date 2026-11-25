@@ -31,6 +31,7 @@ import { isMobileViewportId, type MobileViewportId } from '../shared/mobileAcces
 export function registerIpcHandlers(
   isTrustedSender: (event: IpcMainInvokeEvent) => boolean,
   launchMobileWindow: (parent: BrowserWindow, viewport: MobileViewportId) => Promise<void>,
+  openChartWindow: (parent: BrowserWindow, symbol: unknown) => Promise<void>,
 ): () => void {
   const handle: typeof ipcMain.handle = (channel, listener) => {
     ipcMain.handle(channel, (event, ...args: unknown[]) => {
@@ -206,6 +207,12 @@ export function registerIpcHandlers(
   })
 
   handle(CHANNELS.rendererCacheFlushed, event => rendererCacheFlushed(event.sender))
+
+  handle(CHANNELS.openChartWindow, async (event, symbol: unknown) => {
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    if (!parent) throw new Error('Chart windows require an application window.')
+    await openChartWindow(parent, symbol)
+  })
 
   handle(CHANNELS.windowControl, (event, action: WindowAction) => {
     const window = BrowserWindow.fromWebContents(event.sender)

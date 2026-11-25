@@ -276,7 +276,7 @@ export function PoliticsPage({
           <DataTable
             columns={tradeColumns}
             rows={filtered}
-            rowKey={(row, index) => `${row.politician}-${row.ticker}-${row.transactionDate}-${row.disclosureDate}-${index}`}
+            rowKey={(row, index) => `${row.politician}-${row.ticker}-${row.transactionDate}-${row.disclosureDate}-${index}`} rowSymbol={(row) => row.ticker}
             layout="fixed"
             defaultSort={{ key: 'transactionDate', direction: 'desc' }}
             onRowDoubleClick={(row) => { if (row.ticker) onNavigate('charts', row.ticker) }}

@@ -62,7 +62,7 @@ export function ScorecardMatrix({ rows, columns, chartMetric, onSelectMetric, on
         <thead><tr><th scope="col" className="scorecard-corner"><span>FINANCIAL METRICS</span><p>Latest fiscal year</p></th>
           {ordered.map(row => <th key={row.symbol} scope="col" data-company={row.symbol}>
             <div className="scorecard-company">
-              {onNavigate ? <button className="scorecard-symbol" onClick={() => onNavigate('stocks', row.symbol)} title={`Open ${row.symbol} in Stocks`}>{row.symbol}<span aria-hidden="true"> ↗</span></button> : <span className="scorecard-symbol">{row.symbol}</span>}
+              {onNavigate ? <button className="scorecard-symbol" data-symbol={row.symbol} onClick={() => onNavigate('stocks', row.symbol)} title={`Open ${row.symbol} in Stocks`}>{row.symbol}<span aria-hidden="true"> ↗</span></button> : <span className="scorecard-symbol" data-symbol={row.symbol}>{row.symbol}</span>}
               <span className="scorecard-company-name" title={row.name}>{row.name}</span>
               <span className="scorecard-company-sector" title={row.sector}>{row.sector || 'Sector unavailable'}</span>
               <span className="scorecard-fiscal">FY {row.fiscalEnd ?? 'unavailable'}</span>

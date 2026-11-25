@@ -10,6 +10,9 @@ import { TopBarAgent } from './TopBarAgent'
 
 interface TabBarProps {
   onOpenPicker: () => void
+  canGoBack?: boolean
+  canGoForward?: boolean
+  onStepHistory?: (direction: -1 | 1) => void
   onReload: () => void
   reloadProgress: ReloadProgress | null
   clockCountry: string
@@ -23,6 +26,9 @@ interface TabBarProps {
 
 export function TabBar({
   onOpenPicker,
+  canGoBack = false,
+  canGoForward = false,
+  onStepHistory,
   onReload,
   reloadProgress,
   clockCountry,
@@ -53,6 +59,7 @@ export function TabBar({
       {demo && <span className="shrink-0 whitespace-nowrap text-2xs text-warn">Demo data</span>}
       <McpActivity />
       <TopBarAgent available={agentChatAvailable} />
+      {onStepHistory ? <HistoryButtons isMac={isMac} canGoBack={canGoBack} canGoForward={canGoForward} onStep={onStepHistory} /> : null}
       <button type="button" onClick={onOpenPicker}
         className={`terminal-page-picker no-drag flex shrink-0 items-center gap-4 border border-border-strong px-3 py-2 text-2xs text-text-muted hover:bg-surface-hover ${isMac ? 'rounded-lg bg-surface-raised' : 'rounded'}`}>
         Find a page <kbd className="terminal-picker-hint num">{isMac ? '⌘ K' : 'Ctrl K'}</kbd>
@@ -85,6 +92,23 @@ export function TabBar({
         className={`no-drag h-9 w-28 shrink-0 whitespace-nowrap border border-border-strong bg-surface-raised text-2xs text-text enabled:hover:bg-surface-hover ${isMac ? 'rounded-lg' : ''}`} />
 
       {!isMac ? <WindowControls /> : null}
+    </div>
+  )
+}
+
+function HistoryButtons({ isMac, canGoBack, canGoForward, onStep }: {
+  isMac: boolean
+  canGoBack: boolean
+  canGoForward: boolean
+  onStep: (direction: -1 | 1) => void
+}) {
+  const button = `no-drag flex h-9 w-8 items-center justify-center border border-border-strong bg-surface-raised text-xs text-text-muted enabled:hover:bg-surface-hover enabled:hover:text-text disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-accent-hover ${isMac ? 'rounded-lg' : 'rounded'}`
+  return (
+    <div className="flex shrink-0 items-center gap-1" role="group" aria-label="Page history">
+      <button type="button" className={button} disabled={!canGoBack} onClick={() => onStep(-1)}
+        aria-label="Back" title={`Back (${isMac ? '⌘[' : 'Alt+←'})`}>←</button>
+      <button type="button" className={button} disabled={!canGoForward} onClick={() => onStep(1)}
+        aria-label="Forward" title={`Forward (${isMac ? '⌘]' : 'Alt+→'})`}>→</button>
     </div>
   )
 }

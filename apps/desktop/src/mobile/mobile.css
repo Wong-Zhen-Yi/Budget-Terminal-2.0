@@ -71,6 +71,8 @@
   margin-top: 0;
 }
 [data-terminal-mobile] .workspace-pages button { flex: none; }
+/* Scrolling the active pill into view leaves room for the edge fade, so it is never dimmed. */
+[data-terminal-mobile] :is(.workspace-pages, [role='tablist'], .mobile-tab-strip) { scroll-padding-inline: 32px; }
 [data-terminal-mobile] [data-terminal-content] {
   overflow: hidden auto;
   overscroll-behavior: none contain;
@@ -267,3 +269,81 @@
   scrollbar-width: none;
 }
 [data-terminal-mobile] .news-toolbar-filters > button { flex: none; }
+
+/* Phone browsers: a tap acts at once instead of waiting to see if it is a double-tap zoom.
+   Pinch zoom and scrolling still work. Zero specificity, so charts that claim gestures win. */
+:where([data-terminal-mobile]) :where(*) { touch-action: manipulation; }
+
+.mobile-topbar .mobile-back-button { flex: none; padding: 0; }
+
+/* Headings that repeat the page name already shown in the header. */
+[data-terminal-mobile] [data-page-id] [data-mobile-repeat] { display: none; }
+
+/* A sideways scroller fades at each edge that has more to show. With frozen columns, the
+   left fade starts where they end, so the ticker stays fully visible. */
+[data-terminal-mobile] [data-mobile-more='end'] {
+  -webkit-mask-image: linear-gradient(to left, transparent, #000 28px);
+  mask-image: linear-gradient(to left, transparent, #000 28px);
+}
+[data-terminal-mobile] [data-mobile-more='start'] {
+  -webkit-mask-image: linear-gradient(to right, #000 var(--freeze-width, 0px), transparent var(--freeze-width, 0px), #000 calc(var(--freeze-width, 0px) + 28px));
+  mask-image: linear-gradient(to right, #000 var(--freeze-width, 0px), transparent var(--freeze-width, 0px), #000 calc(var(--freeze-width, 0px) + 28px));
+}
+[data-terminal-mobile] [data-mobile-more='both'] {
+  -webkit-mask-image: linear-gradient(to right, #000 var(--freeze-width, 0px), transparent var(--freeze-width, 0px), #000 calc(var(--freeze-width, 0px) + 28px), #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, #000 var(--freeze-width, 0px), transparent var(--freeze-width, 0px), #000 calc(var(--freeze-width, 0px) + 28px), #000 calc(100% - 28px), transparent);
+}
+
+/* Wide tables keep their ticker or name column (and a rank column before it) in place. */
+[data-terminal-mobile] table[data-mobile-freeze] :is(th, td):nth-child(1),
+[data-terminal-mobile] table:is([data-mobile-freeze='2'], [data-mobile-freeze='3']) :is(th, td):nth-child(2),
+[data-terminal-mobile] table[data-mobile-freeze='3'] :is(th, td):nth-child(3) {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background-color: var(--freeze-bg);
+}
+[data-terminal-mobile] table:is([data-mobile-freeze='2'], [data-mobile-freeze='3']) :is(th, td):nth-child(2) { left: var(--freeze-left-2); }
+[data-terminal-mobile] table[data-mobile-freeze='3'] :is(th, td):nth-child(3) { left: var(--freeze-left-3); }
+[data-terminal-mobile] table[data-mobile-freeze] th:is(:nth-child(1), :nth-child(2), :nth-child(3)) { z-index: 2; background-color: var(--freeze-head-bg); }
+[data-terminal-mobile] table[data-mobile-freeze='1'] :is(th, td):nth-child(2),
+[data-terminal-mobile] table[data-mobile-freeze='2'] :is(th, td):nth-child(3),
+[data-terminal-mobile] table[data-mobile-freeze='3'] :is(th, td):nth-child(4) { position: static; }
+[data-terminal-mobile] :is([data-mobile-more='start'], [data-mobile-more='both']) table[data-mobile-freeze='1'] :is(th, td):nth-child(1),
+[data-terminal-mobile] :is([data-mobile-more='start'], [data-mobile-more='both']) table[data-mobile-freeze='2'] :is(th, td):nth-child(2),
+[data-terminal-mobile] :is([data-mobile-more='start'], [data-mobile-more='both']) table[data-mobile-freeze='3'] :is(th, td):nth-child(3) {
+  box-shadow: inset -1px 0 0 var(--color-border-strong);
+}
+
+@media (pointer: coarse), (max-width: 600px), (orientation: landscape) and (max-height: 600px) and (max-width: 1050px) {
+  /* Finger-sized controls (44 CSS px, Apple's minimum). Table cells and lists keep their row height. */
+  [data-terminal-mobile] [data-page-id] :is(button, [role='tab'], summary, select, input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'])):not(:is(td, th, li, svg, .recharts-wrapper) *) {
+    min-height: 44px;
+  }
+
+  /* The page list grows with the page instead of scrolling inside it; rows carry their own move buttons. */
+  [data-terminal-mobile] .settings-visible-pages { max-height: none; overflow: visible; }
+  [data-terminal-mobile] .settings-visible-pages [role='button'] { height: 44px; }
+  [data-terminal-mobile] .settings-row-move { display: flex; gap: 4px; margin-left: auto; }
+  [data-terminal-mobile] .settings-row-move button {
+    width: 44px;
+    height: 36px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 6px;
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+    font-size: 16px;
+  }
+  [data-terminal-mobile] .settings-row-move button:disabled { opacity: .4; }
+
+  /* Positions size to their rows, so the sideways scrollbar sits under the last one. */
+  [data-terminal-mobile] .portfolio-workspace > .terminal-panel:has(table) { flex: none; min-height: 0; }
+
+  /* Before a ticker is loaded, the hint sits under the controls rather than a screen below. */
+  [data-terminal-mobile] [data-page-id='options'] .options-summary-empty { display: none; }
+  [data-terminal-mobile] [data-page-id='options'] .options-summary-empty + p { white-space: normal; }
+
+  /* Keep the ticker whole; the company name gives way instead. */
+  [data-terminal-mobile] .dashboard-price-chart-instrument { min-width: 0; }
+  [data-terminal-mobile] .dashboard-price-chart-instrument h2 { flex: none; overflow-wrap: normal; white-space: nowrap; }
+}

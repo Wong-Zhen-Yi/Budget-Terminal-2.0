@@ -630,7 +630,7 @@ function SummaryGrid({
         {controls}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className={`min-h-0 flex-1 overflow-auto ${buckets.length ? '' : 'options-summary-empty'}`}>
         <div
           className="grid gap-2"
           style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}

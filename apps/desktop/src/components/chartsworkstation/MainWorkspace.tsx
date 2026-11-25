@@ -288,7 +288,7 @@ function SymbolList({ title, symbols, active, onSelect, onRemove, addButton }: {
         <ul className="divide-y divide-border">
           {symbols.map((symbol) => (
             <li key={symbol} className={`flex h-8 items-stretch ${active === symbol ? 'bg-accent-dim' : 'hover:bg-surface-hover'}`}>
-              <button type="button" aria-current={active === symbol ? 'true' : undefined} className={`min-w-0 flex-1 truncate border-l-2 px-2 text-left text-[12px] font-semibold focus-visible:outline-accent ${active === symbol ? 'border-accent text-text' : 'border-transparent text-text-muted hover:text-text'}`} onClick={() => onSelect(symbol)}>{symbol}</button>
+              <button type="button" data-symbol={symbol} aria-current={active === symbol ? 'true' : undefined} className={`min-w-0 flex-1 truncate border-l-2 px-2 text-left text-[12px] font-semibold focus-visible:outline-accent ${active === symbol ? 'border-accent text-text' : 'border-transparent text-text-muted hover:text-text'}`} onClick={() => onSelect(symbol)}>{symbol}</button>
               {onRemove ? <button type="button" aria-label={`Remove ${symbol}`} className="w-8 text-text-muted hover:text-down" onClick={() => onRemove(symbol)}>×</button> : null}
             </li>
           ))}

@@ -72,6 +72,12 @@ try {
   assert.equal(html.status, 200)
   assert.match(html.body, /data-terminal-mobile/)
   assert.match(html.csp ?? '', /frame-ancestors 'none'/)
+  // Add to Home Screen opens the workspace full screen.
+  assert.match(html.body, /rel="manifest" href="\.?\/manifest\.webmanifest"/)
+  const manifest = await send('/manifest.webmanifest', headers)
+  assert.equal(manifest.status, 200)
+  assert.deepEqual((({ display, start_url, scope }) => ({ display, start_url, scope }))(JSON.parse(manifest.body)), { display: 'standalone', start_url: '/', scope: '/' })
+  assert.equal((await send('/manifest.webmanifest', { ...headers, 'tailscale-user-login': 'another-user' })).status, 403)
   assert.equal((await send('/index.html', headers)).status, 404)
   assert.equal((await send('/%2e%2e/package.json', headers)).status, 404)
   assert.equal((await send('/api/call/test:echo', { ...post, Origin: 'https://foreign.test' }, 'POST', '[]')).status, 403)

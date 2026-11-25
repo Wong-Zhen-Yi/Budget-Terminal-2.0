@@ -7,17 +7,17 @@ export async function loadRenderer(
   window: Pick<BrowserWindow, 'loadFile' | 'loadURL' | 'isDestroyed'>,
   file: string,
   devServerUrl?: string,
-  { attempts = 20, retryDelayMs = 250 } = {},
+  { attempts = 20, retryDelayMs = 250, hash }: { attempts?: number; retryDelayMs?: number; hash?: string } = {},
 ): Promise<void> {
   if (devServerUrl) {
-    await window.loadURL(devServerUrl)
+    await window.loadURL(hash ? `${devServerUrl.replace(/#.*$/, '')}#${hash}` : devServerUrl)
     return
   }
   for (let attempt = 0; attempt < attempts; attempt++) {
     if (window.isDestroyed()) return
     try {
       await access(file)
-      await window.loadFile(file)
+      await window.loadFile(file, hash ? { hash } : undefined)
       return
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code

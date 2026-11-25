@@ -77,3 +77,40 @@ export function startupPages(active: string, favorites: readonly string[], recen
   const implemented = new Set(TABS.filter((tab) => tab.implemented).map((tab) => tab.id))
   return [...new Set([active, ...favorites, ...recent, ...implemented])].filter((id) => implemented.has(id))
 }
+
+/** In-session page history behind the back/forward controls. The last entry of each stack is the next step. */
+export interface PageHistory {
+  back: string[]
+  forward: string[]
+}
+
+export const PAGE_HISTORY_LIMIT = 50
+
+export const EMPTY_PAGE_HISTORY: PageHistory = { back: [], forward: [] }
+
+/** Leaving `from` for a new page: remember it and drop the forward branch. */
+export function pushPageHistory(history: PageHistory, from: string): PageHistory {
+  if (history.back.at(-1) === from) return { back: history.back, forward: [] }
+  return { back: [...history.back, from].slice(-PAGE_HISTORY_LIMIT), forward: [] }
+}
+
+/**
+ * Step back (-1) or forward (1) from `current`, skipping pages that are no longer
+ * available (hidden, disabled Labs) and repeats of the current page.
+ */
+export function stepPageHistory(history: PageHistory, current: string, direction: -1 | 1,
+  available: (id: string) => boolean): { page: string; history: PageHistory } | undefined {
+  const source = [...(direction < 0 ? history.back : history.forward)]
+  while (source.length) {
+    const page = source.pop()!
+    if (page === current || !available(page)) continue
+    const other = [...(direction < 0 ? history.forward : history.back), current].slice(-PAGE_HISTORY_LIMIT)
+    return { page, history: direction < 0 ? { back: source, forward: other } : { back: other, forward: source } }
+  }
+  return undefined
+}
+
+/** Favorites in sidebar order that Ctrl/⌘+1…9 open. */
+export function favoriteShortcutPages(favorites: readonly string[], tabs: readonly { id: string; implemented: boolean }[]): string[] {
+  return favorites.filter(id => tabs.some(tab => tab.id === id && tab.implemented)).slice(0, 9)
+}

@@ -16,6 +16,9 @@ import {
 import { manageQueryMemory, QUERY_IDLE_MS } from './api/queryMemory'
 import { registerSnapshot } from './api/snapshotHealth'
 import { isMobileTerminal } from './mobile/client'
+import { ChartWindow } from './components/chartwindow/ChartWindow'
+import { chartWindowSymbol } from './lib/chartWindow'
+import { useChartsStore } from './stores/charts'
 import './styles/theme.css'
 
 const queryClient = new QueryClient({
@@ -51,7 +54,13 @@ if (import.meta.hot) import.meta.hot.dispose(stopMcpChanges)
 const stopLiveStatus = api.onLiveStatusChanged ? subscribeLiveStatus(queryClient, api.onLiveStatusChanged) : undefined
 if (import.meta.hot) import.meta.hot.dispose(() => stopLiveStatus?.())
 
+// A pop-out chart window opens on its own symbol and keeps no renderer cache on disk:
+// the main window owns that cache, and a second writer would replace it.
+const chartSymbol = chartWindowSymbol()
+if (chartSymbol) useChartsStore.getState().setSymbol(chartSymbol)
+
 export default function TerminalRoot() {
+  if (chartSymbol) return <StrictMode><QueryClientProvider client={queryClient}><ChartWindow /></QueryClientProvider></StrictMode>
   if (isMobileTerminal()) return <StrictMode><QueryClientProvider client={queryClient}><App /></QueryClientProvider></StrictMode>
   return (
     <StrictMode>

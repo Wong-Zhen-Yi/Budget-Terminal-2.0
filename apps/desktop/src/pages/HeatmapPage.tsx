@@ -20,6 +20,7 @@ import { useHeatmap, useHeatmapProgress } from '@/api/heatmapQueries'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { IndexHeatmap } from '@/components/heatmap/IndexHeatmap'
 import { Button } from '@/components/ui/Button'
+import { pointerText } from '@/mobile/touch'
 
 /**
  * The Heatmap page, ported from `SpyHeatmapMixin.init_page17`.
@@ -247,7 +248,7 @@ export function HeatmapPage({
           {detail.changeText}
         </span>
         <span className="ml-auto text-text-dim">
-          Scroll to zoom, drag to pan, double-click a tile to open it in Charts.
+          {pointerText('Scroll to zoom, drag to pan, double-click a tile to open it in Charts.', 'Pinch to zoom, drag to pan, double-tap a tile to open it in Charts.')}
         </span>
       </div>
     </div>

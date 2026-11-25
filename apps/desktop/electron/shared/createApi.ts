@@ -165,6 +165,7 @@ export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS
     exportArticlesPdf: (request) => invoke(CHANNELS.exportArticlesPdf, request),
     writeClipboard: (contents) => invoke(CHANNELS.writeClipboard, contents),
     windowControl: (action) => invoke(CHANNELS.windowControl, action),
+    openChartWindow: (symbol) => invoke(CHANNELS.openChartWindow, symbol),
     onCacheFlush: (listener) => subscribe(CHANNELS.flushRendererCache, () => {
       void Promise.resolve().then(listener)
         .catch(error => console.warn('Renderer cache flush failed:', error))

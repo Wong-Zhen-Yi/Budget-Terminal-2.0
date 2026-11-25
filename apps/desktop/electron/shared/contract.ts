@@ -3698,6 +3698,7 @@ export const CHANNELS = {
   exportArticlesPdf: 'shell:exportArticlesPdf',
   writeClipboard: 'shell:writeClipboard',
   windowControl: 'window:control',
+  openChartWindow: 'window:open-chart',
   flushRendererCache: 'cache:flush-renderer',
   rendererCacheFlushed: 'cache:renderer-flushed',
 } as const
@@ -3971,6 +3972,8 @@ export interface DesktopApi {
   exportArticlesPdf(request: ArticlePdfRequest): Promise<Envelope<ArticlePdfResult>>
   writeClipboard(contents: string): Promise<void>
   windowControl(action: WindowAction): Promise<void>
+  /** Open a pop-out chart window for a symbol (desktop only). */
+  openChartWindow(symbol: string): Promise<void>
   onCacheFlush(listener: () => Promise<void>): () => void
   onPortfolioChanged(listener: () => void): () => void
 }

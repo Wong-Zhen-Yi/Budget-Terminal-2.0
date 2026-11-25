@@ -5,6 +5,7 @@ import { buildDonut, etfWeight, filterHoldings } from '@shared/etf'
 import { Donut } from '@/components/charts/Donut'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { SearchInput } from '@/components/ui/SearchInput'
+import { pointerText } from '@/mobile/touch'
 
 export function HoldingsTab({ holdings, sectors, filter, onFilterChange, onOpenSymbol, loading }: {
   holdings: EtfHoldingRow[]
@@ -26,8 +27,8 @@ export function HoldingsTab({ holdings, sectors, filter, onFilterChange, onOpenS
     <div className="etf-holdings-layout">
       <section className="etf-holdings-table">
         <div className="etf-table-tools"><SearchInput aria-label="Filter holdings by ticker or name" value={filter} onChange={onFilterChange} placeholder="Find a holding…" /><span>{rows.length} / {holdings.length} rows</span></div>
-        <DataTable columns={columns} rows={rows} layout="fixed" minWidth="400px" rowKey={(row, index) => `${row.symbol}-${index}`} onRowDoubleClick={row => onOpenSymbol(row.symbol)} defaultSort={{ key: 'weight', direction: 'desc' }} empty={loading ? 'Loading published holdings…' : 'No holdings available. Try another ETF or refresh.'} />
-        <p className="etf-table-note">Double-click a holding to open its chart. Allocation bars are scaled to 10%.</p>
+        <DataTable columns={columns} rows={rows} layout="fixed" minWidth="400px" rowKey={(row, index) => `${row.symbol}-${index}`} rowSymbol={(row) => row.symbol} onRowDoubleClick={row => onOpenSymbol(row.symbol)} defaultSort={{ key: 'weight', direction: 'desc' }} empty={loading ? 'Loading published holdings…' : 'No holdings available. Try another ETF or refresh.'} />
+        <p className="etf-table-note">{pointerText('Double-click', 'Double-tap')} a holding to open its chart. Allocation bars are scaled to 10%.</p>
       </section>
       <aside className="etf-allocation-panel">
         <header><span className="etf-eyebrow">Portfolio composition</span><h3>Holdings allocation</h3></header>

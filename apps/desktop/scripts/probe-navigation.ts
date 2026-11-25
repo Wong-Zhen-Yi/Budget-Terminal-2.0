@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createRequire } from 'node:module'
 import { build } from 'esbuild'
-import { adjacentPage, DEFAULT_TAB_ID, pagesInVisualOrder, startupPages, workspaceFor } from '../electron/shared/navigation.js'
+import { adjacentPage, DEFAULT_TAB_ID, EMPTY_PAGE_HISTORY, favoriteShortcutPages, PAGE_HISTORY_LIMIT, pagesInVisualOrder, pushPageHistory, startupPages, stepPageHistory, workspaceFor } from '../electron/shared/navigation.js'
 import { FOCUS_DASHBOARD_TAB_ID, TABS } from '../electron/shared/contract.js'
 
 assert.equal(workspaceFor('dashboard-2')?.id, 'overview')
@@ -46,6 +46,38 @@ assert.equal(adjacentPage([], 'news', 1), undefined)
 assert.equal(adjacentPage(visualOrder, 'hidden', 1), 'news')
 assert(!pagesInVisualOrder(interleaved.map(tab => ({ ...tab, implemented: tab.id !== 'charts' }))).some(tab => tab.id === 'charts'))
 assert(!pagesInVisualOrder(interleaved.filter(tab => tab.id !== 'heatmap')).some(tab => tab.id === 'heatmap'))
+
+// Back/forward history: a browser-style stack that skips pages hidden since the visit.
+{
+  const all = () => true
+  let history = EMPTY_PAGE_HISTORY
+  for (const [from] of [['news'], ['charts'], ['stocks']]) history = pushPageHistory(history, from)
+  assert.deepEqual(history, { back: ['news', 'charts', 'stocks'], forward: [] })
+  const back = stepPageHistory(history, 'portfolio', -1, all)!
+  assert.equal(back.page, 'stocks')
+  assert.deepEqual(back.history, { back: ['news', 'charts'], forward: ['portfolio'] })
+  const forward = stepPageHistory(back.history, 'stocks', 1, all)!
+  assert.equal(forward.page, 'portfolio', 'Forward must return to the page Back left')
+  assert.deepEqual(forward.history, { back: ['news', 'charts', 'stocks'], forward: [] })
+  assert.deepEqual(pushPageHistory(back.history, 'stocks').forward, [], 'A new visit drops the forward branch')
+  const skipped = stepPageHistory(history, 'portfolio', -1, id => id !== 'stocks')!
+  assert.equal(skipped.page, 'charts', 'Back must skip a page that is no longer visible')
+  assert.deepEqual(skipped.history.back, ['news'])
+  assert.equal(stepPageHistory(history, 'portfolio', 1, all), undefined, 'Forward is empty after a new visit')
+  assert.equal(stepPageHistory({ back: ['news'], forward: [] }, 'news', -1, all), undefined, 'Back never lands on the current page')
+  assert.deepEqual(pushPageHistory({ back: ['news'], forward: ['x'] }, 'news'), { back: ['news'], forward: [] })
+  let long = EMPTY_PAGE_HISTORY
+  for (let index = 0; index < PAGE_HISTORY_LIMIT + 20; index++) long = pushPageHistory(long, `page-${index}`)
+  assert.equal(long.back.length, PAGE_HISTORY_LIMIT)
+  assert.equal(long.back[0], 'page-20', 'History keeps the most recent pages')
+}
+
+// Ctrl/⌘+1…9 follow the sidebar's favorites, skipping hidden or unavailable pages.
+{
+  const tabs = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k'].map(id => ({ id, implemented: id !== 'c' }))
+  assert.deepEqual(favoriteShortcutPages(['c', 'a', 'missing', 'b'], tabs), ['a', 'b'])
+  assert.equal(favoriteShortcutPages(tabs.map(tab => tab.id), tabs).length, 9)
+}
 
 // Exercise the actual page host in Chromium with synthetic data and isolated storage.
 const require = createRequire(import.meta.url)

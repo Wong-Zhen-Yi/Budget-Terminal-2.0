@@ -260,7 +260,7 @@ export function UpDownPage({
         <DataTable
           columns={columns}
           rows={rows}
-          rowKey={(row) => row.ticker}
+          rowKey={(row) => row.ticker} rowSymbol={(row) => row.ticker}
           showIndex
           layout="fixed"
           defaultSort={{ key: 'daysUp', direction: 'desc' }}

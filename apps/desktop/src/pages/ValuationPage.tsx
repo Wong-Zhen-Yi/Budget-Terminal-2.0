@@ -881,7 +881,7 @@ export function ValuationPage({
             >
               <DataTable
                 rows={payload?.peerRows ?? []}
-                rowKey={(row) => row.ticker}
+                rowKey={(row) => row.ticker} rowSymbol={(row) => row.ticker}
                 columns={peerColumns}
                 rowClassName={(row) => (row.source === 'Loaded' ? 'text-text' : '')}
                 empty="Load a ticker to rank its peers"
