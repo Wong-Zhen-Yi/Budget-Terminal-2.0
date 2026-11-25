@@ -9,7 +9,8 @@ const app = defineApp({ env: {
   AUTH_GOOGLE_ID: v.string(), AUTH_GOOGLE_SECRET: v.string(),
 } })
 app.use(auth)
-// GitHub's exact redirect registration must include this prefix plus /callback.
+// GitHub sign-in was removed. The component stays mounted, with no sign-in entry point, so the
+// GitHub-ID-to-account links of existing accounts survive deploys and could be restored later.
 app.use(authGithub, {
   httpPrefix: '/api/auth/callback/github',
   env: { CLIENT_ID: app.env.AUTH_GITHUB_ID, CLIENT_SECRET: app.env.AUTH_GITHUB_SECRET },

@@ -494,7 +494,7 @@ The current comparison loads at startup, including when Scorecard is unvisited.
 
 | Guide | What's inside |
 | :--- | :--- |
-| [Optional Convex sync](docs/convex-sync.md) | Cross-device snapshot sync, GitHub browser sign-in, offline local saves, conflict recovery and deployment. |
+| [Optional Convex sync](docs/convex-sync.md) | Cross-device snapshot sync, Google browser sign-in, offline local saves, conflict recovery and deployment. |
 | [Data, startup & backups](docs/user-guide.md) | All-page readiness, feed health, saved-data locations, migration, and backup behavior. |
 | [Public data routing](docs/public-data-routing.md) | Hyperliquid/CoinGecko crypto quotes, World Bank/IMF annual context, and provider budgets. |
 | [Browser](docs/browser.md) | Embedded Chromium tabs, source reading, research controls, and local login profiles. |

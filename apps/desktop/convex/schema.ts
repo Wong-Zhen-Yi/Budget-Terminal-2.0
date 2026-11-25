@@ -7,7 +7,7 @@ export default defineSchema({
     .index('by_key', ['key']).index('by_window', ['windowStart']),
   oauthRequests: defineTable({ stateHash: v.string(), purpose: v.union(v.literal('signIn'), v.literal('revokeOthers')),
     expiresAt: v.number(), userId: v.optional(v.id('users')), sessionId: v.optional(v.string()),
-    // Rows created before Google sign-in have no provider and belong to GitHub.
+    // Rows created before Google sign-in have no provider and belong to the retired GitHub sign-in.
     provider: v.optional(v.union(v.literal('github'), v.literal('google'))) })
     .index('by_state', ['stateHash']).index('by_expiry', ['expiresAt'])
     .index('by_purpose_expiry', ['purpose', 'expiresAt'])

@@ -72,6 +72,7 @@ rem HOOD Focus quarterly earnings charts, headline metrics and MCP schemas rebui
 rem Anthropic Focus research, source update checks and MCP tools rebuild through the shared launcher.
 rem GOOGL Focus, quarterly SEC drivers and MCP schemas rebuild through the shared launch path.
 rem News reader and scoped clipboard exports rebuild through the shared launcher.
+rem The shared build uses Google-only cloud sign-in and retires saved GitHub sessions.
 rem Finnhub streaming-first refresh, visible-stock priorities and idle/session savings rebuild through the shared launcher.
 rem Settings dashboard keeps the five slowest pages stable during startup updates; rebuilt through the shared launcher.
 rem Shared snapshot validation, account quotas and typed cloud contracts rebuild through the shared launcher; deploy backend policies separately.

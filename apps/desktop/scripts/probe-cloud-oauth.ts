@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { request, createServer } from 'node:http'
-import { beginGitHubSignIn, createOAuthCallback, GitHubSetupError } from '../electron/services/cloudSyncOAuth.js'
-import { DESKTOP_AUTH_PORTS, convexDeploymentUrl, desktopOAuthRedirect, githubSignInUrl, googleSignInUrl, providerSignInUrl } from '../electron/shared/cloudOAuth.js'
+import { beginOAuthSignIn, createOAuthCallback, OAuthSetupError } from '../electron/services/cloudSyncOAuth.js'
+import { DESKTOP_AUTH_PORTS, convexDeploymentUrl, desktopOAuthRedirect, googleSignInUrl, OAUTH_PROVIDER_LABELS } from '../electron/shared/cloudOAuth.js'
 
 const path = `/convex-sync-callback/${'a'.repeat(64)}`
 assert.equal(desktopOAuthRedirect(`http://127.0.0.1:34567${path}`), `http://127.0.0.1:34567${path}`)
@@ -12,28 +12,25 @@ for (const invalid of [
 ]) assert.throws(() => desktopOAuthRedirect(invalid))
 const deployment = 'https://fixture.convex.cloud'
 const state = 'fixture-state'
-const entry = (site = 'fixture.convex.site') => `https://github.com/login/oauth/authorize?client_id=fixture&state=${state}&redirect_uri=${encodeURIComponent(`https://${site}/api/auth/callback/github/callback`)}&code_challenge=fixture-challenge&code_challenge_method=S256`
+// GitHub sign-in was removed. Its authorization URL is never opened, even when correctly bound to this deployment.
+const githubEntry = `https://github.com/login/oauth/authorize?client_id=fixture&state=${state}&redirect_uri=${encodeURIComponent('https://fixture.convex.site/api/auth/callback/github/callback')}&code_challenge=fixture-challenge&code_challenge_method=S256`
+assert.deepEqual(Object.keys(OAUTH_PROVIDER_LABELS), ['google'], 'Google is the only sign-in provider')
 assert.equal(convexDeploymentUrl(' https://fixture.ap-southeast-2.convex.cloud/ '), 'https://fixture.ap-southeast-2.convex.cloud')
-assert.equal(githubSignInUrl('https://fixture.ap-southeast-2.convex.cloud', entry('fixture.ap-southeast-2.convex.site'), state), entry('fixture.ap-southeast-2.convex.site'))
 for (const invalid of ['http://fixture.convex.cloud', 'https://fixture.convex.cloud.evil.invalid',
   'https://user:secret@fixture.convex.cloud', 'https://fixture.convex.cloud:8443',
   'https://fixture.convex.cloud/other', 'https://fixture.convex.cloud?token=value']) assert.throws(() => convexDeploymentUrl(invalid))
-assert.equal(githubSignInUrl(deployment, entry(), state), entry())
-for (const invalid of ['https://example.invalid/login/oauth/authorize', 'javascript:alert(1)',
-  entry().replace('github.com/', 'github.com.evil.invalid/'), entry().replace('github.com/', 'user@github.com/'),
-  entry().replace('fixture-state', 'other-state'), entry().replace('client_id=fixture', 'client_id=undefined'),
-  entry('other.convex.site'), `${entry()}&state=duplicate`, `${entry()}&redirect_uri=https://example.invalid`,
-]) assert.throws(() => githubSignInUrl(deployment, invalid, state))
-// Google authorization is bound to Google's host, this deployment's Google callback and the same state/PKCE rules.
-const googleEntry = (site = 'fixture.convex.site') => `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=fixture.apps.googleusercontent.com&redirect_uri=${encodeURIComponent(`https://${site}/api/auth/callback/google/callback`)}&state=${state}&code_challenge=fixture-challenge&code_challenge_method=S256&scope=openid+email+profile`
-assert.equal(googleSignInUrl(deployment, googleEntry(), state), googleEntry())
-assert.equal(googleSignInUrl('https://fixture.ap-southeast-2.convex.cloud', googleEntry('fixture.ap-southeast-2.convex.site'), state), googleEntry('fixture.ap-southeast-2.convex.site'))
-for (const invalid of [entry(), googleEntry().replace('accounts.google.com/', 'accounts.google.com.evil.invalid/'),
-  googleEntry().replace('/o/oauth2/v2/auth', '/o/oauth2/auth'), googleEntry().replace('fixture-state', 'other-state'),
-  googleEntry().replace('callback%2Fgoogle%2F', 'callback%2Fgithub%2F'), googleEntry('other.convex.site'),
-  googleEntry().replace('code_challenge_method=S256', 'code_challenge_method=plain'), `${googleEntry()}&state=duplicate`,
+// Google authorization is bound to Google's host, this deployment's Google callback and the state/PKCE rules.
+const entry = (site = 'fixture.convex.site') => `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=fixture.apps.googleusercontent.com&redirect_uri=${encodeURIComponent(`https://${site}/api/auth/callback/google/callback`)}&state=${state}&code_challenge=fixture-challenge&code_challenge_method=S256&scope=openid+email+profile`
+assert.equal(googleSignInUrl(deployment, entry(), state), entry())
+assert.equal(googleSignInUrl('https://fixture.ap-southeast-2.convex.cloud', entry('fixture.ap-southeast-2.convex.site'), state), entry('fixture.ap-southeast-2.convex.site'))
+for (const invalid of [githubEntry, 'https://example.invalid/o/oauth2/v2/auth', 'javascript:alert(1)',
+  entry().replace('accounts.google.com/', 'accounts.google.com.evil.invalid/'), entry().replace('accounts.google.com/', 'user@accounts.google.com/'),
+  entry().replace('/o/oauth2/v2/auth', '/o/oauth2/auth'), entry().replace('fixture-state', 'other-state'),
+  entry().replace('client_id=fixture.apps.googleusercontent.com', 'client_id=undefined'),
+  entry().replace('callback%2Fgoogle%2F', 'callback%2Fgithub%2F'), entry('other.convex.site'),
+  entry().replace('code_challenge_method=S256', 'code_challenge_method=plain'), `${entry()}&state=duplicate`,
+  `${entry()}&redirect_uri=https://example.invalid`,
 ]) assert.throws(() => googleSignInUrl(deployment, invalid, state))
-assert.throws(() => providerSignInUrl('github', deployment, googleEntry(), state), 'A Google URL is never accepted for a GitHub flow')
 
 const callback = await createOAuthCallback()
 try {
@@ -95,7 +92,7 @@ try {
 const tokens = { accessToken: 'fixture-token', refreshToken: 'fixture-refresh', userId: 'fixture-user', refreshTokenExpiresAt: Date.now() + 60_000 }
 let callbackUrl = ''
 let completed = 0
-const flow = await beginGitHubSignIn(deployment, {
+const flow = await beginOAuthSignIn('google', deployment, {
   isConfigured: async () => true,
   startSignIn: async args => { callbackUrl = args.redirectTo; return { redirect: entry(), state } },
   completeSignIn: async args => {
@@ -111,14 +108,14 @@ const flow = await beginGitHubSignIn(deployment, {
 assert.deepEqual(await flow.result, { tokens })
 assert.equal(completed, 1)
 let unsafeOpened = false
-await assert.rejects(beginGitHubSignIn(deployment, {
+await assert.rejects(beginOAuthSignIn('google', deployment, {
   isConfigured: async () => true,
   startSignIn: async () => ({ redirect: 'https://example.invalid', state }),
   completeSignIn: async () => { throw Error('Must not redeem unsafe redirect') },
   openExternal: async () => { unsafeOpened = true },
 }))
 assert.equal(unsafeOpened, false)
-const pending = await beginGitHubSignIn(deployment, {
+const pending = await beginOAuthSignIn('google', deployment, {
   isConfigured: async () => true,
   startSignIn: async () => ({ redirect: entry(), state }),
   completeSignIn: async () => { throw Error('Cancelled flow must not redeem') }, openExternal: async () => {},
@@ -126,11 +123,11 @@ const pending = await beginGitHubSignIn(deployment, {
 pending.cancel()
 assert.deepEqual(await pending.result, { reason: 'cancelled' })
 let startedWithoutCredentials = false
-await assert.rejects(beginGitHubSignIn(deployment, {
+await assert.rejects(beginOAuthSignIn('google', deployment, {
   isConfigured: async () => false,
   startSignIn: async () => { startedWithoutCredentials = true; return { redirect: entry(), state } },
   completeSignIn: async () => { throw Error('Missing configuration') },
   openExternal: async () => { startedWithoutCredentials = true },
-}), GitHubSetupError)
+}), OAuthSetupError)
 assert.equal(startedWithoutCredentials, false)
-console.log('PASS: v2 GitHub state exchange, Google authorization URL binding, deployment-bound redirects, PKCE, loopback allowlist/port fallback, hostile callbacks, one-use listener, cancellation/expiry and no browser token exposure')
+console.log('PASS: v2 Google state exchange and authorization URL binding, GitHub URL rejection, deployment-bound redirects, PKCE, loopback allowlist/port fallback, hostile callbacks, one-use listener, cancellation/expiry and no browser token exposure')

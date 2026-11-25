@@ -87,7 +87,7 @@ MCP writes still save through local stores; optional sync observes those saved-d
 changes. No tools or permissions are added for authentication. See
 [Convex setup and account reconnection](convex-sync.md).
 
-Workspace ownership approval, public GitHub account display, keyring recovery and
+Workspace ownership approval, verified Google account display, keyring recovery and
 other-device sign-out are also desktop-only. Switching cloud accounts pauses sync
 until the user chooses an import or restore in Settings. MCP cannot approve that
 choice, inspect account profiles, or revoke sessions; existing tools, schemas and
@@ -494,4 +494,4 @@ The Focus Dashboard can show the first Economic observations while the full snap
 
 Use `budget_terminal_economic` with `{ "request": {} }` for the indicator rows, histories, source labels, dates, units and missing coverage. Use `budget_terminal_calendar_month` with the current year and month in US Eastern Time and `request.tickers: []` for the official release dates. The watch lists the next scheduled FOMC decision, CPI release, PCE inflation, jobs report and GDP report available from today through 60 days ahead. Existing market-research permission and stale/partial envelope metadata apply. Use screenshot `request.page: "macro"` for the page. Run `npm run build:mcp` and `npm run probe:mcp`, then reconnect MCP clients to load the updated descriptions. All double-click launchers rebuild through the shared path.
 
-Google and GitHub cloud sign-in, OAuth credentials and account/session controls remain desktop-only. Google sign-in adds no MCP tool or access to cloud credentials; provider setup is documented in `docs/convex-sync.md`.
+Google cloud sign-in, OAuth credentials and account/session controls remain desktop-only. Google sign-in adds no MCP tool or access to cloud credentials; provider setup is documented in `docs/convex-sync.md`.

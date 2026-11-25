@@ -332,7 +332,8 @@ try {
   await assert.rejects(read(ctx, {}))
   await assert.rejects(write(ctx, { expectedRevision: 0, payload: baseline }))
   const users = await import('../convex/users.js')
-  const createUser = (users.createGithubUser as unknown as { _handler: (ctx: unknown, args: unknown) => Promise<string> })._handler
+  assert(!Object.keys(users).some(name => /github/i.test(name)), 'GitHub sign-in user hooks were removed')
+  const createUser = (users.createGoogleUser as unknown as { _handler: (ctx: unknown, args: unknown) => Promise<string> })._handler
   let legacy: { userId: string } | null = { userId: 'original-owner' }
   let userExists = true
   let inserts = 0
@@ -344,32 +345,33 @@ try {
         const filters: Record<string, string> = {}
         const q = { eq: (key: string, value: string) => { filters[key] = value; return q } }
         select(q)
-        assert.deepEqual(filters, { provider: 'github', providerAccountId: 'verified-github-id' })
+        assert.deepEqual(filters, { provider: 'google', providerAccountId: 'verified-google-id' })
         return { unique: async () => legacy }
       } }
     },
     get: async (id: string) => { assert.equal(id, 'original-owner'); return userExists ? { _id: id } : null },
     insert: async (table: string, data: unknown) => { assert.equal(table, 'users'); assert.deepEqual(data, {}); inserts++; return 'new-owner' },
   } }
-  const verified = { method: { name: 'github', profile: { id: 'verified-github-id', login: 'fixture', email: 'untrusted@example.invalid', emailVerified: false } } }
-  assert.equal(await createUser(migrationCtx, verified), 'original-owner', 'V2 must retain the existing owner and snapshots by GitHub provider ID')
+  const verified = { method: { name: 'google', profile: { id: 'verified-google-id', email: 'untrusted@example.invalid', emailVerified: false } } }
+  assert.equal(await createUser(migrationCtx, verified), 'original-owner', 'V2 must retain the existing owner and snapshots by Google provider ID')
   assert.equal(inserts, 0, 'Migration must not duplicate an existing account')
   userExists = false
   await assert.rejects(createUser(migrationCtx, verified), 'A broken legacy link must not create a competing account')
   legacy = null
-  assert.equal(await createUser(migrationCtx, verified), 'new-owner', 'A new GitHub account must never link by matching email or login')
+  assert.equal(await createUser(migrationCtx, verified), 'new-owner', 'A new Google account must never link by matching email')
   assert.equal(inserts, 1)
   owner = 'owner-a'; revoked = false
   const account = (backend.account as unknown as { _handler: (ctx: unknown, args: unknown) => Promise<unknown> })._handler
   assert.deepEqual(await account({ ...ctx, db: { get: async () => ({ githubLogin: 'fixture', email: 'private@example.invalid' }) } }, {}),
-    { userId: 'owner-a', githubLogin: 'fixture' }, 'Account settings expose only the authenticated user ID and public login')
+    { userId: 'owner-a' }, 'A retired GitHub login is never exposed by account settings')
   assert.deepEqual(await account({ ...ctx, db: { get: async () => ({ googleEmail: 'verified@example.invalid', email: 'private@example.invalid', name: 'Private name' }) } }, {}),
-    { userId: 'owner-a', githubLogin: undefined, googleEmail: 'verified@example.invalid' }, 'Google account settings expose only the verified Google address, never other profile fields')
-  const updateProfile = (users.updateGithubProfile as unknown as { _handler: (ctx: unknown, args: unknown) => Promise<null> })._handler
-  await updateProfile({ db: { patch: async (id: string, fields: unknown) => {
-    assert.equal(id, 'new-owner')
-    assert.deepEqual(fields, { githubLogin: 'fixture' }, 'Only the public GitHub login is persisted by the sign-in hook')
-  } } }, { ...verified, userId: 'new-owner' })
+    { userId: 'owner-a', googleEmail: 'verified@example.invalid' }, 'Google account settings expose only the verified Google address, never other profile fields')
+  const updateProfile = (users.updateGoogleProfile as unknown as { _handler: (ctx: unknown, args: unknown) => Promise<null> })._handler
+  const patches: unknown[] = []
+  const profileCtx = { db: { patch: async (id: string, fields: unknown) => { assert.equal(id, 'new-owner'); patches.push(fields) } } }
+  await updateProfile(profileCtx, { ...verified, userId: 'new-owner' })
+  await updateProfile(profileCtx, { method: { name: 'google', profile: { id: 'verified-google-id', email: 'verified@example.invalid', emailVerified: true } }, userId: 'new-owner' })
+  assert.deepEqual(patches, [{ googleEmail: undefined }, { googleEmail: 'verified@example.invalid' }], 'Only a Google-verified address is persisted by the sign-in hook')
 
   console.log('PASS: shared strict snapshot validation, UTF-8 limits, large local backups, account write quotas/cooldown/reset/isolation, ownership migration, revoked sessions, offline timestamps, conflicts, retries and recovery')
 } finally {

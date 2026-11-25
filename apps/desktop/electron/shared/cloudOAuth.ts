@@ -13,17 +13,12 @@ export function desktopOAuthRedirect(value: string): string {
   return url.href
 }
 
-export type OAuthProvider = 'github' | 'google'
-export const OAUTH_PROVIDER_LABELS: Record<OAuthProvider, string> = { github: 'GitHub', google: 'Google' }
+export type OAuthProvider = 'google'
+export const OAUTH_PROVIDER_LABELS: Record<OAuthProvider, string> = { google: 'Google' }
 const AUTHORIZE_ENDPOINTS: Record<OAuthProvider, { host: string; path: string }> = {
-  github: { host: 'github.com', path: '/login/oauth/authorize' },
   google: { host: 'accounts.google.com', path: '/o/oauth2/v2/auth' },
 }
 
-/** The OS browser opens only GitHub, bound to this deployment and the initiating state. */
-export function githubSignInUrl(deploymentUrl: string, redirect: string, state: string): string {
-  return providerSignInUrl('github', deploymentUrl, redirect, state)
-}
 /** The OS browser opens only Google, bound to this deployment and the initiating state. */
 export function googleSignInUrl(deploymentUrl: string, redirect: string, state: string): string {
   return providerSignInUrl('google', deploymentUrl, redirect, state)

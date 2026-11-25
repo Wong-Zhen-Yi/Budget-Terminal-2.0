@@ -258,7 +258,7 @@ export function SettingsPage({
     {
       id: 'data', title: 'Data & storage', hint: 'Keep useful data close and your saved work protected.',
       cards: [
-        { id: 'cloud-sync', category: 'data', terms: 'cloud convex sync devices account offline github google browser sign in email backup conflicts', content: <CloudSyncPanel /> },
+        { id: 'cloud-sync', category: 'data', terms: 'cloud convex sync devices account offline google browser sign in email backup conflicts', content: <CloudSyncPanel /> },
         { id: 'cache', category: 'data', terms: 'cache retention disk memory snapshots market images previews limits startup', content: <CachePanel /> },
         { id: 'backups', category: 'data', column: 'secondary', terms: 'automatic backups saved data export import restore storage location portfolios cards finance', content:
           <UserDataPanel mode="backups" onRun={onRunMaintenance} busy={busy} sourcePath={holdingsPath}
