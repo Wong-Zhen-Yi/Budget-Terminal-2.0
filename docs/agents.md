@@ -2,6 +2,23 @@
 
 Live Agents status always updates the desktop conversation and controls, including during an intermittent Telegram failure. Telegram connection errors remain in **Agents > Telegram** instead of becoming a desktop chat query error or freezing an older transcript. Startup failures still appear in Settings, and failed startup status is retained so unvisited Agents pages can show the current connection details. This does not retry Telegram messages or screenshots.
 
+## Claude provider
+
+Agents can run on Codex (the default) or Claude. Choose **Provider** in the Agents header. The choice is saved locally and applies to chat, autonomous monitoring, tracker checks and Telegram research. Switching is blocked while a run, autonomous monitoring or a Telegram reply is in progress.
+
+Claude uses the Anthropic API with your own API key. Create one in the Claude Console under **API keys**, open **Agents → Controls → Get connected · Claude**, paste the key and select **Save key and connect**. The key is encrypted with Electron's OS-backed `safeStorage` in `claude-settings.bin` under the app's private user-data directory, like the Telegram token. It never reaches the renderer, chat history, logs or the agent; the renderer only learns whether a key is saved. Linux requires a real system keyring. **Remove saved key** deletes the file. Never paste a key into chat, commit it or put it in a launcher. Usage is billed to the key's Console workspace.
+
+The model picker lists Claude Opus 5.5 (default), Claude Sonnet 5.5, Claude Haiku 5.5 and Claude Fable 5.2, filtered by the models your key can use. **Thinking** sets Claude's effort level (Low to Maximum) with adaptive thinking. Claude Opus 5.5 defaults to Medium; raise it for long multi-step research.
+
+Claude uses the same Budget Terminal tools, permissions, approval dialogs, 80-tool and time limits, portfolio review flow, trackers and recovery checkpoints as Codex. Differences:
+
+- The most common Budget Terminal tools load up front. Claude loads the rest of the MCP catalog on demand with tool search, which keeps each request small.
+- Public web research uses the Claude API's web search and web fetch tools (basic variants on Haiku). It never uses the shared Browser session.
+- Claude reads attached images, including portfolio screenshots, but cannot generate or edit images. Use Codex for image generation.
+- On Opus, Sonnet and Fable, a declined request is retried automatically on a fallback model by the API. A request that is still declined ends the run with an explanation.
+
+Run `npm run probe:claude-agent` to check the Claude transport offline against a fake API.
+
 ## Telegram
 
 Open **Agents > Telegram** to connect a bot created with Telegram's **@BotFather** (`/newbot`). Start a private conversation with the bot first. Paste its token into the password field and enter your own numeric Telegram user ID as the private home chat ID. Save, use **Check private chat** to verify access without sending, then use **Send test message** to confirm delivery. Startup checks the configured private chat as well as the token. Delivery errors remain visible even while incoming polling succeeds, and explain rejected tokens, inaccessible chats, blocked bots and competing gateways. Never paste a token into agent chat, commit it, or put it in a launcher. The token and connection settings are encrypted with Electron's OS-backed `safeStorage` in `telegram-settings.bin` under the app's private user-data directory. Linux requires a real system keyring; plaintext fallback is refused.

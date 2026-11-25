@@ -3961,4 +3961,6 @@ export interface SavedDataChanged {
   portfolioMetadataOnly?: boolean
 }
 
-export interface McpStatus { available: boolean; connected?: boolean; active?: boolean; tools?: number; error?: string; diagnostics?: McpDiagnostics; setup?: { valid: boolean; message: string; configuration?: string; descriptorPath?: string } }
+export interface McpStatus { available: boolean; connected?: boolean; active?: boolean; tools?: number; error?: string; diagnostics?: McpDiagnostics; setup?: { valid: boolean; message: string; configuration?: string; descriptorPath?: string; clients?: McpClientSetup[] } }
+/** Token-free registration text for a specific MCP client. */
+export interface McpClientSetup { id: 'claude-code' | 'claude-desktop' | 'codex'; label: string; text: string; hint: string }

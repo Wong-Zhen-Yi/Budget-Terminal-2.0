@@ -6,6 +6,12 @@ import type { TelegramCommand, TelegramHistoryState, TelegramState } from './tel
 
 export interface AgentImage { name: string; dataUrl: string }
 
+/** The model runtime behind Agents chat, trackers, monitoring and Telegram research. */
+export type AgentProvider = 'codex' | 'claude'
+export const agentProviderLabels: Record<AgentProvider, string> = { codex: 'Codex', claude: 'Claude' }
+/** Claude API keys from the Claude Console. Only a saved/not-saved flag reaches the renderer. */
+export const claudeApiKeyPattern = /^sk-ant-[A-Za-z0-9_-]{16,400}$/
+
 export interface AgentMessage {
   run?: AgentRun
   images?: string[]
@@ -26,6 +32,8 @@ export interface AgentNavigation {
 export type AgentActivity = 'idle' | 'connecting' | 'thinking' | 'researching' | 'working' | 'responding' | 'generating' | 'done' | 'stopped' | 'error'
 
 export interface AgentsState extends AgentWorkspaceState {
+  provider?: AgentProvider
+  claude?: { keySaved: boolean }
   telegram?: TelegramState
   telegramHistory?: TelegramHistoryState
   runLimitMinutes?: number
@@ -57,6 +65,9 @@ export interface AgentModel {
 
 export type AgentsCommand =
   | TelegramCommand
+  | { type: 'agentProvider'; provider: AgentProvider }
+  | { type: 'claudeKey'; apiKey: string }
+  | { type: 'claudeKeyClear' }
   | { type: 'continueResearch'; runId: string }
   | { type: 'configureRun'; minutes: number }
   | { type: 'configure'; model: string; thinking: string | null }

@@ -1,16 +1,20 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
+import { CallToolRequestSchema, GetPromptRequestSchema, ListPromptsRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
+import { getPrompt, prompts } from './prompts.js'
 import { catalog, connectionTool, validateCall } from './catalog.js'
 import { invokeBridge } from './runtime.js'
 import { toolResult } from './toolResult.js'
 import { errorResult, McpError } from './errors.js'
 import { marketResearchInstructions, newsResearchInstructions, optionsResearchInstructions } from './operations.js'
 
-const server = new Server({ name: 'budget-terminal', version: '0.1.0' }, {
-  capabilities: { tools: {} },
+const server = new Server({ name: 'budget-terminal', title: 'Budget Terminal', version: '0.1.0' }, {
+  capabilities: { tools: {}, prompts: {} },
   instructions: 'Budget Terminal must be open. Read tools expose saved data and market research with source and freshness metadata. Writes edit local records, never broker orders. Use request for tool arguments. Keep partial/stale data limitations visible. Saved-record mutations require requestId outside request: use a fresh UUID for each intended edit and reuse it only for an exact same-session retry. Supply expectedRevision from the latest read meta.revision for portfolio, cards, personal finance and settings edits. Research reads support response summaries, fields and pagination; preserve omission and coverage warnings. Cancellation does not roll back an executing edit. Read-only MCP is on by default; permissions can only be changed locally in Settings. Edits may require native local approval. Do not bypass a refusal with a new ID. A private write journal survives app restarts. Check budget_terminal_operation_status with the original mutation tool and requestId, then read saved records. Uncertain writes are never executed automatically again. Start company research with company_overview or saved-portfolio research with portfolio_briefing; sections can skip unneeded provider work. Use response.snapshot new to create a stable five-minute snapshot and reuse the returned snapshotId for later pages with the same request. Category permissions also apply to workflows. Research shares the app provider rate gate; reuse cached results unless fresh data is needed. ' + marketResearchInstructions + ' ' + newsResearchInstructions + ' ' + optionsResearchInstructions,
 })
+// Prompts are static guidance and work even while the app is closed.
+server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts }))
+server.setRequestHandler(GetPromptRequestSchema, async ({ params }) => getPrompt(params.name, params.arguments))
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [...catalog.map((entry) => entry.tool), connectionTool] }))
 server.setRequestHandler(CallToolRequestSchema, async ({ params }, extra) => {
   try {

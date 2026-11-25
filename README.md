@@ -49,7 +49,7 @@ research pages.
 | **⚡ Open ready pages** | Every implemented page starts loading at launch. Startup progress, failures, and diagnostic logs stay in Settings. |
 | **Saved pages at launch** | Use cached content while every page refreshes. Settings controls separate page, market-data and image budgets, retention and cache diagnostics. |
 | **🔗 Extend your workspace** | Connect local research tools through MCP while keeping the workspace in the desktop app. |
-| **Work with Agents** | Use the embedded Codex workspace for research and local alerts, with autonomous mode off by default. |
+| **Work with Agents** | Use the embedded Codex or Claude workspace for research and local alerts, with autonomous mode off by default. |
 | **Use your phone** | Open a connected phone viewport on Windows, or enable private phone and tablet access through Tailscale. Telegram provides mobile links and agent quick prompts when configured. |
 
 ## Screenshots
@@ -315,8 +315,10 @@ and guidance for separate Python environments.
 The launcher also checks Codex for the **Agents** page and passes the detected
 executable to the app. It detects the Windows Codex desktop installation, native
 CLI installations and native executables behind Windows npm shims. If Codex is
-missing, the app still opens with setup instructions in Agents. The launcher
-does not sign in or start agent work; autonomous mode remains off by default.
+missing, the app still opens with setup instructions in Agents. To use Claude
+instead, choose **Provider → Claude** in Agents and save a Claude API key (see
+[Agents](docs/agents.md#claude-provider)). The launcher does not sign in or start
+agent work; autonomous mode remains off by default.
 
 <details>
 <summary><strong>Electron repair and production bundles</strong></summary>
@@ -483,8 +485,9 @@ The current comparison loads at startup, including when Scorecard is unvisited.
   Mobile Access serves the same records and market services to phones and tablets
   over Tailscale while the app runs. Windows also offers a resizable local phone
   viewport, and a disposable mobile preview uses demo records. See [Mobile Access](docs/mobile-access.md).
-- **Local MCP tools.** Connect research and saved-record tools to supported local
-  clients. Write tools edit local records, not broker orders. See the [MCP setup guide](docs/local-mcp.md).
+- **Local MCP tools.** Connect research and saved-record tools to Claude Code,
+  Claude Desktop, ChatGPT, Codex and other local MCP clients. Write tools edit
+  local records, not broker orders. See the [MCP setup guide](docs/local-mcp.md).
 - **Optional encrypted credentials.** Settings → Integrations can store Finnhub
   and Financial Modeling Prep API keys encrypted locally. These integrations
   remain inactive, even with saved keys; current data services use public endpoints.
@@ -502,7 +505,7 @@ The current comparison loads at startup, including when Scorecard is unvisited.
 | [Public data routing](docs/public-data-routing.md) | Hyperliquid/CoinGecko crypto quotes, World Bank/IMF annual context, and provider budgets. |
 | [Browser](docs/browser.md) | Embedded Chromium tabs, source reading, research controls, and local login profiles. |
 | [Diagnostic logging](docs/diagnostic-logging.md) | Settings log viewer, retention, export, and privacy. |
-| [Local MCP](docs/local-mcp.md) | Client registration, research tools, record edits, screenshots, and bridge security. |
+| [Local MCP](docs/local-mcp.md) | Client registration (Claude Code, Claude Desktop, Codex), prompts, research tools, record edits, screenshots, and bridge security. |
 | [Mobile Access](docs/mobile-access.md) | Open Budget Terminal on your phone or tablet through Tailscale and get the private link from Telegram. |
 | [Development](docs/development.md) | Architecture, verification commands, security checks, and data-layer conventions. |
 | [Design archive](docs/design-prototypes/README.md) | Curated page prototypes, branding concepts, source prompts, and renderers. |

@@ -3,16 +3,18 @@ import { readFile, writeFile, rename, rm } from 'node:fs/promises'
 import { TelegramService, telegramConfigSchema } from './telegram.js'
 import { resetTelegramConversation, telegramResearchCommand, telegramHistoryAction, telegramHistorySnapshot, telegramModelChoices } from './telegramResearch.js'
 import { notificationCenter } from './notificationsHost.js'
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { findCodex } from '../../../../scripts/codex-runtime.cjs'
 import { createServiceRoutes } from '../mcp/routes.js'
 import { captureTerminalScreenshot, getMcpStatus, invokeMcpTool } from '../mcp/host.js'
-import type { AgentsCommand } from '../shared/agents.js'
+import { agentProviderLabels, claudeApiKeyPattern, type AgentProvider, type AgentsCommand } from '../shared/agents.js'
 import type { Envelope } from '../shared/contract.js'
 import type { ScreenshotPayload } from '../shared/screenshot.js'
 import { failed, ok } from '../shared/envelope.js'
 import { AgentsService } from './agents.js'
+import { CodexClient, type CodexPacket } from './codexClient.js'
+import { ClaudeClient } from './claudeClient.js'
 import { AgentWorkspace } from './agentWorkspace.js'
 import { AgentImageStore } from './agentImageStore.js'
 import type { AgentTracker } from '../shared/agentWorkspace.js'
@@ -34,6 +36,60 @@ let telegramChanging = false
 let remote: AgentsService | null = null
 let remoteWorkspace: AgentWorkspace | null = null
 let viewedTelegramChat: string | null = null
+let provider: AgentProvider | null = null
+let providerChanging = false
+const providerPath = () => join(app.getPath('userData'), 'agents-provider.json')
+const claudeKeyPath = () => join(app.getPath('userData'), 'claude-settings.bin')
+function selectedProvider(): AgentProvider {
+  if (!provider) {
+    try { provider = JSON.parse(readFileSync(providerPath(), 'utf8')).provider === 'claude' ? 'claude' : 'codex' }
+    catch { provider = 'codex' }
+  }
+  return provider
+}
+const providerLabel = () => agentProviderLabels[selectedProvider()]
+function claudeKeySaved() { return existsSync(claudeKeyPath()) }
+async function saveProvider(value: AgentProvider) {
+  const path = providerPath()
+  await writeFile(path + '.tmp', JSON.stringify({ provider: value }), { mode: 0o600 })
+  await rename(path + '.tmp', path)
+  provider = value
+}
+/** Decrypt only in the main process, when a Claude connection starts. */
+async function loadClaudeKey(): Promise<string | null> {
+  let bytes: Buffer
+  try { bytes = await readFile(claudeKeyPath()) } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error }
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('OS encryption is unavailable, so the saved Claude API key cannot be read.')
+  const key = (JSON.parse(safeStorage.decryptString(bytes)) as { apiKey?: unknown }).apiKey
+  return typeof key === 'string' && claudeApiKeyPattern.test(key) ? key : null
+}
+async function saveClaudeKey(apiKey: string | null) {
+  const path = claudeKeyPath()
+  if (!apiKey) { await rm(path, { force: true }); return }
+  if (!claudeApiKeyPattern.test(apiKey)) throw new Error('Enter a Claude API key from the Claude Console. It starts with sk-ant-.')
+  if (!safeStorage.isEncryptionAvailable() || (process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text')) throw new Error('OS credential encryption is unavailable. Enable the system keyring before saving a Claude API key.')
+  await writeFile(path + '.tmp', safeStorage.encryptString(JSON.stringify({ apiKey })), { mode: 0o600 })
+  await rename(path + '.tmp', path)
+}
+/** Every Agents worker (chat, trackers, Telegram) follows the selected provider. */
+function transport(receive: (packet: CodexPacket) => void, disconnected: (message: string) => void) {
+  if (selectedProvider() === 'claude') return new ClaudeClient(loadClaudeKey, receive)
+  const cwd = join(app.getPath('userData'), 'agents')
+  mkdirSync(cwd, { recursive: true })
+  return new CodexClient(executable(), cwd, receive, disconnected)
+}
+async function changeProvider(change: () => Promise<boolean>) {
+  if (providerChanging) throw new Error('Agent provider settings are already being updated.')
+  const state = agent().snapshot()
+  if (state.busy || state.autonomy || remote?.snapshot().busy) throw new Error('Stop the agent and turn off autonomous mode before changing provider settings.')
+  providerChanging = true
+  try {
+    if (!await change()) return
+    agent().disconnect()
+    if (!remote?.snapshot().busy) remote?.disconnect()
+    await agent().command({ type: 'connect' })
+  } finally { providerChanging = false }
+}
 function telegramWorkspace() {
   return remoteWorkspace ??= new AgentWorkspace({ path: join(app.getPath('userData'), 'telegram-agents.json') })
 }
@@ -41,7 +97,7 @@ function telegramWorker() {
   if (!remote) {
     const cwd = join(app.getPath('userData'), 'agents')
     mkdirSync(cwd, { recursive: true })
-    remote = new AgentsService({ executable: executable(), cwd, workspace: telegramWorkspace(), remoteResearch: true, telegramScreenshotDelivery: (result, signal) => telegramAgent().sendScreenshots(result, signal), routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool })
+    remote = new AgentsService({ executable: executable(), cwd, workspace: telegramWorkspace(), remoteResearch: true, telegramScreenshotDelivery: (result, signal) => telegramAgent().sendScreenshots(result, signal), routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, clientFactory: transport, label: providerLabel })
   }
   return remote
 }
@@ -103,12 +159,12 @@ export async function telegramProfile() {
   return enabled && receive && /^[a-z][a-z\d_]{4,31}$/i.test(bot) ? bot : ''
 }
 function snapshot() {
-  return { ...agent().snapshot(), telegram: telegramAgent().snapshot(),
+  return { ...agent().snapshot(), provider: selectedProvider(), claude: { keySaved: claudeKeySaved() }, telegram: telegramAgent().snapshot(),
     telegramHistory: telegramHistorySnapshot(telegramWorkspace(), viewedTelegramChat, !!remote?.snapshot().busy) }
 }
 async function checkTracker(tracker: AgentTracker, signal: AbortSignal) {
   const cwd = join(app.getPath('userData'), 'agents')
-  const worker = new AgentsService({ executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, workspace: workspace!, trackerId: tracker.id })
+  const worker = new AgentsService({ executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, workspace: workspace!, trackerId: tracker.id, clientFactory: transport, label: providerLabel })
   const cancel = () => worker.close()
   signal.addEventListener('abort', cancel, { once: true })
   let timedOut = false
@@ -127,7 +183,7 @@ async function checkTracker(tracker: AgentTracker, signal: AbortSignal) {
     if (timedOut) throw new Error('Tracker exceeded the 12-minute worker limit.')
     if (worker.snapshot().error) throw new Error(worker.snapshot().error)
     const report = worker.trackerReport()
-    if (!report) throw new Error('Codex completed without a tracker report. The tracker has been paused for review.')
+    if (!report) throw new Error(`${providerLabel()} completed without a tracker report. The tracker has been paused for review.`)
     return report
   } finally { clearTimeout(deadline); signal.removeEventListener('abort', cancel); worker.close() }
 }
@@ -140,7 +196,7 @@ function agent() {
     const cwd = join(app.getPath('userData'), 'agents')
     mkdirSync(cwd, { recursive: true })
     workspace ??= new AgentWorkspace({ notifications: notificationCenter, check: checkTracker, removeImage: id => images.remove(id) })
-    service = new AgentsService({ workspace, images, telegramSend: (text, signal) => telegramAgent().send(text, signal), telegramScreenshot: (page, signal) => telegramAgent().sendScreenshot(page, signal), executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, connectionStatus: getMcpStatus, portfolio: {
+    service = new AgentsService({ workspace, images, telegramSend: (text, signal) => telegramAgent().send(text, signal), telegramScreenshot: (page, signal) => telegramAgent().sendScreenshot(page, signal), executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, connectionStatus: getMcpStatus, clientFactory: transport, label: providerLabel, portfolio: {
       read: readPortfolios,
       apply: async (before, after) => {
         const result = await withAutomaticBackup(async () => ok(await applyAgentPortfolioUpdate(before, after), 'portfolio store'))
@@ -167,7 +223,7 @@ export async function agentsStatus() {
   try { await startup } catch { /* The snapshot retains startup/storage failures. */ }
   const state = snapshot()
   const error = state.error || state.storageError || state.telegram.error || state.telegramHistory.error
-  return error ? failed(state, error, 'Codex agent') : ok(state, 'Codex agent')
+  return error ? failed(state, error, `${providerLabel()} agent`) : ok(state, `${providerLabel()} agent`)
 }
 export async function agentsCommand(command: AgentsCommand) {
   try { return await executeAgentsCommand(command) } finally { agentsChanged() }
@@ -196,9 +252,30 @@ async function executeAgentsCommand(command: AgentsCommand) {
     } catch (error) { return failed(snapshot(), error instanceof Error ? error.message : 'Telegram settings failed.', 'Telegram') }
     finally { telegramChanging = false }
   }
+  if (command?.type === 'agentProvider' || command?.type === 'claudeKey' || command?.type === 'claudeKeyClear') {
+    try {
+      if (command.type === 'agentProvider') {
+        if (command.provider !== 'codex' && command.provider !== 'claude') throw new Error('Choose Codex or Claude.')
+        await changeProvider(async () => {
+          if (command.provider === selectedProvider()) return false
+          await saveProvider(command.provider)
+          return true
+        })
+      } else {
+        const apiKey = command.type === 'claudeKey' ? String(command.apiKey ?? '').trim() : null
+        await changeProvider(async () => {
+          await saveClaudeKey(apiKey)
+          // Reconnect only when the change affects the active provider.
+          return selectedProvider() === 'claude'
+        })
+      }
+      const state = snapshot()
+      return state.error ? failed(state, state.error, `${providerLabel()} agent`) : ok(state, `${providerLabel()} agent`)
+    } catch (error) { return failed(snapshot(), error instanceof Error ? error.message : 'Agent provider settings failed.', `${providerLabel()} agent`) }
+  }
   if (command?.type === 'stop') await browserControl({ action: 'stop' })
-  try { await agent().command(command); return ok(snapshot(), 'Codex agent') }
-  catch (error) { return failed(snapshot(), error instanceof Error ? error.message : String(error), 'Codex agent') }
+  try { await agent().command(command); return ok(snapshot(), `${providerLabel()} agent`) }
+  catch (error) { return failed(snapshot(), error instanceof Error ? error.message : String(error), `${providerLabel()} agent`) }
 }
 export async function agentsImage(id: string) {
   try { return ok(await agent().image(id), 'Private chat image') }

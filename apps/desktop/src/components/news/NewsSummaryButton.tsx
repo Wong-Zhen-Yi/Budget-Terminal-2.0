@@ -12,7 +12,7 @@ export function NewsSummaryButton({ article, preview, loading }: {
   const { agent, pending, readingImages, chatAvailable, update, perform } = useAgentComposer()
   const reason = !chatAvailable ? 'Reveal Agent chat to summarize this story.'
     : loading ? 'Waiting for the article preview to finish loading.'
-    : !agent?.connected ? 'Connect Codex in Agent chat to enable AI summaries.'
+    : !agent?.connected ? `Connect ${agent?.provider === 'claude' ? 'Claude' : 'Codex'} in Agent chat to enable AI summaries.`
     : pending || readingImages || agent.busy ? 'Wait for the current Agent task to finish.'
     : agent.portfolioProposal ? 'Review the pending portfolio update in Agent chat first.'
     : ''

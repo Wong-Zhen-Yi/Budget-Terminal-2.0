@@ -1,0 +1,12 @@
+{
+  "name": "budget-terminal",
+  "description": "Local Budget Terminal plugins. Run npm run build:mcp before installing.",
+  "owner": { "name": "Budget Terminal" },
+  "plugins": [
+    {
+      "name": "budget-terminal",
+      "source": "./plugins/budget-terminal",
+      "description": "Budget Terminal MCP tools, prompts and skill for the running local app."
+    }
+  ]
+}

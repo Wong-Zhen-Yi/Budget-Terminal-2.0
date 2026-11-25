@@ -7,6 +7,11 @@ import { McpError } from './errors.js'
 import { operations, mutationDomains, newsRefreshOperations, optionsRefreshOperations, priceRefreshOperations, toolName, type Operation } from './operations.js'
 
 const validator = new Ajv({ strict: false, allErrors: true })
+/** Human-readable names shown by clients such as Claude Code and Claude Desktop. */
+export function toolTitle(operation: string): string {
+  const words = operation.replace(/([a-zd])([A-Z])/g, '$1 $2').toLowerCase()
+  return `Budget Terminal: ${words.charAt(0).toUpperCase()}${words.slice(1)}`
+}
 export const catalog = Object.entries(operations).map(([operation, description]) => {
   const inputSchema = schemas[operation as Operation]
   const mutation = operation in mutationDomains
@@ -19,6 +24,7 @@ export const catalog = Object.entries(operations).map(([operation, description])
         : 'Prefer cached data and narrow symbols/dates before forcing a refresh.'
   const tool: Tool = {
     outputSchema: outputSchema(operation),
+    title: toolTitle(operation),
     name: toolName(operation), description: mutation ? `${description} Supply a unique requestId for each intended edit; reuse it only when retrying exactly the same edit in the same app session. After interruption or restart, check operation_status and read saved records. Durable receipts block duplicate execution. For portfolios, cards, personal finance and settings, supply expectedRevision from the latest read meta.revision.` : !mutation && !['screenshot', 'browserResearch'].includes(operation) ? `${description} Returns structured data with source/freshness metadata and partial-data warnings; coverage depends on the provider. Use response.snapshot new for stable paging (reuse the returned snapshotId), response.filter for equality filters and sortBy/descending for ranking. These shape loaded data; narrow request symbols or workflow sections to reduce provider work. Use response.mode summary for a preview, or response.collection with offset/limit and fields for large collections. Default JSON data budget: 256 KiB; omitted data is marked explicitly. ${freshness}` : description,
     // A wrapper keeps every MCP tool's root schema an object, including mutation unions.
     inputSchema: {
@@ -44,6 +50,7 @@ export const catalog = Object.entries(operations).map(([operation, description])
 
 export const connectionTool: Tool = {
   name: 'budget_terminal_connection_status',
+  title: 'Budget Terminal: Connection status',
   description: 'Check whether the running Budget Terminal app can accept MCP calls.',
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   outputSchema: { type: 'object', anyOf: [

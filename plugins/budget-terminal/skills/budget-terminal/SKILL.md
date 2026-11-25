@@ -3,7 +3,7 @@ name: budget-terminal
 description: Capture app pages, research markets and read or edit saved portfolios, options records, Cards, personal finance and settings in the running local Budget Terminal app.
 ---
 
-Use Budget Terminal tools for data owned by the local app. Open Budget Terminal before service calls; connection status can diagnose availability. Arguments use a `request` object; pass `{ "request": {} }` for operations without parameters.
+Use Budget Terminal tools for data owned by the local app. The server also offers the prompts `company_research`, `portfolio_review`, `market_brief` and `page_screenshot` as starting points. Open Budget Terminal before service calls; connection status can diagnose availability. Arguments use a `request` object; pass `{ "request": {} }` for operations without parameters.
 
 For iPhone or iPad access, the configured private Telegram bot answers `/mobile` once Mobile Access is enabled under desktop Settings → Labs. Tailscale Serve is a separate browser endpoint. Keep MCP clients on the local MCP connection.
 

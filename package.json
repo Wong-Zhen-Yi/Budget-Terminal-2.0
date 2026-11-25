@@ -44,6 +44,7 @@
     "probe:certificates": "npm run --workspace budget-terminal-desktop probe:certificates --",
     "probe:agent-privacy": "node scripts/probe-agent-privacy.cjs",
     "probe:agent-recovery": "npm run --workspace budget-terminal-desktop probe:agent-recovery --",
+    "probe:claude-agent": "npm run --workspace budget-terminal-desktop probe:claude-agent --",
     "probe:readiness-ui": "npm run --workspace budget-terminal-desktop probe:readiness-ui --",
     "probe:maintenance": "npm run --workspace budget-terminal-desktop probe:maintenance --",
     "probe:maintenance-live": "npm run --workspace budget-terminal-desktop probe:maintenance-live --",

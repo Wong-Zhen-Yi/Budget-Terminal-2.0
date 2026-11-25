@@ -247,7 +247,7 @@ export function SettingsPage({
         { id: 'privacy', category: 'privacy', terms: 'obscure privacy protected pages hide mask blur portfolio finance shortcut', content:
           <PrivacyPanel tabs={privacyTabs} obscured={settings.obscuredTabs}
             onSetObscured={(id, obscured) => void write({ type: 'setTabObscured', id, obscured }, 'Privacy settings updated.')} /> },
-        { id: 'mcp', category: 'integrations', column: 'secondary', terms: 'local mcp chatgpt codex tools connection permissions read only approval browser client setup activity', content: <McpPanel /> },
+        { id: 'mcp', category: 'integrations', column: 'secondary', terms: 'local mcp claude claude code claude desktop chatgpt codex tools connection permissions read only approval browser client setup activity', content: <McpPanel /> },
         { id: 'market-api-keys', category: 'integrations', terms: 'finnhub financial modeling modelling prep fmp binance coinbase world bank imf sdmx api keys credentials inactive providers', content: <MarketApiKeysPanel /> },
         ...(mobile ? [{ id: 'host-settings', category: 'integrations' as const, terms: 'mobile access desktop cloud sync mcp credentials backups cache updates', content: <Panel title="Computer settings">
           <p className="p-3 text-2xs text-text-muted">Manage Mobile Access, cloud sync, credentials, MCP, backups, and updates in Budget Terminal on the computer.</p>

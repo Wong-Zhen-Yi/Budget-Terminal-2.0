@@ -37,6 +37,7 @@
     "probe:mobile": "tsx scripts/probe-mobile.ts",
     "probe:agents": "tsx scripts/probe-agents.ts",
     "probe:agent-recovery": "tsx scripts/probe-agent-recovery.ts",
+    "probe:claude-agent": "tsx scripts/probe-claude-agent.ts",
     "probe:agent-images": "tsx scripts/probe-agent-images.ts",
     "probe:agent-charts": "tsx scripts/probe-agent-charts.ts",
     "probe:agents-workspace": "tsx scripts/probe-agents-workspace.ts",
@@ -193,6 +194,7 @@
     "vite": "^8.3.8"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.14.0",
     "@convex-dev/auth": "^2.0.0",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@tanstack/react-query": "^5.107.1",

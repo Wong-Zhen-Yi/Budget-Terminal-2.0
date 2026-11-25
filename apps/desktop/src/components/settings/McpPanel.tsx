@@ -44,6 +44,8 @@ export function McpPanel() {
   const client = useQueryClient()
   const [testMessage, setTestMessage] = useState('')
   const [copyMessage, setCopyMessage] = useState('')
+  const [mcpClient, setMcpClient] = useState<string>('claude-code')
+  const [clientCopy, setClientCopy] = useState('')
   const { data, error } = useQuery({ queryKey: ['mcpStatus'], queryFn: () => api.mcpStatus(), refetchInterval: api.onLiveStatusChanged ? 30_000 : 5_000 })
   const permissions = useMutation({
     mutationFn: (policy: McpPolicy) => api.configureMcp(policy),
@@ -60,7 +62,7 @@ export function McpPanel() {
   const active = diagnostics?.activity.filter(entry => entry.durationMs === undefined).length ?? 0
   return <Panel title="Local MCP">
     <p className={`mt-1 text-2xs ${data?.available ? 'text-up' : 'text-down'}`}>
-      {data?.available ? `Ready · ${data.tools} tools for ChatGPT / Codex` : data?.error ?? error?.message ?? 'Checking connection…'}
+      {data?.available ? `Ready · ${data.tools} tools for Claude, ChatGPT and Codex` : data?.error ?? error?.message ?? 'Checking connection…'}
     </p>
     <p className="mt-1 text-2xs text-text-muted">Available while Budget Terminal is running. Client setup is documented in the repository README.</p>
     <div className="mt-3 space-y-2 rounded border border-border p-2 text-2xs">
@@ -110,6 +112,25 @@ export function McpPanel() {
           void api.writeClipboard(data.setup!.configuration!).then(() => setCopyMessage('Client configuration copied.')).catch(() => setCopyMessage('Copy failed. Select and copy the configuration above.'))
         }}>Copy client configuration</button><span className="ml-2" role="status">{copyMessage}</span>
       </>}
+      {!!data?.setup?.clients?.length && <div className="mt-3" aria-label="Client registration">
+        <h3 className="font-semibold text-text">Register a client</h3>
+        <div className="mt-1 flex flex-wrap gap-1" role="tablist" aria-label="MCP client">
+          {data.setup.clients.map(entry => <button key={entry.id} type="button" role="tab" aria-selected={mcpClient === entry.id}
+            className={`rounded border px-2 py-1 ${mcpClient === entry.id ? 'border-accent text-text' : 'border-border text-text-muted'}`}
+            onClick={() => { setMcpClient(entry.id); setClientCopy('') }}>{entry.label}</button>)}
+        </div>
+        {(() => {
+          const selected = data.setup.clients.find(entry => entry.id === mcpClient) ?? data.setup.clients[0]
+          return <div role="tabpanel">
+            <p className="mt-2 text-text-muted">{selected.hint}</p>
+            <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all">{selected.text}</pre>
+            <button type="button" className="mt-2 rounded border border-border px-2 py-1" onClick={() => {
+              void api.writeClipboard(selected.text).then(() => setClientCopy(`${selected.label} setup copied.`)).catch(() => setClientCopy('Copy failed. Select and copy the text above.'))
+            }}>Copy {selected.label} setup</button><span className="ml-2" role="status">{clientCopy}</span>
+          </div>
+        })()}
+        <p className="mt-2 text-text-muted">The repository also ships a Claude Code plugin: run <code>claude plugin marketplace add</code> with the repository folder, then <code>claude plugin install budget-terminal@budget-terminal</code>. Use either the plugin or a direct registration, not both.</p>
+      </div>}
     </details>
     <details className="mt-3 rounded border border-border p-2 text-2xs">
       <summary className="cursor-pointer font-semibold text-text">Recent MCP activity · {active} active</summary>

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { AgentsCommand, AgentsState } from '@shared/agents'
+import { agentProviderLabels } from '@shared/agents'
 import { AgentHistory } from './AgentHistory'
 import { TelegramSettings } from './TelegramSettings'
 
@@ -14,6 +15,7 @@ export function AgentWorkspacePanel({ agent, locked, perform, setDraft, showTele
   const [tab, setTab] = useState<'history' | 'trackers' | 'telegram' | null>(null)
   const [confirm, setConfirm] = useState('')
   const trackers = agent?.trackers ?? []
+  const label = agentProviderLabels[agent?.provider ?? 'codex']
   const latestRun = [...agent?.messages ?? []].reverse().find(message => message.run)?.run
   const recoverable = latestRun && ['failed', 'partial', 'stopped'].includes(latestRun.status)
   const date = (at: number) => new Date(at).toLocaleString()
@@ -35,9 +37,9 @@ export function AgentWorkspacePanel({ agent, locked, perform, setDraft, showTele
     {tab && tab !== 'history' && <div className="agents-workspace-content" aria-label={tab === 'telegram' ? 'Telegram settings' : 'Saved trackers'}>
       {tab === 'telegram' && <TelegramSettings state={agent?.telegram} perform={perform} pending={pending} />}
       {tab === 'trackers' && <>
-        <div className="agents-saved-heading"><p>Codex writes the instructions; you review and Start. Checks use read-only research tools and your Codex account while the app is open. All trackers pause on relaunch. No arbitrary scripts or trades.</p>
-          <button onClick={() => setDraft('Write a tracker for me. Ask what I want to track, the comparison baseline, how often to check, and when to notify me. Save it paused so I can review and start it.')}>Ask Codex to write a tracker</button></div>
-        {!trackers.length && <p>No trackers yet. Describe any research condition or reminder to Codex in chat.</p>}
+        <div className="agents-saved-heading"><p>{label} writes the instructions; you review and Start. Checks use read-only research tools and your {label === 'Claude' ? 'Claude API key' : 'Codex account'} while the app is open. All trackers pause on relaunch. No arbitrary scripts or trades.</p>
+          <button onClick={() => setDraft('Write a tracker for me. Ask what I want to track, the comparison baseline, how often to check, and when to notify me. Save it paused so I can review and start it.')}>Ask {label} to write a tracker</button></div>
+        {!trackers.length && <p>No trackers yet. Describe any research condition or reminder to {label} in chat.</p>}
         {trackers.map(tracker => <article key={tracker.id} className="agents-saved-item">
           <div className="agents-saved-heading"><h3>{tracker.title}</h3><strong>{tracker.running ? 'Checking…' : tracker.enabled ? 'Scheduled' : 'Paused'}</strong></div>
           <small>Every {tracker.intervalMinutes} min · {tracker.runsRemaining} checks left · Notification cooldown {tracker.cooldownMinutes} min{tracker.nextRunAt ? ` · Next ${date(tracker.nextRunAt)}` : ''}</small>

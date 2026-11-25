@@ -108,6 +108,15 @@ try {
   const tools = (await client.listTools()).tools
   assert.equal(tools.length, Object.keys(operations).length + 1)
   assert.equal(new Set(tools.map((tool) => tool.name)).size, tools.length)
+  assert(tools.every((tool) => tool.title?.startsWith('Budget Terminal: ')), 'Every MCP tool has a readable title for Claude and other clients')
+  // Prompts are static guidance: available with the app closed, validated, and free of bridge calls.
+  const listedPrompts = (await client.listPrompts()).prompts
+  assert.deepEqual(listedPrompts.map((prompt) => prompt.name), ['company_research', 'portfolio_review', 'market_brief', 'page_screenshot'])
+  const research = await client.getPrompt({ name: 'company_research', arguments: { symbol: 'aapl' } })
+  assert.match(JSON.stringify(research.messages), /budget_terminal_company_overview[\s\S]*AAPL/)
+  await assert.rejects(client.getPrompt({ name: 'company_research', arguments: { symbol: 'AAPL; rm -rf /' } }), /Invalid prompt argument/)
+  await assert.rejects(client.getPrompt({ name: 'company_research', arguments: {} }), /required/)
+  assert.match(JSON.stringify((await client.getPrompt({ name: 'portfolio_review', arguments: {} })).messages), /budget_terminal_portfolio\b/)
   const closed = await client.callTool({ name: 'budget_terminal_portfolio', arguments: { request: {} } })
   assert.equal(closed.isError, true)
   assert.match(JSON.stringify(closed), new RegExp(APP_CLOSED.replace('.', '\\.')))

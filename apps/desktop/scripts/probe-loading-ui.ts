@@ -177,7 +177,7 @@ try {
           document.querySelector('[data-settings-card="backups"] details.settings-path').open = true
           check(document.body.innerText.includes('/fixture/Downloads/budget-terminal-backup.json'), 'Automatic backup file is not shown in Settings')
           await chooseSettingsCategory('integrations')
-          check(document.body.innerText.includes('Ready · ' + toolCount + ' tools for ChatGPT / Codex'), 'MCP status is not visible in Settings')
+          check(document.body.innerText.includes('Ready · ' + toolCount + ' tools for Claude, ChatGPT and Codex'), 'MCP status is not visible in Settings')
           const capabilities = document.querySelector('[aria-label="MCP capabilities"]')
           check(capabilities?.querySelectorAll('[data-mcp-capability]').length === toolCount, 'Settings does not list every MCP capability')
           check(capabilities?.querySelector('[data-mcp-capability="budget_terminal_hood"]'), 'HOOD capability is missing')

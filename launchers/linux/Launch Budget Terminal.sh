@@ -2,6 +2,7 @@
 # The shared build includes Google sign-in alongside GitHub on the startup popup and in Settings cloud sync.
 # The shared build uses less idle CPU: no hidden API-usage polling, slower settled cloud-sync checks, and cheaper cache saves.
 # The shared build adds QR codes for the existing phone links in Settings Labs.
+# The shared build adds Claude as an Agents provider and Claude Code, Claude Desktop and MCP prompt support.
 # The shared build loads the open mobile page before background preloads for unseen pages, so Polymarket appears promptly.
 # The shared build lets phone pages such as Polymarket, Charts, Valuation, Economic and Dictionary scroll their headers away.
 # GitHub demo screenshots reflect the current app; this launcher rebuilds desktop and MCP source.

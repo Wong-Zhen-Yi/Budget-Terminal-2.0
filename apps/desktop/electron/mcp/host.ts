@@ -5,7 +5,7 @@ import { isYouTubePipWindow } from '../services/youtubePlayer.js'
 import { app, BrowserWindow, dialog } from 'electron'
 import { access, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import type { McpStatus } from '../shared/contract.js'
+import type { McpClientSetup, McpStatus } from '../shared/contract.js'
 import { startBridge } from './bridge.js'
 import { createServiceRoutes } from './routes.js'
 import { createScreenshotService } from './screenshot.js'
@@ -32,6 +32,19 @@ export async function cancelMcpCall(id: number): Promise<McpStatus> {
   statusChanged()
   return getMcpStatus()
 }
+/** Shell-safe in bash, cmd and PowerShell for ordinary absolute paths, including spaces. */
+const quoted = (value: string) => `"${value.replace(/"/g, '')}"`
+export function mcpClientSetup(server: string, dataDirectory: string, configuration: string): McpClientSetup[] {
+  const env = quoted(`BUDGET_TERMINAL_DATA_DIR=${dataDirectory}`)
+  return [
+    { id: 'claude-code', label: 'Claude Code', text: `claude mcp add --scope user --env ${env} budget-terminal -- node ${quoted(server)}`,
+      hint: 'Run once in a terminal, then use /mcp in Claude Code to confirm the connection. For long scans, set MCP_TOOL_TIMEOUT=180000 before starting Claude Code.' },
+    { id: 'claude-desktop', label: 'Claude Desktop', text: configuration,
+      hint: 'Merge into claude_desktop_config.json (Claude Desktop Settings → Developer → Edit Config), then restart Claude Desktop.' },
+    { id: 'codex', label: 'Codex CLI', text: `codex mcp add budget-terminal --env ${env} -- node ${quoted(server)}`,
+      hint: 'Run once in a terminal. For heavy research set tool_timeout_sec = 180 for this server in config.toml.' },
+  ]
+}
 async function inspectSetup(): Promise<NonNullable<McpStatus['setup']>> {
   const descriptorPath = runtimePath()
   const dataDirectory = dirname(dirname(descriptorPath))
@@ -40,11 +53,12 @@ async function inspectSetup(): Promise<NonNullable<McpStatus['setup']>> {
     await access(dirname(descriptorPath), constants.R_OK | constants.W_OK)
     if (!(await stat(descriptorPath)).isFile()) throw new Error('Missing runtime descriptor')
     // The adapter discovers the token at runtime. Never include token/port in copied setup.
+    const server = join(app.getAppPath(), 'out', 'mcp', 'server.mjs')
     const configuration = JSON.stringify({ mcpServers: { 'budget-terminal': {
-      command: 'node', args: [join(app.getAppPath(), 'out', 'mcp', 'server.mjs')],
+      command: 'node', args: [server],
       env: { BUDGET_TERMINAL_DATA_DIR: dataDirectory },
     } } }, null, 2)
-    return { valid: true, message: 'Local data folder is outside source repositories and the runtime descriptor is readable.', descriptorPath, configuration }
+    return { valid: true, message: 'Local data folder is outside source repositories and the runtime descriptor is readable.', descriptorPath, configuration, clients: mcpClientSetup(server, dataDirectory, configuration) }
   } catch {
     return { valid: false, message: 'Local MCP setup is invalid. Use a writable application-data folder outside source and Git repositories, rebuild and restart Budget Terminal.' }
   }

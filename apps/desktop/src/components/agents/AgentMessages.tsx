@@ -5,14 +5,15 @@ import { AgentMarkdown } from './AgentMarkdown'
 import { AgentRunDetails } from './AgentRunDetails'
 
 interface MessageProps {
+  assistant: string
   message: AgentMessage
   imagesLocked: boolean
   onUseImage: (image: AgentImage) => void
 }
 
-const Message = memo(function Message({ message, imagesLocked, onUseImage }: MessageProps) {
-  return <article className={`agents-message ${message.role}`} aria-label={message.role === 'assistant' ? 'Codex response' : message.role === 'user' ? 'Your message' : 'Agent activity'}>
-    <div className="agents-message-meta">{message.role === 'assistant' ? 'Codex' : message.role === 'user' ? 'You' : 'Activity'} <time dateTime={new Date(message.at).toISOString()}>{new Date(message.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>
+const Message = memo(function Message({ assistant, message, imagesLocked, onUseImage }: MessageProps) {
+  return <article className={`agents-message ${message.role}`} aria-label={message.role === 'assistant' ? `${assistant} response` : message.role === 'user' ? 'Your message' : 'Agent activity'}>
+    <div className="agents-message-meta">{message.role === 'assistant' ? assistant : message.role === 'user' ? 'You' : 'Activity'} <time dateTime={new Date(message.at).toISOString()}>{new Date(message.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time></div>
     {message.role === 'assistant' ? <AgentMarkdown text={message.text} /> : <p className="agents-plain-message">{message.text}</p>}
     {message.run && <AgentRunDetails run={message.run} />}
     {message.imageStatus === 'generating' && <p className="agents-thinking" role="status">Creating image… This can take a few minutes.</p>}
@@ -22,10 +23,11 @@ const Message = memo(function Message({ message, imagesLocked, onUseImage }: Mes
 })
 
 // Polls and composer edits should not reconcile the entire conversation.
-export const AgentMessages = memo(function AgentMessages({ messages, imagesLocked, onUseImage }: {
+export const AgentMessages = memo(function AgentMessages({ messages, imagesLocked, onUseImage, assistant = 'Agent' }: {
+  assistant?: string
   messages: AgentMessage[]
   imagesLocked: boolean
   onUseImage: (image: AgentImage) => void
 }) {
-  return <>{messages.map(message => <Message key={message.id} message={message} imagesLocked={imagesLocked} onUseImage={onUseImage} />)}</>
+  return <>{messages.map(message => <Message key={message.id} assistant={assistant} message={message} imagesLocked={imagesLocked} onUseImage={onUseImage} />)}</>
 })
