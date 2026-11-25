@@ -180,7 +180,7 @@ export function Donut({
               className={
                 compact
                   ? 'min-w-0 flex-1 truncate text-[10px] text-text'
-                  : `${responsive ? 'min-w-0 flex-1 break-words' : 'w-20'} text-2xs text-text`
+                  : `${responsive ? 'min-w-0 flex-1 truncate' : 'w-20'} text-2xs text-text`
               }
               title={wedge.label}
             >

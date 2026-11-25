@@ -142,16 +142,16 @@ export function PricePage({
         header: 'Exchange',
         cell: (row) => row.exchange,
         sortValue: (row) => row.exchange,
-        width: '120px',
+        width: '90px',
       },
       {
         key: 'price',
         header: 'Price',
-        cell: (row) => <span title={row.priceSource}>{preciseCurrency(row.price)}{row.priceBasis === 'equity-perp-mark' ? ' PERP' : ''}</span>,
+        cell: (row) => <span title={row.priceSource}>{preciseCurrency(row.price)}{row.priceBasis === 'equity-perp-mark' ? <span className="ml-1 text-[9px] text-accent">PERP</span> : null}</span>,
         sortValue: (row) => row.price,
         align: 'right',
         numeric: true,
-        width: '105px',
+        width: '125px',
       },
       {
         key: 'volume',
@@ -240,7 +240,7 @@ export function PricePage({
               rows={rankedRows}
               rowKey={(row) => row.ticker} rowSymbol={(row) => row.ticker}
               layout="fixed"
-              minWidth="780px"
+              minWidth="740px"
               defaultSort={{ key: 'marketCap', direction: 'desc' }}
               onRowClick={(row) => setSelectedTicker(row.ticker)}
               rowClassName={(row) =>

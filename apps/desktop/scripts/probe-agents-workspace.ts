@@ -40,10 +40,10 @@ try {
       if (method === 'account/read') return { account: {} }
       if (method === 'config/read') return { config: { mcp_servers: { untrusted: {} } } }
       if (method === 'model/list') return { data: [
-        { model: 'fixture', displayName: 'Fixture', defaultReasoningEffort: 'low', supportedReasoningEfforts: [{ reasoningEffort: 'low', description: 'Quick' }, { reasoningEffort: 'high', description: 'Deeper' }] },
-        { model: 'fixture-other', displayName: 'Other fixture', defaultReasoningEffort: 'medium', supportedReasoningEfforts: [{ reasoningEffort: 'medium', description: 'Balanced' }] },
+        { model: 'gpt-6.1-terra', displayName: 'Fixture', defaultReasoningEffort: 'low', supportedReasoningEfforts: [{ reasoningEffort: 'low', description: 'Quick' }, { reasoningEffort: 'high', description: 'Deeper' }] },
+        { model: 'gpt-6-luna', displayName: 'Other fixture', defaultReasoningEffort: 'medium', supportedReasoningEfforts: [{ reasoningEffort: 'medium', description: 'Balanced' }] },
       ] }
-      if (method === 'thread/start') { thread = 'thread-' + (++sequence); return { thread: { id: thread }, model: 'fixture' } }
+      if (method === 'thread/start') { thread = 'thread-' + (++sequence); return { thread: { id: thread }, model: (params as { model?: string }).model ?? 'gpt-6.1-terra' } }
       return { turn: { id: 'turn' } }
     },
   }
@@ -96,6 +96,9 @@ try {
   assert(!bytes.includes('thread-') && !bytes.includes('baseInstructions') && !bytes.includes('data:image'), 'Persist no thread IDs, tool configuration or image bytes')
   service.close(); await store.close()
   const legacy = JSON.parse(bytes)
+  const legacyActiveChat = legacy.conversations.find((chat: { id: string }) => chat.id === service.snapshot().currentChatId)
+  legacyActiveChat.model = 'gpt-5.6-luna'
+  legacyActiveChat.thinking = 'medium'
   const connectionNotice = 'Codex connected. Budget Terminal MCP tools are available for research, screenshots and requested saved-data edits.'
   for (const chat of legacy.conversations) chat.messages.push({ id: 'legacy-connect-' + chat.id, role: 'activity', text: connectionNotice, at: Date.now() })
   await writeFile(agentWorkspacePath(), JSON.stringify(legacy))
@@ -119,6 +122,8 @@ try {
   assert.deepEqual(restarted.snapshot().messages.find(message => message.text === 'Persist this latest chat')?.images, ['Synthetic.png'])
   const restoredMessages = restarted.snapshot().messages
   await restarted.command({ type: 'connect' })
+  assert.equal(restarted.snapshot().model, 'gpt-6-luna', 'Migrate a saved older model within its family')
+  assert.equal(restarted.snapshot().thinking, 'medium', 'Preserve supported reasoning when updating the model')
   assert.deepEqual(restarted.snapshot().messages, restoredMessages, 'Reconnecting after launch must preserve the transcript without adding a notice')
   assert(requests.at(-1)!.params.baseInstructions.includes('Persist this latest chat'))
 
@@ -218,31 +223,31 @@ try {
   await telegramWorker.command({ type: 'openChat', id: oldTelegramId })
   assert(requests.at(-1)!.params.baseInstructions.includes('OLD_TELEGRAM_CONTEXT'))
   assert.deepEqual(await telegramModelChoices(telegramWorker), [
-    { id: 'fixture', name: 'Fixture', current: true, reasoning: [
+    { id: 'gpt-6.1-terra', name: 'Fixture', current: true, reasoning: [
       { id: 'default', name: 'Model default (low)', current: true }, { id: 'low', name: 'low', current: false }, { id: 'high', name: 'high', current: false },
     ] },
-    { id: 'fixture-other', name: 'Other fixture', current: false, reasoning: [
+    { id: 'gpt-6-luna', name: 'Other fixture', current: false, reasoning: [
       { id: 'default', name: 'Model default (medium)', current: true }, { id: 'medium', name: 'medium', current: false },
     ] },
   ])
   assert.match(await telegramResearchCommand(telegramWorker, 'model', 'unknown'), /Unknown model/)
-  assert.match(await telegramResearchCommand(telegramWorker, 'model', 'fixture'), /context is retained/)
+  assert.match(await telegramResearchCommand(telegramWorker, 'model', 'gpt-6.1-terra'), /context is retained/)
   assert((await telegramModelChoices(telegramWorker))[0].reasoning.some(mode => mode.id === 'high'))
   assert.match(await telegramResearchCommand(telegramWorker, 'reasoning', 'invalid'), /Unsupported reasoning/)
   assert.equal(telegramWorker.snapshot().thinking, null, 'Invalid reasoning does not change settings')
   assert.match(await telegramResearchCommand(telegramWorker, 'reasoning', 'high'), /Reasoning: high/)
   assert.equal(telegramWorker.snapshot().thinking, 'high')
   assert.equal(telegramReloaded.conversation()?.thinking, 'high', 'Reasoning choice is saved with the conversation')
-  await telegramResearchCommand(telegramWorker, 'model', 'fixture')
+  await telegramResearchCommand(telegramWorker, 'model', 'gpt-6.1-terra')
   assert.equal(telegramWorker.snapshot().thinking, 'high', 'Model choice keeps compatible reasoning')
-  await telegramResearchCommand(telegramWorker, 'model', 'fixture-other')
+  await telegramResearchCommand(telegramWorker, 'model', 'gpt-6-luna')
   assert.equal(telegramWorker.snapshot().thinking, null, 'Incompatible reasoning falls back to the new model default')
   assert((await telegramModelChoices(telegramWorker)).find(model => model.current)?.reasoning.some(mode => mode.id === 'medium'))
   assert.match(await telegramResearchCommand(telegramWorker, 'reasoning', 'high'), /Unsupported reasoning/)
   await telegramResearchCommand(telegramWorker, 'reasoning', 'medium')
   await telegramResearchCommand(telegramWorker, 'reasoning', 'default')
   assert.equal(telegramWorker.snapshot().thinking, null)
-  assert.equal(telegramWorker.snapshot().model, 'fixture-other')
+  assert.equal(telegramWorker.snapshot().model, 'gpt-6-luna')
   assert.deepEqual(telegramWorker.snapshot().messages.map(message => message.text), ['OLD_TELEGRAM_CONTEXT'])
   telegramWorker.close()
   await telegramHistoryAction(telegramReloaded, { type: 'telegramDeleteChat', id: freshTelegramId }, false)

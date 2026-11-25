@@ -4,8 +4,12 @@ import type { PositionRow } from '@shared/portfolioMath'
 import { PrivateNumber } from '@/components/ui/NumberPrivacy'
 import { currency, percent, plainPercent } from '@/lib/format'
 
-/** Below this height the strip would show a heading and one clipped row, so it hides instead. */
-const MIN_HEIGHT = 96
+/** Heading, row and bottom padding heights in rem; they match h-8, h-7 and pb-2 below. */
+const HEADING_REM = 2
+const ROW_REM = 1.75
+const PADDING_REM = 0.5
+/** With room for fewer rows than this the strip would be a heading and a sliver, so it hides. */
+const MIN_ROWS = 2
 
 /** Today's dollar move for a position, from its market value and the day's percent change. */
 function dayMove(row: PositionRow): number | null {
@@ -20,11 +24,15 @@ function dayMove(row: PositionRow): number | null {
  */
 export function DayContribution({ rows }: { rows: PositionRow[] }) {
   const host = useRef<HTMLDivElement>(null)
-  const [visible, setVisible] = useState(false)
+  // How many whole rows fit. Rows that do not fit are left out rather than clipped mid-row.
+  const [capacity, setCapacity] = useState(0)
   useLayoutEffect(() => {
     const element = host.current
     if (!element) return
-    const measure = () => setVisible(element.clientHeight >= MIN_HEIGHT)
+    const measure = () => {
+      const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+      setCapacity(Math.max(0, Math.floor((element.clientHeight - (HEADING_REM + PADDING_REM) * rem) / (ROW_REM * rem))))
+    }
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(element)
@@ -37,6 +45,9 @@ export function DayContribution({ rows }: { rows: PositionRow[] }) {
     .sort((a, b) => Math.abs(b.move ?? 0) - Math.abs(a.move ?? 0))
   const total = movers.reduce((sum, entry) => sum + (entry.move ?? 0), 0)
   const largest = Math.max(...movers.map((entry) => Math.abs(entry.move ?? 0)), 0)
+  const visible = capacity >= MIN_ROWS
+  const shown = movers.slice(0, capacity)
+  const partial = shown.length < movers.length
 
   return (
     <div ref={host} data-day-contribution={visible && movers.length ? 'shown' : 'hidden'}
@@ -44,13 +55,15 @@ export function DayContribution({ rows }: { rows: PositionRow[] }) {
       {visible && movers.length ? <>
         <div className="flex h-8 shrink-0 items-center gap-3 px-2 text-2xs">
           <span className="font-semibold tracking-wide text-text uppercase">Today by position</span>
-          <span className="text-text-muted">Largest dollar moves first</span>
-          <span className={`num ml-auto ${total >= 0 ? 'text-up' : 'text-down'}`}>
+          <span className="truncate text-text-muted">
+            {partial ? `Top ${shown.length} of ${movers.length} by dollar move` : 'Largest dollar moves first'}
+          </span>
+          <span className={`num ml-auto shrink-0 ${total >= 0 ? 'text-up' : 'text-down'}`} title="Net move across all positions today">
             <PrivateNumber>{`${total >= 0 ? '+' : '-'}${currency(Math.abs(total))}`}</PrivateNumber>
           </span>
         </div>
         <ul className="min-h-0 flex-1 overflow-hidden px-2 pb-2">
-          {movers.map(({ row, move }) => {
+          {shown.map(({ row, move }) => {
             const up = (move ?? 0) >= 0
             const width = largest ? Math.max(2, (Math.abs(move ?? 0) / largest) * 100) : 0
             return (

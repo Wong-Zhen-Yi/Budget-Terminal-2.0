@@ -64,7 +64,7 @@ function buildColumns(largestCap: number): Column<MetricsRow>[] {
       align: 'right',
       width: '13%',
     },
-    { key: 'price', header: 'Price', cell: (row) => <span title={row.priceSource}>{currency(row.price)}{row.priceBasis === 'equity-perp-mark' ? ' PERP' : ''}</span>, sortValue: (row) => row.price, numeric: true, align: 'right', width: '9%' },
+    { key: 'price', header: 'Price', cell: (row) => <span title={row.priceSource}>{currency(row.price)}{row.priceBasis === 'equity-perp-mark' ? <span className="ml-1 text-[9px] text-accent">PERP</span> : null}</span>, sortValue: (row) => row.price, numeric: true, align: 'right', width: '12%' },
     {
       key: 'trailingEps',
       header: <span title="Reported earnings per share over the trailing twelve months">EPS (TTM)</span>,
@@ -81,7 +81,7 @@ function buildColumns(largestCap: number): Column<MetricsRow>[] {
     { key: 'trailingPe', header: <span title="Price divided by trailing twelve-month earnings per share">P/E (TTM)</span>, cell: (row) => ratio(row.trailingPe), sortValue: (row) => row.trailingPe, numeric: true, align: 'right', width: '8%' },
     { key: 'forwardPe', header: <span title="Yahoo Finance forward price-to-earnings estimate">Forward P/E</span>, cell: (row) => ratio(row.forwardPe), sortValue: (row) => row.forwardPe, numeric: true, align: 'right', width: '9%' },
     { key: 'priceToSales', header: <span title="Price-to-sales ratio using trailing twelve-month revenue">P/S (TTM)</span>, cell: (row) => ratio(row.priceToSales), sortValue: (row) => row.priceToSales, numeric: true, align: 'right', width: '8%' },
-    { key: 'exchange', header: 'Exchange', cell: (row) => row.exchange, sortValue: (row) => row.exchange, width: '12%' },
+    { key: 'exchange', header: 'Exchange', cell: (row) => row.exchange, sortValue: (row) => row.exchange, width: '9%' },
   ]
 }
 

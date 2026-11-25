@@ -72,8 +72,8 @@ async function saveClaudeKey(apiKey: string | null) {
   await rename(path + '.tmp', path)
 }
 /** Every Agents worker (chat, trackers, Telegram) follows the selected provider. */
-function transport(receive: (packet: CodexPacket) => void, disconnected: (message: string) => void) {
-  if (selectedProvider() === 'claude') return new ClaudeClient(loadClaudeKey, receive)
+function transport(receive: (packet: CodexPacket) => void, disconnected: (message: string) => void, provider = selectedProvider()) {
+  if (provider === 'claude') return new ClaudeClient(loadClaudeKey, receive)
   const cwd = join(app.getPath('userData'), 'agents')
   mkdirSync(cwd, { recursive: true })
   return new CodexClient(executable(), cwd, receive, disconnected)
@@ -97,7 +97,7 @@ function telegramWorker() {
   if (!remote) {
     const cwd = join(app.getPath('userData'), 'agents')
     mkdirSync(cwd, { recursive: true })
-    remote = new AgentsService({ executable: executable(), cwd, workspace: telegramWorkspace(), remoteResearch: true, telegramScreenshotDelivery: (result, signal) => telegramAgent().sendScreenshots(result, signal), routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, clientFactory: transport, label: providerLabel })
+    remote = new AgentsService({ executable: executable(), cwd, workspace: telegramWorkspace(), remoteResearch: true, telegramScreenshotDelivery: (result, signal) => telegramAgent().sendScreenshots(result, signal), routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, clientFactory: transport, provider: selectedProvider })
   }
   return remote
 }
@@ -164,7 +164,9 @@ function snapshot() {
 }
 async function checkTracker(tracker: AgentTracker, signal: AbortSignal) {
   const cwd = join(app.getPath('userData'), 'agents')
-  const worker = new AgentsService({ executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, workspace: workspace!, trackerId: tracker.id, clientFactory: transport, label: providerLabel })
+  const trackerProvider = selectedProvider()
+  const worker = new AgentsService({ executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, workspace: workspace!, trackerId: tracker.id,
+    clientFactory: (receive, disconnected) => transport(receive, disconnected, trackerProvider), provider: () => trackerProvider })
   const cancel = () => worker.close()
   signal.addEventListener('abort', cancel, { once: true })
   let timedOut = false
@@ -183,7 +185,7 @@ async function checkTracker(tracker: AgentTracker, signal: AbortSignal) {
     if (timedOut) throw new Error('Tracker exceeded the 12-minute worker limit.')
     if (worker.snapshot().error) throw new Error(worker.snapshot().error)
     const report = worker.trackerReport()
-    if (!report) throw new Error(`${providerLabel()} completed without a tracker report. The tracker has been paused for review.`)
+    if (!report) throw new Error(`${agentProviderLabels[trackerProvider]} completed without a tracker report. The tracker has been paused for review.`)
     return report
   } finally { clearTimeout(deadline); signal.removeEventListener('abort', cancel); worker.close() }
 }
@@ -196,7 +198,7 @@ function agent() {
     const cwd = join(app.getPath('userData'), 'agents')
     mkdirSync(cwd, { recursive: true })
     workspace ??= new AgentWorkspace({ notifications: notificationCenter, check: checkTracker, removeImage: id => images.remove(id) })
-    service = new AgentsService({ workspace, images, telegramSend: (text, signal) => telegramAgent().send(text, signal), telegramScreenshot: (page, signal) => telegramAgent().sendScreenshot(page, signal), executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, connectionStatus: getMcpStatus, clientFactory: transport, label: providerLabel, portfolio: {
+    service = new AgentsService({ workspace, images, telegramSend: (text, signal) => telegramAgent().send(text, signal), telegramScreenshot: (page, signal) => telegramAgent().sendScreenshot(page, signal), executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, connectionStatus: getMcpStatus, clientFactory: transport, provider: selectedProvider, portfolio: {
       read: readPortfolios,
       apply: async (before, after) => {
         const result = await withAutomaticBackup(async () => ok(await applyAgentPortfolioUpdate(before, after), 'portfolio store'))

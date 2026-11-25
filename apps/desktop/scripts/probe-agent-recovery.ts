@@ -34,8 +34,8 @@ async function fixture(path = join(directory, `fixture-${storeSequence++}.json`)
       requests.push({ method, params })
       if (method === 'account/read') return { account: {} }
       if (method === 'config/read') return { config: {} }
-      if (method === 'model/list') return { data: [{ model: 'fixture', displayName: 'Fixture', defaultReasoningEffort: 'low', supportedReasoningEfforts: [{ reasoningEffort: 'low', description: 'Quick' }] }] }
-      if (method === 'thread/start') { thread = 'private-thread-' + (++sequence); return { thread: { id: thread }, model: 'fixture' } }
+      if (method === 'model/list') return { data: [{ model: 'gpt-6.1-terra', displayName: 'Fixture', defaultReasoningEffort: 'low', supportedReasoningEfforts: [{ reasoningEffort: 'low', description: 'Quick' }] }] }
+      if (method === 'thread/start') { thread = 'private-thread-' + (++sequence); return { thread: { id: thread }, model: 'gpt-6.1-terra' } }
       if (method === 'turn/start') { turn = 'private-turn-' + (++sequence); return { turn: { id: turn } } }
       return {}
     },

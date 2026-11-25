@@ -41,6 +41,8 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
   const settingsLocked = locked || !agent?.connected || !!agent?.autonomy
   const provider = agent?.provider ?? 'codex'
   const label = agentProviderLabels[provider]
+  const modelValue = selectedModel?.id ?? (provider === 'claude' ? agent?.model : null) ?? ''
+  const thinkingValue = modelValue ? agent?.thinking ?? '' : ''
   // Embedded panes are narrow: until a connection loads models, the Model and Thinking boxes only say "Connect to load…".
   const compactSettings = embedded && !agent?.connected && !models.length
   const rawError = error || agent?.error || (query.error ? String(query.error) : '')
@@ -57,16 +59,16 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
         onChange={event => void perform({ type: 'agentProvider', provider: event.target.value as AgentProvider })}>
         {(Object.keys(agentProviderLabels) as AgentProvider[]).map(id => <option key={id} value={id}>{agentProviderLabels[id]}</option>)}
       </select></label>
-      {!compactSettings && <><label htmlFor={`${idPrefix}-model`}>Model<select id={`${idPrefix}-model`} value={agent?.model ?? ''} disabled={settingsLocked || !models.length}
+      {!compactSettings && <><label htmlFor={`${idPrefix}-model`}>Model<select id={`${idPrefix}-model`} value={modelValue} disabled={settingsLocked || !models.length}
         onChange={event => void perform({ type: 'configure', model: event.target.value, thinking: null })}>
-        {!agent?.model && <option value="">Connect to load models</option>}
-        {agent?.model && !selectedModel && <option value={agent.model}>{agent.model}</option>}
+        {!modelValue && <option value="">Connect to load models</option>}
+        {modelValue && !selectedModel && <option value={modelValue}>{modelValue}</option>}
         {models.map(model => <option key={model.id} value={model.id}>{model.name}</option>)}
       </select></label>
-      <label htmlFor={`${idPrefix}-thinking`}>Thinking<select id={`${idPrefix}-thinking`} value={agent?.thinking ?? ''} disabled={settingsLocked || !selectedModel?.thinkingModes.length}
+      <label htmlFor={`${idPrefix}-thinking`}>Thinking<select id={`${idPrefix}-thinking`} value={thinkingValue} disabled={settingsLocked || !selectedModel?.thinkingModes.length}
         onChange={event => agent?.model && void perform({ type: 'configure', model: agent.model, thinking: event.target.value || null })}>
         <option value="">{selectedModel ? `Default (${thinkingLabel(selectedModel.defaultThinking)})` : 'Connect to load modes'}</option>
-        {agent?.thinking && !selectedModel?.thinkingModes.some(mode => mode.id === agent.thinking) && <option value={agent.thinking}>{thinkingLabel(agent.thinking)} (current)</option>}
+        {thinkingValue && !selectedModel?.thinkingModes.some(mode => mode.id === thinkingValue) && <option value={thinkingValue}>{thinkingLabel(thinkingValue)} (current)</option>}
         {selectedModel?.thinkingModes.map(mode => <option key={mode.id} value={mode.id} title={mode.description}>{thinkingLabel(mode.id)}</option>)}
       </select></label></>}
       </div>

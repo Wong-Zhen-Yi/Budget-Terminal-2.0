@@ -56,7 +56,7 @@ const fakeFetch: typeof fetch = async (input, init) => {
 
 const routes = new Map<Operation, (request: unknown) => unknown>()
 let key: string | null = KEY
-const service = new AgentsService({ executable: 'unused', cwd: directory, routes, label: () => 'Claude',
+const service = new AgentsService({ executable: 'unused', cwd: directory, routes, provider: () => 'claude',
   connectionStatus: () => ({ available: true, tools: 99 }),
   clientFactory: receive => new ClaudeClient(async () => key, receive, { baseURL: 'http://claude.fixture', fetch: fakeFetch }) })
 async function settle() {

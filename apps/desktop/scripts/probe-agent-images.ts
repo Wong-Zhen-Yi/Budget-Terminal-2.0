@@ -25,9 +25,9 @@ const transport: CodexTransport = {
   async request(method, params) {
     calls.push({ method, params })
     if (method === 'account/read') return { account: {} }
-    if (method === 'model/list') return { data: [{ model: 'fixture', displayName: 'Fixture', defaultReasoningEffort: 'low', supportedReasoningEfforts: [{ reasoningEffort: 'low', description: 'Quick' }] }] }
+    if (method === 'model/list') return { data: [{ model: 'gpt-6.1-terra', displayName: 'Fixture', defaultReasoningEffort: 'low', supportedReasoningEfforts: [{ reasoningEffort: 'low', description: 'Quick' }] }] }
     if (method === 'modelProvider/capabilities/read') return { imageGeneration: true }
-    if (method === 'thread/start') { thread = randomUUID(); return { thread: { id: thread }, model: 'fixture' } }
+    if (method === 'thread/start') { thread = randomUUID(); return { thread: { id: thread }, model: 'gpt-6.1-terra' } }
     return {}
   },
   write() {}, close() {},

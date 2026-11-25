@@ -21,8 +21,8 @@ const transport: CodexTransport = {
   async request(method) {
     if (method === 'account/read') return { account: { type: 'fixture' } }
     if (method === 'config/read') return { config: {} }
-    if (method === 'model/list') return { data: [{ model: 'fixture', displayName: 'Fixture', defaultReasoningEffort: 'low', supportedReasoningEfforts: [] }] }
-    if (method === 'thread/start') return { thread: { id: 'fixture-thread' }, model: 'fixture' }
+    if (method === 'model/list') return { data: [{ model: 'gpt-6.1-terra', displayName: 'Fixture', defaultReasoningEffort: 'low', supportedReasoningEfforts: [] }] }
+    if (method === 'thread/start') return { thread: { id: 'fixture-thread' }, model: 'gpt-6.1-terra' }
     return { turn: { id: 'fixture-turn' } }
   },
 }

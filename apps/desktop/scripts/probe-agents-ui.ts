@@ -66,11 +66,11 @@ try {
           : { data: null, meta: { freshness: 'failed', source: 'fixture', fetchedAt: Date.now() }, errors: [{ reason: 'Fixture image missing' }] }
       }
       const models = [
-        { id: 'fixture-fast', name: 'Codex fast', defaultThinking: 'low', thinkingModes: [{ id: 'low', description: 'Quick' }, { id: 'high', description: 'Deeper' }] },
-        { id: 'fixture-research', name: 'Codex research', defaultThinking: 'medium', thinkingModes: [{ id: 'medium', description: 'Balanced' }] },
+        { id: 'gpt-6.1-terra', name: 'GPT-6.1 Terra', defaultThinking: 'low', thinkingModes: [{ id: 'low', description: 'Quick' }, { id: 'high', description: 'Deeper' }] },
+        { id: 'gpt-6-luna', name: 'GPT-6 Luna', defaultThinking: 'medium', thinkingModes: [{ id: 'medium', description: 'Balanced' }] },
       ]
       const trackerFixture = { id: 'tracker-fixture', title: 'Custom catalyst research', instructions: 'Use fresh research tools to evaluate my custom catalyst conditions. Compare with saved evidence and report unknown if coverage is missing.', intervalMinutes: 15, cooldownMinutes: 60, runLimit: 4, runsRemaining: 4, enabled: false, running: false, createdAt: Date.now(), updatedAt: Date.now(), nextRunAt: null, lastRunAt: null, lastNotifiedAt: null, lastOutcome: null, lastSummary: '', memory: '', error: '' }
-      const state = { currentChatId: 'chat-current', history: [{ id: 'chat-current', title: 'New chat', createdAt: Date.now(), updatedAt: Date.now(), model: null, thinking: null, messageCount: 0 }, { id: 'chat-saved', title: 'Saved research', createdAt: Date.now(), updatedAt: Date.now(), model: 'fixture-fast', thinking: null, messageCount: 2 }], notifications: [{ id: 'notice-1', title: 'Monitoring update', body: 'Synthetic cited evidence · fresh. <img src=x onerror=alert(1)>', at: Date.now(), read: false, eventKey: 'fixture-1', source: 'autonomy', deliveryError: 'OS notifications blocked' }], trackers: [trackerFixture], storageError: '', portfolioProposal: null, model: null, thinking: null, models: [], connected: false, busy: false, autonomy: false, objective: '', intervalMinutes: 15, runsRemaining: 0, nextRunAt: null, messages: [], error: '', navigation: null }
+      const state = { currentChatId: 'chat-current', history: [{ id: 'chat-current', title: 'New chat', createdAt: Date.now(), updatedAt: Date.now(), model: null, thinking: null, messageCount: 0 }, { id: 'chat-saved', title: 'Saved research', createdAt: Date.now(), updatedAt: Date.now(), model: 'gpt-6.1-terra', thinking: null, messageCount: 2 }], notifications: [{ id: 'notice-1', title: 'Monitoring update', body: 'Synthetic cited evidence · fresh. <img src=x onerror=alert(1)>', at: Date.now(), read: false, eventKey: 'fixture-1', source: 'autonomy', deliveryError: 'OS notifications blocked' }], trackers: [trackerFixture], storageError: '', portfolioProposal: null, model: null, thinking: null, models: [], connected: false, busy: false, autonomy: false, objective: '', intervalMinutes: 15, runsRemaining: 0, nextRunAt: null, messages: [], error: '', navigation: null }
       const historyMessages = new Map([['chat-saved', [{ id: 'saved-user', role: 'user', text: 'Previous research question', at: Date.now() }, { id: 'saved-answer', role: 'assistant', text: 'Saved answer with source dates', at: Date.now() }]]])
       const envelope = () => ({ data: structuredClone(state), meta: { freshness: state.telegram?.error ? 'failed' : 'fresh', source: 'fixture', fetchedAt: Date.now() }, errors: state.telegram?.error ? [{ reason: state.telegram.error }] : [] })
       window.api.agentsStatus = async () => {
@@ -187,12 +187,13 @@ try {
         check(!shouldPersistRemoteQuery(client.getQueryCache().find({ queryKey: ['agents'] })), 'Private chat must not persist in renderer cache')
         check(document.querySelector('.agents-status').textContent === 'Connected', 'Startup connection status')
         check(!commands.some(command => command.type === 'connect'), 'Startup does not require a renderer Connect command')
-        check(document.getElementById('agent-model').value === 'fixture-fast', 'Current model is visible')
+        check(document.getElementById('agent-model').value === 'gpt-6.1-terra', 'Current model is visible')
+        check([...document.getElementById('agent-model').options].map(option => option.value).join(',') === 'gpt-6.1-terra,gpt-6-luna', 'Only Terra and Luna appear in the picker')
         check(document.getElementById('agent-thinking').textContent.includes('Default (Low)'), 'Current thinking default is visible')
         await select('agent-thinking', 'high')
         check(commands.at(-1).thinking === 'high' && document.getElementById('agent-thinking').value === 'high', 'Thinking selection reaches main process')
-        await select('agent-model', 'fixture-research')
-        check(commands.at(-1).model === 'fixture-research' && commands.at(-1).thinking === null, 'Model change resets thinking to the new default')
+        await select('agent-model', 'gpt-6-luna')
+        check(commands.at(-1).model === 'gpt-6-luna' && commands.at(-1).thinking === null, 'Model change resets thinking to the new default')
         check(!document.getElementById('agent-thinking').textContent.includes('High') && document.getElementById('agent-thinking').textContent.includes('Medium'), 'Only supported thinking modes are offered')
         await fill('agent-message', 'Show me the charts for AAPL. Keep **my text** and -5%.')
         await click('Send message')
@@ -308,7 +309,7 @@ try {
         check(savedArticle.querySelectorAll('button')[1].disabled, 'Active chat cannot be deleted')
         const desktopChatId = state.currentChatId
         const desktopTranscript = JSON.stringify(state.messages)
-        state.telegramHistory = { history: [{ id: 'telegram-saved', title: 'Telegram research', createdAt: Date.now(), updatedAt: Date.now() + 1000, model: 'fixture-fast', thinking: null, messageCount: 2 }], currentChatId: 'telegram-current', busy: true, selected: null, error: '' }
+        state.telegramHistory = { history: [{ id: 'telegram-saved', title: 'Telegram research', createdAt: Date.now(), updatedAt: Date.now() + 1000, model: 'gpt-6.1-terra', thinking: null, messageCount: 2 }], currentChatId: 'telegram-current', busy: true, selected: null, error: '' }
         client.setQueryData(['agents'], envelope()); await settle()
         const history = document.querySelector('[aria-label="Chat history"]')
         const rows = () => [...history.querySelectorAll('.agents-chat-history-row')]

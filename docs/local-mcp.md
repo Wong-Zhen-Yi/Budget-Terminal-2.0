@@ -40,7 +40,8 @@ Prompts are static text that names existing tools. They work while the app is cl
 validate their arguments and add no permissions. The tools they mention still follow
 Local MCP permissions and approvals.
 
-The embedded Agents page can also run on Claude; see [Agents](agents.md#claude-provider).
+The desktop Agents picker uses current Terra and Luna models when Codex is selected.
+External MCP clients select their models in their own settings. See [Agents](agents.md) for runtime setup.
 
 A [demo launch](../README.md#test-with-demo-data) has its own temporary MCP bridge and saved records.
 The default MCP client configuration still targets your regular profile. For MCP tests against demo data,

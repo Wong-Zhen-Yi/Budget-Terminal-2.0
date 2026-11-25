@@ -31,6 +31,9 @@ let nextThreadId = 'thread-1'
 let threadError = false
 let threadGate: Promise<void> | null = null
 let workspaceMcpServer = 'video-editor-fixture'
+let includeCurrentModels = true
+const terra = { model: 'gpt-6.1-terra', displayName: 'Fixture Fast', defaultReasoningEffort: 'low', supportedReasoningEfforts: [{ reasoningEffort: 'low', description: 'Quick' }, { reasoningEffort: 'high', description: 'Deeper' }] }
+const luna = { model: 'gpt-6-luna', displayName: 'Fixture Deep', inputModalities: ['text'], defaultReasoningEffort: 'medium', supportedReasoningEfforts: [{ reasoningEffort: 'medium', description: 'Balanced' }] }
 const client: CodexTransport = {
   async start() { starts++ },
   async request(method, params) {
@@ -40,16 +43,23 @@ const client: CodexTransport = {
       unrelated: {},
       ...((params as { cwd?: string }).cwd === directory ? { [workspaceMcpServer]: { required: true } } : {}),
     } } }
-    if (method === 'model/list') return { data: [
-      { model: 'fixture-fast', displayName: 'Fixture Fast', defaultReasoningEffort: 'low', supportedReasoningEfforts: [{ reasoningEffort: 'low', description: 'Quick' }, { reasoningEffort: 'high', description: 'Deeper' }] },
-      { model: 'fixture-deep', displayName: 'Fixture Deep', inputModalities: ['text'], defaultReasoningEffort: 'medium', supportedReasoningEfforts: [{ reasoningEffort: 'medium', description: 'Balanced' }] },
-    ], nextCursor: null }
+    if (method === 'model/list') {
+      if ((params as { cursor: string | null }).cursor === 'next') return { data: includeCurrentModels ? [terra] : [], nextCursor: null }
+      return { data: [
+        { ...terra, model: 'gpt-6.2-sol' },
+        { ...terra, model: 'gpt-6.2-astra' },
+        { ...terra, model: 'gpt-5.6-terra' },
+        { ...luna, model: 'gpt-5.6-luna' },
+        { ...luna, model: 'gpt-6.1-luna', hidden: true },
+        ...(includeCurrentModels ? [luna] : []),
+      ], nextCursor: 'next' }
+    }
     if (method === 'thread/start') {
       if (threadGate) await threadGate
       if (threadError) throw new Error('Fixture thread creation failed')
       const config = (params as { config: Record<string, unknown> }).config
       if (config[`mcp_servers.${workspaceMcpServer}.enabled`] !== false) throw new Error('Required workspace MCP server is offline')
-      return { thread: { id: nextThreadId }, model: (params as { model?: string }).model ?? 'fixture-fast', reasoningEffort: null }
+      return { thread: { id: nextThreadId }, model: (params as { model?: string }).model ?? 'gpt-6.2-sol', reasoningEffort: null }
     }
     return { turn: { id: 'turn-1' } }
   },
@@ -112,11 +122,12 @@ try {
   await assert.rejects(() => service.command({ type: 'autonomy', enabled: true, objective: 'test', intervalMinutes: 1 }), /too_small|Too small/)
   await service.command({ type: 'connect' })
   assert(service.snapshot().connected)
-  assert.equal(service.snapshot().model, 'fixture-fast')
-  assert.equal(service.snapshot().models.length, 2)
+  assert.equal(service.snapshot().model, 'gpt-6.1-terra')
+  assert.deepEqual(service.snapshot().models.map(model => model.id), ['gpt-6.1-terra', 'gpt-6-luna'])
+  await assert.rejects(() => service.command({ type: 'configure', model: 'gpt-6.2-sol', thinking: null }), /catalog/)
   await assert.rejects(() => service.command({ type: 'configure', model: 'invented', thinking: null }), /catalog/)
-  await assert.rejects(() => service.command({ type: 'configure', model: 'fixture-deep', thinking: 'high' }), /not supported/)
-  await service.command({ type: 'configure', model: 'fixture-fast', thinking: 'high' })
+  await assert.rejects(() => service.command({ type: 'configure', model: 'gpt-6-luna', thinking: 'high' }), /not supported/)
+  await service.command({ type: 'configure', model: 'gpt-6.1-terra', thinking: 'high' })
   const start = calls.find(call => call.method === 'thread/start')!.params
   assert(start.baseInstructions.includes('```pie') && start.baseInstructions.includes('native pie charts'), 'Agent must know the native pie format')
   assert(start.baseInstructions.includes('```candlestick') && start.baseInstructions.includes('"symbol":"AAPL"')
@@ -143,7 +154,7 @@ try {
   for (const tool of [...catalog.map(entry => entry.tool), connectionTool]) assert(agentTools.some(entry => entry.name === tool.name), `${tool.name} must be available in Agents`)
   assert(!agentTools.some(tool => /maintenance|openExternal|shell/.test(tool.name)))
   await service.command({ type: 'send', text: 'Show AAPL and inspect the portfolio' })
-  assert.equal(calls.at(-1)!.params.model, 'fixture-fast')
+  assert.equal(calls.at(-1)!.params.model, 'gpt-6.1-terra')
   assert.equal(calls.at(-1)!.params.effort, 'high')
   assert.equal(service.snapshot().activity, 'thinking', 'New runs begin thinking, not done')
   receiver({ method: 'item/started', params: { threadId: 'thread-1', item: { id: 'web-source-1', type: 'webSearch' } } })
@@ -153,7 +164,7 @@ try {
   receiver({ method: 'item/completed', params: { threadId: 'thread-1', item: { id: 'web-source-1', type: 'webSearch' } } })
   assert.equal(service.snapshot().messages.findLast(message => message.run)?.run?.tools[0].status, 'succeeded')
   assert.equal(service.snapshot().activity, 'thinking')
-  await assert.rejects(() => service.command({ type: 'configure', model: 'fixture-fast', thinking: 'low' }), /working/)
+  await assert.rejects(() => service.command({ type: 'configure', model: 'gpt-6.1-terra', thinking: 'low' }), /working/)
   assert(service.snapshot().busy)
   await assert.rejects(() => service.command({ type: 'send', text: 'overlap' }), /working/)
   await assert.rejects(() => service.command({ type: 'newChat' }), /working/)
@@ -229,9 +240,9 @@ try {
   assert(!service.snapshot().messages.some(message => message.id === 'ignored'))
   assert.equal(service.snapshot().busy, false)
   assert.equal(service.snapshot().autonomy, false)
-  await service.command({ type: 'configure', model: 'fixture-deep', thinking: null })
+  await service.command({ type: 'configure', model: 'gpt-6-luna', thinking: null })
   await service.command({ type: 'autonomy', enabled: true, objective: 'Check news', runs: 2, intervalMinutes: 5 })
-  assert.equal(calls.at(-1)!.params.model, 'fixture-deep')
+  assert.equal(calls.at(-1)!.params.model, 'gpt-6-luna')
   assert.equal(calls.at(-1)!.params.effort, 'medium', 'Default effort must follow the newly selected model')
   assert(service.snapshot().busy)
   assert.equal(service.snapshot().runsRemaining, 1)
@@ -241,7 +252,7 @@ try {
   assert.equal(mutations.length, 1, 'Autonomy must never dispatch saved-data edits')
   complete()
   assert(service.snapshot().nextRunAt! > Date.now())
-  await assert.rejects(() => service.command({ type: 'configure', model: 'fixture-fast', thinking: 'low' }), /autonomous mode/)
+  await assert.rejects(() => service.command({ type: 'configure', model: 'gpt-6.1-terra', thinking: 'low' }), /autonomous mode/)
   await assert.rejects(() => service.command({ type: 'newChat' }), /autonomous mode/)
   await service.command({ type: 'autonomy', enabled: false })
   assert.equal(service.snapshot().nextRunAt, null)
@@ -272,7 +283,7 @@ try {
   assert.equal(service.snapshot().connected, false, 'New chat while disconnected does not silently reconnect')
   authenticated = true
   await service.command({ type: 'connect' })
-  await service.command({ type: 'configure', model: 'fixture-fast', thinking: 'high' })
+  await service.command({ type: 'configure', model: 'gpt-6.1-terra', thinking: 'high' })
   const connectionCounts = { starts, closes, accounts: calls.filter(call => call.method === 'account/read').length }
   threadError = true
   const previousMessages = service.snapshot().messages
@@ -287,7 +298,7 @@ try {
   assert.equal(service.snapshot().messages.length, 0)
   assert.equal(service.snapshot().connected, true)
   assert.equal(service.snapshot().activity, 'idle', 'New chat clears old completion status')
-  assert.equal(service.snapshot().model, 'fixture-fast')
+  assert.equal(service.snapshot().model, 'gpt-6.1-terra')
   assert.equal(service.snapshot().thinking, 'high')
   assert.deepEqual({ starts, closes, accounts: calls.filter(call => call.method === 'account/read').length }, connectionCounts, 'New chat reuses the signed-in Codex transport')
   assert.equal(calls.at(-1)!.method, 'thread/start')
@@ -380,9 +391,9 @@ try {
     clientFactory: (receive, ended) => { receiver = receive; disconnected = ended; return client } })
   try {
     await imports.command({ type: 'connect' })
-    await imports.command({ type: 'configure', model: 'fixture-deep', thinking: null })
+    await imports.command({ type: 'configure', model: 'gpt-6-luna', thinking: null })
     await assert.rejects(() => imports.command({ type: 'send', text: '', images: [image] }), /does not accept images/)
-    await imports.command({ type: 'configure', model: 'fixture-fast', thinking: null })
+    await imports.command({ type: 'configure', model: 'gpt-6.1-terra', thinking: null })
     await imports.command({ type: 'send', text: '', images: [image] })
     assert.deepEqual(calls.at(-1)!.params.input[1], { type: 'image', url: pixel })
     assert.deepEqual(imports.snapshot().messages.findLast(message => message.role === 'user')?.images, ['Portfolio.png'])
@@ -426,6 +437,15 @@ try {
     complete()
     console.log('PASS: image validation and transport, reviewed portfolio/option writes, on-disk verification, omitted fields, stale-write protection and autonomous write rejection')
   } finally { imports.close() }
+  const unavailable = new AgentsService({ executable: 'unused', cwd: directory, routes, clientFactory: () => client })
+  try {
+    includeCurrentModels = false
+    calls = []
+    await unavailable.command({ type: 'connect' })
+    assert.equal(unavailable.snapshot().connected, false)
+    assert.match(unavailable.snapshot().error, /latest Terra and Luna models are unavailable/)
+    assert(!calls.some(call => call.method === 'thread/start'), 'An outdated catalog must not start an older model or the Codex default')
+  } finally { includeCurrentModels = true; unavailable.close() }
   calls = []; writes = []
   console.log('PASS: connected New chat, model preservation, thread isolation, failed thread rollback, Stop during reset, full MCP catalog, validated edits, screenshot image results, failed envelopes, read-only autonomy, navigation, streaming, cancellation and reconnect')
 
@@ -439,7 +459,8 @@ try {
       await live.command({ type: 'connect' })
       assert.equal(live.snapshot().connected, true, live.snapshot().error)
       assert(live.snapshot().model, 'Real Codex must report the active model')
-      assert(live.snapshot().models.length > 0, 'Real model catalog must load')
+      const families = live.snapshot().models.map(model => /^gpt-\d+(?:\.\d+)?-(terra|luna)$/.exec(model.id)?.[1])
+      assert(families.length > 0 && families.every(Boolean) && new Set(families).size === families.length, 'The live desktop catalog exposes only one current model per allowed family')
       const model = live.snapshot().models.find(model => model.id === live.snapshot().model)!
       assert(model, 'Active model must be discoverable')
       await live.command({ type: 'configure', model: model.id, thinking: model.defaultThinking })

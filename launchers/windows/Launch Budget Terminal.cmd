@@ -1,4 +1,6 @@
 @echo off
+rem Desktop Agents uses the latest Codex Terra and Luna models from the shared build.
+rem The shared build shows only whole rows in Portfolio's Today by position strip (Top N of M when space is short), keeps the PERP tag readable on Price and Market Cap, and fits the Price table without sideways scrolling.
 rem The shared build batches Yahoo quotes (Forex, Dashboard, Oil, Semiconductors, Homebuilders) and dates daily bars in each exchange's timezone so summer forex changes are no longer flat.
 rem The shared build refines the UI: one MCP Offline chip, a sidebar that fits the window, shared heatmap colours, no in-page load notes, Options opening on SPY, and tidier Stocks, Crypto, Economic, Portfolio and Finance layouts.
 rem The shared build makes the phone view browser-friendly: Back steps through pages, double-tap opens rows, wide tables keep the ticker in view, controls are finger-sized and Add to Home Screen opens full screen.
