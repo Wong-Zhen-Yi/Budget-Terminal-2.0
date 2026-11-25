@@ -32,11 +32,22 @@ export class FinnhubQuotes {
     return this.isPortfolio(symbol) ? 2 : this.visible.has(finnhubSymbol(symbol) ?? '') ? 1 : 0
   }
 
+  // Intl formatting is comparatively expensive and the session only changes by minute,
+  // so one poll's symbol scan shares a single New York clock reading.
+  private session?: { minute: number; minutes: number; weekday: boolean }
+
+  private sessionTime(): { minutes: number; weekday: boolean } {
+    const minute = Math.floor(this.now() / 60_000)
+    if (this.session?.minute !== minute) {
+      const parts = sessionClock.formatToParts(this.now())
+      const part = (type: string) => parts.find(value => value.type === type)?.value ?? ''
+      this.session = { minute, minutes: Number(part('hour')) * 60 + Number(part('minute')), weekday: !['Sat', 'Sun'].includes(part('weekday')) }
+    }
+    return this.session
+  }
+
   private refreshInterval(symbol: string): number {
-    const parts = sessionClock.formatToParts(this.now())
-    const part = (type: string) => parts.find(value => value.type === type)?.value ?? ''
-    const minutes = Number(part('hour')) * 60 + Number(part('minute'))
-    const weekday = !['Sat', 'Sun'].includes(part('weekday'))
+    const { minutes, weekday } = this.sessionTime()
     // Include pre-market and after-hours in New York time, including DST.
     // Holidays conservatively follow weekday hours without a calendar request.
     if (!weekday || minutes < 240 || minutes >= 1200) return 15 * 60_000
@@ -193,6 +204,14 @@ export class FinnhubQuotes {
 
   /** Refresh portfolio stocks first, then rotate the remaining requested symbols. */
   async poll(): Promise<void> {
+    // Without a saved key there is nothing to stream or refresh. Saving a key resets
+    // the cached credential, so the next tick picks it up.
+    const generation = this.generation
+    let key: string | undefined
+    try { key = await (this.credential ??= this.getKey()) } catch { return }
+    if (generation !== this.generation) return
+    this.enabled = Boolean(key)
+    if (!key) return
     await this.preparePortfolio()
     if (this.streaming) {
       if (this.socket && this.now() - this.lastMessageAt > 90_000) this.disconnect()

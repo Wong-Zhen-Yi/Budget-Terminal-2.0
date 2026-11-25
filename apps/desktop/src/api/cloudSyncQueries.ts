@@ -1,17 +1,31 @@
 import { useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import type { CloudSyncCommand } from '@shared/cloudSync'
+import type { CloudSyncCommand, CloudSyncStatus } from '@shared/cloudSync'
+import type { Envelope } from '@shared/contract'
 
 const statusKey = ['cloudSyncStatus'] as const
+export const CLOUD_SYNC_ACTIVE_POLL_MS = 2_000
+export const CLOUD_SYNC_IDLE_POLL_MS = 30_000
 
-/** Authentication stays live even before Settings has been visited. */
-export function useCloudSyncStatus(enabled = true) {
+/** Sign-in, restore and sync transitions resolve in seconds; a settled account does not. */
+export function cloudSyncPollInterval(status: CloudSyncStatus | undefined, watching: boolean): number {
+  if (watching || !status) return CLOUD_SYNC_ACTIVE_POLL_MS
+  const transitioning = status.signInPending || status.pending || status.state === 'syncing'
+    || status.authState === 'restoring' || status.authState === 'signingIn'
+  return transitioning ? CLOUD_SYNC_ACTIVE_POLL_MS : CLOUD_SYNC_IDLE_POLL_MS
+}
+
+/**
+ * Authentication stays live even before Settings has been visited. The shell polls a
+ * settled account slowly; `watching` (the visible Settings panel) keeps the fast cadence.
+ */
+export function useCloudSyncStatus(enabled = true, watching = false) {
   return useQuery({
     queryKey: statusKey,
     enabled,
     queryFn: () => window.api.cloudSyncStatus(),
     refetchOnMount: 'always',
-    refetchInterval: 2000,
+    refetchInterval: query => cloudSyncPollInterval((query.state.data as Envelope<CloudSyncStatus> | undefined)?.data, watching),
     retry: false,
   })
 }

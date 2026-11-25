@@ -6,7 +6,7 @@ import { Panel } from '@/components/ui/Panel'
 import { useAuthPrompt } from '@/stores/authPrompt'
 
 export function CloudSyncPanel() {
-  const query = useCloudSyncStatus()
+  const query = useCloudSyncStatus(true, true)
   const runCommand = useCloudSyncCommand()
   const status = query.data?.data
   const [busy, setBusy] = useState(false)

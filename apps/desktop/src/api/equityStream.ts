@@ -186,10 +186,19 @@ export function useEquityMarketStream(activePage: string): void {
       void window.api.setEquityQuoteVisibility?.(symbols).catch(() => undefined)
     }
     publish()
-    const timer = setInterval(publish, 1_000)
+    // The visible set changes only when the page's queries mount, unmount or load new
+    // results. Recompute on those cache events instead of polling every second; a
+    // slow fallback covers page-scope registrations that emit no cache event.
+    let pending: ReturnType<typeof setTimeout> | undefined
+    const schedule = () => { pending ??= setTimeout(() => { pending = undefined; publish() }, 100) }
+    const unsubscribe = client.getQueryCache().subscribe(event => {
+      if (event.type === 'added' || event.type === 'removed' || event.type === 'observerAdded' || event.type === 'observerRemoved'
+        || (event.type === 'updated' && event.action.type === 'success' && !event.action.manual)) schedule()
+    })
+    const fallback = setInterval(publish, 15_000)
     const stream = createBatchedEquityUpdates(client)
     const stop = window.api.onEquityMarketChanged?.(stream.enqueue)
-    return () => { clearInterval(timer); index.stop(); stop?.(); stream.stop() }
+    return () => { clearTimeout(pending); clearInterval(fallback); unsubscribe(); index.stop(); stop?.(); stream.stop() }
   }, [client, activePage])
 }
 

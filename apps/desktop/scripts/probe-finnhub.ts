@@ -419,6 +419,23 @@ try {
   await client.resolve('AAPL')
   assert.equal(calls, 3)
 
+  // The main process polls every 1.2s for the whole session. Without a saved key,
+  // a tick must not read portfolios, scan symbols or contact Finnhub.
+  let keylessKey: string | undefined
+  let keylessRequests = 0
+  let keylessPortfolioReads = 0
+  const keyless = new FinnhubQuotes(async () => keylessKey, async () => { keylessRequests++; return Response.json({ c: 110, pc: 100, t: Math.floor(now / 1_000) }) }, () => now)
+  keyless.setPortfolioLoader(async () => { keylessPortfolioReads++; return ['AAPL', 'MSFT'] })
+  for (let tick = 0; tick < 5; tick++) await keyless.poll()
+  assert.equal(keylessRequests + keylessPortfolioReads, 0, 'Keyless polling still did work')
+  assert(!keyless.prefers('AAPL'))
+  keylessKey = 'fixture-keyless-saved'
+  keyless.credentialsChanged()
+  await keyless.poll()
+  assert.equal(keylessPortfolioReads, 1, 'Saving a key must resume portfolio polling on the next tick')
+  assert.equal(keylessRequests, 2, 'Saving a key must seed portfolio quotes on the next tick')
+  console.log('PASS: keyless Finnhub polling is idle and resumes when a key is saved')
+
   let active = 0
   let maximumActive = 0
   let portfolioCalls = 0

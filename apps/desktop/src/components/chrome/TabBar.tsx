@@ -21,6 +21,21 @@ interface TabBarProps {
   agentChatAvailable?: boolean
 }
 
+/** Only the clock re-renders every second, not the whole top bar. */
+function TopBarClock({ zone, time12h }: { zone: string; time12h: boolean }) {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+  return (
+    <span className="terminal-clock num no-drag shrink-0 whitespace-nowrap px-2 text-2xs text-text-muted">
+      {now.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric', timeZone: zone })}
+      {'  '}{clockTime(now, zone, time12h)}
+    </span>
+  )
+}
+
 export function TabBar({
   onOpenPicker,
   onReload,
@@ -37,13 +52,6 @@ export function TabBar({
   const zone =
     CLOCK_COUNTRIES.find((entry) => entry.code === clockCountry)?.zone ??
     CLOCK_COUNTRIES.find((entry) => entry.code === DEFAULT_CLOCK_COUNTRY)!.zone
-  const [now, setNow] = useState(() => new Date())
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000)
-    return () => clearInterval(timer)
-  }, [])
-
   return (
     <div className={`terminal-topbar drag-region flex shrink-0 items-center gap-2 border-b border-border bg-surface ${isMac ? 'h-[52px] rounded-t-xl pr-3 pl-[86px]' : 'h-12 pr-0 pl-2'}`}>
       <span className="terminal-brand shrink-0" title="Budget Terminal">
@@ -58,10 +66,7 @@ export function TabBar({
         Find a page <kbd className="terminal-picker-hint num">{isMac ? '⌘ K' : 'Ctrl K'}</kbd>
       </button>
 
-      <span className="terminal-clock num no-drag shrink-0 whitespace-nowrap px-2 text-2xs text-text-muted">
-        {now.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric', timeZone: zone })}
-        {'  '}{clockTime(now, zone, time12h)}
-      </span>
+      <TopBarClock zone={zone} time12h={time12h} />
 
       <button
         type="button"

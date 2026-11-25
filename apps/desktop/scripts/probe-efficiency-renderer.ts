@@ -13,6 +13,10 @@ import { refreshSavedData } from '../src/api/mcpChanges.js'
 import { subscribeLiveStatus } from '../src/api/liveStatus.js'
 import { createLiveStatusEvents } from '../electron/services/liveStatusEvents.js'
 import { ok } from '../electron/shared/envelope.js'
+import { dehydrate } from '@tanstack/react-query'
+import { trimPersistedClient } from '../src/api/queryPersistence.js'
+import { cloudSyncPollInterval, CLOUD_SYNC_ACTIVE_POLL_MS, CLOUD_SYNC_IDLE_POLL_MS } from '../src/api/cloudSyncQueries.js'
+import type { CloudSyncStatus } from '../electron/shared/cloudSync.js'
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 const baseline = process.argv.includes('--baseline')
@@ -227,6 +231,57 @@ try {
   assert(sizes.pinnedBytes > sizes.additionalBytes && sizes.additionalBytes > sizes.localBytes)
   assert.equal(sizes.unmeasuredQueries, 0)
   console.log('PASS: incremental RSI/SMA parity including retention shifts, indexed 2,000-query routing, batched bar ordering, structural sharing, chart corrections and protected-memory estimates')
+
+  // Persistence sizes: `dehydrate` copies query state on every save, so the size cache
+  // must follow the payload. Unchanged histories are serialized once, not once per save.
+  client.clear()
+  const history = { candles: Array.from({ length: 2_000 }, (_, index) => ({ time: index, close: index })) }
+  client.setQueryData(['chart', 'HISTORY'], history)
+  const persisted = () => ({ buster: '', timestamp: 0, clientState: dehydrate(client) })
+  let historyWrites = 0
+  const stringify = JSON.stringify
+  const stringifySpy = mock.method(JSON, 'stringify', (value: unknown, ...rest: unknown[]) => {
+    if (value === history) historyWrites++
+    return (stringify as (...args: unknown[]) => string)(value, ...rest)
+  })
+  let full = 0
+  try {
+    for (let save = 0; save < 5; save++) trimPersistedClient(persisted())
+    full = new TextEncoder().encode(stringify(persisted().clientState.queries[0])).byteLength
+  } finally { stringifySpy.mock.restore() }
+  assert.equal(historyWrites, 1, 'Each renderer cache save re-serialized an unchanged history')
+  const header = new TextEncoder().encode(stringify({ ...persisted(), clientState: { ...persisted().clientState, queries: [] } })).byteLength
+  assert.equal(trimPersistedClient(persisted(), header + full).clientState.queries.length, 1, 'Cached sizes must stay exact at the budget edge')
+  assert.equal(trimPersistedClient(persisted(), header + full - 1).clientState.queries.length, 0, 'Cached sizes must not under-count')
+
+  // Live marks are manual writes into existing results; they must not trigger a sweep.
+  const liveClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: Infinity } } })
+  liveClient.setQueryData(['chart', 'LIVE'], { candles: history.candles })
+  let liveTraversals = 0
+  const liveCache = liveClient.getQueryCache()
+  const liveGetAll = liveCache.getAll.bind(liveCache)
+  const liveSpy = mock.method(liveCache, 'getAll', () => { liveTraversals++; return liveGetAll() })
+  const liveMemory = manageQueryMemory(liveClient, { maxBytes: 1 << 30, maxQueries: 1_000 })
+  try {
+    await wait(300)
+    liveTraversals = 0
+    for (let tick = 0; tick < 40; tick++) {
+      liveClient.setQueryData(['chart', 'LIVE'], (previous: { candles: Candle[] } | undefined) => ({ candles: [...previous!.candles.slice(0, -1), { time: 1_999, close: tick }] }))
+      await wait(25)
+    }
+    await wait(300)
+    assert.equal(liveTraversals, 0, 'Streamed marks scheduled memory sweeps')
+  } finally { liveMemory.stop(); liveSpy.mock.restore(); liveClient.clear() }
+
+  const settled: CloudSyncStatus = { url: 'https://fixture.invalid', signedIn: true, encryptionAvailable: true, state: 'synced', pending: false, authState: 'authenticated' }
+  assert.equal(cloudSyncPollInterval(settled, false), CLOUD_SYNC_IDLE_POLL_MS, 'A settled account must poll slowly')
+  assert.equal(cloudSyncPollInterval({ ...settled, signedIn: false, state: 'disconnected', authState: 'signedOut' }, false), CLOUD_SYNC_IDLE_POLL_MS, 'A signed-out account must poll slowly')
+  assert.equal(cloudSyncPollInterval(settled, true), CLOUD_SYNC_ACTIVE_POLL_MS, 'The visible Settings panel keeps the fast cadence')
+  for (const change of [{ signInPending: true }, { pending: true }, { state: 'syncing' }, { authState: 'restoring' }, { authState: 'signingIn' }] as Partial<CloudSyncStatus>[]) {
+    assert.equal(cloudSyncPollInterval({ ...settled, ...change }, false), CLOUD_SYNC_ACTIVE_POLL_MS, 'Transitions must poll fast: ' + JSON.stringify(change))
+  }
+  assert.equal(cloudSyncPollInterval(undefined, false), CLOUD_SYNC_ACTIVE_POLL_MS, 'Unknown status must resolve quickly')
+  console.log('PASS: persistence sizes serialize unchanged histories once and stay exact; streamed marks skip memory sweeps; settled cloud sync polls every 30s')
 } finally {
   memory.stop(); spy.mock.restore(); client.clear()
 }

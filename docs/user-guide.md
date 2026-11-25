@@ -62,7 +62,7 @@ partial results remain usable when a provider fails, with their limitations visi
 
 Market data comes from Yahoo Finance, SEC, fund issuers and other public providers.
 Feed availability and coverage can vary. Yahoo requests share a rate gate; the
-footer's API bars show app-side request pressure, not a provider-reported quota.
+API usage bars in Settings show app-side request pressure, not a provider-reported quota.
 
 ## Saved data and backups
 

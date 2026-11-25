@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 
-import type { ApiProviderUsage, ApiUsageSnapshot, Envelope, Freshness } from '@shared/contract'
+import type { Envelope, Freshness } from '@shared/contract'
 import { effectiveFreshness, errorMessage, useSnapshotClock } from '@/api/snapshotHealth'
 
 export interface PanelStatus {
@@ -20,80 +19,6 @@ const severity: Record<Freshness, number> = {
   stale: 1,
   cached: 0,
   fresh: 0,
-}
-
-const EMPTY_USAGE: ApiUsageSnapshot = { providers: [], sampledAt: 0 }
-
-function usageTone(provider: ApiProviderUsage): string {
-  if (provider.throttled || provider.percent >= 90) return 'bg-down'
-  if (provider.percent >= 60) return 'bg-warn'
-  return 'bg-up'
-}
-
-function ApiLimitBars() {
-  const [usage, setUsage] = useState<ApiUsageSnapshot>(EMPTY_USAGE)
-
-  useEffect(() => {
-    let mounted = true
-    const refresh = async () => {
-      try {
-        const next = await window.api.apiUsage()
-        if (mounted) setUsage(next)
-      } catch {
-        // The footer is diagnostic chrome; a closing/reloading main process should not
-        // turn a missed poll into a renderer error.
-      }
-    }
-    void refresh()
-    const timer = window.setInterval(() => void refresh(), 1_000)
-    return () => {
-      mounted = false
-      window.clearInterval(timer)
-    }
-  }, [])
-
-  return (
-    <div
-      className="flex min-w-0 max-w-[48vw] shrink-0 flex-nowrap items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      aria-label="API request pressure"
-    >
-      <span className="shrink-0 tracking-wide text-text-dim">API USAGE</span>
-      {usage.providers.length ? usage.providers.map((provider) => {
-        const title = [
-          `${provider.label}: ${provider.requestCount}/${provider.softLimit} requests in the last ${provider.windowSeconds}s`,
-          `${provider.inFlight} active`,
-          ...(provider.queued !== undefined ? [`${provider.queued} queued (not yet sent)`] : []),
-          ...(provider.throttled ? [`Rate limited; cooldown ${Math.ceil(provider.cooldownMs / 1000)}s`] : []),
-          ...(provider.backgroundRequestsPerSecond !== undefined ? [
-            `Startup paced at ${provider.backgroundRequestsPerSecond} requests/s (~${Math.round(provider.backgroundRequestsPerSecond * provider.windowSeconds / provider.softLimit * 100)}% of the app budget when busy)`,
-          ] : []),
-        ].join(' · ')
-        return (
-          <div
-            key={provider.id}
-            className="flex shrink-0 items-center gap-1"
-            title={`${title}. Rolling app-side usage, not a provider-reported quota or loading progress. It falls as requests leave the time window.`}
-          >
-            <span className="text-text-muted">{provider.label.toUpperCase()}</span>
-            <span className="num w-8 text-right text-text-muted">{provider.percent}%</span>
-            {provider.queued !== undefined ? (
-              <span className="num text-text-muted">
-                {provider.requestCount}/{provider.softLimit} · {provider.inFlight} active · {provider.queued} queued
-              </span>
-            ) : null}
-            <span className="h-2 w-12 border border-border-strong bg-bg" aria-hidden="true">
-              <span
-                className={`block h-full transition-[width] duration-300 ${usageTone(provider)}`}
-                style={{ width: `${provider.percent}%` }}
-              />
-            </span>
-          </div>
-        )
-      }) : (
-        <span className="text-text-dim">IDLE</span>
-      )}
-    </div>
-  )
 }
 
 /**
@@ -162,8 +87,6 @@ export function StatusBar({
       <span className="ml-auto min-w-0 truncate text-text-dim" title={sourcePath}>
         {sourcePath || 'no holdings file'}
       </span>
-      <span className="text-text-dim">|</span>
-      <ApiLimitBars />
     </footer>
   )
 }

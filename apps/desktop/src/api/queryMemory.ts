@@ -134,7 +134,10 @@ export function manageQueryMemory(client: QueryClient, options: {
     if (event.type === 'removed') accessed.delete(event.query.queryHash)
     else if (event.type === 'added' || event.type === 'observerAdded' || (event.type === 'updated' && event.action.type === 'success')) accessed.set(event.query.queryHash, Date.now())
     if (pins.get(client)?.has(event.query.queryHash)) return
-    const settled = event.type === 'updated' && (event.action.type === 'success' || event.action.type === 'error'
+    // Manual writes are live marks/candles merged into an existing result many times a
+    // second. Sweeping (and re-measuring that payload) on each one burns CPU without
+    // changing which queries are evictable; the periodic sweep still accounts for them.
+    const settled = event.type === 'updated' && ((event.action.type === 'success' && !event.action.manual) || event.action.type === 'error'
       || (event.action.type === 'setState' && ('data' in event.action.state || event.action.state.fetchStatus === 'idle')))
     if (event.type === 'added' || event.type === 'removed' || event.type === 'observerAdded' || event.type === 'observerRemoved' || settled) schedule()
   })

@@ -167,9 +167,10 @@ function jsonBytes(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value)).byteLength
 }
 
-// React Query retains immutable state objects between updates. Reuse their sizes so
-// each startup result does not serialize all previously loaded histories again.
-const querySizes = new WeakMap<object, number>()
+// React Query keeps a result's data object until that query changes, but `dehydrate`
+// copies `state` on every save. Key the expensive part of the estimate, the payload,
+// by its data identity so a save does not serialize every retained history again.
+const dataSizes = new WeakMap<object, number>()
 const liveSnapshots = new WeakSet<object>()
 
 /** Internal provenance only: source refreshes/failures must retain normal persistence timing. */
@@ -178,12 +179,15 @@ export function markLiveQuerySnapshot(snapshot: object): void {
 }
 
 function querySize(query: PersistedClient['clientState']['queries'][number]): number {
-  let size = querySizes.get(query.state)
+  const data = query.state.data
+  if (!data || typeof data !== 'object') return jsonBytes(query)
+  let size = dataSizes.get(data)
   if (size === undefined) {
-    size = jsonBytes(query)
-    querySizes.set(query.state, size)
+    size = jsonBytes(data)
+    dataSizes.set(data, size)
   }
-  return size
+  // Exact total: the small remainder is serialized with a 4-byte `null` placeholder.
+  return size - 4 + jsonBytes({ ...query, state: { ...query.state, data: null } })
 }
 
 function* trimClient(client: PersistedClient, maxBytes = cacheSettings.rendererMiB * MIB): Generator<void, PersistedClient> {

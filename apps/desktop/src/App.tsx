@@ -471,7 +471,7 @@ export function App() {
       {!mobile && <YouTubePlayer pageActive={activeTab === 'youtube'} onReturn={() => setActiveTab('youtube')}
         suppressed={Boolean(screenshotPage) || (obscured && (settings?.obscuredTabs ?? []).includes('youtube'))} />}
 
-      {/* Keep chart observers and diagnostic polling mounted without a visible bottom strip. */}
+      {/* Keep chart observers mounted without a visible bottom strip. API usage is polled only where it is shown. */}
       {!mobile && <div hidden>
         <StatusBar
           portfolioCharts={<PortfolioChartsStatus enabled={!settingsQuery.isPending} />}

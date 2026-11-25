@@ -53,19 +53,14 @@ try {
           createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><App /></QueryClientProvider>)
           await settle()
           if (${labsCaptureOnly}) return 'Mounted renderer for Labs screenshot checks'
-          const meters = () => document.querySelector('footer [aria-label="API request pressure"]')
-          check(document.querySelector('footer')?.getClientRects().length === 0, 'Bottom status strip must be hidden without unmounting background monitoring')
-          await new Promise(resolve => setTimeout(resolve, 1100))
-          check(meters()?.textContent.includes('API USAGE'), 'Footer must describe usage, not provider quota')
-          check(meters()?.textContent.includes('60/240 · 1 active · 120 queued'), 'Yahoo request counts and queue are missing')
-          check(meters()?.querySelector('[title*="Startup paced at 1 requests/s"]'), 'Yahoo plateau explanation is missing')
-          window.fixtureYahooUsage.queued = 80
-          await new Promise(resolve => setTimeout(resolve, 1100))
-          check(meters()?.textContent.includes('25%') && meters()?.textContent.includes('80 queued'), 'Yahoo queue must update even when rolling usage stays at 25%')
-          Object.assign(window.fixtureYahooUsage, { percent: 0, requestCount: 0, inFlight: 0, queued: 0 })
-          await new Promise(resolve => setTimeout(resolve, 1100))
-          check(meters()?.textContent.includes('0/240 · 0 active · 0 queued'), 'Yahoo idle state did not update')
-          console.log('PASS: Yahoo steady 25% usage shows a live queue and updates to idle')
+          check(document.querySelector('footer')?.getClientRects().length === 0, 'Bottom status strip must be hidden without unmounting chart observers')
+          // Nobody can see the hidden strip, so it must not poll API usage every second.
+          const usageCalls = () => window.fixtureApiUsageCalls ?? 0
+          const usageBefore = usageCalls()
+          await new Promise(resolve => setTimeout(resolve, 2200))
+          check(!document.querySelector('footer [aria-label="API request pressure"]'), 'Hidden strip still renders API usage meters')
+          check(usageCalls() - usageBefore <= 1, 'Hidden strip polls API usage: ' + (usageCalls() - usageBefore) + ' calls in 2.2s')
+          console.log('PASS: hidden bottom strip does not poll API usage')
           const light = name => document.querySelector('[data-mcp-light="' + name + '"]')
           check(light('active')?.dataset.state === 'off', 'Idle MCP activity light should be off')
           check(light('connected')?.dataset.state === 'off', 'MCP readiness alone must not imply a connected client')
@@ -326,7 +321,7 @@ try {
           return calls === 1 ? { data: [], errors: [{ source: 'fixture', operation: 'fetch', reason: 'HTTP 503' }],
             meta: { source: 'fixture', freshness: 'partial', fetchedAt: Date.now() } } : ok([]);
         },
-        apiUsage: async () => ({ providers: ['Yahoo', 'CoinGecko', 'Alt.me', 'DefeatBeta'].map((label, index) => ({
+        apiUsage: async () => (window.fixtureApiUsageCalls = (window.fixtureApiUsageCalls ?? 0) + 1, { providers: ['Yahoo', 'CoinGecko', 'Alt.me', 'DefeatBeta'].map((label, index) => ({
           id: label.toLowerCase(), label, percent: 0, requestCount: 0,
           softLimit: 100, windowSeconds: 60, inFlight: 0, throttled: false, cooldownMs: 0, updatedAt: Date.now(),
           ...(index === 0 ? (window.fixtureYahooUsage ??= { percent: 25, requestCount: 60, softLimit: 240,
@@ -473,17 +468,15 @@ try {
           window.setSize(width, 800);
           await new Promise(resolve => setTimeout(resolve, 250));
           await window.webContents.executeJavaScript(\`(() => {
-            const footer = document.querySelector('[aria-label="API request pressure"]').closest('footer');
+            const footer = document.querySelector('footer');
             const check = (ok, message) => { if (!ok) throw Error(message + ' at width ' + innerWidth) };
-            check(footer.getClientRects().length === 0, 'Bottom status strip became visible');
-            const meters = footer.querySelector('[aria-label="API request pressure"]');
-            check(meters.children.length === 5, 'Background API monitoring did not load');
+            check(footer && footer.getClientRects().length === 0, 'Bottom status strip became visible');
             const workspace = document.querySelector('.terminal-workspace').getBoundingClientRect();
             check(Math.abs(workspace.bottom - innerHeight) <= 1, 'Hidden strip still reserves workspace height');
           })()\`);
         }
         fs.writeFileSync(${JSON.stringify(join(root, 'out', 'status-bar-smoke.png'))}, (await window.webContents.capturePage(undefined, { stayHidden: true, stayAwake: true })).toPNG());
-        console.log('PASS: bottom strip stays hidden without reserving space; background API monitoring continues at 800, 1000, 1280 and 1920px');
+        console.log('PASS: bottom strip stays hidden without reserving space at 800, 1000, 1280 and 1920px');
         app.exit(0);
       } catch (error) { console.error(error); app.exit(1); }
     });

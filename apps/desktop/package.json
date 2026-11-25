@@ -169,6 +169,7 @@
     "probe:diagnostics-ui": "tsx scripts/probe-diagnostics-ui.ts",
     "probe:polymarket": "tsx scripts/probe-polymarket.ts",
     "probe:polymarket-ui": "tsx scripts/probe-polymarket-ui.ts",
+    "probe:cpu-idle": "tsx scripts/probe-cpu-idle.ts",
     "probe:efficiency": "tsx scripts/probe-efficiency.ts && tsx scripts/probe-efficiency-renderer.ts && tsx scripts/probe-live-status.ts && tsx scripts/probe-efficiency-ui.ts",
     "probe:googl": "tsx scripts/probe-googl.ts",
     "probe:googl-ui": "tsx scripts/probe-googl-ui.ts",
