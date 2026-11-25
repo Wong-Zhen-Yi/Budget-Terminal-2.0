@@ -5,7 +5,14 @@ import type { SiloBar } from '@shared/financeMath'
 import { BarChart } from '@/components/charts/BarChart'
 import { Button } from '@/components/ui/Button'
 import { Panel } from '@/components/ui/Panel'
-import { moneyRounded } from '@/lib/format'
+import { CURRENCY_PREFIX, moneyRounded } from '@/lib/format'
+
+/** `S$21K`, `S$8.4K`, `S$486`: short enough for a narrow column. */
+function shortMoney(value: number, display: FinanceCurrency): string {
+  const abs = Math.abs(value)
+  const text = abs >= 1e6 ? `${(abs / 1e6).toFixed(abs >= 1e7 ? 0 : 1)}M` : abs >= 1e3 ? `${(abs / 1e3).toFixed(abs >= 1e4 ? 0 : 1)}K` : abs.toFixed(0)
+  return `${CURRENCY_PREFIX[display]}${text}`
+}
 
 interface SilosPanelProps {
   bars: SiloBar[]
@@ -43,6 +50,7 @@ export function SilosPanel({ bars, display, className = '', complete = true }: S
         logScale={logScale}
         sortByMagnitude
         format={(value) => moneyRounded(Math.abs(value), display)}
+        compactFormat={(value) => shortMoney(value, display)}
         empty="No accounts to show"
       />
     </Panel>

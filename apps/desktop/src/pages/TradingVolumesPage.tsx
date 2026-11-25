@@ -205,7 +205,7 @@ export function TradingVolumesPage({
           }}>Reset</Button>
 
 
-          <Button variant="positive" onClick={() => void onExport()}>
+          <Button variant="accent" onClick={() => void onExport()}>
             Export for LLM
           </Button>
         </MobileDisclosure>

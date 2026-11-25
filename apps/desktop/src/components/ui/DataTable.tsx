@@ -55,6 +55,8 @@ interface DataTableProps<T> {
   defaultSort?: SortState
   /** Automatic above 200 rows; false is reserved for deliberately unbounded layouts. */
   virtualize?: boolean
+  /** Keep the index gutter and first column visible while a wide table scrolls sideways. */
+  pinFirstColumn?: boolean
 }
 
 const alignClass = {
@@ -82,7 +84,13 @@ export function DataTable<T>({
   minWidth,
   defaultSort,
   virtualize = true,
+  pinFirstColumn = false,
 }: DataTableProps<T>) {
+  // Sticky cells need an opaque background of their own or scrolled cells show through.
+  const pinGutter = pinFirstColumn ? 'sticky left-0 z-[1]' : ''
+  // The lead column sticks at left-10, so the gutter must be exactly 40px wide or the two overlap.
+  const gutterWidth = pinFirstColumn ? { width: 40, minWidth: 40, maxWidth: 40 } : undefined
+  const pinLead = pinFirstColumn ? `sticky z-[1] ${showIndex ? 'left-10' : 'left-0'} shadow-[1px_0_0_var(--color-border)]` : ''
   const maskNumbers = useNumberPrivacy()
   // One wrapping column makes every row variable-height, so the short cells have to
   // align to the top or they float in the middle of a tall row.
@@ -240,16 +248,16 @@ export function DataTable<T>({
         <thead ref={headerRef} className="sticky top-0 z-10">
           <tr className="bg-surface-raised" aria-rowindex={1}>
             {showIndex ? (
-              <th className="w-10 border-b border-border px-1 py-1 text-right text-2xs font-medium text-text-dim" />
+              <th style={gutterWidth} className={`w-10 border-b border-border bg-surface-raised px-1 py-1 text-right text-2xs font-medium text-text-dim ${pinGutter}`} />
             ) : null}
-            {columns.map((column) => {
+            {columns.map((column, columnIndex) => {
               const active = sort?.key === column.key
               return (
                 <th
                   key={column.key}
                   style={column.width ? { width: column.width } : undefined}
                   onClick={() => toggleSort(column)}
-                  className={`overflow-hidden border-b border-border px-2 py-1 text-2xs font-medium text-ellipsis whitespace-nowrap ${
+                  className={`overflow-hidden border-b border-border px-2 py-1 text-2xs font-medium text-ellipsis whitespace-nowrap ${columnIndex === 0 && pinLead ? `${pinLead} bg-surface-raised` : ''} ${
                     alignClass[column.align ?? 'left']
                   } ${column.sortValue ? 'cursor-pointer select-none hover:text-text' : ''} ${
                     active ? 'text-accent-hover' : 'text-text-muted'
@@ -287,17 +295,18 @@ export function DataTable<T>({
                 >
                   {showIndex ? (
                     <td
-                      className={`num px-1 py-[3px] text-right text-2xs text-text-dim ${
+                      style={gutterWidth}
+                      className={`num px-1 py-[3px] text-right text-2xs text-text-dim ${pinGutter ? `${pinGutter} bg-surface` : ''} ${
                         hasWrap ? 'align-top' : ''
                       }`}
                     >
                       {maskNumbers ? '****' : index + 1}
                     </td>
                   ) : null}
-                  {columns.map((column) => (
+                  {columns.map((column, columnIndex) => (
                     <td
                       key={column.key}
-                      className={`px-2 py-[3px] text-2xs ${
+                      className={`px-2 py-[3px] text-2xs ${columnIndex === 0 && pinLead ? `${pinLead} bg-surface` : ''} ${
                         column.wrap
                           ? 'break-words whitespace-normal'
                           : 'overflow-hidden text-ellipsis whitespace-nowrap'

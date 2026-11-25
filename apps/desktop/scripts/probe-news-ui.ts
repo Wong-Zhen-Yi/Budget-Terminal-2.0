@@ -24,7 +24,7 @@ try {
       import { NewsLitePage } from './src/pages/NewsLitePage'
       const check = (value, message) => { if (!value) throw Error(message) }
       const settle = () => new Promise(resolve => setTimeout(resolve, 150))
-      const button = label => [...document.querySelectorAll('button')].find(b => b.textContent.trim() === label)
+      const button = label => [...document.querySelectorAll('button')].find(b => b.textContent.trim() === label || b.getAttribute('aria-label') === label)
       let copied = '', failed = false
       window.api.writeClipboard = async text => { if (failed) throw Error('clipboard unavailable'); copied = text }
       window.api.saveText = () => { throw Error('File export must not run') }

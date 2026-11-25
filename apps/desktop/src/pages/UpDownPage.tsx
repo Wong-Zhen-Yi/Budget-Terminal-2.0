@@ -251,7 +251,7 @@ export function UpDownPage({
           />
           <div className="flex flex-col gap-1">
             <Button onClick={() => applyCustom(false)}>Apply</Button>
-            <Button variant="positive" onClick={() => applyCustom(true)}>Save</Button>
+            <Button variant="accent" onClick={() => applyCustom(true)}>Save</Button>
           </div>
         </div>
       ) : null}

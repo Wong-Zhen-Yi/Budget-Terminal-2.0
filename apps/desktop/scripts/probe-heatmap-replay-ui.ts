@@ -62,14 +62,14 @@ try {
     window.runProbe = async () => {
       await settle(250)
       check(calls === 1 && button('Play history').disabled, 'Saved history must start building without a reload')
-      check(document.body.innerText.includes('Replay building') && document.body.innerText.includes('Price: $60.00'),
+      check(button('Play history').dataset.replayState === 'building' && !document.body.innerText.includes('Replay building') && document.body.innerText.includes('Price: $60.00'),
         'Replay progress must leave the current map visible')
       finishFirstLoad()
       await settle()
-      check(document.body.innerText.includes('Retrying automatically') && calls === 1,
+      check(button('Play history').dataset.replayState === 'retrying' && !document.body.innerText.includes('Retrying automatically') && calls === 1,
         'Replay failure must keep the current map and wait for the retry interval')
       await settle(650)
-      check(calls === 2 && document.body.innerText.includes('Replay building'), 'History must retry automatically')
+      check(calls === 2 && button('Play history').dataset.replayState === 'building', 'History must retry automatically')
       finishRetry()
       await settle(750)
       window.setInterval = nativeSetInterval

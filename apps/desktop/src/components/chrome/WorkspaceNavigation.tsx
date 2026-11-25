@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { FOCUS_DASHBOARD_TAB_ID, SETTINGS_TAB_ID } from '@shared/contract'
 import { FOCUS_WORKSPACE, WORKSPACES, workspaceFor } from '@shared/navigation'
@@ -17,7 +17,7 @@ interface NavigationProps {
   isMac: boolean
 }
 
-const pageButton = 'rounded px-3 py-2 text-left text-2xs transition-colors disabled:opacity-40 '
+const pageButton = 'rounded px-3 py-1.5 text-left text-2xs transition-colors disabled:opacity-40 '
 const selectedStyle = 'bg-accent-dim text-text'
 const idleStyle = 'text-text-muted hover:bg-surface-hover hover:text-text'
 
@@ -32,6 +32,23 @@ export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, favo
   unreadNotifications?: number
 }) {
   const remembered = useRef(new Map<string, string>())
+  // Recently viewed only gets the height left after Workspaces and Favorites, so the sidebar never scrolls.
+  const recentArea = useRef<HTMLDivElement>(null)
+  const [recentFit, setRecentFit] = useState(4)
+  useLayoutEffect(() => {
+    const area = recentArea.current
+    if (!area) return
+    const measure = () => {
+      const heading = area.firstElementChild?.getBoundingClientRect().height ?? 0
+      const row = area.querySelector('button')?.getBoundingClientRect().height || 32
+      setRecentFit(Math.max(0, Math.min(4, Math.floor((area.clientHeight - heading + 4) / (row + 4)))))
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(area)
+    return () => observer.disconnect()
+  }, [collapsed])
+  const recentPages = recent.filter((id) => id !== activeTab && tabs.some((tab) => tab.id === id && tab.implemented))
   const navigationButton = (collapsed ? pageButton.replace('px-3', 'px-1') + 'text-center ' : pageButton) + (isMac ? 'rounded-lg ' : '')
   const activeWorkspace = workspaceFor(activeTab)
   useEffect(() => {
@@ -39,7 +56,7 @@ export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, favo
   }, [activeTab, activeWorkspace])
 
   return (
-    <aside aria-label="Workspace sidebar" className={`workspace-sidebar flex shrink-0 flex-col gap-6 overflow-y-auto border-r border-border ${isMac ? 'bg-[#101722] px-3 py-5' : 'bg-surface px-2 py-4'} ${collapsed ? 'w-16' : isMac ? 'w-52' : 'w-48'}`}>
+    <aside aria-label="Workspace sidebar" className={`workspace-sidebar flex shrink-0 flex-col gap-4 overflow-y-auto border-r border-border ${isMac ? 'bg-[#101722] px-3 py-5' : 'bg-surface px-2 py-4'} ${collapsed ? 'w-16' : isMac ? 'w-52' : 'w-48'}`}>
       <div>
         <div className="mb-2 flex items-center justify-between">
           {!collapsed ? <p className="px-3 text-2xs text-text-dim">Workspaces</p> : null}
@@ -67,7 +84,7 @@ export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, favo
                 onClick={() => onSelectTab(target.id)}
                 className={`${navigationButton}relative flex items-center ${collapsed ? 'justify-center' : 'justify-between'} gap-2 ${active ? selectedStyle : idleStyle}`}>
                 {collapsed ? <NavigationIcon id={workspace.id} workspace /> : <span>{workspace.label}</span>}
-                {!collapsed ? <span className={`num ${unread ? 'text-accent-hover' : 'text-text-dim'}`}>{unread ? (unreadNotifications > 99 ? '99+' : unreadNotifications) : pages.length}</span> : null}
+                {!collapsed && unread ? <span className="num text-accent-hover">{unreadNotifications > 99 ? '99+' : unreadNotifications}</span> : null}
                 {collapsed && unread ? <span className="absolute right-2 top-1.5 size-1.5 rounded-full bg-accent-hover" aria-hidden="true" /> : null}
               </button>
             )
@@ -92,11 +109,11 @@ export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, favo
           <p className="px-3 text-2xs text-text-dim">Star a page to pin it here.</p>
         ) : null}
       </div>
-      {!collapsed ? <div>
-        <p className="px-3 pb-2 text-2xs text-text-dim">Recently viewed</p>
+      {!collapsed ? <div ref={recentArea} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <p className={`px-3 pb-2 text-2xs text-text-dim ${recentFit && recentPages.length ? '' : 'invisible'}`}>Recently viewed</p>
         <nav aria-label="Recent pages" className="flex flex-col gap-1">
-          {recent.filter((id) => id !== activeTab).slice(0, 4).flatMap((id) => {
-            const tab = tabs.find((entry) => entry.id === id && entry.implemented)
+          {recentPages.slice(0, recentFit).flatMap((id) => {
+            const tab = tabs.find((entry) => entry.id === id)
             return tab ? [<button key={id} type="button" onClick={() => onSelectTab(id)}
               className={pageButton + idleStyle}>{tab.label}</button>] : []
           })}
@@ -105,7 +122,7 @@ export function WorkspaceSidebar({ tabs, activeTab, onSelectTab, favorites, favo
       <button type="button" onClick={() => onSelectTab(SETTINGS_TAB_ID)}
         aria-label="Settings" title={collapsed ? 'Settings' : undefined}
         aria-current={activeTab === SETTINGS_TAB_ID ? 'page' : undefined}
-        className={`${navigationButton}mt-auto ${activeTab === SETTINGS_TAB_ID ? selectedStyle : idleStyle}`}>{collapsed ? <NavigationIcon id={SETTINGS_TAB_ID} /> : 'Settings'}</button>
+        className={`${navigationButton}mt-auto shrink-0 ${activeTab === SETTINGS_TAB_ID ? selectedStyle : idleStyle}`}>{collapsed ? <NavigationIcon id={SETTINGS_TAB_ID} /> : 'Settings'}</button>
     </aside>
   )
 }

@@ -289,6 +289,8 @@ export interface GoalStatus {
   /** False when the mix of currencies cannot be valued without a rate. */
   available: boolean
   reason?: string
+  /** When marks are missing: what the accounts that do have values add up to. */
+  known?: number
 }
 
 /** `_p6_goal_net_worth`, computed in the goal's own currency. */
@@ -298,8 +300,11 @@ export function goalNetWorth(
   display: FinanceCurrency,
   rate: number | null,
 ): GoalStatus {
-  if (breakdown.some(silo => silo.complete === false)) return { value: 0, available: false,
-    reason: `Net worth is incomplete. ${breakdown.flatMap(silo => silo.missingMarks ?? []).join(' ')}`.trim() }
+  const missing = breakdown.flatMap(silo => silo.missingMarks ?? [])
+  const incomplete = breakdown.some(silo => silo.complete === false)
+  const incompleteReason = missing.length
+    ? `Excludes ${missing.join(', ')}: no market price.`
+    : 'Excludes positions without a market price.'
   const cashTotal = categoryTotal(book.cash)
   const debtTotal = categoryTotal(book.debt)
   const portfolioTotal = breakdown.reduce(
@@ -312,13 +317,14 @@ export function goalNetWorth(
     display === 'SGD'
       ? Math.abs(portfolioTotal) > 0.0001 || margin > 0.0001
       : cashTotal > 0.0001 || debtTotal > 0.0001
-  if (requiresFx && !validRate(rate)) return { value: 0, available: false, reason: 'FX required to value mixed currencies.' }
+  if (requiresFx && !validRate(rate)) return { value: 0, available: false, reason: incomplete ? incompleteReason : 'FX required to value mixed currencies.' }
 
   const value =
     convertAmount(cashTotal, 'SGD', display, rate) +
     convertAmount(portfolioTotal, 'USD', display, rate) -
     convertAmount(margin, 'USD', display, rate) -
     convertAmount(debtTotal, 'SGD', display, rate)
+  if (incomplete) return { value: 0, available: false, reason: incompleteReason, known: value }
   return { value, available: true }
 }
 

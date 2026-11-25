@@ -41,6 +41,9 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
   const settingsLocked = locked || !agent?.connected || !!agent?.autonomy
   const provider = agent?.provider ?? 'codex'
   const label = agentProviderLabels[provider]
+  // Embedded panes are narrow: until a connection loads models, the Model and Thinking boxes only say "Connect to load…".
+  const compactSettings = embedded && !agent?.connected && !models.length
+  const rawError = error || agent?.error || (query.error ? String(query.error) : '')
   const thinkingLabel = (id: string) => ({ xhigh: 'Extra high', max: 'Maximum' }[id] ?? id.charAt(0).toUpperCase() + id.slice(1))
 
   return <div className={`agents-page${embedded ? ' agents-embedded' : ''}`} onPaste={event => {
@@ -54,7 +57,7 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
         onChange={event => void perform({ type: 'agentProvider', provider: event.target.value as AgentProvider })}>
         {(Object.keys(agentProviderLabels) as AgentProvider[]).map(id => <option key={id} value={id}>{agentProviderLabels[id]}</option>)}
       </select></label>
-      <label htmlFor={`${idPrefix}-model`}>Model<select id={`${idPrefix}-model`} value={agent?.model ?? ''} disabled={settingsLocked || !models.length}
+      {!compactSettings && <><label htmlFor={`${idPrefix}-model`}>Model<select id={`${idPrefix}-model`} value={agent?.model ?? ''} disabled={settingsLocked || !models.length}
         onChange={event => void perform({ type: 'configure', model: event.target.value, thinking: null })}>
         {!agent?.model && <option value="">Connect to load models</option>}
         {agent?.model && !selectedModel && <option value={agent.model}>{agent.model}</option>}
@@ -65,7 +68,7 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
         <option value="">{selectedModel ? `Default (${thinkingLabel(selectedModel.defaultThinking)})` : 'Connect to load modes'}</option>
         {agent?.thinking && !selectedModel?.thinkingModes.some(mode => mode.id === agent.thinking) && <option value={agent.thinking}>{thinkingLabel(agent.thinking)} (current)</option>}
         {selectedModel?.thinkingModes.map(mode => <option key={mode.id} value={mode.id} title={mode.description}>{thinkingLabel(mode.id)}</option>)}
-      </select></label>
+      </select></label></>}
       </div>
       <div className="agents-actions"><span className={`agents-status ${agent?.busy ? 'working' : agent?.connected ? 'connected' : ''}`}>{agent?.busy ? agent.connected ? 'Working…' : 'Connecting…' : agent?.connected ? 'Connected' : 'Disconnected'}</span>
         {agent?.autonomy && <span className="agents-monitoring" role="status">Monitoring · {agent.runsRemaining} runs remaining</span>}
@@ -76,7 +79,7 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
         {onToggleFavorite && <button type="button" disabled={savingFavorite} onClick={onToggleFavorite} aria-pressed={favorite} aria-label={favorite ? 'Remove page from favorites' : 'Add page to favorites'} title={favorite ? 'Remove page from favorites' : 'Add page to favorites'}>{favorite ? '★' : '☆'}</button>}
       </div>
     </header>
-    {(error || agent?.error || query.error) && <div role="alert" className="agents-error">{error || agent?.error || String(query.error)}</div>}
+    {rawError && <div role="alert" className="agents-error">{friendlyAgentError(rawError, label)}<span className="agents-error-detail" title={rawError}>{rawError}</span></div>}
     <AgentWorkspacePanel agent={agent} locked={locked} perform={perform} setDraft={setDraft} showTelegram={!embedded} pending={pending} />
     <div className={`agents-layout${showControls ? ' with-controls' : ''}`}>
       <section className="agents-chat" aria-label={`Chat with ${label}`}>
@@ -118,4 +121,12 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
       </aside>
     </div>
   </div>
+}
+
+/** Lead a raw runtime failure with what to do next; the raw text stays underneath for diagnosis. */
+function friendlyAgentError(raw: string, label: string): string {
+  if (/process exited|spawn|ENOENT|not found|not installed/i.test(raw)) return `${label} could not start. Check that it is installed and signed in, then select Connect ${label}.`
+  if (/auth|login|sign.?in|api key|401|403/i.test(raw)) return `${label} needs you to sign in again. Then select Connect ${label}.`
+  if (/timed? ?out|timeout|ECONNRESET|network|offline/i.test(raw)) return `${label} lost its connection. Select Connect ${label} to retry.`
+  return `${label} reported a problem.`
 }

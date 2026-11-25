@@ -1,6 +1,8 @@
 import type { Quote } from '../../shared/contract.js'
 import { cache, TTL, type CachedResult } from '../cache.js'
-import { paced, periodStart, yahoo } from './client.js'
+import { paced, periodStart, requestPriority, yahoo } from './client.js'
+import { isRateLimitError, type Priority } from './rateGate.js'
+import { exchangeDateStamper } from '../../shared/exchangeDates.js'
 import { captureSources, observeSource } from '../sourceHealth.js'
 import { equityMarket } from '../../shared/equityMarkets.js'
 import { hyperliquidEquities } from '../hyperliquidEquities.js'
@@ -28,10 +30,13 @@ function finite(value: unknown): value is number {
 
 /** Build a current quote from Yahoo's chart response without mistaking an older bar for it. */
 export function quoteFromChart(symbol: string, result: QuoteChartResult): Quote | null {
+  // Session dates belong to the exchange, not UTC: forex bars open at 23:00 UTC during
+  // British Summer Time, which would otherwise date today's bar as yesterday's.
+  const stamp = exchangeDateStamper(result.meta?.exchangeTimezoneName)
   const closes: Array<{ date: string; value: number }> = []
   for (const row of result.quotes) {
     if (!finite(row.close)) continue
-    const close = { date: row.date.toISOString().slice(0, 10), value: row.close }
+    const close = { date: stamp(row.date), value: row.close }
     if (closes.at(-1)?.date === close.date) {
       closes[closes.length - 1] = close
     } else {
@@ -41,7 +46,8 @@ export function quoteFromChart(symbol: string, result: QuoteChartResult): Quote 
 
   const metaPrice = result.meta?.regularMarketPrice
   if (finite(metaPrice)) {
-    const marketDate = result.meta?.regularMarketTime?.toISOString().slice(0, 10)
+    const marketTime = result.meta?.regularMarketTime
+    const marketDate = marketTime instanceof Date && Number.isFinite(marketTime.getTime()) ? stamp(marketTime) : undefined
     const latest = closes.at(-1)
     const previous = latest?.date === marketDate
       ? closes.at(-2)?.value
@@ -86,8 +92,154 @@ async function fetchQuoteChart(symbol: string): Promise<QuoteChartResult> {
   }))
 }
 
+/* --------------------------------------------------------- batched quote loads */
+
+/**
+ * Yahoo's v7 spark endpoint returns the same chart `meta` (price, trade time, previous
+ * close, exchange timezone, trading period) and daily closes as `chart()`, for up to
+ * twenty symbols per request. Pages request quotes as a fan-out (ten Forex pairs, the
+ * Dashboard's macro row plus holdings, the Oil complex), so the per-symbol misses that
+ * arrive together are collected briefly and sent as one paced request instead of one
+ * request each. A symbol the batch does not return falls back to its own chart call, and
+ * a failed batch falls back the same way unless Yahoo is rate-limiting, where twenty
+ * extra requests would only deepen the cooldown.
+ */
+const QUOTE_BATCH_URL = 'https://query1.finance.yahoo.com/v7/finance/spark'
+export const QUOTE_BATCH_SIZE = 20
+/** Long enough for a fan-out's cache misses to arrive, short against the rate gate. */
+const QUOTE_BATCH_WINDOW_MS = 15
+
+interface QuoteWaiter {
+  resolve: (value: QuoteChartResult) => void
+  reject: (error: unknown) => void
+}
+
+export interface SparkQuoteEntry {
+  symbol?: string
+  response?: Array<{
+    meta?: Record<string, unknown>
+    timestamp?: Array<number | null>
+    indicators?: { quote?: Array<{ close?: Array<number | null> }> }
+  }>
+}
+
+function epochDate(value: unknown): Date | undefined {
+  if (value instanceof Date) return value
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? new Date(value * 1000) : undefined
+}
+
+/** Decode one spark entry into the `chart()` shape `quoteFromChart` already reads. */
+export function quoteChartFromSpark(entry: SparkQuoteEntry): QuoteChartResult | null {
+  const response = entry.response?.[0]
+  const raw = response?.meta
+  if (!response || !raw || typeof raw !== 'object') return null
+  const stamps = response.timestamp ?? []
+  const closes = response.indicators?.quote?.[0]?.close ?? []
+  const quotes = stamps.flatMap((stamp, index) => {
+    const date = epochDate(stamp)
+    const close = closes[index]
+    return date ? [{ date, close: finite(close) ? close : null }] : []
+  })
+  const regular = (raw.currentTradingPeriod as { regular?: { start?: unknown; end?: unknown } } | undefined)?.regular
+  const meta: NonNullable<QuoteChartResult['meta']> = {
+    regularMarketPrice: finite(raw.regularMarketPrice) ? raw.regularMarketPrice : undefined,
+    regularMarketTime: epochDate(raw.regularMarketTime),
+    chartPreviousClose: finite(raw.chartPreviousClose) ? raw.chartPreviousClose : undefined,
+    previousClose: finite(raw.previousClose) ? raw.previousClose : undefined,
+    currency: typeof raw.currency === 'string' ? raw.currency : undefined,
+    instrumentType: typeof raw.instrumentType === 'string' ? raw.instrumentType : undefined,
+    exchangeTimezoneName: typeof raw.exchangeTimezoneName === 'string' ? raw.exchangeTimezoneName : undefined,
+    ...(regular ? { currentTradingPeriod: { regular: { start: epochDate(regular.start), end: epochDate(regular.end) } } } : {}),
+  }
+  if (!quotes.length && !finite(meta.regularMarketPrice)) return null
+  return { quotes, meta }
+}
+
+async function fetchQuoteBatch(symbols: string[]): Promise<Map<string, QuoteChartResult>> {
+  const body = await paced(() => yahoo._fetch(
+    QUOTE_BATCH_URL,
+    { symbols: symbols.join(','), range: '5d', interval: '1d', lang: 'en-US', region: 'US', corsDomain: 'finance.yahoo.com' },
+    {},
+    'json',
+    false,
+  )) as { spark?: { result?: SparkQuoteEntry[] | null; error?: { description?: string } | null } }
+  if (body?.spark?.error) throw new Error(body.spark.error.description ?? 'Yahoo rejected the quote batch.')
+  const results = new Map<string, QuoteChartResult>()
+  for (const entry of body?.spark?.result ?? []) {
+    const symbol = entry?.symbol?.trim().toUpperCase()
+    const chart = symbol ? quoteChartFromSpark(entry) : null
+    if (symbol && chart) results.set(symbol, chart)
+  }
+  return results
+}
+
+type QuoteBatchLoader = (symbols: string[]) => Promise<Map<string, QuoteChartResult>>
+type QuoteChartLoader = (symbol: string) => Promise<QuoteChartResult>
+
+async function flushQuoteBatch(waiting: Map<string, QuoteWaiter[]>, batchLoader: QuoteBatchLoader,
+  singleLoader: QuoteChartLoader): Promise<void> {
+  const symbols = [...waiting.keys()]
+  const settle = (symbol: string, outcome: Promise<QuoteChartResult>) => {
+    const waiters = waiting.get(symbol) ?? []
+    outcome.then(value => waiters.forEach(waiter => waiter.resolve(value)),
+      error => waiters.forEach(waiter => waiter.reject(error)))
+  }
+  // A lone symbol gains nothing from the batch endpoint; keep the established chart call.
+  if (symbols.length === 1) {
+    settle(symbols[0], singleLoader(symbols[0]))
+    return
+  }
+  const chunks: string[][] = []
+  for (let index = 0; index < symbols.length; index += QUOTE_BATCH_SIZE) chunks.push(symbols.slice(index, index + QUOTE_BATCH_SIZE))
+  await Promise.all(chunks.map(async chunk => {
+    let results: Map<string, QuoteChartResult>
+    try {
+      results = await batchLoader(chunk)
+    } catch (error) {
+      if (isRateLimitError(error)) {
+        for (const symbol of chunk) settle(symbol, Promise.reject(error))
+        return
+      }
+      results = new Map()
+    }
+    for (const symbol of chunk) {
+      const hit = results.get(symbol)
+      settle(symbol, hit ? Promise.resolve(hit) : singleLoader(symbol))
+    }
+  }))
+}
+
+/**
+ * Join the current fan-out's quote batch. Foreground and background requests batch
+ * separately so a page the user opened never waits in the startup warm-up's lane.
+ */
+export function createQuoteBatcher(batchLoader: QuoteBatchLoader = fetchQuoteBatch,
+  singleLoader: QuoteChartLoader = fetchQuoteChart, windowMs = QUOTE_BATCH_WINDOW_MS): QuoteChartLoader {
+  const pending: Record<Priority, Map<string, QuoteWaiter[]> | null> = { foreground: null, background: null }
+  return (symbol) => new Promise<QuoteChartResult>((resolve, reject) => {
+    const priority = requestPriority()
+    let batch = pending[priority]
+    if (!batch) {
+      const created = new Map<string, QuoteWaiter[]>()
+      batch = created
+      pending[priority] = created
+      // The timer callback inherits this caller's priority context, so the batch is
+      // paced in the same lane as every request that joined it.
+      setTimeout(() => {
+        if (pending[priority] === created) pending[priority] = null
+        void flushQuoteBatch(created, batchLoader, singleLoader)
+      }, windowMs)
+    }
+    const waiters = batch.get(symbol) ?? []
+    waiters.push({ resolve, reject })
+    batch.set(symbol, waiters)
+  })
+}
+
+const loadQuoteChart = createQuoteBatcher()
+
 /** Cache the regular-session quote until its next useful check, preserving its trade time. */
-export async function resolveYahooQuote(symbol: string, force = false, store = cache, loader = fetchQuoteChart): Promise<CachedResult<Quote> & { stale: boolean }> {
+export async function resolveYahooQuote(symbol: string, force = false, store = cache, loader: QuoteChartLoader = loadQuoteChart): Promise<CachedResult<Quote> & { stale: boolean }> {
   const result = await store.resolveWithStaleFallback(
     `quote:yahoo-session-v1:${symbol}`,
     (value: { quote: Quote; meta: QuoteChartResult['meta'] }) => {

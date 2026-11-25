@@ -151,7 +151,7 @@ export const MainChart = memo(function MainChart({
       lineWidth: 2,
       priceLineVisible: false,
     }, 0)
-    const ma50 = chart.addSeries(LineSeries, { color: COLORS.ma50, lineWidth: 2, priceLineVisible: false, lastValueVisible: false, title: '50-day SMA' }, 0)
+    const ma50 = chart.addSeries(LineSeries, { color: COLORS.ma50, lineWidth: 2, priceLineVisible: false, lastValueVisible: false }, 0)
     const ma200 = chart.addSeries(LineSeries, { color: COLORS.ma200, lineWidth: 2, priceLineVisible: false, lastValueVisible: false }, 0)
     const volume = chart.addSeries(HistogramSeries, { priceFormat: { type: 'volume' }, priceLineVisible: false }, 1)
     const rsi = chart.addSeries(LineSeries, { color: COLORS.rsi, lineWidth: 2, priceLineVisible: false }, 2)

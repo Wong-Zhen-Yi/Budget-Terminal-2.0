@@ -16,6 +16,8 @@ import {
   formatEconomicValue,
   historySeries,
   missingSummary,
+  releaseOrder,
+  rowsForGroup,
   SERIES_BY_ID,
   summarizeHeadlines,
   trimHistory,
@@ -196,6 +198,11 @@ function statusChecks(rows: EconomicRow[]): void {
   assert(summary.includes('FRED (1)'), 'the missing summary should attribute the gap to its provider')
 
   assert(describeFreshness(null).tone === 'muted', 'an unloaded page should read muted')
+
+  const ordered = releaseOrder(ECONOMIC_SERIES.map((series) => buildRow(series, [])))
+  const firstAnnual = ordered.findIndex((row) => row.frequency === 'annual')
+  assert(firstAnnual > 0 && ordered.slice(firstAnnual).every((row) => row.frequency === 'annual'), 'annual reference rows must trail current releases')
+  assert(rowsForGroup(ordered, 'Inflation')[0].seriesId !== 'WB_US_CPI_ANNUAL', 'the Inflation tab must open on a monthly release')
 
   const headlines = summarizeHeadlines({
     generatedAt: today,

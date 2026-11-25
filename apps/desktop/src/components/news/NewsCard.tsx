@@ -68,7 +68,10 @@ export const NewsCard = memo(function NewsCard({
   onOpen,
   showImages,
   now,
+  hideCategory = false,
 }: {
+  /** Set inside a section that already names the category, so each card does not repeat it. */
+  hideCategory?: boolean
   price?: number
   currency?: string
   article: NewsArticle
@@ -93,9 +96,9 @@ export const NewsCard = memo(function NewsCard({
       }`}
     >
       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        <span className={`shrink-0 text-2xs font-semibold ${categoryTextClass[tone]}`}>
+        {hideCategory ? null : <span className={`shrink-0 text-2xs font-semibold ${categoryTextClass[tone]}`}>
           {categoryLabel(article)}
-        </span>
+        </span>}
         <NewsTickerBadge ticker={article.ticker} price={price} currency={currency} category={article.category} />
         <span
           className={`num ml-auto shrink-0 text-2xs ${ageClass(article.publishedAt, now)}`}

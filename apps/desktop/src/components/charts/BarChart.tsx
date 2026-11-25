@@ -1,3 +1,5 @@
+import { useLayoutEffect, useRef, useState } from 'react'
+
 import { PrivateNumber } from '@/components/ui/NumberPrivacy'
 
 export interface BarSegment {
@@ -21,6 +23,8 @@ interface BarChartProps {
   bars: Bar[]
   /** Formats the value printed above each bar. */
   format: (value: number) => string
+  /** Shorter label used when the full one is wider than its column, so neighbours never overlap. */
+  compactFormat?: (value: number) => string
   /** Draw a zero line and let bars fall below it. */
   signed?: boolean
   /**
@@ -42,12 +46,25 @@ interface BarChartProps {
 export function BarChart({
   bars,
   format,
+  compactFormat,
   signed = true,
   logScale = false,
   sortByMagnitude = false,
   empty = 'No data',
   minBarWidth = 0,
 }: BarChartProps) {
+  const host = useRef<HTMLDivElement>(null)
+  const [width, setWidth] = useState(0)
+  useLayoutEffect(() => {
+    const element = host.current
+    if (!element) return
+    const measure = () => setWidth(element.clientWidth)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [bars.length])
+
   if (!bars.length) {
     return (
       <div className="flex flex-1 items-center justify-center text-2xs text-text-dim">{empty}</div>
@@ -68,6 +85,11 @@ export function BarChart({
   const zeroRatio = (maximum - 0) / span
   const logDenominator = Math.log1p(Math.max(...values.map((value) => Math.abs(value)), 0))
 
+  // Column width after the 8px side padding and 8px gaps; the tabular figures run about 8px a character.
+  const column = width ? (Math.max(width, ordered.length * minBarWidth) - 16 - (ordered.length - 1) * 8) / ordered.length : Infinity
+  const compact = Boolean(compactFormat) && ordered.some((bar) => format(bar.value).length * 8 > column)
+  const label = (value: number) => compact && compactFormat ? compactFormat(value) : format(value)
+
   const heightOf = (value: number): number => {
     if (!logScale) return Math.abs(value) / span
     if (logDenominator <= 0) return 0
@@ -75,7 +97,7 @@ export function BarChart({
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
+    <div ref={host} className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden">
       <div
         className="flex h-full min-h-0 flex-col"
         style={minBarWidth ? { minWidth: ordered.length * minBarWidth } : undefined}
@@ -126,7 +148,7 @@ export function BarChart({
                     : null}
                 </div>
                 <span
-                  className="num absolute w-full text-center text-2xs whitespace-nowrap"
+                  className={`num absolute w-full text-center whitespace-nowrap ${compact ? 'text-[10px]' : 'text-2xs'}`}
                   style={{
                     top: positive
                       ? `calc(${zeroRatio * 100}% - ${heightRatio * 100}% - 1.15rem)`
@@ -134,7 +156,7 @@ export function BarChart({
                     color: fallback,
                   }}
                 >
-                  <PrivateNumber>{format(bar.value)}</PrivateNumber>
+                  <PrivateNumber>{label(bar.value)}</PrivateNumber>
                 </span>
               </div>
             </div>
@@ -146,7 +168,7 @@ export function BarChart({
           <span
             key={barIndex}
             title={bar.label}
-            className="min-w-0 flex-1 truncate text-center text-2xs text-text-muted"
+            className="line-clamp-2 min-w-0 flex-1 text-center text-[10px] leading-tight break-words text-text-muted"
           >
             {bar.label}
           </span>

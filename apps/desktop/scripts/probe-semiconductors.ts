@@ -200,6 +200,37 @@ try {
     assert(live.data.rows.every(entry => entry.profile?.description), 'Every representative company should have a profile')
     console.log(`Live result: ${live.meta.freshness}; ${live.errors.length} provider limitations`)
   }
+  const { createBulkQuoteLoader } = await import('../electron/services/yahoo/bulkQuotes.js')
+  let bulkClock = 0
+  const bulkCalls: string[][] = []
+  const singleCalls: string[] = []
+  const bulkLoader = createBulkQuoteLoader(['aaa', 'BBB', 'CCC', 'MISS'], {
+    ttlMs: 30_000, chunkSize: 2, now: () => bulkClock,
+    bulk: async chunk => { bulkCalls.push(chunk); return chunk.filter(symbol => symbol !== 'MISS').map(symbol => ({ symbol, regularMarketPrice: 1 })) },
+    single: async symbol => { singleCalls.push(symbol); return { symbol, regularMarketPrice: 2 } },
+  })
+  const firstQuotes = await Promise.all(['AAA', 'BBB', 'CCC', 'MISS'].map(symbol => bulkLoader(symbol)))
+  assert.deepEqual(bulkCalls, [['AAA', 'BBB'], ['CCC', 'MISS']], 'One chunked bulk load serves every concurrent catalog row')
+  assert.deepEqual(firstQuotes.map(quote => quote.regularMarketPrice), [1, 1, 1, 2])
+  assert.deepEqual(singleCalls, ['MISS'], 'Only a symbol the bulk response omits makes its own request')
+  bulkClock = 5_000
+  await bulkLoader('AAA', true)
+  assert.equal(bulkCalls.length, 2, 'A forced refresh reuses a snapshot loaded seconds ago')
+  bulkClock = 15_000
+  await bulkLoader('AAA', true)
+  assert.equal(bulkCalls.length, 4, 'A forced refresh past the reuse window reloads the catalog')
+  bulkClock = 50_000
+  await bulkLoader('BBB')
+  assert.equal(bulkCalls.length, 6, 'An expired snapshot reloads')
+  await bulkLoader('OUTSIDE')
+  assert.equal(singleCalls.at(-1), 'OUTSIDE', 'Symbols outside the catalog keep their own request')
+  const limitedLoader = createBulkQuoteLoader(['AAA', 'BBB'], {
+    bulk: async () => { throw Object.assign(new Error('Too Many Requests'), { status: 429 }) },
+    single: async symbol => { singleCalls.push(symbol); return { symbol } },
+  })
+  const singlesBefore = singleCalls.length
+  await assert.rejects(limitedLoader('AAA'), /Too Many Requests/)
+  assert.equal(singleCalls.length, singlesBefore, 'A rate-limited bulk load never fans out into single requests')
   cache.close()
   console.log('PASS: catalog, geography/listings, subsectors, returns, common-session comparisons, missing observations, news dedupe, cache, forced refresh, partial/total outages and recovery')
 } finally {

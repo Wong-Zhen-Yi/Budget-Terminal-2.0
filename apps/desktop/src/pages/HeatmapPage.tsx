@@ -204,14 +204,15 @@ export function HeatmapPage({
           <span className="num text-text-muted">{replay.index + 1}/{replay.dates.length}</span>
           <Button onClick={() => setReplay(null)}>Back to latest</Button>
         </> : <>
-          <Button disabled={replayDates.length < 2} onClick={() => {
+          <Button disabled={replayDates.length < 2} data-replay-state={replayDates.length >= 2 ? 'ready' : loading || query.isPending ? 'building' : 'retrying'}
+            title={replayDates.length >= 2 ? undefined : 'Daily history for replay is still loading. Progress is in Settings.'} onClick={() => {
             if (!completed || replayDates.length < 2) return
             if (interval === 'live') setIntervalKey('1d')
             setReplay({ payload: completed, dates: replayDates, index: 0, playing: true })
           }}>Play history</Button>
-          <span role="status" className="min-w-0 flex-1 truncate text-text-muted">{replayDates.length >= 2
-            ? `${replayDates[0]} to ${replayDates.at(-1)} · current holdings and weights`
-            : loading || query.isPending ? 'Replay building…' : 'Replay unavailable. Retrying automatically…'}</span>
+          {/* Replay readiness is not a page note: the disabled button carries it, Settings has the detail. */}
+          <span className="min-w-0 flex-1 truncate text-text-muted">{replayDates.length >= 2
+            ? `${replayDates[0]} to ${replayDates.at(-1)} · current holdings and weights` : ''}</span>
         </>}
       </div>
 

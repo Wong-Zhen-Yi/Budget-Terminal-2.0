@@ -9,7 +9,10 @@ import type { SortState } from '@/components/ui/DataTable'
  * drops whichever subtab a v1 install had persisted so the new default is what it opens
  * on, and arms a stored ticker so the workspace comes back with it.
  */
-const STORE_VERSION = 2
+const STORE_VERSION = 3
+
+/** v3: a fresh install opens on SPY, armed, so the page is never a blank screen and startup preloads it. */
+export const DEFAULT_OPTIONS_SYMBOL = 'SPY'
 
 export type OptionsTab = 'chain' | 'top-volume' | 'strike'
 
@@ -50,13 +53,13 @@ interface OptionsPageState {
 export const useOptionsPage = create<OptionsPageState>()(
   persist(
     (set) => ({
-      symbol: '',
+      symbol: DEFAULT_OPTIONS_SYMBOL,
       tab: 'top-volume',
       expiry: '',
       strategy: 'None',
       typeFilter: 'both',
       selectedStrike: null,
-      loaded: false,
+      loaded: true,
       summarySort: null,
 
       setSymbol: (value) =>
@@ -81,11 +84,8 @@ export const useOptionsPage = create<OptionsPageState>()(
       migrate: (persisted, version) => {
         const state = (persisted ?? {}) as Partial<OptionsPageState>
         if (version >= STORE_VERSION) return state
-        return {
-          ...state,
-          tab: 'top-volume' as OptionsTab,
-          loaded: Boolean(state.symbol),
-        }
+        const upgraded = version < 2 ? { ...state, tab: 'top-volume' as OptionsTab, loaded: Boolean(state.symbol) } : state
+        return upgraded.symbol ? upgraded : { ...upgraded, symbol: DEFAULT_OPTIONS_SYMBOL, expiry: '', selectedStrike: null, loaded: true }
       },
     },
   ),

@@ -1,9 +1,11 @@
 import type { HeatmapInterval, MetricsLookback, ReturnTimeframe } from '../../shared/contract.js'
 import { getYahooSeries, type YahooSeriesRow } from './series.js'
 import type { DailyValueBar } from '../../shared/analytics.js'
+import { exchangeDateStamper, exchangeTimezone } from '../../shared/exchangeDates.js'
 
 /** Apply the adjusted-close factor to every OHLC field, preserving candle shape. */
-export function adjustedDailyBars(rows: YahooSeriesRow[]): DailyValueBar[] {
+export function adjustedDailyBars(rows: YahooSeriesRow[], zone = ''): DailyValueBar[] {
+  const stamp = exchangeDateStamper(zone)
   const bars = new Map<string, DailyValueBar>()
   for (const row of rows) {
     const { open, high, low, close } = row
@@ -11,7 +13,7 @@ export function adjustedDailyBars(rows: YahooSeriesRow[]): DailyValueBar[] {
       || ![open, high, low, close, row.time].every(Number.isFinite)) continue
     const factor = row.adjclose !== null ? row.adjclose / close : 1
     if (!Number.isFinite(factor) || factor <= 0) continue
-    const date = new Date(row.time * 1000).toISOString().slice(0, 10)
+    const date = stamp(new Date(row.time * 1000))
     bars.set(date, { date, open: open * factor, high: high * factor, low: low * factor, close: close * factor })
   }
   return [...bars.values()].sort((left, right) => left.date.localeCompare(right.date))
@@ -25,7 +27,7 @@ export async function getDailyBarsBatch(
   const unique = [...new Set(symbols)]
   const settled = await Promise.allSettled(unique.map(async symbol => {
     const result = await getYahooSeries({ symbol, start: windowStart(window), interval: '1d', force, adjusted: true })
-    return adjustedDailyBars(result.rows)
+    return adjustedDailyBars(result.rows, exchangeTimezone(result.meta))
   }))
   return Object.fromEntries(settled.flatMap((result, index) => result.status === 'fulfilled' ? [[unique[index], result.value]] : []))
 }
@@ -106,7 +108,8 @@ export function windowStart(window: ReturnTimeframe | HeatmapInterval | MetricsL
  * unions above (the Pre-Market page wants a flat two years) get the same adjusted-close
  * preference and repeated-trailing-date collapse instead of writing their own.
  */
-function closeSeries(rows: YahooSeriesRow[]): CloseSeries {
+function closeSeries(rows: YahooSeriesRow[], zone = ''): CloseSeries {
+  const stamp = exchangeDateStamper(zone)
   const dates: string[] = []
   const values: number[] = []
   let previousDate = ''
@@ -114,7 +117,7 @@ function closeSeries(rows: YahooSeriesRow[]): CloseSeries {
     // Prefer the adjusted close so splits and dividends do not show up as returns.
     const close = typeof row.adjclose === 'number' ? row.adjclose : row.close
     if (typeof close !== 'number' || !Number.isFinite(close)) continue
-    const date = new Date(row.time * 1000).toISOString().slice(0, 10)
+    const date = stamp(new Date(row.time * 1000))
     if (date === previousDate) {
       // Yahoo repeats the last session as a live row; keep the newer value.
       values[values.length - 1] = close
@@ -129,7 +132,7 @@ function closeSeries(rows: YahooSeriesRow[]): CloseSeries {
 
 export async function fetchCloses(symbol: string, start: Date, force = false): Promise<CloseSeries> {
   const result = await getYahooSeries({ symbol, start, interval: '1d', force, adjusted: true })
-  const series = closeSeries(result.rows)
+  const series = closeSeries(result.rows, exchangeTimezone(result.meta))
   if (series.dates.length < 2) throw new Error(`No history returned for ${symbol}.`)
   return series
 }
@@ -141,7 +144,7 @@ export async function getCloses(
 ): Promise<CloseSeries> {
   const start = windowStart(window)
   const result = await getYahooSeries({ symbol, start, interval: '1d', force, adjusted: true })
-  const series = closeSeries(result.rows)
+  const series = closeSeries(result.rows, exchangeTimezone(result.meta))
   if (series.dates.length < 2) throw new Error(`No history returned for ${symbol}.`)
   return series
 }
@@ -196,7 +199,8 @@ export interface CloseVolumeSeries {
   adjustedCloses?: number[]
 }
 
-function closeVolumeSeries(rows: YahooSeriesRow[]): CloseVolumeSeries {
+function closeVolumeSeries(rows: YahooSeriesRow[], zone = ''): CloseVolumeSeries {
+  const stamp = exchangeDateStamper(zone)
   const dates: string[] = []
   const closes: number[] = []
   const volumes: number[] = []
@@ -208,7 +212,7 @@ function closeVolumeSeries(rows: YahooSeriesRow[]): CloseVolumeSeries {
     const volume = row.volume
     if (typeof close !== 'number' || !Number.isFinite(close) || close <= 0) continue
     if (typeof volume !== 'number' || !Number.isFinite(volume)) continue
-    const date = new Date(row.time * 1000).toISOString().slice(0, 10)
+    const date = stamp(new Date(row.time * 1000))
     if (date === previousDate) {
       // Yahoo repeats the last session as a live row; keep the newer value.
       closes[closes.length - 1] = close
@@ -228,7 +232,7 @@ function closeVolumeSeries(rows: YahooSeriesRow[]): CloseVolumeSeries {
 
 export async function fetchCloseVolume(symbol: string, start: Date, force = false): Promise<CloseVolumeSeries> {
   const result = await getYahooSeries({ symbol, start, interval: '1d', force, adjusted: true })
-  const series = closeVolumeSeries(result.rows)
+  const series = closeVolumeSeries(result.rows, exchangeTimezone(result.meta))
   if (!series.dates.length) throw new Error(`No history returned for ${symbol}.`)
   return series
 }
@@ -253,7 +257,7 @@ export async function getCloseVolumeBatch(
   const settled = await Promise.allSettled(
     unique.map(async (symbol) => {
       const result = await getYahooSeries({ symbol, start, interval: '1d', force, adjusted: true })
-      const series = closeVolumeSeries(result.rows)
+      const series = closeVolumeSeries(result.rows, exchangeTimezone(result.meta))
       if (!series.dates.length) throw new Error(`No history returned for ${symbol}.`)
       return series
     }),

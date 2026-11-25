@@ -39,8 +39,8 @@ export function PortfolioPiePanel({
         : missing ? <PanelMessage>Allocation unavailable. {missing}</PanelMessage>
         : allocation ? (
           <div className="min-h-0 flex-1 overflow-auto">
-            <div className="flex min-h-full flex-col">
-              <Donut compact slices={allocation.slices} empty="No weighted holdings or counted cash to show" />
+            <div className="flex h-full min-h-fit flex-col">
+              <Donut compact grow slices={allocation.slices} empty="No weighted holdings or counted cash to show" />
               <p className="shrink-0 px-2 pb-2 text-2xs text-text-dim">
                 Included holdings{portfolio.includeCashInWeight ? ' + cash' : ' · Cash excluded'} · USD
               </p>

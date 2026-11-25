@@ -671,7 +671,15 @@ export function searchRows(rows: readonly EconomicRow[], text: string): Economic
 
 /** Return the rows belonging to one catalog group, in catalog order. */
 export function rowsForGroup(rows: readonly EconomicRow[], group: EconomicGroup): EconomicRow[] {
-  return rows.filter((row) => row.group === group)
+  return releaseOrder(rows.filter((row) => row.group === group))
+}
+
+/**
+ * Current releases first: annual reference series (World Bank, IMF) trail the monthly,
+ * weekly and quarterly rows they duplicate, keeping catalog order within each band.
+ */
+export function releaseOrder(rows: readonly EconomicRow[]): EconomicRow[] {
+  return [...rows.filter((row) => row.frequency !== 'annual'), ...rows.filter((row) => row.frequency === 'annual')]
 }
 
 /** The row tooltip: provider, cadence, note, and whether anything came back at all. */

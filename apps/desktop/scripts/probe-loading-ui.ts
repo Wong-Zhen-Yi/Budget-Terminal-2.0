@@ -71,7 +71,7 @@ try {
           check(light('active').getBoundingClientRect().width === 8, 'MCP light has no visible size')
           client.setQueryData(['mcpStatus'], { available: false, error: 'Fixture MCP startup failure' })
           await settle()
-          check(light('active')?.dataset.state === 'error' && light('connected')?.dataset.state === 'error', 'MCP failure lights are missing')
+          check(light('offline')?.dataset.state === 'error' && !light('active') && !light('connected'), 'MCP failure must show one labelled Offline chip')
           client.setQueryData(['mcpStatus'], { available: true, tools: toolCount })
           // Complete one measured page; leave the others pending to exercise navigation.
           await new Promise(resolve => setTimeout(resolve, 5600))

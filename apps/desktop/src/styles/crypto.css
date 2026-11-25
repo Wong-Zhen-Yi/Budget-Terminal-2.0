@@ -1,5 +1,5 @@
 .crypto-workspace { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; gap: 8px; padding: 10px; overflow: hidden; container: crypto / inline-size; }
-.crypto-ribbon, .crypto-footer { flex-shrink: 0; }
+.crypto-ribbon { flex-shrink: 0; }
 .crypto-ribbon { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); border: 1px solid #1e2b3f; border-radius: 5px; background: #0d1420; }
 .crypto-ribbon-item { display: flex; flex: 1 1 auto; align-items: center; gap: 8px; padding: 7px 10px; border-right: 1px solid #1e2b3f; font-size: 13px; }
 .crypto-ribbon-item strong { color: #d5dee9; white-space: nowrap; }
@@ -39,7 +39,7 @@
 .crypto-context { flex-shrink: 0; }
 .crypto-heatmap { display: grid; flex: 1; min-height: 0; grid-template-columns: repeat(6,minmax(0,1fr)); grid-template-rows: repeat(5,minmax(0,1fr)); gap: 3px; padding: 5px; }
 .crypto-heatmap-cell { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0; overflow: hidden; border: 1px solid #1e2b3f; border-radius: 3px; font-size: 11px; }
-.crypto-heatmap-cell strong { font-size: 12px; }
+.crypto-heatmap-cell strong { font-size: 12px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .crypto-context-row { display: flex; justify-content: space-between; gap: 12px; padding: 8px 12px; border-top: 1px solid #1e2b3f; font-size: 13px; }
 .crypto-perps { grid-column: 2; grid-row: 2; }
 .crypto-perps .crypto-panel-title { justify-content: space-between; }
@@ -50,8 +50,6 @@
 .crypto-news-list { overflow: auto; min-height: 0; }
 .crypto-news-item { display: block; width: 100%; border: 0; border-top: 1px solid #1e2b3f; padding: 11px 12px; background: transparent; color: #d5dee9; text-align: left; cursor: pointer; font: inherit; font-size: 14px; line-height: 1.5; }
 .crypto-news-item:hover { background: #172233; } .crypto-news-item small { display: block; font-size: 12px; color: #7d8ea6; margin-top: 4px; }
-.crypto-footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; color: #7d8ea6; font-size: 12px; padding: 8px 0; }
-.crypto-feed-states { display: flex; flex-wrap: wrap; gap: 16px; }
 .crypto-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .crypto-workspace button:focus-visible, .crypto-workspace input:focus-visible { outline: 2px solid #3b82e8; outline-offset: -2px; }
 @container crypto (max-width: 1100px) {
@@ -72,8 +70,6 @@
   .crypto-heatmap-cell { gap: 0; font-size: 10px; line-height: 1.1; }
   .crypto-heatmap-cell strong { font-size: 11px; }
   .crypto-news-item { padding: 6px 8px; font-size: 12px; }
-  .crypto-footer { padding: 2px 0; font-size: 11px; }
-  .crypto-feed-states { gap: 8px; }
 }
 @container crypto (min-width: 681px) and (max-width: 900px) {
   .crypto-heatmap { grid-template-columns: repeat(5,minmax(0,1fr)); grid-template-rows: repeat(6,minmax(0,1fr)); gap: 2px; padding: 3px; }

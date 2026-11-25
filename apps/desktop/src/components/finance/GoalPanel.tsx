@@ -20,6 +20,8 @@ interface GoalPanelProps {
   current: number
   available: boolean
   unavailableReason?: string
+  /** Known subtotal when some marks are missing; the ring shows it as partial progress. */
+  known?: number
   onSetTitle: (title: string) => void
   onSetTarget: (target: number) => void
   onSetCurrency: (currency: FinanceCurrency) => void
@@ -48,6 +50,7 @@ export function GoalPanel({
   current,
   available,
   unavailableReason,
+  known,
   onSetTitle,
   onSetTarget,
   onSetCurrency,
@@ -55,7 +58,9 @@ export function GoalPanel({
   className = '',
 }: GoalPanelProps) {
   const maskNumbers = useNumberPrivacy()
-  const progress = goalProgress(current, goal.targetAmount, available)
+  const partial = !available && known !== undefined
+  const shown = partial ? known : current
+  const progress = goalProgress(shown, goal.targetAmount, available || partial)
 
   return (
     <Panel title="Goal" className={className}>
@@ -96,8 +101,8 @@ export function GoalPanel({
         <GoalRing
           progress={progress}
           animationProgress={animationProgress}
-          available={available}
-          centerText={available ? moneyRounded(current, goal.currency) : 'Unavailable'}
+          available={available || partial}
+          centerText={available || partial ? moneyRounded(shown, goal.currency) : 'Unavailable'}
           subtext={
             goal.targetAmount > 0
               ? `of ${maskNumbers ? '****' : moneyRounded(goal.targetAmount, goal.currency)} ${goal.currency}`
@@ -109,7 +114,9 @@ export function GoalPanel({
       {/* The status line is a whole sentence, so it wraps rather than clipping in a
           panel this narrow. */}
       <div className="flex min-h-8 shrink-0 items-center justify-center border-t border-border px-2 py-1 text-center text-2xs leading-tight text-text-muted">
-        {!available && unavailableReason ? unavailableReason : statusText(current, goal.targetAmount, goal.currency, available, maskNumbers)}
+        {partial
+          ? `Known accounts: ${statusText(shown, goal.targetAmount, goal.currency, true, maskNumbers)}. ${unavailableReason ?? 'Some positions have no market price.'}`
+          : !available && unavailableReason ? unavailableReason : statusText(current, goal.targetAmount, goal.currency, available, maskNumbers)}
       </div>
     </Panel>
   )

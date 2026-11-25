@@ -118,7 +118,7 @@ export const NewsToolbar = forwardRef<
           onChange={props.onQuery}
           placeholder="Filter headlines, tickers, sources, or signals   (/)"
           aria-label="Filter the news feed"
-          className={mobileDisclosure ? 'min-w-0 basis-full' : 'ml-1 min-w-[16rem] flex-1'}
+          className={mobileDisclosure ? 'min-w-0 basis-full' : 'ml-1 min-w-[14rem] flex-1'}
         />
 
         {/* The toolbar gives each full-width Select a fixed-width box. */}
@@ -144,22 +144,23 @@ export const NewsToolbar = forwardRef<
           Reader
         </Button>
 
-        <div className="w-44 shrink-0">
+        <div className="w-32 shrink-0">
           <Select value={props.exportScope} onChange={props.onExportScope}
             options={[{ value: 'filtered', label: 'Filtered results' }, { value: 'all', label: 'All loaded news' }]}
             aria-label="News export scope" className="h-8" />
         </div>
         <Button
-          variant="positive"
+          variant="accent"
           onClick={props.onExport}
           title="Copy news in the selected scope to the clipboard for AI."
+          aria-label="Copy News for AI"
         >
-          Copy News for AI
+          Copy for AI
         </Button>
 
-        <span className={`ml-auto pl-2 text-2xs ${toneClass[props.status.tone]}`}>
+        {props.status.text ? <span className={`ml-auto pl-2 text-2xs ${toneClass[props.status.tone]}`}>
           {props.status.text}
-        </span>
+        </span> : null}
       </div>
     </div>
   )

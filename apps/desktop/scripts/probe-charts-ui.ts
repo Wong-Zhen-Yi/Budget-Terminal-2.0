@@ -220,7 +220,7 @@ try {
           check(calls.every(request => !request.force), 'Changing Stocks tickers must preserve service caches')
           await submit('AAPL')
           check(calls.filter(request => request.symbol === 'AAPL').length === 1, 'Stocks revisit must reuse its cached query')
-          check(document.body.innerText.includes('Loaded AAPL.'), 'Stocks revisit must be ready')
+          check(document.querySelector('[data-stocks-state="ready"][data-symbol="AAPL"]') && !document.body.innerText.includes('Loaded AAPL'), 'Stocks revisit must be ready without a status note')
           await submit('AAPL')
           check(calls.at(-1).force === true, 'Explicit same-ticker reload must still refresh data')
           window.finishProbe = () => app.unmount()

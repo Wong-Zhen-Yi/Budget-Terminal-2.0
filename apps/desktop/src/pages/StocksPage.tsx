@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { LogicalRange } from 'lightweight-charts'
 
@@ -135,18 +135,9 @@ export function StocksPage({
     }
   }, [payload, autoFollow, mfiEnabled])
 
-  const status = useMemo<{ text: string; tone: Tone }>(() => {
-    if (notice) return notice
-    if (query.isFetching || manualLoading) return { text: `Loading ${symbol}...`, tone: 'muted' }
-    if (query.data?.meta.freshness === 'failed') {
-      return { text: `Stocks load failed: ${query.data.meta.failureReason ?? 'unknown error'}`, tone: 'negative' }
-    }
-    if (!payload) return { text: 'Ready', tone: 'muted' }
-    if (query.data?.errors.length) {
-      return { text: `Loaded ${payload.symbol} with ${query.data.errors.length} unavailable block(s).`, tone: 'warning' }
-    }
-    return { text: query.isPlaceholderData ? `Restored last session for ${payload.symbol}.` : `Loaded ${payload.symbol}.`, tone: 'positive' }
-  }, [notice, query.isFetching, query.isPlaceholderData, query.data, manualLoading, payload, symbol])
+  // Only user-action results (export copied/failed) show here; load state and provider gaps belong in Settings.
+  const status = notice ?? { text: '', tone: 'muted' as Tone }
+  const loadState = query.isFetching || manualLoading ? 'loading' : query.data?.meta.freshness === 'failed' ? 'failed' : payload ? 'ready' : 'empty'
 
   const activeCandle = hovered ?? payload?.chart.candles.at(-1) ?? null
   const stats = payload?.chart.stats ?? null
@@ -169,6 +160,16 @@ export function StocksPage({
     setMiddleSizes(resizeTriplet(middleSizes, divider, clientY - bounds.top, bounds.height - 8, [100, 100, 100]))
   }, [middleSizes, setMiddleSizes])
 
+  // A panel with nothing to show shrinks to its header and one line, handing its height to its neighbours.
+  // Decided by the shown payload alone, so a background refresh never reshapes the layout.
+  const settled = Boolean(payload)
+  // A fund reports only a few company figures; its overview then takes just the rows it has.
+  const sparseOverview = settled && OVERVIEW_ROWS.filter(([, key]) => reported(payload?.metrics[key])).length <= OVERVIEW_ROWS.length / 2
+  const noTargets = settled && !TARGET_ROWS.some(([, key]) => reported(payload?.targets[key]))
+  const noInstitutions = settled && !payload?.institutional.length
+  const noInsiders = settled && !payload?.insiders.length
+  const slot = (grow: number, collapsed: boolean) => collapsed ? { flexGrow: 0, flexBasis: 'auto' } : { flexGrow: grow, flexBasis: 0 }
+
   return (
     <div ref={mainRef} className="stocks-workspace flex min-h-0 flex-1 gap-0 p-1">
       <div className="flex min-h-0 min-w-[300px] flex-col gap-1" style={{ flexGrow: mainSizes[0], flexBasis: 0 }}>
@@ -181,14 +182,14 @@ export function StocksPage({
           onExport={() => void exportForLlm()}
         />
         <div ref={leftRef} className="flex min-h-0 flex-1 flex-col">
-          <div className="flex min-h-0 flex-col" style={{ flexGrow: leftSizes[0], flexBasis: 0 }}>
+          <div className="flex min-h-0 flex-col" style={slot(leftSizes[0], sparseOverview)}>
             <OverviewPanel payload={payload} loading={query.isLoading} warning={warningOf(query.data, 'Overview')} />
           </div>
-          <ResizeHandle orientation="horizontal" onDrag={(position) => resizeLeft(0, position)} />
-          <div className="flex min-h-0 flex-col" style={{ flexGrow: leftSizes[1], flexBasis: 0 }}>
+          {noTargets || sparseOverview ? <div className="h-1 shrink-0" /> : <ResizeHandle orientation="horizontal" onDrag={(position) => resizeLeft(0, position)} />}
+          <div className="flex min-h-0 flex-col" style={slot(leftSizes[1], noTargets)}>
             <TargetsPanel payload={payload} warning={warningOf(query.data, 'Price targets')} />
           </div>
-          <ResizeHandle orientation="horizontal" onDrag={(position) => resizeLeft(1, position)} />
+          {noTargets ? <div className="h-1 shrink-0" /> : <ResizeHandle orientation="horizontal" onDrag={(position) => resizeLeft(1, position)} />}
           <div className="flex min-h-0 flex-col" style={{ flexGrow: leftSizes[2], flexBasis: 0 }}>
             <DescriptionPanel payload={payload} warning={warningOf(query.data, 'Description')} />
           </div>
@@ -202,12 +203,12 @@ export function StocksPage({
           <div className="flex min-h-0 flex-col" style={{ flexGrow: middleSizes[0], flexBasis: 0 }}>
             <NewsPanel rows={payload?.news ?? []} loading={query.isLoading} warning={warningOf(query.data, 'News')} />
           </div>
-          <ResizeHandle orientation="horizontal" onDrag={(position) => resizeMiddle(0, position)} />
-          <div className="flex min-h-0 flex-col" style={{ flexGrow: middleSizes[1], flexBasis: 0 }}>
+          {noInstitutions ? <div className="h-1 shrink-0" /> : <ResizeHandle orientation="horizontal" onDrag={(position) => resizeMiddle(0, position)} />}
+          <div className="flex min-h-0 flex-col" style={slot(middleSizes[1], noInstitutions)} data-collapsed={noInstitutions || undefined}>
             <InstitutionalPanel rows={payload?.institutional ?? []} loading={query.isLoading} warning={warningOf(query.data, 'Institutional holders')} />
           </div>
-          <ResizeHandle orientation="horizontal" onDrag={(position) => resizeMiddle(1, position)} />
-          <div className="flex min-h-0 flex-col" style={{ flexGrow: middleSizes[2], flexBasis: 0 }}>
+          {noInstitutions || noInsiders ? <div className="h-1 shrink-0" /> : <ResizeHandle orientation="horizontal" onDrag={(position) => resizeMiddle(1, position)} />}
+          <div className="flex min-h-0 flex-col" style={slot(middleSizes[2], noInsiders)} data-collapsed={noInsiders || undefined}>
             <InsiderPanel rows={payload?.insiders ?? []} loading={query.isLoading} warning={warningOf(query.data, 'Insider transactions')} />
           </div>
         </div>
@@ -236,7 +237,7 @@ export function StocksPage({
             O {decimals(activeCandle?.open, 2)} H {decimals(activeCandle?.high, 2)} L {decimals(activeCandle?.low, 2)} C {decimals(activeCandle?.close, 2)} Vol {compactNumber(activeCandle?.volume)}
           </span>
           {mfiEnabled ? <span className="num text-[#9d7ce0]">MFI({STOCKS_MFI_PERIOD}) {decimals(payload?.chart.mfi.at(-1)?.value, 2)}</span> : null}
-          <span className={`ml-auto truncate ${toneClass[status.tone]}`} title={status.text}>{status.text}</span>
+          <span className={`ml-auto truncate ${toneClass[status.tone]}`} title={status.text || undefined} data-stocks-state={loadState} data-symbol={payload?.symbol}>{status.text}</span>
         </div>
         {warningOf(query.data, 'Chart') && !payload?.chart.candles.length ? (
           <PanelMessage>{warningOf(query.data, 'Chart')}</PanelMessage>
@@ -285,12 +286,16 @@ function TickerPanel({ draft, busy, onDraft, onLoad, onNavigate, onExport }: {
           <Button key={id} onClick={() => onNavigate(id, draft.trim().toUpperCase())} className="capitalize">{id}</Button>
         ))}
       </div>
-      <Button variant="positive" className="mt-1 w-full" onClick={onExport}>Export for LLM</Button>
+      <Button variant="accent" className="mt-1 w-full" onClick={onExport}>Export for LLM</Button>
     </div>
   )
 }
 
+const reported = (value: unknown) => value !== null && value !== undefined && value !== '' && value !== 'N/A' && value !== '--'
+
 function OverviewPanel({ payload, loading, warning }: { payload: StocksPayload | null; loading: boolean; warning?: string }) {
+  // Only reported figures are listed, so a fund is not a column of N/A company financials.
+  const metrics = payload ? OVERVIEW_ROWS.filter(([, key]) => reported(payload.metrics[key])) : OVERVIEW_ROWS
   const subtitle = [payload?.company.exchange, payload?.company.sector, payload?.company.industry].filter(Boolean).join('  ·  ')
   return (
     <Panel title={payload?.company.name ?? 'Overview'} warning={warning}>
@@ -298,7 +303,8 @@ function OverviewPanel({ payload, loading, warning }: { payload: StocksPayload |
         <div className="min-h-0 flex-1 overflow-auto px-2 py-1">
           {subtitle ? <p className="border-b border-border pb-1 text-2xs text-text-muted">{subtitle}</p> : null}
           <dl>
-            {OVERVIEW_ROWS.map(([label, key]) => (
+            {payload && !metrics.length ? <p className="py-2 text-2xs text-text-dim">No company financials are reported for {payload.symbol}. Funds and ETFs do not file them.</p> : null}
+            {metrics.map(([label, key]) => (
               <div key={key} className="flex items-center gap-2 border-b border-border/50 py-[3px] text-2xs">
                 <dt className="text-text-muted">{label}</dt>
                 <dd className="num ml-auto text-right text-text">{payload?.metrics[key] ?? 'N/A'}</dd>
@@ -315,7 +321,8 @@ function TargetsPanel({ payload, warning }: { payload: StocksPayload | null; war
   return (
     <Panel title="Price targets" warning={warning}>
       <dl className="min-h-0 flex-1 overflow-auto px-2 py-1">
-        {TARGET_ROWS.map(([label, key]) => {
+        {payload && !TARGET_ROWS.some(([, key]) => reported(payload.targets[key])) ? <p className="py-1 text-2xs text-text-dim">No analyst price targets for {payload.symbol}.</p> : null}
+        {TARGET_ROWS.filter(([, key]) => !payload || reported(payload.targets[key])).map(([label, key]) => {
           const upside = key === 'upsideToMean' ? payload?.targets.upsidePct : null
           return (
             <div key={key} className="flex gap-2 py-[2px] text-2xs">
@@ -330,14 +337,18 @@ function TargetsPanel({ payload, warning }: { payload: StocksPayload | null; war
 }
 
 function DescriptionPanel({ payload, warning }: { payload: StocksPayload | null; warning?: string }) {
-  return <Panel title="Description" warning={warning}><p className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap p-2 text-2xs leading-relaxed text-text-muted">{payload?.company.description ?? 'Load a ticker to read its company description.'}</p></Panel>
+  return <Panel title="Description" warning={warning} className="flex-1"><p className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap p-2 text-2xs leading-relaxed text-text-muted">{payload?.company.description ?? 'Load a ticker to read its company description.'}</p></Panel>
 }
 
+// The headline gets the width; ticker and source ride underneath it instead of squeezing their own columns.
 const newsColumns: Array<Column<StocksNewsRow>> = [
-  { key: 'headline', header: 'Headline', width: '55%', wrap: true, cell: (row) => row.title },
-  { key: 'ticker', header: 'Ticker', width: '13%', align: 'center', wrap: true, cell: (row) => row.ticker },
-  { key: 'source', header: 'Source', width: '20%', align: 'center', wrap: true, cell: (row) => row.source },
-  { key: 'time', header: 'Time', width: '12%', align: 'center', numeric: true, cell: (row) => row.publishedAt ? new Date(row.publishedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--' },
+  { key: 'headline', header: 'Headline', wrap: true, cell: (row) => (
+    <span className="block" title={row.title}>
+      <span className="line-clamp-2 text-text">{row.title}</span>
+      <span className="block truncate text-text-dim">{[row.ticker, row.source].filter(Boolean).join(' · ')}</span>
+    </span>
+  ) },
+  { key: 'time', header: 'Time', width: '52px', align: 'right', numeric: true, cell: (row) => row.publishedAt ? new Date(row.publishedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--' },
 ]
 
 function NewsPanel({ rows, loading, warning }: { rows: StocksNewsRow[]; loading: boolean; warning?: string }) {
@@ -354,7 +365,7 @@ const institutionalColumns: Array<Column<StocksInstitutionalRow>> = [
 ]
 
 function InstitutionalPanel({ rows, loading, warning }: { rows: StocksInstitutionalRow[]; loading: boolean; warning?: string }) {
-  return <Panel title={`Top institutional holders${rows.length ? ` · ${rows.length}` : ''}`} warning={warning}><DataTable columns={institutionalColumns} rows={rows} rowKey={(row, index) => `${row.holder}:${row.reported}:${index}`} empty={loading ? 'Loading institutional holders...' : 'No institutional holder rows were available for this ticker.'} /></Panel>
+  return <Panel title={`Top institutional holders${rows.length ? ` · ${rows.length}` : ''}`} warning={warning}><DataTable columns={institutionalColumns} rows={rows} rowKey={(row, index) => `${row.holder}:${row.reported}:${index}`} empty={loading ? 'Loading institutional holders...' : 'None reported for this ticker.'} /></Panel>
 }
 
 const insiderColumns: Array<Column<StocksInsiderRow>> = [
@@ -367,7 +378,7 @@ const insiderColumns: Array<Column<StocksInsiderRow>> = [
 ]
 
 function InsiderPanel({ rows, loading, warning }: { rows: StocksInsiderRow[]; loading: boolean; warning?: string }) {
-  return <Panel title={`Insider transactions${rows.length ? ` · ${rows.length}` : ''}`} warning={warning}><DataTable columns={insiderColumns} rows={rows} rowKey={(row, index) => `${row.date}:${row.insider}:${index}`} empty={loading ? 'Loading insider transactions...' : 'No insider transaction rows were available for this ticker.'} /></Panel>
+  return <Panel title={`Insider transactions${rows.length ? ` · ${rows.length}` : ''}`} warning={warning}><DataTable columns={insiderColumns} rows={rows} rowKey={(row, index) => `${row.date}:${row.insider}:${index}`} empty={loading ? 'Loading insider transactions...' : 'None reported for this ticker.'} /></Panel>
 }
 
 function resizeTriplet(

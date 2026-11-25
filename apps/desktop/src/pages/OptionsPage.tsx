@@ -330,17 +330,19 @@ export function OptionsPage({
           <input
             value={draft}
             onChange={(event) => setDraft(event.target.value.toUpperCase())}
-            placeholder="Enter Ticker (e.g. AAPL)"
+            placeholder="e.g. AAPL"
             aria-label="Options ticker"
             className="h-8 w-44 border border-border-strong bg-surface-raised px-2 text-2xs font-semibold tracking-wide text-text outline-none focus:border-accent"
           />
-          <span
-            className="num px-1 text-2xs font-semibold text-text whitespace-nowrap"
-            title="Current underlying price"
-            aria-label="Current underlying price"
-          >
-            {currency(tickerPrice)}
-          </span>
+          {tickerPrice !== null && tickerPrice !== undefined && Number.isFinite(tickerPrice) ? (
+            <span
+              className="num px-1 text-2xs font-semibold text-text whitespace-nowrap"
+              title="Current underlying price"
+              aria-label="Current underlying price"
+            >
+              {currency(tickerPrice)}
+            </span>
+          ) : null}
           <Button type="submit" variant="accent" disabled={loading}>
             {loading ? 'Loading...' : 'Load Ticker'}
           </Button>

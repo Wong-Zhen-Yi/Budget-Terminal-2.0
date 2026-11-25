@@ -15,6 +15,7 @@ import { ManagePortfoliosDialog } from '@/components/portfolio/ManagePortfoliosD
 import { MetricsTab } from '@/components/portfolio/MetricsTab'
 import { MomentumTab } from '@/components/portfolio/MomentumTab'
 import { buildOptionRows, OptionsTable, totalOptionsPnl } from '@/components/portfolio/OptionsTable'
+import { DayContribution } from '@/components/portfolio/DayContribution'
 import { PositionsTable } from '@/components/portfolio/PositionsTable'
 import { MovePositionsDialog } from '@/components/portfolio/MovePositionsDialog'
 import { RemovePositionsDialog } from '@/components/portfolio/RemovePositionsDialog'
@@ -429,6 +430,8 @@ export function PortfolioPage({
             </div>
           }
         >
+          {/* The table takes only the height its rows need; the space left over shows today's movers. */}
+          <div className="flex min-h-0 shrink flex-col" style={{ flex: '0 1 auto' }}>
           <PositionsTable
             onResearch={(symbol) => onNavigate?.('stocks', symbol)}
             portfolio={selected}
@@ -444,6 +447,8 @@ export function PortfolioPage({
               void send({ type: 'setPosition', portfolioId: selected.id, ticker, includeInWeight })
             }
           />
+          </div>
+          <DayContribution rows={rows} />
         </Panel>
       ) : null}
 

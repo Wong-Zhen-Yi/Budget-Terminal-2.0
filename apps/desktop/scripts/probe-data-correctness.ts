@@ -115,7 +115,10 @@ try {
     assert.match(silo.missingMarks![0], new RegExp(currency))
   }
   const book = { cash: [], debt: [], recurringBills: [], goal: { title: 'Goal', targetAmount: 100, currency: 'USD' as const } }
-  assert.equal(goalNetWorth(book, portfolioBreakdown([portfolio], {}), 'USD', null).available, false)
+  const partialGoal = goalNetWorth(book, portfolioBreakdown([portfolio], {}), 'USD', null)
+  assert.equal(partialGoal.available, false)
+  assert.equal(typeof partialGoal.known, 'number', 'Incomplete net worth still reports the known subtotal for the goal ring')
+  assert.match(partialGoal.reason!, /^Excludes /, 'Incomplete net worth names what it leaves out')
   const negative = [{ id: 'p', name: 'P', stocks: 100, cash: 0, options: 0, marginDebt: 150 }]
   assert.equal(totalsCenter(totalsSeries(book, negative, 'USD', null)), -50)
   assert.equal(goalNetWorth(book, negative, 'USD', null).value, -50)
@@ -221,7 +224,7 @@ try {
   assert.equal(isolated[1].meta.freshness, 'stale')
   await reopened.close()
 
-  FOREX_PAIRS.forEach(pair => cache.set(`quote:yahoo-only:${pair.symbol}`, { symbol: pair.symbol, price: 1.25, change: 0, absChange: 0 }, TTL.quotes,
+  FOREX_PAIRS.forEach(pair => cache.set(`quote:yahoo-session-v1:${pair.symbol}`, { quote: { symbol: pair.symbol, price: 1.25, change: 0, absChange: 0 }, meta: {} }, TTL.quotes,
     { fetchedAt: now, asOf: now - 60_000, expiresAt: now + TTL.quotes, stale: false, fromCache: false, failures: [] }))
   const forexQuotes = await getForexQuotes()
   assert.equal(forexQuotes.meta.expiresAt, now + TTL.quotes, 'Forex aggregate cannot extend 30-second quote dependencies to its own 60-second TTL')
@@ -250,7 +253,7 @@ try {
   assert.ok(Math.abs(currentSession.change - (-1.87 / 779.09 * 100)) < 1e-10,
     'Current quotes compare against the previous historical close, independently from the chart candle-to-candle change')
   cache.clear()
-  cache.set('quote:yahoo-only:SGD=X', { symbol: 'SGD=X', price: 1.25, change: 0, absChange: 0 }, TTL.quotes)
+  cache.set('quote:yahoo-session-v1:SGD=X', { quote: { symbol: 'SGD=X', price: 1.25, change: 0, absChange: 0 }, meta: {} }, TTL.quotes)
   const rateFetchedAt = now
   now += 3600_000
   Reflect.set(yahoo, 'chart', async () => { throw new Error('fixture offline') })

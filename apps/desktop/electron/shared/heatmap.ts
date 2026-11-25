@@ -399,8 +399,8 @@ export function buildHeatmapDetail(row: HeatmapRow | null, interval: HeatmapInte
 /**
  * `_heat_color`: mix the neutral tile toward up or down, saturating at a 4% move.
  *
- * Four, not the five the Portfolio Heatmap's own ramp uses — matching the reference here
- * is what makes the same session read the same shade in both apps. A tile with no quote
+ * Every heatmap in the app (index, portfolio, dashboard) uses this ramp through
+ * `src/components/heatmap/palette.ts`, so one move reads as one shade. A tile with no quote
  * is not coloured by this at all: it stays neutral and is outlined instead, so missing
  * data never reads as a genuine flat move.
  */

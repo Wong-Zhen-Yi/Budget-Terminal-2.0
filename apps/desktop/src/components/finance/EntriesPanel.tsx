@@ -14,7 +14,6 @@ interface EntriesPanelProps {
   rows: FinanceEntry[]
   footer: ReactNode
   /** Green for the asset table, red for the liability one. */
-  addVariant: 'positive' | 'danger'
   onAdd: () => void
   onRemove: (id: string) => void
   onSetDesc: (id: string, desc: string) => void
@@ -34,7 +33,6 @@ export function EntriesPanel({
   title,
   rows,
   footer,
-  addVariant,
   onAdd,
   onRemove,
   onSetDesc,
@@ -85,7 +83,7 @@ export function EntriesPanel({
       className={className}
       actions={
         <>
-          <Button variant={addVariant} onClick={onAdd}>
+          <Button variant="accent" onClick={onAdd}>
             + Add
           </Button>
           <Button
@@ -113,7 +111,8 @@ export function EntriesPanel({
         onRowClick={(row) => setSelectedId(row.id === selectedId ? null : row.id)}
         rowClassName={(row) => (row.id === selectedId ? 'bg-accent-dim' : '')}
       />
-      <div className="flex h-8 shrink-0 items-center justify-end border-t border-border px-2 text-2xs font-semibold text-text">
+      {/* The debt footer carries a margin clause, so it may wrap to a second line instead of clipping. */}
+      <div className="flex min-h-8 shrink-0 flex-wrap items-center justify-end gap-x-1 border-t border-border px-2 py-1 text-right text-2xs leading-tight font-semibold text-text">
         {footer}
       </div>
     </Panel>

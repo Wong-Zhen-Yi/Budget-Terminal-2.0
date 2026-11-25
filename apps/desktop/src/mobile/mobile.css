@@ -239,6 +239,9 @@
   [data-terminal-mobile] .stocks-workspace [role="separator"] { display: none; }
 }
 
+/* Phones stack the chart and its symbol lists, so rows size to content there. */
+[data-terminal-mobile] .charts-main-grid { grid-template-rows: none !important; }
+
 @media (max-width: 600px) {
   [data-terminal-mobile] .focus-dashboard__grid { grid-template-columns: minmax(0, 1fr); }
   [data-terminal-mobile] [data-page-id="pre-market"] > div > div,

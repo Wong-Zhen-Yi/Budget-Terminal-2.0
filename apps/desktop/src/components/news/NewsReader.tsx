@@ -108,7 +108,7 @@ export function NewsReader({
             </span>
             <NewsSummaryButton article={article} preview={preview} loading={loading} />
             <Button
-              variant="positive"
+              variant="accent"
               disabled={!article.url}
               onClick={() => onOpen(article)}
               title="Opens in the system browser."

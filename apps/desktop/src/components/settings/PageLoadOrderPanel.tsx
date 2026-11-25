@@ -61,7 +61,7 @@ export function PageLoadOrderPanel() {
 
   return (
     <Panel title="Page Load Order" actions={
-      <Button variant="positive" onClick={() => void exportForAi()} disabled={!order.length || exporting}
+      <Button variant="accent" onClick={() => void exportForAi()} disabled={!order.length || exporting}
         title="Save a text snapshot of all startup pages, saved load times, task timings and failures for AI analysis. Nothing is sent to an AI service.">
         {exporting ? 'Exporting...' : 'Export for AI'}
       </Button>

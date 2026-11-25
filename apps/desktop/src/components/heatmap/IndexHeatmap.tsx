@@ -8,6 +8,7 @@ import {
   type HeatmapRow,
 } from '@shared/heatmap'
 import { squarify, type Rect } from '@/components/charts/Treemap'
+import { FALLBACK_HEATMAP_PALETTE, readHeatmapPalette, type HeatmapPalette } from './palette'
 
 /**
  * The index holdings map, ported from `widgets/etf_heatmap.py`.
@@ -38,25 +39,9 @@ const MAX_ZOOM = 6
 /** `_LEFT_DRAG_THRESHOLD`: a press that moves less than this is a click, not a pan. */
 const DRAG_THRESHOLD = 4
 
-interface Palette {
-  neutral: string
-  up: string
-  down: string
-}
-
-const FALLBACK_PALETTE: Palette = { neutral: '#121b2b', up: '#26c281', down: '#f0554e' }
-
-/** The tile ramp mixes hex channels, so it needs the resolved values, not `var(...)`. */
-function readPalette(): Palette {
-  if (typeof window === 'undefined') return FALLBACK_PALETTE
-  const style = getComputedStyle(document.documentElement)
-  const read = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback
-  return {
-    neutral: read('--color-surface-raised', FALLBACK_PALETTE.neutral),
-    up: read('--color-up', FALLBACK_PALETTE.up),
-    down: read('--color-down', FALLBACK_PALETTE.down),
-  }
-}
+type Palette = HeatmapPalette
+const FALLBACK_PALETTE = FALLBACK_HEATMAP_PALETTE
+const readPalette = readHeatmapPalette
 
 interface PlacedTile {
   row: HeatmapRow

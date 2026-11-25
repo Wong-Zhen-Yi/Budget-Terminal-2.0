@@ -10,7 +10,7 @@ import { FRESHNESS } from '@shared/freshness'
 import { api } from '@/api/client'
 import { useCrypto, useCryptoProviderUsage } from '@/api/cryptoQueries'
 import { useChartsHistory } from '@/api/chartsQueries'
-import { effectiveFreshness, useSnapshotClock } from '@/api/snapshotHealth'
+import { useSnapshotClock } from '@/api/snapshotHealth'
 import { useCryptoWorkspace } from '@/stores/crypto'
 import { CryptoPriceChart } from '@/components/crypto/CryptoPriceChart'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
@@ -45,14 +45,22 @@ export function CryptoPage({ onStatusChange }: { onStatusChange: (panels: PanelS
   const refreshing = false
   const [search, setSearch] = useState('')
   const payload = query.data?.data
-  const quotes = payload?.quotes ?? {}
+  const quotes = useMemo(() => {
+    // A missing spot quote falls back to the Hyperliquid mark, labelled PERP, instead of showing dashes beside a live chart.
+    const merged: Record<string, CryptoQuote> = { ...(payload?.quotes ?? {}) }
+    for (const { label, symbol: ticker, name } of CRYPTO_TICKERS) {
+      const mark = payload?.hyperliquid?.markets.find(row => row.symbol === label)
+      if (merged[label]?.price != null || !mark) continue
+      const prior = merged[label] as CryptoQuote | undefined
+      merged[label] = { ...prior, volume: prior?.volume ?? null, marketCap: prior?.marketCap ?? null, label, symbol: ticker, name, price: mark.markPrice, changePct: mark.changePct, source: 'Hyperliquid perpetual mark' }
+    }
+    return merged
+  }, [payload?.quotes, payload?.hyperliquid])
   const loading = query.isFetching || refreshing
   const coinGecko = usage.data?.providers.find(provider => provider.id === 'coingecko')
   const cooldownSeconds = coinGecko?.throttled ? Math.max(0, Math.ceil(((usage.data?.sampledAt ?? now) + coinGecko.cooldownMs - now) / 1_000)) : 0
   const cooldown = cooldownSeconds > 0
   const wasCooling = useRef(false)
-  const freshness = query.data ? effectiveFreshness(query.data, now, FRESHNESS.crypto) : 'unavailable'
-  const spotWarning = query.data?.errors.some(error => /coingecko/i.test(`${error.source} ${error.reason}`))
   const market = payload?.hyperliquid?.markets.find(row => row.symbol === symbol)
   const venueAge = payload?.hyperliquid ? now - new Date(payload.hyperliquid.fetchedAt).getTime() : Infinity
   const venueRecent = venueAge >= -5_000 && venueAge <= 15_000
@@ -60,7 +68,6 @@ export function CryptoPage({ onStatusChange }: { onStatusChange: (panels: PanelS
   const breadthSources = [...new Set(payload?.heatmap.tiles.map(tile => tile.source).filter(Boolean) ?? [])].join(' + ')
   const chartCandles = history.data?.meta.freshness === 'failed' ? EMPTY_CANDLES : history.data?.data.candles ?? EMPTY_CANDLES
   const chartFailure = history.isError || history.data?.meta.freshness === 'failed'
-  const chartFreshness = history.data ? effectiveFreshness(history.data, now, FRESHNESS.chartIntraday) : 'loading'
   const chartSource = history.data?.data.stats?.source ?? 'Hyperliquid crypto perpetual'
 
   useEffect(() => {
@@ -98,7 +105,6 @@ export function CryptoPage({ onStatusChange }: { onStatusChange: (panels: PanelS
             <span className="num">{cryptoPrice(quotes[entry.label]?.price)}</span>
             <span className={`num ${changeClass(quotes[entry.label]?.changePct)}`}>{cryptoPercent(quotes[entry.label]?.changePct)}</span>
           </button>)}
-          <div className="crypto-chart-caption">Snapshot {payload ? clockTail(payload.fetchedAt) : '--'} · {freshness}</div>
         </Section>
         <Section title="Equity & ETF proxies" subtitle="Yahoo stock metadata · Perpetual marks labelled separately">
           {PROXY_TICKERS.map(entry => { const quote = quotes[entry.label]; return <div className="crypto-proxy" key={entry.label}>
@@ -124,16 +130,16 @@ export function CryptoPage({ onStatusChange }: { onStatusChange: (panels: PanelS
               : <div className="crypto-empty" role="status">{history.isFetching ? 'Loading perpetual candles...' : 'No candle history returned.'}</div>}
           </div>}
         </div>
-        <div className="crypto-chart-caption"><span>{chartSource} · {chartFreshness} · {chartCandles.length} candles</span><span>UTC · Volume in base asset · {pointerText('Scroll to zoom, drag to pan', 'Pinch to zoom, drag to pan')}</span></div>
+        <div className="crypto-chart-caption"><span>{chartSource}</span><span>UTC · Volume in base asset · {pointerText('Scroll to zoom, drag to pan', 'Pinch to zoom, drag to pan')}</span></div>
       </section>
 
       <div className="crypto-right">
-        <Section title="Market breadth" subtitle={`Snapshot coverage ${coverage?.loaded ?? 0}/${coverage?.total ?? 30} | ${freshness} | Updated ${payload ? clockTail(payload.heatmap.updatedAt) : '--'}`} className="crypto-breadth"
+        <Section title="Market breadth" subtitle={`Snapshot coverage ${coverage?.loaded ?? 0}/${coverage?.total ?? 30} · Updated ${payload ? clockTail(payload.heatmap.updatedAt) : '--'}`} className="crypto-breadth"
           badge={<span className="crypto-badge">Top 30 · {breadthSources || 'Awaiting data'}</span>}><Breadth payload={payload} /></Section>
         <Section title="Market context" className="crypto-context">
           <div className="crypto-context-row"><span>BTC dominance</span><strong className="num">{payload?.global?.btcDominance == null ? '--' : `${payload.global.btcDominance.toFixed(1)}%`}</strong></div>
           <div className="crypto-context-row"><span>24h spot volume</span><strong className="num">{cryptoMoney(payload?.global?.volume24h)}</strong></div>
-          <div className="crypto-chart-caption">CoinGecko snapshot · {freshness}</div>
+          <div className="crypto-chart-caption">Source: CoinGecko</div>
           <div className="crypto-context-row"><span>Fear &amp; Greed</span><strong className="crypto-warning">{payload?.fearGreed?.value ?? '--'} / 100</strong></div>
           <div className="crypto-chart-caption">Alternative.me · {payload?.fearGreed?.timestamp || 'Awaiting observation date'}</div>
         </Section>
@@ -151,11 +157,6 @@ export function CryptoPage({ onStatusChange }: { onStatusChange: (panels: PanelS
         <PerpetualTable markets={markets} loading={loading} selected={symbol} select={selectSymbol} />
       </Section>
     </div>
-    <footer className="crypto-footer"><div className="crypto-feed-states">
-      <span className={`crypto-badge ${cooldown || spotWarning ? 'crypto-warning' : ''}`} title={cooldown ? `CoinGecko rate limited · Auto-retry in ${cooldownSeconds}s` : undefined}>Spot: {cooldown ? 'rate limited' : freshness}</span>
-      <span className={`crypto-badge ${venueRecent ? 'crypto-positive' : ''}`}>Perpetuals: {venueRecent ? 'live mark' : payload?.hyperliquid ? 'snapshot' : 'unavailable'}</span>
-      <span className="crypto-badge">News: {payload?.news.length ? 'ready' : 'unavailable'}</span>
-    </div></footer>
   </div>
 }
 
@@ -175,13 +176,13 @@ function Breadth({ payload }: { payload?: CryptoPayload }) {
 function PerpetualTable({ markets, loading, selected, select }: { markets: HyperliquidMarket[]; loading: boolean; selected: string; select: (symbol: string) => void }) {
   const columns: Array<Column<HyperliquidMarket>> = [
     { key: 'market', header: 'Market', cell: row => <button type="button" aria-label={`Chart ${row.symbol} perpetual market`} onClick={() => select(row.symbol)}>{row.symbol}-PERP</button>, sortValue: row => row.symbol },
-    { key: 'mark', header: 'Mark (USD)', numeric: true, align: 'right', cell: row => cryptoPrice(row.markPrice), sortValue: row => row.markPrice },
+    { key: 'mark', header: 'Mark', numeric: true, align: 'right', cell: row => cryptoPrice(row.markPrice), sortValue: row => row.markPrice },
     { key: 'change', header: '24h', numeric: true, align: 'right', cell: row => <span className={changeClass(row.changePct)}>{cryptoPercent(row.changePct)}</span>, sortValue: row => row.changePct },
-    { key: 'funding', header: <span title="Current hourly funding. Positive: longs pay shorts; negative: shorts pay longs.">Funding / 1h</span>, numeric: true, align: 'right', cell: row => `${row.fundingHourlyPct >= 0 ? '+' : ''}${row.fundingHourlyPct.toFixed(5)}%`, sortValue: row => row.fundingHourlyPct },
-    { key: 'interest', header: 'Open interest', numeric: true, align: 'right', cell: row => cryptoMoney(row.openInterestUsd, true), sortValue: row => row.openInterestUsd },
+    { key: 'funding', header: <span title="Current hourly funding. Positive: longs pay shorts; negative: shorts pay longs.">Fund/1h</span>, numeric: true, align: 'right', cell: row => `${row.fundingHourlyPct >= 0 ? '+' : ''}${row.fundingHourlyPct.toFixed(5)}%`, sortValue: row => row.fundingHourlyPct },
+    { key: 'interest', header: <span title="Open interest (USD)">OI</span>, numeric: true, align: 'right', cell: row => cryptoMoney(row.openInterestUsd, true), sortValue: row => row.openInterestUsd },
     { key: 'volume', header: '24h volume', numeric: true, align: 'right', cell: row => cryptoMoney(row.volume24hUsd, true), sortValue: row => row.volume24hUsd },
   ]
   return <DataTable columns={columns} rows={markets} rowKey={row => row.symbol} defaultSort={{ key: 'volume', direction: 'desc' }}
-    rowClassName={row => row.symbol === selected ? 'bg-accent-dim' : ''} minWidth="620px"
+    rowClassName={row => row.symbol === selected ? 'bg-accent-dim' : ''} minWidth="500px"
     empty={loading ? 'Loading Hyperliquid perpetual markets...' : 'No matching perpetual markets. Data may be unavailable.'} />
 }

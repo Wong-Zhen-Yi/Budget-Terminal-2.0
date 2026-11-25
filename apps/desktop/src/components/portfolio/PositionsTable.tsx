@@ -23,13 +23,10 @@ function formatSize(row: PositionRow): string {
   return row.sizeType === 'aum' ? `AUM $${magnitude}` : `${sizeBucket(row.size)} $${magnitude}`
 }
 
+/** Size is not a gain, loss or warning, so it stays neutral: larger companies read brighter. */
 function sizeTone(value: number | null): string {
   if (value === null) return 'text-text-dim'
-  if (value >= 200_000_000_000) return 'text-yellow-400'
-  if (value >= 10_000_000_000) return 'text-sky-400'
-  if (value >= 2_000_000_000) return 'text-up'
-  if (value >= 300_000_000) return 'text-orange-400'
-  return 'text-down'
+  return value >= 10_000_000_000 ? 'text-text' : 'text-text-muted'
 }
 
 function pegTone(value: number | null): string {
@@ -249,6 +246,7 @@ export function PositionsTable({
       rowKey={(row) => row.ticker} rowSymbol={(row) => row.ticker}
       rowClassName={() => 'hover:bg-surface-hover focus-within:bg-surface-hover'}
       showIndex
+      pinFirstColumn
       defaultSort={{ key: 'marketValue', direction: 'desc' }}
       empty={loading ? 'Loading positions...' : 'No positions. Use + Add Position to start.'}
     />

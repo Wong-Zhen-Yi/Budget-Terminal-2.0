@@ -51,10 +51,10 @@ const emptyBook: PersonalFinancePayload = {
 function debtFooter(debtTotal: number, margin: number, rate: number | null) {
   if (margin <= 0) return <>Debt total: <PrivateNumber>{money(debtTotal, 'SGD')}</PrivateNumber></>
   if (!validRate(rate)) {
-    return <>Debt total: <PrivateNumber>{money(debtTotal, 'SGD')}</PrivateNumber> + <PrivateNumber>{moneyExplicit(margin, 'USD')}</PrivateNumber> margin</>
+    return <><span>Debt total: <PrivateNumber>{money(debtTotal, 'SGD')}</PrivateNumber></span> <span className="font-normal whitespace-nowrap text-text-muted">+ <PrivateNumber>{moneyExplicit(margin, 'USD')}</PrivateNumber> margin</span></>
   }
   const combined = debtTotal + margin * rate
-  return <>Debt total: <PrivateNumber>{money(combined, 'SGD')}</PrivateNumber> (incl. <PrivateNumber>{moneyExplicit(margin, 'USD')}</PrivateNumber> margin)</>
+  return <><span>Debt total: <PrivateNumber>{money(combined, 'SGD')}</PrivateNumber></span> <span className="font-normal whitespace-nowrap text-text-muted">(incl. <PrivateNumber>{moneyExplicit(margin, 'USD')}</PrivateNumber> margin)</span></>
 }
 
 export function PersonalFinancePage({
@@ -269,7 +269,6 @@ export function PersonalFinancePage({
           title="Cash (SGD)"
           className="finance-cash"
           rows={finance.cash}
-          addVariant="positive"
           footer={<>Cash total: <PrivateNumber>{money(cashTotal, 'SGD')}</PrivateNumber></>}
           onAdd={() => void send({ type: 'addEntry', category: 'cash' })}
           onRemove={(id) => void send({ type: 'removeEntry', category: 'cash', id })}
@@ -280,7 +279,6 @@ export function PersonalFinancePage({
           title="Debt (SGD)"
           className="finance-debt"
           rows={finance.debt}
-          addVariant="danger"
           footer={debtFooter(debtTotal, margin, rate)}
           onAdd={() => void send({ type: 'addEntry', category: 'debt' })}
           onRemove={(id) => void send({ type: 'removeEntry', category: 'debt', id })}
@@ -319,6 +317,7 @@ export function PersonalFinancePage({
           current={goal.value}
           available={goal.available}
           unavailableReason={goal.reason}
+          known={goal.known}
           animationProgress={ring.progress}
           onSetTitle={(title) => void send({ type: 'setGoal', title })}
           onSetTarget={(targetAmount) => void send({ type: 'setGoal', targetAmount })}

@@ -45,7 +45,7 @@ function commonColumns(): Array<Column<EconomicRow>> {
       header: 'As of',
       align: 'center',
       numeric: true,
-      width: '96px',
+      width: '108px',
       cell: (row) => row.latestDate ?? '—',
       sortValue: (row) => row.latestDate ?? '',
     },
@@ -90,7 +90,7 @@ function labelColumn(): Column<EconomicRow> {
   return {
     key: 'label',
     header: 'Indicator',
-    width: '210px',
+    width: '250px',
     cell: (row) => (
       <span title={rowTooltip(row)} className={row.available ? 'text-text' : 'text-text-dim'}>
         {row.label}

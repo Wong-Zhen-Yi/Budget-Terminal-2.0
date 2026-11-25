@@ -36,6 +36,8 @@ interface DonutProps {
   animationProgress?: number
   /** Dense dashboard treatment: smaller chart and a two-column legend. */
   compact?: boolean
+  /** With `compact`: let the ring grow into a tall panel instead of stopping at 150px. */
+  grow?: boolean
   /** Keep labels at normal text size while the finance chart resizes. */
   responsive?: boolean
   /**
@@ -80,6 +82,7 @@ export function Donut({
   animationProgress = 1,
   startAngle = 0,
   compact = false,
+  grow = false,
   responsive = false,
 }: DonutProps) {
   const maskNumbers = useNumberPrivacy()
@@ -112,7 +115,8 @@ export function Donut({
     <div
       className={
         responsive ? 'finance-donut' : compact
-          ? 'flex min-h-0 flex-1 items-center justify-center gap-4 p-2'
+          // Growing rings stack their legend underneath, so a larger ring never squeezes the labels out.
+          ? `flex min-h-0 flex-1 items-center justify-center p-2 ${grow ? 'flex-col gap-3' : 'gap-4'}`
           : 'flex min-h-0 flex-1 flex-wrap items-center justify-center gap-8 p-4'
       }
     >
@@ -126,7 +130,7 @@ export function Donut({
         viewBox={`0 0 ${SIZE} ${SIZE}`}
         className={
           responsive ? 'finance-donut-ring' : compact
-            ? 'h-full max-h-[150px] min-h-[110px] w-auto shrink-0'
+            ? grow ? 'min-h-[110px] max-h-[240px] w-auto flex-1' : 'h-full max-h-[150px] min-h-[110px] w-auto shrink-0'
             : 'h-full max-h-[340px] min-h-[220px] w-auto'
         }
       >
@@ -163,7 +167,7 @@ export function Donut({
 
       <ul
         className={
-          responsive ? 'finance-donut-legend' : compact ? 'grid min-w-0 flex-1 grid-cols-2 gap-x-3 gap-y-1' : 'flex flex-col gap-1'
+          responsive ? 'finance-donut-legend' : compact ? `grid min-w-0 grid-cols-2 gap-x-3 gap-y-1 ${grow ? 'shrink-0 gap-x-6' : 'flex-1'}` : 'flex flex-col gap-1'
         }
       >
         {wedges.map((wedge, index) => (

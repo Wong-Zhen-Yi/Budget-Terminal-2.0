@@ -217,7 +217,8 @@ export function MainWorkspace({ onStatus }: { onStatus: (meta: EnvelopeMeta | un
       ) : null}
       <div
         className="charts-main-grid grid min-h-0 flex-1 gap-2"
-        style={{ gridTemplateColumns: focus || !store.sidebarVisible ? 'minmax(0, 1fr)' : `minmax(0, 1fr) clamp(165px, ${(1 - store.splitterRatio) * 100}%, 46%)` }}
+        // An explicit row keeps a tall sidebar scrolling inside the pane instead of stretching (and refitting) the chart.
+        style={{ gridTemplateRows: 'minmax(0, 1fr)', gridTemplateColumns: focus || !store.sidebarVisible ? 'minmax(0, 1fr)' : `minmax(0, 1fr) clamp(165px, ${(1 - store.splitterRatio) * 100}%, 46%)` }}
       >
         <section aria-label="Price chart" className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-border bg-surface">
           <header className="flex min-h-12 shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b border-border bg-surface-raised px-3 py-1.5 tabular-nums">
@@ -258,6 +259,7 @@ export function MainWorkspace({ onStatus }: { onStatus: (meta: EnvelopeMeta | un
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-2.5">
               <SymbolList title={activePortfolio?.name ? `Portfolio · ${activePortfolio.name}` : 'Active portfolio'} symbols={portfolioSymbols} active={effectiveSymbol} onSelect={selectSymbol} />
               <SymbolList title="Charts watchlist" symbols={store.watchlist} active={effectiveSymbol} onSelect={selectSymbol} onRemove={(symbol) => store.setWatchlist(store.watchlist.filter((entry) => entry !== symbol))} addButton={<Button className={CONTROL} disabled={store.watchlist.includes(store.symbol)} onClick={() => store.setWatchlist([...store.watchlist, store.symbol])}>+ Current</Button>} />
+              <RangeSnapshot symbol={effectiveSymbol} candles={shown} unit={quoteUnit} />
             </div>
             <label className="flex shrink-0 items-center gap-2 border-t border-border px-2.5 py-2 text-[11px] text-text-muted">
               Chart width
@@ -267,6 +269,56 @@ export function MainWorkspace({ onStatus }: { onStatus: (meta: EnvelopeMeta | un
         ) : null}
       </div>
     </div>
+  )
+}
+
+function movingAverage(candles: readonly Candle[], length: number): number | null {
+  if (candles.length < length) return null
+  return candles.slice(-length).reduce((sum, candle) => sum + candle.close, 0) / length
+}
+
+/** Where the last bar sits in the loaded range and against its averages, from the candles already on screen. */
+function RangeSnapshot({ symbol, candles, unit }: { symbol: string; candles: readonly Candle[]; unit: Parameters<typeof quotePrice>[1] }) {
+  const last = candles.at(-1)
+  if (!last) return null
+  const high = Math.max(...candles.map((candle) => candle.high))
+  const low = Math.min(...candles.map((candle) => candle.low))
+  const position = high > low ? (last.close - low) / (high - low) : null
+  const versus = (average: number | null) => average ? (last.close / average - 1) * 100 : null
+  const volumeBars = candles.slice(-20)
+  const averageVolume = volumeBars.reduce((sum, candle) => sum + candle.volume, 0) / volumeBars.length
+  const signed = (value: number | null) => value === null ? '—' : `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`
+  const tone = (value: number | null) => value === null ? 'text-text-muted' : value >= 0 ? 'text-up' : 'text-down'
+  const rows: Array<[string, string, string]> = [
+    ['Range high', quotePrice(high, unit), 'text-text'],
+    ['Range low', quotePrice(low, unit), 'text-text'],
+    ['From high', signed((last.close / high - 1) * 100), tone((last.close / high - 1) * 100)],
+    ['vs 50-bar avg', signed(versus(movingAverage(candles, 50))), tone(versus(movingAverage(candles, 50)))],
+    ['vs 200-bar avg', signed(versus(movingAverage(candles, 200))), tone(versus(movingAverage(candles, 200)))],
+    ['Avg volume (20)', averageVolume ? new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(averageVolume) : '—', 'text-text'],
+  ]
+  return (
+    <section aria-label={`${symbol} range summary`} className="overflow-hidden rounded border border-border">
+      <header className="flex min-h-10 items-center border-b border-border bg-surface-raised px-2">
+        <h3 className="truncate text-[12px] font-semibold text-text">{symbol} · loaded range</h3>
+      </header>
+      {position !== null ? (
+        <div className="px-2 pt-2" title="Last close within the loaded range">
+          <div className="h-1.5 overflow-hidden rounded-full bg-surface-raised">
+            <div className="h-full rounded-full bg-accent-hover" style={{ width: `${Math.max(2, position * 100)}%` }} />
+          </div>
+          <div className="mt-1 flex justify-between text-[10px] text-text-dim"><span>Low</span><span>High</span></div>
+        </div>
+      ) : null}
+      <dl className="divide-y divide-border/60 px-2 pb-1">
+        {rows.map(([label, value, className]) => (
+          <div key={label} className="flex h-7 items-center justify-between gap-2 text-[12px]">
+            <dt className="text-text-muted">{label}</dt>
+            <dd className={`tabular-nums ${className}`}>{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   )
 }
 

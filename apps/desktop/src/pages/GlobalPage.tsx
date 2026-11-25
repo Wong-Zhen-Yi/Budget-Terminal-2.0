@@ -96,7 +96,7 @@ export function GlobalPage({
             </Button>
           ))}
 
-          <Button variant="positive" disabled={!rows.length || exportResult.state === 'saving'} onClick={() => void onExport()}>
+          <Button variant="accent" disabled={!rows.length || exportResult.state === 'saving'} onClick={() => void onExport()}>
             Export for LLM
           </Button>
           <Button

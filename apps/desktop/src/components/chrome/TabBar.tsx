@@ -87,14 +87,14 @@ export function TabBar({
             : 'border-border-strong bg-surface-raised text-text hover:bg-surface-hover'
         }`}
       >
-        <span>Obscure</span>
+        <span>Obscure:</span>
         <span aria-hidden="true" className={obscured ? 'text-text' : 'text-text-muted'}>
-          {!obscured ? 'Off' : obscurePageCount === 0 ? 'No pages' : 'On'}
+          {!obscured ? 'off' : obscurePageCount === 0 ? 'on · 0 pages' : 'on'}
         </span>
       </button>
 
       <ReloadButton onReload={onReload} progress={reloadProgress} shortcut={isMac ? '⌘ R' : 'F5'}
-        className={`no-drag h-9 w-28 shrink-0 whitespace-nowrap border border-border-strong bg-surface-raised text-2xs text-text enabled:hover:bg-surface-hover ${isMac ? 'rounded-lg' : ''}`} />
+        className={`no-drag h-9 w-20 shrink-0 whitespace-nowrap border border-border-strong bg-surface-raised text-2xs text-text enabled:hover:bg-surface-hover ${isMac ? 'rounded-lg' : ''}`} />
 
       {!isMac ? <WindowControls /> : null}
     </div>

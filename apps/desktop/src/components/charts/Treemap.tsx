@@ -1,5 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { PrivateNumber, useNumberPrivacy } from '@/components/ui/NumberPrivacy'
+import { heatColor } from '@/components/heatmap/palette'
 
 export interface TreemapTile {
   key: string
@@ -87,13 +88,7 @@ export function squarify(values: number[], bounds: Rect): Rect[] {
   return out
 }
 
-/** Reference palette: green above, red below, deepening with the size of the move. */
-export function heatColor(changePct: number | null): string {
-  if (changePct === null || !Number.isFinite(changePct)) return '#2a3446'
-  const magnitude = Math.min(Math.abs(changePct) / 5, 1)
-  const lightness = 22 + magnitude * 24
-  return changePct >= 0 ? `hsl(152 55% ${lightness}%)` : `hsl(4 60% ${lightness}%)`
-}
+export { heatColor }
 
 interface TreemapProps {
   tiles: TreemapTile[]
@@ -196,6 +191,8 @@ export function Treemap({ tiles, onHover, format, empty = 'No holdings to map' }
                       width: inner[index].width,
                       height: inner[index].height,
                       background: heatColor(member.changePct),
+                      // No quote: stay neutral and outlined, so missing data never reads as a flat move.
+                      ...(member.changePct === null || !Number.isFinite(member.changePct) ? { outline: '1px dashed var(--color-text-muted)', outlineOffset: -2 } : {}),
                     }}
                   >
                     {/* Tiles carry their own saturated background, so they need their

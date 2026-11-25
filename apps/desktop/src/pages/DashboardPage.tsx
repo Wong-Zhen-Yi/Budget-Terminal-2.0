@@ -181,7 +181,8 @@ export function DashboardPage({
   const selectPortfolioTicker = lite && !autoFollow ? undefined : selectTicker
   const holdingsPanel = (
     <PortfolioPanel
-      className={mobilePortfolio ? 'dashboard-mobile-holdings' : lite ? undefined : 'min-h-24 flex-[3]'}
+      // Sized to its rows (up to half the column) so a short book leaves its space to the panels below.
+      className={mobilePortfolio ? 'dashboard-mobile-holdings' : lite ? undefined : 'min-h-24 max-h-[50%] flex-initial'}
       portfolios={portfolios}
       selected={selected}
       quotes={quotesQuery.data?.data.holdings ?? {}}

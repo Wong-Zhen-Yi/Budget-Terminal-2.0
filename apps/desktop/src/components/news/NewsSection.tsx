@@ -39,6 +39,8 @@ export function NewsSection({
   /** Ticks once a minute on the page, so every age badge stays live without a refetch. */
   now: number
 }) {
+  // A section of one category (Portfolio spotlight) already says so in its heading.
+  const uniformCategory = articles.length > 0 && articles.every((article) => article.category === articles[0].category)
   return (
     <section className="flex shrink-0 flex-col gap-1.5">
       <header className="flex items-center gap-2">
@@ -66,6 +68,7 @@ export function NewsSection({
             <NewsCard
               key={article.id}
               article={article}
+              hideCategory={uniformCategory}
               price={quotes?.[article.ticker.trim().toUpperCase()]?.price}
               currency={quotes?.[article.ticker.trim().toUpperCase()]?.currency}
               selected={article.id === selectedId}

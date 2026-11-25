@@ -8,6 +8,7 @@ import type { SemiconductorCompany, SemiconductorMarket, SemiconductorProfile, S
 import { cache, TTL, type TtlCache } from './cache.js'
 import { paced, yahoo } from './yahoo/client.js'
 import { getYahooSeries } from './yahoo/series.js'
+import { createBulkQuoteLoader } from './yahoo/bulkQuotes.js'
 import { withYahooSummary } from './yahoo/requests.js'
 import { fetchPortfolioNews } from './yahoo/newsPage.js'
 import { equityMarket } from '../shared/equityMarkets.js'
@@ -33,10 +34,13 @@ function timestamp(value: unknown): number | null {
   return number === null ? null : number < 1e12 ? number * 1000 : number
 }
 
+/** Every catalog row's quote comes from one shared bulk request rather than one each. */
+const catalogQuote = createBulkQuoteLoader(SEMICONDUCTOR_CATALOG.map(company => company.symbol))
+
 const defaults: SemiconductorFetchers = {
   async market(symbol, force) {
     const [quote, series] = await Promise.allSettled([
-      paced(() => yahoo.quote(symbol)),
+      catalogQuote(symbol, force),
       getYahooSeries({ symbol, start: new Date(Date.now() - 400 * DAY), interval: '1d', force }),
     ])
     const warnings: string[] = []

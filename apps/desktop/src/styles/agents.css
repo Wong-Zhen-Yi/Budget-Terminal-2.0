@@ -314,6 +314,7 @@
 .agents-embedded .agents-composer-toolbar { gap: 8px; }
 .agents-embedded .agents-composer-toolbar > span { display: none; }
 .agents-embedded .agents-error { padding: 8px; }
+.agents-error-detail { display: block; margin-top: 2px; overflow: hidden; color: var(--color-text-dim); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .agents-embedded .agents-portfolio-review { padding: 10px; }
 .agents-telegram { min-width: 0; }
 .agents-telegram form { display: flex; flex-direction: column; gap: 10px; max-width: 760px; padding: 12px 0; }

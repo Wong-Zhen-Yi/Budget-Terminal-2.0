@@ -10,6 +10,7 @@ import { GLOBAL_MARKET_INDEXES } from '../../shared/contract.js'
 import { calculateAllIntervals, type DatedSeries } from '../../shared/globalMarkets.js'
 import { cache, TTL } from '../cache.js'
 import { getYahooSeries } from './series.js'
+import { exchangeDateStamper } from '../../shared/exchangeDates.js'
 
 /**
  * The Global page's seventeen world indexes, ported from `GlobalMarketsDataService`.
@@ -59,13 +60,7 @@ interface SymbolResult {
  * belongs to instead of inventing a bar and flattening the 1D return to zero.
  */
 export function localDateStamper(zone: string): (date: Date) => string {
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: zone || 'UTC',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  })
-  return (date) => formatter.format(date)
+  return exchangeDateStamper(zone)
 }
 
 /**

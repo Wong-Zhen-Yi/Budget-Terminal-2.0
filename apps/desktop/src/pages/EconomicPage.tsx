@@ -2,10 +2,9 @@ import { useEffect, useMemo } from 'react'
 
 import type { EconomicGroup, EconomicRow } from '@shared/contract'
 import {
-  describeFreshness,
   dropUnavailable,
   filterRows,
-  missingSummary,
+  releaseOrder,
   rowsForGroup,
   searchRows,
 } from '@shared/economic'
@@ -38,9 +37,9 @@ import {
  *
  * One documented departure from the reference: there is no progress bar. `_p42_launch_fetch`
  * drives a `QProgressBar` from the worker's per-provider `progress` signal, and an IPC
- * request/response carries no intermediate frames — the same wall the Crypto page hit. The
- * busy status line reports the load instead, and the disk cache means most visits never see
- * it.
+ * request/response carries no intermediate frames — the same wall the Crypto page hit. Load
+ * progress and unavailable providers are reported in Settings, and the disk cache means most
+ * visits never wait.
  */
 
 const TAB_LABELS: Record<EconomicTab, string> = {
@@ -107,7 +106,7 @@ export function EconomicPage({
   }, [hideUnavailable, payload])
 
   const overviewRows = useMemo(
-    () => searchRows(filterRows(allRows, groupFilter), search),
+    () => releaseOrder(searchRows(filterRows(allRows, groupFilter), search)),
     [allRows, groupFilter, search],
   )
 
@@ -119,15 +118,6 @@ export function EconomicPage({
   )
   const charted = group ? selectedRow(groupRows, selectedSeries[group] ?? '') : null
 
-  const status = useMemo(() => {
-    if (busy && !payload?.rows.length) return 'Pulling series from US Treasury, BLS, NY Fed, UMich and FRED...'
-    if (query.data?.meta.freshness === 'failed') {
-      return `Economic refresh failed: ${query.data.meta.failureReason ?? 'unknown error'}`
-    }
-    return describeFreshness(payload).text
-  }, [busy, payload, query.data])
-
-  const footer = missingSummary(payload)
 
   return (
     <div className="economic-page flex min-h-0 flex-1 flex-col gap-2 p-2">
@@ -137,21 +127,7 @@ export function EconomicPage({
           Headline US macro releases — inflation, labour, growth and the full treasury curve.
           Decision support only.
         </p>
-
-
-        <span className="text-2xs text-text-muted">Chart span</span>
-        <Select
-          aria-label="Chart span"
-          value={lookback}
-          options={LOOKBACK_OPTIONS}
-          onChange={(value) => setLookback(value as EconomicLookback)}
-          className="w-[70px]"
-        />
       </div>
-
-      <p className="shrink-0 truncate text-2xs text-text-muted" title={status}>
-        {status}
-      </p>
 
       <HeadlineStrip payload={payload} />
 
@@ -170,6 +146,19 @@ export function EconomicPage({
             {TAB_LABELS[key]}
           </button>
         ))}
+        {/* Only the group tabs draw a history chart, so the span control lives with them. */}
+        {activeTab !== 'overview' ? (
+          <label className="ml-auto flex items-center gap-2 self-center pb-1 text-2xs text-text-muted">
+            Chart span
+            <Select
+              aria-label="Chart span"
+              value={lookback}
+              options={LOOKBACK_OPTIONS}
+              onChange={(value) => setLookback(value as EconomicLookback)}
+              className="w-[70px]"
+            />
+          </label>
+        ) : null}
       </div>
 
       {activeTab === 'overview' ? (
@@ -221,7 +210,6 @@ export function EconomicPage({
         </div>
       )}
 
-      {footer ? <p className="shrink-0 text-2xs text-text-muted">{footer}</p> : null}
     </div>
   )
 }

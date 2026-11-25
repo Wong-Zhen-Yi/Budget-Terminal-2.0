@@ -12,6 +12,7 @@ const panelId = 'topbar-agent-chat'
 export const TopBarAgent = memo(function TopBarAgent({ available = true }: { available?: boolean }) {
   const { agent, query, draft, images, update, pending, sending, error, readingImages, send, addImages, chatOpenRequested } = useAgentComposer()
   const activity = topBarAgentActivity(agent, { available, sending, loading: query.isPending, error: !!error, queryError: !!query.error })
+  const errorDetail = activity.phase === 'error' ? (error || query.error?.message || agent?.error || '') : ''
   const [open, setOpen] = useState(false)
   const [top, setTop] = useState(48)
   const launcher = useRef<HTMLFormElement>(null)
@@ -87,7 +88,7 @@ export const TopBarAgent = memo(function TopBarAgent({ available = true }: { ava
             if (event.key === '`') event.stopPropagation()
             if (event.key === 'Enter' && event.nativeEvent.isComposing) event.preventDefault()
           }} />
-        <span className={`terminal-agent-activity ${activity.phase}${activity.active ? ' is-active' : ''}`} role="status" aria-live="polite" aria-atomic="true" data-agent-activity={activity.phase} title={`Agent: ${activity.label}`}>
+        <span className={`terminal-agent-activity ${activity.phase}${activity.active ? ' is-active' : ''}`} role="status" aria-live="polite" aria-atomic="true" data-agent-activity={activity.phase} title={errorDetail ? `Agent error: ${errorDetail}. Open the Agent chat or Settings → Diagnostics for details.` : `Agent: ${activity.label}`}>
           <span className="terminal-agent-light" aria-hidden="true" />{activity.label}
         </span>
         <button type="submit" aria-label="Send to Agent" title="Send to Agent" disabled={!available || blocked || (!draft.trim() && !images.length)}>↑</button>

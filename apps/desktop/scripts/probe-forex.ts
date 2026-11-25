@@ -4,7 +4,8 @@ import type { ForexQuoteRow } from '../electron/shared/forex.js'
 import { FOREX_CURRENCIES, FOREX_PAIRS, forexConversionRate, forexPair, forexNumber, selectForexNews, usableForexQuote } from '../electron/shared/forex.js'
 import { forexLane, getForexQuotes, getForexHistory, getForexNews } from '../electron/services/forex.js'
 import { cache } from '../electron/services/cache.js'
-import { quoteFromChart } from '../electron/services/yahoo/quotes.js'
+import { createQuoteBatcher, quoteChartFromSpark, quoteFromChart } from '../electron/services/yahoo/quotes.js'
+import { adjustedDailyBars } from '../electron/services/yahoo/history.js'
 
 if (process.argv.includes('--offline')) {
   assert.deepEqual(FOREX_PAIRS.map((pair) => pair.symbol), ['EURUSD=X', 'GBPUSD=X', 'JPY=X', 'CHF=X', 'AUDUSD=X', 'CAD=X', 'NZDUSD=X', 'SGD=X', 'EURSGD=X', 'SGDJPY=X'])
@@ -70,6 +71,61 @@ if (process.argv.includes('--offline')) {
   assert.equal(partialNews.meta.freshness, 'partial')
   assert.deepEqual(partialNews.data.articles.map((row) => row.id), ['ecb'])
   await cache.clear()
+
+  // British Summer Time: Yahoo opens each FX daily bar at 23:00 UTC the previous day.
+  // Dated in UTC, today's bar looked like yesterday's and the quote compared the live
+  // session with itself, reading a flat 0% change.
+  const bst = quoteFromChart('EURUSD=X', {
+    quotes: [
+      { date: new Date('2026-06-30T23:00:00Z'), close: 1.10 },
+      { date: new Date('2026-07-01T23:00:00Z'), close: 1.111 },
+    ],
+    meta: { regularMarketPrice: 1.111, regularMarketTime: new Date('2026-07-02T14:00:00Z'), exchangeTimezoneName: 'Europe/London' },
+  })!
+  assert.ok(Math.abs(bst.change - 1) < 1e-9, `BST forex quotes compare with the previous London session, got ${bst.change}%`)
+  const nz = adjustedDailyBars([
+    { time: Date.parse('2026-07-01T22:00:00Z') / 1000, open: 1, high: 1, low: 1, close: 1, adjclose: 1, volume: 1 },
+  ], 'Pacific/Auckland')
+  assert.equal(nz[0].date, '2026-07-02', 'Daily bars carry the exchange-local session date')
+
+  const sparkChart = quoteChartFromSpark({ symbol: 'EURUSD=X', response: [{
+    meta: { regularMarketPrice: 1.111, regularMarketTime: Date.parse('2026-07-02T14:00:00Z') / 1000, exchangeTimezoneName: 'Europe/London',
+      currency: 'USD', currentTradingPeriod: { regular: { start: 1782946800, end: 1783033140 } } },
+    timestamp: [Date.parse('2026-06-30T23:00:00Z') / 1000, Date.parse('2026-07-01T23:00:00Z') / 1000],
+    indicators: { quote: [{ close: [1.10, null] }] },
+  }] })!
+  assert.ok(sparkChart.meta?.regularMarketTime instanceof Date)
+  assert.ok(sparkChart.meta?.currentTradingPeriod?.regular?.start instanceof Date)
+  assert.equal(sparkChart.quotes[1].close, null, 'A missing spark close stays missing, never zero')
+  assert.ok(Math.abs(quoteFromChart('EURUSD=X', sparkChart)!.change - 1) < 1e-9, 'Spark quotes decode to the chart quote')
+  assert.equal(quoteChartFromSpark({ symbol: 'NONE', response: [] }), null)
+
+  const chartFixture = (price: number) => ({ quotes: [], meta: { regularMarketPrice: price } })
+  const batchCalls: string[][] = []
+  const singleCalls: string[] = []
+  const batcher = createQuoteBatcher(async symbols => {
+    batchCalls.push(symbols)
+    return new Map(symbols.filter(symbol => symbol !== 'MISS').map(symbol => [symbol, chartFixture(symbols.indexOf(symbol) + 1)]))
+  }, async symbol => { singleCalls.push(symbol); return chartFixture(99) }, 1)
+  const batched = await Promise.all(['A', 'B', 'A', 'MISS'].map(symbol => batcher(symbol)))
+  assert.deepEqual(batchCalls, [['A', 'B', 'MISS']], 'A fan-out shares one batch request and duplicate symbols share a slot')
+  assert.deepEqual(singleCalls, ['MISS'], 'Only a symbol the batch omits falls back to its own chart call')
+  assert.deepEqual(batched.map(result => result.meta?.regularMarketPrice), [1, 2, 1, 99])
+  singleCalls.length = 0
+  batchCalls.length = 0
+  await batcher('ONLY')
+  assert.deepEqual([batchCalls, singleCalls], [[], ['ONLY']], 'A lone symbol keeps the single chart request')
+  singleCalls.length = 0
+  const throttled = createQuoteBatcher(async () => { throw Object.assign(new Error('Too Many Requests'), { status: 429 }) },
+    async symbol => { singleCalls.push(symbol); return chartFixture(1) }, 1)
+  const limited = await Promise.allSettled(['A', 'B'].map(symbol => throttled(symbol)))
+  assert.ok(limited.every(result => result.status === 'rejected'))
+  assert.equal(singleCalls.length, 0, 'A rate-limited batch never multiplies into per-symbol requests')
+  const broken = createQuoteBatcher(async () => { throw new Error('Unexpected response') },
+    async symbol => { singleCalls.push(symbol); return chartFixture(1) }, 1)
+  await Promise.all(['A', 'B'].map(symbol => broken(symbol)))
+  assert.deepEqual(singleCalls, ['A', 'B'], 'A failed batch falls back to per-symbol chart requests')
+  console.log('PASS Forex offline: exchange-local session dates, batched quote loads')
   console.log('PASS Forex offline: mappings, conversion rates, precision, relevance, deduplication, stale fallback, partial failure, invalid range')
 } else {
   const quotes = await getForexQuotes({ force: true })

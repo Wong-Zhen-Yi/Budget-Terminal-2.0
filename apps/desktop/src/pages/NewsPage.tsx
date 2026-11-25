@@ -189,33 +189,14 @@ export function NewsPage({
     return { all: articles.length, portfolio, market_macro: articles.length - portfolio }
   }, [articles])
 
+  // Load and feed state belong in Settings. Only user-action results, the no-holdings hint and filter matches show here.
   const status = useMemo<{ text: string; tone: Tone }>(() => {
     if (notice) return notice
-    if (fetching) {
-      return { text: payload ? 'Refreshing news...' : 'Loading news...', tone: 'muted' }
-    }
     if (!holdings.length) return { text: 'Add a holding to load portfolio news.', tone: 'warning' }
-    const meta = query.data?.meta
-    if (meta?.freshness === 'failed') {
-      return { text: `News failed: ${meta.failureReason ?? 'unknown error'}`, tone: 'negative' }
-    }
-    if (!payload) return { text: 'Ready', tone: 'muted' }
-
+    if (!queryText.trim() || !payload) return { text: '', tone: 'muted' }
     const shown = visibleSearch.length + groups.portfolio.length + groups.market.length
-    const base = `${shown} visible of ${articles.length + searchArticles.length} article(s)`
-    // Feed coverage and startup health are reported in Settings.
-    return { text: base, tone: 'positive' }
-  }, [
-    notice,
-    fetching,
-    query.data,
-    payload,
-    holdings,
-    visibleSearch,
-    groups,
-    articles,
-    searchArticles,
-  ])
+    return { text: `${shown} of ${articles.length + searchArticles.length} match`, tone: 'muted' }
+  }, [notice, holdings, queryText, payload, visibleSearch, groups, articles, searchArticles])
 
   const searchStatus = useMemo(() => {
     if (!searchTickers.length) {
