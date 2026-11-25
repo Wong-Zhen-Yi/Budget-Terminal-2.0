@@ -1,4 +1,6 @@
 @echo off
+rem The shared build installs Convex 1.51 and Convex Auth 2.1 for cloud sync. Cloud deployment uses the separate Convex setup commands.
+rem The shared build adds a Launch on startup switch in Settings Labs that opens the most recent build when you sign in to Windows.
 rem The shared build loads Focus headline figures as sources respond and uses market observation dates for Gold and Oil quotes.
 rem The shared build keeps the Polymarket chart at its natural height on phones instead of stretching it to the trade table.
 rem The shared build keeps fresh Technical Indicators results visible on phones whose clock runs slightly behind the computer.

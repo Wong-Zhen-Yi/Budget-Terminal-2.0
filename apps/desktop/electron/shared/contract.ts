@@ -3566,6 +3566,8 @@ export const CHANNELS = {
   mobileAccessStatus: 'mobile-access:status',
   configureMobileAccess: 'mobile-access:configure',
   launchMobileWindow: 'mobile-access:launch-window',
+  launchOnStartupStatus: 'system:launch-on-startup',
+  configureLaunchOnStartup: 'system:launch-on-startup:configure',
   appMetrics: 'system:app-metrics',
   browserStatus: 'browser:status',
   browserResearch: 'browser:research',
@@ -3794,6 +3796,15 @@ export interface DiagnosticEntry {
 }
 export interface DiagnosticSnapshot { entries: DiagnosticEntry[]; files: number; bytes: number }
 
+/** Whether Windows opens this checkout's most recent build when the user signs in. */
+export interface LaunchOnStartupStatus {
+  /** False in demo profiles and on platforms where a source build cannot register itself. */
+  supported: boolean
+  enabled: boolean
+  /** Why the toggle is unavailable, when it is. */
+  reason?: string
+}
+
 export interface DesktopApi {
   checkForUpdates(): Promise<void>
   cloudSyncStatus(): Promise<Envelope<CloudSyncStatus>>
@@ -3801,6 +3812,9 @@ export interface DesktopApi {
   mobileAccessStatus(): Promise<import('./mobileAccess.js').MobileAccessStatus>
   configureMobileAccess(enabled: boolean): Promise<import('./mobileAccess.js').MobileAccessStatus>
   launchMobileWindow(viewport: import('./mobileAccess.js').MobileViewportId): Promise<void>
+  /** Desktop only: Settings → Labs reads and changes the Windows sign-in entry. */
+  launchOnStartupStatus(): Promise<LaunchOnStartupStatus>
+  configureLaunchOnStartup(enabled: boolean): Promise<LaunchOnStartupStatus>
   diagnosticLogs: () => Promise<Envelope<DiagnosticSnapshot>>
   diagnosticLogAction: (action: 'folder' | 'export') => Promise<Envelope<{ message: string }>>
   diagnosticsInitial: () => Promise<boolean>

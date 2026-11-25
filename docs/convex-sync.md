@@ -6,7 +6,7 @@ Every installation uses the same Budget Terminal cloud deployment. To connect a 
 
 The desktop uses the existing deployment that passed two-device GitHub sign-in and sync acceptance. This restores access to accounts and cloud copies created before the production rollout attempt.
 
-## Configure with the CLI (operators)
+## Configure cloud deployments with the CLI (operators)
 
 Use the repository's existing Convex project when upgrading. From the repository root:
 
@@ -15,11 +15,13 @@ npm install
 npm run convex:setup
 ```
 
-The setup command uses the deployment selected in the ignored `apps/desktop/.env.local`. It generates component bindings, runs the application typecheck, exports the complete existing deployment (including file storage) outside the repository, deploys the v2 components and functions, and checks public authentication configuration. It stops before deployment if the typecheck, credentials check or recovery export fails. The compiler runs through the workspace's resolved TypeScript installation because Convex's built-in compiler lookup does not resolve hoisted npm dependencies.
+The setup command uses the Convex CLI's deployment selection, which normally lives in the ignored `apps/desktop/.env.local`. It also accepts a deployment-scoped `CONVEX_DEPLOY_KEY` in the environment or that file. It generates component bindings, runs the application typecheck, exports the complete existing deployment (including file storage) outside the repository, deploys the v2 components and functions, and checks public authentication configuration. It stops before deployment if the typecheck, credentials check or recovery export fails. The compiler runs through the workspace's resolved TypeScript installation because Convex's built-in compiler lookup does not resolve hoisted npm dependencies.
 
 The private recovery ZIP is stored under `BudgetTerminal/convex-backups` in LOCALAPPDATA on Windows (or the user's home directory otherwise). It contains sensitive account and saved data. Never upload it to Git or share it publicly. Environment variables are not part of this export; setup preserves the existing provider credentials and legacy signing configuration.
 
-For a new project, run `npm run convex:dev` to authenticate the CLI and select/create the deployment, then stop the watcher after project selection. Configure the following deployment environment variables in the Convex dashboard or using `npx convex env set` from `apps/desktop`, and run `npm run convex:setup`:
+For a local Convex deployment, use `npm run convex:dev`. To export local data, run `npx convex export --include-file-storage --path <private-backup.zip>` from `apps/desktop` while that development process is running. Local database files under `.convex/` are ignored by Git.
+
+For a new project, run `npm exec --workspace budget-terminal-desktop -- convex init` from the repository root to select or create the deployment before pushing functions. Configure the following deployment environment variables in the Convex dashboard or using `npx convex env set` from `apps/desktop`, and run `npm run convex:setup`:
 
 | Variable | Backend-only value |
 | --- | --- |

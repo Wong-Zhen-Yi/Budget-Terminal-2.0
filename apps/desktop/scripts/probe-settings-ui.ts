@@ -52,7 +52,7 @@ try {
       const toolbar = document.querySelector('.settings-toolbar').getBoundingClientRect()
       const tabs = [...document.querySelectorAll('[data-settings-category]')]
       check(tabs.length === 8 && tabs.every(tab => visible(tab) && tab.getBoundingClientRect().top === tabs[0].getBoundingClientRect().top), 'Preferences must form one horizontal row')
-      check(document.querySelectorAll('[data-settings-card]').length === 14, 'Expected all fourteen settings panels mounted')
+      check(document.querySelectorAll('[data-settings-card]').length === 15, 'Expected all fifteen settings panels mounted')
       const settingsSearch = document.querySelector('input[aria-label="Search settings"]')
       check(visible(settingsSearch) && !settingsSearch.disabled, 'Settings search must be available from the default view')
       await setSearch('DASHBOARD-LITE')
@@ -85,6 +85,15 @@ try {
         'Labs must enable News Lite and expose it as a startup choice')
       newsLab.click(); await wait(80)
       check(newsLab.getAttribute('aria-checked') === 'false' && !startupNewsLite(), 'Disabling News Lite must remove it from startup choices')
+      const startupLab = card('labs').querySelector('[role=switch][aria-labelledby="lab-launch-on-startup"]')
+      check(visible(startupLab) && startupLab.getAttribute('aria-checked') === 'false' && !startupLab.disabled, 'Launch on startup must start off in Labs')
+      startupLab.click(); await wait(80)
+      check(startupLab.getAttribute('aria-checked') === 'true' && window.fixtureLaunchOnStartup.enabled, 'Labs did not enable launch on startup')
+      startupLab.click(); await wait(80)
+      check(startupLab.getAttribute('aria-checked') === 'false' && !window.fixtureLaunchOnStartup.enabled, 'Labs did not disable launch on startup')
+      await setSearch('autostart')
+      check(visible(card('labs')), 'Search must find launch on startup in Labs')
+      await setSearch('')
       useSettingsNavigation.getState().openDiagnostics(); await wait(80)
       check(visible(card('logs')), 'Diagnostics navigation must reveal the log panel')
       choose('dashboard'); await wait(80)
@@ -350,6 +359,7 @@ try {
     window.maintenanceCalls = []
     window.fixtureKeys = { finnhub: false, fmp: false }
     window.syncCommands = []
+    window.fixtureLaunchOnStartup = { supported: true, enabled: false }
     window.fixtureSync = { url: 'https://fixture.convex.cloud', configured: true, signedIn: false, encryptionAvailable: true, state: 'disconnected', pending: false }
     const envelope = data => ({ data, meta: { source: 'UI fixture', fetchedAt: Date.now(), freshness: 'fresh' }, errors: [] })
     window.api = {
@@ -367,6 +377,11 @@ try {
         return envelope(window.fixtureSync)
       },
       platform: 'win32', settings: async () => envelope(window.fixtureSettings),
+      launchOnStartupStatus: async () => ({ ...window.fixtureLaunchOnStartup }),
+      configureLaunchOnStartup: async enabled => {
+        window.fixtureLaunchOnStartup = { ...window.fixtureLaunchOnStartup, enabled }
+        return { ...window.fixtureLaunchOnStartup }
+      },
       marketApiKeys: async () => envelope({ configured: { ...window.fixtureKeys }, encryptionAvailable: true }),
       mutateMarketApiKeys: async request => {
         window.fixtureKeys[request.provider] = request.type === 'save'

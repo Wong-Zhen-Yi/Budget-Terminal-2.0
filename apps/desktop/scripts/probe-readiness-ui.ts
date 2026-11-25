@@ -434,7 +434,7 @@ try {
           check(calls.some(call => call.method === 'cloudSyncCommand' && call.request.type === 'confirmWorkspace' && call.request.use === 'local'), 'Import did not invoke explicit workspace consent')
           check(!panel().querySelector('[data-workspace-approval]'), 'Approved workspace must leave the consent state')
           accountClick('Sign out other devices'); await wait()
-          accountClick('Verify account'); await wait()
+          accountClick('Verify with GitHub'); await wait()
           check(panel().textContent.includes('same account') && panel().textContent.includes('Cancel sign-in'), 'Other-device sign-out must request GitHub verification')
           accountClick('Cancel sign-in'); await wait()
           fixtureAuth = { ...fixtureAuth, signedIn: false, signInPending: false, authState: 'signedOut', revocation: 'unconfirmed' }

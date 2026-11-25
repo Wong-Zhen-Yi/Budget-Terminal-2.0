@@ -24,6 +24,7 @@ import { liveStatusEvents } from '../services/liveStatusEvents.js'
 import { finnhubQuotes } from '../services/finnhubQuotes.js'
 import { marketApiKeys } from '../services/marketApiKeysHost.js'
 import { checkForUpdates } from '../services/appUpdates.js'
+import { configureLaunchOnStartup, launchOnStartupStatus } from '../services/launchOnStartup.js'
 import { broadcastMobile, configureMobileAccess, mobileAccessStatus } from '../services/mobileHost.js'
 import { isMobileViewportId, type MobileViewportId } from '../shared/mobileAccess.js'
 
@@ -69,6 +70,8 @@ export function registerIpcHandlers(
   handle(CHANNELS.cloudSyncCommand, (_event, command) => cloudSyncCommand(command))
   handle(CHANNELS.mobileAccessStatus, () => mobileAccessStatus())
   handle(CHANNELS.configureMobileAccess, (_event, value) => configureMobileAccess(value))
+  handle(CHANNELS.launchOnStartupStatus, () => launchOnStartupStatus())
+  handle(CHANNELS.configureLaunchOnStartup, (_event, enabled: unknown) => configureLaunchOnStartup(enabled))
   handle(CHANNELS.launchMobileWindow, async (event, viewport: unknown) => {
     const parent = BrowserWindow.fromWebContents(event.sender)
     if (!parent || !isMobileViewportId(viewport)) throw new Error('Choose a supported mobile viewport size.')

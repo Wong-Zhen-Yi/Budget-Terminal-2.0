@@ -14,6 +14,8 @@ export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS
     mobileAccessStatus: () => invoke(CHANNELS.mobileAccessStatus),
     configureMobileAccess: enabled => invoke(CHANNELS.configureMobileAccess, enabled),
     launchMobileWindow: viewport => invoke(CHANNELS.launchMobileWindow, viewport),
+    launchOnStartupStatus: () => invoke(CHANNELS.launchOnStartupStatus),
+    configureLaunchOnStartup: enabled => invoke(CHANNELS.configureLaunchOnStartup, enabled),
     diagnosticLogs: () => invoke('diagnostics:read'),
     diagnosticLogAction: action => invoke('diagnostics:action', action),
     diagnosticsInitial: () => invoke('diagnostics:initial'),

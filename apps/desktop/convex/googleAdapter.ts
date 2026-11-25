@@ -1,7 +1,7 @@
 import { setupGoogle } from '@convex-dev/auth/methods/google/server'
 import { v } from 'convex/values'
 import { components, internal } from './_generated/api'
-import { internalMutation } from './_generated/server'
+import { env, internalMutation } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
 import type { DefaultFunctionArgs, RegisteredMutation } from 'convex/server'
 import { authCore } from './authCore'
@@ -33,8 +33,8 @@ export const complete = internalMutation({
 // Google web client IDs end in .apps.googleusercontent.com. Refuse anything else,
 // including a secret pasted into the client ID slot, so it is never published in a redirect.
 export function googleOAuthConfigured(): boolean {
-  const clientId = process.env.AUTH_GOOGLE_ID?.trim()
-  const clientSecret = process.env.AUTH_GOOGLE_SECRET?.trim()
+  const clientId = env.AUTH_GOOGLE_ID?.trim()
+  const clientSecret = env.AUTH_GOOGLE_SECRET?.trim()
   return Boolean(clientId && clientSecret && clientId !== clientSecret &&
     ![clientId, clientSecret].some(value => value === 'null' || value === 'undefined') &&
     /^[a-z0-9-]+\.apps\.googleusercontent\.com$/i.test(clientId))

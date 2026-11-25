@@ -1,7 +1,7 @@
 import { setupGithub } from '@convex-dev/auth/methods/github/server'
 import { v } from 'convex/values'
 import { components, internal } from './_generated/api'
-import { internalMutation } from './_generated/server'
+import { env, internalMutation } from './_generated/server'
 import type { MutationCtx } from './_generated/server'
 import type { DefaultFunctionArgs, RegisteredMutation } from 'convex/server'
 import { authCore } from './authCore'
@@ -38,8 +38,8 @@ export const complete = internalMutation({
 // GitHub OAuth app secrets can be 40 hex characters. Refuse to publish a
 // secret-shaped value as client_id, regardless of which app it belongs to.
 export function githubOAuthConfigured(): boolean {
-  const clientId = process.env.AUTH_GITHUB_ID?.trim()
-  const clientSecret = process.env.AUTH_GITHUB_SECRET?.trim()
+  const clientId = env.AUTH_GITHUB_ID?.trim()
+  const clientSecret = env.AUTH_GITHUB_SECRET?.trim()
   return Boolean(clientId && clientSecret && clientId !== clientSecret &&
     ![clientId, clientSecret].some(value => value === 'null' || value === 'undefined') &&
     !/^[a-f0-9]{40}$/i.test(clientId))

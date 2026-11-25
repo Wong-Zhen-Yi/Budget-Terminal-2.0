@@ -26,6 +26,7 @@ import { MarketApiKeysPanel } from '@/components/settings/MarketApiKeysPanel'
 import { CloudSyncPanel } from '@/components/settings/CloudSyncPanel'
 import { DiagnosticLogsPanel } from '@/components/settings/DiagnosticLogsPanel'
 import { MobileAccessPanel } from '@/components/settings/MobileAccessPanel'
+import { LAUNCH_ON_STARTUP_DESCRIPTION, LAUNCH_ON_STARTUP_LABEL, LaunchOnStartupRow } from '@/components/settings/LaunchOnStartupRow'
 import { downloadMobileBackup, isMobileTerminal } from '@/mobile/client'
 import { useSettingsNavigation } from '@/stores/settingsNavigation'
 import { AppDashboard } from '@/components/settings/AppDashboard'
@@ -276,7 +277,7 @@ export function SettingsPage({
     },
     {
       id: 'labs', title: 'Labs', hint: 'Try experimental features on this device.',
-      cards: [{ id: 'labs', category: 'labs', terms: `experimental opt in ${LAB_FEATURES.map(feature => `${feature.label} ${feature.description}`).join(' ')}`,
+      cards: [{ id: 'labs', category: 'labs', terms: `experimental opt in ${LAB_FEATURES.map(feature => `${feature.label} ${feature.description}`).join(' ')}${mobile ? '' : ` ${LAUNCH_ON_STARTUP_LABEL} ${LAUNCH_ON_STARTUP_DESCRIPTION} login sign in boot autostart`}`,
         content: <Panel title="Experiments">
           <ul className="settings-labs">
             {LAB_FEATURES.map(feature => {
@@ -303,6 +304,7 @@ export function SettingsPage({
                 </button>
               </li>
             })}
+            {!mobile && <LaunchOnStartupRow onResult={(text, ok) => setStatus({ text, tone: ok ? 'positive' : 'negative' })} />}
           </ul>
       </Panel> },
       ...(!mobile ? [{ id: 'mobile-access', category: 'labs' as const, terms: mobileAccessTerms,

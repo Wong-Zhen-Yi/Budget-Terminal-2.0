@@ -4,6 +4,7 @@ import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parseEnv } from 'node:util'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const require = createRequire(import.meta.url)
@@ -20,11 +21,18 @@ function convex(args, capture = false) {
 }
 
 // Never overwrite a deployed backend until a complete private recovery export exists.
-// First-time projects should run convex:dev to select/create their deployment first.
-let configured = false
-try { configured = /^CONVEX_DEPLOYMENT=\S+/m.test(readFileSync(join(root, '.env.local'), 'utf8')) } catch {}
-if (!configured && !process.env.CONVEX_DEPLOYMENT && !process.env.CONVEX_DEPLOY_KEY) {
-  throw new Error('Select your Convex project first with npm run convex:dev. Configure AUTH_GITHUB_ID, AUTH_GITHUB_SECRET, AUTH_GOOGLE_ID and AUTH_GOOGLE_SECRET on that deployment, then run this setup again.')
+// Match the Convex CLI's precedence for deployment selection.
+function readProjectEnv(file) {
+  try {
+    return parseEnv(readFileSync(join(root, file), 'utf8'))
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+    return {}
+  }
+}
+const projectEnv = { ...readProjectEnv('.env'), ...readProjectEnv('.env.local'), ...process.env }
+if (!projectEnv.CONVEX_DEPLOYMENT?.trim() && !projectEnv.CONVEX_DEPLOY_KEY?.trim()) {
+  throw new Error('Select your Convex deployment first with npm exec --workspace budget-terminal-desktop -- convex init. Configure AUTH_GITHUB_ID, AUTH_GITHUB_SECRET, AUTH_GOOGLE_ID and AUTH_GOOGLE_SECRET on that deployment, then run this setup again.')
 }
 const names = convex(['env', ...target, 'list', '--names-only'], true).split(/\r?\n/)
 // The deployment refuses to start without every provider credential the app config declares.
