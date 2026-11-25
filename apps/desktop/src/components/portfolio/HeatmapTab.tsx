@@ -12,6 +12,7 @@ import { Treemap, type TreemapTile } from '@/components/charts/Treemap'
 import { Button } from '@/components/ui/Button'
 import { PrivateNumber } from '@/components/ui/NumberPrivacy'
 import { currency, percent, plainPercent } from '@/lib/format'
+import { pointerText } from '@/mobile/touch'
 
 interface HeatmapTabProps {
   portfolio: Portfolio
@@ -145,7 +146,7 @@ export function HeatmapTab({ portfolio, rows, visible, compact = false, onStatus
             </div>
           </>
         ) : (
-          <span className="text-text-dim">Hover a tile for detail</span>
+          <span className="text-text-dim">{pointerText('Hover', 'Tap')} a tile for detail</span>
         )}
       </div>
     </div>

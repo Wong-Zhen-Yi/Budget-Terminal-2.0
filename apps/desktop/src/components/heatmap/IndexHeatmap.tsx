@@ -114,6 +114,9 @@ export function IndexHeatmap({
   )
   /** Whether the press that just ended moved far enough to have been a pan. */
   const panned = useRef(false)
+  /** Touch points on the map, and the two-finger pinch they form, for phone browsers. */
+  const touches = useRef(new Map<number, { x: number; y: number }>())
+  const pinch = useRef<{ distance: number; zoom: number; pan: { x: number; y: number }; mid: { x: number; y: number } } | null>(null)
 
   useEffect(() => setPalette(readPalette()), [])
 
@@ -256,8 +259,25 @@ export function IndexHeatmap({
     return () => node.removeEventListener('wheel', onWheel)
   }, [rows, zoom, pan, clamp])
 
+  /** Midpoint (in map pixels) and spread of the two fingers on the map. */
+  const pinchPoints = useCallback(() => {
+    const [a, b] = [...touches.current.values()]
+    const box = containerRef.current?.getBoundingClientRect()
+    if (!a || !b || !box) return null
+    return { distance: Math.hypot(a.x - b.x, a.y - b.y), mid: { x: (a.x + b.x) / 2 - box.left, y: (a.y + b.y) / 2 - box.top } }
+  }, [])
+
   const onPointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.pointerType === 'touch') {
+        touches.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
+        const points = touches.current.size === 2 ? pinchPoints() : null
+        if (points && points.distance > 0) {
+          pinch.current = { distance: points.distance, zoom, pan, mid: points.mid }
+          drag.current = null
+          return
+        }
+      }
       if (event.button !== 0 || zoom <= 1) return
       drag.current = {
         startX: event.clientX,
@@ -268,11 +288,25 @@ export function IndexHeatmap({
       }
       event.currentTarget.setPointerCapture(event.pointerId)
     },
-    [zoom],
+    [zoom, pan, pinchPoints],
   )
 
   const onPointerMove = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
+      if (touches.current.has(event.pointerId)) touches.current.set(event.pointerId, { x: event.clientX, y: event.clientY })
+      const start = pinch.current
+      if (start) {
+        const points = pinchPoints()
+        if (!points) return
+        // Keep the map point that started under the fingers' midpoint under it as they spread.
+        const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, start.zoom * (points.distance / start.distance)))
+        const virtualX = (start.mid.x + start.pan.x) / start.zoom
+        const virtualY = (start.mid.y + start.pan.y) / start.zoom
+        setZoom(next)
+        setPan(clamp({ x: virtualX * next - points.mid.x, y: virtualY * next - points.mid.y }, next))
+        panned.current = true
+        return
+      }
       const state = drag.current
       if (!state) return
       const distance = Math.hypot(event.clientX - state.startX, event.clientY - state.startY)
@@ -284,10 +318,17 @@ export function IndexHeatmap({
       state.lastY = event.clientY
       setPan((previous) => clamp({ x: previous.x - dx, y: previous.y - dy }, zoom))
     },
-    [clamp, zoom],
+    [clamp, zoom, pinchPoints],
   )
 
   const onPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    touches.current.delete(event.pointerId)
+    if (pinch.current) {
+      // Lifting one finger ends the pinch; the tap that ends it must not select a tile.
+      if (touches.current.size < 2) pinch.current = null
+      panned.current = true
+      return
+    }
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
@@ -318,6 +359,8 @@ export function IndexHeatmap({
       className={`relative min-h-0 flex-1 overflow-hidden bg-bg ${
         zoom > 1 ? 'cursor-grab' : ''
       }`}
+      // Fingers pinch the map rather than the browser page; once zoomed in, one finger pans it.
+      style={{ touchAction: zoom > 1 ? 'none' : 'pan-x pan-y' }}
     >
       {layout.map((group) => {
         const box = project(group.rect)
@@ -364,6 +407,7 @@ export function IndexHeatmap({
               return (
                 <div
                   key={row.symbol}
+                  data-symbol={row.symbol}
                   title={tooltipFor(row)}
                   onClick={() => {
                     if (!panned.current) onSelect(row)

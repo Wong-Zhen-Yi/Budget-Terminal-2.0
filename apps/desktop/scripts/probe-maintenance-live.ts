@@ -5,7 +5,10 @@ import { tmpdir } from 'node:os'
 import { join, relative, resolve } from 'node:path'
 import { TABS } from '../electron/shared/contract.js'
 import type { Envelope } from '../electron/shared/contract.js'
-import { WORKSPACES } from '../electron/shared/navigation.js'
+import { focusTopicPages } from '../electron/shared/navigation.js'
+import { calendarToday } from '../electron/shared/calendar.js'
+import { MACRO_DRIVERS, MACRO_RATES, upcomingMacroReleases } from '../electron/shared/macro.js'
+import { OIL_BENCHMARK_SPECS, OIL_FLOW_SPECS, OIL_STOCK_SPECS } from '../electron/shared/oil.js'
 import { pltrHistory } from '../electron/shared/pltr.js'
 
 const root = resolve(import.meta.dirname, '..')
@@ -17,11 +20,12 @@ process.env.BUDGET_TERMINAL_DATA_DIR = join(scratch, 'roaming', 'BudgetTerminalE
 delete process.env.ELECTRON_RUN_AS_NODE
 const { yahooProvider: provider } = await import('../electron/services/provider.js')
 const { getBitcoin } = await import('../electron/services/bitcoin.js')
+const { getEth } = await import('../electron/services/eth.js')
 const { getForexQuotes, getForexHistory, getForexNews } = await import('../electron/services/forex.js')
 const { cache } = await import('../electron/services/cache.js')
 const { yahoo, paced } = await import('../electron/services/yahoo/client.js')
 const only = process.argv.find(value => value.startsWith('--only='))?.slice(7).split(',')
-const focusPages = WORKSPACES.find(workspace => workspace.id === 'focus')!.pages
+const focusPages = focusTopicPages(TABS).map(page => page.id)
 const focus = process.argv.includes('--focus')
 const fullScans = process.argv.includes('--full-scans')
 const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Singapore', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date())
@@ -29,7 +33,9 @@ const datePart = (type: Intl.DateTimeFormatPartTypes) => parts.find(part => part
 const year = Number(datePart('year'))
 const month = Number(datePart('month'))
 const today = `${datePart('year')}-${datePart('month')}-${datePart('day')}`
-interface Task { name: string; pages: string[]; run: () => Promise<Envelope<unknown>>; check?: (result: Envelope<unknown>) => void }
+const usToday = calendarToday('est')
+const [usYear, usMonth] = usToday.split('-').map(Number)
+interface Task { name: string; pages: string[]; run: () => Promise<Envelope<unknown>>; check?: (result: Envelope<unknown>) => string | void }
 const positions = [{ ticker: 'AAPL', shares: 1 }]
 const tasks: Task[] = [
   { name: 'quotes', pages: ['dashboard', 'portfolio', 'personal-finance'], run: () => provider.quotes({ holdings: ['AAPL', 'SPY'] }), check: result => {
@@ -64,6 +70,43 @@ const tasks: Task[] = [
   { name: 'forexNews', pages: ['forex'], run: () => getForexNews({ pair: 'EUR/USD' }) },
   { name: 'crypto', pages: ['crypto'], run: () => provider.crypto({}) },
   { name: 'bitcoin', pages: ['bitcoin'], run: () => getBitcoin({}) },
+  { name: 'eth', pages: ['eth'], run: () => getEth({}), check: result => {
+    const { mainnet, market } = (result as Awaited<ReturnType<typeof getEth>>).data
+    assert.ok(mainnet && mainnet.tps > 0 && (mainnet.medianTransactionFeeUsd ?? -1) >= 0, 'Ethereum mainnet metrics unavailable')
+    assert.ok(market?.length, 'Ethereum market history unavailable')
+  } },
+  { name: 'economic', pages: ['economic', 'bonds', 'macro'], run: () => provider.economic({}), check: result => {
+    const data = result.data as Awaited<ReturnType<typeof provider.economic>>['data']
+    const missing = [...MACRO_DRIVERS.flatMap(group => [...group.ids]), ...MACRO_RATES]
+      .filter(id => !data.rows.some(row => row.seriesId === id && row.available && row.latest !== null && row.latestDate))
+    assert.deepEqual(missing, [], 'Missing Macro indicator observations')
+    assert.ok(data.yieldCurve?.tenors.length, 'Macro Treasury yield curve unavailable')
+  } },
+  { name: 'macroCalendar', pages: ['macro'], run: () => provider.calendarMonth({ tickers: [], year: usYear, month: usMonth }), check: result => {
+    const { economicEvents } = (result as Awaited<ReturnType<typeof provider.calendarMonth>>).data
+    assert.ok(upcomingMacroReleases(economicEvents, usToday).length, 'Upcoming US economic releases unavailable')
+  } },
+  { name: 'homebuilders', pages: ['homebuilders'], run: () => provider.homebuilders({}), check: result => {
+    const data = result.data as Awaited<ReturnType<typeof provider.homebuilders>>['data']
+    for (const symbol of ['ITB', 'XHB']) {
+      const market = data.rows.find(row => row.company.symbol === symbol)?.market
+      assert.ok(market?.price && market.price > 0 && market.changeBasis !== '24h', `${symbol}: market quote unavailable`)
+    }
+  } },
+  { name: 'gold', pages: ['gold'], run: () => provider.gold({}), check: result => {
+    const { market } = (result as Awaited<ReturnType<typeof provider.gold>>).data
+    assert.ok(market.futuresPrice.value && market.futuresPrice.asOf && market.gldPrice?.value && market.gldPrice.asOf, 'Gold futures or GLD observation unavailable')
+  } },
+  { name: 'oil', pages: ['oil'], run: () => provider.oil({}), check: result => {
+    const { market, inventories, flows, benchmarks } = (result as Awaited<ReturnType<typeof provider.oil>>).data
+    assert.ok(market.wtiPrice.value && market.wtiPrice.asOf && market.brentPrice?.value && market.brentPrice.asOf, 'WTI or Brent observation unavailable')
+    for (const [block, specs] of [[inventories, OIL_STOCK_SPECS], [flows, OIL_FLOW_SPECS], [benchmarks?.prices, OIL_BENCHMARK_SPECS]] as const) {
+      const available = new Set(block?.series.map(row => row.key))
+      const missing = specs.filter(spec => !available.has(spec.key)).map(spec => spec.key)
+      assert.deepEqual(missing, [], 'Missing EIA oil series')
+    }
+    if (!benchmarks?.opec) return 'Optional OPEC Reference Basket unavailable from the official archive.'
+  } },
   { name: 'pltrMarket', pages: ['pltr'], run: () => provider.stocks({ symbol: 'PLTR', force: true }), check: result => {
     const data = result.data as Awaited<ReturnType<typeof provider.stocks>>['data']
     assert.equal(data.symbol, 'PLTR')
@@ -100,8 +143,8 @@ const tasks: Task[] = [
   { name: 'etfHoldings', pages: ['etf'], run: () => provider.etfHoldings({ ticker: 'SPY' }) },
   { name: 'etfArbitrage', pages: ['etf'], run: () => provider.etfArbitrage({ ticker: 'SPY' }) },
   { name: 'etfAum', pages: ['etf'], run: () => provider.etfAum({}) },
-  ...(['anthropic', 'bmnr', 'sofi', 'mu', 'googl', 'nvda', 'amzn', 'avgo', 'vst', 'hood', 'hims', 'gold', 'oil', 'money', 'economic'] as const)
-    .map(name => ({ name, pages: name === 'economic' ? ['economic', 'bonds'] : [name], run: () => provider[name]({}) })),
+  ...(['anthropic', 'bmnr', 'sofi', 'mu', 'googl', 'nvda', 'amzn', 'avgo', 'vst', 'hood', 'hims', 'money'] as const)
+    .map(name => ({ name, pages: [name], run: () => provider[name]({}) })),
   { name: 'discovery', pages: ['stock-discovery'], run: () => provider.discovery({ symbol: 'AAPL' }) },
   { name: 'signals', pages: ['signals'], run: () => provider.signals({}) },
   { name: 'quantPair', pages: ['quant'], run: () => provider.quantPair({ left: 'AAPL', right: 'MSFT' }) },
@@ -205,16 +248,18 @@ try {
       assert.ok(result.meta.fetchedAt <= Date.now() + 60_000, 'Future retrieval timestamp')
       assertFinite(result.data)
       if (result.meta.freshness === 'failed') throw Error(result.meta.failureReason || 'Provider returned failed data')
-      task.check?.(result)
+      const note = task.check?.(result)
       // A partially populated Focus page must never pass merely because its envelope exists.
       if (task.pages.some(page => focusPages.includes(page))) {
         const data = result.data as { progress?: Record<string, string>; market?: { symbol: string; chart: { candles: unknown[]; stats: { price: number } } }; financials?: { quarterly: { revenue: unknown[] } } }
         if (data.progress) for (const [lane, status] of Object.entries(data.progress)) assert.ok(status === 'loaded', `${task.name}/${lane}: ${status}`)
-        if ('market' in data && task.name !== 'bmnr') assert.ok(data.market?.chart.candles.length && data.market.chart.stats.price > 0, `${task.name}: quote/history unavailable`)
+        if (['amzn', 'avgo', 'googl', 'hims', 'hood', 'mu', 'nvda', 'sofi', 'vst'].includes(task.name)) {
+          assert.ok(data.market?.chart?.candles.length && data.market.chart.stats.price > 0, `${task.name}: quote/history unavailable`)
+        }
         if ('financials' in data) assert.ok(data.financials?.quarterly.revenue.length, `${task.name}: fiscal statements unavailable`)
       }
       record.status = ['stale', 'partial'].includes(result.meta.freshness) ? 'degraded' : 'passed'
-      record.reason = result.meta.failureReason
+      record.reason = result.meta.failureReason || note || undefined
       if (task.name === 'quotes') {
         const source = await paced(() => yahoo.quote('AAPL', {}, { validateResult: false }))
         const quote = (result.data as Awaited<ReturnType<typeof provider.quotes>>['data']).holdings.AAPL

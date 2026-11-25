@@ -57,7 +57,7 @@ try {
         const target = join(folder, 'sync-session.bin')
         await mkdir(folder, { recursive: true })
         const accessToken = 'fixture.' + Buffer.from(JSON.stringify({ exp: Math.floor(Date.now()/1000) + 3600 })).toString('base64url') + '.fixture'
-        const session = { authVersion: 2, url: ${JSON.stringify(CLOUD_DEPLOYMENT_URL)}, userId: 'fixture-user',
+        const session = { authVersion: 2, url: ${JSON.stringify(CLOUD_DEPLOYMENT_URL)}, userId: 'fixture-user', provider: 'google',
           tokens: { accessToken, refreshToken: 'fixture-refresh', refreshTokenExpiresAt: Date.now()+86400000, userId: 'fixture-user' } }
         const foreignSession = await safeStorage.encryptStringAsync(JSON.stringify({ ...session, url: 'https://other.convex.cloud' }))
         await writeFile(target, foreignSession)

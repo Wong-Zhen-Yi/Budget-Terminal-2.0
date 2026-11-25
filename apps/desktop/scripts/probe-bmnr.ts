@@ -390,6 +390,19 @@ function runOffline(): void {
   near(d.navPerShare.value, expectedNav / 603_226_394, 1e-6, 'NAV per share')
   near(d.mnav.value, 20_000_000_000 / expectedNav, 1e-9, 'mNAV')
   near(d.premiumPct.value, (20_000_000_000 / expectedNav - 1) * 100, 1e-6, 'premium')
+  assert.equal(d.marketCap.value, 20_000_000_000, 'Yahoo market cap is preferred when it answered')
+  const noCap = buildBmnrPayload({
+    fetchedAt: '2026-09-02T13:00:00',
+    treasuryBody: coinGeckoFixture,
+    sec: secInput(balanceSheetFacts),
+    market: { sharePrice: 40, shareChangePct: 1.5, marketCap: null, ethPrice, ethChangePct: -2 },
+  })
+  near(noCap.derived.marketCap.value, 40 * 603_226_394, 1, 'a missing Yahoo market cap falls back to price × filed shares')
+  near(noCap.derived.mnav.value, (40 * 603_226_394) / expectedNav, 1e-9, 'mNAV survives a missing Yahoo market cap')
+  assert.equal(noCap.derived.marketCap.basis, 'cross')
+  near(noCap.sensitivity[0].mnav, (40 * 603_226_394) / expectedNav, 1e-9, 'sensitivity uses the fallback market cap')
+  const noCapMarked = markBmnrPayload(noCap, { symbol: 'BMNR', price: 50, change: 25, absChange: 10, asOf: Date.now() })
+  near(noCapMarked.derived.mnav.value, (50 * 603_226_394) / expectedNav, 1e-9, 'a new mark re-prices the fallback market cap')
   near(d.ethPerShare.value, 5_901_112 / 603_226_394, 1e-9, 'ETH per share')
   near(d.ethPer1000Shares.value, (5_901_112 / 603_226_394) * 1000, 1e-6, 'ETH per 1,000 shares')
   near(d.impliedGrossCostPerEth.value, 19_074_382_000 / 5_700_049, 0.01, 'implied gross cost per ETH')

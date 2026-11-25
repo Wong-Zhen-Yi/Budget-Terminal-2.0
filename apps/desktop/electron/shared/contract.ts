@@ -1519,7 +1519,7 @@ export interface EconomicPayload {
   source: string
   groups: EconomicGroup[]
   rows: EconomicRow[]
-  /** Series ids whose provider returned nothing. */
+  /** Series ids with no usable rate or level in the latest fetch. A row may carry a prior dated observation. */
   missing: string[]
   /** Providers that looked unreachable rather than merely short a series. */
   unreachable: EconomicProvider[]
@@ -2416,6 +2416,11 @@ export interface BmnrDerived {
   /** `navBuildUp - nav`; equals `minorityInterest` when the filing tags one. */
   navReconciliationGap: BmnrValue
   navPerShare: BmnrValue
+  /**
+   * The market cap mNAV divides by: Yahoo's when it answered, otherwise the share price
+   * times the filed share count, so a failed `quoteSummary` does not blank mNAV.
+   */
+  marketCap: BmnrValue
   mnav: BmnrValue
   premiumPct: BmnrValue
   ethPerShare: BmnrValue
@@ -3561,6 +3566,8 @@ export const CHANNELS = {
   mobileAccessStatus: 'mobile-access:status',
   configureMobileAccess: 'mobile-access:configure',
   launchMobileWindow: 'mobile-access:launch-window',
+  launchOnStartupStatus: 'system:launch-on-startup',
+  configureLaunchOnStartup: 'system:launch-on-startup:configure',
   appMetrics: 'system:app-metrics',
   browserStatus: 'browser:status',
   browserResearch: 'browser:research',
@@ -3691,6 +3698,7 @@ export const CHANNELS = {
   exportArticlesPdf: 'shell:exportArticlesPdf',
   writeClipboard: 'shell:writeClipboard',
   windowControl: 'window:control',
+  openChartWindow: 'window:open-chart',
   flushRendererCache: 'cache:flush-renderer',
   rendererCacheFlushed: 'cache:renderer-flushed',
 } as const
@@ -3789,6 +3797,15 @@ export interface DiagnosticEntry {
 }
 export interface DiagnosticSnapshot { entries: DiagnosticEntry[]; files: number; bytes: number }
 
+/** Whether Windows opens this checkout's most recent build when the user signs in. */
+export interface LaunchOnStartupStatus {
+  /** False in demo profiles and on platforms where a source build cannot register itself. */
+  supported: boolean
+  enabled: boolean
+  /** Why the toggle is unavailable, when it is. */
+  reason?: string
+}
+
 export interface DesktopApi {
   checkForUpdates(): Promise<void>
   cloudSyncStatus(): Promise<Envelope<CloudSyncStatus>>
@@ -3796,10 +3813,15 @@ export interface DesktopApi {
   mobileAccessStatus(): Promise<import('./mobileAccess.js').MobileAccessStatus>
   configureMobileAccess(enabled: boolean): Promise<import('./mobileAccess.js').MobileAccessStatus>
   launchMobileWindow(viewport: import('./mobileAccess.js').MobileViewportId): Promise<void>
+  /** Desktop only: Settings → Labs reads and changes the Windows sign-in entry. */
+  launchOnStartupStatus(): Promise<LaunchOnStartupStatus>
+  configureLaunchOnStartup(enabled: boolean): Promise<LaunchOnStartupStatus>
   diagnosticLogs: () => Promise<Envelope<DiagnosticSnapshot>>
   diagnosticLogAction: (action: 'folder' | 'export') => Promise<Envelope<{ message: string }>>
   diagnosticsInitial: () => Promise<boolean>
   onOpenDiagnostics: (listener: () => void) => () => void
+  /** Tells the desktop shell the opening page has painted, so it can show the window. */
+  reportFirstRender: () => void
   reportDiagnostics: (report: { kind: 'pages'; pages: { page: string; state: string }[] } | { kind: 'error' | 'unhandled-rejection'; line?: number; column?: number }) => void
   setEquityQuoteVisibility?(symbols: string[]): Promise<void>
   onEquityMarketChanged(listener: (update: EquityMarketUpdate) => void): () => void
@@ -3950,6 +3972,8 @@ export interface DesktopApi {
   exportArticlesPdf(request: ArticlePdfRequest): Promise<Envelope<ArticlePdfResult>>
   writeClipboard(contents: string): Promise<void>
   windowControl(action: WindowAction): Promise<void>
+  /** Open a pop-out chart window for a symbol (desktop only). */
+  openChartWindow(symbol: string): Promise<void>
   onCacheFlush(listener: () => Promise<void>): () => void
   onPortfolioChanged(listener: () => void): () => void
 }

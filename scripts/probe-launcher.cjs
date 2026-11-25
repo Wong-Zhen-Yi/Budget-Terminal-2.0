@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const { spawnSync } = require('node:child_process')
-const { dirname, join, resolve } = require('node:path')
-const { chmodSync, copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, statSync, writeFileSync, rmSync } = require('node:fs')
+const { join, resolve } = require('node:path')
+const { chmodSync, copyFileSync, existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { launch: runLaunch, createLauncherOutput } = require('./launch.cjs')
 const { dev } = require('./dev.cjs')
@@ -64,18 +64,8 @@ if (process.platform !== 'win32') {
     mkdirSync(scripts, { recursive: true })
     copyFileSync(join(__dirname, 'launch-posix.sh'), join(scripts, 'launch-posix.sh'))
     mkdirSync(join(home, '.local/bin'), { recursive: true })
-    const launchers = [
-      ['launchers/macos/Launch Budget Terminal.command', []],
-      ['launchers/macos/Launch Budget Terminal Demo.command', ['--demo']],
-      ['launchers/linux/Launch Budget Terminal.sh', []],
-    ]
-    for (const [file] of launchers) {
-      const source = resolve(__dirname, '..', file)
-      const destination = join(checkout, file)
-      assert(statSync(source).mode & 0o111, `${file} must be executable after checkout`)
-      mkdirSync(dirname(destination), { recursive: true })
-      copyFileSync(source, destination)
-    }
+    // macOS and Linux start from the shared script; Windows keeps the only double-click launcher.
+    const launcher = join(scripts, 'launch-posix.sh')
     const node = join(home, '.local/bin/node')
     writeFileSync(node, `#!/bin/sh
 case "$1" in
@@ -92,12 +82,10 @@ exit 99
       cwd: tmpdir(), encoding: 'utf8', input: '', timeout: 10_000,
       env: { ...process.env, HOME: home, BUDGET_LAUNCHER_PROBE_OUTPUT: output, BUDGET_LAUNCHER_PROBE_STATUS: String(status) },
     })
-    for (const [file, mode] of launchers) {
-      for (const status of [0, 7]) {
-        const result = run(join(checkout, file), ['--logs', 'argument with spaces'], status)
-        assert.equal(result.status, status, result.stderr || result.error?.message)
-        assert.deepEqual(readFileSync(output, 'utf8').trim().split('\n'), [checkout, 'scripts/launch.cjs', ...mode, '--logs', 'argument with spaces'], 'Launcher must resolve its checkout, find Node outside PATH, forward arguments and preserve errors')
-      }
+    for (const status of [0, 7]) {
+      const result = run(launcher, ['--logs', 'argument with spaces'], status)
+      assert.equal(result.status, status, result.stderr || result.error?.message)
+      assert.deepEqual(readFileSync(output, 'utf8').trim().split('\n'), [checkout, 'scripts/launch.cjs', '--logs', 'argument with spaces'], 'Launcher must resolve its checkout, find Node outside PATH, forward arguments and preserve errors')
     }
     if (process.platform === 'darwin') {
       const bootstrap = join(scripts, 'bootstrap-mac.sh')
@@ -179,14 +167,12 @@ assert.equal(launch({ mobilePreview: true, detach: true, platform: 'win32', node
 assert(previewDirectory && !existsSync(previewDirectory), 'Remove the preview profile on exit')
 
 const windowsLaunchers = resolve(__dirname, '../launchers/windows')
-const connectedLauncher = readFileSync(join(windowsLaunchers, 'Launch Budget Terminal Mobile.cmd'), 'utf8').replace(/\r\n/g, '\n')
-assert.match(connectedLauncher, /powershell\.exe[^\r\n]*launch-windows\.ps1" mobile\nif not errorlevel 1 exit \/b 0/)
+// One double-click launcher. Demo and phone previews start from launch-windows.ps1 flags instead.
+assert.deepEqual(readdirSync(resolve(__dirname, '../launchers'), { recursive: true }).map(String).filter(name => name.includes('.')),
+  [join('windows', 'Launch Budget Terminal.cmd')], 'Launch Budget Terminal.cmd must be the only launcher')
 
 for (const [file, command] of [
   ['Launch Budget Terminal.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -Attached\n/],
-  ['Launch Budget Terminal Demo.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -Demo -Attached\n/],
-  ['Launch Budget Terminal Mobile Preview.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -MobilePreview -Attached\n/],
-  ['Launch Budget Terminal iPhone 17 Preview.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -MobilePreview -Attached\n/],
 ]) {
   const source = readFileSync(join(windowsLaunchers, file), 'utf8').replace(/\r\n/g, '\n')
   assert.match(source, command, `${file} must launch the application on double click`)

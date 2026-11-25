@@ -731,7 +731,15 @@ export function buildDerived(
   // interest, which the page shows as a live correctness check.
   const nav = add(quarter?.stockholdersEquity ?? null, diff(cryptoValue, quarter?.cryptoFairValue ?? null))
   const navBuildUp = diff(add(add(cryptoValue, quarter?.cash ?? null), otherAssets), quarter?.liabilities ?? null)
-  const mnav = ratio(market.marketCap.value, nav)
+  // Yahoo's `quoteSummary` market cap fails independently of the quote; price × the
+  // filed count keeps mNAV alive instead of blanking it for the whole snapshot.
+  const filedShares = coverShares ?? sheetShares
+  const priceTimesShares = times(market.sharePrice.value, filedShares)
+  const marketCap = market.marketCap.value !== null
+    ? market.marketCap
+    : bmnrValue(priceTimesShares, market.sharePrice.asOf, `${market.sharePrice.source} × ${shares.source}`, 'cross',
+        'Yahoo market cap was unavailable; share price times the filed share count used.')
+  const mnav = ratio(marketCap.value, nav)
   const ethPerShare = ratio(ethHeld, sharesValue)
   const impliedGrossCostPerEth = ratio(quarter?.cryptoCost ?? null, quarter?.ethUnits ?? null)
 
@@ -743,6 +751,7 @@ export function buildDerived(
     navBuildUp: asCross(navBuildUp),
     navReconciliationGap: asCross(diff(navBuildUp, nav)),
     navPerShare: asCross(ratio(nav, sharesValue)),
+    marketCap,
     mnav: asCross(mnav),
     premiumPct: asCross(mnav === null ? null : (mnav - 1) * 100),
     ethPerShare: asCross(ethPerShare),
@@ -770,6 +779,7 @@ export function buildSensitivity(
   filed: BmnrFiledTreasury | null,
   market: BmnrMarket,
   shares: number | null,
+  marketCap: number | null = market.marketCap.value,
 ): BmnrSensitivityRow[] {
   const quarter = filed?.latest ?? null
   const ethHeld = live?.ethHeld.value ?? null
@@ -780,7 +790,7 @@ export function buildSensitivity(
     quarter?.stockholdersEquity ?? null,
     diff(times(ethHeld, market.ethPrice.value), quarter?.cryptoFairValue ?? null),
   )
-  const currentMnav = ratio(market.marketCap.value, currentNav)
+  const currentMnav = ratio(marketCap, currentNav)
   const currentPremiumPct = currentMnav === null ? null : (currentMnav - 1) * 100
   return BMNR_ETH_SHOCKS.map((shockPct) => {
     const ethPrice = times(market.ethPrice.value, 1 + shockPct / 100)
@@ -831,7 +841,7 @@ export function buildBmnrPayload(input: BmnrBuildInput): BmnrPayload {
     derived,
     composition: buildComposition(filed?.latest ?? null),
     history: buildHistory(filed?.quarters ?? []),
-    sensitivity: buildSensitivity(live, filed, market, derived.shares.value),
+    sensitivity: buildSensitivity(live, filed, market, derived.shares.value, derived.marketCap.value),
     filings: input.sec?.filings ?? [],
     progress,
   }
@@ -849,7 +859,7 @@ export function markBmnrPayload(payload: BmnrPayload, quote: Quote): BmnrPayload
   }
   const derived = buildDerived(payload.live, payload.filed, market)
   return { ...payload, market, derived,
-    sensitivity: buildSensitivity(payload.live, payload.filed, market, derived.shares.value) }
+    sensitivity: buildSensitivity(payload.live, payload.filed, market, derived.shares.value, derived.marketCap.value) }
 }
 
 export function emptyBmnrPayload(fetchedAt = ''): BmnrPayload {
@@ -899,6 +909,7 @@ export function buildBmnrSnapshot(payload: BmnrPayload): string {
     '',
     line('NAV', payload.derived.nav, 0),
     line('NAV per share', payload.derived.navPerShare, 2),
+    line('Market cap', payload.derived.marketCap, 0),
     line('mNAV', payload.derived.mnav, 3),
     line('Premium / (discount) %', payload.derived.premiumPct, 2),
     line('ETH per 1,000 shares', payload.derived.ethPer1000Shares, 3),

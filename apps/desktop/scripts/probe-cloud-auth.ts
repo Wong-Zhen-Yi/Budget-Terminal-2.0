@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { build } from 'esbuild'
-import type { CloudSnapshot } from '../electron/shared/cloudSync.js'
+import type { CloudSnapshot, CloudSyncCommand } from '../electron/shared/cloudSync.js'
 import { CLOUD_DEPLOYMENT_URL } from '../electron/shared/cloudDeployment.js'
 
 // Run the real host and loopback OAuth exchange against an isolated provider fixture.
@@ -15,9 +15,8 @@ process.env.APPDATA = directory
 process.env.LOCALAPPDATA = directory
 const url = CLOUD_DEPLOYMENT_URL
 const site = url.replace('.convex.cloud', '.convex.site')
-const callbacks = { github: new URL('/api/auth/callback/github/callback', site).href, google: new URL('/api/auth/callback/google/callback', site).href }
-const authorizeUrls = { github: 'https://github.com/login/oauth/authorize', google: 'https://accounts.google.com/o/oauth2/v2/auth' }
-let googleConfigured = true, lastProvider: 'github' | 'google' = 'github'
+const callback = new URL('/api/auth/callback/google/callback', site).href
+let googleConfigured = true
 let nextUser = 'account-a', serial = 0, refreshCalls = 0, writes = 0, reads = 0, backups = 0
 let offline = false, revoked = false, loseResponse = false, failEncryption = false, rotateKey = false, keyring = true, unavailableDecrypt = false
 let callbackUrl = '', oauthState = '', autoApprove = true
@@ -50,26 +49,24 @@ function owner(token: string) {
 const fixture = {
   async query(name: string, _args: unknown, token: string) {
     if (offline) throw TypeError('Synthetic network failure')
-    if (name === 'sync:authConfiguration') return { authVersion: 2, accountControlsVersion, githubConfigured: true, googleConfigured }
+    if (name === 'sync:authConfiguration') return { authVersion: 2, accountControlsVersion, googleConfigured }
     if (name === 'auth:isAuthenticated') { try { owner(token); return true } catch { return false } }
     const identity = owner(token)
     if (name === 'sync:identity') return identity.user
-    if (name === 'sync:account') return { userId: identity.user, githubLogin: identity.user, googleEmail: `${identity.user}@example.invalid` }
+    if (name === 'sync:account') return { userId: identity.user, googleEmail: `${identity.user}@example.invalid` }
     if (name === 'sync:read') { reads++; return snapshots.get(identity.user) ?? null }
     throw Error('Unexpected fixture query')
   },
   async mutation(name: string, args: Record<string, any>, token: string) {
     if (offline) throw TypeError('Synthetic network failure')
-    if (name === 'auth:startSignInWithGithub' || name === 'auth:startSignInWithGoogle') {
-      lastProvider = name.endsWith('Google') ? 'google' : 'github'
+    if (name === 'auth:startSignInWithGoogle') {
       purpose = args.purpose
       initiatingUser = purpose === 'revokeOthers' ? owner(token).user : undefined
       callbackUrl = args.redirectTo
       oauthState = `state-${++serial}`
-      return { state: oauthState, redirect: `${authorizeUrls[lastProvider]}?client_id=fixture&state=${oauthState}&redirect_uri=${encodeURIComponent(callbacks[lastProvider])}&code_challenge=fixture&code_challenge_method=S256` }
+      return { state: oauthState, redirect: `https://accounts.google.com/o/oauth2/v2/auth?client_id=fixture.apps.googleusercontent.com&state=${oauthState}&redirect_uri=${encodeURIComponent(callback)}&code_challenge=fixture&code_challenge_method=S256` }
     }
-    if (name === 'auth:completeSignInWithGithub' || name === 'auth:completeSignInWithGoogle') {
-      assert.equal(name.endsWith('Google') ? 'google' : 'github', lastProvider, 'Completion uses the provider that started the flow')
+    if (name === 'auth:completeSignInWithGoogle') {
       assert.equal(args.state, oauthState)
       assert.equal(args.code, 'fixture-code')
       const tokens = bundle(nextUser)
@@ -208,18 +205,20 @@ try {
   const fresh = () => { delete require.cache[target]; host = require(target); return host! }
   const signIn = async (user: string) => {
     nextUser = user
-    const result = await host!.cloudSyncCommand({ type: 'signInGitHub' })
+    const result = await host!.cloudSyncCommand({ type: 'signInGoogle' })
     assert(!result.meta.failureReason, result.meta.failureReason ?? 'Sign-in command failed')
     await waitFor(() => !host!.cloudSyncStatus().signInPending, 'OAuth completion timed out')
     assert.equal(host!.cloudSyncStatus().signedIn, true)
-    assert.equal(host!.cloudSyncStatus().githubLogin, user)
+    assert.equal(host!.cloudSyncStatus().googleEmail, `${user}@example.invalid`)
   }
   fresh(); await host!.startCloudSync()
   assert.equal(host!.cloudSyncStatus().url, url)
-  const callerSelectedDeployment = { type: 'signInGitHub' as const, url: 'https://other.convex.cloud' }
+  const callerSelectedDeployment = { type: 'signInGoogle' as const, url: 'https://other.convex.cloud' }
   assert((await host!.cloudSyncCommand(callerSelectedDeployment)).meta.failureReason, 'Renderer must not be able to select a deployment')
+  assert((await host!.cloudSyncCommand({ type: 'signInGitHub' } as unknown as CloudSyncCommand)).meta.failureReason, 'The removed GitHub sign-in command is rejected')
+  assert.equal(callbackUrl, '', 'Rejected commands never open OAuth')
   accountControlsVersion = 0
-  const needsUpgrade = await host!.cloudSyncCommand({ type: 'signInGitHub' })
+  const needsUpgrade = await host!.cloudSyncCommand({ type: 'signInGoogle' })
   assert(needsUpgrade.meta.failureReason?.includes('cloud sign-in is unavailable'))
   assert.equal(callbackUrl, '', 'An outdated backend must be rejected before opening OAuth')
   accountControlsVersion = 2
@@ -308,12 +307,12 @@ try {
   rotateKey = false
   await host!.cloudSyncCommand({ type: 'sync' })
 
-  // A reauthentication with the wrong GitHub account cannot end any current sessions.
+  // A reauthentication with the wrong Google account cannot end any current sessions.
   nextUser = 'account-b'
   await host!.cloudSyncCommand({ type: 'revokeOtherSessions' })
   await waitFor(() => !host!.cloudSyncStatus().signInPending, 'Session management did not finish')
-  assert.equal(host!.cloudSyncStatus().githubLogin, 'account-a')
-  assert(host!.cloudSyncStatus().message?.includes('same GitHub account'))
+  assert.equal(host!.cloudSyncStatus().googleEmail, 'account-a@example.invalid')
+  assert(host!.cloudSyncStatus().message?.includes('same Google account'))
   nextUser = 'account-a'
   await host!.cloudSyncCommand({ type: 'revokeOtherSessions' })
   await waitFor(() => !host!.cloudSyncStatus().signInPending && host!.cloudSyncStatus().revocation === 'complete', 'Other sessions were not revoked')
@@ -327,14 +326,14 @@ try {
   await host!.cloudSyncCommand({ type: 'cancelSignIn' })
   await assert.rejects(readFile(sessionPath))
   revoked = false; autoApprove = false
-  await host!.cloudSyncCommand({ type: 'signInGitHub' })
+  await host!.cloudSyncCommand({ type: 'signInGoogle' })
   await host!.cloudSyncCommand({ type: 'cancelSignIn' })
   assert.equal(host!.cloudSyncStatus().signedIn, false)
   assert.equal(host!.cloudSyncStatus().signInPending, false)
   autoApprove = true
   holdCompletion = true
   const beforeCancelledCleanup = cleanups
-  await host!.cloudSyncCommand({ type: 'signInGitHub' })
+  await host!.cloudSyncCommand({ type: 'signInGoogle' })
   await waitFor(() => Boolean(releaseCompletion), 'Redemption did not start')
   const abandonedFamily = lastIssuedFamily
   await host!.cloudSyncCommand({ type: 'cancelSignIn' })
@@ -344,7 +343,7 @@ try {
   assert.equal(host!.cloudSyncStatus().signedIn, false)
   failEncryption = true
   const beforeFailedCleanup = cleanups
-  await host!.cloudSyncCommand({ type: 'signInGitHub' })
+  await host!.cloudSyncCommand({ type: 'signInGoogle' })
   await waitFor(() => !host!.cloudSyncStatus().signInPending, 'Failed persistence did not settle')
   assert.equal(host!.cloudSyncStatus().signedIn, false)
   assert.equal(host!.cloudSyncStatus().authState, 'keyringUnavailable')
@@ -380,8 +379,7 @@ try {
   await signIn('account-a')
   await host!.cloudSyncCommand({ type: 'disconnect' })
 
-  // Google: an unconfigured backend is refused before OAuth opens; a configured one uses Google endpoints
-  // and the account's own provider for session-management verification.
+  // An unconfigured backend is refused before OAuth opens.
   googleConfigured = false
   const startsBeforeGoogle = serial
   const googleMissing = await host!.cloudSyncCommand({ type: 'signInGoogle' })
@@ -391,29 +389,46 @@ try {
   nextUser = 'account-a'
   const googleResult = await host!.cloudSyncCommand({ type: 'signInGoogle' })
   assert(!googleResult.meta.failureReason, googleResult.meta.failureReason ?? '')
-  assert.equal(lastProvider, 'google')
   await waitFor(() => !host!.cloudSyncStatus().signInPending, 'Google sign-in did not finish')
   assert.equal(host!.cloudSyncStatus().signedIn, true)
   assert.equal(host!.cloudSyncStatus().accountProvider, 'google')
   assert.equal(host!.cloudSyncStatus().googleEmail, 'account-a@example.invalid')
-  assert.equal(host!.cloudSyncStatus().githubLogin, undefined, 'A Google session does not show a GitHub login')
   assert.equal((await readSession()).provider, 'google')
   await host!.cloudSyncCommand({ type: 'revokeOtherSessions' })
   await waitFor(() => !host!.cloudSyncStatus().signInPending && host!.cloudSyncStatus().revocation === 'complete', 'Google session management did not finish')
-  assert.equal(lastProvider, 'google', 'Session management re-verifies with the account provider')
   await host!.closeCloudSync()
   fresh(); await host!.startCloudSync()
   assert.equal(host!.cloudSyncStatus().accountProvider, 'google', 'The provider survives a restart')
   await host!.cloudSyncCommand({ type: 'disconnect' })
+
+  // A device saved with the retired GitHub sign-in is signed out locally, revoked on the server and asked to use Google.
+  for (const provider of ['github', undefined] as const) {
+    await host!.closeCloudSync()
+    const tokens = bundle('account-a')
+    const family = lastIssuedFamily
+    await writeFile(sessionPath, `encrypted:${JSON.stringify({ authVersion: 2, url, userId: 'account-a', ...(provider ? { provider } : {}), githubLogin: 'account-a', tokens })}`)
+    await rm(join(directory, 'sync-signout.json'), { force: true })
+    fresh(); await host!.startCloudSync()
+    assert.equal(host!.cloudSyncStatus().signedIn, false, 'A saved GitHub session never restores')
+    assert.equal(host!.cloudSyncStatus().authState, 'reauthRequired')
+    assert(host!.cloudSyncStatus().message?.includes('Sign in with Google'), host!.cloudSyncStatus().message ?? 'Google prompt missing')
+    await assert.rejects(readFile(sessionPath), 'Saved GitHub credentials are erased')
+    await waitFor(() => revokedFamilies.has(family), 'The retired GitHub session was not revoked on the server')
+  }
+  await host!.cloudSyncCommand({ type: 'cancelSignIn' })
+  assert.equal(JSON.parse(await readFile(join(directory, 'sync-signout.json'), 'utf8')).revocation, 'complete', 'Confirmed revocation is recorded')
+  await signIn('account-a')
+  assert.equal(host!.cloudSyncStatus().accountProvider, 'google')
+  await host!.cloudSyncCommand({ type: 'disconnect' })
   holdCompletion = true
-  await host!.cloudSyncCommand({ type: 'signInGitHub' })
+  await host!.cloudSyncCommand({ type: 'signInGoogle' })
   await waitFor(() => Boolean(releaseCompletion), 'Shutdown redemption did not start')
   const shutdownFamily = lastIssuedFamily
   const closing = host!.closeCloudSync()
   releaseCompletion!(); holdCompletion = false; releaseCompletion = undefined
   await closing
   assert(revokedFamilies.has(shutdownFamily), 'Shutdown drains cleanup of a late OAuth result')
-  console.log('PASS: full loopback sign-in, account import/restore consent, offline sign-out, refresh serialization/lost responses/persistence failure, malformed JWT recovery, locked keyring retry, same-account session management, Google sign-in and remote revocation')
+  console.log('PASS: full loopback sign-in, account import/restore consent, offline sign-out, refresh serialization/lost responses/persistence failure, malformed JWT recovery, locked keyring retry, same-account session management, Google-only sign-in, retired GitHub session cleanup and remote revocation')
 } finally {
   await host?.closeCloudSync()
   delete globals.__cloudAuthFixture

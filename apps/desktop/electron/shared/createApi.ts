@@ -14,10 +14,13 @@ export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS
     mobileAccessStatus: () => invoke(CHANNELS.mobileAccessStatus),
     configureMobileAccess: enabled => invoke(CHANNELS.configureMobileAccess, enabled),
     launchMobileWindow: viewport => invoke(CHANNELS.launchMobileWindow, viewport),
+    launchOnStartupStatus: () => invoke(CHANNELS.launchOnStartupStatus),
+    configureLaunchOnStartup: enabled => invoke(CHANNELS.configureLaunchOnStartup, enabled),
     diagnosticLogs: () => invoke('diagnostics:read'),
     diagnosticLogAction: action => invoke('diagnostics:action', action),
     diagnosticsInitial: () => invoke('diagnostics:initial'),
     onOpenDiagnostics: listener => subscribe('diagnostics:open', listener),
+    reportFirstRender: () => { void invoke('shell:first-render').catch(() => undefined) },
     reportDiagnostics: (report) => { void invoke('diagnostics:report', report).catch(() => undefined) },
     setEquityQuoteVisibility: symbols => invoke(CHANNELS.equityQuoteVisibility, symbols),
     onEquityMarketChanged: listener => subscribe<EquityMarketUpdate>(CHANNELS.equityMarketChanged, payload => {
@@ -162,6 +165,7 @@ export function createApi(invoke: Invoke, subscribe: Subscribe, platform: NodeJS
     exportArticlesPdf: (request) => invoke(CHANNELS.exportArticlesPdf, request),
     writeClipboard: (contents) => invoke(CHANNELS.writeClipboard, contents),
     windowControl: (action) => invoke(CHANNELS.windowControl, action),
+    openChartWindow: (symbol) => invoke(CHANNELS.openChartWindow, symbol),
     onCacheFlush: (listener) => subscribe(CHANNELS.flushRendererCache, () => {
       void Promise.resolve().then(listener)
         .catch(error => console.warn('Renderer cache flush failed:', error))

@@ -9,11 +9,13 @@ import { Sp500Page } from '@/pages/Sp500Page'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { FOCUS_DASHBOARD_TAB_ID, SETTINGS_TAB_ID, TABS, VALUE_MASKED_TABS } from '@shared/contract'
-import { adjacentPage, isLabPageEnabled, pagesInVisualOrder, resolveMainPage, workspaceFor } from '@shared/navigation'
+import { adjacentPage, EMPTY_PAGE_HISTORY, favoriteShortcutPages, isLabPageEnabled, pagesInVisualOrder, pushPageHistory, resolveMainPage, stepPageHistory, workspaceFor } from '@shared/navigation'
+import type { PageHistory } from '@shared/navigation'
 import { useWarmPages } from '@/api/prefetch'
 import type { ReloadProgress } from '@/api/startupScheduler'
 import { useEquityMarketStream } from '@/api/equityStream'
 import { useMcpScreenshot, useScreenshotReady } from '@/api/mcpScreenshot'
+import { useFirstPageRender } from '@/api/firstRender'
 import { useSettings, useSettingsMutation } from '@/api/settingsQueries'
 import { useCloudSyncStatus } from '@/api/cloudSyncQueries'
 import { AuthPopup } from '@/components/auth/AuthPopup'
@@ -23,6 +25,7 @@ import { StatusBar, type PanelStatus } from '@/components/chrome/StatusBar'
 import { PortfolioChartsStatus } from '@/components/chrome/PortfolioChartsStatus'
 import { TabBar } from '@/components/chrome/TabBar'
 import { TabPicker } from '@/components/chrome/TabPicker'
+import { SymbolContextMenu } from '@/components/chrome/SymbolContextMenu'
 import { WorkspaceHeader, WorkspaceSidebar } from '@/components/chrome/WorkspaceNavigation'
 import { isTextEntry } from '@/lib/shortcuts'
 import { useControllerNavigation } from '@/input/useControllerNavigation'
@@ -99,6 +102,7 @@ import { useObscureMode } from '@/stores/obscureMode'
 import { isMobileTerminal } from '@/mobile/client'
 import { MobileAgentsPage, MobileBrowserPage, MobileHeader } from '@/mobile/MobileShell'
 import { MobileNavigation } from '@/mobile/MobileNavigation'
+import { reloadedPage, standaloneWebApp, useBrowserHistory } from '@/mobile/useBrowserHistory'
 
 const TAB_BY_ID = new Map(TABS.map((tab) => [tab.id, tab]))
 const DEFAULT_TAB_ORDER = TABS.map((tab) => tab.id)
@@ -109,7 +113,8 @@ export function App() {
   const settingsQuery = useSettings()
   const settings = settingsQuery.data?.data
   const enabledLabs = settings?.enabledLabs
-  const [tabOverride, setActiveTab] = useState<string>()
+  // A phone browser reload keeps the page it showed.
+  const [tabOverride, setActiveTab] = useState<string | undefined>(() => mobile ? reloadedPage() : undefined)
   const initialPage = resolveMainPage(settings?.mainPage, settings?.tabOrder ?? DEFAULT_TAB_ORDER, settings?.hiddenTabs ?? [], enabledLabs)
   const selectedTab = tabOverride && isLabPageEnabled(tabOverride, enabledLabs) ? tabOverride : initialPage
   useEffect(() => {
@@ -187,6 +192,8 @@ export function App() {
   const hideCurrent = obscured && (settings?.obscuredTabs ?? []).includes(activeTab)
   const blurCurrent = hideCurrent && !VALUE_MASKED_TABS.includes(activeTab)
   useScreenshotReady(screenshot, activeTab, hideCurrent, warm.active, completeScreenshot)
+  // The desktop window stays hidden until the opening page has painted its content.
+  useFirstPageRender(activeTab, !mobile && !settingsQuery.isPending)
   const setFundamentalsSymbol = useFundamentalsStore((state) => state.setSymbol)
   const setOptionsSymbol = useOptionsPage((state) => state.setSymbol)
 
@@ -310,6 +317,43 @@ export function App() {
 
   const workspaceTabs = useMemo(() => pagesInVisualOrder(visibleTabs), [visibleTabs])
 
+  /**
+   * Back/forward history for this session. Every page change is recorded here, whatever
+   * caused it (sidebar, picker, shortcuts, another page or an agent), except the steps
+   * the history itself makes.
+   */
+  const [history, setHistory] = useState<PageHistory>(EMPTY_PAGE_HISTORY)
+  const historyRef = useRef(history)
+  historyRef.current = history
+  const steppingHistory = useRef(false)
+  const previousPage = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (settingsQuery.isPending) return
+    const previous = previousPage.current
+    previousPage.current = selectedTab
+    if (steppingHistory.current) {
+      steppingHistory.current = false
+      return
+    }
+    if (previous && previous !== selectedTab) setHistory(current => pushPageHistory(current, previous))
+  }, [selectedTab, settingsQuery.isPending])
+  const pageAvailable = useCallback((id: string) => visibleTabs.some(tab => tab.id === id && tab.implemented), [visibleTabs])
+  const stepHistory = useCallback((direction: -1 | 1) => {
+    const step = stepPageHistory(historyRef.current, activeTabRef.current, direction, pageAvailable)
+    if (!step) return
+    steppingHistory.current = true
+    setHistory(step.history)
+    setActiveTab(step.page)
+  }, [pageAvailable])
+  // Phone browsers: Back steps through pages and closes Workspaces instead of leaving the app.
+  const mobileCanGoBack = useBrowserHistory({
+    enabled: mobile && !settingsQuery.isPending && !screenshotPage,
+    page: activeTab, setPage: setActiveTab, sheetOpen: mobileNavigationOpen, setSheetOpen: setPickerOpen, available: pageAvailable,
+  })
+  const canGoBack = history.back.some(id => id !== activeTab && pageAvailable(id))
+  const canGoForward = history.forward.some(id => id !== activeTab && pageAvailable(id))
+  const favoriteShortcuts = useMemo(() => favoriteShortcutPages(favorites, visibleTabs), [favorites, visibleTabs])
+
   /** Step through visible pages, wrapping at both ends. */
   const stepTab = useCallback(
     (direction: -1 | 1) => {
@@ -334,11 +378,38 @@ export function App() {
         return
       }
 
-      // Ctrl+Tab cycles regardless of what has focus, but not over the open picker.
+      // Ctrl+Tab and Ctrl+PgUp/PgDn cycle regardless of what has focus, but not over the open picker.
       if (event.key === 'Tab' && event.ctrlKey && !event.altKey) {
         if (pickerOpen) return
         event.preventDefault()
         stepTab(event.shiftKey ? -1 : 1)
+        return
+      }
+      if ((event.key === 'PageUp' || event.key === 'PageDown') && event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey) {
+        if (pickerOpen) return
+        event.preventDefault()
+        stepTab(event.key === 'PageUp' ? -1 : 1)
+        return
+      }
+
+      // Back/forward: Alt+←/→ on Windows and Linux, ⌘[ / ⌘] on macOS (Option+arrows move by word there).
+      const historyDirection = isMac
+        ? event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && (event.key === '[' || event.key === ']') ? (event.key === '[' ? -1 : 1) : 0
+        : event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight') ? (event.key === 'ArrowLeft' ? -1 : 1) : 0
+      if (historyDirection) {
+        if (pickerOpen) return
+        event.preventDefault()
+        stepHistory(historyDirection)
+        return
+      }
+
+      // Ctrl/⌘+1…9 open favorites in sidebar order.
+      if ((isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey) && !event.altKey && !event.shiftKey && /^[1-9]$/.test(event.key)) {
+        const page = favoriteShortcuts[Number(event.key) - 1]
+        if (!page) return
+        event.preventDefault()
+        setPickerOpen(false)
+        setActiveTab(page)
         return
       }
 
@@ -375,19 +446,24 @@ export function App() {
         // Typing into a field first exits it, then opens the picker.
         if (isTextEntry(event.target)) (event.target as HTMLElement).blur()
         setPickerOpen((open) => !open)
-        return
-      }
-
-      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-        if (pickerOpen || isTextEntry(event.target)) return
-        event.preventDefault()
-        stepTab(event.key === 'ArrowLeft' ? -1 : 1)
       }
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [isMac, pickerOpen, reload, stepTab, toggleObscure, workspaceTabs, authOpen])
+  }, [isMac, pickerOpen, reload, stepTab, stepHistory, favoriteShortcuts, toggleObscure, authOpen])
+
+  // Mouse side buttons step through history, like a browser.
+  useEffect(() => {
+    if (mobile || screenshotPage || authOpen) return
+    const onMouseUp = (event: MouseEvent) => {
+      if (event.button !== 3 && event.button !== 4) return
+      event.preventDefault()
+      stepHistory(event.button === 3 ? -1 : 1)
+    }
+    window.addEventListener('mouseup', onMouseUp)
+    return () => window.removeEventListener('mouseup', onMouseUp)
+  }, [mobile, screenshotPage, authOpen, stepHistory])
 
   const visibleIds = useMemo(() => visibleTabs.map((tab) => tab.id), [visibleTabs])
   const renderCachedPage = useCallback((tabId: string) => renderPage({
@@ -410,8 +486,12 @@ export function App() {
         onReload={() => void reload()} reloadProgress={reloadProgress}
         onToggleObscure={toggleObscure} obscured={obscured}
         favorite={favorites.includes(activeTab)} savingFavorite={savingFavorite || !settings}
-        onToggleFavorite={!settingsQuery.isPending && workspaceFor(activeTab) ? () => void toggleFavorite() : undefined} /> : <TabBar
+        onToggleFavorite={!settingsQuery.isPending && workspaceFor(activeTab) ? () => void toggleFavorite() : undefined}
+        onBack={mobileCanGoBack && standaloneWebApp() ? () => window.history.back() : undefined} /> : <TabBar
         onOpenPicker={() => setPickerOpen(true)}
+        canGoBack={canGoBack && !screenshotPage}
+        canGoForward={canGoForward && !screenshotPage}
+        onStepHistory={stepHistory}
         onReload={() => void reload()}
         reloadProgress={reloadProgress}
         clockCountry={settings?.clockCountry ?? 'US'}
@@ -432,6 +512,7 @@ export function App() {
       <div className={`terminal-workspace min-h-0 flex-1 ${mobileNavigationOpen ? 'hidden' : 'flex'}`}>
         {!mobile && <WorkspaceSidebar
           tabs={visibleTabs} activeTab={activeTab} onSelectTab={setActiveTab} favorites={favorites} recent={recent}
+          favoriteShortcuts={favoriteShortcuts}
           collapsed={settings?.sidebarCollapsed ?? false} onToggleCollapsed={() => void toggleSidebar()}
           isMac={isMac}
           saving={savingSidebar || !settings}
@@ -497,6 +578,8 @@ export function App() {
           onClose={() => setPickerOpen(false)}
         />
       ) : null}
+      {!mobile && <SymbolContextMenu visibleTabIds={visibleIds} onNavigate={handleStocksNavigate}
+        enabled={!screenshotPage && !pickerOpen && !authOpen && !blurCurrent} />}
       {authOpen && <AuthPopup status={authStatus}
         statusError={auth.error ? 'Could not check your account. Please try again.' : auth.data?.meta.failureReason}
         onRetry={() => { void auth.refetch() }} onContinue={() => setAuthDismissed(true)}

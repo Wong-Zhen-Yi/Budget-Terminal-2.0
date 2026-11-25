@@ -19,6 +19,7 @@ import {
   thousands,
   timestampLabel,
 } from '@/lib/format'
+import { pointerText } from '@/mobile/touch'
 
 type MetricsRow = MarketCapRow & { priceToSales: number | null }
 
@@ -100,7 +101,7 @@ function DetailBar({ row, rankedCap }: { row: MetricsRow | null; rankedCap: numb
       <span className="num">P/S {row ? ratio(row.priceToSales) : EM_DASH}</span>
       <span className="text-text-muted">{row?.exchange ?? EM_DASH}</span>
       <span className="ml-auto text-text-dim">
-        Click a row to inspect it, double-click to open it in Stocks.
+        {pointerText('Click a row to inspect it, double-click to open it in Stocks.', 'Tap a row to inspect it, double-tap to open it in Stocks.')}
       </span>
     </div>
   )
@@ -274,6 +275,7 @@ export function MarketCapPage({ onStatusChange, onNavigate }: {
           columns={columns}
           rows={rows}
           rowKey={rowKey}
+          rowSymbol={rowKey}
           defaultSort={{ key: 'marketCap', direction: 'desc' }}
           layout="fixed"
           minWidth="1240px"

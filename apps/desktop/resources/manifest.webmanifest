@@ -1,0 +1,14 @@
+{
+  "name": "Budget Terminal",
+  "short_name": "Budget Terminal",
+  "description": "Budget Terminal research workspace, served by your computer over Tailscale.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#080b12",
+  "theme_color": "#080b12",
+  "icons": [
+    { "src": "/budget-terminal-icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

@@ -22,10 +22,25 @@ export function shortcutsForPlatform(isMac: boolean): ReadonlyArray<ShortcutRow>
         'Switch to the next visible page in workspace order, following the page buttons shown on screen. Wrap at the ends.',
     },
     {
-      keys: '← / →',
+      keys: 'Ctrl+PgUp / Ctrl+PgDn',
       label: 'Previous / next page',
       behavior:
-        'Step through visible pages in workspace order, matching the page buttons shown on screen. Ignored while a text field or dropdown has focus, or a control handles the key.',
+        'Step through visible pages in workspace order, matching the page buttons shown on screen. Wrap at the ends. Plain arrow keys stay with the page content.',
+    },
+    {
+      keys: isMac ? '⌘[ / ⌘]' : 'Alt+← / Alt+→',
+      label: 'Back / forward',
+      behavior: 'Return to the page you came from, or go forward again. The mouse side buttons and the arrows beside page search do the same.',
+    },
+    {
+      keys: isMac ? '⌘1 … ⌘9' : 'Ctrl+1 … Ctrl+9',
+      label: 'Open favorite',
+      behavior: 'Open the first nine favorites, in the order the sidebar lists them.',
+    },
+    {
+      keys: 'Right-click a ticker',
+      label: 'Symbol menu',
+      behavior: 'Open the ticker in Charts, Stocks, Fundamentals, Options or Valuation, pop its chart out into a separate window, copy it, or add it to the Charts watchlist.',
     },
     { keys: isMac ? '⌘R' : 'F5', label: 'Reload pages', behavior: 'Reload the current page first, then check all other pages.' },
     {

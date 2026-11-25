@@ -8,10 +8,12 @@ import { Button } from '@/components/ui/Button'
 import { MobileDisclosure } from '@/components/ui/MobileDisclosure'
 import { DataTable, type Column } from '@/components/ui/DataTable'
 import { Select } from '@/components/ui/Select'
+import { pointerText } from '@/mobile/touch'
 
 const number = (value: number) => value.toFixed(2)
 const percent = (value: number) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
 const dateTime = (value: string) => new Date(value).toLocaleString()
+const SCAN_LIFETIME = 12 * 60 * 60_000
 
 export function TechnicalScreenPage({
   onStatusChange,
@@ -27,7 +29,9 @@ export function TechnicalScreenPage({
   const scan = useTechnicalScan()
   const envelope = snapshot.data
   const age = Math.max(clock, Date.now()) - Date.parse(envelope?.data?.completedAt ?? '')
-  const expired = Boolean(envelope?.data) && (!Number.isFinite(age) || age < 0 || age > 12 * 60 * 60_000)
+  // completedAt comes from the computer's clock. A phone clock running behind it
+  // makes a fresh scan look slightly in the future, so only reject implausible skew.
+  const expired = Boolean(envelope?.data) && (!Number.isFinite(age) || Math.abs(age) > SCAN_LIFETIME)
   const payload = expired ? null : envelope?.data
   const failure = scan.data?.meta.freshness === 'failed'
     ? scan.data.meta.failureReason || 'Scan unavailable'
@@ -106,13 +110,13 @@ export function TechnicalScreenPage({
         <span><strong className="text-text">{Object.keys(payload?.errors ?? {}).length}</strong> failed</span>
         <span><strong className="text-text">{Object.keys(payload?.excluded ?? {}).length}</strong> recent listings excluded</span>
         <span><strong className="text-text">{payload?.universeCount ?? 0}</strong> in shortlist</span>
-        <span className="text-text-muted">Double-click a stock to inspect it.</span>
+        <span className="text-text-muted">{pointerText('Double-click', 'Double-tap')} a stock to inspect it.</span>
       </section>
 
       {selected.estimated ? (
         <p className="shrink-0 text-2xs text-warn">Estimate: extrapolates the last two completed indicator readings one session ahead. A projected cross is not a confirmed signal or price forecast.</p>
       ) : null}
-      <DataTable columns={columns} rows={rows} rowKey={(row) => row.ticker} layout="fixed" minWidth="900px"
+      <DataTable columns={columns} rows={rows} rowKey={(row) => row.ticker} rowSymbol={(row) => row.ticker} layout="fixed" minWidth="900px"
         defaultSort={{ key: 'volume', direction: 'desc' }} onRowDoubleClick={(row) => onNavigate('stocks', row.ticker)}
         empty={payload ? (matches ? 'No matches for this search.' : `No stocks matched ${selected.label} in this scan.`) : 'Run a scan to load technical results.'} />
     </div>

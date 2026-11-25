@@ -36,6 +36,9 @@
 @media (max-width: 1100px) {
   .terminal-topbar .terminal-brand, .terminal-topbar [aria-label^='MCP:'] { display: none; }
   .terminal-topbar .terminal-brand-icon { display: block; }
+  /* Back/forward take room from the agent box; the picker's shortcut hint gives it back. */
+  .terminal-topbar .terminal-picker-hint { display: none; }
+  .terminal-topbar .terminal-page-picker { gap: 0; }
 }
 @media (max-width: 800px) {
   .terminal-topbar [aria-label^='MCP:'] { display: none; }

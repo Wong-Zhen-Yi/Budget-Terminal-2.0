@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { getFunctionName } from 'convex/server'
 import * as authentication from '../convex/auth.js'
-import * as adapter from '../convex/githubAdapter.js'
 import * as googleAdapter from '../convex/googleAdapter.js'
 import { cleanup } from '../convex/authMaintenance.js'
 import type { OAuthCompletion } from '../electron/shared/cloudOAuth.js'
@@ -11,7 +10,6 @@ const tables = new Map<string, Map<string, Row>>()
 const table = (name: string) => { if (!tables.has(name)) tables.set(name, new Map()); return tables.get(name)! }
 const sessions = new Map<string, { userId: string; creationTime: number; lastRefreshedAt: number }>()
 let subject: string | null = 'original-session', mintedUser = 'owner-a', starts = 0, redemptions = 0, serial = 0
-let provider: 'github' | 'google' = 'github'
 const addSession = (id: string, userId: string) => sessions.set(id, { userId, creationTime: Date.now(), lastRefreshedAt: Date.now() })
 addSession('original-session', 'owner-a')
 const ctx = {
@@ -42,12 +40,12 @@ const ctx = {
   },
   async runMutation(ref: Parameters<typeof getFunctionName>[0], args: Record<string, unknown>) {
     if ('redirectTo' in args) {
-      assert.equal(getFunctionName(ref), `${provider}Adapter:start`)
+      assert.equal(getFunctionName(ref), 'googleAdapter:start')
       starts++
-      return { redirect: 'https://github.com/login/oauth/authorize', state: `fixture-state-${starts}` }
+      return { redirect: 'https://accounts.google.com/o/oauth2/v2/auth', state: `fixture-state-${starts}` }
     }
     if ('code' in args) {
-      assert.equal(getFunctionName(ref), `${provider}Adapter:complete`)
+      assert.equal(getFunctionName(ref), 'googleAdapter:complete')
       redemptions++
       if (args.code !== 'valid-code') return { status: 'error', userError: { error: 'INVALID_CODE' } }
       const sessionId = `issued-${redemptions}`
@@ -62,21 +60,25 @@ const ctx = {
   },
 }
 const handler = <Args, Result>(fn: unknown) => (fn as { _handler: (context: unknown, args: Args) => Promise<Result> })._handler
-const start = handler<{ redirectTo: string; purpose?: 'signIn' | 'revokeOthers' }, { redirect: string; state: string }>(authentication.startSignInWithGithub)
-const complete = handler<{ code: string; state: string }, OAuthCompletion>(authentication.completeSignInWithGithub)
+const start = handler<{ redirectTo: string; purpose?: 'signIn' | 'revokeOthers' }, { redirect: string; state: string }>(authentication.startSignInWithGoogle)
+const complete = handler<{ code: string; state: string }, OAuthCompletion>(authentication.completeSignInWithGoogle)
 const revoke = handler<{ authorization: string }, number>(authentication.revokeOtherSessions)
 const redirectTo = `http://127.0.0.1:43871/convex-sync-callback/${'a'.repeat(64)}`
-for (const fn of [adapter.start, adapter.complete, googleAdapter.start, googleAdapter.complete]) {
+for (const fn of [googleAdapter.start, googleAdapter.complete]) {
   assert.equal((fn as unknown as { isInternal: boolean }).isInternal, true, 'Raw SDK handlers must not be publicly callable')
 }
-process.env.AUTH_GITHUB_ID = 'a'.repeat(40)
-process.env.AUTH_GITHUB_SECRET = 'b'.repeat(40)
-assert.equal(adapter.githubOAuthConfigured(), false)
+// GitHub sign-in was removed: no public entry point may start or redeem a GitHub flow.
+assert(!Object.keys(authentication).some(name => /github/i.test(name)), 'GitHub sign-in mutations must not be exported')
+process.env.AUTH_GOOGLE_ID = 'secret-in-the-id-slot'
+process.env.AUTH_GOOGLE_SECRET = 'GOCSPX-fixture'
+assert.equal(googleAdapter.googleOAuthConfigured(), false, 'A non-Google client ID is refused')
 await assert.rejects(start(ctx, { redirectTo }), /AUTH_UNAVAILABLE/)
-assert.equal(starts, 0, 'A secret-shaped client ID must never reach the OAuth adapter')
+assert.equal(starts, 0, 'An invalid client ID must never reach the OAuth adapter')
 assert.equal(table('oauthLimits').size, 0, 'Unavailable sign-in does not allocate quota')
-process.env.AUTH_GITHUB_ID = 'fixture-client-id'
-assert.equal(adapter.githubOAuthConfigured(), true)
+process.env.AUTH_GOOGLE_ID = 'GOCSPX-fixture'
+assert.equal(googleAdapter.googleOAuthConfigured(), false, 'A secret repeated as the client ID is refused')
+process.env.AUTH_GOOGLE_ID = '1234-fixture.apps.googleusercontent.com'
+assert.equal(googleAdapter.googleOAuthConfigured(), true)
 await assert.rejects(start(ctx, { redirectTo: 'https://example.invalid' }))
 subject = null
 await assert.rejects(start(ctx, { redirectTo, purpose: 'revokeOthers' }))
@@ -148,37 +150,21 @@ assert.equal(table('sessionActionGrants').size, 0)
 assert(!sessions.has(`issued-${redemptions}`), 'A wrong-account session created by redemption is revoked')
 assert(sessions.has(verifiedSession), 'Wrong-account verification must preserve the existing authenticated session')
 
-// Google shares the quota and grant policy, and its states are bound to the provider that started them.
-const startGoogle = handler<{ redirectTo: string; purpose?: 'signIn' | 'revokeOthers' }, { redirect: string; state: string }>(authentication.startSignInWithGoogle)
-const completeGoogle = handler<{ code: string; state: string }, OAuthCompletion>(authentication.completeSignInWithGoogle)
+// Pending states left by the retired GitHub sign-in (with or without a provider field) are never redeemed through Google.
 mintedUser = 'owner-a'; subject = verifiedSession
 table('oauthLimits').clear(); table('oauthRequests').clear()
-process.env.AUTH_GOOGLE_ID = 'secret-in-the-id-slot'
-process.env.AUTH_GOOGLE_SECRET = 'GOCSPX-fixture'
-assert.equal(googleAdapter.googleOAuthConfigured(), false, 'A non-Google client ID is refused')
-await assert.rejects(startGoogle(ctx, { redirectTo }), /AUTH_UNAVAILABLE/)
-process.env.AUTH_GOOGLE_ID = 'GOCSPX-fixture'
-assert.equal(googleAdapter.googleOAuthConfigured(), false, 'A secret repeated as the client ID is refused')
-process.env.AUTH_GOOGLE_ID = '1234-fixture.apps.googleusercontent.com'
-assert.equal(googleAdapter.googleOAuthConfigured(), true)
-provider = 'google'
-const googleStart = await startGoogle(ctx, { redirectTo })
+const googleStart = await start(ctx, { redirectTo })
 assert.equal([...table('oauthRequests').values()].find(row => row.provider === 'google')?.purpose, 'signIn')
-const redemptionsBeforeCrossProvider = redemptions
-provider = 'github'
-assert.deepEqual(await complete(ctx, { code: 'valid-code', state: googleStart.state }), { status: 'error', userError: { error: 'INVALID_CODE' } })
-const githubStart = await start(ctx, { redirectTo })
-provider = 'google'
-assert.deepEqual(await completeGoogle(ctx, { code: 'valid-code', state: githubStart.state }), { status: 'error', userError: { error: 'INVALID_CODE' } })
-assert.equal(redemptions, redemptionsBeforeCrossProvider, 'A state started by one provider never reaches another provider adapter')
-const googleSignIn = await completeGoogle(ctx, { code: 'valid-code', state: googleStart.state })
+const redemptionsBeforeRetired = redemptions
+const hash = async (value: string) => Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))).toString('hex')
+await ctx.db.insert('oauthRequests', { stateHash: await hash('legacy-github-state'), purpose: 'signIn', expiresAt: Date.now() + 60_000 })
+await ctx.db.insert('oauthRequests', { stateHash: await hash('tagged-github-state'), purpose: 'signIn', provider: 'github', expiresAt: Date.now() + 60_000 })
+for (const state of ['legacy-github-state', 'tagged-github-state']) {
+  assert.deepEqual(await complete(ctx, { code: 'valid-code', state }), { status: 'error', userError: { error: 'INVALID_CODE' } })
+}
+assert.equal(redemptions, redemptionsBeforeRetired, 'A retired GitHub state never reaches the Google adapter')
+const googleSignIn = await complete(ctx, { code: 'valid-code', state: googleStart.state })
 assert(googleSignIn.status === 'complete' && !googleSignIn.authorization, 'Ordinary Google sign-in cannot mint a grant')
-for (let i = 0; i < 28; i++) await startGoogle(ctx, { redirectTo })
-await assert.rejects(startGoogle(ctx, { redirectTo }), 'Google and GitHub share the deployment sign-in budget')
-const googleManagement = await startGoogle(ctx, { redirectTo, purpose: 'revokeOthers' })
-const googleApproved = await completeGoogle(ctx, { code: 'valid-code', state: googleManagement.state })
-assert(googleApproved.status === 'complete' && googleApproved.authorization, 'Google can verify session management for its own account')
-provider = 'github'
 for (const row of [...table('sessionActionGrants').values()]) await ctx.db.delete(row._id)
 await ctx.db.insert('sessionActionGrants', { secretHash: 'expired', expiresAt: Date.now() - 1 })
 await ctx.db.insert('oauthRequests', { stateHash: 'expired', expiresAt: Date.now() - 1 })
@@ -189,4 +175,4 @@ assert(![...table('oauthRequests').values()].some(row => row.stateHash === 'expi
 assert.equal(table('sessionActionGrants').size, 0)
 assert(![...table('oauthLimits').values()].some(row => row.key === 'expired-account'))
 assert.equal(table('syncWriteLimits').size, 0)
-console.log('PASS: reserved security OAuth capacity, per-account verification quotas, internal-only SDK adapters, purpose/session/account binding, grant hashing, expiry, single-use revocation and bounded cleanup')
+console.log('PASS: Google-only sign-in, retired GitHub state rejection, reserved security OAuth capacity, per-account verification quotas, internal-only SDK adapters, purpose/session/account binding, grant hashing, expiry, single-use revocation and bounded cleanup')

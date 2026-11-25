@@ -13,18 +13,16 @@ export interface CloudSyncStatus {
   signInPending?: boolean
   authState?: 'restoring' | 'signedOut' | 'signingIn' | 'authenticated' | 'offline' | 'reauthRequired' | 'keyringUnavailable' | 'storageError'
   credentialCleanupRequired?: boolean
-  githubLogin?: string
   googleEmail?: string
   /** Provider of the connected account. */
-  accountProvider?: 'github' | 'google'
+  accountProvider?: 'google'
   /** Provider of the browser approval currently in progress. */
-  signInProvider?: 'github' | 'google'
+  signInProvider?: 'google'
   workspaceApprovalRequired?: boolean
   revocation?: 'complete' | 'unconfirmed'
 }
 
 export type CloudSyncCommand =
-  | { type: 'signInGitHub' }
   | { type: 'signInGoogle' }
   | { type: 'cancelSignIn' }
   | { type: 'sync' }

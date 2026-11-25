@@ -6,10 +6,54 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseCloudSnapshot } from '../electron/shared/cloudSnapshot.js'
-import { TABS } from '../electron/shared/contract.js'
+import { LAB_FEATURES, TABS } from '../electron/shared/contract.js'
 import { WORKSPACES } from '../electron/shared/navigation.js'
 
 const root = resolve(import.meta.dirname, '..')
+// Runs in the phone renderer. Reports how much of the content area stays fixed while the
+// page scrolls: zero when the content area itself scrolls, otherwise the space around the
+// largest inner scroller. With `spacer`, a tall block is added to that scroller first.
+const pinnedLayoutScript = String.raw`function (id, spacer) {
+  const content = document.querySelector('[data-terminal-content]')
+  const page = document.querySelector('[data-page-id="' + id + '"]')
+  const box = content.getBoundingClientRect()
+  const visible = el => el.getClientRects().length > 0
+  const scrollable = el => /(auto|scroll)/.test(getComputedStyle(el).overflowY)
+  const scrolls = el => scrollable(el) && el.scrollHeight > el.clientHeight + 4
+  const area = el => {
+    const r = el.getBoundingClientRect()
+    return Math.max(0, Math.min(r.bottom, box.bottom) - Math.max(r.top, box.top)) * Math.max(0, Math.min(r.right, box.right) - Math.max(r.left, box.left))
+  }
+  const label = el => (typeof el.className === 'string' && el.className ? el.className : el.tagName).slice(0, 90)
+  const all = [...page.querySelectorAll('*')].filter(visible)
+  let block
+  if (spacer) {
+    const target = all.filter(scrollable).sort((a, b) => area(b) - area(a))[0] ?? page.firstElementChild ?? page
+    block = document.createElement('div')
+    block.style.cssText = 'flex:none;width:1px;height:3000px'
+    target.append(block)
+  }
+  try {
+    const sticky = all.filter(el => /sticky|fixed/.test(getComputedStyle(el).position)).filter(el => {
+      let parent = el.parentElement
+      while (parent && parent !== content && !/(auto|scroll|hidden|clip)/.test(getComputedStyle(parent).overflowY)) parent = parent.parentElement
+      return parent === content
+    }).map(label)
+    // Growing pages must not squash charts that used to take their height from the screen.
+    const collapsed = all.filter(el => el.matches('.tv-lightweight-charts, .recharts-responsive-container, .js-plotly-plot')).filter(el => {
+      const r = el.getBoundingClientRect()
+      return r.width > 150 && r.height < 80
+    }).map(el => label(el.parentElement ?? el))
+    if (collapsed.length) return { mode: 'collapsed', pinned: 0, sticky, collapsed }
+    if (scrolls(content)) return { mode: 'page', pinned: 0, sticky }
+    const scrollers = all.filter(scrolls).sort((a, b) => area(b) - area(a))
+    if (!scrollers.length) return { mode: 'fits', pinned: 0, sticky }
+    const rect = scrollers[0].getBoundingClientRect()
+    const top = Math.max(0, Math.round(rect.top - box.top))
+    const bottom = Math.max(0, Math.round(box.bottom - rect.bottom))
+    return { mode: 'inner', pinned: top + bottom, top, bottom, scroller: label(scrollers[0]), sticky }
+  } finally { block?.remove() }
+}`
 const require = createRequire(import.meta.url)
 const directory = await mkdtemp(join(tmpdir(), 'budget-desktop-startup-'))
 const normalDownloads = join(directory, 'downloads')
@@ -66,6 +110,11 @@ try {
       (_details, callback) => callback({ cancel: true }),
     ))
     app.on('browser-window-created', (_event, window) => {
+      // The window must appear with its opening page painted, not as an empty frame.
+      const shownWithPage = new Promise(resolve => window.once('show', () => {
+        window.webContents.executeJavaScript('(() => { const page = [...document.querySelectorAll("[data-page-id]")].find(el => el.getBoundingClientRect().height > 0); return Boolean(page && page.childElementCount && document.querySelector(".terminal-shell")) })()')
+          .then(resolve, () => resolve(false))
+      }))
       const verify = async () => {
         if (window.webContents.getURL() === 'about:blank') return
         window.webContents.off('did-finish-load', verify)
@@ -148,7 +197,7 @@ try {
             return
           }
           if (process.env.BUDGET_TERMINAL_MOBILE_PREVIEW === '1') {
-            const run = script => window.webContents.executeJavaScript(script)
+            const run = script => window.webContents.executeJavaScript(script).catch(error => { throw new Error(error.message + ' Script: ' + script.slice(0, 240)) })
             const waitFor = async (script, message) => {
               const end = Date.now() + 10_000
               while (!await run(script)) {
@@ -249,6 +298,45 @@ try {
             await waitFor(visible('[role=dialog][aria-label="Manage Portfolios"]'), 'Manage Portfolios must open at 320px')
             await click('[role=dialog][aria-label="Manage Portfolios"] [aria-label=Close]')
 
+            // Wide tables keep the ticker in place and fade on the side with more columns.
+            await window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, screenWidth: 390, screenHeight: 844, mobile: true, deviceScaleFactor: 2 })
+            await waitFor('document.querySelector("[data-page-id=portfolio] table")?.dataset.mobileFreeze === "2"', 'Portfolio positions must freeze the rank and Symbol columns')
+            await waitFor('document.querySelector("[data-page-id=portfolio] table").parentElement.dataset.mobileMore === "end"', 'A table with more columns must fade on the right')
+            assert.equal(await run('(() => { const table = document.querySelector("[data-page-id=portfolio] table"); const scroller = table.parentElement; const cell = table.tBodies[0].rows[0].cells[1]; const before = cell.getBoundingClientRect().left; scroller.scrollLeft = 80; const after = cell.getBoundingClientRect().left; scroller.scrollLeft = 0; return Math.abs(before - after) < 1 })()'), true,
+              'The Symbol column must stay in place while the other columns swipe')
+            assert.equal(await run('(() => { const panel = document.querySelector("[data-page-id=portfolio] table").closest(".terminal-panel"); const table = panel.querySelector("table"); return panel.getBoundingClientRect().bottom - table.getBoundingClientRect().bottom < 60 })()'), true,
+              'The positions panel must end under its last row instead of leaving an empty frame')
+
+            // Phone browsers' Back gesture steps through pages and closes Workspaces instead of leaving the app.
+            await selectPage('charts')
+            await waitFor(visible('.charts-toolbar'), 'Charts must open from its pill')
+            await run('history.back()')
+            await waitFor(visible('.portfolio-summary'), 'Back must return to the previous page')
+            await run('history.forward()')
+            await waitFor(visible('.charts-toolbar'), 'Forward must return to the next page')
+            await openNavigation()
+            await run('history.back()')
+            await waitFor('!' + visible('#mobile-navigation') + ' && ' + visible('.charts-toolbar'), 'Back must close Workspaces and keep the page')
+            await openNavigation()
+            await click('[data-navigation-page="portfolio"]')
+            await waitFor(visible('.portfolio-summary'), 'Choosing a page must open it')
+            await run('history.back()')
+            await waitFor(visible('.charts-toolbar'), 'Back after choosing a page from Workspaces must skip the closed sheet')
+
+            // Two quick taps reach the page as one double-click, as phones do not send one reliably.
+            await run('(() => { const el = document.createElement("button"); el.id = "probe-double-tap"; el.style.cssText = "position:fixed;left:100px;top:300px;width:120px;height:60px;z-index:99999"; el.dataset.count = "0"; el.addEventListener("dblclick", () => { el.dataset.count = String(Number(el.dataset.count) + 1) }); document.body.append(el); return true })()')
+            const tap = async () => {
+              await window.webContents.debugger.sendCommand('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 160, y: 330 }] })
+              await window.webContents.debugger.sendCommand('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+            }
+            await tap()
+            await new Promise(resolve => setTimeout(resolve, 120))
+            await tap()
+            await waitFor('document.querySelector("#probe-double-tap").dataset.count === "1"', 'Two quick taps must reach the page as one double-click')
+            await new Promise(resolve => setTimeout(resolve, 700))
+            assert.equal(await run('document.querySelector("#probe-double-tap").dataset.count'), '1', 'A native double-click after a double tap must not repeat the action')
+            await run('document.querySelector("#probe-double-tap").remove()')
+
             await selectPage('charts')
             await waitFor(visible('.charts-toolbar'), 'Charts must open from its pill')
             await atPhoneWidths(async width => {
@@ -261,13 +349,24 @@ try {
             })
             await selectPage('politics')
             await waitFor(visible('.politics-filters'), 'Politics filters must mount')
-            assert.equal(await run('document.querySelector(".politics-filters").offsetHeight <= 60'), true)
+            const politicsFilters = await run('document.querySelector(".politics-filters").offsetHeight')
+            // One row of 44px touch controls and the toggle; the filters themselves stay folded away.
+            assert(politicsFilters <= 64, 'Politics filters must stay on one row, measured ' + politicsFilters + 'px')
             await click('.politics-filters .mobile-disclosure-toggle')
             await waitFor(visible('.politics-filters select'), 'Politics filters must be available on demand')
             await selectPage('options')
             await waitFor(visible('.options-views'), 'Options views must mount')
             assert.equal(await run('new Set([...document.querySelectorAll(".options-views button")].map(el => el.offsetTop)).size === 1'), true,
               'Options view buttons must stay in one row')
+            await waitFor('(() => { const hint = [...document.querySelectorAll("[data-page-id=options] p")].find(p => p.textContent.startsWith("Enter a ticker")); const strip = hint?.parentElement.querySelector(".mobile-tab-strip"); return hint && strip && hint.getBoundingClientRect().top - strip.getBoundingClientRect().bottom < 40 })()',
+              'Before a ticker loads, the Options hint must sit under its controls')
+            // Controls are finger-sized, and a heading that repeats the page name in the header is hidden.
+            await selectPage('technical-screen')
+            await waitFor(visible('.technical-scan-toolbar'), 'Technical Indicators must mount')
+            await waitFor('!' + visible('[data-page-id=technical-screen] h1'), 'A heading that repeats the page name must be hidden on phones')
+            assert.equal(await run('[...document.querySelectorAll(".technical-scan-toolbar :is(button, select)")].filter(el => el.getClientRects().length).every(el => el.getBoundingClientRect().height >= 44)'), true,
+              'Toolbar controls must be at least 44px tall on phones')
+            assert.equal(await run('document.querySelector("[data-page-id=technical-screen]").innerText.includes("Double-tap a stock")'), true, 'Phone hints name taps, not clicks')
             await selectPage('browser')
             await waitFor('Boolean(document.querySelector("#mobile-browser-address"))', 'The Browser pill must open Browser')
             for (const [width, height] of [[568, 320], [780, 360], [844, 390], [932, 430]]) {
@@ -291,19 +390,43 @@ try {
               await window.webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', {
                 width: 390, height: 844, screenWidth: 390, screenHeight: 844, mobile: true, deviceScaleFactor: 2,
               })
+              // Audit every implemented page, including hidden pages and Labs a user may turn on.
+              await run('(async () => { const settings = (await window.api.settings()).data; for (const id of settings.hiddenTabs) await window.api.mutateSettings({ type: "setTabHidden", id, hidden: false }); for (const id of ' + JSON.stringify(${JSON.stringify(LAB_FEATURES.map(lab => lab.id))}) + ') await window.api.mutateSettings({ type: "setLabEnabled", id, enabled: true }); for (const id of settings.obscuredTabs) await window.api.mutateSettings({ type: "setTabObscured", id, obscured: false }) })()')
+              window.webContents.reload()
+              await new Promise(resolve => window.webContents.once('did-finish-load', resolve))
+              await waitFor('Boolean(document.querySelector(".mobile-page-button"))', 'Mobile UI must return after enabling every page')
+              window.webContents.setBackgroundThrottling(false)
               await openNavigation()
               const ids = await run('[...document.querySelectorAll("[data-navigation-page]")].map(el => el.dataset.navigationPage)')
               await click('.mobile-page-button')
               const failures = []
+              const pinned = []
+              const shots = ${JSON.stringify(join(root, 'out', 'mobile-pages'))}
+              await require('node:fs/promises').mkdir(shots, { recursive: true })
+              // Only the mobile header and workspace page strip may stay put. Everything in the
+              // page must scroll with the content, so no toolbar sits above a short inner scroller.
+              const measurePinned = (id, spacer) => run('(' + ${JSON.stringify(pinnedLayoutScript)} + ')(' + JSON.stringify(id) + ', ' + spacer + ')')
               for (const id of ids) {
                 await selectPage(id)
                 await waitFor(visible('[data-page-id="' + id + '"]'), id + ' must mount')
-                await new Promise(resolve => setTimeout(resolve, 100))
+                await new Promise(resolve => setTimeout(resolve, 1200))
                 const result = await run('(() => { const page = document.querySelector("[data-page-id=' + id + ']"); const rect = page.getBoundingClientRect(); return { error: page.innerText.includes("This page could not render"), width: rect.width, height: rect.height, content: page.innerText.length } })()')
                 if (result.error || result.width < 100 || result.height < 100 || !result.content) failures.push({ id, ...result })
+                await run('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+                await require('node:fs/promises').writeFile(join(shots, id + '.png'), (await window.webContents.capturePage()).toPNG())
+                // Measure with today's content, then with a tall block in the page's largest scroll
+                // area so short or empty results cannot hide a pinned toolbar.
+                for (const spacer of [false, true]) {
+                  const layout = await measurePinned(id, spacer)
+                  // Page padding and a closing border are not controls; anything taller is a pinned strip.
+                  if (layout.pinned > 16 || layout.sticky.length || layout.collapsed) { pinned.push({ id, spacer, ...layout }); break }
+                }
               }
               assert.deepEqual(failures, [], 'Every available mobile page must render a usable content area')
               console.log('PASS: all ' + ids.length + ' available mobile pages mounted without render failures or collapsed frames')
+              for (const entry of pinned) console.log('PINNED ' + JSON.stringify(entry))
+              assert.deepEqual(pinned.map(entry => entry.id), [], 'Only the mobile header and page strip may stay fixed while a page scrolls')
+              console.log('PASS: every mobile page scrolls as one column below the header and page strip')
             }
             console.log('PASS: mobile preview opens with isolated sample data, resizes, and reflows navigation and toolbars across compact through large phones and landscape')
             app.quit()
@@ -328,6 +451,10 @@ try {
             assert(Date.now() < deadline, 'Desktop UI must mount')
             await new Promise(resolve => setTimeout(resolve, 25))
           }
+          if (window.getTitle() === 'Budget Terminal' || window.getTitle() === 'Budget Terminal Demo') {
+            assert.equal(await Promise.race([shownWithPage, new Promise(resolve => setTimeout(() => resolve('timeout'), 20_000))]), true,
+              'The desktop window must first appear with its opening page rendered')
+          }
           if (demoDirectory) {
             const mobile = await window.webContents.executeJavaScript('window.api.configureMobileAccess(true)')
             assert.equal(mobile.available, false, 'Demo profiles cannot share records through the computer’s Tailscale proxy')
@@ -338,7 +465,7 @@ try {
             }
             assert.equal(window.getTitle(), 'Budget Terminal Demo')
             assert.equal(await window.webContents.executeJavaScript('Boolean(document.querySelector(".auth-popup"))'), false)
-            const demoData = await window.webContents.executeJavaScript('(async () => { const api = window.api; return { portfolio: (await api.portfolio()).data, finance: (await api.personalFinance()).data, cards: (await api.cards()).data, articles: (await api.articles()).data, settings: (await api.settings()).data, syncCommand: await api.cloudSyncCommand({ type: "signInGitHub" }) } })()')
+            const demoData = await window.webContents.executeJavaScript('(async () => { const api = window.api; return { portfolio: (await api.portfolio()).data, finance: (await api.personalFinance()).data, cards: (await api.cards()).data, articles: (await api.articles()).data, settings: (await api.settings()).data, syncCommand: await api.cloudSyncCommand({ type: "signInGoogle" }) } })()')
             assert.equal(demoData.portfolio.portfolios[0].name, 'Demo Core Portfolio')
             assert.equal(demoData.portfolio.portfolios.length, 3, 'Include both saved portfolios and their combined view')
             assert.equal(demoData.portfolio.sourcePath, join(process.env.BUDGET_TERMINAL_DATA_DIR, 'portfolio.json'))
@@ -414,7 +541,7 @@ try {
       let text = ''
       child.stdout.on('data', chunk => { text += chunk })
       child.stderr.on('data', chunk => { text += chunk })
-      const timer = setTimeout(() => { child.kill(); reject(Error('Desktop startup timed out: ' + text)) }, 30_000)
+      const timer = setTimeout(() => { child.kill(); reject(Error('Desktop startup timed out: ' + text)) }, process.argv.includes('--all-pages') ? 600_000 : 30_000)
       child.on('error', error => { clearTimeout(timer); reject(error) })
       child.on('close', code => { clearTimeout(timer); resolveRun({ code, text }) })
     })

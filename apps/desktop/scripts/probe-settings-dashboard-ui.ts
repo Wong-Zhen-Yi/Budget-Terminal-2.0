@@ -44,7 +44,7 @@ try {
     let fail = false
     window.api.apiUsage = async () => {
       if (fail) throw Error('synthetic private error must not appear')
-      return { sampledAt: Date.now(), providers: ['Yahoo', 'CoinGecko', 'Hyperliquid', 'Alt.me', 'DefeatBeta', 'Finnhub', 'Coinbase', 'Binance', 'World Bank', 'IMF'].map((label, index) => ({ id: label, label, inFlight: index < 5 ? index : 0, ...(index === 0 ? { queued: 2 } : {}), latencyMs: { p50: 200 * (index + 1), p95: 600 * (index + 1), samples: 20 }, requestCount: index * 10, windowSeconds: 60 })) }
+      return { sampledAt: Date.now(), providers: ['Yahoo', 'CoinGecko', 'Hyperliquid', 'Alt.me', 'DefeatBeta', 'Finnhub', 'Coinbase', 'Binance', 'World Bank', 'IMF', 'TickerTick', 'Coin Metrics', 'ultrasound.money', 'growthepie', 'NVIDIA investor relations', 'SEC EDGAR', 'Polymarket'].map((label, index) => ({ id: label, label, inFlight: index < 5 ? index : 0, ...(index === 0 ? { queued: 2 } : {}), latencyMs: { p50: 200 * (index + 1), p95: 600 * (index + 1), samples: 20 }, requestCount: index * 10, windowSeconds: 60 })) }
     }
     window.api.cacheStatus = async () => envelope({ settings: DEFAULT_CACHE_SETTINGS, service: { market: partition, assets: partition, hits: 90, misses: 10, errors: 4 } })
     window.api.mcpStatus = async () => ({ available: true, diagnostics: { activity: [{ state: 'success' }, { state: 'failed' }] } })
@@ -104,7 +104,9 @@ try {
       check(!document.querySelector('.app-dash-heading') && !document.body.textContent.includes('Your terminal, in numbers.'), 'Removed heading returned')
       check(document.querySelector('.app-dash-latency'), 'Provider latency must render real samples')
       check(!document.body.textContent.includes('not collected'), 'Unimplemented telemetry placeholder returned')
-      check(document.body.textContent.includes('0.5'), 'Current automatic backup size missing')
+      check(document.body.textContent.includes('512'), 'Current automatic backup size missing')
+      const providerCard = [...document.querySelectorAll('.app-dash-card')].find(card => card.querySelector('h3').textContent === 'Provider requests')
+      check(providerCard.querySelectorAll('.app-dash-bar').length === 8 && providerCard.textContent.includes('10 others'), 'Provider requests must group quiet providers to fit')
       check(document.querySelectorAll('.app-dash-line').length === 2, 'Request and memory charts must render from first sample')
       check(document.querySelector('.app-dash-line svg').getAttribute('aria-label').includes('Active 10, Known queued 2'), 'Missing queues must not block active counts or fabricate queue totals')
       check(!document.querySelector('svg [stroke-dasharray="NaN"]'), 'Invalid chart geometry')

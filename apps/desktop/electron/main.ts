@@ -11,7 +11,9 @@ import { configureBrowserWindow } from './services/browser.js'
 import { assertPrivateBrowserStorage } from './services/browserStorage.js'
 import { configureYouTubePlayer, isYouTubePlayerContents } from './services/youtubePlayer.js'
 import { isYouTubeEmbedUrl } from './shared/youtubePlayer.js'
-import { desktopWindowBounds, useGamingFullscreen } from './shared/windowSize.js'
+import { desktopWindowBounds, restoreWindowBounds, useGamingFullscreen } from './shared/windowSize.js'
+import { readWindowState, trackWindowState } from './services/windowState.js'
+import { chartWindowHash, normalizeChartSymbol } from './shared/chartWindow.js'
 import { configureRendererCacheShutdown } from './services/rendererCacheShutdown.js'
 import { assertDesktopCertificateSecurity } from './shared/certificateSecurity.js'
 import { startDiagnostics, observeDiagnosticWindow } from './services/diagnosticHost.js'
@@ -80,9 +82,15 @@ const rendererUrl = isDev && process.env.ELECTRON_RENDERER_URL
   ? process.env.ELECTRON_RENDERER_URL
   : pathToFileURL(join(dirname, '../renderer/index.html')).href
 
+/** Longest the main window waits, after its first paint, for the opening page to render. */
+const FIRST_RENDER_FALLBACK_MS = 12_000
+
 function createWindow(): BrowserWindow {
   const isMac = process.platform === 'darwin'
-  const size = desktopWindowBounds(screen.getPrimaryDisplay().workArea)
+  // Gaming sessions are always fullscreen; elsewhere reopen where the window was left.
+  const gaming = useGamingFullscreen(process.platform, process.env)
+  const saved = gaming ? undefined : readWindowState()
+  const size = restoreWindowBounds(screen.getAllDisplays().map(display => display.workArea), screen.getPrimaryDisplay().workArea, saved)
   const window = new BrowserWindow({
     ...size,
     show: false,
@@ -104,6 +112,7 @@ function createWindow(): BrowserWindow {
   })
   if (demoDirectory) window.on('page-title-updated', event => event.preventDefault())
   mainWindow = window
+  if (!gaming) trackWindowState(window)
   window.once('closed', () => {
     if (mainWindow === window) {
       mainWindow = null
@@ -111,6 +120,8 @@ function createWindow(): BrowserWindow {
     }
     const child = mobileWindow?.window
     if (child && !child.isDestroyed()) child.destroy()
+    // Pop-out charts belong to this window's session.
+    for (const chart of chartWindows) if (!chart.isDestroyed()) chart.destroy()
   })
 
   configureBrowserWindow(window)
@@ -118,16 +129,36 @@ function createWindow(): BrowserWindow {
   configureYouTubePlayer(window)
   configureRendererCacheShutdown(window)
 
-  // Paint once, rather than showing an empty frame and then the UI.
-  window.once('ready-to-show', () => {
-    if (useGamingFullscreen(process.platform, process.env)) window.setFullScreen(true)
+  // Show the window once the opening page has painted its content, rather than an
+  // empty frame that fills in afterwards. The renderer reports that page; a bounded
+  // fallback still opens the window if the interface never reports.
+  let painted = false
+  let pageRendered = false
+  let revealTimer: ReturnType<typeof setTimeout> | undefined
+  const reveal = () => {
+    clearTimeout(revealTimer)
+    if (mainWindowReady || window.isDestroyed()) return
+    if (gaming) window.setFullScreen(true)
+    else if (saved?.maximized) window.maximize()
     mainWindowReady = true
     window.show()
     if (openMobileOnStartup) {
       openMobileOnStartup = false
       showConnectedMobile(window)
     }
+  }
+  window.webContents.ipc.handle('shell:first-render', (event) => {
+    const frame = event.senderFrame
+    if (!frame || frame !== window.webContents.mainFrame || !isTrustedRendererUrl(frame.url, rendererUrl)) return
+    pageRendered = true
+    if (painted) reveal()
   })
+  window.once('ready-to-show', () => {
+    painted = true
+    if (pageRendered) reveal()
+    else revealTimer = setTimeout(reveal, FIRST_RENDER_FALLBACK_MS)
+  })
+  window.once('closed', () => clearTimeout(revealTimer))
 
   // Docking, rotating or changing desktop scaling must not strand the window.
   // Let the compositor own maximized/fullscreen bounds, especially in Gamescope.
@@ -179,10 +210,63 @@ function createWindow(): BrowserWindow {
   return window
 }
 
+const chartWindows = new Set<BrowserWindow>()
+const MAX_CHART_WINDOWS = 8
+
+/**
+ * A pop-out chart: the same trusted shell document opened with `#chart=<symbol>`, so it
+ * passes the IPC sender check (which ignores the hash) and renders only the chart workspace.
+ */
+async function openChartWindow(parent: BrowserWindow, request: unknown): Promise<void> {
+  const symbol = normalizeChartSymbol(request)
+  if (!symbol) throw new Error('Choose a valid ticker to chart.')
+  if (chartWindows.size >= MAX_CHART_WINDOWS) throw new Error(`Close a chart window first (limit ${MAX_CHART_WINDOWS}).`)
+  const area = screen.getDisplayMatching(parent.getBounds()).workArea
+  const width = Math.min(1180, area.width)
+  const height = Math.min(760, area.height)
+  // Cascade new windows so several pop-outs never stack exactly on top of each other.
+  const offset = (chartWindows.size % 6) * 28
+  const window = new BrowserWindow({
+    width,
+    height,
+    minWidth: Math.min(640, area.width),
+    minHeight: Math.min(420, area.height),
+    x: area.x + Math.max(0, Math.min(Math.floor((area.width - width) / 2) + offset, area.width - width)),
+    y: area.y + Math.max(0, Math.min(Math.floor((area.height - height) / 2) + offset, area.height - height)),
+    show: false,
+    backgroundColor: '#080b12',
+    title: `${symbol} · Budget Terminal Chart`,
+    icon: join(app.getAppPath(), 'resources', process.platform === 'win32' ? 'budget-terminal-icon.ico' : 'budget-terminal-icon.png'),
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: join(dirname, '../preload/preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  })
+  window.removeMenu()
+  chartWindows.add(window)
+  window.once('closed', () => chartWindows.delete(window))
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (isSafeExternalUrl(url)) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  window.webContents.on('will-navigate', (event) => event.preventDefault())
+  window.once('ready-to-show', () => { if (!window.isDestroyed()) window.show() })
+  try {
+    await loadRenderer(window, join(dirname, '../renderer/index.html'),
+      isDev ? process.env.ELECTRON_RENDERER_URL : undefined, { hash: chartWindowHash(symbol) })
+  } catch (error) {
+    if (!window.isDestroyed()) window.destroy()
+    throw error
+  }
+}
+
 function showConnectedMobile(parent: BrowserWindow) {
   void launchConnectedMobile(parent, DEFAULT_MOBILE_VIEWPORT).catch(() => {
     if (!parent.isDestroyed() && !finishingQuit) {
-      dialog.showErrorBox('Budget Terminal could not open the iPhone viewport', 'Run Launch Budget Terminal Mobile.cmd in launchers/windows. If the viewport still does not open, check Application logs in Settings.')
+      dialog.showErrorBox('Budget Terminal could not open the iPhone viewport', 'Run btd mobile to rebuild and reopen it. If the viewport still does not open, check Application logs in Settings.')
     }
   })
 }
@@ -317,7 +401,7 @@ if (ownsInstance) app.whenReady().then(async () => {
       const frame = event.senderFrame
       return Boolean(frame && frame === event.sender.mainFrame &&
         BrowserWindow.fromWebContents(event.sender) && isTrustedRendererUrl(frame.url, rendererUrl))
-    }, launchConnectedMobile)
+    }, launchConnectedMobile, openChartWindow)
     if (mobilePreview) {
       stage = 'mobile-preview'
       const { createMobileRoutes } = await import('./services/mobileRoutes.js')

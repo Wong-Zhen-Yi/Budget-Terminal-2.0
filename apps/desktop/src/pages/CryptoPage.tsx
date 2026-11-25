@@ -15,6 +15,7 @@ import { useCryptoWorkspace } from '@/stores/crypto'
 import { CryptoPriceChart } from '@/components/crypto/CryptoPriceChart'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
 import { DataTable, type Column } from '@/components/ui/DataTable'
+import { pointerText } from '@/mobile/touch'
 
 const EMPTY_CANDLES: Candle[] = []
 const changeClass = (value: number | null | undefined) => `crypto-${cryptoTone(value)}`
@@ -123,7 +124,7 @@ export function CryptoPage({ onStatusChange }: { onStatusChange: (panels: PanelS
               : <div className="crypto-empty" role="status">{history.isFetching ? 'Loading perpetual candles...' : 'No candle history returned.'}</div>}
           </div>}
         </div>
-        <div className="crypto-chart-caption"><span>{chartSource} · {chartFreshness} · {chartCandles.length} candles</span><span>UTC · Volume in base asset · Scroll to zoom, drag to pan</span></div>
+        <div className="crypto-chart-caption"><span>{chartSource} · {chartFreshness} · {chartCandles.length} candles</span><span>UTC · Volume in base asset · {pointerText('Scroll to zoom, drag to pan', 'Pinch to zoom, drag to pan')}</span></div>
       </section>
 
       <div className="crypto-right">

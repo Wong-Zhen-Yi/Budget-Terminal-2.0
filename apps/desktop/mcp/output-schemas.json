@@ -1727,7 +1727,7 @@
             "$ref": "#/definitions/McpOutputChartsCompareRange"
           },
           "series": {
-            "$ref": "#/definitions/Record%3Cstring%2Cdef-interface-523195628-31683-31768-523195628-0-150916%5B%5D%3E"
+            "$ref": "#/definitions/Record%3Cstring%2Cdef-interface-523195628-31683-31768-523195628-0-152192%5B%5D%3E"
           },
           "sources": {
             "$ref": "#/definitions/Record%3Cstring%2Cstring%3E"
@@ -1766,7 +1766,7 @@
           "1M"
         ]
       },
-      "Record<string,def-interface-523195628-31683-31768-523195628-0-150916[]>": {
+      "Record<string,def-interface-523195628-31683-31768-523195628-0-152192[]>": {
         "type": "object",
         "additionalProperties": {
           "type": "array",
@@ -3896,9 +3896,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "McpOutputFundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CMcpOutputFundamentalSeriesKey%2Cdef-interface-523195628-26738-26992-523195628-0-150916%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CMcpOutputFundamentalSeriesKey%2Cdef-interface-523195628-26738-26992-523195628-0-152192%5B%5D%3E"
       },
-      "Record<McpOutputFundamentalSeriesKey,def-interface-523195628-26738-26992-523195628-0-150916[]>": {
+      "Record<McpOutputFundamentalSeriesKey,def-interface-523195628-26738-26992-523195628-0-152192[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -11841,6 +11841,10 @@
           "navPerShare": {
             "$ref": "#/definitions/McpOutputBmnrValue"
           },
+          "marketCap": {
+            "$ref": "#/definitions/McpOutputBmnrValue",
+            "description": "The market cap mNAV divides by: Yahoo's when it answered, otherwise the share price times the filed share count, so a failed `quoteSummary` does not blank mNAV."
+          },
           "mnav": {
             "$ref": "#/definitions/McpOutputBmnrValue"
           },
@@ -11903,6 +11907,7 @@
           "navBuildUp",
           "navReconciliationGap",
           "navPerShare",
+          "marketCap",
           "mnav",
           "premiumPct",
           "ethPerShare",
@@ -14228,9 +14233,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23980-24216-150963582-0-132206%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23980-24216-150963582-0-133446%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-23980-24216-150963582-0-132206[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-23980-24216-150963582-0-133446[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -17799,9 +17804,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23980-24216-150963582-0-132206%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23980-24216-150963582-0-133446%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-23980-24216-150963582-0-132206[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-23980-24216-150963582-0-133446[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -19229,9 +19234,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23980-24216-150963582-0-132206%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23980-24216-150963582-0-133446%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-23980-24216-150963582-0-132206[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-23980-24216-150963582-0-133446[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -20669,9 +20674,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23980-24216-150963582-0-132206%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23980-24216-150963582-0-133446%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-23980-24216-150963582-0-132206[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-23980-24216-150963582-0-133446[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -22956,9 +22961,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23980-24216-150963582-0-132206%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23980-24216-150963582-0-133446%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-23980-24216-150963582-0-132206[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-23980-24216-150963582-0-133446[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -24548,9 +24553,9 @@
         "description": "Raw inputs for the ten reference headline calculations."
       },
       "FundamentalSeriesMap": {
-        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23980-24216-150963582-0-132206%5B%5D%3E"
+        "$ref": "#/definitions/Record%3CFundamentalSeriesKey%2Cdef-interface-150963582-23980-24216-150963582-0-133446%5B%5D%3E"
       },
-      "Record<FundamentalSeriesKey,def-interface-150963582-23980-24216-150963582-0-132206[]>": {
+      "Record<FundamentalSeriesKey,def-interface-150963582-23980-24216-150963582-0-133446[]>": {
         "type": "object",
         "properties": {
           "revenue": {
@@ -30095,7 +30100,7 @@
             "items": {
               "type": "string"
             },
-            "description": "Series ids whose provider returned nothing."
+            "description": "Series ids with no usable rate or level in the latest fetch. A row may carry a prior dated observation."
           },
           "unreachable": {
             "type": "array",

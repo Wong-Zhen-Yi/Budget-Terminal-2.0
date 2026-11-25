@@ -165,7 +165,7 @@
 .poly-explorer { min-height: 0; overflow: auto; }
 @container polymarket (max-width: 1160px) { .poly-workspace { grid-template-columns: 245px minmax(0, 1fr); gap: 14px; } .poly-detail-layout { grid-template-columns: minmax(0, 1fr); } .poly-book-panel { display: none; } }
 @container polymarket (max-width: 850px) { .poly-workspace { grid-template-columns: 215px minmax(0, 1fr); gap: 12px; } .poly-header { gap: 12px; } .poly-brand h1 { font-size: 21px; } .poly-header-actions { gap: 9px; } .poly-tab-heading > span { display: none; } .poly-question .poly-market-image { display: none; } .poly-tab-heading nav { gap: 13px; } .poly-market-metrics { gap: 6px; padding-inline: 12px; } .poly-market-metrics span { font-size: 10px; } }
-@container polymarket (max-width: 620px) { .poly-workspace { display: flex; flex-direction: column; overflow: auto; } .poly-discover { min-height: 250px; max-height: 340px; } .poly-analysis { min-height: 670px; flex-shrink: 0; } .poly-market-grid { display: grid; grid-template-columns: repeat(2, minmax(190px, 1fr)); } .poly-discovery-bar nav { gap: 1px; } .poly-discovery-bar nav button { padding: 6px 8px; } }
+@container polymarket (max-width: 620px) { .poly-workspace { display: flex; flex-direction: column; overflow: auto; } .poly-discover { min-height: 250px; max-height: 340px; } .poly-analysis { flex-shrink: 0; } .poly-market-grid { display: grid; grid-template-columns: repeat(2, minmax(190px, 1fr)); } .poly-discovery-bar nav { gap: 1px; } .poly-discovery-bar nav button { padding: 6px 8px; } }
 
 .poly-expanded-book { min-height: 0; overflow: auto; }
 
@@ -191,4 +191,12 @@
   .poly-tab-heading { padding: 9px 12px 0; }
   .poly-tab-heading nav { flex-wrap: wrap; gap: 12px; }
   .poly-tab-heading nav button { padding-bottom: 8px; }
+}
+
+/* Stacked layout: fr rows sized from content let the trade table stretch the chart, so give each panel a fixed size. */
+@container polymarket (max-width: 620px) {
+  .poly-analysis { grid-template-rows: auto 340px; }
+  .poly-feature { overflow: visible; }
+  .poly-chart { flex: none; min-height: 0; }
+  .poly-chart svg { height: auto; min-height: 0; max-height: 260px; }
 }

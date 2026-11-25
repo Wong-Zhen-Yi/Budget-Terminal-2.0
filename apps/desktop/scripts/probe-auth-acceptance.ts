@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 import { convexDeploymentUrl } from '../electron/shared/cloudOAuth.js'
 
-// Opt-in: two human-approved GitHub sign-ins, no writes to saved cloud data.
+// Opt-in: two human-approved Google sign-ins, no writes to saved cloud data.
 // Each stage starts a new Electron process and uses a private temporary profile.
 const offline = process.argv.includes('--offline')
 const cleanupIndex = process.argv.indexOf('--cleanup-only')
@@ -30,7 +30,7 @@ try {
     import { ConvexHttpClient } from 'convex/browser'
     import { makeFunctionReference } from 'convex/server'
     import { z } from 'zod'
-    import { beginGitHubSignIn } from '../electron/services/cloudSyncOAuth'
+    import { beginOAuthSignIn } from '../electron/services/cloudSyncOAuth'
     const directory = process.env.BUDGET_AUTH_ACCEPTANCE_DIR
     const url = process.env.BUDGET_AUTH_ACCEPTANCE_URL
     const stage = process.argv.at(-1)
@@ -61,18 +61,18 @@ try {
           console.log('PASS: acceptance runner restored its encrypted fixture in a new Electron process')
         } else if (stage === 'a' || stage === 'b') {
           const client = http()
-          console.log('APPROVE: GitHub sign-in for temporary device ' + stage.toUpperCase())
-          pending = await beginGitHubSignIn(url, {
-            isConfigured: async () => { const value = await client.query(ref('sync:authConfiguration'), {}); return value.authVersion === 2 && value.accountControlsVersion === 2 && value.githubConfigured },
-            startSignIn: args => client.mutation(ref('auth:startSignInWithGithub'), { ...args, purpose: 'signIn' }),
-            completeSignIn: args => client.mutation(ref('auth:completeSignInWithGithub'), args),
+          console.log('APPROVE: Google sign-in for temporary device ' + stage.toUpperCase())
+          pending = await beginOAuthSignIn('google', url, {
+            isConfigured: async () => { const value = await client.query(ref('sync:authConfiguration'), {}); return value.authVersion === 2 && value.accountControlsVersion === 2 && value.googleConfigured },
+            startSignIn: args => client.mutation(ref('auth:startSignInWithGoogle'), { ...args, purpose: 'signIn' }),
+            completeSignIn: args => client.mutation(ref('auth:completeSignInWithGoogle'), args),
             openExternal: value => shell.openExternal(value),
           })
           const completed = await pending.result
           assert('tokens' in completed)
           try { await save(stage, completed.tokens) }
           catch (error) { await client.mutation(ref('auth:signOut'), { refreshToken: completed.tokens.refreshToken }); throw error }
-          if (stage === 'b') assert.equal((await load('a')).userId, completed.tokens.userId, 'Use the same GitHub account for both temporary devices')
+          if (stage === 'b') assert.equal((await load('a')).userId, completed.tokens.userId, 'Use the same Google account for both temporary devices')
           console.log('PASS: temporary device ' + stage.toUpperCase() + ' signed in and encrypted its credentials')
         } else if (stage === 'verify') {
           let a = await load('a')
@@ -123,7 +123,7 @@ try {
     child.stdout.on('data', data => process.stdout.write(data))
     // Never echo raw Electron/provider errors or command arguments.
     child.stderr.resume()
-    const timer = setTimeout(() => { child.kill(); reject(Error('Live GitHub approval timed out. Temporary-session cleanup will run.')) }, stage === 'a' || stage === 'b' ? 330_000 : 60_000)
+    const timer = setTimeout(() => { child.kill(); reject(Error('Live Google approval timed out. Temporary-session cleanup will run.')) }, stage === 'a' || stage === 'b' ? 330_000 : 60_000)
     child.on('error', () => { clearTimeout(timer); reject(Error('Could not start the isolated live acceptance process.')) })
     child.on('exit', code => { clearTimeout(timer); done(code === 0) })
   })

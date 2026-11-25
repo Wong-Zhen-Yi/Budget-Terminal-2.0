@@ -6,6 +6,7 @@ import { SectionHeader } from '@/components/settings/SettingsSection'
 import { Button } from '@/components/ui/Button'
 import { Checkbox } from '@/components/ui/Checkbox'
 import { Panel } from '@/components/ui/Panel'
+import { touchShell } from '@/mobile/touch'
 
 export interface NavigationTab {
   id: string
@@ -43,6 +44,7 @@ export function NavigationPanel({
   const [selected, setSelected] = useState<string | null>(tabs[0]?.id ?? null)
   const [savingMainPage, setSavingMainPage] = useState(false)
   const index = tabs.findIndex((tab) => tab.id === selected)
+  const phone = touchShell()
   const available = tabs.filter(tab => isMainPageAvailable(tab.id, hidden, enabledLabs))
   const defaultPage = resolveMainPage(undefined, tabs.map(tab => tab.id), hidden, enabledLabs)
   const defaultLabel = tabs.find(tab => tab.id === defaultPage)?.label
@@ -78,7 +80,7 @@ export function NavigationPanel({
           title="Visible Pages"
           hint="Choose visible pages and their order within each workspace. Favorites are managed from the page header."
         />
-        <ul className="max-h-96 overflow-y-auto border border-border bg-bg">
+        <ul className="settings-visible-pages max-h-96 overflow-y-auto border border-border bg-bg">
           {tabs.map((tab) => {
             const isSettings = tab.id === SETTINGS_TAB_ID
             return (
@@ -107,13 +109,20 @@ export function NavigationPanel({
                   {!tab.implemented ? (
                     <span className="ml-auto shrink-0 text-2xs text-text-dim">not migrated</span>
                   ) : null}
+                  {/* On phones the list grows with the page, so the selected row carries its own move buttons. */}
+                  {phone && tab.id === selected ? <span className="settings-row-move">
+                    <button type="button" disabled={index <= 0} aria-label={`Move ${tab.label} up`}
+                      onClick={event => { event.stopPropagation(); onMove(tab.id, -1) }}>↑</button>
+                    <button type="button" disabled={index >= tabs.length - 1} aria-label={`Move ${tab.label} down`}
+                      onClick={event => { event.stopPropagation(); onMove(tab.id, 1) }}>↓</button>
+                  </span> : null}
                 </div>
               </li>
             )
           })}
         </ul>
         <div className="flex items-center gap-2">
-          <Button
+          {!phone && <><Button
             disabled={index <= 0}
             onClick={() => selected && onMove(selected, -1)}
           >
@@ -124,7 +133,7 @@ export function NavigationPanel({
             onClick={() => selected && onMove(selected, 1)}
           >
             Move Down
-          </Button>
+          </Button></>}
           <Button variant="danger" className="ml-auto" onClick={onReset}>
             Reset Order
           </Button>

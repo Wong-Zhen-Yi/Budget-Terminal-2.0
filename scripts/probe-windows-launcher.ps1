@@ -105,16 +105,12 @@ ConvertTo-Json -Compress -InputObject @((Get-Location).Path, $Command, [bool]$De
   Push-Location -LiteralPath $testRoot
   try {
     foreach ($case in @(
-      @{ File = 'Launch Budget Terminal.cmd'; Command = 'start'; Attached = $true },
-      @{ File = 'Launch Budget Terminal Demo.cmd'; Command = 'start'; Demo = $true; Attached = $true },
-      @{ File = 'Launch Budget Terminal Mobile.cmd'; Command = 'mobile' },
-      @{ File = 'Launch Budget Terminal Mobile Preview.cmd'; Command = 'start'; MobilePreview = $true; Attached = $true },
-      @{ File = 'Launch Budget Terminal iPhone 17 Preview.cmd'; Command = 'start'; MobilePreview = $true; Attached = $true }
+      @{ File = 'Launch Budget Terminal.cmd'; Command = 'start'; Attached = $true }
     )) {
       $wrapper = Join-Path $wrapperLaunchers $case.File
       Copy-Item -LiteralPath (Join-Path $PSScriptRoot ('..\launchers\windows\' + $case.File)) -Destination $wrapper
       $launchOutput = & $wrapper | Select-Object -Last 1
-      Assert-Check ($LASTEXITCODE -eq 0) "The grouped launcher must run from outside the checkout."
+      Assert-Check ($LASTEXITCODE -eq 0) "The launcher must run from outside the checkout."
       $actual = ConvertFrom-Json -InputObject $launchOutput
       Assert-Check ($actual[0] -eq $wrapperCheckout -and $actual[1] -eq $case.Command -and
         $actual[2] -eq [bool]$case.Demo -and $actual[3] -eq [bool]$case.MobilePreview -and
@@ -123,7 +119,7 @@ ConvertTo-Json -Compress -InputObject @((Get-Location).Path, $Command, [bool]$De
   } finally {
     Pop-Location
   }
-  Write-Host 'PASS: all grouped Windows wrappers launch from a checkout with spaces and pass the correct mode.'
+  Write-Host 'PASS: the Windows launcher starts from a checkout with spaces and passes the attached start mode.'
   & {
     . (Join-Path $PSScriptRoot 'install-bt.ps1')
     $script:fixtureUserPath = 'C:\fixture-bin'

@@ -139,8 +139,7 @@ send you that link when configured. Mobile edits save to the desktop records;
 page navigation and scroll positions are independent.
 
 On Windows, **Open phone viewport** in Settings opens a connected, resizable local
-window without Tailscale. To try sample data, use
-[Launch Budget Terminal Mobile Preview.cmd](launchers/windows/Launch%20Budget%20Terminal%20Mobile%20Preview.cmd).
+window without Tailscale. To try sample data, run `btd -MobilePreview`.
 The images above are actual renders of that disposable preview at 390 × 844 CSS
 pixels, rather than captures from physical phones. Demo profiles
 cannot be shared remotely. See the [Mobile Access guide](docs/mobile-access.md)
@@ -157,7 +156,8 @@ cd Budget-Terminal-2.0
 
 ### 2. Install and check the setup
 
-Choose your operating system in the [launchers](launchers) folder.
+Windows has a double-click launcher in [launchers/windows](launchers/windows). On macOS
+and Linux, start the app with `sh scripts/launch-posix.sh` from the checkout.
 Point any shortcuts or aliases that used the repository root to the new location.
 
 On Windows, double-click [Launch Budget Terminal.cmd](launchers/windows/Launch%20Budget%20Terminal.cmd)
@@ -177,15 +177,13 @@ Failed dependency checks stop startup. There is no interface selection menu, and
 No administrator access is needed. Double-click it again whenever you need to open
 the app. From the checkout, `npm.cmd run setup` runs the Windows checks without opening the app.
 
-On macOS, double-click
-[Launch Budget Terminal.command](launchers/macos/Launch%20Budget%20Terminal.command) in Finder.
+On macOS, run `sh scripts/launch-posix.sh` from the checkout in Terminal.
 It checks the runtime, installs dependencies, builds the latest source and opens
 the desktop app. Keep its Terminal window open while using the app. Homebrew,
 Volta, fnm and nvm installation locations are checked automatically. If needed,
 the launcher downloads and verifies Node.js with npm and installs it under
 `~/Library/Application Support/BudgetTerminal/runtimes` without administrator
-access. Launch errors stay visible so you can fix them and retry. Keep the launcher
-in the checkout. You can create a Finder alias to open it from elsewhere.
+access. Launch errors stay visible so you can fix them and retry.
 
 For a manual installation on any platform:
 
@@ -206,7 +204,7 @@ npm run setup:linux
 ```
 
 Double-click **Budget Terminal 2.0** on the desktop, or run
-[Launch Budget Terminal.sh](launchers/linux/Launch%20Budget%20Terminal.sh) from the checkout.
+`sh scripts/launch-posix.sh` from the checkout.
 The launcher checks the runtime, installs dependencies, builds the latest source,
 and opens the desktop app. Keep its terminal open while using the app. It finds
 Node in `~/.local/bin`, fnm's default alias, Volta, or a per-user Budget Terminal
@@ -256,17 +254,16 @@ run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-bt.
 
 ### Update Budget Terminal
 
-Open **Settings → App dashboard** and click **Check for updates**. If an update is available, choose **Install update**. On Windows, `btd update` checks and applies the same source update from any directory. From the checkout on macOS, run `sh 'launchers/macos/Launch Budget Terminal.command' update`. On Linux, run `sh 'launchers/linux/Launch Budget Terminal.sh' update`.
+Open **Settings → App dashboard** and click **Check for updates**. If an update is available, choose **Install update**. On Windows, `btd update` checks and applies the same source update from any directory. From the checkout on macOS or Linux, run `sh scripts/launch-posix.sh update`.
 
 Updates use the project's published `main` branch and require Git and a clean checkout on `main` that can be fast-forwarded. After updating, close Budget Terminal and reopen it with the launcher to rebuild the app and MCP tools. On Windows, `btd restart` handles both steps.
 
 ### Test with demo data
 
-On Windows, double-click [Launch Budget Terminal Demo.cmd](launchers/windows/Launch%20Budget%20Terminal%20Demo.cmd)
-or run `btd -Demo` if the terminal command is installed. On macOS, double-click
-[Launch Budget Terminal Demo.command](launchers/macos/Launch%20Budget%20Terminal%20Demo.command).
-On Linux, run `sh 'launchers/linux/Launch Budget Terminal.sh' --demo` from the checkout.
-Keep the launcher terminal open until you close the demo app.
+The demo is for development checks, screenshots and UI smoke tests, so it has no
+double-click launcher. On Windows, run `btd -Demo`. On macOS or Linux, run
+`sh scripts/launch-posix.sh --demo` from the checkout. Keep the terminal open until
+you close the demo app.
 
 The app displays **Demo data** in the top bar. It opens with two sample portfolios, an options record,
 personal finance entries and a goal, chart watchlists, a backtest allocation, custom cards, and articles.
@@ -275,7 +272,7 @@ Edits and automatic backups go into that profile, alongside its own browser sess
 The regular launcher still opens your personal profile, and cloud sync is disabled in the demo.
 Market prices still use the app's usual providers.
 
-On Windows, select **Open phone viewport** under **Settings → Labs → Mobile Access** to open your desktop workspace in a resizable phone window, with compact through large phone presets. After an update, run `btd mobile` or double-click [Launch Budget Terminal Mobile.cmd](launchers/windows/Launch%20Budget%20Terminal%20Mobile.cmd) to save, rebuild, and reopen with the viewport. To use temporary sample data, open [Launch Budget Terminal Mobile Preview.cmd](launchers/windows/Launch%20Budget%20Terminal%20Mobile%20Preview.cmd). See [Mobile Access](docs/mobile-access.md#open-the-connected-mobile-window-on-windows) for details.
+On Windows, select **Open phone viewport** under **Settings → Labs → Mobile Access** to open your desktop workspace in a resizable phone window, with compact through large phone presets. After an update, run `btd mobile` to save, rebuild, and reopen with the viewport. To use temporary sample data, run `btd -MobilePreview`. See [Mobile Access](docs/mobile-access.md#open-the-connected-mobile-window-on-windows) for details.
 
 ### Launch behavior and troubleshooting
 
@@ -500,7 +497,7 @@ The current comparison loads at startup, including when Scorecard is unvisited.
 
 | Guide | What's inside |
 | :--- | :--- |
-| [Optional Convex sync](docs/convex-sync.md) | Cross-device snapshot sync, GitHub browser sign-in, offline local saves, conflict recovery and deployment. |
+| [Optional Convex sync](docs/convex-sync.md) | Cross-device snapshot sync, Google browser sign-in, offline local saves, conflict recovery and deployment. |
 | [Data, startup & backups](docs/user-guide.md) | All-page readiness, feed health, saved-data locations, migration, and backup behavior. |
 | [Public data routing](docs/public-data-routing.md) | Hyperliquid/CoinGecko crypto quotes, World Bank/IMF annual context, and provider budgets. |
 | [Browser](docs/browser.md) | Embedded Chromium tabs, source reading, research controls, and local login profiles. |

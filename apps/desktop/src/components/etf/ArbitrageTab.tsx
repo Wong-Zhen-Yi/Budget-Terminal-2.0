@@ -199,7 +199,7 @@ export function ArbitrageTab({
           columns={columns}
           rows={rows}
           layout="fixed"
-          rowKey={(row, index) => `${row.symbol}-${index}`}
+          rowKey={(row, index) => `${row.symbol}-${index}`} rowSymbol={(row) => row.symbol}
           onRowDoubleClick={(row) => onOpenSymbol(row.symbol)}
           defaultSort={{ key: 'contribution', direction: 'desc' }}
           empty={loading ? 'Fetching basket quotes...' : 'No basket rows yet'}

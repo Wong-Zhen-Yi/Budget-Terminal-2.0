@@ -2,7 +2,7 @@ import { useCallback, useSyncExternalStore } from 'react'
 import { hashKey, useQueryClient, type QueryKey } from '@tanstack/react-query'
 
 import type { AmznPayload } from '@shared/amzn'
-import type { AnthropicPayload } from '@shared/anthropic'
+import { reviewedAnthropicQuarters, type AnthropicPayload } from '@shared/anthropic'
 import type { AvgoPayload } from '@shared/avgo'
 import type { BitcoinPayload } from '@shared/bitcoin'
 import type { BmnrPayload, EconomicPayload, Envelope, FundamentalsPagePayload, GoldPayload, OilPayload } from '@shared/contract'
@@ -18,6 +18,7 @@ import { semiconductorOverview, type SemiconductorsPayload } from '@shared/semic
 import type { SofiPayload } from '@shared/sofi'
 import type { VstPayload } from '@shared/vst'
 import { queryKeys } from '@/api/client'
+import { pagePreview, subscribePagePreview } from '@/api/pageProgress'
 import { compactCurrency, compactNumber, currency, performancePercent, plainPercent, thousands } from '@/lib/format'
 
 interface MetricReading {
@@ -28,6 +29,7 @@ interface MetricReading {
 type MetricReadings = readonly [MetricReading | undefined, MetricReading | undefined]
 
 const shortDate = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+const shortMonth = new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' })
 
 function dated(observed: string | number | null | undefined) {
   if (!observed) return undefined
@@ -43,28 +45,31 @@ function reading(
   return typeof value === 'number' && Number.isFinite(value) ? { value: format(value), period } : undefined
 }
 
-function CachedMetrics<T>({ page, queryKey, labels, select, obscured }: {
+function CachedMetrics<T>({ page, queryKey, labels, select, fallback, obscured }: {
   page: string
   queryKey: QueryKey
   labels: readonly [string, string]
   select: (data: T) => MetricReadings | undefined
+  fallback?: () => MetricReadings | undefined
   obscured: boolean
 }) {
   const client = useQueryClient()
   const queryHash = hashKey(queryKey)
-  // Listen to the existing startup cache without a query observer that could fetch or pin a payload.
+  // Share the topic's startup query and progressive results without starting a second fetch.
   const subscribe = useCallback((onChange: () => void) => {
     if (obscured) return () => {}
-    return client.getQueryCache().subscribe(event => {
+    const unsubscribeCache = client.getQueryCache().subscribe(event => {
       if (event.query.queryHash === queryHash) onChange()
     })
+    const unsubscribePreview = subscribePagePreview(queryHash, onChange)
+    return () => { unsubscribeCache(); unsubscribePreview() }
   }, [client, obscured, queryHash])
   const getSnapshot = useCallback(
-    () => obscured ? undefined : client.getQueryData<Envelope<T>>(queryKey),
-    [client, obscured, queryKey],
+    () => obscured ? undefined : client.getQueryData<Envelope<T>>(queryKey) ?? pagePreview(queryHash) as Envelope<T> | undefined,
+    [client, obscured, queryKey, queryHash],
   )
   const snapshot = useSyncExternalStore(subscribe, getSnapshot)
-  const readings = snapshot && snapshot.meta.freshness !== 'failed' ? select(snapshot.data) : undefined
+  const readings = obscured ? undefined : (snapshot && snapshot.meta.freshness !== 'failed' ? select(snapshot.data) : undefined) ?? fallback?.()
   const period = readings?.[0]?.period === readings?.[1]?.period ? readings?.[0]?.period : undefined
   const unavailable = obscured ? 'Hidden by Obscure mode' : 'No figure available'
   return (
@@ -85,8 +90,16 @@ function CachedMetrics<T>({ page, queryKey, labels, select, obscured }: {
   )
 }
 
-function metricPair<T>(queryKey: QueryKey, labels: readonly [string, string], select: (data: T) => MetricReadings | undefined) {
-  return (page: string, obscured: boolean) => <CachedMetrics page={page} queryKey={queryKey} labels={labels} select={select} obscured={obscured} />
+function metricPair<T>(queryKey: QueryKey, labels: readonly [string, string], select: (data: T) => MetricReadings | undefined, fallback?: () => MetricReadings | undefined) {
+  return (page: string, obscured: boolean) => <CachedMetrics page={page} queryKey={queryKey} labels={labels} select={select} fallback={fallback} obscured={obscured} />
+}
+
+function anthropicReadings(quarters: AnthropicPayload['quarters']): MetricReadings | undefined {
+  const quarter = quarters.at(-1)
+  return quarter && [
+    reading(quarter.revenue * 1e9, compactCurrency, quarter.period),
+    reading(quarter.compute * 1e9, compactCurrency, quarter.period),
+  ]
 }
 
 const metrics: Record<string, ReturnType<typeof metricPair> | undefined> = {
@@ -97,13 +110,8 @@ const metrics: Record<string, ReturnType<typeof metricPair> | undefined> = {
       reading(report?.operatingIncome, compactCurrency, report?.period),
     ]
   }),
-  anthropic: metricPair<AnthropicPayload>(queryKeys.anthropic, ['Qtr. revenue', 'Compute costs'], data => {
-    const quarter = data.quarters.at(-1)
-    return quarter && [
-      reading(quarter.revenue * 1e9, compactCurrency, quarter.period),
-      reading(quarter.compute * 1e9, compactCurrency, quarter.period),
-    ]
-  }),
+  anthropic: metricPair<AnthropicPayload>(queryKeys.anthropic, ['Qtr. revenue', 'Compute & infra.'],
+    data => anthropicReadings(data.quarters), () => anthropicReadings(reviewedAnthropicQuarters())),
   avgo: metricPair<AvgoPayload>(queryKeys.avgo, ['AI chip rev.', 'Qtr. revenue'], ({ earnings }) => {
     const ai = earnings?.metrics.find(item => item.id === 'aiRevenue')
     const qualifier = ai?.text === 'over' ? '> ' : ai?.text ? '≈ ' : ''
@@ -159,12 +167,14 @@ const metrics: Record<string, ReturnType<typeof metricPair> | undefined> = {
     reading(monthly?.metrics.find(item => item.id === 'deposits')?.value, compactCurrency, monthly?.period),
     reading(monthly?.metrics.find(item => item.id === 'customers')?.value, compactNumber, monthly?.period),
   ]),
-  macro: metricPair<EconomicPayload>(queryKeys.economic, ['U.S. CPI YoY', 'Real GDP SAAR'], ({ rows }) => {
-    const rate = (seriesId: string) => {
+  macro: metricPair<EconomicPayload>(queryKeys.economic, ['CPI YoY (SA)', 'Real GDP SAAR'], ({ rows }) => {
+    const rate = (seriesId: string, period: (date: Date) => string) => {
       const row = rows.find(item => item.seriesId === seriesId && item.available)
-      return reading(row?.latest, value => plainPercent(value, 2), dated(row?.latestDate))
+      const date = new Date(row?.latestDate ?? '')
+      return reading(row?.latest, value => plainPercent(value, 2), Number.isFinite(date.getTime()) ? period(date) : undefined)
     }
-    return [rate('CPIAUCSL'), rate('GDPC1')]
+    return [rate('CPIAUCSL', date => shortMonth.format(date)),
+      rate('GDPC1', date => `Q${Math.floor(date.getUTCMonth() / 3) + 1} ${date.getUTCFullYear()}`)]
   }),
   mu: metricPair<MuPayload>(queryKeys.mu, ['Qtr. revenue', 'Adj. gross mgn'], ({ earnings }) => [
     reading(earnings?.metrics.find(item => item.id === 'revenue')?.value, compactCurrency, earnings?.period),

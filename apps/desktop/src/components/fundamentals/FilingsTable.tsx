@@ -4,6 +4,7 @@ import type { SecFiling } from '@shared/contract'
 import { filterFundamentalsFilings } from '@shared/fundamentalsPage'
 import { api } from '@/api/client'
 import { Button } from '@/components/ui/Button'
+import { pointerText } from '@/mobile/touch'
 
 type FilingFilter = 'All' | '10-K' | '10-Q' | '8-K'
 type SortKey = 'filedDate' | 'reportPeriod' | 'form' | 'description'
@@ -112,7 +113,7 @@ export function FilingsTable({ filings, compact = false }: { filings: SecFiling[
         ) : null}
       </div>
       <p className="shrink-0 text-2xs text-text-dim">
-        {rows.length} filing{rows.length === 1 ? '' : 's'}{compact ? '' : ' shown'} · double-click to open
+        {rows.length} filing{rows.length === 1 ? '' : 's'}{compact ? '' : ' shown'} · {pointerText('double-click', 'double-tap')} to open
       </p>
     </div>
   )

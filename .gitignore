@@ -22,6 +22,7 @@ plugins/budget-terminal/server/
 # Local credentials, browser captures, and machine-specific configuration.
 conf/
 .playwright-cli/
+.convex/
 .env
 .env.*
 !.env.example

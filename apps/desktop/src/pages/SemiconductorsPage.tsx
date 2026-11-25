@@ -109,7 +109,7 @@ export function SemiconductorsPage({ onStatusChange, onNavigate }: {
           className="min-w-0 flex-1 border border-border-strong bg-bg px-2 py-1 text-2xs text-text outline-none focus:border-accent" />
         <Button variant="toggle" active={group === 'all'} onClick={() => selectGroup('all')}>All subsectors</Button>
       </div>
-      <DataTable columns={detailed ? columns : columns.filter(column => ['symbol', 'company', 'price', 'daily', 'month', 'ytd', 'cap', 'forward', 'status'].includes(column.key)).map(column => column.key === 'company' ? { ...column, wrap: false } : column)} rows={filtered} rowKey={row => row.company.symbol} defaultSort={{ key: 'cap', direction: 'desc' }} minWidth={detailed ? '1450px' : '850px'}
+      <DataTable columns={detailed ? columns : columns.filter(column => ['symbol', 'company', 'price', 'daily', 'month', 'ytd', 'cap', 'forward', 'status'].includes(column.key)).map(column => column.key === 'company' ? { ...column, wrap: false } : column)} rows={filtered} rowKey={row => row.company.symbol} rowSymbol={row => row.company.symbol} defaultSort={{ key: 'cap', direction: 'desc' }} minWidth={detailed ? '1450px' : '850px'}
         onRowClick={row => setSymbol(row.company.symbol)} onRowDoubleClick={row => onNavigate('stocks', row.company.symbol)}
         rowClassName={row => row.company.symbol === symbol ? 'bg-surface-hover' : ''} empty="No companies match your filters" />
       <div className="shrink-0 border-t border-border px-2 py-1 text-2xs text-text-dim">USD quotes · 1D price change; 1M/YTD adjusted-close returns · revenue growth is latest reported quarter YoY · gross margin is TTM · P/E forward and earnings dates are provider estimates. Missing data = --.</div>
@@ -161,7 +161,7 @@ export function SemiconductorsPage({ onStatusChange, onNavigate }: {
         { key: 'forward', header: 'P/E · est.', cell: row => ratio(row.profile?.forwardPe), numeric: true },
         { key: 'growth', header: 'Revenue YoY', cell: row => pct(row.profile?.revenueGrowth === null || row.profile?.revenueGrowth === undefined ? null : row.profile.revenueGrowth * 100), numeric: true },
         { key: 'margin', header: 'Gross margin · TTM', cell: row => pct(row.profile?.grossMargin === null || row.profile?.grossMargin === undefined ? null : row.profile.grossMargin * 100), numeric: true },
-      ]} rows={comparisonRows} rowKey={row => row.company.symbol} minWidth="640px" empty="No comparison companies selected" /></div> : null}
+      ]} rows={comparisonRows} rowKey={row => row.company.symbol} rowSymbol={row => row.company.symbol} minWidth="640px" empty="No comparison companies selected" /></div> : null}
       <div className="shrink-0 border-t border-border px-2 py-1 text-2xs text-text-dim">{range} · adjusted returns from first shared session · gaps remain missing</div>
       {comparisonRows.some(row => !row.market?.history.length) ? <div className="shrink-0 px-2 text-2xs text-warn">Missing histories: {comparisonRows.filter(row => !row.market?.history.length).map(row => row.company.symbol).join(', ')}</div> : null}
     </Panel>
@@ -174,7 +174,7 @@ export function SemiconductorsPage({ onStatusChange, onNavigate }: {
           { key: 'date', header: 'Date · New York', cell: row => dateText(row.profile?.earningsDate) },
           { key: 'symbol', header: 'Ticker', cell: row => row.company.symbol },
           { key: 'name', header: 'Company', cell: row => row.company.name, wrap: true },
-        ]} rows={upcoming} rowKey={row => row.company.symbol} onRowClick={row => { setSymbol(row.company.symbol); setGroup(row.company.group); setSearch(''); setView('supply') }} empty={busy ? 'Loading earnings estimates…' : 'No upcoming earnings estimates available'} />
+        ]} rows={upcoming} rowKey={row => row.company.symbol} rowSymbol={row => row.company.symbol} onRowClick={row => { setSymbol(row.company.symbol); setGroup(row.company.group); setSearch(''); setView('supply') }} empty={busy ? 'Loading earnings estimates…' : 'No upcoming earnings estimates available'} />
         <div className="shrink-0 border-t border-border p-2 text-2xs text-text-dim">{rows.filter(row => row.profile?.earningsDate).length}/{rows.length} companies have a date estimate. Dates can change; missing estimates are not confirmed absences.</div>
       </> : <>
         {news.length ? <div className="min-h-0 flex-1 overflow-auto px-2">{news.slice(0, 100).map(article => <div key={article.url || article.id} className="border-b border-border py-2 text-2xs"><SourceLink url={article.url} label={article.title} /><div className="mt-1 text-text-dim">{article.ticker} · {article.source} · {new Date(article.publishedAt).toLocaleString()}</div></div>)}</div> : <PanelMessage>{busy ? 'Loading company news…' : rows.every(row => row.progress.news === 'unavailable') ? 'Company news unavailable' : 'No matching company headlines returned'}</PanelMessage>}

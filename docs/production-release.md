@@ -1,5 +1,7 @@
 # Production release configuration
 
+> GitHub sign-in was removed on 2026-11-25; cloud sign-in is Google-only. The GitHub OAuth notes below are a historical record. Current setup is in [Convex sync and operator setup](convex-sync.md#retired-github-sign-in).
+
 On 2026-11-18, Budget Terminal tested the production deployment as the shared desktop endpoint and then restored the existing deployment that had passed two-device GitHub sign-in. The production account and snapshot tables were empty at the rollback. A private recovery export was taken before upgrading production to the current snapshot backend and Convex Auth v2. Production callback registration and a completed sign-in still require verification through the production OAuth App and an authenticated browser.
 
 The exact v2 production GitHub callback is `https://wonderful-otter-684.ap-southeast-2.convex.site/api/auth/callback/github/callback`. Follow the current [Convex sync and operator setup guide](convex-sync.md).

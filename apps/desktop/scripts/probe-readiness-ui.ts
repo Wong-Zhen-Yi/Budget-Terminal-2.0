@@ -83,8 +83,10 @@ try {
     import { DEFAULT_YOUTUBE_PAGE_SETTINGS } from './electron/shared/youtube'
     import { DEFAULT_CACHE_SETTINGS } from './electron/shared/cachePolicy'
     import { anthropicResearch } from './electron/shared/anthropic'
+    import { buildRow, SERIES_BY_ID } from './electron/shared/economic'
     import { computeExposure, emptyRiskMetrics } from './electron/shared/analytics'
     const check = (condition, message) => { if (!condition) throw Error(message) }
+    const focusOnly = ${JSON.stringify(process.argv.includes('--focus'))}
     const wait = () => new Promise(resolve => setTimeout(resolve, 110))
     const visiblePage = id => [...document.querySelectorAll('[data-page-id]')].find(page => page.dataset.pageId === id && page.getBoundingClientRect().height > 0)
     const paint = async () => {
@@ -137,10 +139,10 @@ try {
       }
       if (method === 'cloudSyncCommand') {
         if (authRejected) return { ...ok(fixtureAuth), meta: { freshness: 'failed', failureReason: 'Synthetic sign-in failure. Try again.' } }
-        fixtureAuth = { ...fixtureAuth, signInPending: ['signInGitHub', 'signInGoogle', 'revokeOtherSessions'].includes(request.type),
+        fixtureAuth = { ...fixtureAuth, signInPending: ['signInGoogle', 'revokeOtherSessions'].includes(request.type),
           credentialCleanupRequired: request.type === 'retryCredentialCleanup' ? false : fixtureAuth.credentialCleanupRequired,
           workspaceApprovalRequired: request.type === 'confirmWorkspace' ? false : fixtureAuth.workspaceApprovalRequired,
-          message: request.type === 'signInGitHub' ? 'Complete GitHub sign-in in your browser.' : request.type === 'signInGoogle' ? 'Complete Google sign-in in your browser.' : undefined }
+          message: request.type === 'signInGoogle' ? 'Complete Google sign-in in your browser.' : undefined }
         return ok(fixtureAuth)
       }
       if (method === 'cacheStatus') {
@@ -187,6 +189,10 @@ try {
       if (!result.data) result.data = {}
       result.meta = ok(null).meta
       const data = result.data
+      if (focusOnly && method === 'economic') data.rows = [
+        buildRow(SERIES_BY_ID.get('CPIAUCSL'), [['2025-09-01', 324.245], ['2026-09-01', 336.298]]),
+        buildRow(SERIES_BY_ID.get('GDPC1'), [['2026-04-01', 24408.011], ['2026-07-01', 24611.077]]),
+      ]
       if ('symbol' in data) data.symbol = request.symbol ?? 'AAPL'
       if ('ticker' in data) data.ticker = request.ticker ?? request.symbol ?? 'AAPL'
       if ('fetchedAt' in data) data.fetchedAt = typeof data.fetchedAt === 'string' ? new Date().toISOString() : Date.now()
@@ -248,7 +254,6 @@ try {
       const startupOnly = ${JSON.stringify(process.argv.includes('--startup-only'))}
       const mainPageOnly = ${JSON.stringify(process.argv.includes('--main-page'))}
       const authOnly = ${JSON.stringify(process.argv.includes('--auth-only'))}
-      const focusOnly = ${JSON.stringify(process.argv.includes('--focus'))}
       const scenarios = mainPageOnly ? ['empty', 'persisted'] : authOnly || focusOnly ? ['empty'] : reloadOnly ? ['populated'] : refreshOnly ? ['persisted'] : agentsOnly ? ['empty'] : ['empty', 'populated', 'persisted']
       for (const scenario of scenarios) {
         console.log('Completed-startup scenario: ' + scenario)
@@ -289,13 +294,18 @@ try {
           await wait()
           const focus = () => document.querySelector('nav[aria-label="Workspaces"] button[aria-label="Focus"]')
           const anthropicCalls = calls.filter(call => call.method === 'anthropic').length
+          const economicCalls = calls.filter(call => call.method === 'economic').length
+          check(anthropicCalls > 0 && economicCalls === 1, 'Anthropic and the shared Macro data must fetch at startup')
           focus().click(); await wait()
           const dashboard = visiblePage('focus-dashboard')?.querySelector('.focus-dashboard')
           check(dashboard, 'Focus workspace did not open the dashboard')
           const anthropic = dashboard.querySelector('#focus-metric-anthropic')
           const anthropicValues = () => [...anthropic.querySelectorAll('b')].map(item => item.textContent).join('|')
           check(anthropic && anthropicValues() === '$17.0B|$9.9B', 'Focus must display both warmed readings')
+          const macroValues = [...dashboard.querySelectorAll('#focus-metric-macro b')].map(item => item.textContent).join('|')
+          check(macroValues === '3.72%|3.37%', 'Focus must display both warmed Macro readings')
           check(calls.filter(call => call.method === 'anthropic').length === anthropicCalls, 'Opening Focus must not request the reading again')
+          check(calls.filter(call => call.method === 'economic').length === economicCalls, 'Opening Focus must not repeat the shared Macro fetch')
           obscure.click(); await wait()
           check(anthropicValues() === '—|—', 'Focus must hide both readings for protected pages')
           obscure.click(); await wait()
@@ -344,17 +354,14 @@ try {
           await window.resizeFixture(1400, 950); await paint()
           await window.captureFixture('auth-sign-up')
           check([...popup().querySelectorAll('button')].some(button => button.textContent.trim() === 'Continue with Google'), 'Google sign-in must be available')
+          check(!popup().textContent.includes('GitHub'), 'GitHub sign-in was removed from the popup')
           authRejected = true; click('Continue with Google'); await wait()
           check(popup().textContent.includes('Synthetic sign-in failure'), 'Failed sign-in must offer recovery')
-          authRejected = false; click('Continue with GitHub'); await wait()
-          check(popup().textContent.includes('Complete GitHub sign-in') && !popup().querySelector('input'), 'Browser approval state missing')
-          check(calls.some(call => call.method === 'cloudSyncCommand' && call.request.type === 'signInGitHub' && !('url' in call.request)), 'Sign-up must leave endpoint selection to the main process')
-          click('Cancel sign-in'); await wait()
-          click('Continue with Google'); await wait()
-          check(popup().textContent.includes('Complete Google sign-in'), 'Google browser approval state missing')
-          check(calls.some(call => call.method === 'cloudSyncCommand' && call.request.type === 'signInGoogle' && !('url' in call.request)), 'Google sign-in must leave endpoint selection to the main process')
+          authRejected = false; click('Continue with Google'); await wait()
+          check(popup().textContent.includes('Complete Google sign-in') && !popup().querySelector('input'), 'Browser approval state missing')
+          check(calls.some(call => call.method === 'cloudSyncCommand' && call.request.type === 'signInGoogle' && !('url' in call.request)), 'Sign-up must leave endpoint selection to the main process')
           click('Cancel sign-in'); await wait(); click('Sign in'); await wait()
-          click('Continue with GitHub'); await wait()
+          click('Continue with Google'); await wait()
           fixtureAuth = { ...fixtureAuth, signedIn: true, signInPending: false, state: 'synced' }
           await new Promise(resolve => setTimeout(resolve, 2200))
           check(!popup(), 'Successful browser approval must close the popup automatically')
@@ -403,14 +410,14 @@ try {
           check(popup() && !useAuthPrompt.getState().hidden, 'Settings must be able to restore the auth popup')
           unmount()
           await wait()
-          fixtureAuth = { ...fixtureAuth, signedIn: true, url: 'https://fixture.convex.cloud', state: 'disconnected', authState: 'authenticated', githubLogin: 'fixture-user', workspaceApprovalRequired: true, message: undefined }
+          fixtureAuth = { ...fixtureAuth, signedIn: true, url: 'https://fixture.convex.cloud', state: 'disconnected', authState: 'authenticated', accountProvider: 'google', googleEmail: 'fixture-user@example.invalid', workspaceApprovalRequired: true, message: undefined }
           const accountClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
           const accountRoot = createRoot(element)
           accountRoot.render(<QueryClientProvider client={accountClient}><CloudSyncPanel /></QueryClientProvider>)
           await wait(); await wait()
           const panel = () => document.querySelector('[data-cloud-sync]')
           const accountClick = text => { const button = [...panel().querySelectorAll('button')].find(button => button.textContent.trim() === text); check(button && !button.disabled, 'Missing account control: ' + text); button.click() }
-          check(panel().textContent.includes('@fixture-user'), 'Connected account must be visible')
+          check(panel().textContent.includes('Google · fixture-user@example.invalid') && !panel().textContent.includes('GitHub'), 'Connected Google account must be visible')
           check([...panel().querySelectorAll('button')].find(button => button.textContent === 'Sync now').disabled, 'Sync must stay paused until ownership is approved')
           accountClick('Import this device’s data'); await wait()
           check(panel().textContent.includes('Allow this account to receive'), 'Import requires a reviewable confirmation')
@@ -424,8 +431,8 @@ try {
           check(calls.some(call => call.method === 'cloudSyncCommand' && call.request.type === 'confirmWorkspace' && call.request.use === 'local'), 'Import did not invoke explicit workspace consent')
           check(!panel().querySelector('[data-workspace-approval]'), 'Approved workspace must leave the consent state')
           accountClick('Sign out other devices'); await wait()
-          accountClick('Verify account'); await wait()
-          check(panel().textContent.includes('same account') && panel().textContent.includes('Cancel sign-in'), 'Other-device sign-out must request GitHub verification')
+          accountClick('Verify with Google'); await wait()
+          check(panel().textContent.includes('same account') && panel().textContent.includes('Cancel sign-in'), 'Other-device sign-out must request Google verification')
           accountClick('Cancel sign-in'); await wait()
           fixtureAuth = { ...fixtureAuth, signedIn: false, signInPending: false, authState: 'signedOut', revocation: 'unconfirmed' }
           await accountClient.refetchQueries({ queryKey: ['cloudSyncStatus'] }); await wait()
@@ -435,7 +442,7 @@ try {
           check([...panel().querySelectorAll('button')].some(button => button.textContent === 'Retry saved sign-in'), 'A locked keyring must offer saved-session recovery')
           fixtureAuth = { ...fixtureAuth, authState: 'storageError', encryptionAvailable: true, credentialCleanupRequired: true }
           await accountClient.refetchQueries({ queryKey: ['cloudSyncStatus'] }); await wait()
-          check([...panel().querySelectorAll('button')].find(button => button.textContent === 'Sign in with GitHub').disabled, 'Credential cleanup must be completed before signing in again')
+          check([...panel().querySelectorAll('button')].find(button => button.textContent === 'Sign in with Google').disabled, 'Credential cleanup must be completed before signing in again')
           accountClick('Retry credential cleanup'); await wait()
           check(calls.some(call => call.method === 'cloudSyncCommand' && call.request.type === 'retryCredentialCleanup'), 'Credential cleanup must call the main process')
           accountRoot.unmount(); accountClient.clear()

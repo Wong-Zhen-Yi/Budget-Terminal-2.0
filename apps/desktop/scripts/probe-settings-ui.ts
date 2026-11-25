@@ -52,7 +52,7 @@ try {
       const toolbar = document.querySelector('.settings-toolbar').getBoundingClientRect()
       const tabs = [...document.querySelectorAll('[data-settings-category]')]
       check(tabs.length === 8 && tabs.every(tab => visible(tab) && tab.getBoundingClientRect().top === tabs[0].getBoundingClientRect().top), 'Preferences must form one horizontal row')
-      check(document.querySelectorAll('[data-settings-card]').length === 14, 'Expected all fourteen settings panels mounted')
+      check(document.querySelectorAll('[data-settings-card]').length === 15, 'Expected all fifteen settings panels mounted')
       const settingsSearch = document.querySelector('input[aria-label="Search settings"]')
       check(visible(settingsSearch) && !settingsSearch.disabled, 'Settings search must be available from the default view')
       await setSearch('DASHBOARD-LITE')
@@ -85,6 +85,15 @@ try {
         'Labs must enable News Lite and expose it as a startup choice')
       newsLab.click(); await wait(80)
       check(newsLab.getAttribute('aria-checked') === 'false' && !startupNewsLite(), 'Disabling News Lite must remove it from startup choices')
+      const startupLab = card('labs').querySelector('[role=switch][aria-labelledby="lab-launch-on-startup"]')
+      check(visible(startupLab) && startupLab.getAttribute('aria-checked') === 'false' && !startupLab.disabled, 'Launch on startup must start off in Labs')
+      startupLab.click(); await wait(80)
+      check(startupLab.getAttribute('aria-checked') === 'true' && window.fixtureLaunchOnStartup.enabled, 'Labs did not enable launch on startup')
+      startupLab.click(); await wait(80)
+      check(startupLab.getAttribute('aria-checked') === 'false' && !window.fixtureLaunchOnStartup.enabled, 'Labs did not disable launch on startup')
+      await setSearch('autostart')
+      check(visible(card('labs')), 'Search must find launch on startup in Labs')
+      await setSearch('')
       useSettingsNavigation.getState().openDiagnostics(); await wait(80)
       check(visible(card('logs')), 'Diagnostics navigation must reveal the log panel')
       choose('dashboard'); await wait(80)
@@ -142,15 +151,15 @@ try {
       check(!showAuth.checked && JSON.parse(localStorage.getItem('budget-terminal:auth-prompt')).state.hidden, 'Popup preference must persist')
       showAuth.click(); await wait(40)
       check(!sync.querySelector('input[type=url]'), 'Settings must use the shared endpoint without asking for a URL')
-      window.githubNotConfigured = true
-      clickText(sync, 'Sign in with GitHub'); await wait(80)
+      window.googleNotConfigured = true
+      clickText(sync, 'Sign in with Google'); await wait(80)
       check(sync.textContent.includes('cloud sign-in is unavailable') && !sync.textContent.includes('Cancel sign-in'), 'Unavailable cloud sign-in must show an error before opening a browser')
-      window.githubNotConfigured = false
-      clickText(sync, 'Sign in with GitHub'); await wait(80)
-      check(sync.textContent.includes('Complete GitHub sign-in') && !sync.querySelector('input[type=url]'), 'Browser approval status missing')
+      window.googleNotConfigured = false
+      clickText(sync, 'Sign in with Google'); await wait(80)
+      check(sync.textContent.includes('Complete Google sign-in') && !sync.querySelector('input[type=url]'), 'Browser approval status missing')
       clickText(sync, 'Cancel sign-in'); await wait(80)
-      check(sync.querySelector('button[type=submit]') && !sync.querySelector('input[type=url]'), 'Cancelled sign-in must restore the GitHub button without a URL field')
-      clickText(sync, 'Sign in with GitHub'); await wait(80)
+      check(sync.querySelector('button[type=submit]') && !sync.querySelector('input[type=url]'), 'Cancelled sign-in must restore the Google button without a URL field')
+      clickText(sync, 'Sign in with Google'); await wait(80)
       window.fixtureSync = { ...window.fixtureSync, state: 'synced', signedIn: true, signInPending: false, cloudUpdatedAt: Date.now(), localUpdatedAt: Date.now(), revision: 3 }
       await wait(2100)
       check(!sync.querySelector('input[type=url]'), 'Browser sign-in must update Settings without reloading')
@@ -165,7 +174,7 @@ try {
       check(window.syncCommands.some(command => command.type === 'resolve' && command.use === 'cloud'), 'Cloud choice did not reach the host')
       clickText(sync, 'Disconnect sync'); await wait(80)
       check(sync.querySelector('button[type=submit]') && !sync.querySelector('input[type=url]') && sync.textContent.includes('Not connected'), 'Disconnect must retain local operation and restore sign-in without a URL field')
-      check(sync.textContent.includes('Sign in with GitHub') && !sync.querySelector('input[type=email]'), 'GitHub must be available after disconnect')
+      check(sync.textContent.includes('Sign in with Google') && !sync.textContent.includes('GitHub') && !sync.querySelector('input[type=email]'), 'Only Google sign-in must be available after disconnect')
       clickText(card('maintenance'), 'Reset Cache'); await wait(80)
       clickText(document.querySelector('[role=dialog]'), 'Reset Cache'); await wait(80)
       check(window.maintenanceCalls.join() === 'resetCache', 'Confirmed maintenance did not run exactly once')
@@ -350,23 +359,29 @@ try {
     window.maintenanceCalls = []
     window.fixtureKeys = { finnhub: false, fmp: false }
     window.syncCommands = []
+    window.fixtureLaunchOnStartup = { supported: true, enabled: false }
     window.fixtureSync = { url: 'https://fixture.convex.cloud', configured: true, signedIn: false, encryptionAvailable: true, state: 'disconnected', pending: false }
     const envelope = data => ({ data, meta: { source: 'UI fixture', fetchedAt: Date.now(), freshness: 'fresh' }, errors: [] })
     window.api = {
       cloudSyncStatus: async () => envelope(window.fixtureSync),
       cloudSyncCommand: async command => {
         window.syncCommands.push(command)
-        if (command.type === 'signInGitHub' && window.githubNotConfigured) {
+        if (command.type === 'signInGoogle' && window.googleNotConfigured) {
           const message = 'Budget Terminal cloud sign-in is unavailable. Try again later or continue locally.'
           window.fixtureSync = { ...window.fixtureSync, state: 'error', message, signInPending: false }
           return { ...envelope(window.fixtureSync), meta: { freshness: 'failed', failureReason: message } }
         }
-        const signedOut = ['disconnect', 'cancelSignIn', 'signInGitHub'].includes(command.type)
+        const signedOut = ['disconnect', 'cancelSignIn', 'signInGoogle'].includes(command.type)
         window.fixtureSync = { ...window.fixtureSync, state: signedOut ? 'disconnected' : command.type === 'sync' ? 'conflict' : 'synced', signedIn: !signedOut,
-          signInPending: command.type === 'signInGitHub', message: command.type === 'signInGitHub' ? 'Complete GitHub sign-in in your browser.' : undefined }
+          signInPending: command.type === 'signInGoogle', message: command.type === 'signInGoogle' ? 'Complete Google sign-in in your browser.' : undefined }
         return envelope(window.fixtureSync)
       },
       platform: 'win32', settings: async () => envelope(window.fixtureSettings),
+      launchOnStartupStatus: async () => ({ ...window.fixtureLaunchOnStartup }),
+      configureLaunchOnStartup: async enabled => {
+        window.fixtureLaunchOnStartup = { ...window.fixtureLaunchOnStartup, enabled }
+        return { ...window.fixtureLaunchOnStartup }
+      },
       marketApiKeys: async () => envelope({ configured: { ...window.fixtureKeys }, encryptionAvailable: true }),
       mutateMarketApiKeys: async request => {
         window.fixtureKeys[request.provider] = request.type === 'save'

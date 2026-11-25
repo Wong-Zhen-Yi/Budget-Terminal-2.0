@@ -23,20 +23,18 @@ const revokeOthersRef = api.auth.revokeOtherSessions
 const authConfigRef = api.sync.authConfiguration
 const writeRef = api.sync.write
 const signInRefs = {
-  github: { start: api.auth.startSignInWithGithub, complete: api.auth.completeSignInWithGithub },
   google: { start: api.auth.startSignInWithGoogle, complete: api.auth.completeSignInWithGoogle },
 } as const
 const refreshRef = api.auth.refreshSession
 const signOutRef = api.auth.signOut
 const tokensSchema = z.object({ accessToken: z.string().min(1), refreshToken: z.string().min(1), refreshTokenExpiresAt: z.number().finite(), userId: z.string().min(1) })
-// Sessions saved before Google sign-in have no provider and are GitHub sessions.
+// Sessions without a provider, or with 'github', came from the retired GitHub sign-in and are retired on restore.
 const sessionSchema = z.object({ authVersion: z.literal(2), url: z.string(), userId: z.string(), provider: z.enum(['github', 'google']).optional(),
   githubLogin: z.string().optional(), googleEmail: z.string().optional(), tokens: tokensSchema })
 type Session = z.infer<typeof sessionSchema>
 const checkpointSchema = z.object({ account: z.string(), baseline: z.string().optional(), revision: z.number().int().nonnegative(), lastSyncedAt: z.number().optional(), cloudUpdatedAt: z.number().optional() })
 const urlSchema = z.string().trim().url().transform(convexDeploymentUrl)
 const commandSchema = z.discriminatedUnion('type', [
-  z.strictObject({ type: z.literal('signInGitHub') }),
   z.strictObject({ type: z.literal('signInGoogle') }),
   z.object({ type: z.literal('cancelSignIn') }),
   z.object({ type: z.literal('sync') }), z.object({ type: z.literal('disconnect') }),
@@ -134,8 +132,7 @@ async function connectTokens(url: string, value: OAuthTokens, provider: OAuthPro
   if (userId !== tokens.userId) throw new Error('Sign-in identity mismatch.')
   const profile = await login.query(accountRef, {})
   if (profile.userId !== userId) throw new Error('Sign-in identity mismatch.')
-  const next: Session = { authVersion: 2, url, userId, tokens, provider,
-    ...(provider === 'github' ? { githubLogin: profile.githubLogin } : { googleEmail: profile.googleEmail }) }
+  const next: Session = { authVersion: 2, url, userId, tokens, provider, googleEmail: profile.googleEmail }
   await saveSession(next)
   await rm(signOutPath(), { force: true }).catch(() => { throw new CredentialError('storageError', 'The saved sign-out marker could not be cleared. Check app-data folder permissions, then retry.') })
   credentialCleanupRequired = false
@@ -155,7 +152,6 @@ function needsRefresh(token: string) {
 }
 
 async function expireSession() {
-  const provider = session?.provider ?? 'github'
   session = undefined
   client?.clearAuth()
   client = undefined
@@ -165,7 +161,7 @@ async function expireSession() {
   subscription = undefined
   authState = 'reauthRequired'
   authError = true
-  message = `Your cloud session expired or was revoked. Sign in with ${OAUTH_PROVIDER_LABELS[provider]} again. Local data is available.`
+  message = `Your cloud session expired or was revoked. Sign in with Google again. Local data is available.`
   try { await rm(sessionPath(), { force: true }) }
   catch { credentialCleanupRequired = true; message += ' Saved credentials could not be erased. Retry credential cleanup in Settings.' }
   await atomicSyncFile(signOutPath(), { signedOut: true, cleanupRequired: credentialCleanupRequired, revocation: 'complete' }).catch(() => {})
@@ -252,6 +248,22 @@ async function disconnectSession() {
   if (!credentialCleanupRequired) message = revocation === 'unconfirmed'
     ? 'Disconnected on this device. Server sign-out could not be confirmed. Reconnect and sign out other devices when online.'
     : 'Disconnected on this device. Local data and the cloud copy are preserved.'
+}
+
+/** GitHub sign-in was removed. A saved GitHub session is erased locally now and revoked on the server without delaying startup. */
+async function retireGitHubSession(stored: Session) {
+  revocation = 'unconfirmed'
+  await atomicSyncFile(signOutPath(), { signedOut: true, cleanupRequired: true, revocation }).catch(() => {})
+  await eraseDisconnectedCredentials()
+  if (credentialCleanupRequired) return
+  authState = 'reauthRequired'
+  authError = true
+  message = 'GitHub sign-in is no longer available. Sign in with Google to resume cloud sync. Local data is preserved and can be imported into the Google account.'
+  void enqueue(async () => {
+    if (closed || session || !await cleanupIssuedSession(stored.url, stored.tokens) || session) return
+    revocation = 'complete'
+    await atomicSyncFile(signOutPath(), { signedOut: true, cleanupRequired: credentialCleanupRequired, revocation }).catch(() => {})
+  })
 }
 
 const accountKey = (value: Session) => `${value.url}|${value.userId}`
@@ -362,8 +374,8 @@ export function cloudSyncStatus(): CloudSyncStatus {
   }
   return { url: CLOUD_DEPLOYMENT_URL, signedIn: Boolean(session), encryptionAvailable,
     credentialCleanupRequired,
-    authState: pendingSignIn ? 'signingIn' : authState, githubLogin: session?.githubLogin, googleEmail: session?.googleEmail,
-    accountProvider: session ? session.provider ?? 'github' : undefined, signInProvider: pendingSignIn ? pendingProvider : undefined,
+    authState: pendingSignIn ? 'signingIn' : authState, googleEmail: session?.googleEmail,
+    accountProvider: session ? 'google' : undefined, signInProvider: pendingSignIn ? pendingProvider : undefined,
     workspaceApprovalRequired, revocation,
     state: authError ? 'error' : engine?.state ?? 'disconnected', pending: engine?.pending ?? false,
     signInPending: Boolean(pendingSignIn),
@@ -409,16 +421,17 @@ async function restoreSession() {
     try { decoded = JSON.parse(decrypted.result) }
     catch { throw new CredentialError('reauthRequired', 'Saved credentials are invalid. Sign in again; local data is preserved.') }
     if (urlSchema.parse(decoded.url) !== CLOUD_DEPLOYMENT_URL) {
-      throw new CredentialError('reauthRequired', 'This device was connected to a different cloud service. Sign in with GitHub or Google to connect to Budget Terminal cloud. Your local data is preserved.')
+      throw new CredentialError('reauthRequired', 'This device was connected to a different cloud service. Sign in with Google to connect to Budget Terminal cloud. Your local data is preserved.')
     }
     if (decoded.authVersion !== 2) {
-      message = 'Cloud sync now uses Convex Auth v2. Sign in with the same GitHub account again to reconnect your saved cloud data.'
+      message = 'Cloud sync now uses Convex Auth v2 and Google sign-in. Sign in with Google to reconnect cloud sync. Local data is preserved.'
       authState = 'reauthRequired'
       return
     }
     const stored = sessionSchema.parse(decoded)
     stored.url = CLOUD_DEPLOYMENT_URL
     if (stored.tokens.userId !== stored.userId) throw new Error('Saved identity mismatch')
+    if (stored.provider !== 'google') { await retireGitHubSession(stored); return }
     if (decrypted.shouldReEncrypt) await saveSession(stored)
     if (!closed) { await attach(stored); authState = 'offline' }
   } catch (error) {
@@ -457,11 +470,10 @@ export function cloudSyncCommand(input: CloudSyncCommand) {
         if (pendingSignIn || credentialCleanupRequired) throw new Error('Finish the pending account action first.')
         if (session) await authenticatedClient(true)
         else await restoreSession()
-      } else if (command.type === 'signInGitHub' || command.type === 'signInGoogle' || command.type === 'revokeOtherSessions') {
+      } else if (command.type === 'signInGoogle' || command.type === 'revokeOtherSessions') {
         const managingSessions = command.type === 'revokeOtherSessions'
         if (credentialCleanupRequired || pendingSignIn || !await checkEncryption() || (managingSessions ? !session : Boolean(session))) throw new Error('Sign-in unavailable')
-        // Verification for session management always uses the provider the account signed in with.
-        const provider: OAuthProvider = managingSessions ? session!.provider ?? 'github' : command.type === 'signInGoogle' ? 'google' : 'github'
+        const provider: OAuthProvider = 'google'
         const label = OAUTH_PROVIDER_LABELS[provider]
         const refs = signInRefs[provider]
         const url = CLOUD_DEPLOYMENT_URL
@@ -473,8 +485,8 @@ export function cloudSyncCommand(input: CloudSyncCommand) {
             if (config.authVersion !== 2 || config.accountControlsVersion !== 2) {
               throw new OAuthSetupError('Budget Terminal cloud sign-in is unavailable. Try again later or continue locally.')
             }
-            if (!(provider === 'google' ? config.googleConfigured : config.githubConfigured)) {
-              throw new OAuthSetupError(`${label} sign-in is not available on Budget Terminal cloud yet. Use another sign-in option or continue locally.`)
+            if (!config.googleConfigured) {
+              throw new OAuthSetupError(`${label} sign-in is not available on Budget Terminal cloud yet. Try again later or continue locally.`)
             }
             return true
           },

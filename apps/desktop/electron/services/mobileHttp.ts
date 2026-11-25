@@ -48,6 +48,7 @@ export async function createMobileHttp(directory: string, run: MobileRequest, ac
     }
   }
   assets.set('/budget-terminal-icon.png', { file: join(directory, 'budget-terminal-icon.png'), type: 'image/png' })
+  assets.set('/manifest.webmanifest', { file: join(directory, 'manifest.webmanifest'), type: 'application/manifest+json' })
   const subscribers = new Map<ServerResponse, IncomingMessage>()
   const directSources = new WeakMap<Socket, string>()
   // Short polling keeps provider waits off Safari's limited HTTP connections.

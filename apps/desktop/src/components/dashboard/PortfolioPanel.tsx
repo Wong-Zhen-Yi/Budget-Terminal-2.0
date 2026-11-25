@@ -138,7 +138,7 @@ export function PortfolioPanel({
       <DataTable
         columns={columns}
         rows={rows}
-        rowKey={(row) => row.ticker}
+        rowKey={(row) => row.ticker} rowSymbol={(row) => row.ticker}
         onRowClick={onSelectTicker ? row => onSelectTicker(row.ticker) : undefined}
         // A faint tint per row direction, as in the reference table.
         rowClassName={(row) =>

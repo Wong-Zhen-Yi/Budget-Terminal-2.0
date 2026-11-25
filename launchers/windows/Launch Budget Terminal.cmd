@@ -1,4 +1,15 @@
 @echo off
+rem The shared build makes the phone view browser-friendly: Back steps through pages, double-tap opens rows, wide tables keep the ticker in view, controls are finger-sized and Add to Home Screen opens full screen.
+rem The shared build adds back/forward page history, Ctrl+1-9 favorites, Ctrl+PgUp/PgDn paging, ticker right-click menus, chart pop-out windows and remembered window placement.
+rem The shared build installs Convex 1.51 and Convex Auth 2.1 for cloud sync. Cloud deployment uses the separate Convex setup commands.
+rem The shared build adds a Launch on startup switch in Settings Labs that opens the most recent build when you sign in to Windows.
+rem The shared build loads Focus headline figures as sources respond and uses market observation dates for Gold and Oil quotes.
+rem The shared build keeps the Polymarket chart at its natural height on phones instead of stretching it to the trade table.
+rem The shared build keeps fresh Technical Indicators results visible on phones whose clock runs slightly behind the computer.
+rem The shared build opens the window only once the opening page has rendered, instead of a blank frame.
+rem The shared build keeps BMNR mNAV visible when Yahoo market cap is unavailable by using share price times the filed share count.
+rem The shared build keeps only the phone header and page strip fixed, so every page's title, toolbars and tables scroll together.
+rem The shared build removes the demo, mobile and macOS/Linux launchers; this file is the only launcher.
 rem The shared build includes Google sign-in alongside GitHub on the startup popup and in Settings cloud sync.
 rem The shared build uses less idle CPU: no hidden API-usage polling, slower settled cloud-sync checks, and cheaper cache saves.
 rem The shared build adds QR codes for the existing phone links in Settings Labs.
@@ -19,10 +30,10 @@ rem The shared build includes the mobile Dashboard 2.0 portfolio stack and Agent
 rem Select a viewport model and launch the connected mobile window from Settings Labs.
 rem Mobile Access includes a button to copy the Tailscale setup commands after the shared build.
 rem Telegram /mobile retrieves links and /restart relaunches the app without Codex inference.
-rem For the mobile News toolbar with collapsible filters and tools, run Launch Budget Terminal Mobile.cmd or btd mobile.
+rem For the mobile News toolbar with collapsible filters and tools, run btd mobile.
 rem The shared build includes the compact phone navigation and touch-friendly page picker.
 rem The shared build includes the direct Tailscale link under Settings > Labs.
-rem On Windows, double-click Launch Budget Terminal Demo.cmd for temporary sample data.
+rem Temporary sample data opens with btd -Demo; there is no separate demo launcher.
 rem The shared build includes the streamlined Charts workspaces and updated chart rendering.
 rem The shared dependency install uses the project's pinned esbuild script approvals.
 rem The shared build brings the Dashboard Lite chart layout to Dashboard 1.
@@ -63,6 +74,7 @@ rem HOOD Focus quarterly earnings charts, headline metrics and MCP schemas rebui
 rem Anthropic Focus research, source update checks and MCP tools rebuild through the shared launcher.
 rem GOOGL Focus, quarterly SEC drivers and MCP schemas rebuild through the shared launch path.
 rem News reader and scoped clipboard exports rebuild through the shared launcher.
+rem The shared build uses Google-only cloud sign-in and retires saved GitHub sessions.
 rem Finnhub streaming-first refresh, visible-stock priorities and idle/session savings rebuild through the shared launcher.
 rem Settings dashboard keeps the five slowest pages stable during startup updates; rebuilt through the shared launcher.
 rem Shared snapshot validation, account quotas and typed cloud contracts rebuild through the shared launcher; deploy backend policies separately.
@@ -98,8 +110,9 @@ rem Windows double-click entry point; shared setup and startup live in scripts/.
 rem Keep dependency checks and build output visible in this terminal before opening the app.
 rem Shared launcher presents five numbered stages with measured completion times.
 rem Incremental charts, indexed live updates and cache checkpoints: docs/performance.md.
-rem macOS and Linux launchers are in launchers/macos and launchers/linux.
+rem macOS and Linux start with sh scripts/launch-posix.sh; this is the only double-click launcher.
 rem Curated design references live in docs/; output/ is for ignored local captures.
+rem Settings dashboard groups quiet providers, keeps chart axes and page configuration counts readable through the shared launcher.
 title Budget Terminal
 cd /d "%~dp0..\.." || exit /b 1
 echo.

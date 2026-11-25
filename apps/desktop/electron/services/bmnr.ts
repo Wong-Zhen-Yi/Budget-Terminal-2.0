@@ -87,6 +87,13 @@ async function fetchBmnr(force: boolean): Promise<BmnrFetchResult> {
   const [treasuryBody, sec, market] = await progressiveAll([treasuryTask, secTask, marketTask], ([treasuryBody, sec, market]) =>
     publishPageProgress(buildBmnrPayload({ fetchedAt, treasuryBody: treasuryBody ?? null, sec: sec ?? null, market: market ?? emptyMarket() }), 'BMNR sources', errors, CHANNELS.bmnr))
 
+  // `getFundamentals` turns a refused quoteSummary into a null size rather than an
+  // error. Keep that visible in Settings; mNAV falls back to price × filed shares.
+  if (market.marketCap === null) {
+    errors.push(err(BMNR_MARKET_SOURCE, 'Market cap was unavailable; mNAV uses share price × filed share count.',
+      'bmnr-market-cap', BMNR_BLOCK_LABELS.market))
+  }
+
   if (treasuryBody !== null && !hasTreasuryRow(treasuryBody)) {
     errors.push(
       err(

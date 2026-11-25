@@ -26,6 +26,7 @@ import { MarketApiKeysPanel } from '@/components/settings/MarketApiKeysPanel'
 import { CloudSyncPanel } from '@/components/settings/CloudSyncPanel'
 import { DiagnosticLogsPanel } from '@/components/settings/DiagnosticLogsPanel'
 import { MobileAccessPanel } from '@/components/settings/MobileAccessPanel'
+import { LAUNCH_ON_STARTUP_DESCRIPTION, LAUNCH_ON_STARTUP_LABEL, LaunchOnStartupRow } from '@/components/settings/LaunchOnStartupRow'
 import { downloadMobileBackup, isMobileTerminal } from '@/mobile/client'
 import { useSettingsNavigation } from '@/stores/settingsNavigation'
 import { AppDashboard } from '@/components/settings/AppDashboard'
@@ -257,7 +258,7 @@ export function SettingsPage({
     {
       id: 'data', title: 'Data & storage', hint: 'Keep useful data close and your saved work protected.',
       cards: [
-        { id: 'cloud-sync', category: 'data', terms: 'cloud convex sync devices account offline github google browser sign in email backup conflicts', content: <CloudSyncPanel /> },
+        { id: 'cloud-sync', category: 'data', terms: 'cloud convex sync devices account offline google browser sign in email backup conflicts', content: <CloudSyncPanel /> },
         { id: 'cache', category: 'data', terms: 'cache retention disk memory snapshots market images previews limits startup', content: <CachePanel /> },
         { id: 'backups', category: 'data', column: 'secondary', terms: 'automatic backups saved data export import restore storage location portfolios cards finance', content:
           <UserDataPanel mode="backups" onRun={onRunMaintenance} busy={busy} sourcePath={holdingsPath}
@@ -276,7 +277,7 @@ export function SettingsPage({
     },
     {
       id: 'labs', title: 'Labs', hint: 'Try experimental features on this device.',
-      cards: [{ id: 'labs', category: 'labs', terms: `experimental opt in ${LAB_FEATURES.map(feature => `${feature.label} ${feature.description}`).join(' ')}`,
+      cards: [{ id: 'labs', category: 'labs', terms: `experimental opt in ${LAB_FEATURES.map(feature => `${feature.label} ${feature.description}`).join(' ')}${mobile ? '' : ` ${LAUNCH_ON_STARTUP_LABEL} ${LAUNCH_ON_STARTUP_DESCRIPTION} login sign in boot autostart`}`,
         content: <Panel title="Experiments">
           <ul className="settings-labs">
             {LAB_FEATURES.map(feature => {
@@ -303,6 +304,7 @@ export function SettingsPage({
                 </button>
               </li>
             })}
+            {!mobile && <LaunchOnStartupRow onResult={(text, ok) => setStatus({ text, tone: ok ? 'positive' : 'negative' })} />}
           </ul>
       </Panel> },
       ...(!mobile ? [{ id: 'mobile-access', category: 'labs' as const, terms: mobileAccessTerms,

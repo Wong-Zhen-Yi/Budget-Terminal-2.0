@@ -9,8 +9,6 @@ export class OAuthSetupError extends Error {
     super(message)
   }
 }
-/** Retained name for existing callers and probes. */
-export { OAuthSetupError as GitHubSetupError }
 type CallbackResult = { code: string } | { reason: 'cancelled' | 'expired' | 'failed' }
 
 /** Listen on loopback only. The random path and v2 state bind the response to this device. */
@@ -77,16 +75,11 @@ export interface OAuthSignIn {
   result: Promise<{ tokens: OAuthTokens; authorization?: string } | { reason: 'cancelled' | 'expired' | 'failed' | 'accountMismatch' }>
   cancel: () => void
 }
-export type GitHubSignIn = OAuthSignIn
 interface SignInDependencies {
   isConfigured: () => Promise<boolean>
   startSignIn: (args: { redirectTo: string }) => Promise<{ redirect: string; state: string }>
   completeSignIn: (args: { code: string; state: string }) => Promise<OAuthCompletion>
   openExternal: (url: string) => Promise<void>
-}
-
-export function beginGitHubSignIn(deploymentUrl: string, dependencies: SignInDependencies): Promise<OAuthSignIn> {
-  return beginOAuthSignIn('github', deploymentUrl, dependencies)
 }
 
 export async function beginOAuthSignIn(provider: OAuthProvider, deploymentUrl: string, dependencies: SignInDependencies): Promise<OAuthSignIn> {

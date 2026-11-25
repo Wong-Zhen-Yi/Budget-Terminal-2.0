@@ -25,6 +25,8 @@ const MAX_RESIDENT_PAGES = 3
 const LIGHT_PAGES = new Set([FOCUS_DASHBOARD_TAB_ID, 'dictionary', 'settings', 'articles', 'notifications', 'news', 'news-lite', 'calendar', 'ipo', 'politics', 'institutions'])
 const MAX_LIGHT_PAGES = 8
 type ScrollPositions = Map<string, { path: number[]; top: number; left: number }>
+/** Phone pages grow with their content, so the shared content area is their scroller. */
+const HOST = 'host'
 
 function PageFrame({ tabId, active, positions, children }: {
   tabId: string; active: boolean; positions: ScrollPositions; children: ReactNode
@@ -32,8 +34,15 @@ function PageFrame({ tabId, active, positions, children }: {
   const root = useRef<HTMLDivElement>(null)
   useLayoutEffect(() => {
     if (!active) return
+    const host = root.current?.parentElement
     const restore = () => {
-      for (const position of positions.values()) {
+      if (host) {
+        const position = positions.get(HOST)
+        host.scrollTop = position?.top ?? 0
+        host.scrollLeft = position?.left ?? 0
+      }
+      for (const [key, position] of positions) {
+        if (key === HOST) continue
         let element: Element | undefined = root.current ?? undefined
         for (const index of position.path) element = element?.children[index]
         if (element instanceof HTMLElement) {
@@ -42,9 +51,17 @@ function PageFrame({ tabId, active, positions, children }: {
         }
       }
     }
+    const save = () => { if (host) positions.set(HOST, { path: [], top: host.scrollTop, left: host.scrollLeft }) }
     restore()
-    const frame = requestAnimationFrame(restore)
-    return () => cancelAnimationFrame(frame)
+    // Start recording after the second restore, so a clamp during layout cannot overwrite the saved offset.
+    const frame = requestAnimationFrame(() => {
+      restore()
+      host?.addEventListener('scroll', save, { passive: true })
+    })
+    return () => {
+      cancelAnimationFrame(frame)
+      host?.removeEventListener('scroll', save)
+    }
   }, [active, positions])
   return <div ref={root} className="flex min-h-0 flex-1 flex-col" data-page-id={tabId} onScrollCapture={event => {
     if (!active || !(event.target instanceof HTMLElement)) return

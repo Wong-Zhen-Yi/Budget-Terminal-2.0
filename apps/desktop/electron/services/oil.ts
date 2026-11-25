@@ -183,27 +183,31 @@ async function fetchBenchmarks(): Promise<OilBenchmarks> {
   return { prices: prices.value, opec: opec.status === 'fulfilled' ? opec.value : null }
 }
 
-async function fetchMarket(force: boolean, fetchedAt: string): Promise<OilMarket> {
+async function fetchMarket(force: boolean): Promise<OilMarket> {
   const symbols = ['CL=F', 'BZ=F', 'RB=F', 'HO=F'] as const
   const [wti, brent, gasoline, diesel] = await Promise.allSettled(
     symbols.map((symbol) => getQuote(symbol, force)),
   )
   const market = emptyOilMarket()
   if (wti.status === 'fulfilled') {
-    market.wtiPrice = oilValue(wti.value.price, 'usdPerBbl', fetchedAt, OIL_MARKET_SOURCE, 'live', 'NYMEX light sweet crude front month (CL=F).')
-    market.wtiChangePct = oilValue(wti.value.change, 'percent', fetchedAt, OIL_MARKET_SOURCE, 'live')
+    const asOf = wti.value.asOf === undefined ? '' : new Date(wti.value.asOf).toISOString()
+    market.wtiPrice = oilValue(wti.value.price, 'usdPerBbl', asOf, OIL_MARKET_SOURCE, 'live', 'NYMEX light sweet crude front month (CL=F).')
+    market.wtiChangePct = oilValue(wti.value.change, 'percent', asOf, OIL_MARKET_SOURCE, 'live')
   }
   if (brent.status === 'fulfilled') {
-    market.brentPrice = oilValue(brent.value.price, 'usdPerBbl', fetchedAt, OIL_MARKET_SOURCE, 'live', 'ICE Brent front month (BZ=F).')
-    market.brentChangePct = oilValue(brent.value.change, 'percent', fetchedAt, OIL_MARKET_SOURCE, 'live')
+    const asOf = brent.value.asOf === undefined ? '' : new Date(brent.value.asOf).toISOString()
+    market.brentPrice = oilValue(brent.value.price, 'usdPerBbl', asOf, OIL_MARKET_SOURCE, 'live', 'ICE Brent front month (BZ=F).')
+    market.brentChangePct = oilValue(brent.value.change, 'percent', asOf, OIL_MARKET_SOURCE, 'live')
   }
   if (gasoline.status === 'fulfilled') {
-    market.gasolinePrice = oilValue(gasoline.value.price, 'usdPerGal', fetchedAt, OIL_MARKET_SOURCE, 'live', 'RBOB gasoline front month (RB=F), in dollars per gallon.')
-    market.gasolineChangePct = oilValue(gasoline.value.change, 'percent', fetchedAt, OIL_MARKET_SOURCE, 'live')
+    const asOf = gasoline.value.asOf === undefined ? '' : new Date(gasoline.value.asOf).toISOString()
+    market.gasolinePrice = oilValue(gasoline.value.price, 'usdPerGal', asOf, OIL_MARKET_SOURCE, 'live', 'RBOB gasoline front month (RB=F), in dollars per gallon.')
+    market.gasolineChangePct = oilValue(gasoline.value.change, 'percent', asOf, OIL_MARKET_SOURCE, 'live')
   }
   if (diesel.status === 'fulfilled') {
-    market.dieselPrice = oilValue(diesel.value.price, 'usdPerGal', fetchedAt, OIL_MARKET_SOURCE, 'live', 'NY Harbor ULSD front month (HO=F), in dollars per gallon.')
-    market.dieselChangePct = oilValue(diesel.value.change, 'percent', fetchedAt, OIL_MARKET_SOURCE, 'live')
+    const asOf = diesel.value.asOf === undefined ? '' : new Date(diesel.value.asOf).toISOString()
+    market.dieselPrice = oilValue(diesel.value.price, 'usdPerGal', asOf, OIL_MARKET_SOURCE, 'live', 'NY Harbor ULSD front month (HO=F), in dollars per gallon.')
+    market.dieselChangePct = oilValue(diesel.value.change, 'percent', asOf, OIL_MARKET_SOURCE, 'live')
   }
   if (symbols.every((_symbol, index) => [wti, brent, gasoline, diesel][index].status === 'rejected')) {
     throw new Error('No crude or product quote was returned.')
@@ -252,7 +256,7 @@ export async function getOil(force = false): Promise<OilFetchResult> {
   // The curve needs the front-month price the market lane already fetches, so those two
   // run in sequence while the three document lanes run alongside them.
   const [market, inventories, flows, benchmarks] = await progressiveAll([
-    lane('oil:market', TTL.oilMarket, force, () => fetchMarket(force, fetchedAt)),
+    lane('oil:market-v2', TTL.oilMarket, force, () => fetchMarket(force)),
     lane('oil:inventories', TTL.oilEia, force, () => fetchEiaBlock(OIL_STOCK_SPECS)),
     lane('oil:flows', TTL.oilEia, force, () => fetchEiaBlock(OIL_FLOW_SPECS)),
     lane('oil:benchmarks', TTL.oilOpec, force, fetchBenchmarks),

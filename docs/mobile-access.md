@@ -6,13 +6,13 @@ Mobile Access opens the Budget Terminal workspace in your phone or tablet browse
 
 In the Windows desktop app, go to **Settings → Labs → Mobile Access**, choose a phone size, and select **Open phone viewport**. Choose Compact phone (320 × 568), Small phone (360 × 780), Phone (390 × 844), or Large phone (430 × 932). These are generic CSS viewport sizes, not device models. Resize the window to try intermediate sizes and landscape proportions. It initially fits the desktop window's monitor and works with Tailscale off.
 
-Double-click [Launch Budget Terminal Mobile.cmd](../launchers/windows/Launch%20Budget%20Terminal%20Mobile.cmd) or run `btd mobile` to build and open the current version. If the desktop is open, the launcher closes it gracefully and waits for pending saves before rebuilding. It opens the desktop and the viewport together. Use this launcher after a source update.
+Run `btd mobile` to build and open the current version. If the desktop is open, the command closes it gracefully and waits for pending saves before rebuilding. It opens the desktop and the viewport together. Use it after a source update.
 
 ## Preview the mobile UI with sample data
 
-Double-click [Launch Budget Terminal Mobile Preview.cmd](../launchers/windows/Launch%20Budget%20Terminal%20Mobile%20Preview.cmd) or run `btd -MobilePreview`. The launcher builds the current code and opens Budget Terminal's mobile interface in an Electron window. The default viewport is 390 × 844 CSS pixels at 2× device pixel ratio. The window initially fits your monitor; dragging its edges changes the viewport and reflows the interface. Actual phones use their own browser width, height, pixel density, and safe areas automatically. The older iPhone-named launcher remains a compatibility entry point to the same responsive preview.
+Run `btd -MobilePreview` (or `sh scripts/launch-posix.sh --mobile-preview` on macOS and Linux). It builds the current code and opens Budget Terminal's mobile interface in an Electron window. The default viewport is 390 × 844 CSS pixels at 2× device pixel ratio. The window initially fits your monitor; dragging its edges changes the viewport and reflows the interface. Actual phones use their own browser width, height, pixel density, and safe areas automatically.
 
-The preview starts with the repository's sample records and discards edits when closed. It can run alongside the regular desktop window and needs only the local computer. Keep the launcher terminal open. Relaunch after editing the source to rebuild, or press **F5** to reload the current build. Use Safari on an iPhone to check WebKit behavior and iOS safe areas.
+The preview starts with the repository's sample records and discards edits when closed. It can run alongside the regular desktop window and needs only the local computer. Keep its terminal open. Relaunch after editing the source to rebuild, or press **F5** to reload the current build. Use Safari on an iPhone to check WebKit behavior and iOS safe areas.
 
 ## Set up the computer
 
@@ -48,7 +48,11 @@ For the HTTPS link, turn on **Use Tailscale DNS** in the Tailscale app. Disconne
 
 ## What you can do on mobile
 
-Tap the current page name to open **Workspaces**. Browse the page pills under each workspace or search by page or workspace name. Narrow screens collapse secondary tools and stack panels; wider or landscape screens reflow according to their available space. The list follows your navigation settings, including enabled Labs. Most research views use the same charts, filters, and tables. Swipe across wide tables and scroll through stacked panels on narrow screens. Portfolio, Cards, Personal Finance, and Articles edits save to the shared desktop records. You can download a backup, export individual article PDFs, or export the article library as a ZIP of PDFs. The mobile ZIP accepts up to 60 articles and has a 64 MB output limit.
+Tap the current page name to open **Workspaces**. Browse the page pills under each workspace or search by page or workspace name. Narrow screens collapse secondary tools and stack panels; wider or landscape screens reflow according to their available space. The list follows your navigation settings, including enabled Labs. Most research views use the same charts, filters, and tables. Swipe across wide tables and scroll through stacked panels on narrow screens. Wide tables keep their ticker or name column in place while the other columns move, and a fade at the edge of a table or tab row shows there is more to swipe to. Portfolio, Cards, Personal Finance, and Articles edits save to the shared desktop records. You can download a backup, export individual article PDFs, or export the article library as a ZIP of PDFs. The mobile ZIP accepts up to 60 articles and has a 64 MB output limit.
+
+Your browser's Back gesture or button returns to the page you came from and closes **Workspaces**. Forward works the same way, and reloading keeps the current page. Double-tap a row or tile where the desktop uses a double-click, for example to open a stock from Technical Indicators or a tile from Heatmap. Pinch to zoom the index heatmap and the price charts. Ticker fields open the keyboard in capitals without autocorrect.
+
+To use Budget Terminal like an app, choose **Add to Home Screen** from Safari's Share menu or Chrome's menu. It then opens full screen without browser bars. iOS has no Back gesture in that mode, so a Back button appears at the left of the header once you have moved between pages.
 
 Browser opens searches and websites in your device browser. YouTube playback opens on the device, and Agents opens your Telegram bot. The computer handles its signed-in Chromium profile, desktop agent history and trackers, account credentials, MCP controls, and system maintenance. Notifications are visible in the app inbox, with native desktop delivery handled by the computer.
 
@@ -58,7 +62,7 @@ Turn off **Mobile Access** under **Settings → Labs** to stop serving the works
 
 Mobile service calls release the browser connection while the computer waits for a provider, then collect results with authenticated same-origin polling. This keeps startup preloading for every page from occupying the limited connections on direct HTTP Tailscale links. Results stay in memory for up to two minutes after completion and are removed when collected or mobile access disconnects.
 
-Add `--all-pages` to the mobile preview startup probe to check every available page for render failures or collapsed content areas at a phone viewport. This checks rendering and transport separately from live provider availability.
+The mobile preview probe also checks the Back gesture, double-tap, frozen table columns, 44-pixel controls and hidden repeated page titles. Add `--all-pages` to the mobile preview startup probe to check every available page for render failures or collapsed content areas at a phone viewport. This checks rendering and transport separately from live provider availability.
 
 Run `npm run probe:desktop-startup --workspace budget-terminal-desktop -- --mobile-preview` after a build to check window resizing, temporary sample data, mobile navigation, and compact toolbars across phone widths from 320 to 430 CSS pixels plus landscape layouts in Electron.
 

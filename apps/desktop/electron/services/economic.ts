@@ -2,6 +2,8 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fetchSeriesCsv } from './fred.js'
 import { publicMacro } from './publicMacro.js'
+import { publishPageProgress } from './pageProgress.js'
+import { CHANNELS } from '../shared/contract.js'
 export { fetchSeriesCsv, parseFredCsv } from './fred.js'
 
 import type {
@@ -118,6 +120,7 @@ const MAX_WORKERS = 6
  * should still paint last week's numbers instead of blanking the page.
  */
 const PAYLOAD_TTL_MS = 6 * 60 * 60_000
+const INCOMPLETE_TTL_MS = 60_000
 const STALE_TTL_MS = 7 * 24 * 60 * 60_000
 
 /**
@@ -568,6 +571,7 @@ async function resolveUmich(catalog: readonly EconomicSeries[]): Promise<Resolve
 }
 
 const BATCH_RESOLVERS: Partial<Record<EconomicProvider, (catalog: readonly EconomicSeries[]) => Promise<Resolved>>> = {
+  fred: async ([series]) => new Map([[series.seriesId, await fetchSeriesCsv(series.seriesId)]]),
   'world-bank': async members => {
     const points = await publicMacro.series('world-bank')
     return new Map(members.map(series => [series.seriesId, points]))
@@ -641,7 +645,8 @@ function planBatches(catalog: readonly EconomicSeries[]): Map<EconomicProvider, 
   const batches = new Map<EconomicProvider, EconomicSeries[]>()
   for (const series of catalog) {
     const provider = series.provider ?? 'fred'
-    if (provider === 'fred') continue
+    // Start the GDP headline immediately. Other FRED series share the fallback queue.
+    if (provider === 'fred' && series.seriesId !== 'GDPC1') continue
     const name = resolverGroup(provider)
     const bucket = batches.get(name)
     if (bucket) bucket.push(series)
@@ -662,20 +667,24 @@ async function buildPayload(groups: EconomicGroup[]): Promise<EconomicPayload> {
   const resolved: Resolved = new Map()
   const unreachable: EconomicProvider[] = []
 
-  const batches = [...planBatches(catalog)]
-  const results = await Promise.all(
-    batches.map(async ([name, members]) => {
+  const preview = () => {
+    const rows = catalog.filter(series => resolved.has(series.seriesId))
+      .map(series => buildRow(series, resolved.get(series.seriesId)))
+    if (rows.some(row => row.available)) {
+      publishPageProgress(makePayload(groups, rows, [], []), ECONOMIC_SOURCE, [], CHANNELS.economic)
+    }
+  }
+  await Promise.all(
+    [...planBatches(catalog)].map(async ([name, members]) => {
       try {
-        return { name, resolved: await BATCH_RESOLVERS[name]!(members) }
+        const pointsBySeries = await BATCH_RESOLVERS[name]!(members)
+        for (const [key, points] of pointsBySeries) resolved.set(key, points)
       } catch {
-        return { name, resolved: null }
+        unreachable.push(name)
       }
+      preview()
     }),
   )
-  for (const result of results) {
-    if (result.resolved === null) unreachable.push(result.name)
-    else for (const [key, points] of result.resolved) resolved.set(key, points)
-  }
 
   const fallback = catalog.filter((series) => series.provider !== 'world-bank' && series.provider !== 'imf' && !resolved.get(series.seriesId)?.length)
   for (const [key, points] of await fetchFallback(fallback, unreachable)) resolved.set(key, points)
@@ -693,20 +702,22 @@ async function buildPayload(groups: EconomicGroup[]): Promise<EconomicPayload> {
   const missing: string[] = []
   for (const series of catalog) {
     const points = resolved.get(series.seriesId) ?? []
-    if (!points.length) missing.push(series.seriesId)
     const fromFallback = points.length > 0 && fallback.some(entry => entry.seriesId === series.seriesId)
-    rows.push(buildRow(fromFallback ? { ...series, provider: 'fred', providerKey: series.seriesId } : series, points))
+    const row = buildRow(fromFallback ? { ...series, provider: 'fred', providerKey: series.seriesId } : series, points)
+    if (!row.available) missing.push(series.seriesId)
+    rows.push(row)
   }
-  const order = new Map(ECONOMIC_SERIES.map((series, index) => [series.seriesId, index]))
-  rows.sort((left, right) => (order.get(left.seriesId) ?? 10_000) - (order.get(right.seriesId) ?? 10_000))
+  return makePayload(groups, rows, missing, reported)
+}
 
+function makePayload(groups: EconomicGroup[], rows: EconomicRow[], missing: string[], unreachable: EconomicProvider[]): EconomicPayload {
   return {
     generatedAt: new Date().toISOString().slice(0, 19),
     source: ECONOMIC_SOURCE,
     groups,
     rows,
     missing,
-    unreachable: reported,
+    unreachable,
     yieldCurve: buildYieldCurve(rows),
   }
 }
@@ -721,18 +732,18 @@ async function buildPayload(groups: EconomicGroup[]): Promise<EconomicPayload> {
 export async function getEconomic(request: EconomicRequest = {}): Promise<EconomicFetchResult> {
   const groups = normalizeGroups(null)
   const disk = await readDisk()
-  if (!request.force && disk && disk.ageMs <= PAYLOAD_TTL_MS) {
+  if (!request.force && disk && disk.ageMs <= (disk.value.missing.length ? INCOMPLETE_TTL_MS : PAYLOAD_TTL_MS)) {
     return { payload: disk.value, fromCache: true, stale: false, cacheAgeSeconds: disk.ageMs / 1000 }
   }
   try {
     const payload = await buildPayload(groups)
-    if (!payload.rows.some((row) => row.available) && disk?.value.rows.some((row) => row.available)) {
-      // A total blackout must never overwrite a good cached payload with an empty one.
-      return {
-        payload: disk.value,
-        fromCache: true,
-        stale: true,
-        cacheAgeSeconds: disk.ageMs / 1000,
+    if (payload.missing.length && disk) {
+      const previous = new Map(disk.value.rows.filter(row => row.available).map(row => [row.seriesId, row]))
+      if (payload.missing.some(id => previous.has(id))) {
+        // Preserve the last observation for a failed series without overwriting the disk snapshot.
+        const rows = payload.rows.map(row => row.available ? row : previous.get(row.seriesId) ?? row)
+        return { payload: { ...payload, rows, yieldCurve: buildYieldCurve(rows) }, fromCache: false, stale: true,
+          cacheAgeSeconds: disk.ageMs / 1000 }
       }
     }
     await writeDisk(payload).catch(() => {})
@@ -745,9 +756,12 @@ export async function getEconomic(request: EconomicRequest = {}): Promise<Econom
 
 /** The provider names behind a payload's gaps, for the envelope's error list. */
 export function economicErrors(payload: EconomicPayload): Array<{ source: string; reason: string; operation: string }> {
-  return payload.unreachable.map((provider) => ({
+  const errors = payload.unreachable.map((provider) => ({
     source: ECONOMIC_SOURCE,
     operation: 'economic',
     reason: `${PROVIDER_LABELS[provider] ?? provider} was unreachable from this network.`,
   }))
+  if (payload.missing.length) errors.push({ source: ECONOMIC_SOURCE, operation: 'economic',
+    reason: `No current observations returned for ${payload.missing.join(', ')}.` })
+  return errors
 }

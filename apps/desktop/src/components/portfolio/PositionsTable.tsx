@@ -246,7 +246,7 @@ export function PositionsTable({
     <DataTable
       columns={columns}
       rows={rows}
-      rowKey={(row) => row.ticker}
+      rowKey={(row) => row.ticker} rowSymbol={(row) => row.ticker}
       rowClassName={() => 'hover:bg-surface-hover focus-within:bg-surface-hover'}
       showIndex
       defaultSort={{ key: 'marketValue', direction: 'desc' }}

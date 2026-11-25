@@ -12,7 +12,6 @@ import type * as auth from "../auth.js";
 import type * as authCore from "../authCore.js";
 import type * as authMaintenance from "../authMaintenance.js";
 import type * as crons from "../crons.js";
-import type * as githubAdapter from "../githubAdapter.js";
 import type * as googleAdapter from "../googleAdapter.js";
 import type * as http from "../http.js";
 import type * as legacyAuthTables from "../legacyAuthTables.js";
@@ -31,7 +30,6 @@ declare const fullApi: ApiFromModules<{
   authCore: typeof authCore;
   authMaintenance: typeof authMaintenance;
   crons: typeof crons;
-  githubAdapter: typeof githubAdapter;
   googleAdapter: typeof googleAdapter;
   http: typeof http;
   legacyAuthTables: typeof legacyAuthTables;

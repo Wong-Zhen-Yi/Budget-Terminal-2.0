@@ -99,3 +99,10 @@ discarding the local save or the previous backup. Imports and clearing user data
 update the file too. Keep a copy outside this computer. Renderer
 preferences such as recent pages, chart drawings and data-health history are local
 to the Electron profile and are not included in the JSON backup.
+
+The main window reopens at its last size, position and maximized state
+(`window-state.json` in the Electron profile). If that monitor is no longer
+connected, the window opens centered on the primary display. Pop-out chart
+windows, opened from Charts or by right-clicking a ticker, start from the main
+window's chart preferences. Changes made in a pop-out, including drawings, last
+only until that window closes, and pop-outs close with the main window.

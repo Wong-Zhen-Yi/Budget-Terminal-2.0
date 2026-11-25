@@ -116,7 +116,7 @@ export function StrategyCard({
       </div>
 
       <div className="min-h-0 flex-1">
-        <StrategySparkline values={performance?.values ?? []} negative={(returnPct ?? 0) < 0} />
+        <StrategySparkline values={performance?.values ?? []} negative={(returnPct ?? 0) < 0} loading={loading && !performance} />
       </div>
 
       <div className="grid gap-1">
@@ -192,7 +192,7 @@ function TimeframeRow({
   )
 }
 
-function StrategySparkline({ values, negative }: { values: number[]; negative: boolean }) {
+function StrategySparkline({ values, negative, loading }: { values: number[]; negative: boolean; loading: boolean }) {
   const plot = useMemo(() => {
     const finite = values.filter(Number.isFinite)
     if (finite.length < 2) return null
@@ -210,7 +210,8 @@ function StrategySparkline({ values, negative }: { values: number[]; negative: b
     const zero = Math.max(0, Math.min(height, y(0)))
     return { line, area: `${line} L ${width} ${zero} L 0 ${zero} Z`, width, height, zero }
   }, [values])
-  if (!plot) return <div className="flex h-full items-center justify-center text-2xs text-text-dim">No data</div>
+  // While the basket loads, the card's source line already says so; an empty plot is not "No data".
+  if (!plot) return <div className="flex h-full items-center justify-center text-2xs text-text-dim">{loading ? '' : 'No data'}</div>
   const color = negative ? 'var(--color-down)' : 'var(--color-up)'
   return (
     <svg viewBox={`0 0 ${plot.width} ${plot.height}`} preserveAspectRatio="none" className="h-full w-full">

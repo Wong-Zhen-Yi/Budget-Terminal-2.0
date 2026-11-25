@@ -238,7 +238,7 @@ export function PricePage({
             <DataTable
               columns={columns}
               rows={rankedRows}
-              rowKey={(row) => row.ticker}
+              rowKey={(row) => row.ticker} rowSymbol={(row) => row.ticker}
               layout="fixed"
               minWidth="780px"
               defaultSort={{ key: 'marketCap', direction: 'desc' }}

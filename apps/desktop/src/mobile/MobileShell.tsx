@@ -6,7 +6,7 @@ import type { ReloadProgress } from '@/api/startupScheduler'
 import { ReloadButton } from '@/components/chrome/ReloadButton'
 import { mobileTelegramProfile } from './client'
 
-export function MobileHeader({ label, navigationOpen, onToggleNavigation, onReload, reloadProgress, onToggleObscure, obscured, favorite, onToggleFavorite, savingFavorite }: {
+export function MobileHeader({ label, navigationOpen, onToggleNavigation, onReload, reloadProgress, onToggleObscure, obscured, favorite, onToggleFavorite, savingFavorite, onBack }: {
   label: string
   navigationOpen: boolean
   onToggleNavigation: () => void
@@ -17,6 +17,8 @@ export function MobileHeader({ label, navigationOpen, onToggleNavigation, onRelo
   favorite: boolean
   onToggleFavorite?: () => void
   savingFavorite: boolean
+  /** Shown only in a Home Screen web app, which has no browser Back gesture or button. */
+  onBack?: () => void
 }) {
   const pageButton = useRef<HTMLButtonElement>(null)
   useEffect(() => {
@@ -26,6 +28,9 @@ export function MobileHeader({ label, navigationOpen, onToggleNavigation, onRelo
   }, [navigationOpen])
 
   return <header className="mobile-topbar">
+    {onBack && !navigationOpen && <button type="button" className="mobile-back-button" onClick={onBack} aria-label="Back to the previous page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>
+    </button>}
     <h1>
       <button ref={pageButton} type="button" className="mobile-page-button" onClick={onToggleNavigation}
         aria-label={navigationOpen ? `Back to ${label}` : `${label}, browse workspaces`}

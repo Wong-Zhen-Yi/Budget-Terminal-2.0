@@ -173,6 +173,13 @@ try {
           );
           if (!assertViewport) throw Error('Compact viewport overflows');
           await window.webContents.executeJavaScript('document.querySelector(".poly-page").style.cssText = ""');
+          window.setContentSize(390, 844);
+          await new Promise(resolve => setTimeout(resolve, 300));
+          const phoneChart = await window.webContents.executeJavaScript(
+            '(() => { const body = document.querySelector(".poly-activity-table tbody"); while (body.rows.length < 25) body.append(body.rows[0].cloneNode(true)); document.querySelector(".poly-feature").scrollIntoView(); const chart = document.querySelector(".poly-chart").getBoundingClientRect(); const svg = document.querySelector(".poly-chart svg").getBoundingClientRect(); const feature = document.querySelector(".poly-feature").getBoundingClientRect(); return { chart: chart.height, svg: svg.height, feature: feature.height, overflow: document.documentElement.scrollWidth > innerWidth } })()'
+          );
+          if (phoneChart.overflow || phoneChart.chart > phoneChart.svg + 24 || phoneChart.feature > 640) throw Error('Phone-width chart stretched: ' + JSON.stringify(phoneChart));
+          fs.writeFileSync(${JSON.stringify(screenshot.replace(/\.png$/, '-phone.png'))}, (await window.webContents.capturePage()).toPNG());
           window.setSize(1600, 1200);
           await new Promise(resolve => setTimeout(resolve, 300));
         }

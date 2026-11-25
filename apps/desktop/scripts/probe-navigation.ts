@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdtemp, writeFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createRequire } from 'node:module'
 import { build } from 'esbuild'
-import { adjacentPage, DEFAULT_TAB_ID, pagesInVisualOrder, startupPages, workspaceFor } from '../electron/shared/navigation.js'
+import { adjacentPage, DEFAULT_TAB_ID, EMPTY_PAGE_HISTORY, favoriteShortcutPages, PAGE_HISTORY_LIMIT, pagesInVisualOrder, pushPageHistory, startupPages, stepPageHistory, workspaceFor } from '../electron/shared/navigation.js'
 import { FOCUS_DASHBOARD_TAB_ID, TABS } from '../electron/shared/contract.js'
 
 assert.equal(workspaceFor('dashboard-2')?.id, 'overview')
@@ -47,8 +47,43 @@ assert.equal(adjacentPage(visualOrder, 'hidden', 1), 'news')
 assert(!pagesInVisualOrder(interleaved.map(tab => ({ ...tab, implemented: tab.id !== 'charts' }))).some(tab => tab.id === 'charts'))
 assert(!pagesInVisualOrder(interleaved.filter(tab => tab.id !== 'heatmap')).some(tab => tab.id === 'heatmap'))
 
+// Back/forward history: a browser-style stack that skips pages hidden since the visit.
+{
+  const all = () => true
+  let history = EMPTY_PAGE_HISTORY
+  for (const [from] of [['news'], ['charts'], ['stocks']]) history = pushPageHistory(history, from)
+  assert.deepEqual(history, { back: ['news', 'charts', 'stocks'], forward: [] })
+  const back = stepPageHistory(history, 'portfolio', -1, all)!
+  assert.equal(back.page, 'stocks')
+  assert.deepEqual(back.history, { back: ['news', 'charts'], forward: ['portfolio'] })
+  const forward = stepPageHistory(back.history, 'stocks', 1, all)!
+  assert.equal(forward.page, 'portfolio', 'Forward must return to the page Back left')
+  assert.deepEqual(forward.history, { back: ['news', 'charts', 'stocks'], forward: [] })
+  assert.deepEqual(pushPageHistory(back.history, 'stocks').forward, [], 'A new visit drops the forward branch')
+  const skipped = stepPageHistory(history, 'portfolio', -1, id => id !== 'stocks')!
+  assert.equal(skipped.page, 'charts', 'Back must skip a page that is no longer visible')
+  assert.deepEqual(skipped.history.back, ['news'])
+  assert.equal(stepPageHistory(history, 'portfolio', 1, all), undefined, 'Forward is empty after a new visit')
+  assert.equal(stepPageHistory({ back: ['news'], forward: [] }, 'news', -1, all), undefined, 'Back never lands on the current page')
+  assert.deepEqual(pushPageHistory({ back: ['news'], forward: ['x'] }, 'news'), { back: ['news'], forward: [] })
+  let long = EMPTY_PAGE_HISTORY
+  for (let index = 0; index < PAGE_HISTORY_LIMIT + 20; index++) long = pushPageHistory(long, `page-${index}`)
+  assert.equal(long.back.length, PAGE_HISTORY_LIMIT)
+  assert.equal(long.back[0], 'page-20', 'History keeps the most recent pages')
+}
+
+// Ctrl/⌘+1…9 follow the sidebar's favorites, skipping hidden or unavailable pages.
+{
+  const tabs = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k'].map(id => ({ id, implemented: id !== 'c' }))
+  assert.deepEqual(favoriteShortcutPages(['c', 'a', 'missing', 'b'], tabs), ['a', 'b'])
+  assert.equal(favoriteShortcutPages(tabs.map(tab => tab.id), tabs).length, 9)
+}
+
 // Exercise the actual page host in Chromium with synthetic data and isolated storage.
 const require = createRequire(import.meta.url)
+const liveReportPath = process.argv.find(arg => arg.startsWith('--live-report='))?.slice('--live-report='.length)
+const liveSnapshots = liveReportPath ? Object.fromEntries((JSON.parse(await readFile(liveReportPath, 'utf8')).results as
+  Array<{ name: string; status: string; envelope?: unknown }>).map(result => [result.name, result.envelope])) : null
 const directory = await mkdtemp(join(tmpdir(), 'budget-navigation-'))
 try {
   const bundle = await build({
@@ -59,8 +94,9 @@ try {
         import { useEffect, useState } from 'react'
         import { createRoot } from 'react-dom/client'
         import { flushSync } from 'react-dom'
-        import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+        import { hashKey, QueryClient, QueryClientProvider } from '@tanstack/react-query'
         import { queryKeys } from './src/api/client'
+        import { setPagePreview } from './src/api/pageProgress'
         import { PageCache } from './src/components/chrome/PageCache'
         import { WorkspaceHeader, WorkspaceSidebar } from './src/components/chrome/WorkspaceNavigation'
         import { pageIconPaths } from './src/components/chrome/NavigationIcon'
@@ -210,10 +246,35 @@ try {
           const metricValues = label => [...metricPair(label).querySelectorAll('b')].map(value => value.textContent)
           const snapshot = (data, freshness = 'fresh') => ({ data, errors: [], meta: { freshness, source: 'Fixture', fetchedAt: timestamp } })
           check(metricValues('Bitcoin').every(value => value === '—'), 'An absent snapshot must leave both metrics empty')
+          check(metricValues('Anthropic').join('|') === '$17.0B|$9.9B', 'Anthropic should show its reviewed quarter while source checks run')
+          const macroData = fixtures.find(([label]) => label === 'Macro')[2]
+          const macroKey = hashKey(queryKeys.economic)
+          flushSync(() => setPagePreview(macroKey, snapshot(macroData, 'partial')))
+          check(metricValues('Macro').join('|') === '2.64%|3.20%', 'Macro should show early data before the Economic snapshot finishes')
+          check(focusCache.getQueryData(queryKeys.economic) === undefined, 'A preview must not mark startup data as cached')
+          renderFocus(TABS, ['anthropic', 'macro'])
+          check(['Anthropic', 'Macro'].every(label => metricValues(label).join('|') === '—|—'), 'Obscure must hide reviewed and early figures')
+          renderFocus(TABS)
+          flushSync(() => setPagePreview(macroKey, null))
+          const liveSnapshots = ${JSON.stringify(liveSnapshots)}
+          if (liveSnapshots) {
+            flushSync(() => {
+              for (const [label, key] of fixtures) {
+                const name = label === 'PLTR' ? 'pltrFinancials' : key[0]
+                check(liveSnapshots[name]?.data, 'No live snapshot for ' + label)
+                focusCache.setQueryData(key, liveSnapshots[name])
+              }
+            })
+            for (const [label] of fixtures) {
+              check(metricValues(label).every(value => value !== '—'), 'Missing live headline figure for ' + label)
+            }
+          }
           flushSync(() => {
             for (const [, key, data] of fixtures) focusCache.setQueryData(key, snapshot(data))
           })
           for (const [label, , , first, second] of fixtures) check(metricValues(label).join('|') === first + '|' + second, 'Wrong metrics for ' + label)
+          check([...metricPair('Macro').querySelectorAll('.focus-dashboard__metric-period')].map(item => item.textContent).join('|') === 'Oct 2026|Q3 2026',
+            'Macro should label monthly and quarterly observations by period')
           check(metricPair('Bitcoin').querySelector('.focus-dashboard__shared-period').textContent === 'Oct 1, 2026',
             'Matching observations must share a date')
           check([...metricPair('BMNR').querySelectorAll('.focus-dashboard__metric-period')].map(item => item.textContent).join('|') === 'Oct 1, 2026|Aug 31, 2026',
@@ -253,6 +314,7 @@ try {
             focusCache.clear()
             railHost.remove()
             return 'PASS: visual page traversal, Focus landing and routes, filters, search, 38 cached readings, cache updates and Obscure protection'
+              + (liveSnapshots ? ', 38 live headline figures' : '')
           }
           flushSync(() => railRoot.render(<WorkspaceSidebar {...railProps} collapsed />))
           const favoriteButtons = [...railHost.querySelectorAll('nav[aria-label="Favorite pages"] button')]
