@@ -11,7 +11,7 @@ declare global {
 
 /** Bootstrap installs either the Electron preload or the authenticated browser bridge. */
 if (!window.api) throw new Error('Budget Terminal service API is unavailable.')
-const progressiveMethods = new Set(['sofi', 'hood', 'hims', 'mu', 'googl', 'nvda', 'amzn', 'avgo', 'vst', 'semiconductors', 'homebuilders', 'bitcoin', 'bmnr', 'projections', 'preMarket', 'gold', 'oil', 'crypto', 'globalMarkets', 'money', 'forexQuotes', 'targets', 'quotes', 'fundamentals', 'priceScreen', 'marketCap', 'tradingVolumes', 'stocks'])
+const progressiveMethods = new Set(['sofi', 'hood', 'hims', 'mu', 'googl', 'nvda', 'amzn', 'avgo', 'vst', 'semiconductors', 'homebuilders', 'bitcoin', 'bmnr', 'projections', 'preMarket', 'gold', 'oil', 'crypto', 'globalMarkets', 'money', 'forexQuotes', 'targets', 'quotes', 'fundamentals', 'priceScreen', 'marketCap', 'tradingVolumes', 'stocks', 'economic'])
 
 const reloadReadMethods = new Set([
   'defeatbetaTerminal', 'chart', 'options', 'quotes', 'targets', 'news',

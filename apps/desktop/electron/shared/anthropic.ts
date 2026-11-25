@@ -39,6 +39,16 @@ export const ANTHROPIC_SOURCES: AnthropicSource[] = [
   { id: 'safety', title: 'Responsible Scaling Policy', publishedAt: 'Living document · reviewed 2026-11-21', url: 'https://www.anthropic.com/responsible-scaling-policy' },
 ]
 
+/** USD billions, rounded as published in the November IPO fact sheet. */
+export function reviewedAnthropicQuarters(): AnthropicPayload['quarters'] {
+  return [
+    { period: 'Q1 25', revenue: 0.4, compute: 0.9 }, { period: 'Q2 25', revenue: 0.8, compute: 1.4 },
+    { period: 'Q3 25', revenue: 1.4, compute: 2.0 }, { period: 'Q4 25', revenue: 2.0, compute: 2.9 },
+    { period: 'Q1 26', revenue: 4.7, compute: 3.4 }, { period: 'Q2 26', revenue: 11.6, compute: 5.6 },
+    { period: 'Q3 26', revenue: 17.0, compute: 9.9 },
+  ]
+}
+
 export function anthropicResearch(): AnthropicPayload {
   return {
     reviewedAt: ANTHROPIC_REVIEWED_AT, nextReviewAt: ANTHROPIC_NEXT_REVIEW, sources: ANTHROPIC_SOURCES,
@@ -52,13 +62,7 @@ export function anthropicResearch(): AnthropicPayload {
       { round: 'Series G', date: '2026-02-12', raised: 30, valuation: 380, source: 'series-g' },
       { round: 'Series H', date: '2026-05-28', raised: 65, valuation: 965, source: 'funding' },
     ],
-    // Billions of USD, rounded as presented in the November IPO fact sheet. These are quarterly flows.
-    quarters: [
-      { period: 'Q1 25', revenue: 0.4, compute: 0.9 }, { period: 'Q2 25', revenue: 0.8, compute: 1.4 },
-      { period: 'Q3 25', revenue: 1.4, compute: 2.0 }, { period: 'Q4 25', revenue: 2.0, compute: 2.9 },
-      { period: 'Q1 26', revenue: 4.7, compute: 3.4 }, { period: 'Q2 26', revenue: 11.6, compute: 5.6 },
-      { period: 'Q3 26', revenue: 17.0, compute: 9.9 },
-    ],
+    quarters: reviewedAnthropicQuarters(),
     topics: [
       { id: 'business', title: 'Business & adoption', question: 'Can enterprise demand sustain the pace?', facts: [
         { title: 'Business', value: 'Frontier AI', detail: 'Research and deployment of Claude models through subscriptions, developer usage and cloud distribution.', source: 'company' },

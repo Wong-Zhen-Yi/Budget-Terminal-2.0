@@ -83,8 +83,10 @@ try {
     import { DEFAULT_YOUTUBE_PAGE_SETTINGS } from './electron/shared/youtube'
     import { DEFAULT_CACHE_SETTINGS } from './electron/shared/cachePolicy'
     import { anthropicResearch } from './electron/shared/anthropic'
+    import { buildRow, SERIES_BY_ID } from './electron/shared/economic'
     import { computeExposure, emptyRiskMetrics } from './electron/shared/analytics'
     const check = (condition, message) => { if (!condition) throw Error(message) }
+    const focusOnly = ${JSON.stringify(process.argv.includes('--focus'))}
     const wait = () => new Promise(resolve => setTimeout(resolve, 110))
     const visiblePage = id => [...document.querySelectorAll('[data-page-id]')].find(page => page.dataset.pageId === id && page.getBoundingClientRect().height > 0)
     const paint = async () => {
@@ -187,6 +189,10 @@ try {
       if (!result.data) result.data = {}
       result.meta = ok(null).meta
       const data = result.data
+      if (focusOnly && method === 'economic') data.rows = [
+        buildRow(SERIES_BY_ID.get('CPIAUCSL'), [['2025-09-01', 324.245], ['2026-09-01', 336.298]]),
+        buildRow(SERIES_BY_ID.get('GDPC1'), [['2026-04-01', 24408.011], ['2026-07-01', 24611.077]]),
+      ]
       if ('symbol' in data) data.symbol = request.symbol ?? 'AAPL'
       if ('ticker' in data) data.ticker = request.ticker ?? request.symbol ?? 'AAPL'
       if ('fetchedAt' in data) data.fetchedAt = typeof data.fetchedAt === 'string' ? new Date().toISOString() : Date.now()
@@ -248,7 +254,6 @@ try {
       const startupOnly = ${JSON.stringify(process.argv.includes('--startup-only'))}
       const mainPageOnly = ${JSON.stringify(process.argv.includes('--main-page'))}
       const authOnly = ${JSON.stringify(process.argv.includes('--auth-only'))}
-      const focusOnly = ${JSON.stringify(process.argv.includes('--focus'))}
       const scenarios = mainPageOnly ? ['empty', 'persisted'] : authOnly || focusOnly ? ['empty'] : reloadOnly ? ['populated'] : refreshOnly ? ['persisted'] : agentsOnly ? ['empty'] : ['empty', 'populated', 'persisted']
       for (const scenario of scenarios) {
         console.log('Completed-startup scenario: ' + scenario)
@@ -289,13 +294,18 @@ try {
           await wait()
           const focus = () => document.querySelector('nav[aria-label="Workspaces"] button[aria-label="Focus"]')
           const anthropicCalls = calls.filter(call => call.method === 'anthropic').length
+          const economicCalls = calls.filter(call => call.method === 'economic').length
+          check(anthropicCalls > 0 && economicCalls === 1, 'Anthropic and the shared Macro data must fetch at startup')
           focus().click(); await wait()
           const dashboard = visiblePage('focus-dashboard')?.querySelector('.focus-dashboard')
           check(dashboard, 'Focus workspace did not open the dashboard')
           const anthropic = dashboard.querySelector('#focus-metric-anthropic')
           const anthropicValues = () => [...anthropic.querySelectorAll('b')].map(item => item.textContent).join('|')
           check(anthropic && anthropicValues() === '$17.0B|$9.9B', 'Focus must display both warmed readings')
+          const macroValues = [...dashboard.querySelectorAll('#focus-metric-macro b')].map(item => item.textContent).join('|')
+          check(macroValues === '3.72%|3.37%', 'Focus must display both warmed Macro readings')
           check(calls.filter(call => call.method === 'anthropic').length === anthropicCalls, 'Opening Focus must not request the reading again')
+          check(calls.filter(call => call.method === 'economic').length === economicCalls, 'Opening Focus must not repeat the shared Macro fetch')
           obscure.click(); await wait()
           check(anthropicValues() === '—|—', 'Focus must hide both readings for protected pages')
           obscure.click(); await wait()

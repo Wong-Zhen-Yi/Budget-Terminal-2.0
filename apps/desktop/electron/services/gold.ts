@@ -172,16 +172,18 @@ async function fetchMining(): Promise<GoldMining> {
   return parsed
 }
 
-async function fetchMarket(force: boolean, fetchedAt: string): Promise<GoldMarket> {
+async function fetchMarket(force: boolean): Promise<GoldMarket> {
   const [future, gld] = await Promise.allSettled([getQuote('GC=F', force), getQuote('GLD', force)])
   const market = emptyGoldMarket()
   if (future.status === 'fulfilled') {
-    market.futuresPrice = goldValue(future.value.price, 'usdPerOz', fetchedAt, GOLD_MARKET_SOURCE, 'live', 'COMEX futures proxy; not the LBMA benchmark.')
-    market.futuresChangePct = goldValue(future.value.change, 'percent', fetchedAt, GOLD_MARKET_SOURCE, 'live')
+    const asOf = future.value.asOf === undefined ? '' : new Date(future.value.asOf).toISOString()
+    market.futuresPrice = goldValue(future.value.price, 'usdPerOz', asOf, GOLD_MARKET_SOURCE, 'live', 'COMEX futures proxy; not the LBMA benchmark.')
+    market.futuresChangePct = goldValue(future.value.change, 'percent', asOf, GOLD_MARKET_SOURCE, 'live')
   }
   if (gld.status === 'fulfilled') {
-    market.gldPrice = goldValue(gld.value.price, 'usd', fetchedAt, GOLD_MARKET_SOURCE, 'live', 'GLD ETF share-price proxy.')
-    market.gldChangePct = goldValue(gld.value.change, 'percent', fetchedAt, GOLD_MARKET_SOURCE, 'live')
+    const asOf = gld.value.asOf === undefined ? '' : new Date(gld.value.asOf).toISOString()
+    market.gldPrice = goldValue(gld.value.price, 'usd', asOf, GOLD_MARKET_SOURCE, 'live', 'GLD ETF share-price proxy.')
+    market.gldChangePct = goldValue(gld.value.change, 'percent', asOf, GOLD_MARKET_SOURCE, 'live')
   }
   if (future.status === 'rejected' && gld.status === 'rejected') {
     throw new Error(`GC=F: ${describeError(future.reason)}; GLD: ${describeError(gld.reason)}`)
@@ -197,7 +199,7 @@ export interface GoldFetchResult {
 export async function getGold(force = false): Promise<GoldFetchResult> {
   const fetchedAt = localIsoSeconds()
   const [market, quarterly, aboveGround, etf, mining] = await progressiveAll([
-    lane('gold:market', TTL.goldMarket, force, () => fetchMarket(force, fetchedAt)),
+    lane('gold:market-v2', TTL.goldMarket, force, () => fetchMarket(force)),
     lane('gold:demand', TTL.goldWgc, force, fetchQuarterly),
     lane('gold:above-ground', TTL.goldWgc, force, fetchAboveGround),
     lane('gold:etf', TTL.goldWgc, force, fetchEtf),

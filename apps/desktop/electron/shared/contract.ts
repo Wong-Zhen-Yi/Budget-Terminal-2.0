@@ -1519,7 +1519,7 @@ export interface EconomicPayload {
   source: string
   groups: EconomicGroup[]
   rows: EconomicRow[]
-  /** Series ids whose provider returned nothing. */
+  /** Series ids with no usable rate or level in the latest fetch. A row may carry a prior dated observation. */
   missing: string[]
   /** Providers that looked unreachable rather than merely short a series. */
   unreachable: EconomicProvider[]

@@ -563,12 +563,14 @@ export function buildYieldCurve(rows: readonly EconomicRow[]): EconomicYieldCurv
     })
   }
   tenors.sort((left, right) => left.years - right.years)
-  const lookup = new Map(tenors.map((item) => [item.seriesId, item.yieldPct]))
-  const twoYear = lookup.get('DGS2')
+  const lookup = new Map(tenors.map((item) => [item.seriesId, item]))
   const tenYear = lookup.get('DGS10')
-  const threeMonth = lookup.get('DGS3MO')
-  const spread10y2y = twoYear === undefined || tenYear === undefined ? null : tenYear - twoYear
-  const spread10y3m = threeMonth === undefined || tenYear === undefined ? null : tenYear - threeMonth
+  const spread = (seriesId: string) => {
+    const shorter = lookup.get(seriesId)
+    return tenYear?.date && shorter?.date === tenYear.date ? tenYear.yieldPct - shorter.yieldPct : null
+  }
+  const spread10y2y = spread('DGS2')
+  const spread10y3m = spread('DGS3MO')
   return {
     tenors,
     spread10y2y,

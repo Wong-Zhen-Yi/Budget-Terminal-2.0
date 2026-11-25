@@ -146,6 +146,11 @@ function curveChecks(): void {
   assert(curve.inverted2s10s && curve.inverted3m10y, 'a negative spread should flag the inversion')
   assert(describeCurve(curve).includes('inverted'), 'the summary should name an inverted curve')
 
+  const mixedDates = buildYieldCurve([
+    ...rates.slice(0, 2), buildRow(SERIES_BY_ID.get('DGS10')!, [['2026-01-07', 4.05]]),
+  ])
+  assert(mixedDates.spread10y2y === null && mixedDates.spread10y3m === null, 'A stale tenor must not produce a cross-date spread')
+
   const flat = buildYieldCurve([
     buildRow(SERIES_BY_ID.get('DGS2')!, [['2026-01-06', 4.0]]),
     buildRow(SERIES_BY_ID.get('DGS10')!, [['2026-01-06', 4.1]]),
