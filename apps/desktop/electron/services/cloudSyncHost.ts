@@ -8,7 +8,7 @@ import { ConvexError } from 'convex/values'
 import type { CloudSyncCommand, CloudSyncStatus } from '../shared/cloudSync.js'
 import { failed, ok } from '../shared/envelope.js'
 import { CloudSyncEngine, type SyncCheckpoint } from './cloudSyncEngine.js'
-import { applySyncData, atomicSyncFile, cloudDataPath, readLocalSyncData, readSyncData, recoverSyncData } from './cloudSyncData.js'
+import { applySyncData, atomicSyncFile, cloudDataPath, isFactoryDefaultPayload, readLocalSyncData, readSyncData, recoverSyncData } from './cloudSyncData.js'
 import { withSavedDataLock } from './automaticBackup.js'
 import { subscribeSavedDataChanged } from './savedDataEvents.js'
 import { beginOAuthSignIn, OAuthSetupError, type OAuthProvider, type OAuthSignIn, type OAuthTokens } from './cloudSyncOAuth.js'
@@ -277,6 +277,10 @@ async function confirmWorkspace(use: 'local' | 'cloud') {
       message = 'This account has no cloud copy. Import this device’s data or disconnect sync.'
       throw new Error('No cloud copy available.')
     }
+    if (isFactoryDefaultPayload(snapshot.payload)) {
+      message = 'This account’s cloud copy holds only default data. Import this device’s data instead, or disconnect sync.'
+      throw new Error('Cloud copy holds only defaults.')
+    }
     await withSavedDataLock(async () => {
       if (await readSyncData() !== before) throw new Error('Local data changed. Review your choice again.')
       await applySyncData(snapshot.payload, snapshot.updatedAt)
@@ -333,6 +337,7 @@ async function attach(value: Session) {
       readRemote: () => remote(connection => connection.query(readRef, {})),
       writeRemote: (expectedRevision, payload) => remote(connection => connection.mutation(writeRef, { expectedRevision, payload })),
       saveCheckpoint: checkpoint => atomicSyncFile(checkpointPath(), checkpoint),
+      isFactoryDefault: isFactoryDefaultPayload,
     })
   }
   // The subscription is only a wake-up signal. Network work never blocks local startup or writes.

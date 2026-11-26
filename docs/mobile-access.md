@@ -2,9 +2,9 @@
 
 Mobile Access opens the Budget Terminal workspace in your phone or tablet browser while Budget Terminal is running on your computer. The browser uses the same saved records and market services. Its page navigation, chart view, and scroll positions are separate from the desktop window.
 
-## Open the connected mobile window on Windows
+## Open the connected mobile window
 
-In the Windows desktop app, go to **Settings → Labs → Mobile Access**, choose a phone size, and select **Open phone viewport**. Choose Compact phone (320 × 568), Small phone (360 × 780), Phone (390 × 844), or Large phone (430 × 932). These are generic CSS viewport sizes, not device models. Resize the window to try intermediate sizes and landscape proportions. It initially fits the desktop window's monitor and works with Tailscale off.
+In the desktop app, go to **Settings → Labs → Mobile Access**, choose a phone size, and select **Open phone viewport**. Choose Compact phone (320 × 568), Small phone (360 × 780), Phone (390 × 844), or Large phone (430 × 932). These are generic CSS viewport sizes, not device models. Resize the window to try intermediate sizes and landscape proportions. It initially fits the desktop window's monitor and works with Tailscale off.
 
 Run `btd mobile` to build and open the current version. If the desktop is open, the command closes it gracefully and waits for pending saves before rebuilding. It opens the desktop and the viewport together. Use it after a source update.
 

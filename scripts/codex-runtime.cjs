@@ -30,4 +30,20 @@ function findCodex({ platform = process.platform, architecture = process.arch, e
   return candidates.find(candidate => candidate && exists(candidate)) || null
 }
 
-module.exports = { findCodex }
+/** Resolve the user's Claude Code CLI, whose saved login the Claude Code agent provider uses. */
+function findClaude({ platform = process.platform, environment = process.env, exists = existsSync } = {}) {
+  const windows = platform === 'win32'
+  const paths = windows ? path.win32 : path.posix
+  const value = name => Object.entries(environment).find(([key]) => windows ? key.toUpperCase() === name.toUpperCase() : key === name)?.[1]
+  const binary = windows ? 'claude.exe' : 'claude'
+  const candidates = [value('BUDGET_TERMINAL_CLAUDE_PATH')]
+  const directories = (value('PATH') || '').split(windows ? ';' : ':').filter(Boolean).map(directory => directory.replace(/^"|"$/g, ''))
+  for (const directory of directories) candidates.push(paths.join(directory, binary))
+  // The native installer puts Claude Code in ~/.local/bin on every platform; desktop launches may not have it on PATH.
+  const home = windows ? value('USERPROFILE') : value('HOME')
+  if (home) candidates.push(paths.join(home, '.local', 'bin', binary), paths.join(home, '.claude', 'local', binary))
+  if (!windows) candidates.push('/opt/homebrew/bin/claude', '/usr/local/bin/claude', '/usr/bin/claude')
+  return candidates.find(candidate => candidate && exists(candidate)) || null
+}
+
+module.exports = { findClaude, findCodex }

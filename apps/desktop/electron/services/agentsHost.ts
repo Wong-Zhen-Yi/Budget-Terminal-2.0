@@ -5,16 +5,17 @@ import { resetTelegramConversation, telegramResearchCommand, telegramHistoryActi
 import { notificationCenter } from './notificationsHost.js'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { findCodex } from '../../../../scripts/codex-runtime.cjs'
+import { findClaude, findCodex } from '../../../../scripts/codex-runtime.cjs'
 import { createServiceRoutes } from '../mcp/routes.js'
 import { captureTerminalScreenshot, getMcpStatus, invokeMcpTool } from '../mcp/host.js'
-import { agentProviderLabels, claudeApiKeyPattern, type AgentProvider, type AgentsCommand } from '../shared/agents.js'
+import { agentProviderLabels, claudeApiKeyPattern, isAgentProvider, type AgentProvider, type AgentsCommand } from '../shared/agents.js'
 import type { Envelope } from '../shared/contract.js'
 import type { ScreenshotPayload } from '../shared/screenshot.js'
 import { failed, ok } from '../shared/envelope.js'
 import { AgentsService } from './agents.js'
 import { CodexClient, type CodexPacket } from './codexClient.js'
 import { ClaudeClient } from './claudeClient.js'
+import { ClaudeCodeClient } from './claudeCodeClient.js'
 import { AgentWorkspace } from './agentWorkspace.js'
 import { AgentImageStore } from './agentImageStore.js'
 import type { AgentTracker } from '../shared/agentWorkspace.js'
@@ -42,8 +43,12 @@ const providerPath = () => join(app.getPath('userData'), 'agents-provider.json')
 const claudeKeyPath = () => join(app.getPath('userData'), 'claude-settings.bin')
 function selectedProvider(): AgentProvider {
   if (!provider) {
-    try { provider = JSON.parse(readFileSync(providerPath(), 'utf8')).provider === 'claude' ? 'claude' : 'codex' }
-    catch { provider = 'codex' }
+    try {
+      const saved: unknown = JSON.parse(readFileSync(providerPath(), 'utf8')).provider
+      provider = isAgentProvider(saved) ? saved : 'codex'
+    }
+    // With no saved choice, a computer that has Claude Code but no Codex starts on Claude Code.
+    catch { provider = !findCodex() && findClaude() ? 'claude-code' : 'codex' }
   }
   return provider
 }
@@ -76,6 +81,8 @@ function transport(receive: (packet: CodexPacket) => void, disconnected: (messag
   if (provider === 'claude') return new ClaudeClient(loadClaudeKey, receive)
   const cwd = join(app.getPath('userData'), 'agents')
   mkdirSync(cwd, { recursive: true })
+  // Without an installed CLI, the Agent SDK's bundled Claude Code runs with the same saved login.
+  if (provider === 'claude-code') return new ClaudeCodeClient(() => findClaude(), cwd, receive, disconnected)
   return new CodexClient(executable(), cwd, receive, disconnected)
 }
 async function changeProvider(change: () => Promise<boolean>) {
@@ -257,7 +264,7 @@ async function executeAgentsCommand(command: AgentsCommand) {
   if (command?.type === 'agentProvider' || command?.type === 'claudeKey' || command?.type === 'claudeKeyClear') {
     try {
       if (command.type === 'agentProvider') {
-        if (command.provider !== 'codex' && command.provider !== 'claude') throw new Error('Choose Codex or Claude.')
+        if (!isAgentProvider(command.provider)) throw new Error('Choose Codex, Claude or Claude Code.')
         await changeProvider(async () => {
           if (command.provider === selectedProvider()) return false
           await saveProvider(command.provider)

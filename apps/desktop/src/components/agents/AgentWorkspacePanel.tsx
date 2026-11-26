@@ -37,7 +37,7 @@ export function AgentWorkspacePanel({ agent, locked, perform, setDraft, showTele
     {tab && tab !== 'history' && <div className="agents-workspace-content" aria-label={tab === 'telegram' ? 'Telegram settings' : 'Saved trackers'}>
       {tab === 'telegram' && <TelegramSettings state={agent?.telegram} perform={perform} pending={pending} />}
       {tab === 'trackers' && <>
-        <div className="agents-saved-heading"><p>{label} writes the instructions; you review and Start. Checks use read-only research tools and your {label === 'Claude' ? 'Claude API key' : 'Codex account'} while the app is open. All trackers pause on relaunch. No arbitrary scripts or trades.</p>
+        <div className="agents-saved-heading"><p>{label} writes the instructions; you review and Start. Checks use read-only research tools and your {label === 'Claude' ? 'Claude API key' : label === 'Claude Code' ? 'Claude Code sign-in' : 'Codex account'} while the app is open. All trackers pause on relaunch. No arbitrary scripts or trades.</p>
           <button onClick={() => setDraft('Write a tracker for me. Ask what I want to track, the comparison baseline, how often to check, and when to notify me. Save it paused so I can review and start it.')}>Ask {label} to write a tracker</button></div>
         {!trackers.length && <p>No trackers yet. Describe any research condition or reminder to {label} in chat.</p>}
         {trackers.map(tracker => <article key={tracker.id} className="agents-saved-item">

@@ -40,9 +40,26 @@ try {
         return { accepted: true, revision: remote.revision, updatedAt: remote.updatedAt }
       },
       saveCheckpoint: async value => { saved = structuredClone(value) },
+      isFactoryDefault: payload => payload.endsWith('factory defaults'),
     })
     return { engine, edit: (value: string) => { local = value; pristine = false; updatedAt++ }, local: () => local, saved: () => saved }
   }
+  const blank = device('factory defaults', undefined, true)
+  await blank.engine.sync()
+  assert.equal(remote, null, 'A device holding only factory defaults must never upload them to an empty cloud')
+  assert.equal(blank.engine.state, 'idle')
+  assert.equal(blank.saved(), undefined, 'Waiting for a cloud copy must not record a checkpoint')
+  remote = { revision: 1, payload: 'older build factory defaults', updatedAt: ++serverTime }
+  const realWork = device('real work')
+  await realWork.engine.sync()
+  assert.equal(realWork.engine.state, 'synced', 'A cloud copy holding only defaults is not competing work')
+  assert.deepEqual([remote.payload, remote.revision], ['real work', 2])
+  await blank.engine.sync()
+  assert.equal(blank.local(), 'real work', 'A waiting fresh device must restore the first uploaded copy')
+  const defaultsSynced = device('factory defaults', { account: 'fixture', baseline: 'factory defaults', revision: 1 }, true)
+  await defaultsSynced.engine.sync()
+  assert.equal(defaultsSynced.local(), 'real work', 'A device that synced only defaults must receive the real copy')
+  remote = null
   const first = device('original')
   await first.engine.sync()
   assert.equal(first.engine.state, 'synced')
@@ -166,12 +183,18 @@ try {
   assert.equal(freshLocal.pristine, true, 'Generated defaults must not be mistaken for newer user work')
   assert.equal(freshLocal.updatedAt, 0)
   assert(!baseline.includes(directory), 'Snapshots must exclude device paths')
+  assert.equal(data.isFactoryDefaultPayload(baseline), true)
+  const otherBuildDefaults = JSON.parse(baseline)
+  otherBuildDefaults.settings.tabOrder = [...otherBuildDefaults.settings.tabOrder].reverse().slice(1)
+  assert.equal(data.isFactoryDefaultPayload(data.canonical(otherBuildDefaults)), true, 'Defaults from another build must still be recognized')
+  assert.equal(data.isFactoryDefaultPayload('not json'), false)
   await withAutomaticBackup(async () => ok(await mutateSettings({ type: 'setTime12h', value: false })))
   await withAutomaticBackup(async () => ok(await mutateArticles({ type: 'add', title: 'Fixture', topic: '', content: 'Offline work', status: 'draft' })))
   const chartsWatchlists = { watchlist: ['SPY', 'QQQ'], multiCustomSymbols: ['MSFT'], multiOrder: ['MSFT'] }
   await withAutomaticBackup(async () => ok(await mutatePortfolios({ type: 'setChartsWatchlists', value: chartsWatchlists })))
   const modified = await withSavedDataLock(data.readSyncData)
   assert.deepEqual(JSON.parse(modified).userData.chartsWatchlists, chartsWatchlists)
+  assert.equal(data.isFactoryDefaultPayload(modified), false, 'Saved records must never be treated as defaults')
   const editedLocal = await withSavedDataLock(data.readLocalSyncData)
   assert.equal(editedLocal.pristine, false)
   assert(editedLocal.updatedAt > 0, 'Offline saves must record their edit time without a cloud connection')

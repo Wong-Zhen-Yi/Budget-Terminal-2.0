@@ -67,10 +67,10 @@ export function MobileAccessPanel({ active }: { active: boolean }) {
     copyResult?.text === text ? (copyResult.ok ? 'Copied' : 'Copy failed. Retry') : label
   return <Panel title="Mobile Access">
     <div className="space-y-2 p-3 text-2xs">
-      {api.platform === 'win32' && state?.available && <>
+      {state?.available && <>
         <div className="obscure-mode-row">
           <div>
-            <h3 className="font-semibold">Mobile viewport on this PC</h3>
+            <h3 className="font-semibold">Mobile viewport on this computer</h3>
             <label className="my-1 flex flex-wrap items-center gap-2">
               Phone size
               <select value={viewportId} disabled={launch.isPending} className={button} onChange={event => {

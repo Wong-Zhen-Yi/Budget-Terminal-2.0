@@ -3,7 +3,7 @@ const { spawnSync } = require('node:child_process')
 const { join, resolve } = require('node:path')
 const { chmodSync, copyFileSync, existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } = require('node:fs')
 const { tmpdir } = require('node:os')
-const { launch: runLaunch, createLauncherOutput } = require('./launch.cjs')
+const { launch: runLaunch, createLauncherOutput, parseCommandLine, commandHelp } = require('./launch.cjs')
 const { dev } = require('./dev.cjs')
 const { verifyDesktopBuild } = require('./verify-desktop-build.cjs')
 const launch = options => runLaunch({ verifyBuild() {}, ...options })
@@ -181,6 +181,26 @@ assert(devPreviewCalls.some(call => call.includes('run build:mcp')) && devPrevie
 assert(!devPreviewCalls.some(call => /run (build|preview)\b(?!:)/.test(call)), 'Dev mobile preview skips the production build')
 assert(devPreviewLines.some(line => /Vite \d+\.\d+/.test(line)), 'Development launches name the Vite version')
 console.log('PASS: btd -MobilePreview -Dev opens the phone UI on the Vite dev server.')
+
+{
+  // Windows and Linux btd have 1:1 parity: identical help and the same commands and options.
+  const windowsHelp = readFileSync(join(__dirname, 'launch-windows.ps1'), 'utf8').replace(/\r\n/g, '\n').match(/Write-Output @'\n([\s\S]*?)\n'@/)[1]
+  assert.equal(commandHelp, windowsHelp, 'btd --help must match on Windows and Linux')
+  const parse = argv => { const { command, flags } = parseCommandLine(argv); return [command, [...flags].sort()] }
+  assert.deepEqual(parse([]), ['start', []])
+  assert.deepEqual(parse(['restart', '-Dev', '-Logs']), ['restart', ['--dev', '--logs']])
+  assert.deepEqual(parse(['mobile']), ['mobile', ['--mobile']])
+  assert.deepEqual(parse(['update']), ['update', []])
+  assert.deepEqual(parse(['-Demo', '-Dev']), ['start', ['--demo', '--dev']])
+  assert.deepEqual(parse(['-MobilePreview']), ['start', ['--mobile-preview']])
+  assert.deepEqual(parse(['-RuntimeOnly']), ['start', ['--runtime-only']])
+  assert.deepEqual(parse(['-Help']), ['start', ['--help']])
+  // launch-windows.ps1 forwards long flags after handling restart and mobile itself.
+  assert.deepEqual(parse(['--mobile', '--detach']), ['start', ['--detach', '--mobile']])
+  const linux = readFileSync(resolve(__dirname, '../launchers/linux/Launch Budget Terminal.sh'), 'utf8')
+  assert.match(linux, /"\$launcher" --attached\n/, 'Linux double-click keeps the app attached, like Windows -Attached')
+}
+console.log('PASS: btd commands, options and help match on Windows and Linux.')
 
 const windowsLaunchers = resolve(__dirname, '../launchers/windows')
 // One double-click launcher per OS (Windows .cmd, Linux .sh). Demo and phone previews start from launch-windows.ps1 flags instead.

@@ -30,6 +30,7 @@ try {
         export const cloudDataPath = name => join(process.env.APPDATA, 'BudgetTerminalElectron', name)
         export const readLocalSyncData = async () => ({ payload: '{}', updatedAt: 0, pristine: true })
         export const recoverSyncData = async () => {}
+        export const isFactoryDefaultPayload = () => false
         export const readSyncData = async () => '{}'
         export const applySyncData = async () => {}
         export const atomicSyncFile = async () => {}

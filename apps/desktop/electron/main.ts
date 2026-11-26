@@ -57,7 +57,7 @@ if (process.env.BUDGET_TERMINAL_DATA_DIR) {
   app.setPath('userData', profile)
   app.setPath('sessionData', profile)
 }
-const localMobileAvailable = process.platform === 'win32' && !demoDirectory
+const localMobileAvailable = !demoDirectory
 let openMobileOnStartup = localMobileAvailable && process.env.BUDGET_TERMINAL_OPEN_MOBILE === '1'
 const ownsInstance = app.requestSingleInstanceLock({ openDiagnostics: process.env.BUDGET_TERMINAL_OPEN_DIAGNOSTICS === '1', openMobile: openMobileOnStartup })
 if (!ownsInstance) app.quit()
@@ -274,7 +274,7 @@ function showConnectedMobile(parent: BrowserWindow) {
 function launchConnectedMobile(parent: BrowserWindow, viewport: MobileViewportId) {
   const launch = openingMobile.then(async () => {
     if (!localMobileAvailable || parent !== mainWindow || parent.isDestroyed() || finishingQuit) {
-      throw new Error('The connected mobile window requires the regular Windows desktop session.')
+      throw new Error('The connected mobile window requires the regular desktop session.')
     }
     if (parent.isMinimized()) parent.restore()
     if (mobileWindow?.viewport === viewport) {
@@ -474,6 +474,9 @@ app.on('will-quit', () => {
   closeYahooWorker?.()
   closeDefeatBetaDecoder?.()
 })
+
+// btd restart and btd mobile on macOS and Linux send SIGTERM; quit through before-quit so saves drain first.
+for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) process.on(signal, () => app.quit())
 
 // Hold ownership until the process exits, including any final in-flight store writes.
 process.once('exit', () => releaseDataSession?.())

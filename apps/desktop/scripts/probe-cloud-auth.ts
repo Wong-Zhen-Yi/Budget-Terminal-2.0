@@ -196,6 +196,7 @@ try {
         export const readLocalSyncData = async () => globalThis.__cloudAuthFixture.local()
         export const readSyncData = async () => globalThis.__cloudAuthFixture.local().payload
         export const recoverSyncData = async () => {}
+        export const isFactoryDefaultPayload = payload => payload === 'factory-defaults'
         export const applySyncData = async (payload, updatedAt) => globalThis.__cloudAuthFixture.apply(payload, updatedAt)
         export const atomicSyncFile = async (path, value) => { await mkdir(dirname(path), { recursive: true }); await writeFile(path, JSON.stringify(value)) }
       `, resolveDir: resolve(import.meta.dirname, '..') }))
@@ -250,8 +251,14 @@ try {
   const missingCloud = await host!.cloudSyncCommand({ type: 'confirmWorkspace', use: 'cloud' })
   assert(missingCloud.meta.failureReason?.includes('no cloud copy'))
   assert.equal(local.payload, 'local-account-a')
+  snapshots.set('account-b', { revision: 1, payload: 'factory-defaults', updatedAt: Date.now() })
+  const defaultsCloud = await host!.cloudSyncCommand({ type: 'confirmWorkspace', use: 'cloud' })
+  assert(defaultsCloud.meta.failureReason?.includes('only default data'), 'A cloud copy of factory defaults must never replace saved local data')
+  assert.equal(local.payload, 'local-account-a')
   await host!.cloudSyncCommand({ type: 'confirmWorkspace', use: 'local' })
   await host!.cloudSyncCommand({ type: 'sync' })
+  assert.equal(snapshots.get('account-b')?.payload, 'local-account-a', 'An imported workspace replaces a cloud copy of defaults without a conflict')
+  assert.equal(host!.cloudSyncStatus().state, 'synced')
   local = { payload: 'local-account-b', updatedAt: 2, pristine: false }
   await host!.cloudSyncCommand({ type: 'disconnect' })
   assert.equal(host!.cloudSyncStatus().revocation, 'complete')

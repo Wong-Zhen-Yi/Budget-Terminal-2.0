@@ -12,6 +12,8 @@ export interface SyncDependencies {
   readRemote: () => Promise<CloudSnapshot | null>
   writeRemote: (revision: number, payload: string) => Promise<{ accepted: boolean; revision: number; updatedAt: number }>
   saveCheckpoint: (checkpoint: SyncCheckpoint) => Promise<void>
+  /** True when a payload holds only factory defaults (no portfolios, cards, articles or preferences). */
+  isFactoryDefault?: (payload: string) => boolean
 }
 
 /** No credentials, UI or timers: local files remain the source for every application read. */
@@ -57,7 +59,7 @@ export class CloudSyncEngine {
         this.message = 'The cloud returned an older revision than this device last synced. Local data was preserved; retry sync after checking the backend.'
         return
       }
-      let decision = syncDecision(local, remote, this.checkpoint.baseline, localState.pristine)
+      let decision = syncDecision(local, remote, this.checkpoint.baseline, localState.pristine, this.deps.isFactoryDefault)
       if (resolve) {
         // The choice applies only to the copies shown when the conflict was reported.
         // If either changed since then, require a new explicit decision.
@@ -70,6 +72,13 @@ export class CloudSyncEngine {
         this.conflict = { local, remote }
         this.state = 'conflict'
         this.message = 'Local and cloud copies differ. Choose which complete copy to keep. A cloud download backs up this device first.'
+        return
+      }
+      if (decision === 'wait') {
+        // Uploading generated defaults would create a cloud copy that competes with real data.
+        this.state = 'idle'
+        this.pending = false
+        this.message = 'This account has no cloud copy yet. Sync starts when you save data here or another signed-in device uploads its copy.'
         return
       }
       if (decision === 'equal') { await this.remember(local, remote!.revision, remote!.updatedAt); return }

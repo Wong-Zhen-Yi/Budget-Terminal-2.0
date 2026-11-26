@@ -49,7 +49,7 @@ research pages.
 | **⚡ Open ready pages** | Every implemented page starts loading at launch. Startup progress, failures, and diagnostic logs stay in Settings. |
 | **Saved pages at launch** | Use cached content while every page refreshes. Settings controls separate page, market-data and image budgets, retention and cache diagnostics. |
 | **🔗 Extend your workspace** | Connect local research tools through MCP while keeping the workspace in the desktop app. |
-| **Work with Agents** | Use the embedded Codex or Claude workspace for research and local alerts, with autonomous mode off by default. |
+| **Work with Agents** | Use the embedded Codex, Claude Code or Claude workspace for research and local alerts, with autonomous mode off by default. |
 | **Use your phone** | Open a connected phone viewport on Windows, or enable private phone and tablet access through Tailscale. Telegram provides mobile links and agent quick prompts when configured. |
 
 ## Screenshots
@@ -208,6 +208,8 @@ On any Linux desktop, double-click [Launch Budget Terminal.sh](launchers/linux/L
 (choose **Run** or **Execute** if the file manager asks; in Ubuntu's Files, right-click it and
 choose **Run as a Program**), double-click **Budget Terminal 2.0** on the desktop or open it from
 the app menu after `npm run setup:linux`, or run `sh scripts/launch-posix.sh` from the checkout.
+`npm run setup:linux` (and every regular launch) also installs a `btd` command in `~/.local/bin`.
+It has the same commands and options as on Windows, including `btd restart` and `btd mobile`.
 On Ubuntu 23.10+, if Electron reports "No usable sandbox", run
 `sudo chown root:root node_modules/electron/dist/chrome-sandbox && sudo chmod 4755 node_modules/electron/dist/chrome-sandbox`
 from the checkout.
@@ -262,9 +264,9 @@ run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-bt.
 
 ### Update Budget Terminal
 
-Open **Settings → App dashboard** and click **Check for updates**. If an update is available, choose **Install update**. On Windows, `btd update` checks and applies the same source update from any directory. From the checkout on macOS or Linux, run `sh scripts/launch-posix.sh update`.
+Open **Settings → App dashboard** and click **Check for updates**. If an update is available, choose **Install update**. `btd update` checks and applies the same source update from any directory on Windows and Linux. On macOS, run `sh scripts/launch-posix.sh update` from the checkout.
 
-Updates use the project's published `main` branch and require Git and a clean checkout on `main` that can be fast-forwarded. After updating, close Budget Terminal and reopen it with the launcher to rebuild the app and MCP tools. On Windows, `btd restart` handles both steps.
+Updates use the project's published `main` branch and require Git and a clean checkout on `main` that can be fast-forwarded. After updating, close Budget Terminal and reopen it with the launcher to rebuild the app and MCP tools. `btd restart` handles both steps.
 
 ### Test with demo data
 
@@ -280,7 +282,7 @@ Edits and automatic backups go into that profile, alongside its own browser sess
 The regular launcher still opens your personal profile, and cloud sync is disabled in the demo.
 Market prices still use the app's usual providers.
 
-On Windows, select **Open phone viewport** under **Settings → Labs → Mobile Access** to open your desktop workspace in a resizable phone window, with compact through large phone presets. After an update, run `btd mobile` to save, rebuild, and reopen with the viewport. To use temporary sample data, run `btd -MobilePreview`. See [Mobile Access](docs/mobile-access.md#open-the-connected-mobile-window-on-windows) for details.
+Select **Open phone viewport** under **Settings → Labs → Mobile Access** to open your desktop workspace in a resizable phone window, with compact through large phone presets. After an update, run `btd mobile` to save, rebuild, and reopen with the viewport. To use temporary sample data, run `btd -MobilePreview`. See [Mobile Access](docs/mobile-access.md#open-the-connected-mobile-window) for details.
 
 ### Launch behavior and troubleshooting
 
@@ -320,9 +322,10 @@ and guidance for separate Python environments.
 The launcher also checks Codex for the **Agents** page and passes the detected
 executable to the app. It detects the Windows Codex desktop installation, native
 CLI installations and native executables behind Windows npm shims. If Codex is
-missing, the app still opens with setup instructions in Agents. To use Claude
-instead, choose **Provider → Claude** in Agents and save a Claude API key (see
-[Agents](docs/agents.md#claude-provider)). The launcher does not sign in or start
+missing, the app still opens with setup instructions in Agents. To use your
+Claude Code sign-in instead, choose **Provider → Claude Code** (see
+[Agents](docs/agents.md#claude-code-provider)); to use a Claude API key, choose
+**Provider → Claude** (see [Agents](docs/agents.md#claude-provider)). The launcher does not sign in or start
 agent work; autonomous mode remains off by default.
 
 <details>

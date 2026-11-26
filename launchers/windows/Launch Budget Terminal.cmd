@@ -82,6 +82,9 @@ rem Anthropic Focus research, source update checks and MCP tools rebuild through
 rem GOOGL Focus, quarterly SEC drivers and MCP schemas rebuild through the shared launch path.
 rem News reader and scoped clipboard exports rebuild through the shared launcher.
 rem The shared build uses Google-only cloud sign-in and retires saved GitHub sessions.
+rem The shared build gives macOS and Linux the same btd commands as Windows, including restart and mobile.
+rem The shared build opens a single terminal when the Linux desktop shortcut is double-clicked.
+rem The shared build adds the Claude Code agent provider and stops a fresh device uploading default data to an empty cloud.
 rem Finnhub streaming-first refresh, visible-stock priorities and idle/session savings rebuild through the shared launcher.
 rem Settings dashboard keeps the five slowest pages stable during startup updates; rebuilt through the shared launcher.
 rem Shared snapshot validation, account quotas and typed cloud contracts rebuild through the shared launcher; deploy backend policies separately.

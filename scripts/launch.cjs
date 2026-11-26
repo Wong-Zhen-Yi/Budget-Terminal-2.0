@@ -76,7 +76,10 @@ function createLauncherOutput({ log = console, environment = process.env, termin
 async function startDetachedDesktop(env, output) {
   // Resolve Electron only after installation and build verification have passed.
   const executable = require('electron')
-  const logDirectory = path.join(env.LOCALAPPDATA, 'BudgetTerminal', 'launcher-logs')
+  const logRoot = process.platform === 'win32' ? env.LOCALAPPDATA
+    : process.platform === 'darwin' ? path.join(require('node:os').homedir(), 'Library', 'Logs')
+      : env.XDG_STATE_HOME || path.join(require('node:os').homedir(), '.local', 'state')
+  const logDirectory = path.join(logRoot, 'BudgetTerminal', 'launcher-logs')
   mkdirSync(logDirectory, { recursive: true })
   const session = randomUUID()
   const stdout = openSync(path.join(logDirectory, `${session}.log`), 'wx')
@@ -131,8 +134,8 @@ function launch({ development = false, demo = false, mobilePreview = false, mobi
     output.error('Setup cannot be combined with launch options.')
     return 1
   }
-  if (mobile && (platform !== 'win32' || development || sampleData || setupOnly || logs)) {
-    output.error('Open the connected mobile window on Windows with btd mobile.')
+  if (mobile && (development || sampleData || setupOnly || logs)) {
+    output.error('Run btd mobile to open the connected mobile window.')
     return 1
   }
 
@@ -210,7 +213,7 @@ function launch({ development = false, demo = false, mobilePreview = false, mobi
   output.stage(5, mobile ? 'Open connected mobile window' : mobilePreview ? 'Open mobile preview' : development ? 'Open live development' : 'Open desktop app')
   output.ready('LAUNCH CHECKS PASSED')
   if (mobile) env.BUDGET_TERMINAL_OPEN_MOBILE = '1'
-  if (detach && platform === 'win32' && !development && !sampleData) {
+  if (detach && !development && !sampleData) {
     return openDetached(env, output).catch(error => {
       output.error(`Budget Terminal could not start: ${error.message}`)
       return 1
@@ -245,18 +248,139 @@ function launch({ development = false, demo = false, mobilePreview = false, mobi
   return 0
 }
 
-if (require.main === module) {
-  if (process.argv[2] === 'update') {
-    if (process.argv.length === 3) void require('./update.cjs').runUpdate()
-    else {
-      console.error('Run the update command without launch options.')
-      process.exitCode = 1
-    }
-  } else {
-    const flags = new Set(process.argv.slice(2))
-    Promise.resolve(launch({ development: flags.has('--dev'), demo: flags.has('--demo'), mobilePreview: flags.has('--mobile-preview'), mobile: flags.has('--mobile'), logs: flags.has('--logs'), setupOnly: flags.has('--setup'), detach: flags.has('--detach') }))
-      .then(status => { process.exitCode = status })
+// Keep this reference identical to the Windows help in launch-windows.ps1: btd has 1:1 parity.
+const commandHelp = `Budget Terminal command help
+
+Usage
+  btd [start|restart] [-Dev] [-Logs] [-Attached]
+  btd mobile
+  btd -Demo [-Dev] [-Logs]
+  btd -MobilePreview [-Dev]
+  btd update
+  btd -Setup
+  btd -RuntimeOnly
+  btd --help
+
+Commands
+  start         Show startup checks and build output, then open the desktop app.
+                You can close the terminal once the app has been launched.
+                Running btd without a command also starts the app.
+  restart       Close the app gracefully, wait for saves, rebuild and reopen it.
+                If the app is already closed, start it.
+  mobile        Save and close the running desktop, rebuild, then open the
+                phone viewport with your workspace. No Tailscale setup.
+                In an open desktop, use Settings > Labs > Mobile Access to
+                open the viewport without rebuilding.
+  update        Check for and apply source updates from the published main branch.
+                Run btd restart afterward to build and use the update.
+
+Options
+  -Dev          Run in development mode on the Vite dev server with hot reload,
+                including the phone UI. Keep the terminal open.
+  -Demo         Open a temporary workspace with sample data. Keep the terminal open.
+  -MobilePreview Open the responsive phone UI with temporary sample data.
+  -Logs         Open Settings diagnostics when the app opens.
+  -Attached     Keep the app and its runtime output attached to this terminal.
+                Keep the terminal open while the app runs.
+  -Setup        Install dependencies, verify Electron, build the app and install
+                the btd command without opening the app.
+  -RuntimeOnly  Locate or install a supported Node.js runtime and print its path.
+  --help, -Help Show this command reference.`
+
+// Accept btd spellings (-Demo, -MobilePreview, restart, mobile) the same way on every platform.
+function parseCommandLine(argv) {
+  const aliases = { mobilepreview: 'mobile-preview', runtimeonly: 'runtime-only', h: 'help', '?': 'help' }
+  const commands = new Set(['start', 'restart', 'mobile', 'update'])
+  let command = 'start'
+  const flags = new Set()
+  for (const [index, arg] of argv.entries()) {
+    const bare = !arg.startsWith('-')
+    const name = arg.replace(/^-{1,2}/, '').toLowerCase()
+    // Windows passes --mobile to request the connected window after its own shutdown step.
+    if (index === 0 && (bare || name === 'update') && commands.has(name)) command = name
+    else flags.add(`--${aliases[name] || name}`)
+  }
+  if (command === 'mobile') flags.add('--mobile')
+  return { command, flags }
+}
+
+function sleepSync(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds)
+}
+
+function processEnvironment(pid, platform) {
+  if (platform === 'linux') {
+    try { return require('node:fs').readFileSync(`/proc/${pid}/environ`, 'latin1') } catch { return '' }
+  }
+  const result = spawnSync('ps', ['-E', '-ww', '-p', String(pid), '-o', 'command='], { encoding: 'utf8' })
+  return result.status === 0 ? result.stdout : ''
+}
+
+// macOS and Linux counterpart of Stop-BudgetTerminal: ask this checkout's desktop to quit and wait for saves.
+function stopRunningDesktop({ retryCommand = 'btd restart', platform = process.platform, log = console } = {}) {
+  let electron
+  try { electron = require('electron') } catch { return }
+  const listing = spawnSync('ps', ['-axww', '-o', 'pid=,args='], { encoding: 'utf8' })
+  if (listing.status !== 0) throw new Error(`Could not list running processes. Close Budget Terminal, then retry ${retryCommand}.`)
+  const running = listing.stdout.split('\n').map(line => line.trim().match(/^(\d+)\s+(.*)$/)).filter(Boolean)
+    .filter(([, , args]) => (args === electron || args.startsWith(`${electron} `)) && !/\s--type=/.test(args))
+    .map(([, pid]) => Number(pid))
+    // Leave demo and phone-preview sessions alone, as Windows does.
+    .filter(pid => !/BUDGET_TERMINAL_(DEMO_DIR|MOBILE_PREVIEW)=/.test(processEnvironment(pid, platform)))
+  const alive = pid => { try { process.kill(pid, 0); return true } catch { return false } }
+  for (const pid of running) {
+    if (!alive(pid)) continue
+    log.log('Closing Budget Terminal and saving pending data...')
+    try { process.kill(pid, 'SIGTERM') } catch { throw new Error(`Could not request a clean shutdown. Close Budget Terminal, then retry ${retryCommand}.`) }
+    const deadline = Date.now() + 30_000
+    while (alive(pid) && Date.now() < deadline) sleepSync(200)
+    if (alive(pid)) throw new Error('Budget Terminal did not finish saving within 30 seconds. Restart stopped without forcing it closed. Check the app before trying again.')
+    log.log('Budget Terminal closed. Preparing the latest desktop build...')
   }
 }
 
-module.exports = { launch, platformName, createLauncherOutput }
+function runCommandLine(argv) {
+  const { command, flags } = parseCommandLine(argv)
+  const has = flag => flags.has(flag)
+  if (has('--help')) {
+    console.log(commandHelp)
+    return 0
+  }
+  const fail = message => { console.error(message); return 1 }
+  const launchOptions = ['--dev', '--logs', '--demo', '--mobile-preview', '--setup', '--runtime-only', '--attached']
+  if (command === 'update') {
+    if (flags.size) return fail('Update cannot be combined with launch options.')
+    void require('./update.cjs').runUpdate()
+    return undefined
+  }
+  if (has('--runtime-only')) {
+    if (command !== 'start' || flags.size > 1) return fail('Run btd -RuntimeOnly by itself.')
+    console.log(process.execPath)
+    return 0
+  }
+  if (has('--demo') && (command !== 'start' || has('--setup'))) return fail('Demo is a launch mode. Run btd -Demo to open it.')
+  if (has('--mobile-preview') && (command !== 'start' || has('--setup'))) return fail('Run btd -MobilePreview by itself or with -Dev to open the phone window.')
+  if (command === 'mobile' && launchOptions.filter(flag => flag !== '--attached').some(has)) return fail('Run btd mobile to open the connected mobile window.')
+  if (command === 'restart' && has('--setup')) return fail('Restart cannot be combined with setup or runtime-only options.')
+  if (process.platform !== 'win32') {
+    try {
+      if (command === 'restart') stopRunningDesktop()
+      if (command === 'mobile') stopRunningDesktop({ retryCommand: 'btd mobile' })
+    } catch (error) {
+      return fail(error.message)
+    }
+    // Like install-bt.ps1 on Windows, regular starts and setup keep the btd command current.
+    if (process.platform === 'linux' && !has('--demo') && !has('--mobile-preview')) {
+      try { require('./install-linux-launcher.cjs').installBtdCommand() } catch { /* the launch itself still proceeds */ }
+    }
+  }
+  // Windows decides detaching in launch-windows.ps1 and passes --detach; elsewhere detach unless -Attached.
+  const detach = has('--detach') || (process.platform !== 'win32' && !has('--attached'))
+  return launch({ development: has('--dev'), demo: has('--demo'), mobilePreview: has('--mobile-preview'), mobile: has('--mobile'), logs: has('--logs'), setupOnly: has('--setup'), detach })
+}
+
+if (require.main === module) {
+  Promise.resolve(runCommandLine(process.argv.slice(2))).then(status => { if (status !== undefined) process.exitCode = status })
+}
+
+module.exports = { launch, platformName, createLauncherOutput, parseCommandLine, commandHelp }

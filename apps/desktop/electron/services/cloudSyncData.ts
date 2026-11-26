@@ -50,10 +50,36 @@ const metadataPath = () => cloudDataPath('sync-local-metadata.json')
 const metadataSchema = z.object({ hash: z.string(), updatedAt: z.number().finite().nonnegative(), pristine: z.boolean() })
 const hash = (payload: string) => createHash('sha256').update(payload).digest('hex')
 
-function pristineData(payload: string): boolean {
+function defaultPayload(): string {
   const { sourcePath: _sourcePath, ...cards } = defaultCardsPayload()
-  return payload === canonical({ version: 1, userData: defaultSyncUserData(), settings: defaultSyncSettings(),
+  return canonical({ version: 1, userData: defaultSyncUserData(), settings: defaultSyncSettings(),
     cards, articles: { articles: [] } })
+}
+
+function pristineData(payload: string): boolean {
+  return payload === defaultPayload()
+}
+
+/**
+ * A snapshot holding only factory defaults, from any build. Tab order is ignored because each
+ * build normalizes it to the pages it ships, so defaults written by another version still match.
+ */
+export function isFactoryDefaultPayload(payload: string): boolean {
+  try {
+    const value = JSON.parse(payload) as Record<string, unknown>
+    const defaults = JSON.parse(defaultPayload()) as Record<string, unknown>
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+    const settings = (input: unknown) => {
+      if (!input || typeof input !== 'object' || Array.isArray(input)) return input
+      const { tabOrder: _tabOrder, ...rest } = input as Record<string, unknown>
+      return rest
+    }
+    return Object.keys(value).length === Object.keys(defaults).length && value.version === defaults.version
+      && canonical(value.userData) === canonical(defaults.userData)
+      && canonical(value.cards) === canonical(defaults.cards)
+      && canonical(value.articles) === canonical(defaults.articles)
+      && canonical(settings(value.settings)) === canonical(settings(defaults.settings))
+  } catch { return false }
 }
 
 async function saveLocalMetadata(value: LocalSyncSnapshot, payloadHash = hash(value.payload)): Promise<void> {

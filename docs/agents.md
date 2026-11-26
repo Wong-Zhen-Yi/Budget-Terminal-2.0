@@ -4,7 +4,7 @@ Live Agents status always updates the desktop conversation and controls, includi
 
 ## Claude provider
 
-Agents can run on Codex (the default) or Claude. Choose **Provider** in the Agents header. The choice is saved locally and applies to chat, autonomous monitoring, tracker checks and Telegram research. Switching is blocked while a run, autonomous monitoring or a Telegram reply is in progress.
+Agents can run on Codex (the default), Claude Code or Claude. Choose **Provider** in the Agents header. The choice is saved locally and applies to chat, autonomous monitoring, tracker checks and Telegram research. Switching is blocked while a run, autonomous monitoring or a Telegram reply is in progress.
 
 Claude uses the Anthropic API with your own API key. Create one in the Claude Console under **API keys**, open **Agents → Controls → Get connected · Claude**, paste the key and select **Save key and connect**. The key is encrypted with Electron's OS-backed `safeStorage` in `claude-settings.bin` under the app's private user-data directory, like the Telegram token. It never reaches the renderer, chat history, logs or the agent; the renderer only learns whether a key is saved. Linux requires a real system keyring. **Remove saved key** deletes the file. Never paste a key into chat, commit it or put it in a launcher. Usage is billed to the key's Console workspace.
 
@@ -18,6 +18,26 @@ Claude uses the same Budget Terminal tools, permissions, approval dialogs, 80-to
 - On Opus, Sonnet and Fable, a declined request is retried automatically on a fallback model by the API. A request that is still declined ends the run with an explanation.
 
 Run `npm run probe:claude-agent` to check the Claude transport offline against a fake API.
+
+## Claude Code provider
+
+**Claude Code** runs Agents on the Claude account you signed in to with the Claude Code CLI, the way Codex uses your signed-in ChatGPT account. No API key is needed, and usage counts toward that account's plan limits. Install Claude Code, run `claude` once in a terminal and sign in with `/login`, then choose **Provider → Claude Code** and select **Connect Claude Code**. When no provider has been saved, a computer with Claude Code but no Codex starts on Claude Code.
+
+Budget Terminal finds the CLI on `PATH`, in `~/.local/bin` (`%USERPROFILE%\.local\bin` on Windows) or at `BUDGET_TERMINAL_CLAUDE_PATH`. Without one, the Claude Agent SDK's bundled Claude Code runs with the same saved login. Connecting only checks the account and model list; it never sends a prompt. The account email stays in the main process.
+
+The session runs through the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview) in isolation:
+
+- Budget Terminal tools reach Claude Code through an in-process MCP server. Every call goes back through the same validation, permissions, approval dialogs, 80-tool and time limits as Codex. Everyday tools stay loaded; Claude Code's tool search loads the rest on demand.
+- The only built-in tools are Claude Code's WebSearch and WebFetch. File, shell, coding and subagent tools are off, and anything not pre-approved is denied without a prompt.
+- Your Claude Code settings, `CLAUDE.md`, hooks, plugins, skills and other MCP servers are never loaded. Prompts are delivered verbatim, so slash commands and `@file` mentions are not expanded.
+- `ANTHROPIC_API_KEY` and other API credentials are removed from the CLI's environment, so it always uses the Claude Code login.
+- Chats are not saved to Claude Code's session history (`persistSession: false`); Budget Terminal keeps its own history as usual.
+
+The model picker lists the Opus, Sonnet, Haiku and Fable models your Claude Code account offers, and **Thinking** sets the effort level each supports. Model and effort changes apply to the running conversation. Claude reads attached images but cannot generate or edit them.
+
+Anthropic's Agent SDK terms do not allow third-party products to offer claude.ai subscription login without approval. This provider runs the user's own installed and signed-in CLI on their own computer, and Budget Terminal never handles the login itself. Use the **Claude** (API key) provider for any shared or hosted deployment.
+
+Run `npm run probe:claude-code-agent` to check the Claude Code transport offline against a fake SDK session.
 
 ## Telegram
 

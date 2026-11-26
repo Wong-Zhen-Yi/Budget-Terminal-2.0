@@ -7,8 +7,10 @@ import type { TelegramCommand, TelegramHistoryState, TelegramState } from './tel
 export interface AgentImage { name: string; dataUrl: string }
 
 /** The model runtime behind Agents chat, trackers, monitoring and Telegram research. */
-export type AgentProvider = 'codex' | 'claude'
-export const agentProviderLabels: Record<AgentProvider, string> = { codex: 'Codex', claude: 'Claude' }
+export type AgentProvider = 'codex' | 'claude' | 'claude-code'
+export const agentProviderLabels: Record<AgentProvider, string> = { codex: 'Codex', claude: 'Claude', 'claude-code': 'Claude Code' }
+export const agentProviders = Object.keys(agentProviderLabels) as AgentProvider[]
+export const isAgentProvider = (value: unknown): value is AgentProvider => agentProviders.includes(value as AgentProvider)
 /** Claude API keys from the Claude Console. Only a saved/not-saved flag reaches the renderer. */
 export const claudeApiKeyPattern = /^sk-ant-[A-Za-z0-9_-]{16,400}$/
 
