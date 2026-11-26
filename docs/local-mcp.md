@@ -50,7 +50,7 @@ use the connection configuration from the demo window's MCP settings while that 
 [Mobile Access](mobile-access.md) uses separate private Tailscale routes for phone and tablet browsers, including a direct link that works without DNS.
 The local MCP bridge retains its existing loopback address, credentials, and permissions.
 Mobile HTTP calls use authenticated asynchronous result collection so provider waits do not exhaust phone browser connections during all-page startup loading. MCP tool routes, schemas and permissions are unchanged.
-Configure Mobile Access under desktop **Settings → Labs** and use `/mobile` in the configured Telegram chat to get the mobile link.
+Manage Mobile Access under desktop **Settings → Labs**. In the configured private Telegram chat, `/mobile` turns on Mobile Access and returns the available links.
 The Windows **Open phone viewport** button opens a resizable local mobile window with generic phone-size presets through desktop IPC. Mobile clients and MCP tools have no window-launch permission.
 
 Use `budget_terminal_screenshot` with `{ "request": { "page": "focus-dashboard" } }`

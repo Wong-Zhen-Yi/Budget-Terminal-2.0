@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { MOBILE_DIRECT_LOCAL_PORT, type MobileAccessStatus } from '../shared/mobileAccess.js'
 import { createMobileHttp, type MobileRequest } from './mobileHttp.js'
 import { readMobileTailnet, type MobileTailnet } from './mobileTailscale.js'
+import { liveStatusEvents } from './liveStatusEvents.js'
 
 let server: Awaited<ReturnType<typeof createMobileHttp>> | undefined
 let localServer: Awaited<ReturnType<typeof createMobileHttp>> | undefined
@@ -110,11 +111,15 @@ export async function configureMobileAccess(value: unknown) {
   await startMobileAccess()
   if (typeof value !== 'boolean' || demo() || stopped) return snapshot()
   const change = changes.then(async () => {
+    const wasEnabled = enabled
     try {
       if (value) {
-        await writeFile(localSetting(), '{"enabled":true}\n', { mode: 0o600 })
-        enabled = true
+        if (!enabled) {
+          await writeFile(localSetting(), '{"enabled":true}\n', { mode: 0o600 })
+          enabled = true
+        }
         if (!server) await listen()
+        else await refreshTailnet()
       } else {
         enabled = false
         await closeListener()
@@ -124,6 +129,7 @@ export async function configureMobileAccess(value: unknown) {
     } catch {
       error = 'Could not save the Mobile Access preference.'
     }
+    if (enabled !== wasEnabled) liveStatusEvents.changed('mobileAccess')
     return snapshot()
   })
   changes = change.then(() => undefined)
@@ -144,12 +150,12 @@ export async function stopMobileAccess() {
   await Promise.all([closeListener(), local?.close()])
 }
 
-export async function telegramMobileLink() {
-  const { url, directUrl, enabled } = await mobileAccessStatus()
+export async function telegramMobileLink(activate: boolean) {
+  const { url, directUrl, enabled, available, message } = await (activate ? configureMobileAccess(true) : mobileAccessStatus())
   if (directUrl) {
     return `Connect Tailscale on your phone or tablet, then open this direct link in your browser: ${directUrl}\nIt works without Tailscale DNS. Keep Budget Terminal open on the computer.${url ? `\nHTTPS link for devices using MagicDNS: ${url}` : ''}`
   }
   return url ? `Open Budget Terminal in your phone or tablet browser: ${url}\nConnect Tailscale with the same account as this computer. If your browser can’t find the address, enable Use Tailscale DNS in the Tailscale app and reconnect.`
-    : enabled ? 'The private Tailscale link is unavailable. Check Mobile Access under Settings → Labs on the computer.'
-      : 'Enable Mobile Access under Settings → Labs on the computer, then send /mobile again.'
+    : !activate && available && !enabled ? 'Mobile Access is off. Send /mobile to turn it on and get the private link.'
+      : `${message} Check Mobile Access under Settings → Labs on the computer.`
 }

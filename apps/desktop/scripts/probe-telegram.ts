@@ -25,12 +25,12 @@ let dispatched = 0
 let resets = 0
 const commands: { command: string; argument: string }[] = []
 const mobileUrl = 'https://test-host.test-tailnet.ts.net:8443/'
-let mobileRequests = 0
+const mobileRequests: boolean[] = []
 const adapter = new TelegramService({
   load: async () => stored,
   save: async config => { stored = structuredClone(config) },
   reset: async () => { resets++ },
-  mobileLink: async () => { mobileRequests++; return mobileUrl },
+  mobileLink: async activate => { mobileRequests.push(activate); return mobileUrl },
   screenshot: async (page, signal) => { assert(!signal.aborted); assert(['current', 'charts', 'all'].includes(page)); captures++; return captureResult },
   models: async () => [{ id: 'fixture', name: 'Fixture model', current: true, reasoning: [{ id: 'default', name: 'Default', current: true }] }],
   command: async (command, argument) => { commands.push({ command, argument }); return `${command} command result` },
@@ -145,7 +145,8 @@ assert.deepEqual(menu.body.scope, { type: 'chat', chat_id: '123' })
 assert.deepEqual((menu.body.commands as { command: string }[]).map(command => command.command), ['new', 'model', 'prompts', 'mobile', 'restart'])
 assert(requests.some(request => typeof request.body.text === 'string' && request.body.text.startsWith('Budget Terminal research agent.') && request.body.text.includes('/prompts')))
 assert.equal(requests.filter(request => request.body.text === 'Available commands: /new, /model, /prompts, /mobile, /restart. Ask naturally for a screenshot of a page.').length, 10)
-assert.equal(mobileRequests, 3, 'Only fresh requests from the configured private chat can retrieve the link')
+assert.deepEqual(mobileRequests, [true, true, false],
+  'Only fresh requests from the configured private chat retrieve the link, and only /mobile enables access')
 assert.equal(requests.filter(request => request.body.text === mobileUrl && request.body.chat_id === '123' &&
   (request.body.link_preview_options as { is_disabled?: boolean })?.is_disabled).length, 3)
 assert.equal(requests.filter(request => request.method === 'sendChatAction').length, dispatched, 'Mobile commands bypass the research path entirely')

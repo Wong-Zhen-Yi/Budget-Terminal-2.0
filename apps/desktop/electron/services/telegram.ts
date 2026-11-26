@@ -11,7 +11,7 @@ export const telegramCommands = [
   { command: 'new', description: 'Start a fresh chat: /new [question]' },
   { command: 'model', description: 'Choose a model, then its reasoning level' },
   { command: 'prompts', description: 'Choose a pre-written research prompt' },
-  { command: 'mobile', description: 'Get the private Budget Terminal link for iPhone or iPad' },
+  { command: 'mobile', description: 'Turn on Mobile Access and get the private link' },
   { command: 'restart', description: 'Restart the Budget Terminal desktop app' },
 ]
 export type TelegramResearchCommand = 'model' | 'reasoning'
@@ -49,7 +49,7 @@ interface Options {
   reset: () => Promise<void>
   command?: (command: TelegramResearchCommand, argument: string) => Promise<string>
   models?: () => Promise<TelegramModelChoice[]>
-  mobileLink?: () => Promise<string>
+  mobileLink?: (activate: boolean) => Promise<string>
   restart?: () => void
   screenshot?: (page: string, signal: AbortSignal) => Promise<Envelope<ScreenshotPayload>>
   fetch?: typeof fetch
@@ -230,11 +230,11 @@ export class TelegramService {
   private async showPromptPicker(signal: AbortSignal) {
     await this.showPicker('Tap a prompt to send it in this conversation.', agentQuickPrompts.map(({ label, prompt }) => ({ label, value: prompt })), 'prompt', signal)
   }
-  private async sendMobileLink(signal: AbortSignal) {
+  private async sendMobileLink(signal: AbortSignal, activate: boolean) {
     const unavailable = 'Mobile Access is unavailable. Check Settings → Labs on the computer, then send /mobile again.'
     let text = unavailable
     try {
-      text = (await this.options.mobileLink?.())?.trim() || unavailable
+      text = (await this.options.mobileLink?.(activate))?.trim() || unavailable
     } catch { /* Link discovery stays local even when Tailscale or the preference is unavailable. */ }
     if (!signal.aborted) await this.send(text, signal)
   }
@@ -329,7 +329,7 @@ export class TelegramService {
             const argument = match?.[3]?.trim() ?? ''
             if (command === 'start') { await this.send(help, signal); continue }
             if (command === 'mobile') {
-              await this.sendMobileLink(signal)
+              await this.sendMobileLink(signal, true)
               continue
             }
             if (command === 'prompts') {
@@ -364,7 +364,7 @@ export class TelegramService {
             } else { await this.send(availableCommands, signal); continue }
           }
           if (/^(?:please )?(?:send|give|get|show)(?: me)? (?:the |a |my )?(?:(?:private )?(?:tailscale|mobile|budget terminal(?: mobile)?) link|(?:private )?link (?:for|to) (?:budget terminal|my iphone|my ipad|mobile access))[.!?]*$/i.test(text)) {
-            await this.sendMobileLink(signal)
+            await this.sendMobileLink(signal, false)
             continue
           }
           await this.replyToResearch(text, signal)
