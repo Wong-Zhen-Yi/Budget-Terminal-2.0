@@ -7,7 +7,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { AccountInfo, ModelInfo, Options, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { AgentsService } from '../electron/services/agents.js'
-import { ClaudeCodeClient, claudeCodeEnvironment, claudeCodeModels, claudeCodeToolResult } from '../electron/services/claudeCodeClient.js'
+import { ClaudeCodeClient, claudeCodeArguments, claudeCodeEnvironment, claudeCodeModels, claudeCodeToolResult } from '../electron/services/claudeCodeClient.js'
 import { claudeCoreTools } from '../electron/services/claudeClient.js'
 import { connectionTool } from '../mcp/catalog.js'
 import type { Operation } from '../mcp/operations.js'
@@ -207,6 +207,11 @@ try {
   assert.deepEqual(converted.content[1], { type: 'image', data: 'cGl4ZWxz', mimeType: 'image/png' })
   assert((converted.content[0] as { text: string }).text.length < 201_000)
   assert.equal(claudeCodeToolResult({ error: { message: 'Denied.' } }).isError, true)
+  // Object arguments sent as JSON text are parsed; anything else is left for validation to reject.
+  assert.deepEqual(claudeCodeArguments({ request: '{}', response: '{"mode":"summary"}' }), { request: {}, response: { mode: 'summary' } })
+  assert.deepEqual(claudeCodeArguments({ request: '[1]' }), { request: '[1]' })
+  assert.deepEqual(claudeCodeArguments({ request: '{bad' }), { request: '{bad' })
+  assert.deepEqual(claudeCodeArguments(undefined), {})
 
   service.close()
   assert(sessions.every(session => session.closed), 'Every Claude Code session closes with the service')

@@ -486,6 +486,8 @@ research routing. Live feed availability is not asserted by those offline probes
 
 Every tool advertises an output schema. Full results describe the shared service types; response-shaped results, failed envelopes, native image metadata and structured errors have explicit variants. Rebuild and reconnect clients to refresh both input and output schemas.
 
+Every tool's `request` input declares its type inline instead of through a bare `$ref`, and tools that take no request parameters list empty `properties` with the hint "pass an empty object {}". Behind a bare `$ref`, Claude models sent parameterless requests such as `budget_terminal_portfolio` as the string `"{}"`, which failed validation with `data/request must be object`. The allowed values and validation are unchanged.
+
 Start common research with:
 - `budget_terminal_company_overview`: `request: { "symbol": "AAPL" }` coordinates current quotes, fundamentals and refreshed news.
 - `budget_terminal_portfolio_briefing`: `request: { "portfolioId": "saved-id" }` reads that portfolio and fetches quotes and news only for its symbols.

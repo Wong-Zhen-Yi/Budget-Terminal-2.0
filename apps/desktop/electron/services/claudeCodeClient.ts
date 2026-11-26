@@ -64,6 +64,20 @@ function clip(text: string) {
   return text.length <= MAX_RESULT_TEXT ? text : `${text.slice(0, MAX_RESULT_TEXT)}\n[Result truncated at ${MAX_RESULT_TEXT} characters. Narrow the request with response fields, summaries or pagination before drawing conclusions.]`
 }
 
+/** Claude occasionally sends an object argument as JSON text; accept it only when it parses to an object. */
+export function claudeCodeArguments(args: Record<string, unknown> | undefined): Record<string, unknown> {
+  const result = { ...(args ?? {}) }
+  for (const key of ['request', 'response']) {
+    const value = result[key]
+    if (typeof value !== 'string' || !value.trim().startsWith('{')) continue
+    try {
+      const parsed: unknown = JSON.parse(value)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) result[key] = parsed
+    } catch { /* Leave it for validation to reject. */ }
+  }
+  return result
+}
+
 /** Convert the agent service's dynamic tool reply into an MCP tool result. */
 export function claudeCodeToolResult(packet: { result?: unknown; error?: { message?: string } }): CallToolResult {
   if (packet.error) return { content: [{ type: 'text', text: packet.error.message || 'Tool call failed.' }], isError: true }
@@ -274,7 +288,7 @@ export class ClaudeCodeClient implements CodexTransport {
       const id = `claude-code-${randomUUID()}`
       return new Promise<CallToolResult>(resolve => {
         this.calls.set(id, resolve)
-        this.receive({ id, method: 'item/tool/call', params: { threadId: turn.thread.id, turnId: turn.id, tool: params.name, arguments: params.arguments ?? {} } })
+        this.receive({ id, method: 'item/tool/call', params: { threadId: turn.thread.id, turnId: turn.id, tool: params.name, arguments: claudeCodeArguments(params.arguments) } })
       })
     })
     return mcp

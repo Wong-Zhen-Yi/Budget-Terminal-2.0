@@ -28,6 +28,7 @@ Budget Terminal finds the CLI on `PATH`, in `~/.local/bin` (`%USERPROFILE%\.loca
 The session runs through the [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview) in isolation:
 
 - Budget Terminal tools reach Claude Code through an in-process MCP server. Every call goes back through the same validation, permissions, approval dialogs, 80-tool and time limits as Codex. Everyday tools stay loaded; Claude Code's tool search loads the rest on demand.
+- If Claude sends a `request` or `response` object as JSON text, the app parses it before validation. Text that doesn't parse to an object is still rejected. `budget_terminal_connection_status` reports only whether tools are available. It leaves out external-client `connected`/`active` fields and setup commands, so the agent doesn't conclude it is disconnected.
 - The only built-in tools are Claude Code's WebSearch and WebFetch. File, shell, coding and subagent tools are off, and anything not pre-approved is denied without a prompt.
 - Your Claude Code settings, `CLAUDE.md`, hooks, plugins, skills and other MCP servers are never loaded. Prompts are delivered verbatim, so slash commands and `@file` mentions are not expanded.
 - `ANTHROPIC_API_KEY` and other API credentials are removed from the CLI's environment, so it always uses the Claude Code login.

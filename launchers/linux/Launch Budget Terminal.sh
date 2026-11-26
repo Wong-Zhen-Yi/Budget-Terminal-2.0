@@ -5,6 +5,7 @@
 # The shared build gives Linux the same btd commands as Windows, including restart and mobile.
 # The shared build opens one terminal on double-click; the desktop entry no longer asks XFCE for a second one.
 # The shared build adds the Claude Code agent provider and stops a fresh device uploading default data to an empty cloud.
+# The shared build fixes Agents tool calls on Claude Code that failed with "request must be object".
 here=$(cd "$(dirname "$0")" && pwd) || exit 1
 launcher="$here/../../scripts/launch-posix.sh"
 

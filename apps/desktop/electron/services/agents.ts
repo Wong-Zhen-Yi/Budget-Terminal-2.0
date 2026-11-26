@@ -853,7 +853,10 @@ export class AgentsService {
     }
     if (name === connectionTool.name) {
       z.object({}).strict().parse(args)
-      return this.options.connectionStatus?.() ?? { available: true, tools: agentCatalog.length + 1 }
+      // The host status's connected/active fields describe external MCP clients, and its setup holds
+      // client registration commands. This conversation calls the tools directly, so report only availability.
+      const status = this.options.connectionStatus?.() as { available?: boolean; error?: string } | undefined
+      return { available: status?.available ?? true, tools: agentCatalog.length + 1, ...(status?.error ? { error: status.error } : {}) }
     }
     if (name === 'terminal_propose_portfolio_update') {
       if (this.readOnly || !this.options.portfolio) throw new Error('Portfolio previews are available only for manual chat requests.')

@@ -143,6 +143,10 @@ try {
   assert.equal((await pluginClient.callTool({ name: 'budget_terminal_connection_status', arguments: {} })).isError, false)
   let mutationVariants = 0
   for (const entry of catalog) {
+    // Claude sends parameterless requests behind a bare $ref as the string "{}"; requests must declare their type inline.
+    const requestShape = (entry.tool.inputSchema.properties as Record<string, { $ref?: string; type?: string; anyOf?: unknown[]; properties?: object }>).request
+    assert(!requestShape.$ref && (requestShape.type === 'object' || Array.isArray(requestShape.anyOf)), `${entry.tool.name} request must declare its type inline`)
+    if (requestShape.type === 'object') assert(requestShape.properties, `${entry.tool.name} request must list its properties`)
     const args = example(entry.tool.inputSchema, entry.tool.inputSchema) as Record<string, unknown>
     validateCall(entry.tool.name, args)
     assert.throws(() => validateCall(entry.tool.name, { ...args, surprise: true }), /Invalid/)

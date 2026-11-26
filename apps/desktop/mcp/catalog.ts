@@ -12,6 +12,24 @@ export function toolTitle(operation: string): string {
   const words = operation.replace(/([a-zd])([A-Z])/g, '$1 $2').toLowerCase()
   return `Budget Terminal: ${words.charAt(0).toUpperCase()}${words.slice(1)}`
 }
+type JsonSchema = { $ref?: string; type?: string; properties?: Record<string, unknown>; description?: string; [key: string]: unknown }
+/**
+ * Inline the request's top-level $ref chain so `request` declares its own type. Behind a bare
+ * $ref, Claude models sent parameterless requests as the string "{}" instead of an object.
+ * Requests that take no parameters also state that an empty object is expected.
+ */
+export function requestSchema(schema: { $ref: string; definitions: Record<string, JsonSchema> }): JsonSchema {
+  let node: JsonSchema = { $ref: schema.$ref }
+  for (let hops = 0; node.$ref?.startsWith('#/definitions/') && hops < 8; hops++) {
+    const target = schema.definitions[decodeURIComponent(node.$ref.slice('#/definitions/'.length))]
+    if (!target) break
+    const { $ref: _ref, ...rest } = node
+    node = { ...target, ...rest }
+  }
+  return node.type === 'object' && !node.properties
+    ? { ...node, properties: {}, description: node.description ?? 'Takes no parameters; pass an empty object {}.' }
+    : node
+}
 export const catalog = Object.entries(operations).map(([operation, description]) => {
   const inputSchema = schemas[operation as Operation]
   const mutation = operation in mutationDomains
@@ -30,7 +48,7 @@ export const catalog = Object.entries(operations).map(([operation, description])
     inputSchema: {
       type: 'object',
       properties: {
-        request: { $ref: inputSchema.$ref },
+        request: requestSchema(inputSchema as Parameters<typeof requestSchema>[0]),
         ...(!mutation && !['screenshot', 'browserResearch'].includes(operation) ? { response: responseJsonSchema } : {}),
         ...(mutation && operation !== 'mutateArticles' ? { expectedRevision: {
           type: 'string' as const, pattern: '^[a-f0-9]{64}$',
