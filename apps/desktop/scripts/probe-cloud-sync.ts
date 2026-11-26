@@ -70,10 +70,11 @@ try {
   assert.equal(fresh.saved()?.cloudUpdatedAt, remote!.updatedAt, 'Checkpoints must preserve the server data timestamp')
   const second = device('new device')
   await second.engine.sync()
-  assert.equal(second.engine.state, 'conflict', 'First connection must not overwrite local or cloud data')
-  assert.equal(second.local(), 'new device')
-  await second.engine.sync('cloud')
+  assert.equal(second.engine.state, 'synced', 'A signed-in device restores the account’s cloud copy without a choice')
   assert.equal(second.local(), 'original')
+  assert(second.engine.message?.includes('recovery backup'), 'Replacing saved local data on first sync must say a backup was kept')
+  await second.engine.sync()
+  assert(second.engine.message?.includes('recovery backup'), 'A background check must not hide the restore notice')
   first.edit('first edit')
   await first.engine.sync()
   await second.engine.sync()
@@ -142,7 +143,7 @@ try {
   const realNow = Date.now
   let clock = realNow(), quotaCalls = 0, allowWrites = false
   let quotaRemote: CloudSnapshot | null = null
-  const throttled = new CloudSyncEngine({ account: 'quota-fixture', revision: 0 }, {
+  const throttled = new CloudSyncEngine({ account: 'quota-fixture', revision: 0, baseline: 'quota baseline' }, {
     readLocal: async () => ({ payload: 'pending edit', pristine: false, updatedAt: 1 }),
     readRemote: async () => quotaRemote,
     writeRemote: async () => {
@@ -188,6 +189,13 @@ try {
   otherBuildDefaults.settings.tabOrder = [...otherBuildDefaults.settings.tabOrder].reverse().slice(1)
   assert.equal(data.isFactoryDefaultPayload(data.canonical(otherBuildDefaults)), true, 'Defaults from another build must still be recognized')
   assert.equal(data.isFactoryDefaultPayload('not json'), false)
+  const changedPreference = JSON.parse(baseline)
+  changedPreference.settings.time12h = !changedPreference.settings.time12h
+  changedPreference.settings.futureBuildSetting = true
+  assert.equal(data.isFactoryDefaultPayload(data.canonical(changedPreference)), true, 'Preferences alone never make a cloud copy worth restoring over saved records')
+  const holding = JSON.parse(baseline)
+  Object.values(holding.userData.portfolios as Record<string, { tickers: string[] }>)[0].tickers = ['AAPL']
+  assert.equal(data.isFactoryDefaultPayload(data.canonical(holding)), false, 'A saved ticker is a record')
   await withAutomaticBackup(async () => ok(await mutateSettings({ type: 'setTime12h', value: false })))
   await withAutomaticBackup(async () => ok(await mutateArticles({ type: 'add', title: 'Fixture', topic: '', content: 'Offline work', status: 'draft' })))
   const chartsWatchlists = { watchlist: ['SPY', 'QQQ'], multiCustomSymbols: ['MSFT'], multiOrder: ['MSFT'] }
@@ -396,7 +404,7 @@ try {
   await updateProfile(profileCtx, { method: { name: 'google', profile: { id: 'verified-google-id', email: 'verified@example.invalid', emailVerified: true } }, userId: 'new-owner' })
   assert.deepEqual(patches, [{ googleEmail: undefined }, { googleEmail: 'verified@example.invalid' }], 'Only a Google-verified address is persisted by the sign-in hook')
 
-  console.log('PASS: shared strict snapshot validation, UTF-8 limits, large local backups, account write quotas/cooldown/reset/isolation, ownership migration, revoked sessions, offline timestamps, conflicts, retries and recovery')
+  console.log('PASS: shared strict snapshot validation, UTF-8 limits, large local backups, account write quotas/cooldown/reset/isolation, automatic first-sync restore/upload, revoked sessions, offline timestamps, conflicts, retries and recovery')
 } finally {
   for (const key of ['APPDATA', 'LOCALAPPDATA'] as const) {
     if (previous[key] === undefined) delete process.env[key]

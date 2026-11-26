@@ -136,7 +136,7 @@ permissions are unchanged.
 
 OAuth request budgets, single-use session-management grants, abandoned-session
 revocation and credential-file cleanup also remain desktop-only. Raw grants and
-credentials never reach the renderer, MCP, screenshots or diagnostics.
+MCP writes save locally first and reach the cloud through the same automatic sync as other local edits.
 Existing MCP writes still respect the workspace ownership gate before cloud sync.
 
 Cloud snapshots now share strict nested validation between the desktop and Convex,

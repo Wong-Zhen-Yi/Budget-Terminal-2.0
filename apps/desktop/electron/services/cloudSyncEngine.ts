@@ -25,6 +25,8 @@ export class CloudSyncEngine {
   cloudUpdatedAt: number | undefined
   cloudRevision: number | undefined
   private conflict: { local: string; remote: CloudSnapshot } | undefined
+  /** Shown until the next upload or download so a background check does not hide it. */
+  private notice: string | undefined
   private retryAt = 0
 
   constructor(public checkpoint: SyncCheckpoint, private readonly deps: SyncDependencies) {}
@@ -40,12 +42,13 @@ export class CloudSyncEngine {
     this.pending = local.payload !== payload
     this.state = this.pending ? 'idle' : 'synced'
     this.message = undefined
+    this.notice = undefined
     this.conflict = undefined
   }
 
   async sync(resolve?: 'local' | 'cloud'): Promise<void> {
     this.state = 'syncing'
-    this.message = undefined
+    this.message = this.notice
     try {
       const localState = await this.deps.readLocal()
       const local = localState.payload
@@ -81,14 +84,21 @@ export class CloudSyncEngine {
         this.message = 'This account has no cloud copy yet. Sync starts when you save data here or another signed-in device uploads its copy.'
         return
       }
-      if (decision === 'equal') { await this.remember(local, remote!.revision, remote!.updatedAt); return }
+      if (decision === 'equal') {
+        const notice = this.notice
+        await this.remember(local, remote!.revision, remote!.updatedAt)
+        this.message = this.notice = notice
+        return
+      }
       if (decision === 'download') {
+        const restored = !resolve && this.checkpoint.baseline === undefined && !localState.pristine
         if (!await this.deps.applyIfUnchanged(local, remote!.payload, remote!.updatedAt)) {
           this.state = 'idle'
           this.pending = true
           return
         }
         await this.remember(remote!.payload, remote!.revision, remote!.updatedAt)
+        if (restored) this.message = this.notice = 'Restored this account’s cloud copy. This device’s previous data was saved as a local recovery backup.'
         return
       }
       // A write allowance must never prevent cloud downloads or conflict inspection.

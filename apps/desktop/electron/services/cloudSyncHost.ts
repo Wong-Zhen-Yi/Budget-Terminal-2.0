@@ -39,7 +39,6 @@ const commandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('cancelSignIn') }),
   z.object({ type: z.literal('sync') }), z.object({ type: z.literal('disconnect') }),
   z.object({ type: z.literal('resolve'), use: z.enum(['local', 'cloud']) }),
-  z.object({ type: z.literal('confirmWorkspace'), use: z.enum(['local', 'cloud']) }),
   z.object({ type: z.literal('revokeOtherSessions') }),
   z.object({ type: z.literal('retrySession') }),
   z.object({ type: z.literal('retryCredentialCleanup') }),
@@ -53,7 +52,8 @@ async function checkEncryption() {
 }
 const sessionPath = () => cloudDataPath('sync-session.bin')
 const checkpointPath = () => cloudDataPath('sync-checkpoint.json')
-const ownerPath = () => cloudDataPath('sync-workspace-owner.json')
+// Retired: signing in with Google is the only consent sync needs. Removed on the next sign-in.
+const legacyOwnerPath = () => cloudDataPath('sync-workspace-owner.json')
 const signOutPath = () => cloudDataPath('sync-signout.json')
 const signOutSchema = z.object({ signedOut: z.literal(true), cleanupRequired: z.boolean(), revocation: z.enum(['complete', 'unconfirmed']) })
 const http = (url: string) => new ConvexHttpClient(url, { logger: false,
@@ -73,7 +73,6 @@ let authError = false
 let pendingSignIn: OAuthSignIn | undefined
 let pendingProvider: OAuthProvider | undefined
 let authState: CloudSyncStatus['authState'] = 'restoring'
-let workspaceApprovalRequired = false
 let revocation: CloudSyncStatus['revocation']
 let credentialCleanupRequired = false
 const activeSignIns = new Set<Promise<unknown>>()
@@ -156,7 +155,6 @@ async function expireSession() {
   client?.clearAuth()
   client = undefined
   engine = undefined
-  workspaceApprovalRequired = false
   void subscription?.close()
   subscription = undefined
   authState = 'reauthRequired'
@@ -234,7 +232,6 @@ async function disconnectSession() {
   client?.clearAuth()
   client = undefined
   engine = undefined
-  workspaceApprovalRequired = false
   const previousSubscription = subscription
   subscription = undefined
   authState = 'signedOut'
@@ -258,7 +255,7 @@ async function retireGitHubSession(stored: Session) {
   if (credentialCleanupRequired) return
   authState = 'reauthRequired'
   authError = true
-  message = 'GitHub sign-in is no longer available. Sign in with Google to resume cloud sync. Local data is preserved and can be imported into the Google account.'
+  message = 'GitHub sign-in is no longer available. Sign in with Google to resume cloud sync. Local data is preserved and syncs with the Google account after sign-in.'
   void enqueue(async () => {
     if (closed || session || !await cleanupIssuedSession(stored.url, stored.tokens) || session) return
     revocation = 'complete'
@@ -267,31 +264,6 @@ async function retireGitHubSession(stored: Session) {
 }
 
 const accountKey = (value: Session) => `${value.url}|${value.userId}`
-
-async function confirmWorkspace(use: 'local' | 'cloud') {
-  if (!session || !workspaceApprovalRequired) throw new Error('No workspace choice pending.')
-  if (use === 'cloud') {
-    const before = await withSavedDataLock(readSyncData)
-    const snapshot = await remote(connection => connection.query(readRef, {}))
-    if (!snapshot) {
-      message = 'This account has no cloud copy. Import this device’s data or disconnect sync.'
-      throw new Error('No cloud copy available.')
-    }
-    if (isFactoryDefaultPayload(snapshot.payload)) {
-      message = 'This account’s cloud copy holds only default data. Import this device’s data instead, or disconnect sync.'
-      throw new Error('Cloud copy holds only defaults.')
-    }
-    await withSavedDataLock(async () => {
-      if (await readSyncData() !== before) throw new Error('Local data changed. Review your choice again.')
-      await applySyncData(snapshot.payload, snapshot.updatedAt)
-    })
-    await atomicSyncFile(checkpointPath(), { account: accountKey(session), baseline: snapshot.payload,
-      revision: snapshot.revision, cloudUpdatedAt: snapshot.updatedAt, lastSyncedAt: Date.now() })
-  }
-  await atomicSyncFile(ownerPath(), { account: accountKey(session) })
-  message = undefined
-  await attach(session)
-}
 
 function schedule() {
   if (scheduled || closed || !engine) return
@@ -315,31 +287,20 @@ async function attach(value: Session) {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') message = 'The sync checkpoint could not be read. Copies will be compared before replacing data.'
   }
-  // Ownership survives disconnect. A checkpoint migrates existing workspaces safely.
-  let owner: string | undefined
-  let unreadableOwner = false
-  try { owner = z.object({ account: z.string().min(1) }).parse(JSON.parse(await readFile(ownerPath(), 'utf8'))).account }
-  catch (error) { unreadableOwner = (error as NodeJS.ErrnoException).code !== 'ENOENT' }
-  const local = await withSavedDataLock(readLocalSyncData)
-  workspaceApprovalRequired = unreadableOwner || (owner ? owner !== account : checkpoint.baseline === undefined && !local.pristine)
-  engine = undefined
-  if (workspaceApprovalRequired) {
-    message = 'Sync is paused. Choose whether to import this device’s saved data into this account or restore this account’s cloud copy.'
-  } else {
-    if (!owner) await atomicSyncFile(ownerPath(), { account })
-    engine = new CloudSyncEngine(checkpoint, {
-      readLocal: () => withSavedDataLock(readLocalSyncData),
-      applyIfUnchanged: (expected, payload, updatedAt) => withSavedDataLock(async () => {
-        if (await readSyncData() !== expected) return false
-        await applySyncData(payload, updatedAt)
-        return true
-      }),
-      readRemote: () => remote(connection => connection.query(readRef, {})),
-      writeRemote: (expectedRevision, payload) => remote(connection => connection.mutation(writeRef, { expectedRevision, payload })),
-      saveCheckpoint: checkpoint => atomicSyncFile(checkpointPath(), checkpoint),
-      isFactoryDefault: isFactoryDefaultPayload,
-    })
-  }
+  // The first sync with this account follows the new-device rules in syncDecision.
+  await rm(legacyOwnerPath(), { force: true }).catch(() => {})
+  engine = new CloudSyncEngine(checkpoint, {
+    readLocal: () => withSavedDataLock(readLocalSyncData),
+    applyIfUnchanged: (expected, payload, updatedAt) => withSavedDataLock(async () => {
+      if (await readSyncData() !== expected) return false
+      await applySyncData(payload, updatedAt)
+      return true
+    }),
+    readRemote: () => remote(connection => connection.query(readRef, {})),
+    writeRemote: (expectedRevision, payload) => remote(connection => connection.mutation(writeRef, { expectedRevision, payload })),
+    saveCheckpoint: checkpoint => atomicSyncFile(checkpointPath(), checkpoint),
+    isFactoryDefault: isFactoryDefaultPayload,
+  })
   // The subscription is only a wake-up signal. Network work never blocks local startup or writes.
   const liveSubscription = new ConvexClient(value.url, { logger: false })
   subscription = liveSubscription
@@ -367,7 +328,7 @@ async function attach(value: Session) {
       catch { /* The HTTP check preserves credentials while offline. */ }
     }).catch(() => {})
   }, () => { /* HTTP retry distinguishes a revoked session from an offline connection. */ })
-  if (engine) subscription.onUpdate(readRef, {}, () => schedule(), () => { /* HTTP retry reports failures in Settings. */ })
+  subscription.onUpdate(readRef, {}, () => schedule(), () => { /* HTTP retry reports failures in Settings. */ })
   schedule()
 }
 
@@ -381,7 +342,7 @@ export function cloudSyncStatus(): CloudSyncStatus {
     credentialCleanupRequired,
     authState: pendingSignIn ? 'signingIn' : authState, googleEmail: session?.googleEmail,
     accountProvider: session ? 'google' : undefined, signInProvider: pendingSignIn ? pendingProvider : undefined,
-    workspaceApprovalRequired, revocation,
+    revocation,
     state: authError ? 'error' : engine?.state ?? 'disconnected', pending: engine?.pending ?? false,
     signInPending: Boolean(pendingSignIn),
     localUpdatedAt: engine?.localUpdatedAt,
@@ -550,8 +511,6 @@ export function cloudSyncCommand(input: CloudSyncCommand) {
         cancelPendingSignIn()
       } else if (command.type === 'disconnect') {
         await disconnectSession()
-      } else if (command.type === 'confirmWorkspace') {
-        await confirmWorkspace(command.use)
       } else {
         if (!engine) throw new Error('Sign in first.')
         await engine.sync(command.type === 'resolve' ? command.use : undefined)

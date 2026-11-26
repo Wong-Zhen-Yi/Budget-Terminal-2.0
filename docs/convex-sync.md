@@ -39,7 +39,7 @@ GitHub sign-in was removed on 2026-11-25. The backend no longer exports `startSi
 
 The `authGithub` component stays mounted with no sign-in entry point. Unmounting it would delete its GitHub-ID-to-account links on the next deploy, so it is kept to allow a reviewed restoration later. For the same reason, the existing `AUTH_GITHUB_*` values must stay set on the deployment. Do not delete them. The schema still accepts `githubLogin`, `authProvider: 'github'` and `provider: 'github'` on existing rows. Cloud copies owned by GitHub accounts are retained on the server but are not reachable from a Google sign-in.
 
-On the desktop, a saved session with provider `github` (or no provider, from before Google sign-in) is never restored. Startup erases it, writes the sign-out marker, and revokes the session on the server in the background without delaying startup; the marker records whether that revocation was confirmed. Settings and the startup popup then ask for a Google sign-in. Local data is untouched, and the workspace consent step lets the user import it into the Google account.
+On the desktop, a saved session with provider `github` (or no provider, from before Google sign-in) is never restored. Startup erases it, writes the sign-out marker, and revokes the session on the server in the background without delaying startup; the marker records whether that revocation was confirmed. Settings and the startup popup then ask for a Google sign-in. Local data is untouched and syncs with the Google account as soon as the user signs in (see [Local saves, sync and recovery](#local-saves-sync-and-recovery)).
 
 ### Google OAuth client
 
@@ -87,7 +87,7 @@ Production is separate: configure its own Google OAuth client and variables firs
 3. Choose **Sign in with Google**.
 4. Approve in your system browser and return to the application. Repeat on each device with the same Google account.
 
-V1 sessions and sessions issued by a different deployment require a fresh Google sign-in. The encrypted session is preserved until successful replacement or explicit disconnect. Local data and sync checkpoints remain available. If this device previously synced with another deployment, its cloud copy stays there. To bring this device’s local copy into the shared cloud, review the workspace import option after signing in.
+V1 sessions and sessions issued by a different deployment require a fresh Google sign-in. The encrypted session is preserved until successful replacement or explicit disconnect. Local data and sync checkpoints remain available. If this device previously synced with another deployment, its cloud copy stays there. After signing in, this device syncs with the shared cloud automatically under the first-sync rules below.
 
 Google accounts are keyed by Google's stable `sub` claim. `createGoogleUser` reuses a retained v1 `authAccounts` row for the same Google `sub` if one exists. Otherwise it creates a new empty user. Email addresses and display names never link accounts, so a Google sign-in never joins an account created by the retired GitHub sign-in. Account settings show the Google address only when Google marks it verified (`googleEmail` on the user row). Session-management verification ("Sign out other devices") uses Google, and its request state is bound to the Google provider on the server. Legacy auth and record-era tables and indexes are retained for recovery; no v1 sign-in endpoints are deployed.
 
@@ -111,9 +111,17 @@ Anonymous sign-in allows 30 starts per minute and at most 120 active requests. A
 
 Synced: portfolios and options, personal finance, custom cards, articles, charts watchlists and shared preferences. Browser profiles, cookies, provider keys, agent histories, market caches and device paths stay on the device.
 
-Workspace ownership is bound to the deployment and authenticated user, and survives disconnect. An existing matching checkpoint migrates ownership automatically. Existing local data with no known owner, an unreadable ownership record, or a different account pauses sync before any snapshot read or write. In Settings, **Import this device’s data** requires confirmation before allowing uploads; **Restore account’s cloud copy** requires confirmation, saves a local recovery backup and refuses to replace data when the account has no cloud copy. Changing the deployment also requires this choice. A fresh device with only factory defaults restores the cloud snapshot automatically. It never uploads its defaults to an empty cloud: Settings reports that the account has no cloud copy yet, and sync starts once you save data on that device or another signed-in device uploads. A cloud copy holding only factory defaults (from any build; tab order is ignored) is not competing work, so a device that has never synced with the account replaces it without a conflict prompt, and **Restore account’s cloud copy** refuses it.
+Signing in with Google is the only consent sync needs. There is no separate workspace-ownership step: on 2026-11-27 it was removed because it left devices paused indefinitely after the move from GitHub to Google sign-in. The retired `sync-workspace-owner.json` record is deleted on the next sign-in.
 
-Once ownership is approved, the first device uploads if the cloud is empty. Existing devices with competing edits require **Keep this device's copy** or **Use cloud copy**, followed by explicit confirmation. A selection must be confirmed again if either copy changes. Records from competing snapshots are not merged.
+The first sync between a device and an account (no checkpoint for that account yet) follows the new-device rules automatically:
+
+- **Cloud copy holds saved records:** the device restores it. A complete local recovery backup is saved first, and Settings says so until the next upload or download.
+- **Cloud copy holds no saved records, or there is none:** the device uploads its own data. A cloud copy counts as having no records when it has no positions, cash, options, finance entries, watchlists, articles or custom cards beyond the shipped starters. Preferences are ignored, so defaults written by another build, or with a changed preference, never replace saved local data.
+- **This device holds only factory defaults:** it restores any cloud copy and never uploads its defaults to an empty cloud. Settings reports that the account has no cloud copy yet, and sync starts once you save data on this device or another signed-in device uploads.
+
+Signing in to a different account, or changing the deployment, follows the same rules. Every restore keeps a local recovery backup.
+
+After the first sync, devices compare against their last acknowledged checkpoint. Only edits made on two devices since they last synced need **Keep this device's copy** or **Use cloud copy**, followed by explicit confirmation. A selection must be confirmed again if either copy changes. Records from competing snapshots are not merged.
 
 ## Authentication state and sessions
 
@@ -157,7 +165,7 @@ npm run probe:mcp
 npm run probe:launcher
 ```
 
-Offline probes exercise the real callback listener, state-bound redemption, hostile requests, allowed-port fallback, cancellation, account linking, revoked-session isolation, snapshot conflicts and recovery. The host lifecycle probe covers unowned/switched-account consent, cloud restores, concurrent/lost refreshes, filesystem and keyring failures, deletion failure across restart, late-redemption cancellation/shutdown cleanup, malformed JWT recovery and key rotation. Backend policy probes check quotas, internal-only adapters, purpose/account/session binding, grant hashing/expiry/replay and bounded cleanup. The real Electron session probe verifies asynchronous encryption and legacy file restoration.
+Offline probes exercise the real callback listener, state-bound redemption, hostile requests, allowed-port fallback, cancellation, account linking, revoked-session isolation, snapshot conflicts and recovery. The host lifecycle probe covers automatic first sync after sign-in, switched accounts, retired ownership records, cloud restores, concurrent/lost refreshes, filesystem and keyring failures, deletion failure across restart, late-redemption cancellation/shutdown cleanup, malformed JWT recovery and key rotation. Backend policy probes check quotas, internal-only adapters, purpose/account/session binding, grant hashing/expiry/replay and bounded cleanup. The real Electron session probe verifies asynchronous encryption and legacy file restoration.
 
 The live probe checks deployed capability versions, that no GitHub sign-in function is callable, the Google authorization entry, callback routing and rejection of unauthorized account/session/data access. It creates only an expiring OAuth request and does not modify saved user data. It fails against a deployment that has not received the GitHub removal yet. A completed live browser login, successful live token rotation and authenticated cross-device sync require a signed-in browser and are not claimed by that probe.
 

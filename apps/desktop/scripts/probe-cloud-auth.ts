@@ -224,49 +224,34 @@ try {
   assert.equal(callbackUrl, '', 'An outdated backend must be rejected before opening OAuth')
   accountControlsVersion = 2
   await signIn('account-a')
-  assert.equal(host!.cloudSyncStatus().workspaceApprovalRequired, true, 'Unowned existing data requires import consent')
-  assert.equal(writes, 0)
-  assert.equal(reads, 0)
-  await host!.cloudSyncCommand({ type: 'confirmWorkspace', use: 'local' })
   await host!.cloudSyncCommand({ type: 'sync' })
-  assert.equal(snapshots.get('account-a')?.payload, local.payload)
+  assert.equal(snapshots.get('account-a')?.payload, local.payload, 'Google sign-in alone starts sync: saved data uploads to an empty account')
+  assert.equal(host!.cloudSyncStatus().state, 'synced')
   await host!.closeCloudSync()
-  await rm(join(directory, 'sync-workspace-owner.json'))
+  await writeFile(join(directory, 'sync-workspace-owner.json'), JSON.stringify({ account: 'https://retired.convex.cloud|github-user' }))
   fresh(); await host!.startCloudSync()
-  assert.equal(host!.cloudSyncStatus().workspaceApprovalRequired, false, 'A matching legacy checkpoint migrates workspace ownership')
-  await host!.closeCloudSync()
-  await writeFile(join(directory, 'sync-workspace-owner.json'), 'invalid-owner-record')
-  fresh(); await host!.startCloudSync()
-  assert.equal(host!.cloudSyncStatus().workspaceApprovalRequired, true, 'An unreadable ownership record must fail closed')
-  await host!.cloudSyncCommand({ type: 'confirmWorkspace', use: 'local' })
+  await host!.cloudSyncCommand({ type: 'sync' })
+  assert.equal(host!.cloudSyncStatus().state, 'synced', 'A retired workspace-ownership record never pauses sync')
+  await assert.rejects(readFile(join(directory, 'sync-workspace-owner.json')), 'The retired ownership record is removed')
   offline = true
   await host!.cloudSyncCommand({ type: 'disconnect' })
   assert.equal(host!.cloudSyncStatus().revocation, 'unconfirmed')
   await assert.rejects(readFile(sessionPath))
   offline = false
-  await signIn('account-b')
-  const beforeWrites = writes
-  await host!.cloudSyncCommand({ type: 'sync' })
-  assert.equal(writes, beforeWrites, 'An empty destination account cannot receive another account’s data automatically')
-  const missingCloud = await host!.cloudSyncCommand({ type: 'confirmWorkspace', use: 'cloud' })
-  assert(missingCloud.meta.failureReason?.includes('no cloud copy'))
-  assert.equal(local.payload, 'local-account-a')
   snapshots.set('account-b', { revision: 1, payload: 'factory-defaults', updatedAt: Date.now() })
-  const defaultsCloud = await host!.cloudSyncCommand({ type: 'confirmWorkspace', use: 'cloud' })
-  assert(defaultsCloud.meta.failureReason?.includes('only default data'), 'A cloud copy of factory defaults must never replace saved local data')
-  assert.equal(local.payload, 'local-account-a')
-  await host!.cloudSyncCommand({ type: 'confirmWorkspace', use: 'local' })
+  await signIn('account-b')
   await host!.cloudSyncCommand({ type: 'sync' })
-  assert.equal(snapshots.get('account-b')?.payload, 'local-account-a', 'An imported workspace replaces a cloud copy of defaults without a conflict')
+  assert.equal(snapshots.get('account-b')?.payload, 'local-account-a', 'Saved data replaces a cloud copy of defaults without a conflict')
+  assert.equal(local.payload, 'local-account-a', 'A cloud copy of defaults never replaces saved local data')
   assert.equal(host!.cloudSyncStatus().state, 'synced')
   local = { payload: 'local-account-b', updatedAt: 2, pristine: false }
   await host!.cloudSyncCommand({ type: 'disconnect' })
   assert.equal(host!.cloudSyncStatus().revocation, 'complete')
   await signIn('account-a')
-  assert.equal(host!.cloudSyncStatus().workspaceApprovalRequired, true)
-  await host!.cloudSyncCommand({ type: 'confirmWorkspace', use: 'cloud' })
-  assert.equal(local.payload, 'local-account-a')
-  assert.equal(backups, 1, 'Restoring another account’s cloud copy backs up local data')
+  await host!.cloudSyncCommand({ type: 'sync' })
+  assert.equal(local.payload, 'local-account-a', 'A device signing in to an account with saved records restores its cloud copy')
+  assert.equal(backups, 1, 'Restoring the account’s cloud copy backs up local data first')
+  assert(host!.cloudSyncStatus().message?.includes('recovery backup'))
 
   // Concurrent HTTP/WebSocket requests must not rotate the same session twice.
   const socket = subscriptions.at(-1)!
@@ -435,7 +420,7 @@ try {
   releaseCompletion!(); holdCompletion = false; releaseCompletion = undefined
   await closing
   assert(revokedFamilies.has(shutdownFamily), 'Shutdown drains cleanup of a late OAuth result')
-  console.log('PASS: full loopback sign-in, account import/restore consent, offline sign-out, refresh serialization/lost responses/persistence failure, malformed JWT recovery, locked keyring retry, same-account session management, Google-only sign-in, retired GitHub session cleanup and remote revocation')
+  console.log('PASS: full loopback sign-in, automatic sync after Google sign-in, offline sign-out, refresh serialization/lost responses/persistence failure, malformed JWT recovery, locked keyring retry, same-account session management, Google-only sign-in, retired GitHub session cleanup and remote revocation')
 } finally {
   await host?.closeCloudSync()
   delete globals.__cloudAuthFixture

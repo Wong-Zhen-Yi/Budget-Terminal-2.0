@@ -13,7 +13,6 @@ export function CloudSyncPanel() {
   const [error, setError] = useState('')
   const failure = error || query.data?.meta.failureReason || (query.error ? 'Sync settings are unavailable. Local saves continue as usual.' : '')
   const [choice, setChoice] = useState<'local' | 'cloud' | null>(null)
-  const [workspaceChoice, setWorkspaceChoice] = useState<'local' | 'cloud' | null>(null)
   const [confirmSessions, setConfirmSessions] = useState(false)
   const hideAuthPrompt = useAuthPrompt((state) => state.hidden)
 
@@ -35,7 +34,6 @@ export function CloudSyncPanel() {
       if (result.meta.failureReason) setError(result.meta.failureReason)
       else {
         setChoice(null)
-        setWorkspaceChoice(null)
         setConfirmSessions(false)
       }
     } catch { setError('Unable to complete sync. Local saves continue as usual.') }
@@ -49,7 +47,7 @@ export function CloudSyncPanel() {
   return <Panel title="Cloud sync">
     <div className="flex flex-col gap-2 p-2" data-cloud-sync>
       <p className="text-2xs text-text-muted">Your data always saves on this device. Cloud sync shares portfolios, finance, cards, articles and preferences across devices signed in to the same account. The app works normally without a cloud connection.</p>
-      <p className="text-xs" role="status">{status ? status.workspaceApprovalRequired ? 'Sync paused · Choose a workspace' : stateLabels[status.state] : 'Checking sync settings…'}
+      <p className="text-xs" role="status">{status ? stateLabels[status.state] : 'Checking sync settings…'}
         {status?.lastSyncedAt ? ` · Last synced ${new Date(status.lastSyncedAt).toLocaleString()}` : ''}
         {status?.pending ? ' · Local changes pending' : ''}</p>
       {status?.authState && <p className="text-2xs text-text-muted">{authLabels[status.authState]}</p>}
@@ -67,21 +65,13 @@ export function CloudSyncPanel() {
           <Button disabled={busy} onClick={() => void run({ type: 'cancelSignIn' })}>Cancel sign-in</Button>
         </div> : <>
         <div className="flex flex-wrap gap-2">
-          <Button disabled={busy || status.state === 'syncing' || status.workspaceApprovalRequired} onClick={() => void run({ type: 'sync' })}>Sync now</Button>
+          <Button disabled={busy || status.state === 'syncing'} onClick={() => void run({ type: 'sync' })}>Sync now</Button>
           <Button disabled={busy} onClick={() => void run({ type: 'disconnect' })}>Disconnect sync</Button>
           <Button disabled={busy || !status.encryptionAvailable} onClick={() => setConfirmSessions(true)}>Sign out other devices</Button>
         </div>
         {confirmSessions && <div className="border border-border p-2 text-2xs">
           <p>Sign in with the same Google account again to end its other sessions. This device will stay connected.</p>
           <div className="mt-2 flex flex-wrap gap-2"><Button disabled={busy} onClick={() => void run({ type: 'revokeOtherSessions' })}>Verify with Google</Button><Button disabled={busy} onClick={() => setConfirmSessions(false)}>Cancel</Button></div>
-        </div>}
-        {status.workspaceApprovalRequired && <div className="border border-border p-2 text-2xs" data-workspace-approval>
-          <p>This device has saved data that is not linked to this account. Sync stays paused until you choose a copy.</p>
-          <div className="mt-2 flex flex-wrap gap-2"><Button disabled={busy} onClick={() => setWorkspaceChoice('local')}>Import this device’s data</Button><Button disabled={busy} onClick={() => setWorkspaceChoice('cloud')}>Restore account’s cloud copy</Button></div>
-          {workspaceChoice && <div className="mt-2" role="alert">
-            <p>{workspaceChoice === 'local' ? 'Allow this account to receive this device’s saved portfolios, finance, articles, cards and preferences? If its cloud copy differs, you will choose which copy to keep next.' : 'Replace this device’s saved data with this account’s cloud copy? A local recovery backup will be saved first. An account with no cloud copy cannot replace local data.'}</p>
-            <div className="mt-2 flex gap-2"><Button disabled={busy} onClick={() => void run({ type: 'confirmWorkspace', use: workspaceChoice })}>Confirm workspace choice</Button><Button disabled={busy} onClick={() => setWorkspaceChoice(null)}>Cancel</Button></div>
-          </div>}
         </div>}
         </>}
         {status.state === 'conflict' ? <div className="flex flex-col gap-2 border border-border p-2">

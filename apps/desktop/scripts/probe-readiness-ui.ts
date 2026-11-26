@@ -141,7 +141,6 @@ try {
         if (authRejected) return { ...ok(fixtureAuth), meta: { freshness: 'failed', failureReason: 'Synthetic sign-in failure. Try again.' } }
         fixtureAuth = { ...fixtureAuth, signInPending: ['signInGoogle', 'revokeOtherSessions'].includes(request.type),
           credentialCleanupRequired: request.type === 'retryCredentialCleanup' ? false : fixtureAuth.credentialCleanupRequired,
-          workspaceApprovalRequired: request.type === 'confirmWorkspace' ? false : fixtureAuth.workspaceApprovalRequired,
           message: request.type === 'signInGoogle' ? 'Complete Google sign-in in your browser.' : undefined }
         return ok(fixtureAuth)
       }
@@ -410,7 +409,7 @@ try {
           check(popup() && !useAuthPrompt.getState().hidden, 'Settings must be able to restore the auth popup')
           unmount()
           await wait()
-          fixtureAuth = { ...fixtureAuth, signedIn: true, url: 'https://fixture.convex.cloud', state: 'disconnected', authState: 'authenticated', accountProvider: 'google', googleEmail: 'fixture-user@example.invalid', workspaceApprovalRequired: true, message: undefined }
+          fixtureAuth = { ...fixtureAuth, signedIn: true, url: 'https://fixture.convex.cloud', state: 'synced', authState: 'authenticated', accountProvider: 'google', googleEmail: 'fixture-user@example.invalid', message: 'Restored this account’s cloud copy. This device’s previous data was saved as a local recovery backup.' }
           const accountClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
           const accountRoot = createRoot(element)
           accountRoot.render(<QueryClientProvider client={accountClient}><CloudSyncPanel /></QueryClientProvider>)
@@ -418,18 +417,16 @@ try {
           const panel = () => document.querySelector('[data-cloud-sync]')
           const accountClick = text => { const button = [...panel().querySelectorAll('button')].find(button => button.textContent.trim() === text); check(button && !button.disabled, 'Missing account control: ' + text); button.click() }
           check(panel().textContent.includes('Google · fixture-user@example.invalid') && !panel().textContent.includes('GitHub'), 'Connected Google account must be visible')
-          check([...panel().querySelectorAll('button')].find(button => button.textContent === 'Sync now').disabled, 'Sync must stay paused until ownership is approved')
-          accountClick('Import this device’s data'); await wait()
-          check(panel().textContent.includes('Allow this account to receive'), 'Import requires a reviewable confirmation')
+          check(!panel().textContent.includes('Import this device') && !panel().textContent.includes('Choose a workspace'), 'A signed-in account must sync without a workspace choice')
+          check(panel().textContent.includes('Up to date') && panel().textContent.includes('recovery backup'), 'An automatic restore must report its local recovery backup')
           for (const [width, height] of [[1366, 768], [1024, 768], [480, 700]]) {
             await window.resizeFixture(width, height); await paint()
             const bounds = panel().getBoundingClientRect()
             check(bounds.right <= innerWidth && bounds.bottom <= innerHeight && panel().scrollWidth <= panel().clientWidth, 'Account controls leave the viewport at ' + width + 'x' + height)
           }
-          await window.captureFixture('auth-workspace-approval')
-          accountClick('Confirm workspace choice'); await wait()
-          check(calls.some(call => call.method === 'cloudSyncCommand' && call.request.type === 'confirmWorkspace' && call.request.use === 'local'), 'Import did not invoke explicit workspace consent')
-          check(!panel().querySelector('[data-workspace-approval]'), 'Approved workspace must leave the consent state')
+          await window.captureFixture('auth-signed-in-sync')
+          accountClick('Sync now'); await wait()
+          check(calls.some(call => call.method === 'cloudSyncCommand' && call.request.type === 'sync'), 'Sync now must be available as soon as the account is signed in')
           accountClick('Sign out other devices'); await wait()
           accountClick('Verify with Google'); await wait()
           check(panel().textContent.includes('same account') && panel().textContent.includes('Cancel sign-in'), 'Other-device sign-out must request Google verification')
@@ -446,7 +443,7 @@ try {
           accountClick('Retry credential cleanup'); await wait()
           check(calls.some(call => call.method === 'cloudSyncCommand' && call.request.type === 'retryCredentialCleanup'), 'Credential cleanup must call the main process')
           accountRoot.unmount(); accountClient.clear()
-          return 'PASS: responsive auth and account controls, workspace consent, provider session verification, revocation uncertainty, keyring recovery, persistent dismissal and all-page preloading'
+          return 'PASS: responsive auth and account controls, automatic sync after sign-in, provider session verification, revocation uncertainty, keyring recovery, persistent dismissal and all-page preloading'
         }
         if (document.querySelector('dialog.auth-popup[open]')) {
           ;[...document.querySelector('dialog.auth-popup').querySelectorAll('button')].find(button => button.textContent === 'Continue locally').click()

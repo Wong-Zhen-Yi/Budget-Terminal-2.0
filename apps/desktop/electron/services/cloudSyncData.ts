@@ -60,25 +60,34 @@ function pristineData(payload: string): boolean {
   return payload === defaultPayload()
 }
 
+const record = (value: unknown): Record<string, unknown> =>
+  value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+const list = (value: unknown): unknown[] => Array.isArray(value) ? value : []
+
 /**
- * A snapshot holding only factory defaults, from any build. Tab order is ignored because each
- * build normalizes it to the pages it ships, so defaults written by another version still match.
+ * A snapshot holding no saved records: no positions, cash, options, finance entries, watchlists,
+ * articles or custom cards beyond the shipped starters. Preferences are ignored, because every
+ * build normalizes tabs and settings to what it ships, so defaults written by another version
+ * (or with a changed preference) are never mistaken for work worth restoring over this device.
  */
 export function isFactoryDefaultPayload(payload: string): boolean {
   try {
-    const value = JSON.parse(payload) as Record<string, unknown>
-    const defaults = JSON.parse(defaultPayload()) as Record<string, unknown>
+    const value: unknown = JSON.parse(payload)
     if (!value || typeof value !== 'object' || Array.isArray(value)) return false
-    const settings = (input: unknown) => {
-      if (!input || typeof input !== 'object' || Array.isArray(input)) return input
-      const { tabOrder: _tabOrder, ...rest } = input as Record<string, unknown>
-      return rest
-    }
-    return Object.keys(value).length === Object.keys(defaults).length && value.version === defaults.version
-      && canonical(value.userData) === canonical(defaults.userData)
-      && canonical(value.cards) === canonical(defaults.cards)
-      && canonical(value.articles) === canonical(defaults.articles)
-      && canonical(settings(value.settings)) === canonical(settings(defaults.settings))
+    const { userData, cards, articles } = record(value)
+    if (list(record(articles).articles).length) return false
+    const starters = new Set(defaultCardsPayload().customCards.map(card => canonical(card)))
+    if (list(record(cards).customCards).some(card => !starters.has(canonical(card)))) return false
+    const data = record(userData)
+    const portfolios = Object.values(record(data.portfolios)).map(record)
+    if (portfolios.length > 1) return false
+    if (portfolios.some(item => list(item.tickers).length || Object.keys(record(item.holdings)).length
+      || list(item.options).length || Number(item.cashBalance ?? 0) !== 0 || Number(item.marginDebt ?? 0) !== 0)) return false
+    const finance = record(data.personalFinance)
+    if (list(finance.cash).length || list(finance.debt).length || list(finance.recurringBills).length
+      || Number(record(finance.goal).targetAmount ?? 0) !== 0) return false
+    const watchlists = record(data.chartsWatchlists)
+    return !Object.values(watchlists).some(entry => list(entry).length)
   } catch { return false }
 }
 
