@@ -70,7 +70,7 @@ Tests are standalone `tsx` probes using Node assertions or explicit checks; no c
 Use concise, imperative commit subjects, matching history: `Improve charts load status & refresh behavior`. Keep commits focused. PRs should describe the problem, resulting behavior, validation commands and outcomes, related issues when applicable, and screenshots for UI changes. Preserve unrelated working-tree edits and exclude generated bundles, credentials, and personal data.
 
 ## User notes
-update the double click launcher everytime a change is made. `launchers/windows/Launch Budget Terminal.cmd` is the only launcher; do not add others. Agents start demo and phone-preview builds themselves (`btd -Demo`, `btd -MobilePreview`, or the matching `scripts/launch.cjs` flags); the user never launches a demo build
+update the double click launcher everytime a change is made. `launchers/windows/Launch Budget Terminal.cmd` and `launchers/linux/Launch Budget Terminal.sh` are the only launchers; do not add others. Agents start demo and phone-preview builds themselves (`btd -Demo`, `btd -MobilePreview`, or the matching `scripts/launch.cjs` flags); the user never launches a demo build
 This is a public repo make sure that there are no private information like passwords, emails and API keys especially for the browser page
 Focus pages should not look the same nor take inspiration from one another it should all be differentiated based on the topic of the page
 

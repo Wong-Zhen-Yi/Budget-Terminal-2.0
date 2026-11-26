@@ -1,0 +1,28 @@
+#!/bin/sh
+# Linux double-click launcher. It runs the shared install, build (including MCP) and verify path in scripts/launch-posix.sh.
+# The shared build bootstraps a private Node.js runtime on Linux when none is installed.
+# The shared build trusts the desktop shortcut on GNOME (Ubuntu) and XFCE and generates the same MCP schemas as Windows.
+here=$(cd "$(dirname "$0")" && pwd) || exit 1
+launcher="$here/../../scripts/launch-posix.sh"
+
+# File managers run scripts without a terminal; reopen in one so build progress and errors stay visible.
+if [ ! -t 1 ] && [ -z "${BUDGET_TERMINAL_IN_TERMINAL:-}" ]; then
+  export BUDGET_TERMINAL_IN_TERMINAL=1
+  for terminal in xfce4-terminal gnome-terminal ptyxis konsole kitty alacritty xterm x-terminal-emulator; do
+    command -v "$terminal" >/dev/null 2>&1 || continue
+    case "$terminal" in
+      xfce4-terminal) exec xfce4-terminal -x /bin/sh "$0" ;;
+      gnome-terminal|ptyxis) exec "$terminal" -- /bin/sh "$0" ;;
+      kitty) exec kitty /bin/sh "$0" ;;
+      *) exec "$terminal" -e /bin/sh "$0" ;;
+    esac
+  done
+fi
+
+/bin/sh "$launcher"
+status=$?
+if [ "$status" -ne 0 ] && [ -t 0 ]; then
+  printf '\n  Budget Terminal stopped with an error. Press Enter to close this window.'
+  read -r _
+fi
+exit "$status"

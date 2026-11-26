@@ -5,3 +5,7 @@
 .githooks/* text eol=lf
 *.command text eol=lf
 *.sh text eol=lf
+
+# Windows batch files can misparse labels and goto with LF endings.
+*.cmd text eol=crlf
+*.bat text eol=crlf

@@ -156,8 +156,9 @@ cd Budget-Terminal-2.0
 
 ### 2. Install and check the setup
 
-Windows has a double-click launcher in [launchers/windows](launchers/windows). On macOS
-and Linux, start the app with `sh scripts/launch-posix.sh` from the checkout.
+Windows has a double-click launcher in [launchers/windows](launchers/windows) and Linux
+has one in [launchers/linux](launchers/linux). On macOS, start the app with
+`sh scripts/launch-posix.sh` from the checkout.
 Point any shortcuts or aliases that used the repository root to the new location.
 
 On Windows, double-click [Launch Budget Terminal.cmd](launchers/windows/Launch%20Budget%20Terminal.cmd)
@@ -203,12 +204,19 @@ menu shortcuts once from the checkout:
 npm run setup:linux
 ```
 
-Double-click **Budget Terminal 2.0** on the desktop, or run
-`sh scripts/launch-posix.sh` from the checkout.
+On any Linux desktop, double-click [Launch Budget Terminal.sh](launchers/linux/Launch%20Budget%20Terminal.sh)
+(choose **Run** or **Execute** if the file manager asks; in Ubuntu's Files, right-click it and
+choose **Run as a Program**), double-click **Budget Terminal 2.0** on the desktop or open it from
+the app menu after `npm run setup:linux`, or run `sh scripts/launch-posix.sh` from the checkout.
+On Ubuntu 23.10+, if Electron reports "No usable sandbox", run
+`sudo chown root:root node_modules/electron/dist/chrome-sandbox && sudo chmod 4755 node_modules/electron/dist/chrome-sandbox`
+from the checkout.
+If no supported Node.js is installed, the launcher downloads and verifies Node.js 24
+into `~/.local/share/budget-terminal` without administrator access.
 The launcher checks the runtime, installs dependencies, builds the latest source,
 and opens the desktop app. Keep its terminal open while using the app. It finds
 Node in `~/.local/bin`, fnm's default alias, Volta, or a per-user Budget Terminal
-runtime. Install a supported Node.js version first; no SteamOS system changes
+runtime, and installs that runtime when none is found; no SteamOS system changes
 or administrator access are required. Re-run `npm run setup:linux` to refresh shortcuts
 that still point to the old launcher location or after moving the checkout. For
 Gaming Mode, add the application menu entry as a non-Steam game and leave Proton

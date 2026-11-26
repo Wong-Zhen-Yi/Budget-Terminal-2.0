@@ -237,6 +237,8 @@ function launch({ development = false, demo = false, mobilePreview = false, mobi
   }
   if (app.error || app.status !== 0) {
     output.error('Budget Terminal stopped with an error. See the output above.')
+    // Ubuntu 23.10+ restricts unprivileged user namespaces, which Chromium's sandbox needs.
+    if (platform === 'linux') output.note('If the output mentions "No usable sandbox", run: sudo chown root:root node_modules/electron/dist/chrome-sandbox && sudo chmod 4755 node_modules/electron/dist/chrome-sandbox')
     return app.status || 1
   }
   output.done('Session ended')

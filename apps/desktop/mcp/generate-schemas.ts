@@ -96,7 +96,17 @@ const outputs = Object.fromEntries(Object.keys(operations).filter(key => !featur
   catch (error) { throw new Error('Output ' + key + ': ' + (error as Error).message) }
 }))
 const outputPath = resolve(root, 'mcp/output-schemas.json')
-const outputContents = `${JSON.stringify(outputs, null, 2)}\n`
+// Anonymous definitions are named from source byte offsets, which differ between
+// CRLF (Windows) and LF (macOS/Linux) checkouts. Number them by first appearance
+// so every platform generates identical schemas.
+const stableIds = (text: string) => {
+  const ids = new Map<string, string>()
+  return text.replace(/def-([a-z]+)-\d+(?:-\d+)+/g, (id, kind: string) => {
+    if (!ids.has(id)) ids.set(id, `def-${kind}-${ids.size + 1}`)
+    return ids.get(id)!
+  })
+}
+const outputContents = stableIds(`${JSON.stringify(outputs, null, 2)}\n`)
 if (process.argv.includes('--check')) {
   if (await readFile(outputPath, 'utf8') !== outputContents) throw new Error('MCP output schemas are out of date.')
 } else await writeFile(outputPath, outputContents)

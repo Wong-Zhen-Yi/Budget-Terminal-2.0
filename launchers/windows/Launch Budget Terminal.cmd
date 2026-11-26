@@ -1,4 +1,6 @@
 @echo off
+rem The shared build generates identical MCP schemas on Windows and Linux checkouts, and keeps this file in CRLF line endings.
+rem The shared build adds a Linux double-click launcher (launchers/linux) that installs a private Node.js runtime when none is found.
 rem The shared build serves the phone UI from the Vite dev server in development runs, with hot reload in the phone preview, and names the Vite version in development output.
 rem Desktop Agents uses the latest Codex Terra and Luna models from the shared build.
 rem The shared build shows only whole rows in Portfolio's Today by position strip (Top N of M when space is short), keeps the PERP tag readable on Price and Market Cap, and fits the Price table without sideways scrolling.

@@ -183,9 +183,14 @@ assert(devPreviewLines.some(line => /Vite \d+\.\d+/.test(line)), 'Development la
 console.log('PASS: btd -MobilePreview -Dev opens the phone UI on the Vite dev server.')
 
 const windowsLaunchers = resolve(__dirname, '../launchers/windows')
-// One double-click launcher. Demo and phone previews start from launch-windows.ps1 flags instead.
-assert.deepEqual(readdirSync(resolve(__dirname, '../launchers'), { recursive: true }).map(String).filter(name => name.includes('.')),
-  [join('windows', 'Launch Budget Terminal.cmd')], 'Launch Budget Terminal.cmd must be the only launcher')
+// One double-click launcher per OS (Windows .cmd, Linux .sh). Demo and phone previews start from launch-windows.ps1 flags instead.
+assert.deepEqual(readdirSync(resolve(__dirname, '../launchers'), { recursive: true }).map(String).filter(name => name.includes('.')).sort(),
+  [join('linux', 'Launch Budget Terminal.sh'), join('windows', 'Launch Budget Terminal.cmd')].sort(), 'Only the Windows .cmd and Linux .sh double-click launchers may exist')
+{
+  const linux = readFileSync(resolve(__dirname, '../launchers/linux/Launch Budget Terminal.sh'), 'utf8')
+  assert.match(linux, /scripts\/launch-posix\.sh/, 'Linux launcher must use the shared POSIX launch path')
+  assert(!/--demo|--dev|--mobile-preview/.test(linux), 'Linux double-click launcher must open the production build')
+}
 
 for (const [file, command] of [
   ['Launch Budget Terminal.cmd', /powershell\.exe[^\r\n]*launch-windows\.ps1" -Attached\n/],
