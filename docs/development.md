@@ -30,6 +30,14 @@ rejects mixed public/private answers before connecting. IPv6 transition and mapp
 addresses are rejected conservatively. Requests use fresh sockets and a timeout
 covering DNS lookup and connection as well as response reading.
 
+## Development server
+
+`npm run dev` (`btd -Dev`) runs `electron-vite dev --watch`: Vite serves the desktop
+renderer with hot reload, and main and preload changes rebuild and restart Electron.
+The launcher prints the Vite version, and electron-vite prints the dev server URL.
+The phone UI also comes from Vite in development. See `docs/mobile-access.md` for
+`btd -MobilePreview -Dev`.
+
 ## Verification
 
 Run from the repository root:

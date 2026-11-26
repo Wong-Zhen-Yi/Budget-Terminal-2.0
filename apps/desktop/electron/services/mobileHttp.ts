@@ -1,5 +1,5 @@
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { randomUUID } from 'node:crypto'
+import { createServer, request as httpRequest, type IncomingHttpHeaders, type IncomingMessage, type ServerResponse } from 'node:http'
+import { createHash, randomUUID } from 'node:crypto'
 import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -27,6 +27,50 @@ const policy = [
   "frame-ancestors 'none'", "base-uri 'none'", "object-src 'none'", "form-action 'none'",
 ].join('; ')
 
+// Development only: the phone UI comes from the Vite dev server, so edits hot-reload.
+// Requests still pass the same owner, token and origin checks before reaching Vite.
+const devHeaders = ['accept', 'accept-language', 'if-none-match', 'if-modified-since', 'cache-control', 'user-agent']
+const devUpgradeHeaders = ['connection', 'upgrade', 'sec-websocket-key', 'sec-websocket-version', 'sec-websocket-protocol', 'sec-websocket-extensions', 'user-agent']
+const devResponseHeaders = ['content-type', 'content-length', 'etag', 'last-modified', 'cache-control', 'vary']
+const pick = (headers: IncomingHttpHeaders, names: string[]) =>
+  Object.fromEntries(names.flatMap(name => headers[name] === undefined ? [] : [[name, headers[name]!]]))
+
+// Vite injects the React Refresh preamble as an inline module. Allow exactly the inline
+// scripts in the page Vite returned, by hash, instead of opening script-src to 'unsafe-inline'.
+function devPagePolicy(page: string) {
+  const hashes = [...page.matchAll(/<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)]
+    .map(([, code]) => `'sha256-${createHash('sha256').update(code).digest('base64')}'`)
+  return policy.replace("script-src 'self'", ["script-src 'self'", ...new Set(hashes)].join(' '))
+}
+
+function proxyDevRequest(devServer: URL, path: string, request: IncomingMessage, response: ServerResponse) {
+  return new Promise<void>((resolve, reject) => {
+    const upstream = httpRequest({
+      hostname: devServer.hostname, port: devServer.port, path, method: 'GET',
+      headers: { ...pick(request.headers, devHeaders), host: devServer.host },
+    }, reply => {
+      reply.once('error', reject)
+      const headers = pick(reply.headers, devResponseHeaders)
+      if (!/^text\/html\b/i.test(reply.headers['content-type'] ?? '')) {
+        response.writeHead(reply.statusCode ?? 502, headers)
+        reply.pipe(response)
+        reply.once('end', resolve)
+        return
+      }
+      const chunks: Buffer[] = []
+      reply.on('data', (chunk: Buffer) => chunks.push(chunk))
+      reply.once('end', () => {
+        const page = Buffer.concat(chunks)
+        response.setHeader('Content-Security-Policy', devPagePolicy(page.toString('utf8')))
+        response.writeHead(reply.statusCode ?? 502, { ...headers, 'content-length': page.length }).end(page)
+        resolve()
+      })
+    })
+    upstream.once('error', () => reject(new MobileRequestError('The Vite dev server is not running. Restart btd -Dev.', 502)))
+    upstream.end()
+  })
+}
+
 async function readArgs(request: IncomingMessage): Promise<unknown[]> {
   if (!/^application\/json(?:;|$)/i.test(request.headers['content-type'] ?? '')) throw new MobileRequestError('Send JSON.', 415)
   if (request.headers['transfer-encoding']) throw new MobileRequestError('Send a request with a fixed length.', 413)
@@ -38,17 +82,24 @@ async function readArgs(request: IncomingMessage): Promise<unknown[]> {
   return value
 }
 
-export async function createMobileHttp(directory: string, run: MobileRequest, access: MobileAccess) {
-  const html = await readFile(join(directory, 'mobile.html'))
-  const assets = new Map<string, { file: string; type: string; compressed?: Promise<Buffer> }>()
-  for (const name of await readdir(join(directory, 'assets'))) {
-    const extension = name.split('.').at(-1) ?? ''
-    if (/^[a-z\d_.-]+$/i.test(name) && Object.hasOwn(contentTypes, extension)) {
-      assets.set(`/assets/${name}`, { file: join(directory, 'assets', name), type: contentTypes[extension] })
-    }
+export async function createMobileHttp(directory: string, run: MobileRequest, access: MobileAccess, { devServer: devServerUrl }: { devServer?: string } = {}) {
+  const devServer = devServerUrl ? new URL(devServerUrl) : undefined
+  if (devServer && (devServer.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(devServer.hostname))) {
+    throw new Error('The mobile dev server must be a local HTTP address.')
   }
-  assets.set('/budget-terminal-icon.png', { file: join(directory, 'budget-terminal-icon.png'), type: 'image/png' })
-  assets.set('/manifest.webmanifest', { file: join(directory, 'manifest.webmanifest'), type: 'application/manifest+json' })
+  const assets = new Map<string, { file: string; type: string; compressed?: Promise<Buffer> }>()
+  let html = Buffer.alloc(0)
+  if (!devServer) {
+    html = await readFile(join(directory, 'mobile.html'))
+    for (const name of await readdir(join(directory, 'assets'))) {
+      const extension = name.split('.').at(-1) ?? ''
+      if (/^[a-z\d_.-]+$/i.test(name) && Object.hasOwn(contentTypes, extension)) {
+        assets.set(`/assets/${name}`, { file: join(directory, 'assets', name), type: contentTypes[extension] })
+      }
+    }
+    assets.set('/budget-terminal-icon.png', { file: join(directory, 'budget-terminal-icon.png'), type: 'image/png' })
+    assets.set('/manifest.webmanifest', { file: join(directory, 'manifest.webmanifest'), type: 'application/manifest+json' })
+  }
   const subscribers = new Map<ServerResponse, IncomingMessage>()
   const directSources = new WeakMap<Socket, string>()
   // Short polling keeps provider waits off Safari's limited HTTP connections.
@@ -111,7 +162,7 @@ export async function createMobileHttp(directory: string, run: MobileRequest, ac
           }
           return
         }
-        if (path === '/') {
+        if (path === '/' && !devServer) {
           response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(html)
           return
         }
@@ -121,6 +172,11 @@ export async function createMobileHttp(directory: string, run: MobileRequest, ac
           response.write('retry: 5000\n\n')
           subscribers.set(response, request)
           response.once('close', () => subscribers.delete(response))
+          return
+        }
+        // Source modules such as /api/client.ts are Vite paths; only the RPC routes above stay local.
+        if (devServer && path !== '/api/events' && !path.startsWith('/api/call/')) {
+          await proxyDevRequest(devServer, path === '/' ? '/mobile.html' : path, request, response)
           return
         }
         const asset = assets.get(path)
@@ -185,6 +241,45 @@ export async function createMobileHttp(directory: string, run: MobileRequest, ac
       response.writeHead(status, { 'Content-Type': 'application/json', Connection: 'close' }).end(JSON.stringify({ message }))
     })
   })
+  // Upgraded sockets leave the HTTP server's connection list, so close them explicitly.
+  const tunnels = new Set<Socket>()
+  const track = (socket: Socket) => {
+    tunnels.add(socket)
+    socket.once('close', () => tunnels.delete(socket))
+  }
+  if (devServer) server.on('upgrade', (request: IncomingMessage, socket: Socket, head: Buffer) => {
+    track(socket)
+    socket.once('error', () => socket.destroy())
+    const origin = authorizedOrigin(request)
+    const protocol = request.headers['sec-websocket-protocol']
+    if (!origin || request.headers.origin !== origin || (protocol !== 'vite-hmr' && protocol !== 'vite-ping')) {
+      socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n')
+      return
+    }
+    const upstream = httpRequest({
+      hostname: devServer.hostname, port: devServer.port, path: request.url, method: 'GET',
+      headers: { ...pick(request.headers, devUpgradeHeaders), host: devServer.host, origin: devServer.origin },
+    })
+    upstream.once('upgrade', (reply, upstreamSocket, upstreamHead) => {
+      track(upstreamSocket)
+      if (socket.destroyed) { upstreamSocket.destroy(); return }
+      const lines = [`HTTP/1.1 101 ${reply.statusMessage || 'Switching Protocols'}`]
+      for (let index = 0; index < reply.rawHeaders.length; index += 2) lines.push(`${reply.rawHeaders[index]}: ${reply.rawHeaders[index + 1]}`)
+      socket.write(`${lines.join('\r\n')}\r\n\r\n`)
+      if (upstreamHead.length) socket.write(upstreamHead)
+      if (head.length) upstreamSocket.write(head)
+      upstreamSocket.once('error', () => socket.destroy())
+      upstreamSocket.once('close', () => socket.destroy())
+      socket.once('close', () => upstreamSocket.destroy())
+      upstreamSocket.pipe(socket).pipe(upstreamSocket)
+    })
+    upstream.once('response', reply => {
+      socket.end(`HTTP/1.1 ${reply.statusCode ?? 502} ${reply.statusMessage ?? ''}\r\nConnection: close\r\n\r\n`)
+      reply.resume()
+    })
+    upstream.once('error', () => socket.end('HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n'))
+    upstream.end()
+  })
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject)
     server.listen('localToken' in access ? 0 : access.port ?? MOBILE_HTTP_PORT, '127.0.0.1', () => {
@@ -224,6 +319,7 @@ export async function createMobileHttp(directory: string, run: MobileRequest, ac
       disconnect()
       const closed = new Promise<void>(resolve => server.close(() => resolve()))
       server.closeAllConnections()
+      for (const socket of tunnels) socket.destroy()
       await Promise.all([closed, direct?.close()])
     },
   }

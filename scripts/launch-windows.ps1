@@ -158,7 +158,7 @@ Usage
   btd [start|restart] [-Dev] [-Logs] [-Attached]
   btd mobile
   btd -Demo [-Dev] [-Logs]
-  btd -MobilePreview
+  btd -MobilePreview [-Dev]
   btd update
   btd -Setup
   btd -RuntimeOnly
@@ -178,7 +178,8 @@ Commands
                 Run btd restart afterward to build and use the update.
 
 Options
-  -Dev          Run in development mode with live reloading. Keep the terminal open.
+  -Dev          Run in development mode on the Vite dev server with hot reload,
+                including the phone UI. Keep the terminal open.
   -Demo         Open a temporary workspace with sample data. Keep the terminal open.
   -MobilePreview Open the responsive phone UI with temporary sample data.
   -Logs         Open Settings diagnostics when the app opens.
@@ -193,7 +194,7 @@ Options
   }
   try {
     if ($Demo -and ($Command -ne 'start' -or $RuntimeOnly -or $Setup)) { throw 'Demo is a launch mode. Run btd -Demo to open it.' }
-    if ($MobilePreview -and ($Command -ne 'start' -or $RuntimeOnly -or $Setup -or $Dev)) { throw 'Run btd -MobilePreview by itself to open the phone window.' }
+    if ($MobilePreview -and ($Command -ne 'start' -or $RuntimeOnly -or $Setup)) { throw 'Run btd -MobilePreview by itself or with -Dev to open the phone window.' }
     if ($Command -eq 'mobile' -and ($RuntimeOnly -or $Setup -or $Dev -or $Logs)) { throw 'Run btd mobile to open the connected mobile window.' }
     if ($Command -eq 'restart' -and ($RuntimeOnly -or $Setup)) { throw 'Restart cannot be combined with setup or runtime-only options.' }
     if ($Command -eq 'update' -and ($RuntimeOnly -or $Setup -or $Dev -or $Logs)) { throw 'Update cannot be combined with launch options.' }

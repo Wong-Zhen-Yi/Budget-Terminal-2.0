@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
-import { Agent, request } from 'node:http'
+import { Agent, createServer, request } from 'node:http'
+import { createHash } from 'node:crypto'
 import { connect } from 'node:net'
 import { resolve } from 'node:path'
 import { createMobileHttp, LOCAL_MOBILE_HEADER, MobileDownload, MobileRequestError } from '../electron/services/mobileHttp.js'
@@ -171,3 +172,70 @@ try {
   assert.deepEqual(await (await post(previewOrigin)).json(), { args: [] })
 } finally { await preview.close() }
 console.log('PASS: local preview authenticates its own window and retains same-origin RPC checks')
+
+// Development builds proxy the phone UI and its HMR socket to the Vite dev server.
+const preamble = 'import { injectIntoGlobalHook } from "/@react-refresh"; injectIntoGlobalHook(window)'
+const preambleHash = `'sha256-${createHash('sha256').update(preamble).digest('base64')}'`
+const viteRequests: { path?: string; host?: string; token?: string }[] = []
+const vite = createServer((req, res) => {
+  viteRequests.push({ path: req.url, host: req.headers.host, token: req.headers[LOCAL_MOBILE_HEADER] as string | undefined })
+  if (req.url === '/mobile.html') res.writeHead(200, { 'Content-Type': 'text/html', ETag: '"fixture"' })
+    .end(`<html data-terminal-mobile><script type="module">${preamble}</script><script type="module" src="/@vite/client"></script></html>`)
+  else if (req.url === '/mobile/main.ts' || req.url === '/api/client.ts') res.writeHead(200, { 'Content-Type': 'text/javascript' }).end('export {}')
+  else res.writeHead(404).end()
+})
+vite.on('upgrade', (req, socket) => {
+  viteRequests.push({ path: req.url, host: req.headers.host, token: req.headers[LOCAL_MOBILE_HEADER] as string | undefined })
+  socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Protocol: vite-hmr\r\n\r\n')
+  socket.on('data', chunk => socket.write(`echo:${chunk}`))
+  socket.once('end', () => socket.destroy())
+})
+await new Promise<void>(done => vite.listen(0, '127.0.0.1', done))
+const viteOrigin = `http://127.0.0.1:${(vite.address() as { port: number }).port}`
+await assert.rejects(createMobileHttp(renderer, echo, { localToken: 'x' }, { devServer: 'http://192.0.2.1:5173' }), /local HTTP address/)
+const devToken = 'fixture-dev-token'
+const devPreview = await createMobileHttp(resolve(import.meta.dirname, 'missing-renderer'), echo, { localToken: devToken }, { devServer: viteOrigin })
+try {
+  const devOrigin = `http://127.0.0.1:${devPreview.port}`
+  const headers = { [LOCAL_MOBILE_HEADER]: devToken }
+  assert.equal((await fetch(devOrigin)).status, 403, 'Dev proxy keeps the local token check')
+  assert.equal(viteRequests.length, 0, 'Unauthenticated requests never reach Vite')
+  const page = await fetch(devOrigin, { headers })
+  assert.match(await page.text(), /@vite\/client/, 'The root serves Vite-transformed mobile.html')
+  assert.equal(page.headers.get('etag'), '"fixture"')
+  const pagePolicy = page.headers.get('content-security-policy') ?? ''
+  assert(pagePolicy.includes(`script-src 'self' ${preambleHash};`), 'Dev pages allow only the hashed Vite preamble')
+  assert.doesNotMatch(pagePolicy, /script-src[^;]*unsafe-inline/, 'Dev pages never allow arbitrary inline scripts')
+  const module = await fetch(`${devOrigin}/mobile/main.ts`, { headers })
+  assert.equal(await module.text(), 'export {}')
+  assert.equal(module.headers.get('content-security-policy'), pagePolicy.replace(` ${preambleHash}`, ''), 'Modules keep the base CSP')
+  assert.equal(await (await fetch(`${devOrigin}/api/client.ts`, { headers })).text(), 'export {}', 'Source modules under /api/ come from Vite')
+  assert.deepEqual(viteRequests.map(entry => entry.path), ['/mobile.html', '/mobile/main.ts', '/api/client.ts'])
+  assert(viteRequests.every(entry => entry.host === new URL(viteOrigin).host && !entry.token), 'Vite sees its own host and never the mobile credential')
+  assert.deepEqual(await (await fetch(`${devOrigin}/api/call/test:echo`, {
+    method: 'POST', headers: { ...headers, Origin: devOrigin, 'x-budget-terminal': 'mobile', 'Content-Type': 'application/json' }, body: '[1]',
+  })).json(), { args: [1] }, 'RPC stays in the main process')
+  const upgrade = (hdrs: Record<string, string>) => new Promise<string>((done, reject) => {
+    const req = request({ host: '127.0.0.1', port: devPreview.port, path: '/?token=fixture', headers: {
+      Connection: 'Upgrade', Upgrade: 'websocket', 'Sec-WebSocket-Version': '13', 'Sec-WebSocket-Key': 'Zml4dHVyZS1rZXktMDAwMA==', ...hdrs,
+    } })
+    req.once('upgrade', (res, socket) => {
+      socket.once('data', chunk => { socket.destroy(); done(`${res.statusCode} ${chunk}`) })
+      socket.write('ping')
+    })
+    req.once('response', res => { res.resume(); done(String(res.statusCode)) })
+    req.once('error', reject)
+    req.end()
+  })
+  assert.equal(await upgrade({ ...headers, Origin: devOrigin, 'Sec-WebSocket-Protocol': 'other' }), '403')
+  assert.equal(await upgrade({ ...headers, Origin: 'http://localhost', 'Sec-WebSocket-Protocol': 'vite-hmr' }), '403')
+  assert.equal(await upgrade({ Origin: devOrigin, 'Sec-WebSocket-Protocol': 'vite-hmr' }), '403')
+  assert.equal(await upgrade({ ...headers, Origin: devOrigin, 'Sec-WebSocket-Protocol': 'vite-hmr' }), '101 echo:ping', 'HMR socket reaches Vite')
+  assert.equal(viteRequests.at(-1)?.path, '/?token=fixture')
+  assert(!viteRequests.at(-1)?.token, 'HMR upgrade drops the mobile credential')
+} finally {
+  await devPreview.close()
+  vite.closeAllConnections()
+  await new Promise(done => vite.close(done))
+}
+console.log('PASS: development mobile UI proxies Vite pages and HMR behind the same token, origin and CSP checks')

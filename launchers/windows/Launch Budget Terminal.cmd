@@ -1,4 +1,5 @@
 @echo off
+rem The shared build serves the phone UI from the Vite dev server in development runs, with hot reload in the phone preview, and names the Vite version in development output.
 rem Desktop Agents uses the latest Codex Terra and Luna models from the shared build.
 rem The shared build shows only whole rows in Portfolio's Today by position strip (Top N of M when space is short), keeps the PERP tag readable on Price and Market Cap, and fits the Price table without sideways scrolling.
 rem The shared build batches Yahoo quotes (Forex, Dashboard, Oil, Semiconductors, Homebuilders) and dates daily bars in each exchange's timezone so summer forex changes are no longer flat.

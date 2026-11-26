@@ -101,6 +101,10 @@ async function startDetachedDesktop(env, output) {
   return 0
 }
 
+function viteVersion() {
+  try { return require(path.join(root, 'node_modules', 'vite', 'package.json')).version } catch { return '(version unknown)' }
+}
+
 // Every double-click launcher builds the current desktop, mobile and MCP bundles.
 function launch({ development = false, demo = false, mobilePreview = false, mobile = false, logs = false, setupOnly = false, detach = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, openDetached = startDetachedDesktop, log = console } = {}) {
   const output = createLauncherOutput({ log, environment })
@@ -125,10 +129,6 @@ function launch({ development = false, demo = false, mobilePreview = false, mobi
   if (logs) env.BUDGET_TERMINAL_OPEN_DIAGNOSTICS = '1'
   if (setupOnly && (development || logs || sampleData)) {
     output.error('Setup cannot be combined with launch options.')
-    return 1
-  }
-  if (mobilePreview && development) {
-    output.error('The mobile preview uses the built mobile interface. Run it without --dev.')
     return 1
   }
   if (mobile && (platform !== 'win32' || development || sampleData || setupOnly || logs)) {
@@ -198,6 +198,7 @@ function launch({ development = false, demo = false, mobilePreview = false, mobi
     }
   }
   output.done(development ? 'MCP tools built' : 'Desktop build verified')
+  if (development) output.note(`Vite ${viteVersion()} serves the desktop and phone UI with hot reload; its dev server URL prints below.`)
 
   if (setupOnly) {
     output.stage(5, 'Finish setup check')
@@ -216,7 +217,7 @@ function launch({ development = false, demo = false, mobilePreview = false, mobi
     })
   }
   output.note('Keep this terminal open while using Budget Terminal.')
-  output.note(mobilePreview ? 'F5 reloads the mobile UI. Relaunch after editing the source.'
+  output.note(mobilePreview ? (development ? 'Live edits reload the phone UI automatically.' : 'F5 reloads the mobile UI. Relaunch after editing the source.')
     : development ? 'Live edits rebuild automatically. Close any existing app window first.' : 'F5 reloads the current page. Startup details are in Settings.')
   log.log('')
   let session

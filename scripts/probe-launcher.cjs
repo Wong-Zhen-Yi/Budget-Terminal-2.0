@@ -165,6 +165,22 @@ assert.equal(launch({ mobilePreview: true, detach: true, platform: 'win32', node
   },
 }), 0)
 assert(previewDirectory && !existsSync(previewDirectory), 'Remove the preview profile on exit')
+const devPreviewCalls = []
+const devPreviewLines = []
+assert.equal(launch({ mobilePreview: true, development: true, platform: 'win32', nodeVersion: '24.22.1',
+  log: { log: line => devPreviewLines.push(line), error: line => devPreviewLines.push(line) }, environment: personalEnvironment,
+  locateCodex() { assert.fail('The dev preview uses sample data and skips Codex discovery') },
+  verifyBuild() { assert.fail('The dev preview serves the phone UI from Vite instead of a verified build') },
+  spawn(_command, args, { env }) {
+    devPreviewCalls.push(args.join(' '))
+    if (args.join(' ').includes('run dev')) assert.equal(env.BUDGET_TERMINAL_MOBILE_PREVIEW, '1')
+    return { status: 0, stdout: '11.0.0' }
+  },
+}), 0)
+assert(devPreviewCalls.some(call => call.includes('run build:mcp')) && devPreviewCalls.some(call => call.includes('run dev --workspace')), 'Dev mobile preview runs the Vite dev server')
+assert(!devPreviewCalls.some(call => /run (build|preview)\b(?!:)/.test(call)), 'Dev mobile preview skips the production build')
+assert(devPreviewLines.some(line => /Vite \d+\.\d+/.test(line)), 'Development launches name the Vite version')
+console.log('PASS: btd -MobilePreview -Dev opens the phone UI on the Vite dev server.')
 
 const windowsLaunchers = resolve(__dirname, '../launchers/windows')
 // One double-click launcher. Demo and phone previews start from launch-windows.ps1 flags instead.

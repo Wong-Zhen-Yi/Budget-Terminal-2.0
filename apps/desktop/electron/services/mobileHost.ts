@@ -20,6 +20,8 @@ let refresh: ReturnType<typeof setInterval> | undefined
 let checking: Promise<void> | undefined
 const localSetting = () => join(app.getPath('userData'), 'mobile-access.json')
 const demo = () => Boolean(process.env.BUDGET_TERMINAL_DEMO_DIR)
+// Development builds serve the phone UI from electron-vite's Vite dev server for hot reload.
+const mobileSource = () => ({ devServer: !app.isPackaged ? process.env.ELECTRON_RENDERER_URL : undefined })
 
 async function refreshTailnet() {
   if (!enabled || stopped) return
@@ -39,7 +41,7 @@ async function listen() {
     if (stopped || !enabled) return
     server = await createMobileHttp(join(import.meta.dirname, '../renderer'), createMobileRoutes(telegramProfile), {
       getTailnet: () => tailnet, directPort: MOBILE_DIRECT_LOCAL_PORT,
-    })
+    }, mobileSource())
     refresh = setInterval(() => { void refreshTailnet() }, 15_000)
     refresh.unref()
     await refreshTailnet()
@@ -61,7 +63,7 @@ export function startMobileAccess() {
 export async function startLocalMobileAccess(run: MobileRequest) {
   if (stopped) throw new Error('Budget Terminal is closing.')
   const token = randomUUID()
-  const listener = await createMobileHttp(join(import.meta.dirname, '../renderer'), run, { localToken: token })
+  const listener = await createMobileHttp(join(import.meta.dirname, '../renderer'), run, { localToken: token }, mobileSource())
   if (stopped) {
     await listener.close()
     throw new Error('Budget Terminal is closing.')

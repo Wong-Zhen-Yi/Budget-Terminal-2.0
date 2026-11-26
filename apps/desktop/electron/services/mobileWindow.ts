@@ -34,10 +34,13 @@ export async function openMobileWindow(origin: string, token: string, viewport: 
   session.setPermissionRequestHandler((_contents, permission, callback) => callback(permission === 'clipboard-sanitized-write'))
   session.setPermissionCheckHandler((_contents, permission) => permission === 'clipboard-sanitized-write')
   // Supply the credential only for this window's own navigation and same-origin requests.
-  session.webRequest.onBeforeSendHeaders({ urls: [`${origin}/*`] }, (details, callback) => {
+  // The WebSocket form carries Vite hot reload in development builds.
+  const socketOrigin = origin.replace(/^http/, 'ws')
+  session.webRequest.onBeforeSendHeaders({ urls: [`${origin}/*`, `${socketOrigin}/*`] }, (details, callback) => {
     const requestHeaders = details.requestHeaders
     const trustedInitiator = details.initiatorOrigin === origin || (details.resourceType === 'mainFrame' && !details.initiatorOrigin)
-    if (trustedInitiator && details.webContentsId === contents.id && new URL(details.url).origin === origin) {
+    const target = new URL(details.url).origin
+    if (trustedInitiator && details.webContentsId === contents.id && (target === origin || (target === socketOrigin && details.resourceType === 'webSocket'))) {
       requestHeaders[LOCAL_MOBILE_HEADER] = token
     }
     callback({ requestHeaders })

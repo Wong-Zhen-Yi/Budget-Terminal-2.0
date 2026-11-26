@@ -12,6 +12,8 @@ Run `btd mobile` to build and open the current version. If the desktop is open, 
 
 Run `btd -MobilePreview` (or `sh scripts/launch-posix.sh --mobile-preview` on macOS and Linux). It builds the current code and opens Budget Terminal's mobile interface in an Electron window. The default viewport is 390 × 844 CSS pixels at 2× device pixel ratio. The window initially fits your monitor; dragging its edges changes the viewport and reflows the interface. Actual phones use their own browser width, height, pixel density, and safe areas automatically.
 
+Add `-Dev` (`btd -MobilePreview -Dev`, or `node scripts/launch.cjs --mobile-preview --dev`) to serve the phone interface from the Vite dev server instead of the last build. Source edits hot-reload in the window. In every development run (`btd -Dev`), the connected mobile window and Mobile Access links also load the phone UI from Vite. The mobile server keeps its own token, Tailscale owner, origin and CSP checks, proxies only page assets and the Vite HMR socket to the local dev server, and keeps `/api/call` and `/api/events` in the main process. Development pages allow only the hashed React Refresh preamble that Vite injects, never other inline scripts. Packaged and production builds still serve `out/renderer`.
+
 The preview starts with the repository's sample records and discards edits when closed. It can run alongside the regular desktop window and needs only the local computer. Keep its terminal open. Relaunch after editing the source to rebuild, or press **F5** to reload the current build. Use Safari on an iPhone to check WebKit behavior and iOS safe areas.
 
 ## Set up the computer
