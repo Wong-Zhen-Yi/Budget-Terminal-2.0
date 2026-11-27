@@ -238,7 +238,7 @@
 .agents-aside button { width: 100%; }
 .agents-aside ul { padding-left: 16px; list-style: disc; }
 .agents-aside code { color: var(--color-text); }
-.agents-aside input[type=password] { width: 100%; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-bg); color: var(--color-text); font-size: 12px; }
+.agents-aside input[type=password], .agents-pi-flow input[type=text] { width: 100%; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-bg); color: var(--color-text); font-size: 12px; }
 .agents-pi-actions { display: grid; gap: 8px; margin-top: 12px; }
 .agents-pi-settings h3 { margin: 12px 0 6px; font-size: inherit; font-weight: 600; }
 .agents-pi-settings ul { display: grid; gap: 6px; margin: 0 0 8px; padding: 0; list-style: none; }
@@ -246,6 +246,11 @@
 .agents-pi-settings li > span:first-child { font-weight: 600; }
 .agents-pi-settings li > span:nth-child(2) { color: var(--color-text-muted); }
 .agents-pi-settings li > button { margin-left: auto; }
+.agents-pi-flow { padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-surface-raised); }
+.agents-pi-flow p { margin: 0 0 6px; overflow-wrap: anywhere; }
+.agents-pi-flow form { margin-top: 6px; }
+.agents-pi-note { color: var(--color-warn); overflow-wrap: anywhere; }
+.agents-pi-code { padding: 2px 6px; border: 1px solid var(--color-border-strong); border-radius: 4px; background: var(--color-surface); color: var(--color-text); font-size: 14px; letter-spacing: 0.08em; user-select: all; }
 .agents-error { padding: 12px 28px; background: color-mix(in srgb, var(--color-warn) 8%, var(--color-bg)); border-bottom: 1px solid color-mix(in srgb, var(--color-warn) 25%, var(--color-border)); color: var(--color-warn); font-size: 12px; overflow-wrap: anywhere; }
 .agents-image-previews { display: flex; gap: 10px; overflow: auto; margin-bottom: 12px; max-height: 120px; }
 .agents-image-previews figure { position: relative; flex: 0 0 110px; margin: 0; border: 1px solid var(--color-border-strong); border-radius: 4px; padding: 6px; background: var(--color-surface); }

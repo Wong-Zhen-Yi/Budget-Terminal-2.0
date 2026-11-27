@@ -6,8 +6,9 @@ const { tmpdir } = require('node:os')
 const { launch: runLaunch, createLauncherOutput, parseCommandLine, commandHelp } = require('./launch.cjs')
 const { dev } = require('./dev.cjs')
 const { verifyDesktopBuild } = require('./verify-desktop-build.cjs')
-const launch = options => runLaunch({ verifyBuild() {}, ...options })
-const { tryRun, ensureElectron } = require('./ensure-electron.cjs')
+const launch = options => runLaunch({ verifyBuild() {}, linuxSandbox() { return true }, ...options })
+const { tryRun, ensureElectron, versionArgs } = require('./ensure-electron.cjs')
+const { ensureLinuxSandbox, sandboxProfile } = require('./linux-sandbox.cjs')
 const { supportedNodeVersion, supportedNpmVersion, runtimeEnvironment, assertCertificateEnvironment } = require('./runtime.cjs')
 const { createUpdater, updateErrorMessage } = require('./update.cjs')
 const { version: electronVersion } = require('electron/package.json')
@@ -33,6 +34,7 @@ try {
         const status = launch({ platform, nodeVersion: '24.22.1', environment: {},
           log: { log() {}, error() {} },
           verifyBuild() { steps.push('verify') },
+          linuxSandbox() { steps.push('sandbox'); return true },
           spawn(_command, args, options) {
             assert.equal(options.cwd, process.cwd())
             const command = args.join(' ')
@@ -42,7 +44,7 @@ try {
             return { status: step === failedStep ? 1 : 0, stdout: '11.0.0' }
           },
         })
-        const expected = ['npm', 'install', 'ensure:electron', 'build', 'verify', 'open']
+        const expected = ['npm', 'install', 'ensure:electron', ...(platform === 'linux' ? ['sandbox'] : []), 'build', 'verify', 'open']
         assert.equal(status, failedStep ? 1 : 0)
         assert.deepEqual(steps, failedStep ? expected.slice(0, expected.indexOf(failedStep) + 1) : expected)
       }
@@ -115,7 +117,7 @@ for (const platform of ['win32', 'darwin', 'linux']) {
 }
 const demoFixture = require('../fixtures/demo-user-data.json')
 const personalEnvironment = { APPDATA: 'personal-roaming', LOCALAPPDATA: 'personal-local',
-  BUDGET_TERMINAL_DATA_DIR: 'personal-mcp', PI_CODING_AGENT_DIR: 'personal-pi', openai_api_key: 'test-placeholder', ANTHROPIC_API_KEY: 'test-placeholder' }
+  BUDGET_TERMINAL_DATA_DIR: 'personal-mcp', PI_CODING_AGENT_DIR: 'personal-pi', CLAUDE_CONFIG_DIR: 'personal-claude', openai_api_key: 'test-placeholder', ANTHROPIC_API_KEY: 'test-placeholder' }
 const demoDirectories = []
 for (const exitCode of [0, 7]) {
   assert.equal(launch({ demo: true, detach: true, platform: 'win32', nodeVersion: '24.22.1', log,
@@ -131,6 +133,7 @@ for (const exitCode of [0, 7]) {
       assert.equal(env.APPDATA, join(directory, 'roaming'))
       assert.equal(env.LOCALAPPDATA, join(directory, 'local'))
       assert.equal(env.PI_CODING_AGENT_DIR, join(directory, 'pi'), 'Demo Pi credentials, models and settings are isolated')
+      assert.equal(env.CLAUDE_CONFIG_DIR, join(directory, 'claude'), 'Demo Claude Code is signed out')
       assert.equal(env.openai_api_key, undefined)
       assert.equal(env.ANTHROPIC_API_KEY, undefined, 'Demo never inherits model provider keys')
       const store = join(env.APPDATA, 'BudgetTerminalElectron')
@@ -448,6 +451,60 @@ assert.equal(ensureElectron({ log, attempts: 2, pause() { pauses++ }, spawn() {
 assert.equal(attempts, 2)
 assert.equal(pauses, 1, 'Transient Windows scan locks remain retryable')
 assert.equal(ensureElectron({ log, attempts: 1, pause() { assert.fail('Last failure must not wait') }, spawn: () => ({ status: 1 }) }), 1)
+
+// Linux: the postinstall version check skips the sandbox; the launcher verifies and repairs it in stage 3.
+assert.deepEqual(versionArgs('linux'), ['--no-sandbox', '--version'])
+assert.deepEqual(versionArgs('win32'), ['--version'])
+assert.equal(tryRun('electron', { spawn: () => ({ status: null, signal: 'SIGTRAP' }) }).reason, 'signal SIGTRAP', 'Report crashes as signals, not "exit null"')
+{
+  const profile = sandboxProfile('/home/user/My [Repo]/node_modules/electron/dist/electron')
+  assert.match(profile.name, /^budget-terminal-[0-9a-f]{12}$/)
+  assert.equal(profile.file, `/etc/apparmor.d/${profile.name}`)
+  assert.equal(profile.name, sandboxProfile('/home/user/My [Repo]/node_modules/electron/dist/electron').name, 'One stable profile per checkout')
+  assert(profile.text.includes('"/home/user/My \\[Repo\\]/node_modules/electron/dist/electron" flags=(unconfined) {'), 'Quote and escape globs in the binary path')
+  assert(profile.text.includes('  userns,'))
+  assert.throws(() => sandboxProfile('/tmp/bad\npath/electron'))
+
+  const sandboxRun = (outcomes, options = {}) => {
+    const messages = []
+    const installs = []
+    const output = { note: m => messages.push(m), warn: m => messages.push(m), error: m => messages.push(m) }
+    const ok = ensureLinuxSandbox({ output, binary: '/x/electron', interactive: true, restricted: () => true,
+      spawn(command, args) { assert.deepEqual([command, args], ['/x/electron', ['--version']], 'Sandbox check runs Electron with its sandbox'); return outcomes.shift() },
+      install(bin) { installs.push(bin); return { ok: options.installOk ?? true, profile: { file: '/etc/apparmor.d/test' } } },
+      ...options })
+    return { ok, messages, installs }
+  }
+  const crash = { status: null, signal: 'SIGTRAP' }
+  let run = sandboxRun([{ status: 0 }])
+  assert.equal(run.ok, true); assert.equal(run.installs.length, 0, 'Working sandbox never asks for sudo')
+  run = sandboxRun([crash, { status: 0 }])
+  assert.equal(run.ok, true); assert.deepEqual(run.installs, ['/x/electron'], 'Restricted user namespaces install the AppArmor profile once')
+  run = sandboxRun([crash, crash])
+  assert.equal(run.ok, false); assert(run.messages.some(m => m.includes('still cannot start')))
+  run = sandboxRun([crash], { installOk: false })
+  assert.equal(run.ok, false); assert(run.messages.some(m => m.includes('npm run setup:linux-sandbox')))
+  run = sandboxRun([crash], { interactive: false })
+  assert.equal(run.ok, false); assert.equal(run.installs.length, 0, 'Never prompt for sudo without a terminal')
+  assert(run.messages.some(m => m.includes('npm run setup:linux-sandbox') && m.includes('signal SIGTRAP')))
+  run = sandboxRun([crash], { restricted: () => false })
+  assert.equal(run.ok, false); assert.equal(run.installs.length, 0); assert(run.messages.some(m => m.includes('chrome-sandbox')))
+
+  for (const ready of [true, false]) {
+    let checked = 0
+    const status = runLaunch({ platform: 'linux', nodeVersion: '24.22.1', environment: { PATH: 'unchanged' }, setupOnly: true,
+      log: { log() {}, error() {} }, verifyBuild() {},
+      spawn() { return { status: 0, stdout: '11.0.0' } },
+      linuxSandbox({ output, spawn }) { checked++; assert.equal(typeof output.error, 'function'); assert.equal(typeof spawn, 'function'); return ready },
+    })
+    assert.equal(checked, 1, 'Linux launches verify the Electron sandbox')
+    assert.equal(status, ready ? 0 : 1)
+  }
+  assert.equal(runLaunch({ platform: 'win32', nodeVersion: '24.22.1', environment: { PATH: 'unchanged' }, setupOnly: true,
+    log: { log() {}, error() {} }, verifyBuild() {}, spawn() { return { status: 0, stdout: '11.0.0' } },
+    linuxSandbox() { assert.fail('Windows has no Linux sandbox step') } }), 0)
+  console.log('PASS: Linux sandbox check installs an AppArmor userns profile only when restricted, prompts only in a terminal and blocks launch on failure.')
+}
 
 const configCheck = spawnSync(process.execPath, [require.resolve('tsx/cli'), '-e',
   "import './apps/desktop/electron.vite.config.ts'; if (process.env.ELECTRON_RUN_AS_NODE !== undefined) throw new Error('Direct dev/preview retained Node mode')",

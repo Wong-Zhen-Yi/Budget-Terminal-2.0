@@ -235,7 +235,7 @@ try {
   // Keep the bridge client and Electron host on this probe's profile, including
   // when the maintenance runner already supplied its own outer scratch path.
   const env: NodeJS.ProcessEnv = { ...process.env, APPDATA: dataDirectory, LOCALAPPDATA: dataDirectory,
-    BUDGET_TERMINAL_DATA_DIR: join(dataDirectory, 'BudgetTerminalElectron'), PI_CODING_AGENT_DIR: join(dataDirectory, 'pi') }
+    BUDGET_TERMINAL_DATA_DIR: join(dataDirectory, 'BudgetTerminalElectron'), PI_CODING_AGENT_DIR: join(dataDirectory, 'pi'), CLAUDE_CONFIG_DIR: join(dataDirectory, 'claude') }
   delete env.ELECTRON_RUN_AS_NODE
   const result = await new Promise<{ code: number | null; output: string }>((resolveRun, reject) => {
     const child = spawn(createRequire(import.meta.url)('electron') as string, [join(directory, 'main.mjs')], {

@@ -9,15 +9,35 @@ export interface AgentImage { name: string; dataUrl: string }
 /** Agents chat, trackers, monitoring and Telegram research all run on the embedded Pi agent runtime. */
 export const agentRuntimeLabel = 'Pi'
 /** A model provider Pi can reach, and where its credential comes from. Credentials never reach the renderer. */
-export interface PiProviderConnection { id: string; label: string; source: 'app' | 'pi' | 'environment' }
+export interface PiProviderConnection { id: string; label: string; source: 'app' | 'pi' | 'environment' | 'claude-code' }
+/** A subscription sign-in in progress. Pi's own OAuth flow runs in the main process; only its public steps reach the renderer. */
+export interface PiSignInFlow {
+  provider: string
+  label: string
+  /** Sign-in page to open in the browser. */
+  url?: string
+  /** Device-code sign-in: the code to enter at the verification page. */
+  userCode?: string
+  verificationUri?: string
+  message?: string
+  /** A question the flow is waiting on, such as a pasted redirect URL. `manual_code` is optional while the browser callback is pending. */
+  prompt?: { kind: 'text' | 'secret' | 'manual_code' | 'select'; message: string; placeholder?: string; options?: { id: string; label: string }[] }
+}
 export interface PiConnectionState {
   /** Providers with an API key saved (encrypted) in Budget Terminal. */
   savedKeys: string[]
-  /** Providers Pi can use now: saved keys, the user's own Pi sign-ins and environment keys. */
+  /** Providers Pi can use now: saved keys, Pi sign-ins, Claude Code and environment keys. */
   connected: PiProviderConnection[]
   /** Providers that accept an API key, for the key form. */
   keyProviders: { id: string; label: string }[]
-  /** Set when the Pi credential or model files could not be read. */
+  /** Subscription sign-ins Pi offers without an API key. Anthropic's is excluded: its terms forbid Claude.ai sign-in in third-party apps. */
+  signInProviders?: { id: string; label: string }[]
+  signIn?: PiSignInFlow
+  /** The user's own Claude Code CLI, which Pi can use as a model provider with Claude Code's own sign-in. */
+  claudeCode?: { installed: boolean; signedIn: boolean; plan?: string; error?: string }
+  /** Explanations for credentials that were found but are not used. */
+  notices?: string[]
+  /** Set when the Pi credential or model files could not be read, or the last sign-in failed. */
   error?: string
 }
 export const piProviderPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/
@@ -78,6 +98,11 @@ export type AgentsCommand =
   | TelegramCommand
   | { type: 'piKey'; provider: string; apiKey: string }
   | { type: 'piKeyClear'; provider: string }
+  | { type: 'piSignIn'; provider: string }
+  | { type: 'piSignInAnswer'; value: string }
+  | { type: 'piSignInCancel' }
+  | { type: 'piSignOut'; provider: string }
+  | { type: 'claudeCodeCheck' }
   | { type: 'continueResearch'; runId: string }
   | { type: 'configureRun'; minutes: number }
   | { type: 'configure'; model: string; thinking: string | null }

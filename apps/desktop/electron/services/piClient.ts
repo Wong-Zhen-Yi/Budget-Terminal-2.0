@@ -3,6 +3,7 @@ import { getSupportedThinkingLevels, type Api, type ImageContent, type Model, ty
 import { randomUUID } from 'node:crypto'
 import type { AgentPacket, AgentResult, AgentTransport } from './agentTransport.js'
 import { isWebTool, runWebTool, webToolDefinitions } from './agentWebTools.js'
+import { availableModels } from './claudeCodeProvider.js'
 
 type ThinkingLevel = AgentSession['thinkingLevel']
 type ToolReply = { result?: unknown; error?: { message?: string } }
@@ -14,6 +15,8 @@ interface Turn { id: string; thread: Thread; message: number; texts: Map<number,
 export interface PiServices {
   runtime: ModelRuntime
   defaults?: { defaultProvider?: string; defaultModel?: string; defaultThinkingLevel?: ThinkingLevel }
+  /** Providers whose credentials Budget Terminal must not use, such as a Claude.ai subscription sign-in made in the `pi` CLI. */
+  excluded?: string[]
 }
 
 const MAX_RESULT_TEXT = 200_000
@@ -86,10 +89,23 @@ export function piModels(runtime: Pick<ModelRuntime, 'getProvider'>, available: 
     })
 }
 
+/**
+ * The model used when the user has not chosen one: Haiku, for fast, low-cost research. Claude
+ * Code's Haiku comes first, then the newest Haiku from Anthropic and then any other provider. With
+ * no Haiku connected, the user's Pi default applies, then Pi's own pick.
+ */
+export function piDefaultModel(available: readonly Model<Api>[], defaults: PiServices['defaults'] = {}): Model<Api> | undefined {
+  const order = new Intl.Collator('en', { numeric: true })
+  const rank = (model: Model<Api>) => model.provider === 'claude-code' ? 0 : model.provider === 'anthropic' ? 1 : 2
+  const haiku = available.filter(model => /haiku/i.test(model.id))
+    .sort((a, b) => rank(a) - rank(b) || order.compare(b.name, a.name) || order.compare(b.id, a.id))[0]
+  return haiku ?? available.find(model => model.provider === defaults.defaultProvider && model.id === defaults.defaultModel)
+}
+
 /** Explain failures without echoing prompts, tool input or credentials. */
 export function piFailure(error: unknown): string {
   const text = (error instanceof Error ? error.message : String(error)).replace(/\b(sk-[A-Za-z0-9_-]{6})[A-Za-z0-9_-]+/g, '$1…')
-  if (/no api key|api key (?:is )?(?:missing|required)|no credentials|not authenticated|unauthori[sz]ed|\b401\b|invalid (?:x-)?api.?key|authentication/i.test(text)) return 'The model provider rejected the credentials. Save a valid API key in Agents → Get connected, or sign in again with `pi` → /login, then select Connect Pi.'
+  if (/no api key|api key (?:is )?(?:missing|required)|no credentials|not authenticated|unauthori[sz]ed|\b401\b|invalid (?:x-)?api.?key|authentication/i.test(text)) return 'The model provider rejected the credentials. Sign in again or save a valid API key in Agents → Get connected, then select Connect Pi.'
   if (/rate.?limit|usage limit|quota|\b429\b/i.test(text)) return 'The model provider\'s rate or usage limit was reached. Wait for it to reset, then use Continue research.'
   if (/context (?:length|window)|too many tokens|maximum context/i.test(text)) return 'The conversation is larger than the selected model accepts. Start a new chat or choose a model with a larger context window.'
   return text.slice(0, 400) || 'Pi stopped unexpectedly. Connect again.'
@@ -143,9 +159,10 @@ export class PiClient implements AgentTransport {
         const services = await this.services()
         this.runtime = services.runtime
         this.defaults = services.defaults ?? {}
-        this.available = [...await this.runtime.getAvailable()]
+        const excluded = new Set(services.excluded ?? [])
+        this.available = (await availableModels(this.runtime)).filter(model => !excluded.has(model.provider))
       } catch (error) { throw new Error(piFailure(error)) }
-      if (!this.available.length) throw new PiAuthError('No model provider is connected to Pi. Save an API key in Agents → Get connected, or sign in with `pi` → /login in a terminal, then select Connect Pi.')
+      if (!this.available.length) throw new PiAuthError('No model provider is connected to Pi. In Agents → Get connected, sign in with a subscription, use your Claude Code sign-in, or save an API key, then select Connect Pi.')
       return { account: { provider: 'pi' } }
     }
     if (method === 'model/list') return { data: this.runtime ? piModels(this.runtime, this.available) : [], nextCursor: null }
@@ -213,7 +230,7 @@ export class PiClient implements AgentTransport {
     const runtime = this.runtime
     if (!runtime) throw new Error('Connect Pi before starting a conversation.')
     this.closeThread()
-    const requested = typeof input.model === 'string' ? this.find(input.model) : undefined
+    const requested = (typeof input.model === 'string' ? this.find(input.model) : undefined) ?? piDefaultModel(this.available, this.defaults)
     const tools = (input.dynamicTools as DynamicTool[] | undefined) ?? []
     // In-memory settings only: Pi's settings files, telemetry and attribution headers are never used.
     const settingsManager = SettingsManager.inMemory({
@@ -229,7 +246,9 @@ export class PiClient implements AgentTransport {
       noTools: 'all', tools: customTools.map(tool => tool.name), customTools,
     })
     if (this.closed) { session.dispose(); throw new Error('Pi connection closed.') }
-    if (!session.model) { session.dispose(); throw new PiAuthError('Pi has no usable model. Save an API key in Agents → Get connected, then select Connect Pi.') }
+    // Pi's own default pick does not know which providers Budget Terminal excludes.
+    if (!(session.model && this.find(piModelId(session.model))) && this.available[0]) await session.setModel(this.available[0])
+    if (!session.model || !this.find(piModelId(session.model))) { session.dispose(); throw new PiAuthError('Pi has no usable model. Connect a model provider in Agents → Get connected, then select Connect Pi.') }
     const thread: Thread = { id: randomUUID(), session, unsubscribe: () => {} }
     thread.unsubscribe = session.subscribe(event => this.handle(thread, event))
     this.thread = thread

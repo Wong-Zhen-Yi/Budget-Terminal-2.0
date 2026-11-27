@@ -43,7 +43,7 @@ if (demoDirectory) {
   const roaming = join(demoDirectory, 'roaming')
   if (process.env.APPDATA !== roaming || process.env.LOCALAPPDATA !== join(demoDirectory, 'local') ||
       process.env.BUDGET_TERMINAL_DATA_DIR !== join(roaming, 'BudgetTerminalElectron') ||
-      process.env.PI_CODING_AGENT_DIR !== join(demoDirectory, 'pi')) {
+      process.env.PI_CODING_AGENT_DIR !== join(demoDirectory, 'pi') || process.env.CLAUDE_CONFIG_DIR !== join(demoDirectory, 'claude')) {
     throw new Error('Demo profile is incomplete. Start it from the Budget Terminal demo launcher.')
   }
   assertPrivateBrowserStorage(demoDirectory, app.getAppPath())

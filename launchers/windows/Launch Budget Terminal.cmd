@@ -88,6 +88,9 @@ rem The shared build adds the Claude Code agent provider and stops a fresh devic
 rem The shared build fixes Agents tool calls on Claude Code that failed with "request must be object".
 rem The shared build syncs automatically after Google sign-in: no workspace choice, and a new device restores or uploads on its first sync.
 rem The shared build replaces the Codex, Claude and Claude Code agent providers with the built-in Pi agent runtime.
+rem The shared build connects Pi without an API key through the signed-in Claude Code CLI or an in-app subscription sign-in.
+rem The shared build starts agents on Haiku when no model has been chosen.
+rem The shared build installs an AppArmor profile when Ubuntu blocks Electron's sandbox, instead of failing at the Electron check.
 rem Finnhub streaming-first refresh, visible-stock priorities and idle/session savings rebuild through the shared launcher.
 rem Settings dashboard keeps the five slowest pages stable during startup updates; rebuilt through the shared launcher.
 rem Shared snapshot validation, account quotas and typed cloud contracts rebuild through the shared launcher; deploy backend policies separately.

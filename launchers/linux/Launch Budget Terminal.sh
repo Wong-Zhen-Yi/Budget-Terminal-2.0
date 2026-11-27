@@ -8,6 +8,9 @@
 # The shared build fixes Agents tool calls on Claude Code that failed with "request must be object".
 # The shared build syncs automatically after Google sign-in: no workspace choice, and a new device restores or uploads on its first sync.
 # The shared build replaces the Codex, Claude and Claude Code agent providers with the built-in Pi agent runtime.
+# The shared build connects Pi without an API key through the signed-in Claude Code CLI or an in-app subscription sign-in.
+# The shared build starts agents on Haiku when no model has been chosen.
+# The shared build installs an AppArmor profile when Ubuntu blocks Electron's sandbox, instead of failing at the Electron check.
 here=$(cd "$(dirname "$0")" && pwd) || exit 1
 launcher="$here/../../scripts/launch-posix.sh"
 

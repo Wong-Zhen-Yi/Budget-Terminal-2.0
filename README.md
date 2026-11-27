@@ -210,9 +210,12 @@ choose **Run as a Program**), double-click **Budget Terminal 2.0** on the deskto
 the app menu after `npm run setup:linux`, or run `sh scripts/launch-posix.sh` from the checkout.
 `npm run setup:linux` (and every regular launch) also installs a `btd` command in `~/.local/bin`.
 It has the same commands and options as on Windows, including `btd restart` and `btd mobile`.
-On Ubuntu 23.10+, if Electron reports "No usable sandbox", run
-`sudo chown root:root node_modules/electron/dist/chrome-sandbox && sudo chmod 4755 node_modules/electron/dist/chrome-sandbox`
-from the checkout.
+Ubuntu 23.10+ restricts the unprivileged user namespaces Electron's Chromium sandbox needs
+(`kernel.apparmor_restrict_unprivileged_userns=1`), so Electron aborts before it opens a window.
+The launcher detects this and asks once for your sudo password to install an AppArmor profile for
+this checkout's Electron in `/etc/apparmor.d/budget-terminal-<id>`, as Chrome and VS Code do. The
+sandbox stays on, and the profile survives dependency reinstalls. To install it yourself, run
+`npm run setup:linux-sandbox` from the checkout. Re-run it after moving the checkout.
 If no supported Node.js is installed, the launcher downloads and verifies Node.js 24
 into `~/.local/share/budget-terminal` without administrator access.
 The launcher checks the runtime, installs dependencies, builds the latest source,
@@ -321,8 +324,10 @@ and guidance for separate Python environments.
 
 The **Agents** page runs on the built-in [Pi](https://pi.dev) agent runtime, so
 there is nothing extra to install. Connect a model provider in **Agents →
-Controls → Get connected · Pi** with an API key, a Pi CLI sign-in or a provider
-environment variable (see [Agents](docs/agents.md#pi-agent-runtime)). Until then,
+Controls → Get connected · Pi**. No API key is needed: use your signed-in Claude
+Code CLI or sign in with a ChatGPT, GitHub Copilot, OpenRouter or other
+subscription. An API key, a Pi CLI sign-in or a provider environment variable
+also works (see [Agents](docs/agents.md#pi-agent-runtime)). Until then,
 the app opens normally with setup instructions in Agents. The launcher does not
 sign in or start agent work; autonomous mode remains off by default.
 

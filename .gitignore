@@ -99,6 +99,7 @@ conf/
 **/market-api-keys.bin*
 # Encrypted model provider API keys for the Pi agent runtime.
 **/pi-keys.bin*
+**/pi-device-id
 **/claude-settings.bin*
 **/telegram-agents.json*
 

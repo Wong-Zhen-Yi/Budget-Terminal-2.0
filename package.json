@@ -25,6 +25,7 @@
     "probe:finnhub": "npm run --workspace budget-terminal-desktop probe:finnhub --",
     "probe:controller": "npm run --workspace budget-terminal-desktop probe:controller",
     "setup:linux": "node scripts/install-linux-launcher.cjs",
+    "setup:linux-sandbox": "node scripts/linux-sandbox.cjs",
     "probe:cloud-oauth": "npm run --workspace budget-terminal-desktop probe:cloud-oauth",
     "probe:auth-ui": "npm run --workspace budget-terminal-desktop probe:auth-ui",
     "probe:cloud-sync": "npm run --workspace budget-terminal-desktop probe:cloud-sync",

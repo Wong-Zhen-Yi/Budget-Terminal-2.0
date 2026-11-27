@@ -524,7 +524,7 @@ try {
   `)
   const env: NodeJS.ProcessEnv = demo?.env ?? {
     ...process.env, APPDATA: join(directory, 'roaming'), LOCALAPPDATA: join(directory, 'local'),
-    BUDGET_TERMINAL_DATA_DIR: join(directory, 'data'), PI_CODING_AGENT_DIR: join(directory, 'pi'),
+    BUDGET_TERMINAL_DATA_DIR: join(directory, 'data'), PI_CODING_AGENT_DIR: join(directory, 'pi'), CLAUDE_CONFIG_DIR: join(directory, 'claude'),
   }
   delete env.ELECTRON_RUN_AS_NODE
   delete env.ELECTRON_RENDERER_URL

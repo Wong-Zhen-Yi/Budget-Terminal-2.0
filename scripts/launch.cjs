@@ -108,7 +108,7 @@ function viteVersion() {
 }
 
 // Every double-click launcher builds the current desktop, mobile and MCP bundles.
-function launch({ development = false, demo = false, mobilePreview = false, mobile = false, logs = false, setupOnly = false, detach = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, verifyBuild = verifyDesktopBuild, openDetached = startDetachedDesktop, log = console } = {}) {
+function launch({ development = false, demo = false, mobilePreview = false, mobile = false, logs = false, setupOnly = false, detach = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, verifyBuild = verifyDesktopBuild, openDetached = startDetachedDesktop, linuxSandbox = (options) => require('./linux-sandbox.cjs').ensureLinuxSandbox(options), log = console } = {}) {
   const output = createLauncherOutput({ log, environment })
   const os = platformName(platform)
   const sampleData = demo || mobilePreview
@@ -173,6 +173,8 @@ function launch({ development = false, demo = false, mobilePreview = false, mobi
     output.error('Electron runtime could not start. See the error above.')
     return 1
   }
+  // Ubuntu 23.10+ restricts the user namespaces Chromium's sandbox needs; repair it here, where sudo can prompt.
+  if (platform === 'linux' && !linuxSandbox({ output, spawn, environment: env })) return 1
   output.done('Electron ready')
 
   output.stage(4, development ? 'Build local MCP tools' : 'Build desktop app')
@@ -229,7 +231,7 @@ function launch({ development = false, demo = false, mobilePreview = false, mobi
   if (app.error || app.status !== 0) {
     output.error('Budget Terminal stopped with an error. See the output above.')
     // Ubuntu 23.10+ restricts unprivileged user namespaces, which Chromium's sandbox needs.
-    if (platform === 'linux') output.note('If the output mentions "No usable sandbox", run: sudo chown root:root node_modules/electron/dist/chrome-sandbox && sudo chmod 4755 node_modules/electron/dist/chrome-sandbox')
+    if (platform === 'linux') output.note('If the output mentions "No usable sandbox", run: npm run setup:linux-sandbox')
     return app.status || 1
   }
   output.done('Session ended')

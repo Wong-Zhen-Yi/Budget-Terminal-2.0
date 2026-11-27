@@ -1,21 +1,24 @@
-import { app, safeStorage } from 'electron'
+import { app, safeStorage, shell } from 'electron'
 import { readFile, writeFile, rename, rm } from 'node:fs/promises'
 import { TelegramService, telegramConfigSchema } from './telegram.js'
 import { resetTelegramConversation, telegramResearchCommand, telegramHistoryAction, telegramHistorySnapshot, telegramModelChoices } from './telegramResearch.js'
 import { notificationCenter } from './notificationsHost.js'
-import { existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { getAgentDir, ModelRuntime } from '@earendil-works/pi-coding-agent'
 import { InMemoryCredentialStore } from '@earendil-works/pi-ai'
 import { createServiceRoutes } from '../mcp/routes.js'
 import { captureTerminalScreenshot, getMcpStatus, invokeMcpTool } from '../mcp/host.js'
-import { agentRuntimeLabel, piApiKeyPattern, piProviderPattern, type AgentsCommand, type PiConnectionState } from '../shared/agents.js'
+import { agentRuntimeLabel, piApiKeyPattern, piProviderPattern, type AgentsCommand, type PiConnectionState, type PiSignInFlow } from '../shared/agents.js'
 import type { Envelope } from '../shared/contract.js'
 import type { ScreenshotPayload } from '../shared/screenshot.js'
 import { failed, ok } from '../shared/envelope.js'
 import { AgentsService } from './agents.js'
 import type { AgentPacket } from './agentTransport.js'
 import { PiClient, piFailure, type PiServices } from './piClient.js'
+import { availableModels, CLAUDE_CODE_PROVIDER, ClaudeCodeAccount, createClaudeCodeProvider } from './claudeCodeProvider.js'
+import { isSafeExternalUrl } from './urls.js'
 import { AgentWorkspace } from './agentWorkspace.js'
 import { AgentImageStore } from './agentImageStore.js'
 import type { AgentTracker } from '../shared/agentWorkspace.js'
@@ -94,9 +97,18 @@ function piSignIns(path: string): string[] {
 
 let piLoad: Promise<PiServices> | null = null
 let piState: PiConnectionState = { savedKeys: [], connected: [], keyProviders: [] }
+const claudeCode = new ClaudeCodeAccount()
+/**
+ * Pi can sign in to Anthropic with a Claude Pro/Max account, but Anthropic's terms do not allow
+ * third-party apps to offer Claude.ai sign-in or use those credentials. Budget Terminal never
+ * offers that sign-in and ignores one made in the `pi` CLI; Claude Code covers that case.
+ */
+const excludedSignIns = new Set(['anthropic', 'radius'])
+const anthropicSubscriptionNotice = 'Your Pi sign-in to Anthropic (Claude Pro/Max) is not used: Anthropic does not allow Claude.ai subscriptions in third-party apps. Use Claude Code below, or save an Anthropic API key.'
 /**
  * One model runtime shared by chat, trackers and Telegram. A missing Pi credential file is never
- * created: without one, saved keys and environment keys live in memory only.
+ * created here: without one, saved keys and environment keys live in memory only. Claude Code is
+ * registered as a provider that runs the user's own CLI.
  */
 function piServices(reload = false): Promise<PiServices> {
   if (reload || !piLoad) {
@@ -107,16 +119,22 @@ function piServices(reload = false): Promise<PiServices> {
         ...(existsSync(files.auth) ? { authPath: files.auth } : { credentials: new InMemoryCredentialStore() }),
         modelsPath: existsSync(files.models) ? files.models : null,
       })
+      const status = await claudeCode.status(reload)
+      runtime.registerNativeProvider(createClaudeCodeProvider({ account: claudeCode, directory: join(app.getPath('userData'), 'agents', 'claude-code') }))
       for (const [provider, key] of Object.entries(keys)) await runtime.setRuntimeApiKey(provider, key)
-      const available = await runtime.getAvailable()
+      const excluded = !keys.anthropic && runtime.isUsingSubscription('anthropic') ? ['anthropic'] : []
+      const available = (await availableModels(runtime)).filter(model => !excluded.includes(model.provider))
       const signIns = new Set(piSignIns(files.auth))
       const providerName = (id: string) => runtime.getProvider(id)?.name ?? id
       const connected = [...new Set(available.map(model => model.provider))].map(id => ({ id, label: providerName(id),
-        source: id in keys ? 'app' as const : signIns.has(id) ? 'pi' as const : 'environment' as const }))
-      const keyProviders = runtime.getProviders().filter(provider => provider.auth.apiKey && provider.getModels().length)
+        source: id === CLAUDE_CODE_PROVIDER ? 'claude-code' as const : id in keys ? 'app' as const : signIns.has(id) ? 'pi' as const : 'environment' as const }))
+      const keyProviders = runtime.getProviders().filter(provider => provider.id !== CLAUDE_CODE_PROVIDER && provider.auth.apiKey && provider.getModels().length)
         .map(provider => ({ id: provider.id, label: provider.name })).sort((a, b) => a.label.localeCompare(b.label))
-      piState = { savedKeys: Object.keys(keys).sort(), connected: connected.sort((a, b) => a.label.localeCompare(b.label)), keyProviders }
-      return { runtime, defaults: piDefaults(files.settings) }
+      const signInProviders = runtime.getProviders().filter(provider => provider.auth.oauth && !excludedSignIns.has(provider.id) && provider.getModels().length)
+        .map(provider => ({ id: provider.id, label: provider.auth.oauth!.name })).sort((a, b) => a.label.localeCompare(b.label))
+      piState = { savedKeys: Object.keys(keys).sort(), connected: connected.sort((a, b) => a.label.localeCompare(b.label)), keyProviders, signInProviders,
+        claudeCode: status, ...(piState.signIn ? { signIn: piState.signIn } : {}), ...(excluded.length ? { notices: [anthropicSubscriptionNotice] } : {}) }
+      return { runtime, defaults: piDefaults(files.settings), excluded }
     })()
     piLoad = load
     load.catch(error => {
@@ -125,6 +143,99 @@ function piServices(reload = false): Promise<PiServices> {
     })
   }
   return piLoad
+}
+
+/** A stable random id for this installation. Some sign-in flows (Sign in with ChatGPT) require one; it is not a secret. */
+function piDeviceId() {
+  const path = join(app.getPath('userData'), 'pi-device-id')
+  try {
+    const saved = readFileSync(path, 'utf8').trim()
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(saved)) return saved
+  } catch { /* Created below. */ }
+  const id = randomUUID()
+  writeFileSync(path, id, { mode: 0o600 })
+  return id
+}
+
+let signInAbort: AbortController | null = null
+let signInAnswer: { resolve: (value: string) => void; reject: (error: Error) => void } | null = null
+function setSignIn(flow: PiSignInFlow | undefined, error?: string) {
+  const { signIn: _signIn, error: _error, ...rest } = piState
+  piState = { ...rest, ...(flow ? { signIn: flow } : {}), ...(error ? { error } : {}) }
+  agentsChanged()
+}
+/**
+ * Run Pi's own subscription sign-in. The credential is written to Pi's auth.json, the same file
+ * the `pi` CLI uses, so one sign-in serves both. Budget Terminal never sees the password; the
+ * browser or device-code page belongs to the provider.
+ */
+async function startPiSignIn(provider: string) {
+  if (signInAbort) throw new Error('A sign-in is already in progress. Finish or cancel it first.')
+  const entry = piState.signInProviders?.find(candidate => candidate.id === provider)
+  if (!entry) throw new Error('Choose a sign-in from the list.')
+  const state = agent().snapshot()
+  if (state.busy || state.autonomy || remote?.snapshot().busy) throw new Error('Stop the agent and turn off autonomous mode before signing in.')
+  const controller = new AbortController()
+  signInAbort = controller
+  let flow: PiSignInFlow = { provider, label: entry.label, message: 'Starting sign-in…' }
+  const update = (change: Partial<PiSignInFlow>) => { if (signInAbort === controller) { flow = { ...flow, ...change }; setSignIn(flow) } }
+  setSignIn(flow)
+  void (async () => {
+    try {
+      const runtime = await ModelRuntime.create({ authPath: piFiles().auth, modelsPath: null, refreshOnCreate: false, signal: controller.signal })
+      await runtime.login(provider, 'oauth', {
+        signal: controller.signal,
+        notify: event => {
+          if (event.type === 'auth_url' && isSafeExternalUrl(event.url)) {
+            update({ url: event.url, message: event.instructions ?? 'Finish signing in on the page that opened in your browser.' })
+            void shell.openExternal(event.url)
+          } else if (event.type === 'device_code' && isSafeExternalUrl(event.verificationUri)) update({ userCode: event.userCode.slice(0, 64), verificationUri: event.verificationUri, message: 'Open the sign-in page and enter this code.' })
+          else if (event.type === 'info' || event.type === 'progress') update({ message: event.message.slice(0, 300) })
+        },
+        prompt: prompt => new Promise<string>((resolve, reject) => {
+          const clear = () => { if (signInAnswer?.resolve === finish) { signInAnswer = null; update({ prompt: undefined }) } }
+          const finish = (value: string) => { clear(); resolve(value) }
+          const fail = (error: Error) => { clear(); reject(error) }
+          signInAnswer = { resolve: finish, reject: fail }
+          prompt.signal?.addEventListener('abort', () => fail(new Error('Prompt closed.')), { once: true })
+          update({ message: flow.message === 'Starting sign-in…' ? undefined : flow.message, prompt: { kind: prompt.type, message: prompt.message.slice(0, 300), placeholder: 'placeholder' in prompt ? prompt.placeholder?.slice(0, 200) : undefined,
+            options: prompt.type === 'select' ? prompt.options.map(option => ({ id: option.id, label: option.label })) : undefined } })
+        }),
+      }, { agentName: 'Budget Terminal', getDeviceId: piDeviceId })
+      if (signInAbort !== controller) return
+      signInAbort = null
+      setSignIn(undefined)
+      await reconnectPi()
+    } catch (error) {
+      if (signInAbort !== controller) return
+      signInAbort = null
+      setSignIn(undefined, controller.signal.aborted ? undefined : `${entry.label} sign-in failed: ${piFailure(error)}`)
+    } finally { if (signInAbort === controller) signInAbort = null }
+  })()
+}
+function cancelPiSignIn() {
+  const controller = signInAbort
+  signInAbort = null
+  signInAnswer?.reject(new Error('Sign-in cancelled.'))
+  signInAnswer = null
+  controller?.abort()
+  setSignIn(undefined)
+}
+async function signOutPi(provider: string) {
+  if (!piState.connected.some(entry => entry.id === provider && entry.source === 'pi')) throw new Error('That provider has no Pi sign-in to remove.')
+  await changeSettings(async () => {
+    const runtime = await ModelRuntime.create({ authPath: piFiles().auth, modelsPath: null, refreshOnCreate: false })
+    await runtime.logout(provider)
+  })
+}
+/** Pick up changed credentials. A running conversation keeps its connection; the next connect uses them. */
+async function reconnectPi() {
+  await piServices(true).catch(() => {})
+  const state = agent().snapshot()
+  if (state.busy || remote?.snapshot().busy || settingsChanging) return
+  agent().disconnect()
+  remote?.disconnect()
+  await agent().command({ type: 'connect' }).catch(() => {})
 }
 /** Every Agents worker (chat, trackers, Telegram) runs on Pi with the same credentials. */
 function transport(receive: (packet: AgentPacket) => void) {
@@ -323,6 +434,32 @@ async function executeAgentsCommand(command: AgentsCommand) {
       return state.error ? failed(state, state.error, `${label} agent`) : ok(state, `${label} agent`)
     } catch (error) { return failed(snapshot(), error instanceof Error ? error.message : 'Model provider settings failed.', `${label} agent`) }
   }
+  if (command?.type === 'piSignIn' || command?.type === 'piSignInAnswer' || command?.type === 'piSignInCancel' || command?.type === 'piSignOut' || command?.type === 'claudeCodeCheck') {
+    try {
+      if (command.type === 'piSignIn') {
+        const provider = String(command.provider ?? '')
+        if (!piProviderPattern.test(provider)) throw new Error('Choose a sign-in from the list.')
+        await startPiSignIn(provider)
+      } else if (command.type === 'piSignInAnswer') {
+        const value = String(command.value ?? '')
+        if (!signInAnswer) throw new Error('The sign-in is not waiting for an answer.')
+        if (value.length > 4096) throw new Error('That answer is too long.')
+        signInAnswer.resolve(value.trim())
+      } else if (command.type === 'piSignInCancel') cancelPiSignIn()
+      else if (command.type === 'piSignOut') {
+        const provider = String(command.provider ?? '')
+        if (!piProviderPattern.test(provider)) throw new Error('Choose a provider to sign out of.')
+        await signOutPi(provider)
+      } else {
+        claudeCode.forget()
+        const connected = agent().snapshot().connected
+        await piServices(true).catch(() => {})
+        if (!connected) await agent().command({ type: 'connect' }).catch(() => {})
+      }
+      const state = snapshot()
+      return state.pi.error ? failed(state, state.pi.error, `${label} agent`) : ok(state, `${label} agent`)
+    } catch (error) { return failed(snapshot(), error instanceof Error ? error.message : 'Sign-in failed.', `${label} agent`) }
+  }
   // Connect re-reads Pi's credential files, so a `pi` sign-in made while the app runs is picked up.
   if (command?.type === 'connect' && !agent().snapshot().connected && !agent().snapshot().busy) await piServices(true).catch(() => {})
   if (command?.type === 'stop') await browserControl({ action: 'stop' })
@@ -343,6 +480,7 @@ export async function flushAgents() {
 }
 export function closeAgents() {
   lifecycle++
+  if (signInAbort) cancelPiSignIn()
   void telegram?.close()
   remote?.close(); remote = null
   void remoteWorkspace?.close(); remoteWorkspace = null; viewedTelegramChat = null; telegramStartup = null

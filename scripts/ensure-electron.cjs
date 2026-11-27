@@ -36,10 +36,17 @@ function distVersion() {
   }
 }
 
-function tryRun(bin, { spawn = spawnSync, environment = process.env, expectedVersion = version } = {}) {
-  const result = spawn(bin, ['--version'], { env: runtimeEnvironment(environment), encoding: 'utf8', timeout: 30_000 })
+// Linux checks the binary without its sandbox: restricted user namespaces would abort it here, inside
+// `npm install`'s postinstall where sudo cannot prompt. The launcher's next step (linux-sandbox.cjs)
+// verifies and repairs sandboxed startup separately.
+function versionArgs(platform = process.platform) {
+  return platform === 'linux' ? ['--no-sandbox', '--version'] : ['--version']
+}
+
+function tryRun(bin, { spawn = spawnSync, environment = process.env, expectedVersion = version, platform = process.platform } = {}) {
+  const result = spawn(bin, versionArgs(platform), { env: runtimeEnvironment(environment), encoding: 'utf8', timeout: 30_000 })
   if (result.error) return { ok: false, reason: `${result.error.code || result.error.message}` }
-  if (result.status !== 0) return { ok: false, reason: `exit ${result.status}` }
+  if (result.status !== 0) return { ok: false, reason: result.signal ? `signal ${result.signal}` : `exit ${result.status}` }
   const reported = result.stdout?.trim() || ''
   if (reported.replace(/^v/, '') !== expectedVersion) {
     return { ok: false, retry: false, reason: `reported ${reported || '(no version)'}, expected Electron ${expectedVersion}` }
@@ -91,4 +98,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { ensureElectron, tryRun }
+module.exports = { ensureElectron, tryRun, versionArgs }

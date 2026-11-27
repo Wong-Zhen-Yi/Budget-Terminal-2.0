@@ -33,6 +33,8 @@ function createDemoSession(environment) {
     BUDGET_TERMINAL_DEMO_DIR: directory,
     // Pi reads credentials, models and settings from here, so the demo never sees personal sign-ins.
     PI_CODING_AGENT_DIR: join(directory, 'pi'),
+    // Claude Code keeps its sign-in in its config directory, so the demo's Claude Code is signed out.
+    CLAUDE_CONFIG_DIR: join(directory, 'claude'),
   }
   // Drop case variants too: Windows resolves environment names case-insensitively.
   // Model provider credentials in the environment are dropped too, so the demo cannot bill a personal account.
