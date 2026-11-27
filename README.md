@@ -49,7 +49,7 @@ research pages.
 | **⚡ Open ready pages** | Every implemented page starts loading at launch. Startup progress, failures, and diagnostic logs stay in Settings. |
 | **Saved pages at launch** | Use cached content while every page refreshes. Settings controls separate page, market-data and image budgets, retention and cache diagnostics. |
 | **🔗 Extend your workspace** | Connect local research tools through MCP while keeping the workspace in the desktop app. |
-| **Work with Agents** | Use the embedded Codex, Claude Code or Claude workspace for research and local alerts, with autonomous mode off by default. |
+| **Work with Agents** | Use the embedded Pi agent workspace, with the model provider you choose, for research and local alerts, with autonomous mode off by default. |
 | **Use your phone** | Open a connected phone viewport on Windows, or enable private phone and tablet access through Tailscale. Telegram provides mobile links and agent quick prompts when configured. |
 
 ## Screenshots
@@ -319,14 +319,12 @@ certificate-verification bypasses, and the launcher forces npm certificate check
 See the [certificate security notes](docs/certificate-security.md) for verification
 and guidance for separate Python environments.
 
-The launcher also checks Codex for the **Agents** page and passes the detected
-executable to the app. It detects the Windows Codex desktop installation, native
-CLI installations and native executables behind Windows npm shims. If Codex is
-missing, the app still opens with setup instructions in Agents. To use your
-Claude Code sign-in instead, choose **Provider → Claude Code** (see
-[Agents](docs/agents.md#claude-code-provider)); to use a Claude API key, choose
-**Provider → Claude** (see [Agents](docs/agents.md#claude-provider)). The launcher does not sign in or start
-agent work; autonomous mode remains off by default.
+The **Agents** page runs on the built-in [Pi](https://pi.dev) agent runtime, so
+there is nothing extra to install. Connect a model provider in **Agents →
+Controls → Get connected · Pi** with an API key, a Pi CLI sign-in or a provider
+environment variable (see [Agents](docs/agents.md#pi-agent-runtime)). Until then,
+the app opens normally with setup instructions in Agents. The launcher does not
+sign in or start agent work; autonomous mode remains off by default.
 
 <details>
 <summary><strong>Electron repair and production bundles</strong></summary>

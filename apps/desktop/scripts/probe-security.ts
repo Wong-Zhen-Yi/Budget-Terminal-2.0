@@ -149,10 +149,10 @@ try {
           await startAgents()
           const missingLogin = await trusted.webContents.executeJavaScript('window.api.agentsStatus()')
           assert.equal(missingLogin.meta.freshness, 'failed', 'Startup failure stays visible in readiness')
-          assert.match(missingLogin.data.error, /codex login/)
+          assert.match(missingLogin.data.error, /Connect a model provider/)
           assert.equal(missingLogin.data.busy, false)
           assert.equal(globalThis.codexFixture.turns, 0)
-          console.log('PASS: automatic Codex startup, single connection attempt, connected New chat, no inference, Stop without reconnect and visible sign-in failure')
+          console.log('PASS: automatic Pi startup, single connection attempt, connected New chat, no inference, Stop without reconnect and visible sign-in failure')
           const other = new BrowserWindow(options)
           await other.loadFile(${JSON.stringify(otherPath)})
           await assert.rejects(other.webContents.executeJavaScript('window.api.settings()'), /Untrusted IPC sender/)
@@ -209,18 +209,18 @@ try {
       })
     ` },
     outfile: join(directory, 'main.mjs'), bundle: true, platform: 'node', format: 'esm', packages: 'external',
-    banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" },
-    plugins: [{ name: 'fixture-codex-transport', setup(builder) {
-      // Exercise the real host/IPC lifecycle without using the user's Codex account.
-      builder.onLoad({ filter: /[\\/]codexClient\.ts$/ }, () => ({ loader: 'ts', contents: `
+    banner: { js: "import { createRequire as __probeCreateRequire } from 'node:module'; const require = __probeCreateRequire(import.meta.url);" },
+    plugins: [{ name: 'fixture-pi-transport', setup(builder) {
+      // Exercise the real host/IPC lifecycle without using any model provider account.
+      builder.onLoad({ filter: /[\\/]piClient\.ts$/ }, () => ({ loader: 'ts', contents: `
         globalThis.codexFixture = { starts: 0, closes: 0, turns: 0, threads: 0, authenticated: true }
-        export class CodexClient {
+        export const piFailure = error => error instanceof Error ? error.message : String(error)
+        export class PiClient {
           async start() { globalThis.codexFixture.starts++ }
           async request(method) {
             const fixture = globalThis.codexFixture
             await new Promise(resolve => setTimeout(resolve, 10))
             if (method === 'account/read') return { account: fixture.authenticated ? {} : null }
-            if (method === 'config/read') return { config: {} }
             if (method === 'model/list') return { data: [{ model: 'fixture-model', displayName: 'Fixture', defaultReasoningEffort: 'low', supportedReasoningEfforts: [{ reasoningEffort: 'low', description: 'Quick' }] }] }
             if (method === 'thread/start') return { thread: { id: 'fixture-' + (++fixture.threads) }, model: 'fixture-model' }
             if (method === 'turn/start') { fixture.turns++; throw Error('Unexpected inference') }
@@ -235,7 +235,7 @@ try {
   // Keep the bridge client and Electron host on this probe's profile, including
   // when the maintenance runner already supplied its own outer scratch path.
   const env: NodeJS.ProcessEnv = { ...process.env, APPDATA: dataDirectory, LOCALAPPDATA: dataDirectory,
-    BUDGET_TERMINAL_DATA_DIR: join(dataDirectory, 'BudgetTerminalElectron') }
+    BUDGET_TERMINAL_DATA_DIR: join(dataDirectory, 'BudgetTerminalElectron'), PI_CODING_AGENT_DIR: join(dataDirectory, 'pi') }
   delete env.ELECTRON_RUN_AS_NODE
   const result = await new Promise<{ code: number | null; output: string }>((resolveRun, reject) => {
     const child = spawn(createRequire(import.meta.url)('electron') as string, [join(directory, 'main.mjs')], {

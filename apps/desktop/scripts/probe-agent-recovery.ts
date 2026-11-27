@@ -5,7 +5,7 @@ import { join, resolve, sep } from 'node:path'
 import { mock } from 'node:test'
 import { AgentsService } from '../electron/services/agents.js'
 import { AgentWorkspace, agentWorkspacePath } from '../electron/services/agentWorkspace.js'
-import type { CodexPacket, CodexTransport } from '../electron/services/codexClient.js'
+import type { AgentPacket, AgentTransport } from '../electron/services/agentTransport.js'
 import type { Operation } from '../mcp/operations.js'
 import { dynamicToolResult, toolResult } from '../mcp/toolResult.js'
 import { failed, ok, partial } from '../electron/shared/envelope.js'
@@ -21,14 +21,14 @@ let storeSequence = 0
 
 async function fixture(path = join(directory, `fixture-${storeSequence++}.json`)) {
   const store = new AgentWorkspace({ path }); stores.push(store)
-  let receive: (packet: CodexPacket) => void = () => {}
+  let receive: (packet: AgentPacket) => void = () => {}
   let disconnect: (error: string) => void = () => {}
   let thread = '', turn = '', sequence = 0, starts = 0
   const requests: { method: string; params: any }[] = []
   const writes: any[] = []
   const routes = new Map<Operation, (request: unknown) => unknown>()
   routes.set('portfolio', () => ok({ portfolios: [], evidence: 'saved-evidence-fixture' }, 'fixture'))
-  const client: CodexTransport = {
+  const client: AgentTransport = {
     async start() { starts++ }, close() {}, write(packet) { writes.push(packet) },
     async request(method, params) {
       requests.push({ method, params })
@@ -40,11 +40,11 @@ async function fixture(path = join(directory, `fixture-${storeSequence++}.json`)
       return {}
     },
   }
-  const service = new AgentsService({ executable: 'unused', cwd: directory, workspace: store, routes,
+  const service = new AgentsService({ cwd: directory, workspace: store, routes,
     clientFactory: (receiver, ended) => { receive = receiver; disconnect = ended; return client } })
   services.push(service)
   await service.command({ type: 'connect' })
-  const emit = (packet: CodexPacket) => receive({ ...packet, params: { threadId: thread, turnId: turn, ...packet.params } })
+  const emit = (packet: AgentPacket) => receive({ ...packet, params: { threadId: thread, turnId: turn, ...packet.params } })
   const run = () => service.snapshot().messages.findLast(message => message.run)!.run!
   const answer = () => {
     emit({ method: 'item/completed', params: { item: { id: 'answer-' + sequence, type: 'agentMessage', text: 'Partial fixture answer. Source: fixture; incomplete coverage disclosed.' } } })
@@ -142,7 +142,7 @@ try {
   assert.equal(f.run().runtimeRetries, 1)
   f.disconnect('Codex process exited (code 7, signal none).')
   assert.equal(f.run().status, 'failed')
-  assert.equal(f.run().error, 'Codex disconnected (exit code 7).')
+  assert.equal(f.run().error, 'The agent runtime disconnected (exit code 7).')
   console.log('PASS: explicit reconnect/continuation with private checkpoints, enforced research-only recovery, runtime retry visibility and empty-answer failures')
 
   const budget = await fixture()

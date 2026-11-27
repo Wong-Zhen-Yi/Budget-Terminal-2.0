@@ -31,14 +31,14 @@ export function agentFailureReason(error: unknown): string {
   if (/run reached its .*minute limit/i.test(text)) return 'The run reached its time limit.'
   if (/80-tool limit/i.test(text)) return 'The run reached its tool limit.'
   if (/without (an answer|a response)/i.test(text)) return 'The provider completed without an answer.'
-  if (/sign.in|unauthori[sz]ed|authentication|\b401\b|codex login/i.test(text)) return 'Sign in to Codex, then continue research.'
+  if (/sign.in|unauthori[sz]ed|authentication|\b401\b|api.?key|credential/i.test(text)) return 'Check the model provider sign-in or API key in Agents, then continue research.'
   if (/429|rate.?limit|quota|allowance|usage.?limit/i.test(text)) return 'The provider rate or usage limit was reached.'
   if (/permission|denied|forbidden|\b403\b/i.test(text)) return 'Access was denied. Review local permissions.'
   if (/timed? ?out|timeout|deadline/i.test(text)) return 'The research request timed out.'
   if (/abort|cancel|stopped|budget ended/i.test(text)) return 'The research request was cancelled.'
   if (/disconnect|connection|ECONN|EPIPE|fetch failed|network|socket|process exited/i.test(text)) {
     const code = text.match(/process exited \(code (-?\d+)/i)?.[1]
-    return code ? `Codex disconnected (exit code ${code}).` : 'The connection was interrupted.'
+    return code ? `The agent runtime disconnected (exit code ${code}).` : 'The connection was interrupted.'
   }
   if (/\b50[0234]\b|temporar|unavailable|overloaded/i.test(text)) return 'The research provider is temporarily unavailable.'
   return 'The request failed. Continue research or check provider access.'

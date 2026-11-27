@@ -43,7 +43,7 @@ if (demoDirectory) {
   const roaming = join(demoDirectory, 'roaming')
   if (process.env.APPDATA !== roaming || process.env.LOCALAPPDATA !== join(demoDirectory, 'local') ||
       process.env.BUDGET_TERMINAL_DATA_DIR !== join(roaming, 'BudgetTerminalElectron') ||
-      process.env.CODEX_HOME !== join(demoDirectory, 'codex')) {
+      process.env.PI_CODING_AGENT_DIR !== join(demoDirectory, 'pi')) {
     throw new Error('Demo profile is incomplete. Start it from the Budget Terminal demo launcher.')
   }
   assertPrivateBrowserStorage(demoDirectory, app.getAppPath())
@@ -417,10 +417,10 @@ if (ownsInstance) app.whenReady().then(async () => {
     const agents = await import('./services/agentsHost.js')
     const { startAgents } = agents
     flushAgents = agents.flushAgents
-    // Connect the signed-in Codex runtime without delaying the window or starting inference.
+    // Connect the Pi agent runtime without delaying the window or starting inference.
     void startAgents().catch(error => {
       diagnosticLog.write('warn', 'app', 'startup-stage-failed', { stage: 'agents', code: faultCode(error) })
-      console.warn('Codex startup connection failed:', error)
+      console.warn('Pi agent startup connection failed:', error)
     })
     // Warm the routes so the Settings shortcut can open the viewport promptly.
     if (localMobileAvailable) void import('./services/mobileRoutes.js').catch(() => {})

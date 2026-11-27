@@ -23,7 +23,6 @@ const { once } = require('node:events')
 const path = require('node:path')
 const { supportedNodeVersion, supportedNpmVersion, runtimeEnvironment, assertCertificateEnvironment } = require('./runtime.cjs')
 const { engines, version } = require('../package.json')
-const { findCodex } = require('./codex-runtime.cjs')
 const { verifyDesktopBuild } = require('./verify-desktop-build.cjs')
 
 const root = path.resolve(__dirname, '..')
@@ -109,7 +108,7 @@ function viteVersion() {
 }
 
 // Every double-click launcher builds the current desktop, mobile and MCP bundles.
-function launch({ development = false, demo = false, mobilePreview = false, mobile = false, logs = false, setupOnly = false, detach = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, locateCodex = findCodex, verifyBuild = verifyDesktopBuild, openDetached = startDetachedDesktop, log = console } = {}) {
+function launch({ development = false, demo = false, mobilePreview = false, mobile = false, logs = false, setupOnly = false, detach = false, platform = process.platform, nodeVersion = process.versions.node, environment = process.env, spawn = spawnSync, verifyBuild = verifyDesktopBuild, openDetached = startDetachedDesktop, log = console } = {}) {
   const output = createLauncherOutput({ log, environment })
   const os = platformName(platform)
   const sampleData = demo || mobilePreview
@@ -139,19 +138,8 @@ function launch({ development = false, demo = false, mobilePreview = false, mobi
     return 1
   }
 
-  // Codex is optional: preserve discovery and handoff without starting inference.
-  const codexPath = sampleData ? null : locateCodex({ platform, environment: env })
-  if (codexPath) {
-    const codex = spawn(codexPath, ['--version'], { cwd: root, env, windowsHide: true, stdio: 'pipe', encoding: 'utf8', timeout: 10_000 })
-    if (!codex.error && codex.status === 0 && /^codex(?:-cli)?\s+\d+\.\d+/i.test(codex.stdout?.trim() || '')) {
-      env.BUDGET_TERMINAL_CODEX_PATH = codexPath
-      output.note(`Agents: ${codex.stdout.trim()}. Autonomous mode starts off.`)
-    } else {
-      output.warn('Codex could not run; the app will open. Check Agents for setup help.')
-    }
-  } else if (!sampleData) {
-    output.note('Agents: optional Codex runtime not found; setup help is in the app.')
-  }
+  // Agents run on the bundled Pi runtime. Model providers are connected in the app, never by the launcher.
+  if (!sampleData) output.note('Agents: built-in Pi runtime. Connect a model provider in Agents. Autonomous mode starts off.')
 
   const npm = (args, capture = false, childEnv = env) => {
     const command = platform === 'win32' ? env.ComSpec || 'cmd.exe' : 'npm'

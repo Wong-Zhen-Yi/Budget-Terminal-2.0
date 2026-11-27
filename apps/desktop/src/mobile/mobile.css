@@ -234,6 +234,8 @@
   [data-terminal-mobile] .stocks-workspace > *,
   [data-terminal-mobile] .stocks-workspace > div:first-child > * { min-width: 0; flex: none !important; }
   [data-terminal-mobile] .stocks-workspace > div:first-child > :first-child { order: -2; }
+  /* Panel slots size to their panels; their inline zero flex-basis would collapse them so panels overlap the next one. */
+  [data-terminal-mobile] .stocks-workspace > div > .flex-1 > div { flex: none !important; }
   [data-terminal-mobile] .stocks-price-chart { order: -1; height: 390px; }
   [data-terminal-mobile] .stocks-workspace .terminal-panel { min-height: 200px; max-height: 400px; }
   [data-terminal-mobile] .stocks-workspace [role="separator"] { display: none; }
@@ -325,7 +327,8 @@
   }
 
   /* The page list grows with the page instead of scrolling inside it; rows carry their own move buttons. */
-  [data-terminal-mobile] .settings-visible-pages { max-height: none; overflow: visible; }
+  /* Outranks the desktop cap in settings.css (.settings-card .terminal-panel .max-h-96), which would clip the list while its rows spill over the controls below. */
+  [data-terminal-mobile] .settings-card .terminal-panel .settings-visible-pages { max-height: none; overflow: visible; }
   [data-terminal-mobile] .settings-visible-pages [role='button'] { height: 44px; }
   [data-terminal-mobile] .settings-row-move { display: flex; gap: 4px; margin-left: auto; }
   [data-terminal-mobile] .settings-row-move button {
@@ -349,4 +352,14 @@
   /* Keep the ticker whole; the company name gives way instead. */
   [data-terminal-mobile] .dashboard-price-chart-instrument { min-width: 0; }
   [data-terminal-mobile] .dashboard-price-chart-instrument h2 { flex: none; overflow-wrap: normal; white-space: nowrap; }
+}
+
+/* The inspector tabs take the 44px touch height, so their row grows with them instead of overlapping the details below. */
+@container (max-width: 860px) {
+  [data-terminal-mobile] .youtube-focus { grid-template-rows: 40px auto minmax(0, 1fr); }
+}
+@media (max-height: 650px) {
+  @container (max-width: 860px) {
+    [data-terminal-mobile] .youtube-focus { grid-template-rows: 32px auto minmax(0, 1fr); }
+  }
 }

@@ -33,7 +33,7 @@ function privateBrowserData(file) {
 function privateAgentData(file) {
   const normalized = file.replace(/\\/g, '/').toLowerCase()
   const basename = normalized.split('/').pop()
-  return /^(?:telegram-settings\.bin|telegram-agents\.json)(?:\..*)?$/.test(basename)
+  return /^(?:telegram-settings\.bin|telegram-agents\.json|pi-keys\.bin|claude-settings\.bin)(?:\..*)?$/.test(basename)
     || privateBrowserData(file)
     || normalized.split('/').includes('budgetterminalelectron')
     || normalized.split('/').includes('agent-images')

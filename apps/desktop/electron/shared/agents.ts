@@ -6,13 +6,23 @@ import type { TelegramCommand, TelegramHistoryState, TelegramState } from './tel
 
 export interface AgentImage { name: string; dataUrl: string }
 
-/** The model runtime behind Agents chat, trackers, monitoring and Telegram research. */
-export type AgentProvider = 'codex' | 'claude' | 'claude-code'
-export const agentProviderLabels: Record<AgentProvider, string> = { codex: 'Codex', claude: 'Claude', 'claude-code': 'Claude Code' }
-export const agentProviders = Object.keys(agentProviderLabels) as AgentProvider[]
-export const isAgentProvider = (value: unknown): value is AgentProvider => agentProviders.includes(value as AgentProvider)
-/** Claude API keys from the Claude Console. Only a saved/not-saved flag reaches the renderer. */
-export const claudeApiKeyPattern = /^sk-ant-[A-Za-z0-9_-]{16,400}$/
+/** Agents chat, trackers, monitoring and Telegram research all run on the embedded Pi agent runtime. */
+export const agentRuntimeLabel = 'Pi'
+/** A model provider Pi can reach, and where its credential comes from. Credentials never reach the renderer. */
+export interface PiProviderConnection { id: string; label: string; source: 'app' | 'pi' | 'environment' }
+export interface PiConnectionState {
+  /** Providers with an API key saved (encrypted) in Budget Terminal. */
+  savedKeys: string[]
+  /** Providers Pi can use now: saved keys, the user's own Pi sign-ins and environment keys. */
+  connected: PiProviderConnection[]
+  /** Providers that accept an API key, for the key form. */
+  keyProviders: { id: string; label: string }[]
+  /** Set when the Pi credential or model files could not be read. */
+  error?: string
+}
+export const piProviderPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/
+/** Printable, without spaces. Provider-specific formats are left to the provider to reject. */
+export const piApiKeyPattern = /^[\x21-\x7e]{8,1024}$/
 
 export interface AgentMessage {
   run?: AgentRun
@@ -34,8 +44,7 @@ export interface AgentNavigation {
 export type AgentActivity = 'idle' | 'connecting' | 'thinking' | 'researching' | 'working' | 'responding' | 'generating' | 'done' | 'stopped' | 'error'
 
 export interface AgentsState extends AgentWorkspaceState {
-  provider?: AgentProvider
-  claude?: { keySaved: boolean }
+  pi?: PiConnectionState
   telegram?: TelegramState
   telegramHistory?: TelegramHistoryState
   runLimitMinutes?: number
@@ -67,9 +76,8 @@ export interface AgentModel {
 
 export type AgentsCommand =
   | TelegramCommand
-  | { type: 'agentProvider'; provider: AgentProvider }
-  | { type: 'claudeKey'; apiKey: string }
-  | { type: 'claudeKeyClear' }
+  | { type: 'piKey'; provider: string; apiKey: string }
+  | { type: 'piKeyClear'; provider: string }
   | { type: 'continueResearch'; runId: string }
   | { type: 'configureRun'; minutes: number }
   | { type: 'configure'; model: string; thinking: string | null }

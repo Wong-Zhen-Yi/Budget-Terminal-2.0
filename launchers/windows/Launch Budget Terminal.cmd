@@ -87,6 +87,7 @@ rem The shared build opens a single terminal when the Linux desktop shortcut is 
 rem The shared build adds the Claude Code agent provider and stops a fresh device uploading default data to an empty cloud.
 rem The shared build fixes Agents tool calls on Claude Code that failed with "request must be object".
 rem The shared build syncs automatically after Google sign-in: no workspace choice, and a new device restores or uploads on its first sync.
+rem The shared build replaces the Codex, Claude and Claude Code agent providers with the built-in Pi agent runtime.
 rem Finnhub streaming-first refresh, visible-stock priorities and idle/session savings rebuild through the shared launcher.
 rem Settings dashboard keeps the five slowest pages stable during startup updates; rebuilt through the shared launcher.
 rem Shared snapshot validation, account quotas and typed cloud contracts rebuild through the shared launcher; deploy backend policies separately.

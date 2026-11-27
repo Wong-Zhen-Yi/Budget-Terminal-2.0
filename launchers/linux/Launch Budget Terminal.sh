@@ -7,6 +7,7 @@
 # The shared build adds the Claude Code agent provider and stops a fresh device uploading default data to an empty cloud.
 # The shared build fixes Agents tool calls on Claude Code that failed with "request must be object".
 # The shared build syncs automatically after Google sign-in: no workspace choice, and a new device restores or uploads on its first sync.
+# The shared build replaces the Codex, Claude and Claude Code agent providers with the built-in Pi agent runtime.
 here=$(cd "$(dirname "$0")" && pwd) || exit 1
 launcher="$here/../../scripts/launch-posix.sh"
 

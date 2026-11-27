@@ -6,7 +6,7 @@ import { AgentsService } from '../electron/services/agents.js'
 import { AgentWorkspace } from '../electron/services/agentWorkspace.js'
 import { NotificationCenter } from '../electron/services/notifications.js'
 import { liveStatusEvents } from '../electron/services/liveStatusEvents.js'
-import type { CodexTransport } from '../electron/services/codexClient.js'
+import type { AgentTransport } from '../electron/services/agentTransport.js'
 import type { LiveStatusChanged } from '../electron/shared/liveStatus.js'
 
 const scratch = await mkdtemp(join(tmpdir(), 'budget-live-status-'))
@@ -16,7 +16,7 @@ const events: LiveStatusChanged[] = []
 const stop = liveStatusEvents.subscribe(event => events.push(event))
 const wait = () => new Promise(resolve => setTimeout(resolve, 750))
 let receive!: Parameters<NonNullable<ConstructorParameters<typeof AgentsService>[0]['clientFactory']>>[0]
-const transport: CodexTransport = {
+const transport: AgentTransport = {
   start: async () => {}, close: () => {}, write: () => {},
   async request(method) {
     if (method === 'account/read') return { account: { type: 'fixture' } }
@@ -28,7 +28,7 @@ const transport: CodexTransport = {
 }
 const center = new NotificationCenter({ deliver: async () => {}, supported: () => true })
 const workspace = new AgentWorkspace({ notifications: center })
-const agent = new AgentsService({ workspace, executable: 'unused', cwd: scratch, routes: new Map(), clientFactory: receiver => { receive = receiver; return transport } })
+const agent = new AgentsService({ workspace, cwd: scratch, routes: new Map(), clientFactory: receiver => { receive = receiver; return transport } })
 try {
   await agent.command({ type: 'connect' })
   await wait()

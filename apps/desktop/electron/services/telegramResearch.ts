@@ -40,12 +40,20 @@ export async function resetTelegramConversation(worker: AgentsService) {
   if (state.error || state.storageError) throw new Error('Telegram conversation could not be reset.')
 }
 
+const TELEGRAM_MODEL_CHOICES = 30
+
 export async function telegramModelChoices(worker: AgentsService) {
   await worker.initialize()
   if (!worker.snapshot().connected) await worker.command({ type: 'connect' })
   const state = worker.snapshot()
-  if (!state.connected) throw new Error('Codex is unavailable.')
-  return state.models.map(model => {
+  if (!state.connected) throw new Error('Pi is unavailable.')
+  // Pi can list hundreds of models. Telegram keyboards stay short: the current model first, then
+  // the rest of its provider, then other providers. Every model stays selectable on the desktop.
+  const provider = (id: string) => id.split('/')[0]
+  const current = state.model ? provider(state.model) : ''
+  const rank = (id: string) => id === state.model ? 0 : provider(id) === current ? 1 : 2
+  const models = [...state.models].sort((a, b) => rank(a.id) - rank(b.id)).slice(0, TELEGRAM_MODEL_CHOICES)
+  return models.map(model => {
     const thinking = model.thinkingModes.some(mode => mode.id === state.thinking) ? state.thinking : null
     return { id: model.id, name: model.name, current: model.id === state.model,
       reasoning: [
@@ -60,7 +68,7 @@ export async function telegramResearchCommand(worker: AgentsService, command: Te
   await worker.initialize()
   if (!worker.snapshot().connected) await worker.command({ type: 'connect' })
   const state = worker.snapshot()
-  if (!state.connected) throw new Error('Codex is unavailable.')
+  if (!state.connected) throw new Error('Pi is unavailable.')
   if (command === 'model') {
     if (!argument) return 'Send /model and tap a model to choose it.'
     const model = state.models.find(model => model.id === argument)

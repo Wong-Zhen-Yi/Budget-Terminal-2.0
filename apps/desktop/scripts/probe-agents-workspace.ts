@@ -6,7 +6,7 @@ import { mock } from 'node:test'
 import { AgentWorkspace, agentWorkspacePath } from '../electron/services/agentWorkspace.js'
 import { AgentsService } from '../electron/services/agents.js'
 import { resetTelegramConversation, telegramResearchCommand, telegramHistoryAction, telegramHistorySnapshot, telegramModelChoices } from '../electron/services/telegramResearch.js'
-import type { CodexPacket, CodexTransport } from '../electron/services/codexClient.js'
+import type { AgentPacket, AgentTransport } from '../electron/services/agentTransport.js'
 import type { AgentTrackerReport } from '../electron/shared/agentWorkspace.js'
 import { AGENT_HISTORY_CHATS, AGENT_HISTORY_DAYS, AGENT_HISTORY_MIB } from '../electron/shared/agentWorkspace.js'
 
@@ -30,10 +30,10 @@ try {
   let deliveries = 0
   const store = workspace({ deliver: () => { deliveries++; throw new Error('OS permissions denied') } })
   await store.initialize()
-  let receive: (packet: CodexPacket) => void = () => {}
+  let receive: (packet: AgentPacket) => void = () => {}
   let thread = '', sequence = 0, transportStarts = 0
   const requests: { method: string; params: any }[] = []
-  const client: CodexTransport = {
+  const client: AgentTransport = {
     async start() { transportStarts++ }, close() {}, write() {},
     async request(method, params) {
       requests.push({ method, params })
@@ -47,7 +47,7 @@ try {
       return { turn: { id: 'turn' } }
     },
   }
-  const service = new AgentsService({ executable: 'unused', cwd: directory, routes: new Map(), workspace: store, clientFactory: receiver => { receive = receiver; return client } })
+  const service = new AgentsService({ cwd: directory, routes: new Map(), workspace: store, clientFactory: receiver => { receive = receiver; return client } })
   services.push(service)
   const complete = async (text = 'Fixture assistant response') => {
     receive({ method: 'item/agentMessage/delta', params: { threadId: thread, itemId: 'answer-' + sequence, delta: text } })
@@ -97,7 +97,7 @@ try {
   service.close(); await store.close()
   const legacy = JSON.parse(bytes)
   const legacyActiveChat = legacy.conversations.find((chat: { id: string }) => chat.id === service.snapshot().currentChatId)
-  legacyActiveChat.model = 'gpt-5.6-luna'
+  legacyActiveChat.model = 'gpt-6-luna'
   legacyActiveChat.thinking = 'medium'
   const connectionNotice = 'Codex connected. Budget Terminal MCP tools are available for research, screenshots and requested saved-data edits.'
   for (const chat of legacy.conversations) chat.messages.push({ id: 'legacy-connect-' + chat.id, role: 'activity', text: connectionNotice, at: Date.now() })
@@ -113,16 +113,16 @@ try {
   assert(restored.snapshot().notifications.every(value => value.read))
   assert.equal(restored.snapshot().trackers[0].enabled, false)
   assert.equal(deliveries, 2, 'Restoring notifications never replays popups')
-  const restarted = new AgentsService({ executable: 'unused', cwd: directory, workspace: restored, routes: new Map(), clientFactory: receiver => { receive = receiver; return client } })
+  const restarted = new AgentsService({ cwd: directory, workspace: restored, routes: new Map(), clientFactory: receiver => { receive = receiver; return client } })
   services.push(restarted)
   const requestsBeforeRestore = requests.length
   await restarted.initialize()
-  assert.equal(requests.length, requestsBeforeRestore, 'Loading history alone never starts inference or Codex')
+  assert.equal(requests.length, requestsBeforeRestore, 'Loading history alone never starts inference or Pi')
   assert(restarted.snapshot().messages.some(message => message.text === 'Restored conversation evidence'))
   assert.deepEqual(restarted.snapshot().messages.find(message => message.text === 'Persist this latest chat')?.images, ['Synthetic.png'])
   const restoredMessages = restarted.snapshot().messages
   await restarted.command({ type: 'connect' })
-  assert.equal(restarted.snapshot().model, 'gpt-6-luna', 'Migrate a saved older model within its family')
+  assert.equal(restarted.snapshot().model, 'gpt-6-luna', 'Restore the saved model of the chat')
   assert.equal(restarted.snapshot().thinking, 'medium', 'Preserve supported reasoning when updating the model')
   assert.deepEqual(restarted.snapshot().messages, restoredMessages, 'Reconnecting after launch must preserve the transcript without adding a notice')
   assert(requests.at(-1)!.params.baseInstructions.includes('Persist this latest chat'))
@@ -186,7 +186,7 @@ try {
   assert(!restarted.snapshot().messages.length && !restarted.snapshot().currentChatId)
   await restarted.command({ type: 'send', text: 'Research after retention cleanup' })
   const replacementThread = requests.findLast(request => request.method === 'thread/start')!
-  assert(!replacementThread.params.baseInstructions.includes('Persist this latest chat'), 'An expired conversation is never reused as Codex context')
+  assert(!replacementThread.params.baseInstructions.includes('Persist this latest chat'), 'An expired conversation is never reused as Pi context')
   await complete()
   console.log('PASS: age, chat-count and UTF-8 byte retention, safe image cleanup, tracker preservation and fresh context after expiry')
 
@@ -203,15 +203,15 @@ try {
   const beforeHistoryView = requests.length
   const viewedId = await telegramHistoryAction(telegramReloaded, { type: 'telegramViewChat', id: oldTelegramId }, true)
   const telegramHistory = telegramHistorySnapshot(telegramReloaded, viewedId, true)
-  assert.equal(telegramHistory.history[0].id, oldTelegramId, 'Saved Telegram history loads without a configured bot or Codex connection')
+  assert.equal(telegramHistory.history[0].id, oldTelegramId, 'Saved Telegram history loads without a configured bot or Pi connection')
   assert.equal(telegramHistory.selected?.messages[0].text, 'OLD_TELEGRAM_CONTEXT')
   assert.equal(telegramReloaded.snapshot().currentChatId, oldTelegramId, 'Viewing does not change the selected Telegram chat')
-  assert.equal(requests.length, beforeHistoryView, 'History viewing never starts Codex or inference')
+  assert.equal(requests.length, beforeHistoryView, 'History viewing never starts Pi or inference')
   await assert.rejects(() => telegramHistoryAction(telegramReloaded, { type: 'telegramViewChat', id: 'missing' }, false), /no longer exists/)
   await assert.rejects(() => telegramHistoryAction(telegramReloaded, { type: 'telegramDeleteChat', id: oldTelegramId }, true), /finish/)
   await assert.rejects(() => telegramHistoryAction(telegramReloaded, { type: 'telegramDeleteChat', id: oldTelegramId }, false), /active chat/)
   assert.equal(await telegramHistoryAction(telegramReloaded, { type: 'telegramViewChat', id: null }, false), null)
-  const telegramWorker = new AgentsService({ executable: 'unused', cwd: directory, workspace: telegramReloaded, remoteResearch: true, routes: new Map(), clientFactory: receiver => { receive = receiver; return client } })
+  const telegramWorker = new AgentsService({ cwd: directory, workspace: telegramReloaded, remoteResearch: true, routes: new Map(), clientFactory: receiver => { receive = receiver; return client } })
   services.push(telegramWorker)
   await resetTelegramConversation(telegramWorker)
   assert.notEqual(telegramWorker.snapshot().currentChatId, oldTelegramId)
@@ -254,9 +254,9 @@ try {
   assert(!telegramHistorySnapshot(telegramReloaded, freshTelegramId, false).selected, 'Deleted transcripts disappear from the viewer')
   assert(!JSON.parse(await readFile(join(directory, 'telegram-agents.json'), 'utf8')).conversations.some((chat: { id: string }) => chat.id === freshTelegramId), 'Telegram history deletion is persisted')
   assert(restored.conversation(), 'Telegram history changes leave desktop history intact')
-  console.log('PASS: desktop Telegram history loads without Codex, views without switching context, and safely persists deletion')
+  console.log('PASS: desktop Telegram history loads without Pi, views without switching context, and safely persists deletion')
 
-  const worker = new AgentsService({ executable: 'unused', cwd: directory, workspace: restored, trackerId: tracker.tracker.id, routes: new Map(), clientFactory: receiver => { receive = receiver; return client } })
+  const worker = new AgentsService({ cwd: directory, workspace: restored, trackerId: tracker.tracker.id, routes: new Map(), clientFactory: receiver => { receive = receiver; return client } })
   services.push(worker)
   await worker.command({ type: 'connect' }); await worker.command({ type: 'send', text: 'Perform one check' })
   for (const [name, args] of [

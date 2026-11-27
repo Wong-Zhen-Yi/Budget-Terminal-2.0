@@ -37,7 +37,7 @@ goal calculation. Some Focus tiles may lack provider metrics. These states are
 preserved in the captures.
 
 `APPDATA`, `LOCALAPPDATA`, application data, Downloads, browser storage, and
-`CODEX_HOME` are isolated in a fresh temporary directory and removed after exit.
+Pi's agent directory (`PI_CODING_AGENT_DIR`) are isolated in a fresh temporary directory and removed after exit.
 The script dismisses sign-in and uses the real Stop and New chat commands so no
 signed-in agent or personal conversation is needed. It does not use personal
 portfolios, browser sessions, or saved credentials; demo cloud sync is disabled.

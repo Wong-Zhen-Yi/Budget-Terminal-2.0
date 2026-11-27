@@ -224,7 +224,7 @@ export class TelegramService {
     this.picker = null
     if (!this.options.models) throw new Error('Model choices are unavailable.')
     const models = await this.options.models()
-    if (!models.length) { await this.send('No models are available. Check Codex in the desktop app.', signal); return }
+    if (!models.length) { await this.send('No models are available. Check Pi in the desktop app.', signal); return }
     await this.showPicker('Choose a model below. Next, choose its reasoning level.', modelPickerChoices(models), 'model', signal)
   }
   private async showPromptPicker(signal: AbortSignal) {
@@ -285,7 +285,7 @@ export class TelegramService {
         const result = await this.options.command('reasoning', choice.value)
         await this.send(result.slice(0, 20_000), signal)
       }
-    } catch { await this.send('Could not complete model and reasoning selection. Check Codex in the desktop app, then send /model to try again.', signal) }
+    } catch { await this.send('Could not complete model and reasoning selection. Check Pi in the desktop app, then send /model to try again.', signal) }
     try { await this.api('editMessageReplyMarkup', { chat_id: config.chatId, message_id: picker.messageId, reply_markup: { inline_keyboard: [] } }, signal) }
     catch { /* Consumed tokens remain invalid even if Telegram cannot remove the buttons. */ }
   }
@@ -296,8 +296,8 @@ export class TelegramService {
     try { reply = await this.options.reply(text, signal) }
     catch {
       if (signal.aborted) return
-      if (this.photosSent === photosBeforeReply) await this.send('Budget Terminal could not complete this research request. Check Codex sign-in and connectivity in the desktop app, then send a new request.', signal)
-      this.state.error = 'Telegram research failed. Check Codex sign-in and connectivity.'
+      if (this.photosSent === photosBeforeReply) await this.send('Budget Terminal could not complete this research request. Check the Pi model provider connection in the desktop app, then send a new request.', signal)
+      this.state.error = 'Telegram research failed. Check the Pi model provider connection.'
       return
     }
     // A screenshot response is photo-only, even if the model writes a delivery summary.
@@ -351,7 +351,7 @@ export class TelegramService {
             if (command === 'new') {
               this.picker = null
               try { await this.options.reset() }
-              catch { await this.send('Could not confirm a new chat. Check local history and Codex in the desktop app.', signal); continue }
+              catch { await this.send('Could not confirm a new chat. Check local history and Pi in the desktop app.', signal); continue }
               await this.send('Started a new Telegram conversation without previous conversation context. Old chats remain in desktop Agents History.', signal)
               if (!argument) continue
               text = argument
@@ -359,7 +359,7 @@ export class TelegramService {
               try {
                 await this.showModelPicker(signal)
               }
-              catch { await this.send('Telegram command could not complete. Check Codex and local history in the desktop app. No research request was sent.', signal) }
+              catch { await this.send('Telegram command could not complete. Check Pi and local history in the desktop app. No research request was sent.', signal) }
               continue
             } else { await this.send(availableCommands, signal); continue }
           }
@@ -372,7 +372,7 @@ export class TelegramService {
       } catch (error) {
         if (signal.aborted) return
         this.state.connected = false
-        this.state.error = error instanceof Error && error.message.startsWith('Telegram') ? error.message : 'Telegram research or settings save failed. Check Codex and local storage in the desktop app.'
+        this.state.error = error instanceof Error && error.message.startsWith('Telegram') ? error.message : 'Telegram research or settings save failed. Check Pi and local storage in the desktop app.'
         failures++
         await new Promise<void>(resolve => {
           const done = () => { clearTimeout(timer); signal.removeEventListener('abort', done); resolve() }

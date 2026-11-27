@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { AgentImage, AgentProvider } from '@shared/agents'
-import { agentProviderLabels } from '@shared/agents'
+import type { AgentImage } from '@shared/agents'
+import { agentRuntimeLabel } from '@shared/agents'
 import { useAgentComposer } from '@/api/agentComposer'
 import { AgentMessages } from '@/components/agents/AgentMessages'
 import { AgentWorkspacePanel } from '@/components/agents/AgentWorkspacePanel'
-import { ClaudeSettings } from '@/components/agents/ClaudeSettings'
+import { PiSettings } from '@/components/agents/PiSettings'
 import { useAgentTranscript } from '@/components/agents/useAgentTranscript'
 import { agentQuickPrompts } from '@shared/agentPrompts'
 import type { PanelStatus } from '@/components/chrome/StatusBar'
@@ -39,10 +39,8 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
   const models = agent?.models ?? []
   const selectedModel = models.find(model => model.id === agent?.model)
   const settingsLocked = locked || !agent?.connected || !!agent?.autonomy
-  const provider = agent?.provider ?? 'codex'
-  const label = agentProviderLabels[provider]
-  const claudeFamily = provider === 'claude' || provider === 'claude-code'
-  const modelValue = selectedModel?.id ?? (claudeFamily ? agent?.model : null) ?? ''
+  const label = agentRuntimeLabel
+  const modelValue = selectedModel?.id ?? agent?.model ?? ''
   const thinkingValue = modelValue ? agent?.thinking ?? '' : ''
   // Embedded panes are narrow: until a connection loads models, the Model and Thinking boxes only say "Connect to load…".
   const compactSettings = embedded && !agent?.connected && !models.length
@@ -56,10 +54,6 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
     <header className="agents-header">
       <h1>Agents <span>{label}</span></h1>
       <div className="agents-model-settings" aria-label="Agent model settings" title={agent?.busy ? `Settings are locked while ${label} is working.` : agent?.autonomy ? 'Turn off autonomous mode to change settings.' : !agent?.connected ? `Connect ${label} to load available models and thinking modes.` : undefined}>
-      <label htmlFor={`${idPrefix}-provider`}>Provider<select id={`${idPrefix}-provider`} value={provider} disabled={locked || !!agent?.autonomy}
-        onChange={event => void perform({ type: 'agentProvider', provider: event.target.value as AgentProvider })}>
-        {(Object.keys(agentProviderLabels) as AgentProvider[]).map(id => <option key={id} value={id}>{agentProviderLabels[id]}</option>)}
-      </select></label>
       {!compactSettings && <><label htmlFor={`${idPrefix}-model`}>Model<select id={`${idPrefix}-model`} value={modelValue} disabled={settingsLocked || !models.length}
         onChange={event => void perform({ type: 'configure', model: event.target.value, thinking: null })}>
         {!modelValue && <option value="">Connect to load models</option>}
@@ -87,7 +81,7 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
     <div className={`agents-layout${showControls ? ' with-controls' : ''}`}>
       <section className="agents-chat" aria-label={`Chat with ${label}`}>
         <div ref={transcript} className="agents-transcript" role="log" aria-label="Conversation" aria-live="polite">
-          {!agent?.messages.some(message => message.role !== 'activity') && <div className="agents-welcome"><div className="agents-mark" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 6h16v11H9l-5 4V6Z" strokeLinejoin="round"/><path d="m8 10 3 2-3 2m5 0h3" strokeLinecap="round" strokeLinejoin="round"/></svg></div><h2>What would you like to explore?</h2><p>Research your watchlist. Understand your portfolio. Generate or edit images.</p>
+          {!agent?.messages.some(message => message.role !== 'activity') && <div className="agents-welcome"><div className="agents-mark" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 6h16v11H9l-5 4V6Z" strokeLinejoin="round"/><path d="m8 10 3 2-3 2m5 0h3" strokeLinecap="round" strokeLinejoin="round"/></svg></div><h2>What would you like to explore?</h2><p>Research your watchlist. Understand your portfolio. Read the web and your saved records.</p>
             <div className="agents-suggestions">{agentQuickPrompts.map(({ label, prompt }) => <button key={label} onClick={() => {
               setDraft(prompt)
               document.getElementById(`${idPrefix}-message`)?.focus()
@@ -117,10 +111,10 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
           <button role="switch" aria-checked={agent?.autonomy ?? false} aria-label="Autonomous mode" className={agent?.autonomy ? '' : 'agents-primary'} disabled={!agent?.autonomy && (locked || !agent?.connected || !objective.trim())} onClick={() => void perform(agent?.autonomy ? { type: 'autonomy', enabled: false } : { type: 'autonomy', enabled: true, objective, intervalMinutes: interval, runs })}>{agent?.autonomy ? 'Turn off autonomous mode' : 'Enable autonomous mode'}</button>
           {agent?.autonomy && <p role="status">{agent.runsRemaining} future runs remaining{agent.nextRunAt ? ` · Next at ${new Date(agent.nextRunAt).toLocaleTimeString()}` : ' · Running now'}</p>}
         </section>
-        <section><h2>Connected to your terminal</h2><ul><li>Use Budget Terminal MCP research and saved-data tools</li><li>Edit saved records and settings when requested</li><li>Capture app screenshots, open pages and select tickers</li><li>Paste portfolio screenshots with Ctrl+V for reviewed updates</li></ul><p>Portfolio screenshot imports require Apply portfolio update. Autonomous monitoring can create notifications, but cannot edit financial records or tracker definitions. Chats, notifications and tracker definitions are saved locally; uploaded and generated images are stored privately with chat references. Review and start trackers in the Trackers panel. {provider === 'claude' ? 'Claude usage is billed to the Claude Console workspace of your API key.' : provider === 'claude-code' ? 'Claude Code usage counts toward the plan limits of your signed-in Claude account.' : 'Codex usage follows your signed-in account.'}</p></section>
-        {claudeFamily ? <section><h2>Images</h2><p>Claude reads attached images, including portfolio screenshots, and can propose reviewed portfolio updates from them. Native image generation and editing are available with Codex only; switch Provider to Codex to generate or edit images.</p></section> : <section><h2>Generate and edit images</h2><p>Ask Codex to generate an image, or attach one and describe the edits. Use for edit on an image card adds its pixels to your next message, including from saved chats. Images use your signed-in Codex account and its image-generation allowance. Native image tools require a compatible Codex runtime/provider. Autonomous monitoring cannot generate images.</p><p>{agent?.imageGeneration === true ? 'Image generation is supported by this provider.' : agent?.imageGeneration === false ? 'This provider does not support image generation. Choose a compatible Codex provider and reconnect.' : 'Image generation availability will be confirmed by the connected runtime when requested.'}</p></section>}
+        <section><h2>Connected to your terminal</h2><ul><li>Use Budget Terminal MCP research and saved-data tools</li><li>Edit saved records and settings when requested</li><li>Capture app screenshots, open pages and select tickers</li><li>Paste portfolio screenshots with Ctrl+V for reviewed updates</li></ul><p>Portfolio screenshot imports require Apply portfolio update. Autonomous monitoring can create notifications, but cannot edit financial records or tracker definitions. Chats, notifications and tracker definitions are saved locally; uploaded images are stored privately with chat references. Review and start trackers in the Trackers panel. Usage is billed by the model provider you connect.</p></section>
+        <section><h2>Images</h2><p>Models that accept images read attached images, including portfolio screenshots, and can propose reviewed portfolio updates from them. Image generation and editing are not available.</p></section>
         <section><h2>Research limits and recovery</h2><label htmlFor={`${idPrefix}-run-limit`}>Manual run limit<select id={`${idPrefix}-run-limit`} value={agent?.runLimitMinutes ?? 10} disabled={locked || !!agent?.autonomy} onChange={event => void perform({ type: 'configureRun', minutes: Number(event.target.value) })}>{[5, 10, 20, 30].map(minutes => <option key={minutes} value={minutes}>{minutes} minutes</option>)}</select></label><p>Each run allows up to 80 tool attempts and reserves time to write an answer. Temporary read failures retry up to three times. Most research calls time out after one minute; large scans allow up to five minutes. Monitoring and trackers keep a ten-minute limit. Use Stop to cancel sooner.</p><p>Run details show timing, retries and failures. Continue research reconnects if needed and uses bounded saved evidence with edits and image generation disabled. Missing or stale coverage stays visible.</p></section>
-        {provider === 'claude-code' ? <section><h2>Get connected · Claude Code</h2><p>Claude Code uses the Claude account you signed in to with the Claude Code CLI, so no API key is needed. Install Claude Code, run <code>claude</code> in a terminal and sign in with <code>/login</code>, then select Connect Claude Code. It connects automatically at startup once signed in.</p><p>Chat, monitoring, trackers and Telegram research use the same Budget Terminal tools, permissions and run limits as Codex. Only Budget Terminal tools and Claude Code&apos;s web search and web fetch are enabled; file, shell and coding tools, your Claude Code settings, CLAUDE.md, hooks, plugins, skills and other MCP servers are never loaded, and chats are not saved to Claude Code&apos;s history.</p></section> : provider === 'claude' ? <section><h2>Get connected · Claude</h2><p>Claude connects automatically at startup once an API key is saved. Chat, monitoring, trackers and Telegram research use the same Budget Terminal tools, permissions and run limits as Codex. Budget Terminal loads its most common tools up front and Claude searches for the rest on demand. Web search and web fetch run on the Claude API.</p><ClaudeSettings agent={agent} locked={locked} perform={perform} /></section> : <section><h2>Get connected</h2><p>Codex connects automatically at startup. If connection fails, install Codex CLI and sign in using <code>codex login</code>, then select Connect Codex to retry. New chat keeps the connection and your model settings. The desktop Codex installation is detected automatically on Windows. Switch Provider to Claude Code to use your Claude Code sign-in, or to Claude to use an Anthropic API key instead.</p></section>}
+        <section><h2>Get connected · Pi</h2><p>Agents run on Pi, an open-source agent runtime built into Budget Terminal, with the model provider you choose. Save an API key below, or sign in to a provider subscription with the Pi CLI in a terminal (<code>npx @earendil-works/pi-coding-agent</code>, then <code>/login</code>) and select Connect Pi. Provider keys in environment variables also work. Pi connects automatically at startup once a provider is available.</p><p>Only Budget Terminal tools and web search and fetch are enabled. Pi&apos;s file, shell and edit tools, and your Pi extensions, skills, prompt templates, context files and settings are never loaded, and chats are not saved to Pi&apos;s session history.</p><PiSettings agent={agent} locked={locked || !!agent?.autonomy} perform={perform} idPrefix={idPrefix} /></section>
       </aside>
     </div>
   </div>
@@ -128,8 +122,8 @@ export function AgentsPage({ onStatusChange, favorite = false, savingFavorite = 
 
 /** Lead a raw runtime failure with what to do next; the raw text stays underneath for diagnosis. */
 function friendlyAgentError(raw: string, label: string): string {
-  if (/process exited|spawn|ENOENT|not found|not installed/i.test(raw)) return `${label} could not start. Check that it is installed and signed in, then select Connect ${label}.`
-  if (/auth|login|sign.?in|api key|401|403/i.test(raw)) return `${label} needs you to sign in again. Then select Connect ${label}.`
+  if (/no model provider|no usable model/i.test(raw)) return `Connect a model provider: open Controls → Get connected · ${label}, save an API key, then select Connect ${label}.`
+  if (/auth|login|sign.?in|api key|credential|401|403/i.test(raw)) return `The model provider needs a valid API key or sign-in. Check Controls → Get connected · ${label}, then select Connect ${label}.`
   if (/timed? ?out|timeout|ECONNRESET|network|offline/i.test(raw)) return `${label} lost its connection. Select Connect ${label} to retry.`
   return `${label} reported a problem.`
 }

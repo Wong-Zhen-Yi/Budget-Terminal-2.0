@@ -4,14 +4,24 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { mock } from 'node:test'
 import { AgentsService, agentTools } from '../electron/services/agents.js'
+import { PiClient } from '../electron/services/piClient.js'
+import { existsSync } from 'node:fs'
 import { catalog, connectionTool } from '../mcp/catalog.js'
-import type { CodexTransport } from '../electron/services/codexClient.js'
+import type { AgentTransport } from '../electron/services/agentTransport.js'
 import type { Operation } from '../mcp/operations.js'
 import { validateAgentImages } from '../electron/services/agentImages.js'
 import { failed, ok } from '../electron/shared/envelope.js'
 import { AGENT_CANDLESTICK_MAX_CANDLES, AGENT_CANDLESTICK_MAX_LENGTH, AGENT_PIE_MAX_LENGTH, parseAgentCandlestick, parseAgentPie } from '../electron/shared/agentCharts.js'
 
 const directory = await mkdtemp(join(tmpdir(), 'budget-agents-'))
+/** Live checks use this computer's own Pi sign-ins and provider environment keys. */
+async function livePi() {
+  const { getAgentDir, ModelRuntime } = await import('@earendil-works/pi-coding-agent')
+  const { InMemoryCredentialStore } = await import('@earendil-works/pi-ai')
+  const auth = join(getAgentDir(), 'auth.json')
+  const runtime = await ModelRuntime.create({ ...(existsSync(auth) ? { authPath: auth } : { credentials: new InMemoryCredentialStore() }), modelsPath: null })
+  return (receive: (packet: any) => void) => new PiClient(async () => ({ runtime }), directory, receive)
+}
 const previous = { APPDATA: process.env.APPDATA, LOCALAPPDATA: process.env.LOCALAPPDATA }
 process.env.APPDATA = directory
 process.env.LOCALAPPDATA = directory
@@ -30,43 +40,29 @@ let starts = 0
 let nextThreadId = 'thread-1'
 let threadError = false
 let threadGate: Promise<void> | null = null
-let workspaceMcpServer = 'video-editor-fixture'
-let includeCurrentModels = true
-const terra = { model: 'gpt-6.1-terra', displayName: 'Fixture Fast', defaultReasoningEffort: 'low', supportedReasoningEfforts: [{ reasoningEffort: 'low', description: 'Quick' }, { reasoningEffort: 'high', description: 'Deeper' }] }
-const luna = { model: 'gpt-6-luna', displayName: 'Fixture Deep', inputModalities: ['text'], defaultReasoningEffort: 'medium', supportedReasoningEfforts: [{ reasoningEffort: 'medium', description: 'Balanced' }] }
-const client: CodexTransport = {
+const terra = { model: 'anthropic/fast', displayName: 'Fixture Fast', defaultReasoningEffort: 'low', supportedReasoningEfforts: [{ reasoningEffort: 'low', description: 'Quick' }, { reasoningEffort: 'high', description: 'Deeper' }] }
+const luna = { model: 'openai/deep', displayName: 'Fixture Deep', inputModalities: ['text'], defaultReasoningEffort: 'medium', supportedReasoningEfforts: [{ reasoningEffort: 'medium', description: 'Balanced' }] }
+const client: AgentTransport = {
   async start() { starts++ },
   async request(method, params) {
     calls.push({ method, params })
     if (method === 'account/read') return { account: authenticated ? { type: 'chatgpt' } : null }
-    if (method === 'config/read') return { config: { mcp_servers: {
-      unrelated: {},
-      ...((params as { cwd?: string }).cwd === directory ? { [workspaceMcpServer]: { required: true } } : {}),
-    } } }
     if (method === 'model/list') {
-      if ((params as { cursor: string | null }).cursor === 'next') return { data: includeCurrentModels ? [terra] : [], nextCursor: null }
-      return { data: [
-        { ...terra, model: 'gpt-6.2-sol' },
-        { ...terra, model: 'gpt-6.2-astra' },
-        { ...terra, model: 'gpt-5.6-terra' },
-        { ...luna, model: 'gpt-5.6-luna' },
-        { ...luna, model: 'gpt-6.1-luna', hidden: true },
-        ...(includeCurrentModels ? [luna] : []),
-      ], nextCursor: 'next' }
+      if ((params as { cursor: string | null }).cursor === 'next') return { data: [luna], nextCursor: null }
+      return { data: [terra, { ...luna, model: 'openai/hidden', hidden: true }], nextCursor: 'next' }
     }
     if (method === 'thread/start') {
       if (threadGate) await threadGate
       if (threadError) throw new Error('Fixture thread creation failed')
-      const config = (params as { config: Record<string, unknown> }).config
-      if (config[`mcp_servers.${workspaceMcpServer}.enabled`] !== false) throw new Error('Required workspace MCP server is offline')
-      return { thread: { id: nextThreadId }, model: (params as { model?: string }).model ?? 'gpt-6.2-sol', reasoningEffort: null }
+      // With no saved model the runtime chooses one, as Pi does from the user's defaults.
+      return { thread: { id: nextThreadId }, model: (params as { model?: string }).model ?? 'anthropic/fast', reasoningEffort: null }
     }
     return { turn: { id: 'turn-1' } }
   },
   write(packet) { writes.push(packet) },
   close() { closes++ },
 }
-const service = new AgentsService({ executable: 'unused', cwd: directory, routes, clientFactory: (receive, ended) => { receiver = receive; disconnected = ended; return client } })
+const service = new AgentsService({ cwd: directory, routes, clientFactory: (receive, ended) => { receiver = receive; disconnected = ended; return client } })
 const complete = (status = 'completed') => {
   if (status === 'completed') receiver({ method: 'item/completed', params: { threadId: 'thread-1', item: { id: 'fixture-answer-' + calls.length, type: 'agentMessage', text: 'Fixture completed response.' } } })
   receiver({ method: 'turn/completed', params: { threadId: 'thread-1', turn: { status } } })
@@ -118,26 +114,21 @@ try {
   ]) assert.equal(parseAgentCandlestick(invalid), null, `Reject invalid candlestick: ${invalid.slice(0, 100)}`)
   console.log('PASS: native pie and candlestick parsing, OHLC bounds, UTC dates, chronological uniqueness, finite numbers and bounded payloads')
   assert.equal(calls.length, 0, 'Constructing a service or reading its snapshot never runs inference; the desktop host starts the connection')
-  await assert.rejects(() => service.command({ type: 'send', text: 'hello' }), /Connect Codex/)
+  await assert.rejects(() => service.command({ type: 'send', text: 'hello' }), /Connect Pi/)
   await assert.rejects(() => service.command({ type: 'autonomy', enabled: true, objective: 'test', intervalMinutes: 1 }), /too_small|Too small/)
   await service.command({ type: 'connect' })
   assert(service.snapshot().connected)
-  assert.equal(service.snapshot().model, 'gpt-6.1-terra')
-  assert.deepEqual(service.snapshot().models.map(model => model.id), ['gpt-6.1-terra', 'gpt-6-luna'])
-  await assert.rejects(() => service.command({ type: 'configure', model: 'gpt-6.2-sol', thinking: null }), /catalog/)
+  assert.equal(service.snapshot().model, 'anthropic/fast')
+  assert.deepEqual(service.snapshot().models.map(model => model.id), ['anthropic/fast', 'openai/deep'])
+  await assert.rejects(() => service.command({ type: 'configure', model: 'openai/hidden', thinking: null }), /catalog/)
   await assert.rejects(() => service.command({ type: 'configure', model: 'invented', thinking: null }), /catalog/)
-  await assert.rejects(() => service.command({ type: 'configure', model: 'gpt-6-luna', thinking: 'high' }), /not supported/)
-  await service.command({ type: 'configure', model: 'gpt-6.1-terra', thinking: 'high' })
+  await assert.rejects(() => service.command({ type: 'configure', model: 'openai/deep', thinking: 'high' }), /not supported/)
+  await service.command({ type: 'configure', model: 'anthropic/fast', thinking: 'high' })
   const start = calls.find(call => call.method === 'thread/start')!.params
   assert(start.baseInstructions.includes('```pie') && start.baseInstructions.includes('native pie charts'), 'Agent must know the native pie format')
   assert(start.baseInstructions.includes('```candlestick') && start.baseInstructions.includes('"symbol":"AAPL"')
     && start.baseInstructions.includes('Never truncate') && start.baseInstructions.includes('do not invent a ticker or prices'), 'Agent must use symbol-backed full-history charts and real evidence, not sampled or fabricated candles')
-  assert.equal(start.ephemeral, true)
-  assert.deepEqual(start.environments, [])
-  assert.equal(start.config['mcp_servers.unrelated.enabled'], false)
-  assert.equal(start.config['mcp_servers.video-editor-fixture.enabled'], false, 'Startup bypasses offline workspace MCP servers')
-  assert.equal(start.config['features.shell_tool'], false)
-  assert.equal(start.config.web_search, 'live', 'Native live web research is available without opening the shared Browser')
+  assert(start.baseInstructions.includes('web_search and web_fetch tools'), 'Public web research is available without opening the shared Browser')
   assert(start.baseInstructions.includes('official investor relations site') && start.baseInstructions.includes('Cite direct source URLs'), 'Web research should verify primary sources and produce usable links')
   assert(start.baseInstructions.includes('To search for websites, use action search with query'), 'General agent instructions retain browser search')
   assert(start.baseInstructions.includes('call the relevant news tool again in the current turn')
@@ -154,7 +145,7 @@ try {
   for (const tool of [...catalog.map(entry => entry.tool), connectionTool]) assert(agentTools.some(entry => entry.name === tool.name), `${tool.name} must be available in Agents`)
   assert(!agentTools.some(tool => /maintenance|openExternal|shell/.test(tool.name)))
   await service.command({ type: 'send', text: 'Show AAPL and inspect the portfolio' })
-  assert.equal(calls.at(-1)!.params.model, 'gpt-6.1-terra')
+  assert.equal(calls.at(-1)!.params.model, 'anthropic/fast')
   assert.equal(calls.at(-1)!.params.effort, 'high')
   assert.equal(service.snapshot().activity, 'thinking', 'New runs begin thinking, not done')
   receiver({ method: 'item/started', params: { threadId: 'thread-1', item: { id: 'web-source-1', type: 'webSearch' } } })
@@ -164,7 +155,7 @@ try {
   receiver({ method: 'item/completed', params: { threadId: 'thread-1', item: { id: 'web-source-1', type: 'webSearch' } } })
   assert.equal(service.snapshot().messages.findLast(message => message.run)?.run?.tools[0].status, 'succeeded')
   assert.equal(service.snapshot().activity, 'thinking')
-  await assert.rejects(() => service.command({ type: 'configure', model: 'gpt-6.1-terra', thinking: 'low' }), /working/)
+  await assert.rejects(() => service.command({ type: 'configure', model: 'anthropic/fast', thinking: 'low' }), /working/)
   assert(service.snapshot().busy)
   await assert.rejects(() => service.command({ type: 'send', text: 'overlap' }), /working/)
   await assert.rejects(() => service.command({ type: 'newChat' }), /working/)
@@ -240,9 +231,9 @@ try {
   assert(!service.snapshot().messages.some(message => message.id === 'ignored'))
   assert.equal(service.snapshot().busy, false)
   assert.equal(service.snapshot().autonomy, false)
-  await service.command({ type: 'configure', model: 'gpt-6-luna', thinking: null })
+  await service.command({ type: 'configure', model: 'openai/deep', thinking: null })
   await service.command({ type: 'autonomy', enabled: true, objective: 'Check news', runs: 2, intervalMinutes: 5 })
-  assert.equal(calls.at(-1)!.params.model, 'gpt-6-luna')
+  assert.equal(calls.at(-1)!.params.model, 'openai/deep')
   assert.equal(calls.at(-1)!.params.effort, 'medium', 'Default effort must follow the newly selected model')
   assert(service.snapshot().busy)
   assert.equal(service.snapshot().runsRemaining, 1)
@@ -252,7 +243,7 @@ try {
   assert.equal(mutations.length, 1, 'Autonomy must never dispatch saved-data edits')
   complete()
   assert(service.snapshot().nextRunAt! > Date.now())
-  await assert.rejects(() => service.command({ type: 'configure', model: 'gpt-6.1-terra', thinking: 'low' }), /autonomous mode/)
+  await assert.rejects(() => service.command({ type: 'configure', model: 'anthropic/fast', thinking: 'low' }), /autonomous mode/)
   await assert.rejects(() => service.command({ type: 'newChat' }), /autonomous mode/)
   await service.command({ type: 'autonomy', enabled: false })
   assert.equal(service.snapshot().nextRunAt, null)
@@ -276,14 +267,14 @@ try {
   assert(closes > 0)
   authenticated = false
   await service.command({ type: 'connect' })
-  assert(service.snapshot().error.includes('codex login'))
+  assert(service.snapshot().error.includes('Connect a model provider'))
   await service.command({ type: 'newChat' })
   assert.equal(service.snapshot().messages.length, 0)
   assert.equal(service.snapshot().autonomy, false)
   assert.equal(service.snapshot().connected, false, 'New chat while disconnected does not silently reconnect')
   authenticated = true
   await service.command({ type: 'connect' })
-  await service.command({ type: 'configure', model: 'gpt-6.1-terra', thinking: 'high' })
+  await service.command({ type: 'configure', model: 'anthropic/fast', thinking: 'high' })
   const connectionCounts = { starts, closes, accounts: calls.filter(call => call.method === 'account/read').length }
   threadError = true
   const previousMessages = service.snapshot().messages
@@ -293,17 +284,15 @@ try {
   assert.deepEqual(service.snapshot().messages, previousMessages, 'Failed new thread retains the old conversation')
   threadError = false
   nextThreadId = 'thread-new'
-  workspaceMcpServer = 'other-editor-fixture'
   await service.command({ type: 'newChat' })
   assert.equal(service.snapshot().messages.length, 0)
   assert.equal(service.snapshot().connected, true)
   assert.equal(service.snapshot().activity, 'idle', 'New chat clears old completion status')
-  assert.equal(service.snapshot().model, 'gpt-6.1-terra')
+  assert.equal(service.snapshot().model, 'anthropic/fast')
   assert.equal(service.snapshot().thinking, 'high')
-  assert.deepEqual({ starts, closes, accounts: calls.filter(call => call.method === 'account/read').length }, connectionCounts, 'New chat reuses the signed-in Codex transport')
+  assert.deepEqual({ starts, closes, accounts: calls.filter(call => call.method === 'account/read').length }, connectionCounts, 'New chat reuses the connected Pi transport')
   assert.equal(calls.at(-1)!.method, 'thread/start')
-  assert.equal(calls.at(-1)!.params.config.model_reasoning_effort, 'high')
-  assert.equal(calls.at(-1)!.params.config['mcp_servers.other-editor-fixture.enabled'], false, 'New threads pick up workspace MCP changes')
+  assert.equal(calls.at(-1)!.params.model, 'anthropic/fast', 'New threads keep the selected model')
   assert(calls.at(-1)!.params.dynamicTools.some((tool: any) => tool.name === 'terminal_pages'))
   receiver({ method: 'item/agentMessage/delta', params: { threadId: 'thread-1', itemId: 'late', delta: 'Old response' } })
   assert.equal(service.snapshot().messages.length, 0, 'Late output from the old conversation must be ignored')
@@ -323,7 +312,7 @@ try {
   threadGate = null
   nextThreadId = 'thread-1'
   service.close()
-  const scheduled = new AgentsService({ executable: 'unused', cwd: directory, routes, clientFactory: (receive, ended) => { receiver = receive; disconnected = ended; return client } })
+  const scheduled = new AgentsService({ cwd: directory, routes, clientFactory: (receive, ended) => { receiver = receive; disconnected = ended; return client } })
   mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() })
   try {
     await scheduled.command({ type: 'connect' })
@@ -364,7 +353,7 @@ try {
     mock.timers.tick(10 * 60_000)
     assert.equal(calls.length, before, 'Stop must cancel future scheduled inference')
   } finally { scheduled.close(); mock.timers.reset() }
-  const trackerDeadline = new AgentsService({ executable: 'unused', cwd: directory, routes, trackerId: 'deadline-fixture', clientFactory: (receive, ended) => { receiver = receive; disconnected = ended; return client } })
+  const trackerDeadline = new AgentsService({ cwd: directory, routes, trackerId: 'deadline-fixture', clientFactory: (receive, ended) => { receiver = receive; disconnected = ended; return client } })
   mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.now() })
   try {
     await trackerDeadline.command({ type: 'connect' })
@@ -386,14 +375,14 @@ try {
   await mutatePortfolios({ type: 'setPosition', portfolioId, ticker: 'AAPL', shares: 2, avgPrice: 5, includeInWeight: false })
   await mutatePortfolios({ type: 'addPosition', portfolioId, ticker: 'MSFT' })
   await mutatePortfolios({ type: 'setPosition', portfolioId, ticker: 'MSFT', shares: 3, avgPrice: 10 })
-  const imports = new AgentsService({ executable: 'unused', cwd: directory, routes,
+  const imports = new AgentsService({ cwd: directory, routes,
     portfolio: { read: readPortfolios, apply: applyAgentPortfolioUpdate },
     clientFactory: (receive, ended) => { receiver = receive; disconnected = ended; return client } })
   try {
     await imports.command({ type: 'connect' })
-    await imports.command({ type: 'configure', model: 'gpt-6-luna', thinking: null })
+    await imports.command({ type: 'configure', model: 'openai/deep', thinking: null })
     await assert.rejects(() => imports.command({ type: 'send', text: '', images: [image] }), /does not accept images/)
-    await imports.command({ type: 'configure', model: 'gpt-6.1-terra', thinking: null })
+    await imports.command({ type: 'configure', model: 'anthropic/fast', thinking: null })
     await imports.command({ type: 'send', text: '', images: [image] })
     assert.deepEqual(calls.at(-1)!.params.input[1], { type: 'image', url: pixel })
     assert.deepEqual(imports.snapshot().messages.findLast(message => message.role === 'user')?.images, ['Portfolio.png'])
@@ -437,34 +426,22 @@ try {
     complete()
     console.log('PASS: image validation and transport, reviewed portfolio/option writes, on-disk verification, omitted fields, stale-write protection and autonomous write rejection')
   } finally { imports.close() }
-  const unavailable = new AgentsService({ executable: 'unused', cwd: directory, routes, clientFactory: () => client })
-  try {
-    includeCurrentModels = false
-    calls = []
-    await unavailable.command({ type: 'connect' })
-    assert.equal(unavailable.snapshot().connected, false)
-    assert.match(unavailable.snapshot().error, /latest Terra and Luna models are unavailable/)
-    assert(!calls.some(call => call.method === 'thread/start'), 'An outdated catalog must not start an older model or the Codex default')
-  } finally { includeCurrentModels = true; unavailable.close() }
   calls = []; writes = []
   console.log('PASS: connected New chat, model preservation, thread isolation, failed thread rollback, Stop during reset, full MCP catalog, validated edits, screenshot image results, failed envelopes, read-only autonomy, navigation, streaming, cancellation and reconnect')
 
   if (process.argv.includes('--live')) {
-    const { findCodex } = await import('../../../scripts/codex-runtime.cjs')
-    const executable = findCodex({ environment: { ...process.env, ...previous } }) ?? 'codex'
+    const clientFactory = await livePi()
     const liveRoutes = new Map(routes)
     liveRoutes.set('portfolio', async () => ok(await readPortfolios(), 'fixture portfolio'))
-    const live = new AgentsService({ executable, cwd: directory, routes: liveRoutes, portfolio: { read: readPortfolios, apply: applyAgentPortfolioUpdate } })
+    const live = new AgentsService({ clientFactory, cwd: directory, routes: liveRoutes, portfolio: { read: readPortfolios, apply: applyAgentPortfolioUpdate } })
     try {
       await live.command({ type: 'connect' })
       assert.equal(live.snapshot().connected, true, live.snapshot().error)
-      assert(live.snapshot().model, 'Real Codex must report the active model')
-      const families = live.snapshot().models.map(model => /^gpt-\d+(?:\.\d+)?-(terra|luna)$/.exec(model.id)?.[1])
-      assert(families.length > 0 && families.every(Boolean) && new Set(families).size === families.length, 'The live desktop catalog exposes only one current model per allowed family')
+      assert(live.snapshot().model, 'Real Pi must report the active model')
       const model = live.snapshot().models.find(model => model.id === live.snapshot().model)!
       assert(model, 'Active model must be discoverable')
       await live.command({ type: 'configure', model: model.id, thinking: model.defaultThinking })
-      console.log('PASS: real Codex app-server initialization, account and dynamic tools')
+      console.log('PASS: real Pi app-server initialization, account and dynamic tools')
       await live.command({ type: 'send', text: 'Integration smoke test. Call terminal_pages, then terminal_show_page to show charts with symbol AAPL. Do not fetch market data. Briefly confirm the result.' })
       const until = Date.now() + 90_000
       let shown = false
@@ -474,10 +451,10 @@ try {
         await new Promise(resolve => setTimeout(resolve, 100))
       }
       assert.equal(live.snapshot().error, '')
-      assert.equal(live.snapshot().busy, false, 'Live Codex run timed out')
-      assert(shown, 'Real Codex must invoke the page navigation tool')
+      assert.equal(live.snapshot().busy, false, 'Live Pi run timed out')
+      assert(shown, 'Real Pi must invoke the page navigation tool')
       assert(live.snapshot().messages.some(message => message.role === 'assistant'))
-      console.log('PASS: real Codex chat, tool calls, navigation and completed response')
+      console.log('PASS: real Pi chat, tool calls, navigation and completed response')
       const portfolioRoute = liveRoutes.get('portfolio')!
       liveRoutes.set('portfolio', () => ok({ portfolios: [], context: 'Synthetic evidence. '.repeat(800), evidenceTail: 'LARGE_RESEARCH_EVIDENCE_7429' }, 'synthetic fixture'))
       try {
@@ -487,7 +464,7 @@ try {
         assert.equal(live.snapshot().error, '')
         assert.equal(live.snapshot().busy, false, 'Live large-evidence test timed out')
         assert(live.snapshot().messages.some(message => message.role === 'assistant' && message.text.includes('LARGE_RESEARCH_EVIDENCE_7429')), 'The live model must receive evidence beyond the external MCP text preview')
-        console.log('PASS: real Codex receives full structured evidence larger than 8 KiB')
+        console.log('PASS: real Pi receives full structured evidence larger than 8 KiB')
         let newsAttempts = 0
         liveRoutes.set('news', () => { newsAttempts++; return failed(null, '403 synthetic news provider denied access', 'fixture news') })
         const oldMessageIds = new Set(live.snapshot().messages.map(message => message.id))
@@ -500,7 +477,7 @@ try {
         const partialAnswer = live.snapshot().messages.filter(message => message.role === 'assistant' && !oldMessageIds.has(message.id)).map(message => message.text).join('\n')
         assert(partialAnswer.includes('LARGE_RESEARCH_EVIDENCE_7429') && /unavailable/i.test(partialAnswer), 'The live model must report useful evidence and missing-source coverage')
         assert.equal(live.snapshot().messages.findLast(message => message.run)?.run?.status, 'partial')
-        console.log('PASS: real Codex produces a useful partial answer after a source failure without retry loops')
+        console.log('PASS: real Pi produces a useful partial answer after a source failure without retry loops')
       } finally { liveRoutes.set('portfolio', portfolioRoute) }
       if (process.argv.includes('--live-image')) {
         const bytes = await readFile(resolve(import.meta.dirname, '../../../output/playwright/agent-portfolio-fixture.png'))
@@ -508,27 +485,26 @@ try {
         const until = Date.now() + 90_000
         while (live.snapshot().busy && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 100))
         assert.equal(live.snapshot().error, '')
-        assert(live.snapshot().portfolioProposal, 'Real Codex must read the image and propose portfolio changes')
+        assert(live.snapshot().portfolioProposal, 'Real Pi must read the image and propose portfolio changes')
         const changes = live.snapshot().portfolioProposal!.changes
         assert(changes.some(change => change.field === 'AAPL · Shares' && change.after === '25'))
         assert(changes.some(change => change.field === 'AAPL · Average cost' && change.after === '123.45'))
         await live.command({ type: 'portfolioDecision', id: live.snapshot().portfolioProposal!.id, approve: true })
         assert.equal((await readPortfolios()).portfolios[0].holdings.AAPL.shares, 25)
         assert(await verifyStoredData({ kind: 'portfolio', expected: await readPortfolios() }))
-        console.log('PASS: real Codex image reading, portfolio proposal, approval and verified temporary-store update')
+        console.log('PASS: real Pi image reading, portfolio proposal, approval and verified temporary-store update')
       }
     } finally { live.close() }
   }
   if (process.argv.includes('--live-telegram-screenshot')) {
-    const { findCodex } = await import('../../../scripts/codex-runtime.cjs')
-    const executable = findCodex({ environment: { ...process.env, ...previous } }) ?? 'codex'
+    const clientFactory = await livePi()
     let capturedPage = ''
     let photosDelivered = 0
     const screenshotRoutes = new Map<Operation, (request: unknown) => unknown>([['screenshot', request => {
       capturedPage = (request as { page: string }).page
       return ok({ screenshots: [{ pageId: capturedPage, label: 'Synthetic Global', base64: 'cGl4ZWxz', mimeType: 'image/png' }] }, 'synthetic screenshot probe')
     }]])
-    const live = new AgentsService({ executable, cwd: directory, routes: screenshotRoutes, remoteResearch: true,
+    const live = new AgentsService({ clientFactory, cwd: directory, routes: screenshotRoutes, remoteResearch: true,
       telegramScreenshotDelivery: async capture => {
         assert.equal(capture.data.screenshots[0].pageId, 'global')
         photosDelivered++
@@ -550,29 +526,28 @@ try {
     } finally { live.close() }
   }
   if (process.argv.includes('--live-web')) {
-    const { findCodex } = await import('../../../scripts/codex-runtime.cjs')
-    const executable = findCodex({ environment: { ...process.env, ...previous } }) ?? 'codex'
-    const live = new AgentsService({ executable, cwd: directory, routes: new Map(), remoteResearch: true })
+    const clientFactory = await livePi()
+    const live = new AgentsService({ clientFactory, cwd: directory, routes: new Map(), remoteResearch: true })
     try {
       await live.command({ type: 'connect' })
       assert.equal(live.snapshot().connected, true, live.snapshot().error)
-      await live.command({ type: 'send', text: 'Web research integration check. Use native web search to find and open an official Apple investor relations quarterly earnings release. Do not use Budget Terminal tools or the shared Browser. Return its title, publication date and direct source URL, plus one sentence describing what the page covers. Do not rely on memory or search snippets alone.' })
+      await live.command({ type: 'send', text: 'Web research integration check. Use web_search and web_fetch to find and open an official Apple investor relations quarterly earnings release. Do not use Budget Terminal tools or the shared Browser. Return its title, publication date and direct source URL, plus one sentence describing what the page covers. Do not rely on memory or search snippets alone.' })
       const deadline = Date.now() + 120_000
       while (live.snapshot().busy && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100))
       assert.equal(live.snapshot().busy, false, 'Live web research timed out')
       assert.equal(live.snapshot().error, '')
       const run = live.snapshot().messages.findLast(message => message.run)?.run
-      assert(run?.tools.some(tool => tool.name === 'web_search' && tool.status === 'succeeded'), 'Real Codex must invoke native web research')
+      assert(run?.tools.some(tool => tool.name === 'web_search' && tool.status === 'succeeded'), 'Real Pi must invoke web research')
       const answer = live.snapshot().messages.filter(message => message.role === 'assistant').map(message => message.text).join('\n')
       assert(/https:\/\/(?:(?:www|investor)\.)?apple\.com\//i.test(answer), 'The answer must include a direct official Apple source link: ' + answer.slice(0, 3000))
-      console.log('PASS: real Telegram-mode agent uses native live web research and returns an official investor relations source link')
+      console.log('PASS: real Telegram-mode agent uses live web research and returns an official investor relations source link')
     } finally { live.close() }
   }
 } finally {
   service.close()
   let delivered = ''
   let screenshotPage = ''
-  const telegramAgent = new AgentsService({ executable: 'unused', cwd: directory, routes, telegramScreenshot: async (page, signal) => { assert(!signal.aborted); screenshotPage = page; return { sent: true, photos: 1 } }, telegramSend: async text => { delivered = text; return { sent: true } }, clientFactory: receive => { receiver = receive; return client } })
+  const telegramAgent = new AgentsService({ cwd: directory, routes, telegramScreenshot: async (page, signal) => { assert(!signal.aborted); screenshotPage = page; return { sent: true, photos: 1 } }, telegramSend: async text => { delivered = text; return { sent: true } }, clientFactory: receive => { receiver = receive; return client } })
   try {
     await telegramAgent.command({ type: 'connect' })
     await telegramAgent.command({ type: 'send', text: 'Send a summary to Telegram' })
@@ -589,7 +564,7 @@ try {
   let remoteDeliveries = 0
   let deliveryFails = false
   let captureDenied = false
-  const remoteAgent = new AgentsService({ executable: 'unused', cwd: directory, routes, remoteResearch: true,
+  const remoteAgent = new AgentsService({ cwd: directory, routes, remoteResearch: true,
     dispatch: async (name, args, signal) => {
       assert.equal(name, 'budget_terminal_screenshot')
       assert.deepEqual(args, { request: { page: 'global' } })
@@ -610,8 +585,7 @@ try {
     await remoteAgent.command({ type: 'connect' })
     const remoteStart = calls.findLast(call => call.method === 'thread/start')!.params
     const tools = remoteStart.dynamicTools
-    assert.equal(remoteStart.config.web_search, 'live', 'Telegram research can use hosted public web research')
-    assert(remoteStart.baseInstructions.includes('native web search') && !remoteStart.baseInstructions.includes('To search for websites, use action search'), 'Telegram should use native web research rather than inaccessible shared Browser tools')
+    assert(remoteStart.baseInstructions.includes('web_search and web_fetch') && !remoteStart.baseInstructions.includes('To search for websites, use action search'), 'Telegram should use public web research rather than inaccessible shared Browser tools')
     assert(tools.length > 0 && tools.every((tool: { name: string }) => tool.name === 'terminal_pages' || catalog.some(entry => entry.tool.name === tool.name && entry.tool.annotations?.readOnlyHint)))
     assert(tools.some((tool: { name: string }) => tool.name === 'budget_terminal_screenshot'))
     assert(remoteStart.baseInstructions.includes('send me a screenshot of global page'))

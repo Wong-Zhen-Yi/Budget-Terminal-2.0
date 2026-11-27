@@ -97,6 +97,9 @@ conf/
 **/telegram-settings.bin*
 **/mobile-access.json*
 **/market-api-keys.bin*
+# Encrypted model provider API keys for the Pi agent runtime.
+**/pi-keys.bin*
+**/claude-settings.bin*
 **/telegram-agents.json*
 
 # Local diagnostic exports (never commit private activity metadata).

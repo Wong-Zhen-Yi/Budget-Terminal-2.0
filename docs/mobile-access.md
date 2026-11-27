@@ -34,7 +34,7 @@ If Budget Terminal says the computer is disconnected from Tailscale, open the **
 
 Enable **Receive research questions from Telegram** under **Agents → Telegram** on the computer. Send `/mobile` in the configured private bot chat to turn on Mobile Access on the computer and get the links. The setting stays on until you turn it off in **Settings → Labs**. If it is already on, you can also ask “Send me the Budget Terminal mobile link.” Tap the link while Tailscale is connected. Open it in your device browser from Telegram and optionally add it to your Home Screen. [Telegram setup](agents.md#telegram)
 
-Budget Terminal looks up the link locally and replies in the configured private chat. Link delivery uses zero Codex tokens and works without Codex sign-in. The link carries no token. Budget Terminal checks that the visiting device uses the same Tailscale account as the computer on each request. Use Tailscale Serve for this port. Funnel and tagged devices do not provide the required user identity.
+Budget Terminal looks up the link locally and replies in the configured private chat. Link delivery uses zero model tokens and works without a connected model provider. The link carries no token. Budget Terminal checks that the visiting device uses the same Tailscale account as the computer on each request. Use Tailscale Serve for this port. Funnel and tagged devices do not provide the required user identity.
 
 ## Use a direct link without DNS
 

@@ -37,8 +37,7 @@
     "probe:mobile": "tsx scripts/probe-mobile.ts",
     "probe:agents": "tsx scripts/probe-agents.ts",
     "probe:agent-recovery": "tsx scripts/probe-agent-recovery.ts",
-    "probe:claude-agent": "tsx scripts/probe-claude-agent.ts",
-    "probe:claude-code-agent": "tsx scripts/probe-claude-code-agent.ts",
+    "probe:pi-agent": "tsx scripts/probe-pi-agent.ts",
     "probe:agent-images": "tsx scripts/probe-agent-images.ts",
     "probe:agent-charts": "tsx scripts/probe-agent-charts.ts",
     "probe:agents-workspace": "tsx scripts/probe-agents-workspace.ts",
@@ -195,9 +194,9 @@
     "vite": "^8.3.8"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.323",
-    "@anthropic-ai/sdk": "^1.14.0",
     "@convex-dev/auth": "^2.1.0",
+    "@earendil-works/pi-ai": "1.5.2",
+    "@earendil-works/pi-coding-agent": "1.5.2",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@tanstack/react-query": "^5.107.1",
     "@tanstack/react-query-persist-client": "^5.107.1",

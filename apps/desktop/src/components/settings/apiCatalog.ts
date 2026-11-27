@@ -56,6 +56,6 @@ export const API_CATALOG: ApiDefinition[] = [
   { id: 'capitol', label: 'Capitol Trades', uses: [use('politics', 'Public congressional trading disclosures.')] },
   { id: 'youtube', label: 'YouTube', uses: [use('youtube', 'Portfolio video search, in-app playback and thumbnails.')] },
   { id: 'news-feeds', label: 'Public news feeds', uses: [use('news|forex', 'Publisher feeds and market headlines.')] },
-  { id: 'agent', label: 'Codex or Claude / connected MCP tools', uses: [use('agents', 'Research and user-requested tool calls; providers depend on local connections. Agent chat can also be opened from any page.')] },
+  { id: 'agent', label: 'Pi model providers / web research', uses: [use('agents', 'Research and user-requested tool calls through the model provider connected to Pi, plus DuckDuckGo search and public pages read by web research. Agent chat can also be opened from any page.')] },
   { id: 'browser', label: 'User-selected websites', uses: [use('browser', 'Navigation and search in the embedded browser; destinations depend on user activity.')] },
 ]

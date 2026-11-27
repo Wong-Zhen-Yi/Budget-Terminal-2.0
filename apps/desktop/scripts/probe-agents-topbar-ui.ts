@@ -28,7 +28,7 @@ try {
       const commands = []
       let reads = 0, historyReads = 0, available = true, fail = false, gate = null, release, page = 'Charts', isMac = false
       const state = { activity: 'idle', currentChatId: 'fixture-chat', history: [], notifications: [], trackers: [], storageError: '', portfolioProposal: null,
-        model: 'fixture', thinking: null, models: [{ id: 'fixture', name: 'Fixture Codex', defaultThinking: 'low', thinkingModes: [{ id: 'low', description: 'Quick' }] }],
+        model: 'fixture', thinking: null, models: [{ id: 'fixture', name: 'Fixture Model', defaultThinking: 'low', thinkingModes: [{ id: 'low', description: 'Quick' }] }],
         connected: true, busy: false, autonomy: false, objective: '', intervalMinutes: 15, runsRemaining: 0, nextRunAt: null,
         messages: [{ id: 'hello', role: 'assistant', text: '## Research ready\\n\\nYour existing conversation is available here.', at: Date.now() }], error: '', navigation: null }
       const envelope = () => ({ data: structuredClone(state), meta: { freshness: state.telegram?.error ? 'failed' : 'fresh', source: 'fixture', fetchedAt: Date.now() }, errors: state.telegram?.error ? [{ reason: state.telegram.error }] : [] })
@@ -163,7 +163,7 @@ try {
         readerLoading = false; state.busy = true; await publish(); render(); await settle()
         check(summaryButton().disabled, 'Summary respects the shared Agent busy lock')
         state.busy = false; state.connected = false; await publish()
-        check(summaryButton().disabled && summaryButton().title.includes('Connect Codex'), 'Disconnected reader explains how to enable summaries')
+        check(summaryButton().disabled && summaryButton().title.includes('Connect Pi'), 'Disconnected reader explains how to enable summaries')
         state.connected = true; await publish(); available = false; render(); await settle()
         check(summaryButton().disabled && !dialog(), 'Privacy mode disables summary requests')
         available = true; render(); await settle()

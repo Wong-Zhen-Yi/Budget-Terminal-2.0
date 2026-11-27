@@ -44,7 +44,7 @@ export function NewsTickerSearchBar({
         }}
         placeholder={`Up to ${TICKER_SEARCH_MAX_SYMBOLS} tickers, separated by commas or spaces`}
         aria-label="Search news for tickers outside the portfolio"
-        className="no-drag h-8 min-w-[22rem] flex-1 border border-border-strong bg-surface-raised px-2 text-2xs text-text outline-none placeholder:text-text-dim focus:border-accent"
+        className="news-ticker-search no-drag h-8 min-w-[22rem] flex-1 border border-border-strong bg-surface-raised px-2 text-2xs text-text outline-none placeholder:text-text-dim focus:border-accent"
       />
 
       <Button variant="accent" onClick={submit} disabled={busy || !draft.trim()}>

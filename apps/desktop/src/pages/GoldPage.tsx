@@ -50,9 +50,9 @@ function MetricTile({
 }) {
   return (
     <div className="flex flex-col items-center justify-center border border-border bg-surface px-2 py-1" title={title}>
-      <span className="truncate text-2xs text-text-muted">{label}</span>
-      <span className="num truncate text-sm font-bold text-text">{value}</span>
-      <span className={`truncate text-2xs font-bold ${toneClass[tone]}`}>{sub}</span>
+      <span className="max-w-full truncate text-2xs text-text-muted">{label}</span>
+      <span className="num max-w-full truncate text-sm font-bold text-text">{value}</span>
+      <span className={`max-w-full truncate text-2xs font-bold ${toneClass[tone]}`}>{sub}</span>
     </div>
   )
 }

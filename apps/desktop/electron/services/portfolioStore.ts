@@ -745,7 +745,7 @@ export async function applyAgentPortfolioUpdate(before: Portfolio, after: Portfo
       if (before.readOnly || after.readOnly || before.id !== after.id) throw new Error('Choose an editable portfolio.')
       const document = structuredClone(await loadDocument())
       const current = requireEditable(document, before.id)
-      if (!isDeepStrictEqual(current, portfolioSchema.parse(before))) throw new Error('This portfolio changed after the preview. Dismiss this update and ask Codex to read it again.')
+      if (!isDeepStrictEqual(current, portfolioSchema.parse(before))) throw new Error('This portfolio changed after the preview. Dismiss this update and ask the agent to read it again.')
       document.portfolios[before.id] = portfolioSchema.parse(after)
       normalize(document)
       await persist(document)

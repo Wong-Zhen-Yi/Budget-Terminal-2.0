@@ -7,7 +7,6 @@ const { launch: runLaunch, createLauncherOutput, parseCommandLine, commandHelp }
 const { dev } = require('./dev.cjs')
 const { verifyDesktopBuild } = require('./verify-desktop-build.cjs')
 const launch = options => runLaunch({ verifyBuild() {}, ...options })
-const { findCodex } = require('./codex-runtime.cjs')
 const { tryRun, ensureElectron } = require('./ensure-electron.cjs')
 const { supportedNodeVersion, supportedNpmVersion, runtimeEnvironment, assertCertificateEnvironment } = require('./runtime.cjs')
 const { createUpdater, updateErrorMessage } = require('./update.cjs')
@@ -20,7 +19,7 @@ try {
   const scripts = join(firstRunDirectory, 'scripts')
   mkdirSync(scripts)
   copyFileSync(resolve(__dirname, '../package.json'), join(firstRunDirectory, 'package.json'))
-  for (const file of ['launch.cjs', 'runtime.cjs', 'codex-runtime.cjs', 'verify-desktop-build.cjs']) {
+  for (const file of ['launch.cjs', 'runtime.cjs', 'verify-desktop-build.cjs']) {
     copyFileSync(join(__dirname, file), join(scripts, file))
   }
   const result = spawnSync(process.execPath, ['-e', `
@@ -32,7 +31,7 @@ try {
       for (const failedStep of [null, 'install', 'ensure:electron', 'build']) {
         const steps = []
         const status = launch({ platform, nodeVersion: '24.22.1', environment: {},
-          locateCodex: () => null, log: { log() {}, error() {} },
+          log: { log() {}, error() {} },
           verifyBuild() { steps.push('verify') },
           spawn(_command, args, options) {
             assert.equal(options.cwd, process.cwd())
@@ -108,7 +107,6 @@ exit 99
 for (const platform of ['win32', 'darwin', 'linux']) {
   const calls = []
   assert.equal(launch({ logs: true, platform, nodeVersion: '24.22.1', log,
-    locateCodex() { return null },
     spawn(command, args, options) { calls.push([command, args, options]); return { status: 0, stdout: '10.9.8' } },
   }), 0)
   assert(calls.some(([, args]) => args.some(arg => String(arg).includes('preview'))), 'Diagnostics launcher must start the main application')
@@ -117,12 +115,11 @@ for (const platform of ['win32', 'darwin', 'linux']) {
 }
 const demoFixture = require('../fixtures/demo-user-data.json')
 const personalEnvironment = { APPDATA: 'personal-roaming', LOCALAPPDATA: 'personal-local',
-  BUDGET_TERMINAL_DATA_DIR: 'personal-mcp', CODEX_HOME: 'personal-codex', openai_api_key: 'test-placeholder' }
+  BUDGET_TERMINAL_DATA_DIR: 'personal-mcp', PI_CODING_AGENT_DIR: 'personal-pi', openai_api_key: 'test-placeholder', ANTHROPIC_API_KEY: 'test-placeholder' }
 const demoDirectories = []
 for (const exitCode of [0, 7]) {
   assert.equal(launch({ demo: true, detach: true, platform: 'win32', nodeVersion: '24.22.1', log,
     environment: personalEnvironment,
-    locateCodex() { assert.fail('Demo must skip Codex discovery with the personal environment') },
     openDetached() { assert.fail('Demo must stay attached so its profile can be removed on exit') },
     spawn(_command, args, { env }) {
       if (!args.join(' ').includes('run preview')) {
@@ -133,8 +130,9 @@ for (const exitCode of [0, 7]) {
       demoDirectories.push(directory)
       assert.equal(env.APPDATA, join(directory, 'roaming'))
       assert.equal(env.LOCALAPPDATA, join(directory, 'local'))
-      assert.equal(env.CODEX_HOME, join(directory, 'codex'))
+      assert.equal(env.PI_CODING_AGENT_DIR, join(directory, 'pi'), 'Demo Pi credentials, models and settings are isolated')
       assert.equal(env.openai_api_key, undefined)
+      assert.equal(env.ANTHROPIC_API_KEY, undefined, 'Demo never inherits model provider keys')
       const store = join(env.APPDATA, 'BudgetTerminalElectron')
       assert.equal(env.BUDGET_TERMINAL_DATA_DIR, store)
       for (const [name, field] of [['portfolio', 'userData'], ['strategies', 'cards'], ['settings', 'settings'], ['articles', 'articles']]) {
@@ -153,7 +151,6 @@ console.log('PASS: demo uses a fresh profile per launch, seeds the saved stores,
 let previewDirectory
 assert.equal(launch({ mobilePreview: true, detach: true, platform: 'win32', nodeVersion: '24.22.1', log,
   environment: personalEnvironment,
-  locateCodex() { assert.fail('The preview uses sample data and skips Codex discovery') },
   openDetached() { assert.fail('The preview stays attached to clean up its sample data') },
   spawn(_command, args, { env }) {
     if (args.join(' ').includes('run preview')) {
@@ -169,7 +166,6 @@ const devPreviewCalls = []
 const devPreviewLines = []
 assert.equal(launch({ mobilePreview: true, development: true, platform: 'win32', nodeVersion: '24.22.1',
   log: { log: line => devPreviewLines.push(line), error: line => devPreviewLines.push(line) }, environment: personalEnvironment,
-  locateCodex() { assert.fail('The dev preview uses sample data and skips Codex discovery') },
   verifyBuild() { assert.fail('The dev preview serves the phone UI from Vite instead of a verified build') },
   spawn(_command, args, { env }) {
     devPreviewCalls.push(args.join(' '))
@@ -232,7 +228,7 @@ for (const platform of ['win32', 'darwin', 'linux']) {
   for (const failedCall of [0, 2, 3, 4]) {
     const calls = []
     let verified = false
-    assert.equal(launch({ setupOnly: true, platform, nodeVersion: '24.22.1', environment: {}, locateCodex: () => null, log,
+    assert.equal(launch({ setupOnly: true, platform, nodeVersion: '24.22.1', environment: {}, log,
       verifyBuild() { verified = true },
       spawn(command, args) {
         calls.push({ command, args })
@@ -298,7 +294,7 @@ assertCertificateEnvironment({ NODE_TLS_REJECT_UNAUTHORIZED: '1' })
 for (const platform of ['win32', 'darwin', 'linux']) {
   const calls = []
   const messages = []
-  const status = launch({ platform, nodeVersion: '22.23.4', environment, locateCodex: () => null,
+  const status = launch({ platform, nodeVersion: '22.23.4', environment,
     log: { ...log, log: message => messages.push(message) }, spawn(command, args, options) {
     calls.push({ command, args, options })
     return { status: 0, stdout: calls.length === 1 ? '10.9.8\n' : '' }
@@ -320,7 +316,7 @@ for (const platform of ['win32', 'darwin', 'linux']) {
 for (const platform of ['win32', 'darwin', 'linux']) {
   const calls = []
   const messages = []
-  assert.equal(launch({ platform, development: true, nodeVersion: '24.22.1', environment, locateCodex: () => null,
+  assert.equal(launch({ platform, development: true, nodeVersion: '24.22.1', environment,
     log: { ...log, log: message => messages.push(message) },
     verifyBuild() { assert.fail('Live mode must not verify production renderer assets') },
     spawn(command, args, options) {
@@ -336,7 +332,7 @@ for (const platform of ['win32', 'darwin', 'linux']) {
 }
 for (const failedCall of [2, 3, 4, 5]) {
   let calls = 0
-  assert.equal(launch({ development: true, nodeVersion: '24.22.1', locateCodex: () => null, log, spawn() {
+  assert.equal(launch({ development: true, nodeVersion: '24.22.1', log, spawn() {
     calls++
     return { status: calls === failedCall ? 7 : 0, stdout: '11.0.0' }
   } }), failedCall === 5 ? 7 : 1)
@@ -385,7 +381,7 @@ try {
   assert.throws(() => verifyDesktopBuild(directory), /desktop build is incomplete/)
   let calls = 0
   const messages = []
-  assert.equal(launch({ nodeVersion: '22.23.4', locateCodex: () => null,
+  assert.equal(launch({ nodeVersion: '22.23.4',
     log: { log() {}, error: message => messages.push(message) },
     verifyBuild: () => verifyDesktopBuild(directory),
     spawn() { calls++; return { status: 0, stdout: '10.9.8' } },
@@ -405,13 +401,13 @@ for (const configuration of [{ platform: 'freebsd' }, { nodeVersion: '22.23.3' }
 }
 for (const result of [{ error: { code: 'ENOENT' }, status: null }, { status: 1 }, { status: 0, stdout: '10.9.7' }, { status: 0, stdout: '' }]) {
   let calls = 0
-  assert.equal(launch({ log, locateCodex: () => null, nodeVersion: '22.23.4', spawn() { calls++; return result } }), 1)
+  assert.equal(launch({ log, nodeVersion: '22.23.4', spawn() { calls++; return result } }), 1)
   assert.equal(calls, 1, 'No installation after missing/unsupported npm')
 }
 for (const failedCall of [2, 3, 4, 5]) {
   let calls = 0
   const messages = []
-  assert.equal(launch({ log: { log() {}, error: message => messages.push(message) }, locateCodex: () => null, nodeVersion: '22.23.4', spawn() {
+  assert.equal(launch({ log: { log() {}, error: message => messages.push(message) }, nodeVersion: '22.23.4', spawn() {
     calls++
     return { status: calls === failedCall ? 7 : 0, stdout: '10.9.8' }
   } }), failedCall === 5 ? 7 : 1)
@@ -419,36 +415,16 @@ for (const failedCall of [2, 3, 4, 5]) {
   if (failedCall === 4) assert(messages.some(message => /bundle remains locked.*disconnect.*MCP/.test(message)), 'Build failures must explain how to recover from a persistent MCP lock')
 }
 
-for (const [platform, environment, expected] of [
-  ['win32', { PATH: 'C:\\npm' }, 'C:\\npm\\node_modules\\@openai\\codex\\node_modules\\@openai\\codex-win32-x64\\vendor\\x86_64-pc-windows-msvc\\bin\\codex.exe'],
-  ['win32', { Path: 'C:\\tools', LOCALAPPDATA: 'C:\\User Data' }, 'C:\\User Data\\Programs\\OpenAI\\Codex\\bin\\codex.exe'],
-  ['win32', { PATH: '"C:\\Program Files\\Codex"' }, 'C:\\Program Files\\Codex\\codex.exe'],
-  ['win32', { PATH: 'C:\\npm' }, 'C:\\npm\\node_modules\\@openai\\codex\\node_modules\\@openai\\codex-win32-x64\\vendor\\x86_64-pc-windows-msvc\\codex\\codex.exe'],
-  ['darwin', { PATH: '/bin', HOME: '/Users/person' }, '/opt/homebrew/bin/codex'],
-  ['linux', { PATH: '/bin', HOME: '/home/person' }, '/home/person/.local/bin/codex'],
-  ['linux', { BUDGET_TERMINAL_CODEX_PATH: '/custom/codex', PATH: '/bin' }, '/custom/codex'],
-]) {
-  assert.equal(findCodex({ platform, architecture: 'x64', environment, exists: candidate => candidate === expected }), expected)
-}
-assert.equal(findCodex({ platform: 'win32', environment: { PATH: 'C:\\empty' }, exists: () => false }), null)
-for (const ready of [true, false]) {
+{
   const calls = []
   const messages = []
-  const codexPath = 'C:\\Codex with spaces\\codex.exe'
   const status = launch({ platform: 'win32', nodeVersion: '22.23.4', environment,
-    locateCodex: () => codexPath, log: { log: message => messages.push(message), error: message => messages.push(message) },
-    spawn(command, args, options) {
-      calls.push({ command, args, options: { ...options, env: { ...options.env } } })
-      if (command === codexPath) return ready ? { status: 0, stdout: 'codex-cli 0.159.0\n' } : { status: null, error: { code: 'ENOENT' } }
-      return { status: 0, stdout: '10.9.8' }
-    },
+    log: { log: message => messages.push(message), error: message => messages.push(message) },
+    spawn(command, args, options) { calls.push({ command, args, options }); return { status: 0, stdout: '10.9.8' } },
   })
-  assert.equal(status, 0, 'Missing/broken Codex must not prevent opening the app')
-  assert.deepEqual(calls[0].args, ['--version'], 'Launcher never signs in or runs agent inference')
-  assert.equal(calls[0].options.windowsHide, true)
-  assert.equal(calls.at(-1).options.env.BUDGET_TERMINAL_CODEX_PATH, ready ? codexPath : undefined)
-  assert.equal(environment.BUDGET_TERMINAL_CODEX_PATH, undefined, 'Do not change parent environment')
-  assert(messages.some(message => ready ? message.includes('Autonomous mode starts off') : message.includes('app will open')))
+  assert.equal(status, 0)
+  assert(!calls.some(call => /codex|claude|pi-coding-agent/i.test([call.command, ...call.args].join(' '))), 'Launcher never starts an agent runtime, signs in or runs inference')
+  assert(messages.some(message => message.includes('built-in Pi runtime') && message.includes('Autonomous mode starts off')))
 }
 
 assert.deepEqual(tryRun('electron', { expectedVersion: '43.7.9', environment, spawn(_command, _args, options) {
@@ -484,7 +460,7 @@ if (process.platform === 'win32') {
   assert.equal(windowsCheck.status, 0, windowsCheck.stdout + windowsCheck.stderr || windowsCheck.error?.message)
   console.log(windowsCheck.stdout.trim())
 }
-console.log('Launcher checks passed: supported toolchains, production and live platform commands, dev runtime recovery, inherited environment, Codex discovery and handoff, optional Agents runtime, failure paths, complete renderer/asset verification, exact Electron version and transient locks.')
+console.log('Launcher checks passed: supported toolchains, production and live platform commands, dev runtime recovery, inherited environment, built-in Agents runtime note, failure paths, complete renderer/asset verification, exact Electron version and transient locks.')
 
 async function probeUpdates() {
   const directory = mkdtempSync(join(tmpdir(), 'budget-update-'))
@@ -558,7 +534,7 @@ async function probeDetachedLaunch() {
     let npmCalls = 0
     const messages = []
     const status = await launch({ platform: 'win32', nodeVersion: '24.22.1', environment: { ELECTRON_RUN_AS_NODE: '1' },
-      detach: true, logs: true, locateCodex: () => null,
+      detach: true, logs: true,
       log: { log: message => messages.push(message), error: message => messages.push(message) },
       verifyBuild() { verified = true },
       spawn() { npmCalls++; return { status: 0, stdout: '11.0.0' } },
@@ -578,7 +554,6 @@ async function probeDetachedLaunch() {
   }
   assert.equal(await launch({ mobile: true, detach: true, platform: 'win32', nodeVersion: '24.22.1', log,
     environment: personalEnvironment,
-    locateCodex: () => null,
     spawn() { return { status: 0, stdout: '11.0.0' } },
     async openDetached(env) {
       assert.equal(env.BUDGET_TERMINAL_OPEN_MOBILE, '1')

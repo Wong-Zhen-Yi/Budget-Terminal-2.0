@@ -7,7 +7,7 @@ import { AgentsService } from '../electron/services/agents.js'
 import { AgentWorkspace } from '../electron/services/agentWorkspace.js'
 import { AgentImageStore } from '../electron/services/agentImageStore.js'
 import { agentMessageSchema } from '../electron/shared/agentWorkspace.js'
-import type { CodexPacket, CodexTransport } from '../electron/services/codexClient.js'
+import type { AgentPacket, AgentTransport } from '../electron/services/agentTransport.js'
 
 const directory = await mkdtemp(join(tmpdir(), 'budget-agent-images-'))
 const previous = { APPDATA: process.env.APPDATA, LOCALAPPDATA: process.env.LOCALAPPDATA }
@@ -17,10 +17,10 @@ const pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcS
 const image = { name: 'Synthetic pixel.png', dataUrl: pixel }
 const store = new AgentImageStore(join(directory, 'agent-images'))
 const workspace = new AgentWorkspace({ path: join(directory, 'agents.json') })
-let receive: (packet: CodexPacket) => void = () => {}
+let receive: (packet: AgentPacket) => void = () => {}
 let thread = ''
 const calls: Array<{ method: string; params: any }> = []
-const transport: CodexTransport = {
+const transport: AgentTransport = {
   async start() {},
   async request(method, params) {
     calls.push({ method, params })
@@ -32,9 +32,9 @@ const transport: CodexTransport = {
   },
   write() {}, close() {},
 }
-const service = new AgentsService({ executable: 'unused', cwd: directory, routes: new Map(), images: store, workspace,
+const service = new AgentsService({ cwd: directory, routes: new Map(), images: store, workspace,
   clientFactory: callback => { receive = callback; return transport } })
-const event = (method: string, item?: NonNullable<NonNullable<CodexPacket['params']>['item']>) => receive({ method, params: { threadId: thread, item, turn: { status: 'completed' } } })
+const event = (method: string, item?: NonNullable<NonNullable<AgentPacket['params']>['item']>) => receive({ method, params: { threadId: thread, item, turn: { status: 'completed' } } })
 const wait = async (check: () => boolean) => {
   const until = Date.now() + 5000
   while (!check() && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 10))
@@ -50,8 +50,7 @@ try {
   await assert.rejects(() => store.read(badId))
   await service.command({ type: 'connect' })
   assert.equal(service.snapshot().imageGeneration, true)
-  assert(calls.find(call => call.method === 'thread/start')!.params.config['features.image_generation'])
-  assert(calls.find(call => call.method === 'thread/start')!.params.baseInstructions.includes('num_last_images_to_include'))
+  assert(calls.find(call => call.method === 'thread/start')!.params.baseInstructions.includes('Native image generation and editing are not available'), 'Pi is told image generation is unavailable')
   await service.command({ type: 'send', text: 'Generate a synthetic blue square' })
   event('item/started', { id: 'native-image', type: 'imageGeneration' })
   assert.equal(service.snapshot().messages.at(-1)?.imageStatus, 'generating')
@@ -92,10 +91,8 @@ try {
     assert.equal(service.snapshot().messages.at(-1)?.imageStatus, 'failed', 'Native result must contain bounded raster bytes, not paths/URLs/SVG')
   }
   await service.command({ type: 'autonomy', enabled: true, objective: 'Research only', runs: 1 })
-  assert.equal(calls.filter(call => call.method === 'thread/start').at(-1)!.params.config['features.image_generation'], false, 'Autonomous runs do not expose native image generation')
   event('turn/completed')
   await service.command({ type: 'send', text: 'Manual images again' })
-  assert.equal(calls.filter(call => call.method === 'thread/start').at(-1)!.params.config['features.image_generation'], true)
   event('item/started', { id: 'interrupted', type: 'imageGeneration' })
   await service.command({ type: 'stop' })
   assert.equal(service.snapshot().messages.at(-2)?.imageStatus, 'failed', 'Stop marks pending generation as interrupted')
@@ -133,33 +130,6 @@ try {
   await assert.rejects(() => new AgentImageStore(quotaDirectory).save(image, 'generated'), /1000 images/)
   console.log('PASS: native generation/edit inputs, capability discovery, in-chat artifacts, private bounded storage, saved/reopened images, deletion, no pixels in snapshots, duplicate/failed/quota/invalid outputs, read-only autonomy, manual tool restoration, cancellation and late-event isolation')
 
-  if (process.argv.includes('--live')) {
-    const executable = process.env.BUDGET_TERMINAL_CODEX_PATH ?? (process.platform === 'win32' ? join(previous.LOCALAPPDATA!, 'Programs/OpenAI/Codex/bin/codex.exe') : 'codex')
-    const live = new AgentsService({ executable, cwd: directory, routes: new Map(), images: new AgentImageStore(join(directory, 'live-images')) })
-    const completeLive = async () => {
-      const until = Date.now() + 5 * 60_000
-      while (live.snapshot().busy && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 200))
-      assert(!live.snapshot().busy, 'Live image run timed out')
-      assert.equal(live.snapshot().error, '')
-      const last = [...live.snapshot().messages].reverse().find(message => message.imageStatus)
-      assert.equal(last?.imageStatus, 'ready', last?.text || live.snapshot().messages.map(message => message.text).join('\n'))
-      return last!.imageArtifacts![0]
-    }
-    try {
-      await live.command({ type: 'connect' })
-      assert(live.snapshot().connected, live.snapshot().error)
-      assert.notEqual(live.snapshot().imageGeneration, false, 'This provider cannot generate images')
-      await live.command({ type: 'send', text: 'Image generation integration test. Use the native image_gen tool to generate one simple blue circle centered on a plain white background, no text. Do not use shell tools or files. The app displays the native result automatically.' })
-      const first = await completeLive()
-      const pixels = await live.image(first.id)
-      assert(pixels.dataUrl.startsWith('data:image/png;base64,'))
-      console.log('PASS: real signed-in Codex native image generation and private image retrieval')
-      await live.command({ type: 'send', text: 'Edit this attached synthetic image using the native image_gen tool with num_last_images_to_include=1: change the blue circle to red. Keep the background white. Return one edited image.', images: [pixels] })
-      const edited = await completeLive()
-      assert.notEqual((await live.image(edited.id)).dataUrl, pixels.dataUrl, 'Edited result must differ from original')
-      console.log('PASS: real Codex native image editing using reattached generated pixels')
-    } finally { live.close() }
-  }
 } finally {
   service.close()
   await workspace.close()

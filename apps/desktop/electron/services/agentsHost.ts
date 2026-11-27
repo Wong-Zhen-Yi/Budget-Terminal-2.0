@@ -5,17 +5,17 @@ import { resetTelegramConversation, telegramResearchCommand, telegramHistoryActi
 import { notificationCenter } from './notificationsHost.js'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { findClaude, findCodex } from '../../../../scripts/codex-runtime.cjs'
+import { getAgentDir, ModelRuntime } from '@earendil-works/pi-coding-agent'
+import { InMemoryCredentialStore } from '@earendil-works/pi-ai'
 import { createServiceRoutes } from '../mcp/routes.js'
 import { captureTerminalScreenshot, getMcpStatus, invokeMcpTool } from '../mcp/host.js'
-import { agentProviderLabels, claudeApiKeyPattern, isAgentProvider, type AgentProvider, type AgentsCommand } from '../shared/agents.js'
+import { agentRuntimeLabel, piApiKeyPattern, piProviderPattern, type AgentsCommand, type PiConnectionState } from '../shared/agents.js'
 import type { Envelope } from '../shared/contract.js'
 import type { ScreenshotPayload } from '../shared/screenshot.js'
 import { failed, ok } from '../shared/envelope.js'
 import { AgentsService } from './agents.js'
-import { CodexClient, type CodexPacket } from './codexClient.js'
-import { ClaudeClient } from './claudeClient.js'
-import { ClaudeCodeClient } from './claudeCodeClient.js'
+import type { AgentPacket } from './agentTransport.js'
+import { PiClient, piFailure, type PiServices } from './piClient.js'
 import { AgentWorkspace } from './agentWorkspace.js'
 import { AgentImageStore } from './agentImageStore.js'
 import type { AgentTracker } from '../shared/agentWorkspace.js'
@@ -37,65 +37,113 @@ let telegramChanging = false
 let remote: AgentsService | null = null
 let remoteWorkspace: AgentWorkspace | null = null
 let viewedTelegramChat: string | null = null
-let provider: AgentProvider | null = null
-let providerChanging = false
-const providerPath = () => join(app.getPath('userData'), 'agents-provider.json')
-const claudeKeyPath = () => join(app.getPath('userData'), 'claude-settings.bin')
-function selectedProvider(): AgentProvider {
-  if (!provider) {
-    try {
-      const saved: unknown = JSON.parse(readFileSync(providerPath(), 'utf8')).provider
-      provider = isAgentProvider(saved) ? saved : 'codex'
-    }
-    // With no saved choice, a computer that has Claude Code but no Codex starts on Claude Code.
-    catch { provider = !findCodex() && findClaude() ? 'claude-code' : 'codex' }
+let settingsChanging = false
+const piKeysPath = () => join(app.getPath('userData'), 'pi-keys.bin')
+/** The API key file of the removed Claude provider; its key moves to Pi's Anthropic provider once. */
+const legacyClaudeKeyPath = () => join(app.getPath('userData'), 'claude-settings.bin')
+const label = agentRuntimeLabel
+
+function decrypt(bytes: Buffer): unknown {
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('OS encryption is unavailable, so saved model provider keys cannot be read.')
+  return JSON.parse(safeStorage.decryptString(bytes))
+}
+async function readEncrypted(path: string): Promise<unknown> {
+  try { return decrypt(await readFile(path)) } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error }
+}
+/** Decrypt only in the main process. Keys never reach the renderer, chats, logs or the model. */
+async function loadPiKeys(): Promise<Record<string, string>> {
+  const saved = await readEncrypted(piKeysPath()) as { keys?: Record<string, unknown> } | null
+  const keys: Record<string, string> = {}
+  if (saved) {
+    for (const [provider, key] of Object.entries(saved.keys ?? {})) if (piProviderPattern.test(provider) && typeof key === 'string' && piApiKeyPattern.test(key)) keys[provider] = key
+    return keys
   }
-  return provider
+  const legacy = await readEncrypted(legacyClaudeKeyPath()).catch(() => null) as { apiKey?: unknown } | null
+  if (typeof legacy?.apiKey === 'string' && piApiKeyPattern.test(legacy.apiKey)) {
+    keys.anthropic = legacy.apiKey
+    await savePiKeys(keys)
+    await rm(legacyClaudeKeyPath(), { force: true })
+  }
+  return keys
 }
-const providerLabel = () => agentProviderLabels[selectedProvider()]
-function claudeKeySaved() { return existsSync(claudeKeyPath()) }
-async function saveProvider(value: AgentProvider) {
-  const path = providerPath()
-  await writeFile(path + '.tmp', JSON.stringify({ provider: value }), { mode: 0o600 })
-  await rename(path + '.tmp', path)
-  provider = value
-}
-/** Decrypt only in the main process, when a Claude connection starts. */
-async function loadClaudeKey(): Promise<string | null> {
-  let bytes: Buffer
-  try { bytes = await readFile(claudeKeyPath()) } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error }
-  if (!safeStorage.isEncryptionAvailable()) throw new Error('OS encryption is unavailable, so the saved Claude API key cannot be read.')
-  const key = (JSON.parse(safeStorage.decryptString(bytes)) as { apiKey?: unknown }).apiKey
-  return typeof key === 'string' && claudeApiKeyPattern.test(key) ? key : null
-}
-async function saveClaudeKey(apiKey: string | null) {
-  const path = claudeKeyPath()
-  if (!apiKey) { await rm(path, { force: true }); return }
-  if (!claudeApiKeyPattern.test(apiKey)) throw new Error('Enter a Claude API key from the Claude Console. It starts with sk-ant-.')
-  if (!safeStorage.isEncryptionAvailable() || (process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text')) throw new Error('OS credential encryption is unavailable. Enable the system keyring before saving a Claude API key.')
-  await writeFile(path + '.tmp', safeStorage.encryptString(JSON.stringify({ apiKey })), { mode: 0o600 })
+async function savePiKeys(keys: Record<string, string>) {
+  const path = piKeysPath()
+  if (!Object.keys(keys).length) { await rm(path, { force: true }); return }
+  if (!safeStorage.isEncryptionAvailable() || (process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text')) throw new Error('OS credential encryption is unavailable. Enable the system keyring before saving a model provider API key.')
+  await writeFile(path + '.tmp', safeStorage.encryptString(JSON.stringify({ keys })), { mode: 0o600 })
   await rename(path + '.tmp', path)
 }
-/** Every Agents worker (chat, trackers, Telegram) follows the selected provider. */
-function transport(receive: (packet: CodexPacket) => void, disconnected: (message: string) => void, provider = selectedProvider()) {
-  if (provider === 'claude') return new ClaudeClient(loadClaudeKey, receive)
+
+/** Pi's own credential, model and settings files, read only when the user already has them. */
+function piFiles() {
+  const directory = getAgentDir()
+  return { auth: join(directory, 'auth.json'), models: join(directory, 'models.json'), settings: join(directory, 'settings.json') }
+}
+function piDefaults(path: string): PiServices['defaults'] {
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
+    const text = (key: string) => typeof value[key] === 'string' && value[key] ? value[key] as string : undefined
+    const thinking = text('defaultThinkingLevel')
+    return { defaultProvider: text('defaultProvider'), defaultModel: text('defaultModel'),
+      defaultThinkingLevel: thinking && ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(thinking) ? thinking as NonNullable<PiServices['defaults']>['defaultThinkingLevel'] : undefined }
+  } catch { return {} }
+}
+function piSignIns(path: string): string[] {
+  try { return Object.keys(JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>) } catch { return [] }
+}
+
+let piLoad: Promise<PiServices> | null = null
+let piState: PiConnectionState = { savedKeys: [], connected: [], keyProviders: [] }
+/**
+ * One model runtime shared by chat, trackers and Telegram. A missing Pi credential file is never
+ * created: without one, saved keys and environment keys live in memory only.
+ */
+function piServices(reload = false): Promise<PiServices> {
+  if (reload || !piLoad) {
+    const load = (async () => {
+      const files = piFiles()
+      const keys = await loadPiKeys()
+      const runtime = await ModelRuntime.create({
+        ...(existsSync(files.auth) ? { authPath: files.auth } : { credentials: new InMemoryCredentialStore() }),
+        modelsPath: existsSync(files.models) ? files.models : null,
+      })
+      for (const [provider, key] of Object.entries(keys)) await runtime.setRuntimeApiKey(provider, key)
+      const available = await runtime.getAvailable()
+      const signIns = new Set(piSignIns(files.auth))
+      const providerName = (id: string) => runtime.getProvider(id)?.name ?? id
+      const connected = [...new Set(available.map(model => model.provider))].map(id => ({ id, label: providerName(id),
+        source: id in keys ? 'app' as const : signIns.has(id) ? 'pi' as const : 'environment' as const }))
+      const keyProviders = runtime.getProviders().filter(provider => provider.auth.apiKey && provider.getModels().length)
+        .map(provider => ({ id: provider.id, label: provider.name })).sort((a, b) => a.label.localeCompare(b.label))
+      piState = { savedKeys: Object.keys(keys).sort(), connected: connected.sort((a, b) => a.label.localeCompare(b.label)), keyProviders }
+      return { runtime, defaults: piDefaults(files.settings) }
+    })()
+    piLoad = load
+    load.catch(error => {
+      if (piLoad === load) piLoad = null
+      piState = { ...piState, error: piFailure(error) }
+    })
+  }
+  return piLoad
+}
+/** Every Agents worker (chat, trackers, Telegram) runs on Pi with the same credentials. */
+function transport(receive: (packet: AgentPacket) => void) {
   const cwd = join(app.getPath('userData'), 'agents')
   mkdirSync(cwd, { recursive: true })
-  // Without an installed CLI, the Agent SDK's bundled Claude Code runs with the same saved login.
-  if (provider === 'claude-code') return new ClaudeCodeClient(() => findClaude(), cwd, receive, disconnected)
-  return new CodexClient(executable(), cwd, receive, disconnected)
+  return new PiClient(() => piServices(), cwd, receive)
 }
-async function changeProvider(change: () => Promise<boolean>) {
-  if (providerChanging) throw new Error('Agent provider settings are already being updated.')
+async function changeSettings(change: () => Promise<void>) {
+  if (settingsChanging) throw new Error('Agent connection settings are already being updated.')
   const state = agent().snapshot()
-  if (state.busy || state.autonomy || remote?.snapshot().busy) throw new Error('Stop the agent and turn off autonomous mode before changing provider settings.')
-  providerChanging = true
+  if (state.busy || state.autonomy || remote?.snapshot().busy) throw new Error('Stop the agent and turn off autonomous mode before changing model provider keys.')
+  settingsChanging = true
   try {
-    if (!await change()) return
+    await change()
+    await piServices(true).catch(() => {})
     agent().disconnect()
     if (!remote?.snapshot().busy) remote?.disconnect()
     await agent().command({ type: 'connect' })
-  } finally { providerChanging = false }
+  } finally { settingsChanging = false }
 }
 function telegramWorkspace() {
   return remoteWorkspace ??= new AgentWorkspace({ path: join(app.getPath('userData'), 'telegram-agents.json') })
@@ -104,7 +152,7 @@ function telegramWorker() {
   if (!remote) {
     const cwd = join(app.getPath('userData'), 'agents')
     mkdirSync(cwd, { recursive: true })
-    remote = new AgentsService({ executable: executable(), cwd, workspace: telegramWorkspace(), remoteResearch: true, telegramScreenshotDelivery: (result, signal) => telegramAgent().sendScreenshots(result, signal), routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, clientFactory: transport, provider: selectedProvider })
+    remote = new AgentsService({ cwd, workspace: telegramWorkspace(), remoteResearch: true, telegramScreenshotDelivery: (result, signal) => telegramAgent().sendScreenshots(result, signal), routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, clientFactory: transport })
   }
   return remote
 }
@@ -166,14 +214,12 @@ export async function telegramProfile() {
   return enabled && receive && /^[a-z][a-z\d_]{4,31}$/i.test(bot) ? bot : ''
 }
 function snapshot() {
-  return { ...agent().snapshot(), provider: selectedProvider(), claude: { keySaved: claudeKeySaved() }, telegram: telegramAgent().snapshot(),
+  return { ...agent().snapshot(), pi: structuredClone(piState), telegram: telegramAgent().snapshot(),
     telegramHistory: telegramHistorySnapshot(telegramWorkspace(), viewedTelegramChat, !!remote?.snapshot().busy) }
 }
 async function checkTracker(tracker: AgentTracker, signal: AbortSignal) {
   const cwd = join(app.getPath('userData'), 'agents')
-  const trackerProvider = selectedProvider()
-  const worker = new AgentsService({ executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, workspace: workspace!, trackerId: tracker.id,
-    clientFactory: (receive, disconnected) => transport(receive, disconnected, trackerProvider), provider: () => trackerProvider })
+  const worker = new AgentsService({ cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, workspace: workspace!, trackerId: tracker.id, clientFactory: transport })
   const cancel = () => worker.close()
   signal.addEventListener('abort', cancel, { once: true })
   let timedOut = false
@@ -192,20 +238,17 @@ async function checkTracker(tracker: AgentTracker, signal: AbortSignal) {
     if (timedOut) throw new Error('Tracker exceeded the 12-minute worker limit.')
     if (worker.snapshot().error) throw new Error(worker.snapshot().error)
     const report = worker.trackerReport()
-    if (!report) throw new Error(`${agentProviderLabels[trackerProvider]} completed without a tracker report. The tracker has been paused for review.`)
+    if (!report) throw new Error(`${label} completed without a tracker report. The tracker has been paused for review.`)
     return report
   } finally { clearTimeout(deadline); signal.removeEventListener('abort', cancel); worker.close() }
 }
 
-function executable() {
-  return findCodex() ?? (process.platform === 'win32' ? 'codex.exe' : 'codex')
-}
 function agent() {
   if (!service) {
     const cwd = join(app.getPath('userData'), 'agents')
     mkdirSync(cwd, { recursive: true })
     workspace ??= new AgentWorkspace({ notifications: notificationCenter, check: checkTracker, removeImage: id => images.remove(id) })
-    service = new AgentsService({ workspace, images, telegramSend: (text, signal) => telegramAgent().send(text, signal), telegramScreenshot: (page, signal) => telegramAgent().sendScreenshot(page, signal), executable: executable(), cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, connectionStatus: getMcpStatus, clientFactory: transport, provider: selectedProvider, portfolio: {
+    service = new AgentsService({ workspace, images, telegramSend: (text, signal) => telegramAgent().send(text, signal), telegramScreenshot: (page, signal) => telegramAgent().sendScreenshot(page, signal), cwd, routes: createServiceRoutes(captureTerminalScreenshot), dispatch: invokeMcpTool, connectionStatus: getMcpStatus, clientFactory: transport, portfolio: {
       read: readPortfolios,
       apply: async (before, after) => {
         const result = await withAutomaticBackup(async () => ok(await applyAgentPortfolioUpdate(before, after), 'portfolio store'))
@@ -223,7 +266,10 @@ export async function startAgents() {
   if (!startup) {
     const session = agent()
     const generation = lifecycle
-    startup = session.initialize().then(() => generation === lifecycle ? session.command({ type: 'connect' }) : session.snapshot())
+    startup = session.initialize().then(async () => {
+      await piServices().catch(() => { /* The connection attempt reports the failure. */ })
+      return generation === lifecycle ? session.command({ type: 'connect' }) : session.snapshot()
+    })
   }
   return startup
 }
@@ -232,7 +278,7 @@ export async function agentsStatus() {
   try { await startup } catch { /* The snapshot retains startup/storage failures. */ }
   const state = snapshot()
   const error = state.error || state.storageError || state.telegram.error || state.telegramHistory.error
-  return error ? failed(state, error, `${providerLabel()} agent`) : ok(state, `${providerLabel()} agent`)
+  return error ? failed(state, error, `${label} agent`) : ok(state, `${label} agent`)
 }
 export async function agentsCommand(command: AgentsCommand) {
   try { return await executeAgentsCommand(command) } finally { agentsChanged() }
@@ -261,30 +307,27 @@ async function executeAgentsCommand(command: AgentsCommand) {
     } catch (error) { return failed(snapshot(), error instanceof Error ? error.message : 'Telegram settings failed.', 'Telegram') }
     finally { telegramChanging = false }
   }
-  if (command?.type === 'agentProvider' || command?.type === 'claudeKey' || command?.type === 'claudeKeyClear') {
+  if (command?.type === 'piKey' || command?.type === 'piKeyClear') {
     try {
-      if (command.type === 'agentProvider') {
-        if (!isAgentProvider(command.provider)) throw new Error('Choose Codex, Claude or Claude Code.')
-        await changeProvider(async () => {
-          if (command.provider === selectedProvider()) return false
-          await saveProvider(command.provider)
-          return true
-        })
-      } else {
-        const apiKey = command.type === 'claudeKey' ? String(command.apiKey ?? '').trim() : null
-        await changeProvider(async () => {
-          await saveClaudeKey(apiKey)
-          // Reconnect only when the change affects the active provider.
-          return selectedProvider() === 'claude'
-        })
-      }
+      const provider = String(command.provider ?? '')
+      if (!piProviderPattern.test(provider) || (command.type === 'piKey' && !piState.keyProviders.some(entry => entry.id === provider))) throw new Error('Choose a model provider from the list.')
+      const apiKey = command.type === 'piKey' ? String(command.apiKey ?? '').trim() : ''
+      if (command.type === 'piKey' && !piApiKeyPattern.test(apiKey)) throw new Error('Paste the full API key from the provider. It cannot contain spaces.')
+      await changeSettings(async () => {
+        const keys = await loadPiKeys()
+        if (command.type === 'piKey') keys[provider] = apiKey
+        else delete keys[provider]
+        await savePiKeys(keys)
+      })
       const state = snapshot()
-      return state.error ? failed(state, state.error, `${providerLabel()} agent`) : ok(state, `${providerLabel()} agent`)
-    } catch (error) { return failed(snapshot(), error instanceof Error ? error.message : 'Agent provider settings failed.', `${providerLabel()} agent`) }
+      return state.error ? failed(state, state.error, `${label} agent`) : ok(state, `${label} agent`)
+    } catch (error) { return failed(snapshot(), error instanceof Error ? error.message : 'Model provider settings failed.', `${label} agent`) }
   }
+  // Connect re-reads Pi's credential files, so a `pi` sign-in made while the app runs is picked up.
+  if (command?.type === 'connect' && !agent().snapshot().connected && !agent().snapshot().busy) await piServices(true).catch(() => {})
   if (command?.type === 'stop') await browserControl({ action: 'stop' })
-  try { await agent().command(command); return ok(snapshot(), `${providerLabel()} agent`) }
-  catch (error) { return failed(snapshot(), error instanceof Error ? error.message : String(error), `${providerLabel()} agent`) }
+  try { await agent().command(command); return ok(snapshot(), `${label} agent`) }
+  catch (error) { return failed(snapshot(), error instanceof Error ? error.message : String(error), `${label} agent`) }
 }
 export async function agentsImage(id: string) {
   try { return ok(await agent().image(id), 'Private chat image') }

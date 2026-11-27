@@ -31,11 +31,14 @@ function createDemoSession(environment) {
     LOCALAPPDATA: localData,
     BUDGET_TERMINAL_DATA_DIR: dataDir,
     BUDGET_TERMINAL_DEMO_DIR: directory,
-    CODEX_HOME: join(directory, 'codex'),
+    // Pi reads credentials, models and settings from here, so the demo never sees personal sign-ins.
+    PI_CODING_AGENT_DIR: join(directory, 'pi'),
   }
   // Drop case variants too: Windows resolves environment names case-insensitively.
-  const replaced = new Set([...Object.keys(overrides), 'OPENAI_API_KEY', 'CODEX_API_KEY'])
-  const inherited = Object.fromEntries(Object.entries(environment).filter(([key]) => !replaced.has(key.toUpperCase())))
+  // Model provider credentials in the environment are dropped too, so the demo cannot bill a personal account.
+  const replaced = new Set([...Object.keys(overrides), 'CODEX_HOME'])
+  const credential = /(?:_API_KEY|_AUTH_TOKEN|_OAUTH_TOKEN|_ACCESS_TOKEN|^GH_TOKEN|^GITHUB_TOKEN|^COPILOT_GITHUB_TOKEN)$/
+  const inherited = Object.fromEntries(Object.entries(environment).filter(([key]) => !replaced.has(key.toUpperCase()) && !credential.test(key.toUpperCase())))
   return { directory, env: { ...inherited, ...overrides }, close }
 }
 

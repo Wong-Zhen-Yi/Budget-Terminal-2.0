@@ -125,6 +125,10 @@
   [data-terminal-mobile] .finance-goal-ring { min-height: 150px; }
   [data-terminal-mobile] .cards-grid { min-width: 0; grid-template-columns: minmax(0, 1fr); }
   [data-terminal-mobile] .cards-grid > article { min-width: 0; height: 310px; }
+  /* The portfolio menu opens from the toolbar's right edge so it stays on screen instead of spilling past the left edge. */
+  [data-terminal-mobile] .cards-toolbar { position: relative; }
+  [data-terminal-mobile] .cards-portfolio-menu { position: static; }
+  [data-terminal-mobile] .cards-portfolio-menu > div { max-width: 100%; }
   [data-terminal-mobile] [data-page-id='projections'] > div { overflow-y: auto; }
   [data-terminal-mobile] .projections-toolbar form { flex: 1 1 7rem; }
   [data-terminal-mobile] .projections-toolbar form input { flex: 1; }
@@ -133,6 +137,8 @@
 
   [data-terminal-mobile] :is(.news-lite-search, .news-lite-toolbar) :is(input, button) { min-height: 38px; }
   [data-terminal-mobile] .news-lite-tickers > button { min-height: 44px; }
+  /* With its desktop minimum width lifted, a zero basis squeezed the field to a sliver; it wraps under its label instead. */
+  [data-terminal-mobile] .news-ticker-search { flex: 1 1 10rem; }
   [data-terminal-mobile] .calendar-month-page { overflow-y: auto; }
   [data-terminal-mobile] .calendar-grid-container { flex: none; min-height: 290px; }
   [data-terminal-mobile] .calendar-toolbar-actions { flex-wrap: wrap; }
@@ -149,8 +155,8 @@
   [data-terminal-mobile] .price-panes > div:first-child { height: 260px; }
   [data-terminal-mobile] .price-panes > div:last-child { min-height: 300px; padding-left: 0; }
   [data-terminal-mobile] .price-toolbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; align-items: end; }
-  [data-terminal-mobile] .price-bound { display: grid; gap: 2px; }
-  [data-terminal-mobile] .price-bound > * { max-width: 100%; }
+  [data-terminal-mobile] .price-bound { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 2px; }
+  [data-terminal-mobile] .price-bound > * { width: 100%; max-width: 100%; }
   [data-terminal-mobile] .price-bound > span { padding-left: 0; }
   [data-terminal-mobile] .price-toolbar > [role='status'] { grid-column: 1 / -1; margin-left: 0; padding-left: 0; text-align: left; }
   [data-terminal-mobile] .beta-toolbar > input { flex: 1 1 8rem; }
@@ -196,7 +202,8 @@
   [data-terminal-mobile] .options-toolbar > [role='status'] { order: 1; flex-basis: 100%; text-align: left; }
   [data-terminal-mobile] .options-toolbar > [role='status']:empty { display: none; }
   [data-terminal-mobile] .options-views { width: 100%; }
-  [data-terminal-mobile] .options-chain-toolbar .options-chain-field { display: grid; flex: 1 1 5rem; min-width: 0; gap: 2px; }
+  [data-terminal-mobile] .options-chain-toolbar .options-chain-field { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1 1 5rem; min-width: 0; gap: 2px; }
+  [data-terminal-mobile] .options-chain-field > * { width: 100%; max-width: 100%; }
   [data-terminal-mobile] .options-chain-field > span { margin: 0; }
   [data-terminal-mobile] .technical-scan-toolbar > select { flex: 1 1 7rem; }
   [data-terminal-mobile] .technical-scan-toolbar > [role='status'] { flex-basis: 100%; text-align: left; margin-left: 0; }
@@ -305,6 +312,9 @@
   [data-terminal-mobile] .politics-analysis { grid-auto-rows: minmax(315px, auto); }
   [data-terminal-mobile] .youtube-search { min-height: 42px; }
   [data-terminal-mobile] .youtube-toolbar :is(button, select) { min-height: 38px; }
+  [data-terminal-mobile] .youtube-feed-footer { height: auto; min-height: 44px; }
+  /* A short screen would squeeze the feed and inspector together; the page scrolls instead. */
+  [data-terminal-mobile] .youtube-workspace { flex: 1 0 auto; min-height: 640px; }
   [data-terminal-mobile] .dictionary-header { gap: 8px; }
   [data-terminal-mobile] :is(.dictionary-categories, .dictionary-terms) button { min-height: 36px; }
   [data-terminal-mobile] [data-page-id='bonds'] .terminal-panel > div > .grid { min-width: 0; }

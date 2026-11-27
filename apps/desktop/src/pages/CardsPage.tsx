@@ -152,13 +152,13 @@ export function CardsPage({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 p-2">
-      <div className="flex shrink-0 flex-wrap items-center gap-1">
+      <div className="cards-toolbar flex shrink-0 flex-wrap items-center gap-1">
         <div className="mr-auto">
           <h1 className="text-sm font-semibold text-text">Cards</h1>
           <p className="text-2xs text-text-muted">Equal-weight, custom-weight, and live portfolio baskets</p>
         </div>
         <span className="px-2 text-2xs text-text-muted">{status}</span>
-        <details className="relative">
+        <details className="cards-portfolio-menu relative">
           <summary className="no-drag flex h-8 cursor-pointer list-none items-center border border-border-strong bg-surface-raised px-2 text-2xs text-text hover:bg-surface-hover">
             Portfolio Cards
           </summary>
