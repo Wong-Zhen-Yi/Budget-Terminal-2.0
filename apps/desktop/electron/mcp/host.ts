@@ -34,10 +34,11 @@ export async function cancelMcpCall(id: number): Promise<McpStatus> {
 }
 /** Shell-safe in bash, cmd and PowerShell for ordinary absolute paths, including spaces. */
 const quoted = (value: string) => `"${value.replace(/"/g, '')}"`
+// Name the server before --env: Claude Code's --env takes every value up to --, so a later name is read as a variable.
 export function mcpClientSetup(server: string, dataDirectory: string, configuration: string): McpClientSetup[] {
   const env = quoted(`BUDGET_TERMINAL_DATA_DIR=${dataDirectory}`)
   return [
-    { id: 'claude-code', label: 'Claude Code', text: `claude mcp add --scope user --env ${env} budget-terminal -- node ${quoted(server)}`,
+    { id: 'claude-code', label: 'Claude Code', text: `claude mcp add --scope user budget-terminal --env ${env} -- node ${quoted(server)}`,
       hint: 'Run once in a terminal, then use /mcp in Claude Code to confirm the connection. For long scans, set MCP_TOOL_TIMEOUT=180000 before starting Claude Code.' },
     { id: 'claude-desktop', label: 'Claude Desktop', text: configuration,
       hint: 'Merge into claude_desktop_config.json (Claude Desktop Settings → Developer → Edit Config), then restart Claude Desktop.' },

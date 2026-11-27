@@ -94,6 +94,8 @@ rem The shared build installs an AppArmor profile when Ubuntu blocks Electron's 
 rem The shared build makes Settings > Labs > Launch on startup work on Linux through an XDG autostart entry.
 rem The shared build sizes the Dashboard 2.0 phone Portfolio Pie to its ring and legend so neither is clipped.
 rem The shared build keeps Mobile Access links working after a rebuild and reloads a phone page whose files failed to load.
+rem The shared build starts Budget Terminal in its own systemd scope on Linux, so closing the launching terminal or agent no longer crashes it.
+rem The shared build shows a working Claude Code command in Local MCP client setup, naming the server before its data folder setting.
 rem Finnhub streaming-first refresh, visible-stock priorities and idle/session savings rebuild through the shared launcher.
 rem Settings dashboard keeps the five slowest pages stable during startup updates; rebuilt through the shared launcher.
 rem Shared snapshot validation, account quotas and typed cloud contracts rebuild through the shared launcher; deploy backend policies separately.

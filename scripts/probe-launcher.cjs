@@ -3,7 +3,7 @@ const { spawnSync } = require('node:child_process')
 const { join, resolve } = require('node:path')
 const { chmodSync, copyFileSync, existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } = require('node:fs')
 const { tmpdir } = require('node:os')
-const { launch: runLaunch, createLauncherOutput, parseCommandLine, commandHelp } = require('./launch.cjs')
+const { launch: runLaunch, createLauncherOutput, parseCommandLine, commandHelp, detachedDesktopCommand } = require('./launch.cjs')
 const { dev } = require('./dev.cjs')
 const { verifyDesktopBuild } = require('./verify-desktop-build.cjs')
 const launch = options => runLaunch({ verifyBuild() {}, linuxSandbox() { return true }, ...options })
@@ -622,7 +622,24 @@ async function probeDetachedLaunch() {
   console.log('PASS: detached desktop starts after all five visible stages and reports launch failures to the terminal.')
 }
 
-Promise.all([probeDetachedLaunch(), probeUpdates()]).catch(error => {
+function probeDetachedScope() {
+  const direct = { command: '/electron', args: ['.'] }
+  for (const platform of ['win32', 'darwin']) {
+    assert.deepEqual(detachedDesktopCommand('/electron', { platform, spawn() { assert.fail(`${platform} has no systemd scope`) } }), direct)
+  }
+  // Linux runs the whole process tree in its own user scope, so closing the launching terminal or agent cannot kill Electron's helpers.
+  const calls = []
+  const scoped = detachedDesktopCommand('/electron', { platform: 'linux', session: 'abc', env: {}, spawn(command, args) { calls.push([command, ...args]); return { status: 0 } } })
+  assert.deepEqual(calls, [['systemd-run', '--user', '--scope', '--quiet', '--collect', 'true']])
+  assert.equal(scoped.command, 'systemd-run')
+  assert.deepEqual(scoped.args, ['--user', '--scope', '--quiet', '--collect', '--unit=budget-terminal-abc', '--description=Budget Terminal', '--', '/electron', '.'])
+  // Without a reachable user manager, start Electron directly instead of failing the launch.
+  assert.deepEqual(detachedDesktopCommand('/electron', { platform: 'linux', spawn() { return { status: 1 } } }), direct)
+  assert.deepEqual(detachedDesktopCommand('/electron', { platform: 'linux', spawn() { return { error: new Error('ENOENT') } } }), direct)
+  console.log('PASS: Linux detached launches own their systemd scope and fall back when systemd is unavailable.')
+}
+
+Promise.all([probeDetachedLaunch(), probeDetachedScope(), probeUpdates()]).catch(error => {
   console.error(error)
   process.exitCode = 1
 })

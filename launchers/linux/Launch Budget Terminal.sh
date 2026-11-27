@@ -14,6 +14,8 @@
 # The shared build makes Settings > Labs > Launch on startup work on Linux through an XDG autostart entry.
 # The shared build sizes the Dashboard 2.0 phone Portfolio Pie to its ring and legend so neither is clipped.
 # The shared build keeps Mobile Access links working after a rebuild and reloads a phone page whose files failed to load.
+# The shared build starts Budget Terminal in its own systemd scope on Linux, so closing the launching terminal or agent no longer crashes it.
+# The shared build shows a working Claude Code command in Local MCP client setup, naming the server before its data folder setting.
 here=$(cd "$(dirname "$0")" && pwd) || exit 1
 launcher="$here/../../scripts/launch-posix.sh"
 

@@ -10,7 +10,7 @@ token-free setup text with this machine's absolute paths for Claude Code, Claude
 Desktop and Codex CLI, each with a copy button.
 
 - **Claude Code:** run the copied command once, for example
-  `claude mcp add --scope user --env "BUDGET_TERMINAL_DATA_DIR=<absolute-data-folder>" budget-terminal -- node "<absolute-repository>/apps/desktop/out/mcp/server.mjs"`,
+  `claude mcp add --scope user budget-terminal --env "BUDGET_TERMINAL_DATA_DIR=<absolute-data-folder>" -- node "<absolute-repository>/apps/desktop/out/mcp/server.mjs"`,
   then use `/mcp` in Claude Code to confirm. For long scans, start Claude Code with
   `MCP_TOOL_TIMEOUT=180000`. `claude mcp remove budget-terminal` removes it without
   deleting app data.

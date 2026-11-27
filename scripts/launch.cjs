@@ -72,6 +72,19 @@ function createLauncherOutput({ log = console, environment = process.env, termin
   }
 }
 
+// Chromium moves only its main process into its own systemd scope. Its zygote, GPU, network and
+// renderer processes stay in the scope of whatever started it (a terminal tab or an agent session),
+// and systemd kills them when that scope stops, so the app aborts with "GPU process isn't usable".
+// On Linux, start the whole app in its own user scope so closing the launcher cannot take it down.
+function detachedDesktopCommand(executable, { platform = process.platform, session = randomUUID(), env = process.env, spawn = spawnSync } = {}) {
+  const direct = { command: executable, args: ['.'] }
+  if (platform !== 'linux') return direct
+  const scope = ['--user', '--scope', '--quiet', '--collect']
+  const check = spawn('systemd-run', [...scope, 'true'], { env, stdio: 'ignore', timeout: 10000 })
+  if (check.error || check.status !== 0) return direct
+  return { command: 'systemd-run', args: [...scope, `--unit=budget-terminal-${session}`, '--description=Budget Terminal', '--', executable, '.'] }
+}
+
 async function startDetachedDesktop(env, output) {
   // Resolve Electron only after installation and build verification have passed.
   const executable = require('electron')
@@ -86,7 +99,8 @@ async function startDetachedDesktop(env, output) {
     const stderr = openSync(path.join(logDirectory, `${session}.error.log`), 'wx')
     try {
       // Windows must allow Electron to show its first window.
-      const app = spawnProcess(executable, ['.'], {
+      const { command, args } = detachedDesktopCommand(executable, { session, env })
+      const app = spawnProcess(command, args, {
         cwd: desktopRoot, env, detached: true, stdio: ['ignore', stdout, stderr],
       })
       await once(app, 'spawn')
@@ -373,4 +387,4 @@ if (require.main === module) {
   Promise.resolve(runCommandLine(process.argv.slice(2))).then(status => { if (status !== undefined) process.exitCode = status })
 }
 
-module.exports = { launch, platformName, createLauncherOutput, parseCommandLine, commandHelp }
+module.exports = { launch, detachedDesktopCommand, platformName, createLauncherOutput, parseCommandLine, commandHelp }
