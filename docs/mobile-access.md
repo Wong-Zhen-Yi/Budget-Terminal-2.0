@@ -26,7 +26,7 @@ The preview starts with the repository's sample records and discards edits when 
    tailscale serve --bg --https=8443 http://127.0.0.1:4387
    ```
 
-4. Click **Check connection**. Select **QR code** next to the direct or HTTPS link and scan it with your phone’s camera while Tailscale is connected. You can also copy either URL or request the links from Telegram. Keep Budget Terminal open on the computer. The links resume working when the app is relaunched.
+4. Click **Check connection**. Select **QR code** next to the direct or HTTPS link and scan it with your phone’s camera while Tailscale is connected. You can also copy either URL or request the links from Telegram. Keep Budget Terminal open on the computer. The links resume working when the app is relaunched. Rebuilding the app while it is open does not break an open link. Budget Terminal serves the new build to the next page load and shows a short updating page during the build. If the phone page's files fail to load, it reloads once by itself, then shows a **Reload** button.
 
 If Budget Terminal says the computer is disconnected from Tailscale, open the **Tailscale** app on the computer and wait for it to connect before checking again. On Windows, open it from the Start menu if its icon is missing from the system tray.
 

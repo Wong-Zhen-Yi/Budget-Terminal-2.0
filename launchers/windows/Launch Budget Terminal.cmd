@@ -91,6 +91,9 @@ rem The shared build replaces the Codex, Claude and Claude Code agent providers 
 rem The shared build connects Pi without an API key through the signed-in Claude Code CLI or an in-app subscription sign-in.
 rem The shared build starts agents on Haiku when no model has been chosen.
 rem The shared build installs an AppArmor profile when Ubuntu blocks Electron's sandbox, instead of failing at the Electron check.
+rem The shared build makes Settings > Labs > Launch on startup work on Linux through an XDG autostart entry.
+rem The shared build sizes the Dashboard 2.0 phone Portfolio Pie to its ring and legend so neither is clipped.
+rem The shared build keeps Mobile Access links working after a rebuild and reloads a phone page whose files failed to load.
 rem Finnhub streaming-first refresh, visible-stock priorities and idle/session savings rebuild through the shared launcher.
 rem Settings dashboard keeps the five slowest pages stable during startup updates; rebuilt through the shared launcher.
 rem Shared snapshot validation, account quotas and typed cloud contracts rebuild through the shared launcher; deploy backend policies separately.

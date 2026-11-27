@@ -3797,7 +3797,7 @@ export interface DiagnosticEntry {
 }
 export interface DiagnosticSnapshot { entries: DiagnosticEntry[]; files: number; bytes: number }
 
-/** Whether Windows opens this checkout's most recent build when the user signs in. */
+/** Whether Windows (Run registry) or Linux (XDG autostart) opens this checkout's most recent build when the user signs in. */
 export interface LaunchOnStartupStatus {
   /** False in demo profiles and on platforms where a source build cannot register itself. */
   supported: boolean

@@ -64,6 +64,7 @@
     "probe:dashboard-ui": "tsx scripts/probe-dashboard-ui.ts",
     "probe:renderer-startup": "tsx scripts/probe-renderer-startup.ts",
     "probe:desktop-startup": "tsx scripts/probe-desktop-startup.ts",
+    "probe:launch-on-startup": "tsx scripts/probe-launch-on-startup.ts",
     "probe:mac-relaunch": "tsx scripts/probe-mac-relaunch.ts",
     "probe:relaunch": "tsx scripts/probe-mac-relaunch.ts",
     "probe:navigation": "tsx scripts/probe-navigation.ts",

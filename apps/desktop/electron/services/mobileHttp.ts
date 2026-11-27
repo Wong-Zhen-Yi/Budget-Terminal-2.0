@@ -1,6 +1,6 @@
 import { createServer, request as httpRequest, type IncomingHttpHeaders, type IncomingMessage, type ServerResponse } from 'node:http'
 import { createHash, randomUUID } from 'node:crypto'
-import { readFile, readdir } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { gzip } from 'node:zlib'
@@ -21,6 +21,10 @@ export class MobileDownload {
 
 const contentTypes: Record<string, string> = { js: 'text/javascript', css: 'text/css', png: 'image/png', svg: 'image/svg+xml', woff2: 'font/woff2', json: 'application/json', wasm: 'application/wasm' }
 const compress = promisify(gzip)
+const updatingPage = '<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+  '<meta http-equiv="refresh" content="3"><title>Budget Terminal</title></head>' +
+  '<body style="margin:0;padding:24px;background:#080b12;color:#d5dee9;font:16px system-ui,sans-serif">' +
+  '<p>Budget Terminal is updating. This page will reload by itself.</p></body></html>'
 const policy = [
   "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'", "img-src 'self' data: blob:",
   "connect-src 'self'", "worker-src 'self' blob:", "frame-src https://www.youtube-nocookie.com",
@@ -87,18 +91,45 @@ export async function createMobileHttp(directory: string, run: MobileRequest, ac
   if (devServer && (devServer.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(devServer.hostname))) {
     throw new Error('The mobile dev server must be a local HTTP address.')
   }
-  const assets = new Map<string, { file: string; type: string; compressed?: Promise<Buffer> }>()
-  let html = Buffer.alloc(0)
-  if (!devServer) {
-    html = await readFile(join(directory, 'mobile.html'))
-    for (const name of await readdir(join(directory, 'assets'))) {
-      const extension = name.split('.').at(-1) ?? ''
-      if (/^[a-z\d_.-]+$/i.test(name) && Object.hasOwn(contentTypes, extension)) {
-        assets.set(`/assets/${name}`, { file: join(directory, 'assets', name), type: contentTypes[extension] })
-      }
-    }
+  // Read the built phone UI on demand and reload it when mobile.html changes, so a rebuild
+  // while the app is open never leaves phones with a page whose hashed assets were deleted.
+  type Asset = { file: string; type: string; compressed?: Promise<Buffer> }
+  type Bundle = { stamp: string; html: Buffer; assets: Map<string, Asset> }
+  let bundle: Bundle | undefined
+  let loading: { stamp: string; promise: Promise<Bundle> } | undefined
+  async function loadBundle(stamp: string): Promise<Bundle> {
+    const html = await readFile(join(directory, 'mobile.html'))
+    const assets: Bundle['assets'] = new Map()
     assets.set('/budget-terminal-icon.png', { file: join(directory, 'budget-terminal-icon.png'), type: 'image/png' })
     assets.set('/manifest.webmanifest', { file: join(directory, 'manifest.webmanifest'), type: 'application/manifest+json' })
+    assets.set('/mobile-boot.js', { file: join(directory, 'mobile-boot.js'), type: 'text/javascript' })
+    return { stamp, html, assets }
+  }
+  async function currentBundle(): Promise<Bundle | undefined> {
+    const info = await stat(join(directory, 'mobile.html')).catch(() => undefined)
+    if (!info) return undefined
+    const stamp = `${info.mtimeMs}:${info.size}`
+    if (bundle?.stamp === stamp) return bundle
+    if (loading?.stamp !== stamp) {
+      const promise = loadBundle(stamp)
+      loading = { stamp, promise }
+      promise.then(next => { if (loading?.promise === promise) { bundle = next; loading = undefined } },
+        () => { if (loading?.promise === promise) loading = undefined })
+    }
+    return loading.promise.catch(() => undefined)
+  }
+  if (!devServer) await currentBundle()
+  // Hashed build files are looked up by name rather than from a listing taken once, so files
+  // written later in a rebuild are found. The name pattern rules out paths outside assets/.
+  function assetFor(files: Bundle, path: string): Asset | undefined {
+    const known = files.assets.get(path)
+    if (known || !path.startsWith('/assets/')) return known
+    const name = path.slice('/assets/'.length)
+    const extension = name.split('.').at(-1) ?? ''
+    if (!/^[a-z\d_-][a-z\d_.-]*$/i.test(name) || !Object.hasOwn(contentTypes, extension)) return undefined
+    const entry: Asset = { file: join(directory, 'assets', name), type: contentTypes[extension] }
+    if (files.assets.size < 4096) files.assets.set(path, entry)
+    return entry
   }
   const subscribers = new Map<ServerResponse, IncomingMessage>()
   const directSources = new WeakMap<Socket, string>()
@@ -162,8 +193,14 @@ export async function createMobileHttp(directory: string, run: MobileRequest, ac
           }
           return
         }
+        const files = devServer ? undefined : await currentBundle()
         if (path === '/' && !devServer) {
-          response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(html)
+          if (!files) {
+            // A build is replacing the phone UI. Refresh shortly instead of showing a broken page.
+            response.writeHead(503, { 'Content-Type': 'text/html; charset=utf-8', 'Retry-After': '3' }).end(updatingPage)
+            return
+          }
+          response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(files.html)
           return
         }
         if (path === '/api/events' && request.headers['sec-fetch-site'] !== 'cross-site' && request.headers.accept === 'text/event-stream') {
@@ -179,20 +216,29 @@ export async function createMobileHttp(directory: string, run: MobileRequest, ac
           await proxyDevRequest(devServer, path === '/' ? '/mobile.html' : path, request, response)
           return
         }
-        const asset = assets.get(path)
+        const asset = files && assetFor(files, path)
         if (asset) {
+          const bytes = await readFile(asset.file).catch(() => undefined)
+          if (!bytes) {
+            // Deleted by a rebuild. Short-lived and uncached, so the page's reload gets the new build.
+            response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Budget Terminal was updated. Reload this page.')
+            return
+          }
           if (path.startsWith('/assets/')) response.setHeader('Cache-Control', 'private, max-age=31536000, immutable')
           if (/\.(js|css|json|svg|wasm)$/.test(path)) {
             response.setHeader('Vary', 'Accept-Encoding')
             if (/(?:^|,\s*)gzip(?:\s*,|$)/i.test(request.headers['accept-encoding'] ?? '')) {
-              asset.compressed ??= readFile(asset.file).then(bytes => compress(bytes))
-              const bytes = await asset.compressed
-              response.writeHead(200, { 'Content-Type': asset.type, 'Content-Encoding': 'gzip' }).end(bytes)
+              const compressed = asset.compressed ??= compress(bytes)
+              compressed.catch(() => { if (asset.compressed === compressed) asset.compressed = undefined })
+              response.writeHead(200, { 'Content-Type': asset.type, 'Content-Encoding': 'gzip' }).end(await compressed)
               return
             }
           }
-          response.writeHead(200, { 'Content-Type': asset.type }).end(await readFile(asset.file))
+          response.writeHead(200, { 'Content-Type': asset.type }).end(bytes)
           return
+        }
+        if (!files && !devServer && !path.startsWith('/api/')) {
+          throw new MobileRequestError('Budget Terminal is updating. Reload this page shortly.', 503)
         }
       }
       if (request.method !== 'POST' || !path.startsWith('/api/call/')) throw new MobileRequestError('Not found.', 404)

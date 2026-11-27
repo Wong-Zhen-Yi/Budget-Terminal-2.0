@@ -160,7 +160,15 @@
 .mobile-browser-field input { flex: 1; min-width: 0; }
 
 [data-terminal-mobile] .dashboard-mobile-holdings { min-height: 9rem; max-height: min(55dvh, 25rem); }
-[data-terminal-mobile] .dashboard-2-mobile .dashboard-portfolio-pie { min-height: 12rem; max-height: 19rem; }
+/* The phone page scrolls, so the pie sizes to its ring and legend instead of clipping them. */
+[data-terminal-mobile] .dashboard-2-mobile .dashboard-portfolio-pie { min-height: 0; max-height: none; }
+[data-terminal-mobile] .dashboard-2-mobile .dashboard-portfolio-pie svg {
+  flex: none;
+  width: auto;
+  height: min(52vw, 13rem);
+  min-height: 0;
+  max-height: none;
+}
 
 .mobile-agent-chat {
   display: grid;

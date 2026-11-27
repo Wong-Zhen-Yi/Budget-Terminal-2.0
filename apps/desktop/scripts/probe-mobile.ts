@@ -2,7 +2,9 @@ import assert from 'node:assert/strict'
 import { Agent, createServer, request } from 'node:http'
 import { createHash } from 'node:crypto'
 import { connect } from 'node:net'
-import { resolve } from 'node:path'
+import { mkdir, mkdtemp, rm, unlink, utimes, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { createMobileHttp, LOCAL_MOBILE_HEADER, MobileDownload, MobileRequestError } from '../electron/services/mobileHttp.js'
 import { mobileTailnet, mobileTailnetIssue, type MobileTailnet } from '../electron/services/mobileTailscale.js'
 import { MOBILE_BODY_LIMIT, MOBILE_DIRECT_LOCAL_PORT, MOBILE_DIRECT_PORT, MOBILE_DIRECT_TARGET, MOBILE_HTTPS_PORT, MOBILE_PROXY_TARGET } from '../electron/shared/mobileAccess.js'
@@ -172,6 +174,44 @@ try {
   assert.deepEqual(await (await post(previewOrigin)).json(), { args: [] })
 } finally { await preview.close() }
 console.log('PASS: local preview authenticates its own window and retains same-origin RPC checks')
+
+// A rebuild while the app is open replaces mobile.html and its hashed assets. Phones must get
+// the new page, never the old one that points at deleted files, and a missing build must not 500.
+const rebuilt = await mkdtemp(join(tmpdir(), 'bt-mobile-rebuild-'))
+try {
+  const writeBuild = async (hash: string, stamp: number) => {
+    await mkdir(join(rebuilt, 'assets'), { recursive: true })
+    await writeFile(join(rebuilt, 'assets', `mobile-${hash}.js`), `console.log('${hash}')`)
+    await writeFile(join(rebuilt, 'mobile-boot.js'), '// boot')
+    await writeFile(join(rebuilt, 'mobile.html'), `<html data-terminal-mobile><script type="module" src="./assets/mobile-${hash}.js"></script></html>`)
+    await utimes(join(rebuilt, 'mobile.html'), stamp, stamp)
+  }
+  await writeBuild('first', 1_000)
+  const token = 'fixture-rebuild-token'
+  const live = await createMobileHttp(rebuilt, echo, { localToken: token })
+  try {
+    const at = (path: string) => fetch(`http://127.0.0.1:${live.port}${path}`, { headers: { [LOCAL_MOBILE_HEADER]: token } })
+    assert.match(await (await at('/')).text(), /mobile-first\.js/)
+    assert.equal((await at('/assets/mobile-first.js')).status, 200)
+    assert.equal((await at('/mobile-boot.js')).status, 200, 'The boot watchdog is served')
+    await unlink(join(rebuilt, 'assets', 'mobile-first.js'))
+    await unlink(join(rebuilt, 'mobile.html'))
+    const updating = await at('/')
+    assert.equal(updating.status, 503, 'A build in progress serves the retry page')
+    assert.match(await updating.text(), /http-equiv="refresh"/)
+    assert.equal((await at('/assets/mobile-first.js')).status, 503)
+    await writeBuild('second', 2_000)
+    const page = await (await at('/')).text()
+    assert.match(page, /mobile-second\.js/, 'The root serves the rebuilt page without a restart')
+    assert.doesNotMatch(page, /mobile-first/)
+    assert.equal((await at('/assets/mobile-second.js')).status, 200, 'New hashed assets are found after the rebuild')
+    const stale = await at('/assets/mobile-first.js')
+    assert.equal(stale.status, 404, 'Deleted assets answer 404 rather than a server error')
+    assert.equal(stale.headers.get('cache-control'), 'no-store')
+    assert.equal((await at('/assets/..%2Fmobile.html')).status, 404, 'Asset names cannot leave assets/')
+  } finally { await live.close() }
+} finally { await rm(rebuilt, { recursive: true, force: true }) }
+console.log('PASS: mobile server follows rebuilds, serves a retry page mid-build and answers 404 for deleted assets')
 
 // Development builds proxy the phone UI and its HMR socket to the Vite dev server.
 const preamble = 'import { injectIntoGlobalHook } from "/@react-refresh"; injectIntoGlobalHook(window)'

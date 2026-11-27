@@ -2,6 +2,8 @@
 <html lang="en" data-terminal-mobile>
   <head>
     <meta charset="UTF-8" />
+    <!-- Palette colours for the moment before the stylesheet loads. -->
+    <style>html { background: #080b12; color: #d5dee9; font-family: system-ui, sans-serif; }</style>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#080b12" />
     <link rel="icon" type="image/png" href="/budget-terminal-icon.png" />
@@ -13,9 +15,10 @@
     <meta name="apple-mobile-web-app-title" content="Budget Terminal" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Budget Terminal</title>
+    <script src="/mobile-boot.js"></script>
   </head>
   <body>
-    <div id="root"><p>Opening Budget Terminal…</p></div>
+    <div id="root"><div data-mobile-boot style="padding: 24px"><p>Opening Budget Terminal…</p></div></div>
     <script type="module" src="./mobile/main.ts"></script>
   </body>
 </html>

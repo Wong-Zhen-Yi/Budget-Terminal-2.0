@@ -11,6 +11,9 @@
 # The shared build connects Pi without an API key through the signed-in Claude Code CLI or an in-app subscription sign-in.
 # The shared build starts agents on Haiku when no model has been chosen.
 # The shared build installs an AppArmor profile when Ubuntu blocks Electron's sandbox, instead of failing at the Electron check.
+# The shared build makes Settings > Labs > Launch on startup work on Linux through an XDG autostart entry.
+# The shared build sizes the Dashboard 2.0 phone Portfolio Pie to its ring and legend so neither is clipped.
+# The shared build keeps Mobile Access links working after a rebuild and reloads a phone page whose files failed to load.
 here=$(cd "$(dirname "$0")" && pwd) || exit 1
 launcher="$here/../../scripts/launch-posix.sh"
 

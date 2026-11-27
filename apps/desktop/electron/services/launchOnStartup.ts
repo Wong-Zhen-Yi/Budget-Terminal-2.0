@@ -1,8 +1,11 @@
+import path from 'node:path'
+
 import { app } from 'electron'
 
 import type { LaunchOnStartupStatus } from '../shared/contract.js'
+import { autostartEnabled, autostartFile, setAutostart } from './linuxAutostart.js'
 
-/** The Run registry value Windows lists in Task Manager → Startup apps. */
+/** The Run registry value Windows lists in Task Manager → Startup apps, and the Linux autostart entry name. */
 const ENTRY_NAME = 'Budget Terminal'
 
 /**
@@ -16,13 +19,18 @@ function loginItem() {
 
 function unavailableReason(): string | undefined {
   if (process.env.BUDGET_TERMINAL_DEMO_DIR) return 'Demo profiles cannot open at sign-in.'
-  if (process.platform !== 'win32') return 'Available on Windows.'
+  if (process.platform !== 'win32' && process.platform !== 'linux') return 'Available on Windows and Linux.'
   return undefined
+}
+
+function linuxCommand() {
+  return { ...loginItem(), icon: path.join(app.getAppPath(), 'resources', 'budget-terminal-icon.png') }
 }
 
 export function launchOnStartupStatus(): LaunchOnStartupStatus {
   const reason = unavailableReason()
   if (reason) return { supported: false, enabled: false, reason }
+  if (process.platform === 'linux') return { supported: true, enabled: autostartEnabled(autostartFile(), linuxCommand()) }
   const item = loginItem()
   // `openAtLogin` only inspects the entry named after the AppUserModelId, so match this
   // entry by name and command. One disabled in Task Manager stays listed but no longer opens.
@@ -36,6 +44,7 @@ export function configureLaunchOnStartup(enabled: unknown): LaunchOnStartupStatu
   if (typeof enabled !== 'boolean') throw new Error('Choose whether Budget Terminal opens when you sign in.')
   const reason = unavailableReason()
   if (reason) throw new Error(reason)
-  app.setLoginItemSettings({ ...loginItem(), name: ENTRY_NAME, openAtLogin: enabled })
+  if (process.platform === 'linux') setAutostart(autostartFile(), enabled, ENTRY_NAME, linuxCommand())
+  else app.setLoginItemSettings({ ...loginItem(), name: ENTRY_NAME, openAtLogin: enabled })
   return launchOnStartupStatus()
 }

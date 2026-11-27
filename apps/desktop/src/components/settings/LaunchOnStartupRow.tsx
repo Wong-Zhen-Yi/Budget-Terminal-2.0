@@ -4,9 +4,9 @@ import { api } from '@/api/client'
 
 const key = ['launchOnStartup'] as const
 export const LAUNCH_ON_STARTUP_LABEL = 'Launch on startup'
-export const LAUNCH_ON_STARTUP_DESCRIPTION = 'Open Budget Terminal when you sign in to Windows, using the most recent build. Run the launcher to rebuild after updates.'
+export const LAUNCH_ON_STARTUP_DESCRIPTION = 'Open Budget Terminal when you sign in to Windows or Linux, using the most recent build. Run the launcher to rebuild after updates.'
 
-/** The sign-in entry belongs to Windows, so the switch shows what Windows reports rather than a saved preference. */
+/** The sign-in entry belongs to the operating system, so the switch shows what it reports rather than a saved preference. */
 export function LaunchOnStartupRow({ onResult }: { onResult: (text: string, ok: boolean) => void }) {
   const client = useQueryClient()
   const status = useQuery({ queryKey: key, queryFn: () => api.launchOnStartupStatus() })
@@ -15,7 +15,7 @@ export function LaunchOnStartupRow({ onResult }: { onResult: (text: string, ok: 
     onSuccess: (state, enabled) => {
       client.setQueryData(key, state)
       if (state.enabled === enabled) onResult(enabled ? 'Budget Terminal will open when you sign in.' : 'Launch on startup disabled.', true)
-      else onResult('Windows did not apply the startup change. Check Task Manager → Startup apps.', false)
+      else onResult('The system did not apply the startup change. Check Task Manager → Startup apps on Windows or ~/.config/autostart on Linux.', false)
     },
     onError: () => onResult('Unable to change launch on startup. Please try again.', false),
   })
